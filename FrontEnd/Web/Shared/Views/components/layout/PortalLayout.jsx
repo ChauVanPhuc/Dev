@@ -1395,7 +1395,7 @@ const PortalLayout = () => {
   }, [location.pathname]);
 
   const pathSegments = location.pathname.split('/').filter(Boolean);
-  const showBackButton = pathSegments.length >= 3 || location.pathname.includes('/product-details') || location.pathname.includes('/paint-colors');
+  const showBackButton = (pathSegments.length >= 3 || location.pathname.includes('/product-details') || location.pathname.includes('/paint-colors')) && location.pathname !== '/admin/kpi/dashboard';
 
   return (
     <div

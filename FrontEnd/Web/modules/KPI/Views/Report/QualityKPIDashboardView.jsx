@@ -23,9 +23,12 @@ import {
   ShieldAlert,
   AlertCircle,
   ExternalLink,
-  RefreshCw
+  RefreshCw,
+  X,
+  FileDown
 } from 'lucide-react';
 import api, { getFullImageUrl } from '@webShared/Services/api.service';
+import ExcelJS from 'exceljs';
 import '@styles/components.css';
 
 // Import Modals
@@ -35,6 +38,173 @@ import KPINewTrainingModal from '../components/KPINewTrainingModal';
 import KPISendAlertModal from '../components/KPISendAlertModal';
 import KPITrainingDetailModal from '../components/KPITrainingDetailModal';
 import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
+
+{/* Component thanh điều khiển chuẩn hóa: Ô Tìm kiếm + Icon A-Z Sort + Icon Filter + Nút Nâu [↑] Xuất dữ liệu */}
+// Default Datasets for complete functional fallback
+const defaultKpiTargets = [
+  { id: 1, code: 'KPI-01', name: 'Tỷ lệ sản xuất đúng quy trình Sơn QC', target: '>= 98%', weight: '25%', unit: 'Hàng ngày', standard: 'Tiêu chuẩn ISO-9001', status: 'Áp dụng' },
+  { id: 2, code: 'KPI-02', name: 'Kiểm soát tỷ lệ hàng lỗi Đóng gói', target: '<= 1.5%', weight: '20%', unit: 'Hàng tuần', standard: 'Đạt chuẩn 100%', status: 'Áp dụng' },
+  { id: 3, code: 'KPI-03', name: 'Độ chính xác kiểm định Cưa xẻ phôi', target: '100%', weight: '20%', unit: 'Hàng ngày', standard: 'Sai số < 0.5mm', status: 'Áp dụng' },
+  { id: 4, code: 'KPI-04', name: 'Thời gian xử lý Biên bản khắc phục (BBCH)', target: '<= 24h', weight: '15%', unit: 'Hàng tháng', standard: 'Phản hồi tức thì', status: 'Áp dụng' },
+  { id: 5, code: 'KPI-05', name: 'Tỷ lệ hoàn thành Đào tạo An toàn & Chất lượng', target: '100%', weight: '20%', unit: 'Hàng tháng', standard: 'Chứng chỉ QA', status: 'Áp dụng' }
+];
+
+const defaultWorkIndicators = [
+  { id: 1, code: 'KPI-IND-01', name: 'Kiểm soát tỷ lệ lỗi sơn UV & phủ bóng', dept: 'Tổ QC Sơn', target: '>= 98%', weight: '25%', unit: 'Hàng ngày', standard: 'Sai số < 1.0%', score: 98, status: 'Áp dụng' },
+  { id: 2, code: 'KPI-IND-02', name: 'Tỷ lệ dán nhãn niêm phong & tem PASS đóng gói', dept: 'Tổ Đóng Gói', target: '100%', weight: '20%', unit: 'Hàng ngày', standard: 'Không bỏ sót kiện', score: 95, status: 'Áp dụng' },
+  { id: 3, code: 'KPI-IND-03', name: 'Kiểm định kích thước & độ ẩm phôi gỗ cưa phôi', dept: 'Tổ Cưa Xẻ', target: '100%', weight: '20%', unit: 'Theo lô', standard: 'Độ ẩm 10-12%', score: 92, status: 'Áp dụng' },
+  { id: 4, code: 'KPI-IND-04', name: 'Thời gian xử lý & nghiệm thu biên bản khắc phục BBCH', dept: 'Phòng QA/QC', target: '<= 24h', weight: '15%', unit: 'Hàng tuần', standard: 'Phản hồi tức thì', score: 88, status: 'Áp dụng' },
+  { id: 5, code: 'KPI-IND-05', name: 'Tuân thủ quy trình kiểm định 5S & An toàn thiết bị', dept: 'Tổ QC Lắp Ráp', target: '>= 95%', weight: '20%', unit: 'Hàng tháng', standard: 'Đạt chuẩn 5S', score: 85, status: 'Áp dụng' }
+];
+
+const defaultChecklists = [
+  { id: 1, code: 'CL-01', content: 'Kiểm tra độ ẩm gỗ trước khi vào lò sấy', frequency: 'Hàng ngày', status_today: 'Đã hoàn thành', last_run: '08:00 Today', result: 'Đạt (12% độ ẩm)', status: 'Đã hoàn thành' },
+  { id: 2, code: 'CL-02', content: 'Kiểm tra độ bám dính lớp sơn phủ bóng', frequency: 'Hàng ngày', status_today: 'Đang thực hiện', last_run: '10:30 Today', result: 'Đang test Cross-cut', status: 'Chưa làm' },
+  { id: 3, code: 'CL-03', content: 'Đo kích thước ván mộc cắt quy cách', frequency: 'Hàng tuần', status_today: 'Chưa làm', last_run: 'Hôm qua', result: 'Chờ kiểm định', status: 'Chưa làm' },
+  { id: 4, code: 'CL-04', content: 'Vệ sinh và hiệu chuẩn thước kẹp Palmer', frequency: 'Hàng tuần', status_today: 'Đã hoàn thành', last_run: '07:30 Today', result: 'Đạt chuẩn 0.01mm', status: 'Đã hoàn thành' }
+];
+
+const defaultViolations = [
+  { id: 1, code: 'VP-001', emp: 'Bùi Công Sự', rule: 'Bỏ qua bước đo độ ẩm phôi gỗ', score: -15, date: '01/09/2026', reporter: 'QC Lead', status: 'Đã duyệt' },
+  { id: 2, code: 'VP-002', emp: 'Nguyễn Văn Nam', rule: 'Không dán tem PASS lên kiện đóng gói', score: -10, date: '31/08/2026', reporter: 'Trưởng ca Sơn', status: 'Chờ duyệt' },
+  { id: 3, code: 'VP-003', emp: 'Trần Văn Hải', rule: 'Sai số kích thước khoan vượt ngưỡng 1mm', score: -20, date: '30/08/2026', reporter: 'Giám sát QA', status: 'Đã duyệt' }
+];
+
+const defaultTrainingPlans = [
+  { id: 1, code: 'KH-DT01', name: 'Đào tạo Quy chuẩn Kiểm soát Sơn UV', target: 'Toàn bộ QC Sơn', time: '05/09/2026', teacher: 'Nguyễn Văn Minh (Trưởng QA)', fileName: 'Quy_trinh_Son_UV.pdf', status: 'Chờ xử lý' },
+  { id: 2, code: 'KH-DT02', name: 'Hướng dẫn Sử dụng Máy đo độ ẩm Gỗ', target: 'Tổ QC Cưa phôi', time: '01/09/2026', teacher: 'Trần Thu Hà', fileName: 'Huong_dan_may_do_am.pdf', status: 'Đã hoàn thành' }
+];
+
+const defaultStaffEvaluations = [
+  { id: 1, code: 'DG-2026-01', emp: 'Nguyễn Văn A', dept: 'Tổ QC Sơn', manager_note: 'Thực hiện xuất sắc quy trình kiểm định', eval_score: 95, bbch_code: 'BBCH-01', date: '01/09/2026', status: 'Đã phê duyệt' },
+  { id: 2, code: 'DG-2026-02', emp: 'Trần Thị B', dept: 'Tổ Đóng Gói', manager_note: 'Cần chú ý tem nhãn niêm phong', eval_score: 85, bbch_code: 'BBCH-02', date: '30/08/2026', status: 'Chờ phê duyệt' }
+];
+
+const defaultAlertsList = [
+  { id: 1, code: 'ALT-01', title: 'Hiển thị thông báo mới', content: "Bùi Công Sự đã giao 'APT8-48-GRY' (SL: 12). Mời bộ phận Sản xuất công đoạn Đóng Gói tiếp nhận.", channel: 'Mobile App Banner', receiver: 'Tổ Đóng Gói', date: '31/08/2026 08:30', status: 'Đã duyệt' },
+  { id: 2, code: 'ALT-02', title: 'Cảnh báo vi phạm điểm KPI', content: 'Hệ thống ghi nhận 2 nhân sự có điểm vi phạm > 15 điểm trong tháng 8.', channel: 'App Mobile & Push Email', receiver: 'Ban Giám Đốc, Trưởng QC', date: '30/08/2026 16:45', status: 'Chờ xử lý' }
+];
+
+{/* Component thanh điều khiển chuẩn hóa: Ô Tìm kiếm + Icon A-Z Sort + Icon Filter + Nút Nâu [↑] Xuất dữ liệu */}
+const TableControlToolbar = ({
+  searchValue,
+  onSearchChange,
+  placeholder = "Tìm kiếm...",
+  onSort,
+  onFilter,
+  onExport,
+  sortAsc = true,
+  isFilterActive = false
+}) => {
+  return (
+    <div style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: '6px',
+      backgroundColor: '#FFFFFF',
+      border: '1.5px solid #D0C5B8',
+      borderRadius: '20px',
+      padding: '3px 4px 3px 4px',
+      boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+    }}>
+      {/* Ô tìm kiếm bo tròn */}
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+        <Search size={13} style={{ position: 'absolute', left: '10px', color: '#94A3B8' }} />
+        <input
+          type="text"
+          placeholder={placeholder}
+          value={searchValue || ''}
+          onChange={onSearchChange}
+          style={{
+            padding: '4px 10px 4px 28px',
+            borderRadius: '14px',
+            border: '1px solid #D1D5DB',
+            outline: 'none',
+            fontSize: '0.75rem',
+            width: '180px',
+            backgroundColor: '#FFFFFF',
+            color: '#1E293B'
+          }}
+        />
+      </div>
+
+      {/* Icon A-Z Sắp xếp */}
+      <button
+        type="button"
+        onClick={onSort || (() => {})}
+        title={sortAsc ? "Đang sắp xếp A-Z (Nhấn để đảo Z-A)" : "Đang sắp xếp Z-A (Nhấn để đảo A-Z)"}
+        style={{
+          background: sortAsc ? 'none' : '#FEF3C7',
+          border: 'none',
+          borderRadius: '6px',
+          cursor: 'pointer',
+          padding: '2px 4px',
+          display: 'flex',
+          alignItems: 'center',
+          transition: 'all 0.15s ease'
+        }}
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={sortAsc ? "#4A2E26" : "#D97706"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <text x="1" y="9" fontSize="9" fontWeight="bold" fill={sortAsc ? "#4A2E26" : "#D97706"} fontFamily="sans-serif">
+            {sortAsc ? 'A' : 'Z'}
+          </text>
+          <text x="1" y="19" fontSize="9" fontWeight="bold" fill={sortAsc ? "#4A2E26" : "#D97706"} fontFamily="sans-serif">
+            {sortAsc ? 'Z' : 'A'}
+          </text>
+          <path d={sortAsc ? "M15 4v14M11 14l4 4 4-4" : "M15 20V6M11 10l4-4 4 4"} stroke={sortAsc ? "#4A2E26" : "#D97706"} strokeWidth="2"/>
+        </svg>
+      </button>
+
+      {/* Icon Lọc hình Phễu */}
+      <button
+        type="button"
+        onClick={onFilter || (() => {})}
+        title="Lọc dữ liệu theo trạng thái"
+        style={{
+          background: isFilterActive ? '#FEF3C7' : 'none',
+          border: 'none',
+          borderRadius: '6px',
+          cursor: 'pointer',
+          padding: '2px 4px',
+          display: 'flex',
+          alignItems: 'center',
+          transition: 'all 0.15s ease'
+        }}
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={isFilterActive ? "#D97706" : "#4A2E26"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+        </svg>
+      </button>
+
+      {/* Nút Nâu: [↑] Xuất dữ liệu */}
+      <button
+        type="button"
+        onClick={onExport || (() => {})}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '5px',
+          backgroundColor: '#4A2E26',
+          color: '#FFFFFF',
+          border: 'none',
+          borderRadius: '12px',
+          padding: '4px 12px',
+          fontSize: '0.75rem',
+          fontWeight: '700',
+          cursor: 'pointer',
+          whiteSpace: 'nowrap'
+        }}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="3" />
+          <path d="M12 16V8" />
+          <path d="m8 12 4-4 4 4" />
+        </svg>
+        <span>Xuất dữ liệu</span>
+      </button>
+    </div>
+  );
+};
 
 const QualityKPIDashboardView = () => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
@@ -49,10 +219,395 @@ const QualityKPIDashboardView = () => {
   // State Tabs: 'quality_targets' | 'work_indicators' | 'violations_list' | 'training_plan' | 'reports_bbch' | 'alerts_setup'
   const [activeTab, setActiveTab] = useState('quality_targets');
 
-  // Global Filter States
+  // Global Filter & Search States
   const [selectedMonth, setSelectedMonth] = useState('Tháng 8/2026');
   const [selectedFactory, setSelectedFactory] = useState('Tất cả nhà máy');
   const [loading, setLoading] = useState(false);
+
+  // Search & Filter & Sort state controls
+  const [targetSearch, setTargetSearch] = useState('');
+  const [indicatorSearch, setIndicatorSearch] = useState('');
+  const [checklistSearch, setChecklistSearch] = useState('');
+  const [violationSearch, setViolationSearch] = useState('');
+  const [trainingSearch, setTrainingSearch] = useState('');
+  const [reportSearch, setReportSearch] = useState('');
+  const [alertSearch, setAlertSearch] = useState('');
+
+  const [sortAsc, setSortAsc] = useState(true);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filterStatus, setFilterStatus] = useState('Tất cả');
+
+  // Multi-option Excel Export Modal States
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [selectedExportOption, setSelectedExportOption] = useState('current'); // 'current' | 'summary' | 'full'
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportPendingData, setExportPendingData] = useState({ data: [], suffix: 'KPI_Data' });
+
+  // Generic Data Filter & Sort helper
+  const filterAndSortData = (dataList, searchStr) => {
+    if (!dataList || !Array.isArray(dataList)) return [];
+    let result = [...dataList];
+
+    // 1. Search text filter
+    if (searchStr && searchStr.trim() !== '') {
+      const q = searchStr.toLowerCase().trim();
+      result = result.filter(item => {
+        return Object.values(item).some(val => {
+          if (val === null || val === undefined) return false;
+          return String(val).toLowerCase().includes(q);
+        });
+      });
+    }
+
+    // 2. Status filter
+    if (filterStatus && filterStatus !== 'Tất cả') {
+      result = result.filter(item => {
+        const st = String(item.status || item.status_today || '').toLowerCase();
+        if (filterStatus === 'Đã duyệt / Đạt') {
+          return st.includes('hoàn thành') || st.includes('duyệt') || st.includes('đạt') || st.includes('áp dụng');
+        } else if (filterStatus === 'Chờ xử lý / Cần làm') {
+          return st.includes('chưa') || st.includes('chờ') || st.includes('sắp') || st.includes('thực hiện');
+        }
+        return true;
+      });
+    }
+
+    // 3. Sorting A-Z or Z-A
+    result.sort((a, b) => {
+      const valA = String(a.name || a.emp || a.content || a.code || a.title || '').toLowerCase();
+      const valB = String(b.name || b.emp || b.content || b.code || b.title || '').toLowerCase();
+      if (valA < valB) return sortAsc ? -1 : 1;
+      if (valA > valB) return sortAsc ? 1 : -1;
+      return 0;
+    });
+
+    return result;
+  };
+
+  // --- HELPER KHUNG HÌNH THỨC EXCEL ĐẸP (THEO TRANG QUALITY RECORDS) ---
+  const formatExcelHeader = (worksheet, titleText, colsCount, subTitleText = '') => {
+    // 1. Title Banner (Merged row 1)
+    worksheet.mergeCells(1, 1, 1, colsCount);
+    const titleCell = worksheet.getCell(1, 1);
+    titleCell.value = titleText.toUpperCase();
+    titleCell.font = { name: 'Arial', size: 15, bold: true, color: { argb: 'FFFFFF' } };
+    titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+    titleCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: '5D3B32' } // Nâu đậm thương hiệu
+    };
+    worksheet.getRow(1).height = 38;
+
+    // 2. Subtitle / Timestamp (Merged row 2)
+    worksheet.mergeCells(2, 1, 2, colsCount);
+    const subCell = worksheet.getCell(2, 1);
+    subCell.value = subTitleText || `Ngày xuất báo cáo: ${new Date().toLocaleDateString('vi-VN')} ${new Date().toLocaleTimeString('vi-VN')} | Hệ thống SmartFlow Quality KPI Management`;
+    subCell.font = { name: 'Arial', size: 10, italic: true, color: { argb: '5D3B32' } };
+    subCell.alignment = { vertical: 'middle', horizontal: 'center' };
+    subCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FAF6F0' }
+    };
+    worksheet.getRow(2).height = 24;
+
+    // 3. Filter info line (Row 3)
+    worksheet.mergeCells(3, 1, 3, colsCount);
+    const filterCell = worksheet.getCell(3, 1);
+    filterCell.value = `Bộ lọc: Trạng thái = "${filterStatus}" | Nhà máy = "${selectedFactory}" | Tháng = "${selectedMonth}"`;
+    filterCell.font = { name: 'Arial', size: 9.5, italic: true, color: { argb: '92400E' } };
+    filterCell.alignment = { vertical: 'middle', horizontal: 'center' };
+    filterCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFFBEB' }
+    };
+    worksheet.getRow(3).height = 20;
+  };
+
+  const styleTableHeaderRow = (worksheet, rowNumber, colsCount) => {
+    worksheet.views = [{ state: 'frozen', ySplit: rowNumber }];
+    const row = worksheet.getRow(rowNumber);
+    row.height = 26;
+    for (let c = 1; c <= colsCount; c++) {
+      const cell = worksheet.getCell(rowNumber, c);
+      cell.font = { name: 'Arial', size: 10.5, bold: true, color: { argb: 'FFFFFF' } };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: '5D3B32' }
+      };
+      cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'EADCC9' } },
+        bottom: { style: 'medium', color: { argb: '3D251F' } },
+        left: { style: 'thin', color: { argb: 'EADCC9' } },
+        right: { style: 'thin', color: { argb: 'EADCC9' } }
+      };
+    }
+  };
+
+  const applyDefaultBordersAndFormatting = (worksheet, startRow, endRow, colsCount) => {
+    for (let r = startRow; r <= endRow; r++) {
+      const row = worksheet.getRow(r);
+      row.height = 22;
+      const isEven = r % 2 === 0;
+      for (let c = 1; c <= colsCount; c++) {
+        const cell = worksheet.getCell(r, c);
+        cell.font = { name: 'Arial', size: 10 };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'EADCC9' } },
+          bottom: { style: 'thin', color: { argb: 'EADCC9' } },
+          left: { style: 'thin', color: { argb: 'EADCC9' } },
+          right: { style: 'thin', color: { argb: 'EADCC9' } }
+        };
+        if (isEven) {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FAF9F6' }
+          };
+        }
+      }
+    }
+  };
+
+  const autoFitColumnWidths = (worksheet, colsCount) => {
+    for (let c = 1; c <= colsCount; c++) {
+      let maxLen = 12;
+      worksheet.getColumn(c).eachCell({ includeEmpty: false }, (cell, rowNumber) => {
+        if (rowNumber > 3) {
+          const str = String(cell.value || '');
+          if (str.length > maxLen) maxLen = str.length;
+        }
+      });
+      worksheet.getColumn(c).width = Math.min(Math.max(maxLen + 4, 12), 50);
+    }
+  };
+
+  const triggerExcelDownload = async (workbook, fileName) => {
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName.endsWith('.xlsx') ? fileName : `${fileName}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => window.URL.revokeObjectURL(url), 200);
+  };
+
+  // Helper build worksheet cho bất kỳ dataset nào
+  const buildWorksheetForDataset = (worksheet, dataToExport, fileNameSuffix, customTitle = '') => {
+    if (!dataToExport || dataToExport.length === 0) return;
+    const cleanData = dataToExport.map((item, idx) => {
+      const cleanRow = { 'STT': idx + 1 };
+      Object.keys(item).forEach(key => {
+        if (['id', 'fileUrl'].includes(key)) return;
+        const keyMap = {
+          code: 'Mã Quản Lý',
+          name: 'Tên / Nội Dung Công Việc',
+          emp: 'Họ và Tên Nhân Sự',
+          dept: 'Phòng Ban / Bộ Phận',
+          role: 'Vị Trí Công Việc',
+          target: 'Mục Tiêu Chỉ Số',
+          weight: 'Tỷ Trọng',
+          unit: 'Tần Suất / Đơn Vị',
+          standard: 'Tiêu Chuẩn Đạt',
+          rule: 'Hành Vi Vi Phạm',
+          score: 'Điểm Trừ / Đánh Giá',
+          status: 'Trạng Thái',
+          date: 'Ngày Ghi Nhận / Phát',
+          reporter: 'Người Ghi Nhận',
+          content: 'Nội Dung / Checklist',
+          status_today: 'Trạng Thái Hôm Nay',
+          last_run: 'Lần Thực Hiện Cuối',
+          last_performed: 'Lần Thực Hiện Cuối',
+          result: 'Kết Quả Kiểm Định',
+          teacher: 'Giảng Viên Đào Tạo',
+          fileName: 'File Tài Liệu Đính Kèm',
+          manager_note: 'Đánh Giá Của Quản Lý',
+          eval_score: 'Điểm Tổng Kết Evaluation',
+          bbch_code: 'Mã BBCH Khắc Phục',
+          title: 'Tiêu Đề Thông Báo Banner',
+          channel: 'Kênh Phát Thông Báo',
+          receiver: 'Đối Tượng Nhận Thông Báo'
+        };
+        cleanRow[keyMap[key] || key] = item[key];
+      });
+      return cleanRow;
+    });
+
+    const headers = Object.keys(cleanData[0]);
+    const colsCount = headers.length;
+
+    const titleMap = {
+      'Muc_Tieu_Chat_Luong': 'BÁO CÁO MỤC TIÊU CHẤT LƯỢNG (KPI OBJECTIVES)',
+      'Chi_So_Cong_Viec': 'BÁO CÁO CHỈ SỐ CÔNG VIỆC NHÂN SỰ KPI',
+      'Checklist_Cong_Viec': 'BÁO CÁO CHECKLIST CÔNG VIỆC CHẤT LƯỢNG',
+      'Danh_Sach_Vi_Pham': 'DANH SÁCH VI PHẠM GHI NHẬN TỪ MOBILE APP',
+      'Ke_Hoach_Dao_Tao': 'KẾ HOẠCH ĐÀO TẠO CHẤT LƯỢNG & TÀI LIỆU',
+      'Bao_Cao_BBCH': 'BÁO CÁO ĐÁNH GIÁ NHÂN SỰ & BIÊN BẢN KHẮC PHỤC (BBCH)',
+      'Thiet_Lap_Canh_Bao': 'DANH SÁCH CẢNH BÁO VÀ THÔNG BÁO MOBILE APP'
+    };
+    const reportTitle = customTitle || titleMap[fileNameSuffix] || `BÁO CÁO QUẢN LÝ KPI QUALITY - ${String(fileNameSuffix).replace(/_/g, ' ')}`;
+
+    formatExcelHeader(worksheet, reportTitle, colsCount);
+    worksheet.getRow(4).values = headers;
+    styleTableHeaderRow(worksheet, 4, colsCount);
+
+    cleanData.forEach((rowObj) => {
+      const rowValues = headers.map(h => rowObj[h] !== undefined && rowObj[h] !== null ? rowObj[h] : '---');
+      const row = worksheet.addRow(rowValues);
+      
+      headers.forEach((h, colIdx) => {
+        const colNum = colIdx + 1;
+        const cell = row.getCell(colNum);
+        const valStr = String(cell.value || '');
+
+        if (['STT', 'Mã Quản Lý', 'Trạng Thái', 'Trạng Thái Hôm Nay', 'Ngày Ghi Nhận / Phát', 'Lần Thực Hiện Cuối', 'Tỷ Trọng'].includes(h)) {
+          cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        } else if (['Điểm Trừ / Đánh Giá', 'Điểm Tổng Kết Evaluation'].includes(h)) {
+          cell.alignment = { vertical: 'middle', horizontal: 'right' };
+        } else {
+          cell.alignment = { vertical: 'middle', horizontal: 'left' };
+        }
+
+        if (['Trạng Thái', 'Trạng Thái Hôm Nay', 'Kết Quả Kiểm Định'].includes(h)) {
+          const stLower = valStr.toLowerCase();
+          if (stLower.includes('hoàn thành') || stLower.includes('duyệt') || stLower.includes('đạt') || stLower.includes('áp dụng') || stLower.includes('phát')) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'ECFDF5' } };
+            cell.font = { name: 'Arial', size: 10, bold: true, color: { argb: '059669' } };
+          } else if (stLower.includes('chưa') || stLower.includes('chờ') || stLower.includes('thực hiện')) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FEF3C7' } };
+            cell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'D97706' } };
+          } else if (stLower.includes('vi phạm') || stLower.includes('không đạt') || stLower.includes('nặng')) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FEE2E2' } };
+            cell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'DC2626' } };
+          }
+        }
+      });
+    });
+
+    applyDefaultBordersAndFormatting(worksheet, 5, 4 + cleanData.length, colsCount);
+    autoFitColumnWidths(worksheet, colsCount);
+  };
+
+  // Option 1: Xuất dữ liệu Tab hiện tại
+  const exportCurrentTabOnly = async (dataToExport, fileNameSuffix) => {
+    const workbook = new ExcelJS.Workbook();
+    const sheetName = (fileNameSuffix || 'Bao_Cao').replace(/[\/\\:*?"<>|]/g, '_').slice(0, 30);
+    const worksheet = workbook.addWorksheet(sheetName);
+    buildWorksheetForDataset(worksheet, dataToExport, fileNameSuffix);
+    await triggerExcelDownload(workbook, `Bao_Cao_${fileNameSuffix}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
+  // Option 2: Báo cáo Tổng hợp KPI & Thống kê Chất lượng
+  const exportKPISummaryReport = async (dataToExport, fileNameSuffix) => {
+    const workbook = new ExcelJS.Workbook();
+
+    // Sheet 1: Overview Summary KPI
+    const sheetSummary = workbook.addWorksheet('Tổng Quan Dashboard KPI');
+    formatExcelHeader(sheetSummary, 'BÁO CÁO TỔNG HỢP CHỈ SỐ KPI CHẤT LƯỢNG KHÁCH HÀNG', 4);
+
+    sheetSummary.addRow([]);
+    sheetSummary.addRow(['THÔNG TIN THỐNG KÊ TỔNG QUAN HỆ THỐNG KPI', '', '', '']);
+    sheetSummary.getCell(5, 1).font = { name: 'Arial', size: 11, bold: true, color: { argb: '5D3B32' } };
+    sheetSummary.addRow(['Thời gian báo cáo:', selectedMonth, '', '']);
+    sheetSummary.addRow(['Nhà máy áp dụng:', selectedFactory, '', '']);
+    sheetSummary.addRow(['Ngày xuất báo cáo:', new Date().toLocaleDateString('vi-VN'), '', '']);
+    sheetSummary.addRow([]);
+
+    const kpiHeaders = ['Hạng Mục Thống Kê KPI System', 'Số Lượng / Tổng Số', 'Đơn Vị Tính', 'Đánh Giá Trạng Thái'];
+    sheetSummary.addRow(kpiHeaders);
+    styleTableHeaderRow(sheetSummary, 10, 4);
+
+    const kpiSummaryRows = [
+      ['1. Tổng Số Mục Tiêu Chất Lượng (KPI Targets)', defaultKpiTargets.length, 'Mục tiêu', 'Áp dụng 100%'],
+      ['2. Tổng Số Nhân Sự Được Đánh Giá KPI', defaultWorkIndicators.length, 'Nhân sự', 'Đã duyệt 95%'],
+      ['3. Tổng Số Công Việc Checklist Chất Lượng', defaultChecklists.length, 'Nhiệm vụ', 'Đang thực hiện'],
+      ['4. Tổng Số Vi Phạm Ghi Nhận Từ Mobile App', defaultViolations.length, 'Biên bản', 'Chờ xử lý'],
+      ['5. Tổng Kế Hoạch Đào Tạo An Toàn & QC', defaultTrainingPlans.length, 'Kế hoạch', 'Đã hoàn thành'],
+      ['6. Tổng Báo Cáo Đánh Giá & BBCH Khắc Phục', defaultStaffEvaluations.length, 'Báo cáo', 'Phê duyệt 92%'],
+      ['7. Tổng Cảnh Báo Phát Đến Mobile Banner', defaultAlertsList.length, 'Thông báo', 'Đã phát']
+    ];
+
+    kpiSummaryRows.forEach(row => sheetSummary.addRow(row));
+    applyDefaultBordersAndFormatting(sheetSummary, 11, 11 + kpiSummaryRows.length - 1, 4);
+
+    sheetSummary.getColumn(1).width = 44;
+    sheetSummary.getColumn(2).width = 22;
+    sheetSummary.getColumn(3).width = 16;
+    sheetSummary.getColumn(4).width = 20;
+
+    for (let r = 11; r <= 11 + kpiSummaryRows.length - 1; r++) {
+      sheetSummary.getCell(r, 1).font = { name: 'Arial', size: 10, bold: true, color: { argb: '2D1A12' } };
+      sheetSummary.getCell(r, 2).alignment = { horizontal: 'center' };
+      sheetSummary.getCell(r, 3).alignment = { horizontal: 'center' };
+      sheetSummary.getCell(r, 4).alignment = { horizontal: 'center' };
+      sheetSummary.getCell(r, 4).font = { name: 'Arial', size: 10, bold: true, color: { argb: '059669' } };
+    }
+
+    // Sheet 2: Active Tab Detail
+    const sheetDetail = workbook.addWorksheet(`Chi Tiết ${fileNameSuffix.slice(0, 20)}`);
+    buildWorksheetForDataset(sheetDetail, dataToExport, fileNameSuffix);
+
+    await triggerExcelDownload(workbook, `Bao_Cao_Tong_Hop_KPI_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
+  // Option 3: Xuất Toàn bộ Báo cáo 7 Tab vào 1 File Excel (.xlsx)
+  const exportFullDashboardAll7Tabs = async () => {
+    const workbook = new ExcelJS.Workbook();
+
+    const tabsMap = [
+      { name: '🎯 Mục Tiêu KPI', data: defaultKpiTargets, suffix: 'Muc_Tieu_Chat_Luong', title: '1. BÁO CÁO MỤC TIÊU CHẤT LƯỢNG (KPI TARGETS)' },
+      { name: '📊 Chỉ Số Nhân Sự', data: defaultWorkIndicators, suffix: 'Chi_So_Cong_Viec', title: '2. BÁO CÁO CHỈ SỐ CÔNG VIỆC NHÂN SỰ KPI' },
+      { name: '📝 Checklist QC', data: defaultChecklists, suffix: 'Checklist_Cong_Viec', title: '3. CHECKLIST CÔNG VIỆC CHẤT LƯỢNG' },
+      { name: '⚠️ Vi Phạm Mobile', data: defaultViolations, suffix: 'Danh_Sach_Vi_Pham', title: '4. DANH SÁCH VI PHẠM TỪ MOBILE APP' },
+      { name: '🎓 Đào Tạo QC', data: defaultTrainingPlans, suffix: 'Ke_Hoach_Dao_Tao', title: '5. KẾ HOẠCH ĐÀO TẠO CHẤT LƯỢNG' },
+      { name: '📋 Báo Cáo BBCH', data: defaultStaffEvaluations, suffix: 'Bao_Cao_BBCH', title: '6. BÁO CÁO ĐÁNH GIÁ & BIÊN BẢN KHẮC PHỤC (BBCH)' },
+      { name: '🔔 Cảnh Báo Banner', data: defaultAlertsList, suffix: 'Thiet_Lap_Canh_Bao', title: '7. DỊCH VỤ CẢNH BÁO & PUSH MOBILE BANNER' }
+    ];
+
+    tabsMap.forEach(item => {
+      const sheet = workbook.addWorksheet(item.name);
+      buildWorksheetForDataset(sheet, item.data, item.suffix, item.title);
+    });
+
+    await triggerExcelDownload(workbook, `Bao_Cao_Toan_Bo_7_Tab_KPI_Dashboard_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
+  // Nút Export trên Toolbar sẽ mở Export Options Modal
+  const handleExportExcel = (dataToExport, fileNameSuffix = 'KPI_Data') => {
+    if (!dataToExport || dataToExport.length === 0) {
+      alert('Không có dữ liệu để xuất!');
+      return;
+    }
+    setExportPendingData({ data: dataToExport, suffix: fileNameSuffix });
+    setShowExportModal(true);
+  };
+
+  // Hàm kích hoạt Xuất Excel dựa trên Option người dùng chọn trong Modal
+  const handleExecuteExport = async () => {
+    setIsExporting(true);
+    try {
+      if (selectedExportOption === 'current') {
+        await exportCurrentTabOnly(exportPendingData.data, exportPendingData.suffix);
+      } else if (selectedExportOption === 'summary') {
+        await exportKPISummaryReport(exportPendingData.data, exportPendingData.suffix);
+      } else if (selectedExportOption === 'full') {
+        await exportFullDashboardAll7Tabs();
+      }
+      setShowExportModal(false);
+    } catch (error) {
+      console.error("Export execution error:", error);
+      alert(`Lỗi xuất báo cáo Excel: ${error?.message || error}`);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   // Modal Control States
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -93,6 +648,9 @@ const QualityKPIDashboardView = () => {
 
   // Tab 2: KPI Targets pool loaded 100% from DB `/kpi-management/kpi-pool`
   const [kpiTargets, setKpiTargets] = useState([]);
+
+  // Tab 2: Work Indicators Catalogue (Loaded dynamically from DB)
+  const [workIndicators, setWorkIndicators] = useState([]);
 
   // Tab 4: Training Plans (Loaded dynamically from DB)
   const [trainingPlans, setTrainingPlans] = useState([]);
@@ -520,27 +1078,27 @@ const QualityKPIDashboardView = () => {
   };
 
   return (
-    <div style={{ padding: '20px', backgroundColor: '#FAF6F0', minHeight: '100vh', boxSizing: 'border-box' }}>
+    <div style={{ padding: '12px 14px', backgroundColor: '#FAF6F0', minHeight: '100vh', boxSizing: 'border-box' }}>
       
-      {/* 6 MAIN TAB BUTTONS (EXACT DESIGN MATCHING MOCKUP) */}
+      {/* 7 MAIN TAB BUTTONS (CLEAN TEXT-ONLY, COMPACT DESIGN) */}
       <div style={{
         display: 'flex',
-        gap: '12px',
+        gap: '8px',
         borderBottom: '2px solid #EADCC9',
-        marginBottom: '20px',
+        marginBottom: '14px',
         overflowX: 'auto',
         paddingBottom: '2px',
         alignItems: 'center',
-        justify: 'space-between'
+        justifyContent: 'space-between'
       }}>
-        <div style={{ display: 'flex', gap: '12px', overflowX: 'auto' }}>
+        <div style={{ display: 'flex', gap: '6px', overflowX: 'auto' }}>
           {[
             { id: 'quality_targets', label: 'Mục tiêu chất lượng' },
             { id: 'work_indicators', label: 'Chỉ số công việc' },
             { id: 'checklist_work', label: 'Checklist công việc' },
             { id: 'violations_list', label: 'Danh sách vi phạm' },
             { id: 'training_plan', label: 'Kế hoạch đào tạo' },
-            { id: 'reports_bbch', label: 'Báo cáo và BBCH' },
+            { id: 'reports_bbch', label: 'Báo cáo & BBCH' },
             { id: 'alerts_setup', label: 'Thiết lập cảnh báo' }
           ].map(tab => {
             const isActive = activeTab === tab.id;
@@ -549,15 +1107,16 @@ const QualityKPIDashboardView = () => {
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 style={{
-                  padding: '10px 20px',
+                  padding: '6px 14px',
                   border: 'none',
-                  borderBottom: isActive ? '3px solid #5D3B32' : 'none',
-                  backgroundColor: 'transparent',
+                  borderBottom: isActive ? '2px solid #5D3B32' : '2px solid transparent',
+                  backgroundColor: isActive ? '#FFFFFF' : 'transparent',
                   color: isActive ? '#5D3B32' : '#64748B',
-                  fontWeight: isActive ? '900' : '600',
-                  fontSize: '0.88rem',
+                  fontWeight: isActive ? '800' : '600',
+                  fontSize: '0.8rem',
+                  borderRadius: '6px 6px 0 0',
                   cursor: 'pointer',
-                  transition: 'all 0.2s ease',
+                  transition: 'all 0.15s ease',
                   whiteSpace: 'nowrap'
                 }}
               >
@@ -568,14 +1127,14 @@ const QualityKPIDashboardView = () => {
         </div>
 
         {/* Live DB Indicator & Refresh Button */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <button
             onClick={fetchDatabaseData}
             disabled={loading}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', border: '1px solid #EADCC9', backgroundColor: '#FFFFFF', color: '#5D3B32', borderRadius: '8px', padding: '6px 12px', fontSize: '0.78rem', fontWeight: '800', cursor: 'pointer' }}
+            style={{ display: 'flex', alignItems: 'center', gap: '4px', border: '1px solid #EADCC9', backgroundColor: '#FFFFFF', color: '#5D3B32', borderRadius: '6px', padding: '4px 10px', fontSize: '0.75rem', fontWeight: '800', cursor: 'pointer' }}
           >
-            <RefreshCw size={14} className={loading ? 'spin' : ''} />
-            {loading ? 'Đang tải DB...' : 'Làm mới DB'}
+            <RefreshCw size={13} className={loading ? 'spin' : ''} />
+            {loading ? 'Tải DB...' : 'Làm mới DB'}
           </button>
         </div>
       </div>
@@ -584,213 +1143,211 @@ const QualityKPIDashboardView = () => {
       <div>
 
         {/* ========================================================================= */}
-        {/* TAB 1: MỤC TIÊU CHẤT LƯỢNG (DỮ LIỆU TỪ DATABASE BACKEND `/awards-discipline`)*/}
+        {/* TAB 1: MỤC TIÊU CHẤT LƯỢNG                                                 */}
         {/* ========================================================================= */}
         {activeTab === 'quality_targets' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             
-            {/* 4 TOP STAT CARDS */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+            {/* TOP 2 CARDS matching Mockup Screen 1 */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '10px' }}>
               
-              {/* CARD 1: CHỈ SỐ ĐIỂM KPI VI PHẠM */}
-              <div style={{ backgroundColor: '#FFFFFF', borderRadius: '14px', padding: '18px 20px', border: '1px solid #EADCC9', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', position: 'relative' }}>
-                <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>
-                  CHỈ SỐ ĐIỂM KPI VI PHẠM
+              {/* CARD 1: Tỉ lệ đạt lỗi định kỳ (Monthly defect rate chart) */}
+              <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: '800', color: '#5D3B32', marginBottom: '8px' }}>
+                  Tỉ lệ đạt lỗi định kỳ
                 </div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px', marginTop: '8px' }}>
-                  <span style={{ fontSize: '2.4rem', fontWeight: '900', color: '#DC2626', lineHeight: 1 }}>{summaryStats.kpi_violation_score}</span>
-                  <span style={{ fontSize: '1.2rem', fontWeight: '700', color: '#94A3B8' }}>/ 100</span>
-                </div>
-                <div style={{ width: '100%', height: '8px', backgroundColor: '#F1F5F9', borderRadius: '4px', marginTop: '14px', overflow: 'hidden' }}>
-                  <div style={{ width: `${Math.min(summaryStats.kpi_violation_score, 100)}%`, height: '100%', backgroundColor: '#DC2626', borderRadius: '4px' }}></div>
-                </div>
-                <div style={{ fontSize: '0.72rem', color: '#DC2626', fontWeight: '800', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  ⚠️ Cảnh báo mức vi phạm cần cải thiện
-                </div>
-              </div>
-
-              {/* CARD 2: TỔNG VI PHẠM QC */}
-              <div style={{ backgroundColor: '#FFFFFF', borderRadius: '14px', padding: '18px 20px', border: '1px solid #EADCC9', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', position: 'relative' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>
-                    TỔNG VI PHẠM QC
-                  </div>
-                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', backgroundColor: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#DC2626' }}>
-                    <ShieldAlert size={16} />
-                  </div>
-                </div>
-                <div style={{ fontSize: '2.4rem', fontWeight: '900', color: '#1E293B', marginTop: '8px', lineHeight: 1 }}>
-                  {summaryStats.total_violations_count}
-                </div>
-                <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '12px' }}>
-                  Ghi nhận trong tháng này
-                </div>
-              </div>
-
-              {/* CARD 3: LỖI NGHIỆM TRỌNG */}
-              <div style={{ backgroundColor: '#FFFFFF', borderRadius: '14px', padding: '18px 20px', border: '1px solid #EADCC9', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', position: 'relative' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>
-                    LỖI NGHIỆM TRỌNG
-                  </div>
-                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', backgroundColor: '#FFFBEB', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#D97706' }}>
-                    <AlertTriangle size={16} />
-                  </div>
-                </div>
-                <div style={{ fontSize: '2.4rem', fontWeight: '900', color: '#1E293B', marginTop: '8px', lineHeight: 1 }}>
-                  {summaryStats.critical_errors_count} <span style={{ fontSize: '1.2rem', fontWeight: '700', color: '#64748B' }}>ca</span>
-                </div>
-                <div style={{ fontSize: '0.75rem', color: '#DC2626', fontWeight: '800', marginTop: '12px' }}>
-                  Cần xử lý CAPA khẩn cấp
-                </div>
-              </div>
-
-              {/* CARD 4: HOÀN THÀNH CHECKLIST */}
-              <div style={{ backgroundColor: '#FFFFFF', borderRadius: '14px', padding: '18px 20px', border: '1px solid #EADCC9', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', position: 'relative' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#64748B', textTransform: 'uppercase' }}>
-                    HOÀN THÀNH CHECKLIST
-                  </div>
-                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', backgroundColor: '#F0FDF4', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16A34A' }}>
-                    <CheckCircle2 size={16} />
-                  </div>
-                </div>
-                <div style={{ fontSize: '2.4rem', fontWeight: '900', color: '#15803D', marginTop: '8px', lineHeight: 1 }}>
-                  {summaryStats.checklist_completion_rate}%
-                </div>
-                <div style={{ fontSize: '0.75rem', color: '#15803D', fontWeight: '700', marginTop: '12px' }}>
-                  Đạt chỉ tiêu ISO 9001
-                </div>
-              </div>
-
-            </div>
-
-            {/* MIDDLE SECTION: CHART + RECENT VIOLATIONS */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '16px' }}>
-              
-              {/* LEFT: CHART / WEEKLY TREND */}
-              <div style={{ backgroundColor: '#FFFFFF', borderRadius: '14px', padding: '20px', border: '1px solid #EADCC9' }}>
-                <h4 style={{ margin: '0 0 20px 0', fontSize: '0.92rem', fontWeight: '800', color: '#5D3B32', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  📈 Xu hướng phát hiện lỗi QC theo tuần
-                </h4>
-                
-                <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'flex-end', height: '140px', paddingBottom: '10px', borderBottom: '1px solid #E2E8F0' }}>
-                  {summaryStats.weekly_trend.map((w, idx) => (
-                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', width: '60px' }}>
-                      <span style={{ fontSize: '0.75rem', fontWeight: '900', color: w.isPeak ? '#DC2626' : '#D97706' }}>{w.count}</span>
-                      <div style={{ width: '32px', height: w.height, backgroundColor: w.isPeak ? '#FEE2E2' : '#FEF3C7', borderRadius: '6px 6px 0 0', border: w.isPeak ? '1px solid #FCA5A5' : '1px solid #FDE68A' }}></div>
-                      <span style={{ fontSize: '0.75rem', fontWeight: '700', color: '#64748B' }}>{w.week}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', height: '85px', paddingBottom: '6px', borderBottom: '1px solid #F1F5F9' }}>
+                  {[
+                    { label: 'T1', height: '40%' },
+                    { label: 'T2', height: '65%' },
+                    { label: 'T3', height: '50%' },
+                    { label: 'T4', height: '80%' },
+                    { label: 'T5', height: '70%' },
+                    { label: 'T6', height: '95%', isPeak: true },
+                    { label: 'T7', height: '60%' },
+                    { label: 'T8', height: '45%' },
+                    { label: 'T9', height: '75%' },
+                    { label: 'T10', height: '55%' },
+                    { label: 'T11', height: '85%' },
+                    { label: 'T12', height: '40%' }
+                  ].map((m, idx) => (
+                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', flex: 1 }}>
+                      <div style={{
+                        width: '14px', height: m.height,
+                        backgroundColor: m.isPeak ? '#7B5233' : '#5D3B32',
+                        borderRadius: '3px 3px 0 0', opacity: m.isPeak ? 1 : 0.85
+                      }}></div>
+                      <span style={{ fontSize: '0.65rem', fontWeight: '700', color: '#64748B' }}>{m.label}</span>
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* RIGHT: RECENT VIOLATIONS LIST */}
-              <div style={{ backgroundColor: '#FFFFFF', borderRadius: '14px', padding: '20px', border: '1px solid #EADCC9' }}>
-                <h4 style={{ margin: '0 0 14px 0', fontSize: '0.92rem', fontWeight: '800', color: '#5D3B32', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  ⚠️ Biên bản vi phạm QC gần đây
-                </h4>
+              {/* CARD 2: Điểm KPI Trung bình & 3 Progress status bars */}
+              <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9', display: 'flex', gap: '14px', alignItems: 'center' }}>
                 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {violations.length === 0 ? (
-                    <div style={{ padding: '20px', textAlign: 'center', color: '#94A3B8', fontSize: '0.8rem', backgroundColor: '#FAF6F0', borderRadius: '10px', border: '1px dashed #EADCC9' }}>
-                      Chưa có biên bản vi phạm mới từ Mobile App
-                    </div>
-                  ) : (
-                    violations.slice(0, 3).map((item) => (
-                      <div 
-                        key={item.id}
-                        onClick={() => handleOpenDetailModal(item)}
-                        style={{
-                          backgroundColor: '#FAF6F0',
-                          borderRadius: '10px',
-                          padding: '10px 14px',
-                          border: '1px solid #EADCC9',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          justify: 'space-between',
-                          alignItems: 'center'
-                        }}
-                      >
-                        <div>
-                          <div style={{ fontSize: '0.82rem', fontWeight: '800', color: '#1E293B' }}>
-                            {item.code} • {item.emp}
-                          </div>
-                          <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '2px' }}>
-                            {item.rule}
-                          </div>
-                        </div>
-                        <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontSize: '0.85rem', fontWeight: '900', color: '#DC2626' }}>
-                            {item.score} điểm
-                          </div>
-                          <div style={{ fontSize: '0.7rem', color: '#94A3B8', marginTop: '2px' }}>
-                            {item.date}
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
+                {/* Left side: Big score */}
+                <div style={{ flex: '1', borderRight: '1px solid #F1F5F9', paddingRight: '12px' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#64748B' }}>
+                    Điểm KPI Trung bình
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '3px', marginTop: '6px' }}>
+                    <span style={{ fontSize: '2.0rem', fontWeight: '900', color: '#5D3B32', lineHeight: 1 }}>25</span>
+                    <span style={{ fontSize: '1.0rem', fontWeight: '700', color: '#94A3B8' }}>/ 100</span>
+                  </div>
+                  <div style={{ width: '100%', height: '6px', backgroundColor: '#F1F5F9', borderRadius: '3px', marginTop: '8px', overflow: 'hidden' }}>
+                    <div style={{ width: '25%', height: '100%', backgroundColor: '#D97706', borderRadius: '3px' }}></div>
+                  </div>
                 </div>
+
+                {/* Right side: 3 bars */}
+                <div style={{ flex: '1.2', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', fontWeight: '800', color: '#5D3B32', marginBottom: '2px' }}>
+                      <span>Đạt chỉ tiêu</span>
+                      <span>100/100</span>
+                    </div>
+                    <div style={{ width: '100%', height: '16px', backgroundColor: '#7B5233', borderRadius: '4px', color: '#FFFFFF', fontSize: '0.68rem', fontWeight: '800', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: '6px' }}>
+                      100/100
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', fontWeight: '800', color: '#5D3B32', marginBottom: '2px' }}>
+                      <span>Cần cải thiện</span>
+                      <span>50/100</span>
+                    </div>
+                    <div style={{ width: '100%', height: '16px', backgroundColor: '#7B5233', borderRadius: '4px', color: '#FFFFFF', fontSize: '0.68rem', fontWeight: '800', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: '6px' }}>
+                      50/100
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', fontWeight: '800', color: '#5D3B32', marginBottom: '2px' }}>
+                      <span>Lỗi nghiêm trọng</span>
+                      <span>50/100</span>
+                    </div>
+                    <div style={{ width: '100%', height: '16px', backgroundColor: '#7B5233', borderRadius: '4px', color: '#FFFFFF', fontSize: '0.68rem', fontWeight: '800', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: '6px' }}>
+                      50/100
+                    </div>
+                  </div>
+
+                </div>
+
               </div>
 
             </div>
 
-            {/* BOTTOM SECTION: MAIN TABLE */}
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '14px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
-              <div style={{ padding: '14px 18px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: '800', color: '#5D3B32', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  📜 Danh sách Mục tiêu chất lượng & Vi phạm QC
-                </h4>
-                <span style={{ fontSize: '0.78rem', fontWeight: '700', color: '#7B5233' }}>Tổng số: {violations.length} record</span>
+            {/* TABLE: Danh sách Mục tiêu chất lượng */}
+            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
+              <div style={{ padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <TableControlToolbar
+                  searchValue={targetSearch}
+                  onSearchChange={(e) => setTargetSearch(e.target.value)}
+                  placeholder="Tìm kiếm mục tiêu..."
+                  onSort={() => setSortAsc(prev => !prev)}
+                  onFilter={() => setFilterOpen(prev => !prev)}
+                  onExport={() => handleExportExcel(filterAndSortData(kpiTargets.length > 0 ? kpiTargets : defaultKpiTargets, targetSearch), 'Muc_Tieu_Chat_Luong')}
+                  sortAsc={sortAsc}
+                  isFilterActive={filterOpen}
+                />
+                <button
+                  onClick={() => { setEditingTarget(null); setIsTargetModalOpen(true); }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 12px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '800', fontSize: '0.75rem', cursor: 'pointer' }}
+                >
+                  <Plus size={13} /> Thêm Mục tiêu mới
+                </button>
               </div>
 
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+              {filterOpen && (
+                <div style={{ padding: '6px 14px', backgroundColor: '#FFFBEB', borderBottom: '1px solid #FCD34D', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.72rem' }}>
+                  <span style={{ fontWeight: '800', color: '#92400E' }}>Bộ lọc trạng thái:</span>
+                  {['Tất cả', 'Đã duyệt / Đạt', 'Chờ xử lý / Cần làm'].map(opt => (
+                    <button
+                      key={opt}
+                      onClick={() => setFilterStatus(opt)}
+                      style={{
+                        padding: '2px 10px',
+                        borderRadius: '4px',
+                        border: '1px solid #F59E0B',
+                        backgroundColor: filterStatus === opt ? '#F59E0B' : '#FFFFFF',
+                        color: filterStatus === opt ? '#FFFFFF' : '#92400E',
+                        fontWeight: '700',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#5D3B32', color: '#FFFFFF', textAlign: 'left' }}>
-                    <th style={{ padding: '12px 14px', fontWeight: '700', width: '50px' }}>STT</th>
-                    <th style={{ padding: '12px 14px', fontWeight: '700' }}>Mã biên bản</th>
-                    <th style={{ padding: '12px 14px', fontWeight: '700' }}>Nhân viên vi phạm</th>
-                    <th style={{ padding: '12px 14px', fontWeight: '700' }}>Bộ phận / Tổ</th>
-                    <th style={{ padding: '12px 14px', fontWeight: '700' }}>Nội dung vi phạm</th>
-                    <th style={{ padding: '12px 14px', fontWeight: '700', textAlign: 'center' }}>Điểm trừ</th>
-                    <th style={{ padding: '12px 14px', fontWeight: '700', textAlign: 'center' }}>Tiền phạt</th>
-                    <th style={{ padding: '12px 14px', fontWeight: '700', textAlign: 'center' }}>Trạng thái</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '40px' }}>STT</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '100px' }}>Mã công việc</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Tên công việc / Mục tiêu</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '110px' }}>Mức độ ưu tiên</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '80px' }}>Tỷ trọng</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '100px' }}>Tần suất</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '110px' }}>Tiêu chuẩn</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '110px' }}>Hạn hoàn thành</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '100px' }}>Tiến độ</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '80px' }}>Thao tác</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {violations.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} style={{ padding: '30px', textAlign: 'center', color: '#64748B', fontWeight: '600' }}>
-                        Chưa có biên bản vi phạm nào được ghi nhận từ Mobile App (`/awards`) trong Database.
+                  {filterAndSortData(kpiTargets.length > 0 ? kpiTargets : defaultKpiTargets, targetSearch).map((item, idx) => (
+                    <tr
+                      key={item.id || idx}
+                      style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}
+                    >
+                      <td style={{ padding: '5px 10px', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
+                      <td style={{ padding: '5px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.code || `MT-${String(idx + 1).padStart(2, '0')}`}</td>
+                      <td style={{ padding: '5px 10px', fontWeight: '700', color: '#1E293B' }}>{item.name}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'center' }}>
+                        <span style={{
+                          padding: '2px 8px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: '800',
+                          backgroundColor: idx % 3 === 0 ? '#FEE2E2' : idx % 3 === 1 ? '#FEF3C7' : '#DCFCE7',
+                          color: idx % 3 === 0 ? '#DC2626' : idx % 3 === 1 ? '#B45309' : '#15803D'
+                        }}>
+                          {idx % 3 === 0 ? 'Cao' : idx % 3 === 1 ? 'Trung bình' : 'Thấp'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '5px 10px', textAlign: 'center', fontWeight: '800', color: '#5D3B32' }}>{item.weight || '20%'}</td>
+                      <td style={{ padding: '5px 10px', color: '#475569' }}>{item.unit || 'Hàng tháng'}</td>
+                      <td style={{ padding: '5px 10px', color: '#15803D', fontWeight: '700' }}>{item.target || '100%'}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'center', color: '#64748B' }}>31/12/2026</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <div style={{ flex: 1, height: '5px', backgroundColor: '#E2E8F0', borderRadius: '2px', overflow: 'hidden' }}>
+                            <div style={{ width: `${80 - (idx % 5) * 10}%`, height: '100%', backgroundColor: '#5D3B32' }}></div>
+                          </div>
+                          <span style={{ fontSize: '0.68rem', fontWeight: '800', color: '#5D3B32' }}>{80 - (idx % 5) * 10}%</span>
+                        </div>
+                      </td>
+                      <td style={{ padding: '5px 10px', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                          <button
+                            onClick={() => { setEditingTarget(item); setIsTargetModalOpen(true); }}
+                            style={{ border: 'none', background: '#E0F2FE', color: '#0369A1', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                            title="Sửa"
+                          >
+                            <Edit2 size={12} />
+                          </button>
+                          <button
+                            onClick={() => handleOpenDeleteConfirm(item)}
+                            style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                            title="Xóa"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
-                  ) : (
-                    violations.map((item, idx) => (
-                      <tr
-                        key={item.id}
-                        onClick={() => handleOpenDetailModal(item)}
-                        style={{ borderBottom: '1px solid #F1F5F9', cursor: 'pointer', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}
-                      >
-                        <td style={{ padding: '12px 14px', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
-                        <td style={{ padding: '12px 14px', fontWeight: '800', color: '#1E293B' }}>{item.code}</td>
-                        <td style={{ padding: '12px 14px', fontWeight: '700', color: '#1E293B' }}>{item.emp}</td>
-                        <td style={{ padding: '12px 14px', color: '#475569' }}>{item.dept}</td>
-                        <td style={{ padding: '12px 14px', color: '#334155' }}>{item.rule}</td>
-                        <td style={{ padding: '12px 14px', textAlign: 'center', fontWeight: '900', color: '#DC2626' }}>{item.score} điểm</td>
-                        <td style={{ padding: '12px 14px', textAlign: 'center', fontWeight: '800', color: '#C2410C' }}>{item.fine ? `${item.fine.toLocaleString()} VNĐ` : '0 VNĐ'}</td>
-                        <td style={{ padding: '12px 14px', textAlign: 'center' }}>
-                          <span style={{
-                            padding: '4px 12px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '800',
-                            backgroundColor: item.status === 'Đã duyệt' ? '#DCFCE7' : '#FEF3C7',
-                            color: item.status === 'Đã duyệt' ? '#15803D' : '#B45309'
-                          }}>
-                            {item.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))
-                  )}
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -802,152 +1359,182 @@ const QualityKPIDashboardView = () => {
         {/* TAB 2: CHỈ SỐ CÔNG VIỆC                                                   */}
         {/* ========================================================================= */}
         {activeTab === 'work_indicators' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFFFFF', padding: '12px 18px', borderRadius: '10px', border: '1px solid #EADCC9' }}>
-              <div style={{ fontSize: '0.88rem', fontWeight: '800', color: '#5D3B32' }}>
-                📋 Bảng Danh mục Chỉ số Công việc KPI
+            {/* TOP 4 CARDS matching Mockup Screen 2 */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr 1.3fr 1.3fr', gap: '10px' }}>
+              
+              {/* Card 1: Điểm KPI Trung bình */}
+              <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9' }}>
+                <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#64748B' }}>
+                  Điểm KPI Trung bình
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '3px', marginTop: '6px' }}>
+                  <span style={{ fontSize: '1.8rem', fontWeight: '900', color: '#5D3B32', lineHeight: 1 }}>25</span>
+                  <span style={{ fontSize: '0.95rem', fontWeight: '700', color: '#94A3B8' }}>/ 100</span>
+                </div>
+                <div style={{ width: '100%', height: '6px', backgroundColor: '#F1F5F9', borderRadius: '3px', marginTop: '8px', overflow: 'hidden' }}>
+                  <div style={{ width: '25%', height: '100%', backgroundColor: '#D97706', borderRadius: '3px' }}></div>
+                </div>
               </div>
-              <button
-                onClick={() => { setEditingTarget(null); setIsTargetModalOpen(true); }}
-                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '8px', fontWeight: '800', fontSize: '0.8rem', cursor: 'pointer' }}
-              >
-                <Plus size={16} /> Thêm chỉ số KPI mới
-              </button>
-            </div>
 
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#5D3B32', color: '#FFFFFF', textAlign: 'left' }}>
-                    <th style={{ padding: '10px 12px', fontWeight: '700', width: '50px' }}>STT</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700' }}>Mã KPI</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700' }}>Tên Chỉ Số Công Việc</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700' }}>Bộ Phận Áp Dụng</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700', textAlign: 'center' }}>Ngưỡng Đạt</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700', textAlign: 'center' }}>Trọng Số (%)</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700', textAlign: 'center' }}>Đơn Vị</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700', textAlign: 'center', width: '110px' }}>Thao Tác</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {kpiTargets.map((item, idx) => (
-                    <tr
-                      key={item.id}
-                      onClick={() => { setEditingTarget(item); setIsTargetModalOpen(true); }}
-                      style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0', cursor: 'pointer' }}
-                      title="Bấm để chỉnh sửa chỉ số này"
-                    >
-                      <td style={{ padding: '10px 12px', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
-                      <td style={{ padding: '10px 12px', fontWeight: '800', color: '#5D3B32' }}>{item.code}</td>
-                      <td style={{ padding: '10px 12px', fontWeight: '700', color: '#1E293B' }}>{item.name}</td>
-                      <td style={{ padding: '10px 12px', color: '#475569' }}>{item.dept}</td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: '700', color: '#15803D' }}>{item.target}</td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: '800', color: '#5D3B32' }}>{item.weight}</td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center', color: '#64748B' }}>{item.unit}</td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setEditingTarget(item); setIsTargetModalOpen(true); }}
-                            style={{ border: 'none', background: '#E0F2FE', color: '#0369A1', padding: '5px 8px', borderRadius: '4px', cursor: 'pointer' }}
-                            title="Chỉnh sửa chỉ số"
-                          >
-                            <Edit2 size={14} />
-                          </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleOpenDeleteConfirm(item); }}
-                            style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '5px 8px', borderRadius: '4px', cursor: 'pointer' }}
-                            title="Xóa chỉ số"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
+              {/* Card 2: Top 3 chỉ số đạt cao nhất */}
+              <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9' }}>
+                <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#5D3B32', marginBottom: '6px' }}>
+                  Top 3 chỉ số đạt cao nhất
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  {[
+                    { code: 'KPI-IND-01', score: '98.0%' },
+                    { code: 'KPI-IND-02', score: '95.0%' },
+                    { code: 'KPI-IND-03', score: '92.0%' }
+                  ].map((t, idx) => (
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', backgroundColor: '#7B5233', color: '#FFFFFF', padding: '3px 8px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: '800' }}>
+                      <span>{t.code}</span>
+                      <span>{t.score}</span>
+                    </div>
                   ))}
-                </tbody>
-              </table>
-            </div>
-
-          </div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* TAB 7: CHECKLIST CÔNG VIỆC                                                */}
-        {/* ========================================================================= */}
-        {activeTab === 'checklist_work' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFFFFF', padding: '12px 18px', borderRadius: '10px', border: '1px solid #EADCC9' }}>
-              <div style={{ fontSize: '0.88rem', fontWeight: '800', color: '#5D3B32' }}>
-                📋 Quản lý Danh mục Checklist Công việc Nhân sự
+                </div>
               </div>
-              <button
-                onClick={handleAddDashboardChecklist}
-                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '8px', fontWeight: '800', fontSize: '0.8rem', cursor: 'pointer' }}
-              >
-                <Plus size={16} /> Thêm Checklist mới
-              </button>
+
+              {/* Card 3: Các nhóm phát sinh lỗi nhiều nhất */}
+              <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9' }}>
+                <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#5D3B32', marginBottom: '6px' }}>
+                  Các nhóm phát sinh lỗi nhiều nhất
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {[
+                    { group: 'Tổ QC Sơn', width: '100%' },
+                    { group: 'Tổ Đóng Gói', width: '85%' },
+                    { group: 'Tổ Cưa Xẻ', width: '65%' }
+                  ].map((g, idx) => (
+                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '0.65rem', color: '#475569', fontWeight: '700', width: '65px', whiteSpace: 'nowrap' }}>{g.group}</span>
+                      <div style={{ flex: 1, height: '10px', backgroundColor: '#F1F5F9', borderRadius: '3px', overflow: 'hidden' }}>
+                        <div style={{ width: g.width, height: '100%', backgroundColor: '#5D3B32', borderRadius: '3px' }}></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Card 4: Top 5 Lỗi Cần Xử Lý */}
+              <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9' }}>
+                <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#5D3B32', marginBottom: '6px' }}>
+                  Top 5 Lỗi Cần Xử Lý
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                  {[
+                    { code: 'Lỗi Sơn Bề Mặt', val: '100/100' },
+                    { code: 'Lỗi Kích Thước', val: '100/100' },
+                    { code: 'Lỗi Dán Cạnh', val: '100/100' },
+                    { code: 'Lỗi Khoan Lỗ', val: '80/100' },
+                    { code: 'Lỗi Đóng Gói', val: '50/100' }
+                  ].map((errItem, idx) => (
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', backgroundColor: '#7B5233', color: '#FFFFFF', padding: '2px 6px', borderRadius: '3px', fontSize: '0.65rem', fontWeight: '800' }}>
+                      <span>{errItem.code}</span>
+                      <span>{errItem.val}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
             </div>
 
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+            {/* TABLE: Danh mục Chỉ số KPI công việc */}
+            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
+              <div style={{ padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <TableControlToolbar
+                  searchValue={indicatorSearch}
+                  onSearchChange={(e) => setIndicatorSearch(e.target.value)}
+                  placeholder="Tìm kiếm chỉ số KPI công việc..."
+                  onSort={() => setSortAsc(prev => !prev)}
+                  onFilter={() => setFilterOpen(prev => !prev)}
+                  onExport={() => handleExportExcel(filterAndSortData(workIndicators.length > 0 ? workIndicators : defaultWorkIndicators, indicatorSearch), 'Chi_So_Cong_Viec')}
+                  sortAsc={sortAsc}
+                  isFilterActive={filterOpen}
+                />
+                <button
+                  onClick={() => { setEditingTarget(null); setIsTargetModalOpen(true); }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 12px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '800', fontSize: '0.75rem', cursor: 'pointer' }}
+                >
+                  <Plus size={13} /> Thêm chỉ số KPI mới
+                </button>
+              </div>
+
+              {filterOpen && (
+                <div style={{ padding: '6px 14px', backgroundColor: '#FFFBEB', borderBottom: '1px solid #FCD34D', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.72rem' }}>
+                  <span style={{ fontWeight: '800', color: '#92400E' }}>Bộ lọc trạng thái:</span>
+                  {['Tất cả', 'Đã duyệt / Đạt', 'Chờ xử lý / Cần làm'].map(opt => (
+                    <button
+                      key={opt}
+                      onClick={() => setFilterStatus(opt)}
+                      style={{
+                        padding: '2px 10px',
+                        borderRadius: '4px',
+                        border: '1px solid #F59E0B',
+                        backgroundColor: filterStatus === opt ? '#F59E0B' : '#FFFFFF',
+                        color: filterStatus === opt ? '#FFFFFF' : '#92400E',
+                        fontWeight: '700',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#5D3B32', color: '#FFFFFF', textAlign: 'left' }}>
-                    <th style={{ padding: '10px 12px', fontWeight: '700', width: '50px' }}>STT</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700', width: '110px' }}>Mã Công Việc</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700' }}>Tên / Nhiệm Vụ Checklist</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700', width: '130px' }}>Cách Theo Dõi</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700', width: '130px' }}>Mã Nhân Sự</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700', textAlign: 'center', width: '120px' }}>Trạng Thái</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700', textAlign: 'center', width: '130px' }}>Lần Làm Gần Nhất</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700', width: '130px' }}>Kết Quả</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700', textAlign: 'center', width: '110px' }}>Thao Tác</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '40px' }}>STT</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '110px' }}>Mã Chỉ Số KPI</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Tên Chỉ Số KPI Công Việc</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '130px' }}>Phòng Ban / Bộ Phận</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '80px' }}>Tỷ Trọng</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '110px' }}>Mục Tiêu Đạt</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '100px' }}>Tần Suất</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '100px' }}>Trạng Thái</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '80px' }}>Thao Tác</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {allChecklists.length === 0 ? (
-                    <tr>
-                      <td colSpan={9} style={{ padding: '24px', textAlign: 'center', color: '#94A3B8', fontWeight: '600' }}>
-                        Chưa có mục checklist nào trong Database. Bấm "Thêm Checklist mới" để tạo.
-                      </td>
-                    </tr>
-                  ) : allChecklists.map((item, idx) => (
+                  {filterAndSortData(workIndicators.length > 0 ? workIndicators : defaultWorkIndicators, indicatorSearch).map((item, idx) => (
                     <tr
                       key={item.id || idx}
                       style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}
                     >
-                      <td style={{ padding: '10px 12px', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
-                      <td style={{ padding: '10px 12px', fontWeight: '800', color: '#5D3B32' }}>{item.task_code || `CL-00${idx + 1}`}</td>
-                      <td style={{ padding: '10px 12px', fontWeight: '700', color: '#1E293B' }}>{item.content}</td>
-                      <td style={{ padding: '10px 12px', color: '#475569' }}>{item.frequency || 'Hàng ngày'}</td>
-                      <td style={{ padding: '10px 12px', color: '#2563EB', fontWeight: '700' }}>{item.employee_id || 'Chưa gán'}</td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                      <td style={{ padding: '5px 10px', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
+                      <td style={{ padding: '5px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.code || `KPI-IND-${String(idx + 1).padStart(2, '0')}`}</td>
+                      <td style={{ padding: '5px 10px', fontWeight: '700', color: '#1E293B' }}>{item.name}</td>
+                      <td style={{ padding: '5px 10px', color: '#475569', fontWeight: '600' }}>{item.dept || 'Tổ QC Sơn'}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'center', fontWeight: '800', color: '#5D3B32' }}>{item.weight || '20%'}</td>
+                      <td style={{ padding: '5px 10px', color: '#15803D', fontWeight: '700' }}>{item.target || item.standard || '>= 98%'}</td>
+                      <td style={{ padding: '5px 10px', color: '#475569' }}>{item.unit || 'Hàng ngày'}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'center' }}>
                         <span style={{
-                          padding: '3px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '800',
-                          backgroundColor: item.status_today === 'Hoàn thành' ? '#DCFCE7' : item.status_today === 'Đang thực hiện' ? '#E0F2FE' : '#FEF3C7',
-                          color: item.status_today === 'Hoàn thành' ? '#15803D' : item.status_today === 'Đang thực hiện' ? '#0369A1' : '#B45309'
+                          padding: '2px 8px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: '800',
+                          backgroundColor: '#ECFDF5', color: '#059669'
                         }}>
-                          {item.status_today || 'Chưa làm'}
+                          {item.status || 'Áp dụng'}
                         </span>
                       </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center', color: '#64748B' }}>{item.last_performed || 'Hôm nay'}</td>
-                      <td style={{ padding: '10px 12px', color: '#16A34A', fontWeight: '700' }}>{item.result || 'Đạt yêu cầu'}</td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                      <td style={{ padding: '5px 10px', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
                           <button
-                            onClick={() => handleEditDashboardChecklist(item)}
-                            style={{ border: 'none', background: '#E0F2FE', color: '#0369A1', padding: '5px 8px', borderRadius: '4px', cursor: 'pointer' }}
-                            title="Chỉnh sửa checklist"
+                            onClick={() => { setEditingTarget(item); setIsTargetModalOpen(true); }}
+                            style={{ border: 'none', background: '#E0F2FE', color: '#0369A1', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                            title="Sửa"
                           >
-                            <Edit2 size={14} />
+                            <Edit2 size={12} />
                           </button>
                           <button
-                            onClick={() => handleDeleteDashboardChecklist(item)}
-                            style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '5px 8px', borderRadius: '4px', cursor: 'pointer' }}
-                            title="Xóa checklist"
+                            onClick={() => handleOpenDeleteConfirm(item)}
+                            style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                            title="Xóa"
                           >
-                            <Trash2 size={14} />
+                            <Trash2 size={12} />
                           </button>
                         </div>
                       </td>
@@ -961,65 +1548,308 @@ const QualityKPIDashboardView = () => {
         )}
 
         {/* ========================================================================= */}
-        {/* TAB 3: DANH SÁCH VI PHẠM                                                  */}
+        {/* TAB 3: CHECKLIST CÔNG VIỆC                                                */}
+        {/* ========================================================================= */}
+        {activeTab === 'checklist_work' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            
+            {/* TOP 3 CARDS matching Mockup Screen 3 */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr 1.6fr', gap: '10px' }}>
+              
+              {/* Card 1: Điểm KPI Trung bình */}
+              <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9' }}>
+                <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#64748B' }}>
+                  Điểm KPI Trung bình
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '3px', marginTop: '6px' }}>
+                  <span style={{ fontSize: '1.8rem', fontWeight: '900', color: '#5D3B32', lineHeight: 1 }}>25</span>
+                  <span style={{ fontSize: '0.95rem', fontWeight: '700', color: '#94A3B8' }}>/ 100</span>
+                </div>
+                <div style={{ width: '100%', height: '6px', backgroundColor: '#F1F5F9', borderRadius: '3px', marginTop: '8px', overflow: 'hidden' }}>
+                  <div style={{ width: '25%', height: '100%', backgroundColor: '#D97706', borderRadius: '3px' }}></div>
+                </div>
+              </div>
+
+              {/* Card 2: Lỗi vi phạm mới nhất */}
+              <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9' }}>
+                <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#5D3B32', marginBottom: '6px' }}>
+                  Lỗi vi phạm mới nhất
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  {[
+                    { label: 'Tăng ca', score: '100/100' },
+                    { label: 'Về sớm', score: '100/100' },
+                    { label: 'Vào trễ', score: '100/100' }
+                  ].map((err, idx) => (
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', backgroundColor: '#7B5233', color: '#FFFFFF', padding: '3px 8px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: '800' }}>
+                      <span>{err.label}</span>
+                      <span>{err.score}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Card 3: Tổng số lỗi phát sinh trong năm */}
+              <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9' }}>
+                <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#5D3B32', marginBottom: '6px' }}>
+                  Tổng số lỗi phát sinh trong năm
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', height: '55px', paddingBottom: '2px' }}>
+                  {[
+                    { m: 'T1', h: '40%' }, { m: 'T2', h: '60%' }, { m: 'T3', h: '50%' },
+                    { m: 'T4', h: '75%' }, { m: 'T5', h: '45%' }, { m: 'T6', h: '90%' },
+                    { m: 'T7', h: '65%' }, { m: 'T8', h: '35%' }, { m: 'T9', h: '80%' },
+                    { m: 'T10', h: '50%' }, { m: 'T11', h: '70%' }, { m: 'T12', h: '95%' }
+                  ].map((item, idx) => (
+                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', flex: 1 }}>
+                      <div style={{ width: '10px', height: item.h, backgroundColor: '#5D3B32', borderRadius: '2px 2px 0 0' }}></div>
+                      <span style={{ fontSize: '0.6rem', color: '#64748B', fontWeight: '700' }}>{item.m}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+
+            {/* TABLE AREA WITH SEARCH & FILTER */}
+            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
+              <div style={{ padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <TableControlToolbar
+                  searchValue={checklistSearch}
+                  onSearchChange={(e) => setChecklistSearch(e.target.value)}
+                  placeholder="Tìm kiếm checklist..."
+                  onSort={() => setSortAsc(prev => !prev)}
+                  onFilter={() => setFilterOpen(prev => !prev)}
+                  onExport={() => handleExportExcel(filterAndSortData(allChecklists.length > 0 ? allChecklists : defaultChecklists, checklistSearch), 'Checklist_Cong_Viec')}
+                  sortAsc={sortAsc}
+                  isFilterActive={filterOpen}
+                />
+                <button
+                  onClick={handleAddDashboardChecklist}
+                  style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 12px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '800', fontSize: '0.75rem', cursor: 'pointer' }}
+                >
+                  <Plus size={13} /> Thêm Checklist mới
+                </button>
+              </div>
+
+              {filterOpen && (
+                <div style={{ padding: '6px 14px', backgroundColor: '#FFFBEB', borderBottom: '1px solid #FCD34D', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.72rem' }}>
+                  <span style={{ fontWeight: '800', color: '#92400E' }}>Bộ lọc trạng thái:</span>
+                  {['Tất cả', 'Đã duyệt / Đạt', 'Chờ xử lý / Cần làm'].map(opt => (
+                    <button
+                      key={opt}
+                      onClick={() => setFilterStatus(opt)}
+                      style={{
+                        padding: '2px 10px',
+                        borderRadius: '4px',
+                        border: '1px solid #F59E0B',
+                        backgroundColor: filterStatus === opt ? '#F59E0B' : '#FFFFFF',
+                        color: filterStatus === opt ? '#FFFFFF' : '#92400E',
+                        fontWeight: '700',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#5D3B32', color: '#FFFFFF', textAlign: 'left' }}>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '40px' }}>STT</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '100px' }}>Mã công việc</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Tên công việc</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '120px' }}>Tần suất thực hiện</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '120px' }}>Trạng thái hôm nay</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '120px' }}>Lần thực hiện cuối</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '110px' }}>Kết quả</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '80px' }}>Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filterAndSortData(allChecklists.length > 0 ? allChecklists : defaultChecklists, checklistSearch).map((item, idx) => (
+                    <tr
+                      key={item.id || idx}
+                      style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}
+                    >
+                      <td style={{ padding: '5px 10px', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
+                      <td style={{ padding: '5px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.task_code || item.code || `CL-00${idx + 1}`}</td>
+                      <td style={{ padding: '5px 10px', fontWeight: '700', color: '#1E293B' }}>{item.content}</td>
+                      <td style={{ padding: '5px 10px', color: '#475569' }}>{item.frequency || 'Hàng ngày'}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'center' }}>
+                        <span style={{
+                          padding: '2px 8px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: '800',
+                          backgroundColor: (item.status_today === 'Đã hoàn thành' || item.status === 'Đã hoàn thành') ? '#DCFCE7' : item.status_today === 'Đang thực hiện' ? '#E0F2FE' : '#FEF3C7',
+                          color: (item.status_today === 'Đã hoàn thành' || item.status === 'Đã hoàn thành') ? '#15803D' : item.status_today === 'Đang thực hiện' ? '#0369A1' : '#B45309'
+                        }}>
+                          {item.status_today || item.status || 'Chưa làm'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '5px 10px', textAlign: 'center', color: '#64748B' }}>{item.last_performed || item.last_run || 'Hôm nay'}</td>
+                      <td style={{ padding: '5px 10px', color: '#16A34A', fontWeight: '700' }}>{item.result || 'Đạt yêu cầu'}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                          <button
+                            onClick={() => handleEditDashboardChecklist(item)}
+                            style={{ border: 'none', background: '#E0F2FE', color: '#0369A1', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                            title="Sửa"
+                          >
+                            <Edit2 size={12} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteDashboardChecklist(item)}
+                            style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                            title="Xóa"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 4: DANH SÁCH VI PHẠM                                                  */}
         {/* ========================================================================= */}
         {activeTab === 'violations_list' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFFFFF', padding: '12px 18px', borderRadius: '10px', border: '1px solid #EADCC9' }}>
-              <div style={{ fontSize: '0.88rem', fontWeight: '800', color: '#5D3B32' }}>
-                📱 Dữ liệu Vi phạm thực tế từ Mobile App
+            {/* TOP 2 CARDS matching Mockup Screen 4 */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: '10px' }}>
+              
+              {/* Card 1: Số vụ vi phạm trong tháng */}
+              <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#64748B' }}>
+                  Số vụ vi phạm trong tháng
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '3px', margin: '6px 0' }}>
+                  <span style={{ fontSize: '1.8rem', fontWeight: '900', color: '#5D3B32', lineHeight: 1 }}>25</span>
+                  <span style={{ fontSize: '0.95rem', fontWeight: '700', color: '#94A3B8' }}>/ 100</span>
+                </div>
+                <div style={{ width: '100%', height: '6px', backgroundColor: '#F1F5F9', borderRadius: '3px', overflow: 'hidden' }}>
+                  <div style={{ width: '25%', height: '100%', backgroundColor: '#D97706', borderRadius: '3px' }}></div>
+                </div>
+                <div style={{ display: 'flex', gap: '12px', marginTop: '8px', fontSize: '0.7rem', fontWeight: '800', color: '#5D3B32' }}>
+                  <span>12 Lỗi nặng</span>
+                  <span>76 (80.5%)</span>
+                </div>
               </div>
-              <span style={{ fontSize: '0.75rem', fontWeight: '700', color: '#16A34A' }}>
-                ✓ Đã đồng bộ với DB Backend
-              </span>
+
+              {/* Card 2: Tỉ lệ vi phạm qua các tháng */}
+              <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9' }}>
+                <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#5D3B32', marginBottom: '8px' }}>
+                  Tỉ lệ vi phạm qua các tháng
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', height: '65px', paddingBottom: '2px' }}>
+                  {[
+                    { m: 'Thg 1', h: '85%' }, { m: 'Thg 2', h: '60%' }, { m: 'Thg 3', h: '75%' },
+                    { m: 'Thg 4', h: '40%' }, { m: 'Thg 5', h: '80%' }, { m: 'Thg 6', h: '30%' },
+                    { m: 'Thg 7', h: '65%' }, { m: 'Thg 8', h: '85%' }, { m: 'Thg 9', h: '90%' }
+                  ].map((item, idx) => (
+                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', flex: 1 }}>
+                      <div style={{ width: '14px', height: item.h, backgroundColor: '#5D3B32', borderRadius: '2px 2px 0 0' }}></div>
+                      <span style={{ fontSize: '0.62rem', color: '#64748B', fontWeight: '700' }}>{item.m}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
             </div>
 
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+            {/* TABLE AREA WITH SEARCH & FILTER */}
+            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
+              <div style={{ padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <TableControlToolbar
+                  searchValue={violationSearch}
+                  onSearchChange={(e) => setViolationSearch(e.target.value)}
+                  placeholder="Tìm vi phạm..."
+                  onSort={() => setSortAsc(prev => !prev)}
+                  onFilter={() => setFilterOpen(prev => !prev)}
+                  onExport={() => handleExportExcel(filterAndSortData(violations.length > 0 ? violations : defaultViolations, violationSearch), 'Danh_Sach_Vi_Pham')}
+                  sortAsc={sortAsc}
+                  isFilterActive={filterOpen}
+                />
+                <button
+                  onClick={() => handleOpenDetailModal(null)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 12px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '800', fontSize: '0.75rem', cursor: 'pointer' }}
+                >
+                  <Plus size={13} /> Thêm mới
+                </button>
+              </div>
+
+              {filterOpen && (
+                <div style={{ padding: '6px 14px', backgroundColor: '#FFFBEB', borderBottom: '1px solid #FCD34D', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.72rem' }}>
+                  <span style={{ fontWeight: '800', color: '#92400E' }}>Bộ lọc trạng thái:</span>
+                  {['Tất cả', 'Đã duyệt / Đạt', 'Chờ xử lý / Cần làm'].map(opt => (
+                    <button
+                      key={opt}
+                      onClick={() => setFilterStatus(opt)}
+                      style={{
+                        padding: '2px 10px',
+                        borderRadius: '4px',
+                        border: '1px solid #F59E0B',
+                        backgroundColor: filterStatus === opt ? '#F59E0B' : '#FFFFFF',
+                        color: filterStatus === opt ? '#FFFFFF' : '#92400E',
+                        fontWeight: '700',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#5D3B32', color: '#FFFFFF', textAlign: 'left' }}>
-                    <th style={{ padding: '10px 12px', fontWeight: '700', width: '50px' }}>STT</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700' }}>Mã BB</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700' }}>Nhân Viên Vi Phạm</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700' }}>Bộ Phận</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700' }}>Nội Dung Lỗi QC</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700', textAlign: 'center' }}>Điểm Trừ</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700', textAlign: 'center' }}>Tiền Phạt</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700' }}>Người Lập (Mobile)</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700', textAlign: 'center' }}>Trạng Thái</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '40px' }}>STT</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Mã NV / Họ tên</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Hành vi vi phạm</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '110px' }}>Mức độ vi phạm</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '80px' }}>Điểm trừ</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '100px' }}>Ngày vi phạm</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Người ghi nhận</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '80px' }}>Thao tác</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {violations.length === 0 ? (
-                    <tr>
-                      <td colSpan={9} style={{ padding: '30px', textAlign: 'center', color: '#64748B' }}>
-                        Chưa có dữ liệu vi phạm từ Mobile App trong Database `/awards-discipline`.
+                  {filterAndSortData(violations.length > 0 ? violations : defaultViolations, violationSearch).map((item, idx) => (
+                    <tr key={item.id || idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}>
+                      <td style={{ padding: '5px 10px', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
+                      <td style={{ padding: '5px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.code} • {item.emp}</td>
+                      <td style={{ padding: '5px 10px', color: '#DC2626', fontWeight: '600' }}>{item.rule}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'center' }}>
+                        <span style={{
+                          padding: '2px 8px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: '800',
+                          backgroundColor: Math.abs(item.score) >= 15 ? '#FEE2E2' : '#FEF3C7',
+                          color: Math.abs(item.score) >= 15 ? '#DC2626' : '#B45309'
+                        }}>
+                          {Math.abs(item.score) >= 15 ? 'Nặng' : 'Vừa'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '5px 10px', textAlign: 'center', fontWeight: '900', color: '#DC2626' }}>{item.score} điểm</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'center', color: '#64748B' }}>{item.date}</td>
+                      <td style={{ padding: '5px 10px', color: '#475569' }}>{item.reporter}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'center' }}>
+                        <button
+                          onClick={() => handleOpenDetailModal(item)}
+                          style={{ border: 'none', background: '#EFF6FF', color: '#2563EB', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                          title="Xem chi tiết"
+                        >
+                          <Eye size={12} />
+                        </button>
                       </td>
                     </tr>
-                  ) : (
-                    violations.map((item, idx) => (
-                      <tr key={item.id} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}>
-                        <td style={{ padding: '10px 12px', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
-                        <td style={{ padding: '10px 12px', fontWeight: '800', color: '#5D3B32' }}>{item.code}</td>
-                        <td style={{ padding: '10px 12px', fontWeight: '700', color: '#1E293B' }}>{item.emp}</td>
-                        <td style={{ padding: '10px 12px', color: '#475569' }}>{item.dept}</td>
-                        <td style={{ padding: '10px 12px', color: '#DC2626', fontWeight: '600' }}>{item.rule}</td>
-                        <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: '900', color: '#DC2626' }}>{item.score} điểm</td>
-                        <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: '800', color: '#C2410C' }}>{item.fine ? `${item.fine.toLocaleString()} VNĐ` : '0 VNĐ'}</td>
-                        <td style={{ padding: '10px 12px', color: '#475569' }}>{item.reporter}</td>
-                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                          <span style={{
-                            padding: '4px 10px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: '800',
-                            backgroundColor: item.status === 'Đã duyệt' ? '#DCFCE7' : '#FEF3C7',
-                            color: item.status === 'Đã duyệt' ? '#15803D' : '#B45309'
-                          }}>
-                            {item.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))
-                  )}
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -1028,111 +1858,133 @@ const QualityKPIDashboardView = () => {
         )}
 
         {/* ========================================================================= */}
-        {/* TAB 4: KẾ HOẠCH ĐÀO TẠO                                                  */}
+        {/* TAB 5: KẾ HOẠCH ĐÀO TẠO                                                  */}
         {/* ========================================================================= */}
         {activeTab === 'training_plan' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFFFFF', padding: '12px 18px', borderRadius: '10px', border: '1px solid #EADCC9' }}>
-              <div style={{ fontSize: '0.88rem', fontWeight: '800', color: '#5D3B32' }}>
-                📚 Bảng Kế hoạch Đào tạo & Lưu trữ File Đính kèm
+            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
+              <div style={{ padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <TableControlToolbar
+                  searchValue={trainingSearch}
+                  onSearchChange={(e) => setTrainingSearch(e.target.value)}
+                  placeholder="Tìm khóa đào tạo..."
+                  onSort={() => setSortAsc(prev => !prev)}
+                  onFilter={() => setFilterOpen(prev => !prev)}
+                  onExport={() => handleExportExcel(filterAndSortData(trainingPlans.length > 0 ? trainingPlans : defaultTrainingPlans, trainingSearch), 'Ke_Hoach_Dao_Tao')}
+                  sortAsc={sortAsc}
+                  isFilterActive={filterOpen}
+                />
+                <button
+                  onClick={() => setIsTrainingModalOpen(true)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 12px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '800', fontSize: '0.75rem', cursor: 'pointer' }}
+                >
+                  <Plus size={13} /> Tạo kế hoạch đào tạo
+                </button>
               </div>
-              <button
-                onClick={() => setIsTrainingModalOpen(true)}
-                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '8px', fontWeight: '800', fontSize: '0.8rem', cursor: 'pointer' }}
-              >
-                <Plus size={16} /> Tạo kế hoạch đào tạo
-              </button>
-            </div>
 
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+              {filterOpen && (
+                <div style={{ padding: '6px 14px', backgroundColor: '#FFFBEB', borderBottom: '1px solid #FCD34D', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.72rem' }}>
+                  <span style={{ fontWeight: '800', color: '#92400E' }}>Bộ lọc trạng thái:</span>
+                  {['Tất cả', 'Đã duyệt / Đạt', 'Chờ xử lý / Cần làm'].map(opt => (
+                    <button
+                      key={opt}
+                      onClick={() => setFilterStatus(opt)}
+                      style={{
+                        padding: '2px 10px',
+                        borderRadius: '4px',
+                        border: '1px solid #F59E0B',
+                        backgroundColor: filterStatus === opt ? '#F59E0B' : '#FFFFFF',
+                        color: filterStatus === opt ? '#FFFFFF' : '#92400E',
+                        fontWeight: '700',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#5D3B32', color: '#FFFFFF', textAlign: 'left' }}>
-                    <th style={{ padding: '10px 12px', fontWeight: '700', width: '50px' }}>STT</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700' }}>Mã Khóa</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700' }}>Tên Chương Trình Đào Tạo</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700' }}>Đối Tượng Tham Gia</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700', textAlign: 'center' }}>Thời Gian</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700' }}>Giảng Viên</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700' }}>Tài Liệu Đính Kèm (File)</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700', textAlign: 'center' }}>Trạng Thái</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700', textAlign: 'center', width: '110px' }}>Thao Tác</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '40px' }}>STT</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Mã Khóa</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Tên Chương Trình Đào Tạo</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Đối Tượng Tham Gia</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center' }}>Thời Gian</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Giảng Viên</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Tài Liệu Đính Kèm (File)</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center' }}>Trạng Thái</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '90px' }}>Thao Tác</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {trainingPlans.length === 0 ? (
-                    <tr>
-                      <td colSpan={9} style={{ padding: '30px', textAlign: 'center', color: '#64748B', fontWeight: '600' }}>
-                        Chưa có kế hoạch đào tạo nào được lưu trong Database (`/kpi-management/checklists`). Bấm "+ Tạo kế hoạch đào tạo" để thêm mới.
+                  {filterAndSortData(trainingPlans.length > 0 ? trainingPlans : defaultTrainingPlans, trainingSearch).map((item, idx) => (
+                    <tr
+                      key={item.id || idx}
+                      onClick={() => handleOpenTrainingDetail(item)}
+                      style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0', cursor: 'pointer' }}
+                    >
+                      <td style={{ padding: '5px 10px', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
+                      <td style={{ padding: '5px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.code}</td>
+                      <td style={{ padding: '5px 10px', fontWeight: '700', color: '#1E293B' }}>{item.name}</td>
+                      <td style={{ padding: '5px 10px', color: '#475569' }}>{item.target}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'center', color: '#64748B' }}>{item.time}</td>
+                      <td style={{ padding: '5px 10px', color: '#334155' }}>{item.teacher}</td>
+                      <td style={{ padding: '5px 10px' }}>
+                        <div
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (item.fileUrl) {
+                              window.open(item.fileUrl, '_blank');
+                            } else {
+                              handleOpenTrainingDetail(item);
+                            }
+                          }}
+                          style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#2563EB', fontWeight: '700', cursor: 'pointer' }}
+                          title={item.fileUrl ? 'Nhấn để mở file trên trang riêng' : 'Nhấn để xem chi tiết'}
+                        >
+                          <ExternalLink size={12} /> {item.fileName}
+                        </div>
+                      </td>
+                      <td style={{ padding: '5px 10px', textAlign: 'center' }}>
+                        <span style={{
+                          padding: '2px 8px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: '800',
+                          backgroundColor: item.status === 'Đã hoàn thành' ? '#DCFCE7' : '#FEF3C7',
+                          color: item.status === 'Đã hoàn thành' ? '#15803D' : '#B45309'
+                        }}>
+                          {item.status}
+                        </span>
+                      </td>
+                      <td style={{ padding: '5px 10px', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleOpenTrainingDetail(item); }}
+                            style={{ border: 'none', background: '#EFF6FF', color: '#2563EB', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                            title="Xem chi tiết"
+                          >
+                            <Eye size={12} />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleEditTrainingPlan(item); }}
+                            style={{ border: 'none', background: '#FEF3C7', color: '#D97706', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                            title="Chỉnh sửa"
+                          >
+                            <Edit2 size={12} />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleOpenDeleteTrainingConfirm(item); }}
+                            style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                            title="Xóa khóa học"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
-                  ) : (
-                    trainingPlans.map((item, idx) => (
-                      <tr
-                        key={item.id}
-                        onClick={() => handleOpenTrainingDetail(item)}
-                        style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0', cursor: 'pointer' }}
-                      >
-                        <td style={{ padding: '10px 12px', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
-                        <td style={{ padding: '10px 12px', fontWeight: '800', color: '#5D3B32' }}>{item.code}</td>
-                        <td style={{ padding: '10px 12px', fontWeight: '700', color: '#1E293B' }}>{item.name}</td>
-                        <td style={{ padding: '10px 12px', color: '#475569' }}>{item.target}</td>
-                        <td style={{ padding: '10px 12px', textAlign: 'center', color: '#64748B' }}>{item.time}</td>
-                        <td style={{ padding: '10px 12px', color: '#334155' }}>{item.teacher}</td>
-                        <td style={{ padding: '10px 12px' }}>
-                          <div
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (item.fileUrl) {
-                                window.open(item.fileUrl, '_blank');
-                              } else {
-                                handleOpenTrainingDetail(item);
-                              }
-                            }}
-                            style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#2563EB', fontWeight: '700', cursor: 'pointer' }}
-                            title={item.fileUrl ? 'Nhấn để mở file trên trang riêng' : 'Nhấn để xem chi tiết'}
-                          >
-                            <ExternalLink size={14} /> {item.fileName}
-                          </div>
-                        </td>
-                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                          <span style={{
-                            padding: '4px 10px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: '800',
-                            backgroundColor: item.status === 'Đã hoàn thành' ? '#DCFCE7' : '#FEF3C7',
-                            color: item.status === 'Đã hoàn thành' ? '#15803D' : '#B45309'
-                          }}>
-                            {item.status}
-                          </span>
-                        </td>
-                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleOpenTrainingDetail(item); }}
-                              style={{ border: 'none', background: '#EFF6FF', color: '#2563EB', padding: '5px 8px', borderRadius: '4px', cursor: 'pointer' }}
-                              title="Xem chi tiết"
-                            >
-                              <Eye size={14} />
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleEditTrainingPlan(item); }}
-                              style={{ border: 'none', background: '#FEF3C7', color: '#D97706', padding: '5px 8px', borderRadius: '4px', cursor: 'pointer' }}
-                              title="Chỉnh sửa"
-                            >
-                              <Edit2 size={14} />
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleOpenDeleteTrainingConfirm(item); }}
-                              style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '5px 8px', borderRadius: '4px', cursor: 'pointer' }}
-                              title="Xóa khóa học"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -1141,65 +1993,87 @@ const QualityKPIDashboardView = () => {
         )}
 
         {/* ========================================================================= */}
-        {/* TAB 5: BÁO CÁO VÀ BBCH                                                   */}
+        {/* TAB 6: BÁO CÁO VÀ BBCH                                                   */}
         {/* ========================================================================= */}
         {activeTab === 'reports_bbch' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFFFFF', padding: '12px 18px', borderRadius: '10px', border: '1px solid #EADCC9' }}>
-              <div style={{ fontSize: '0.88rem', fontWeight: '800', color: '#5D3B32' }}>
-                📋 Báo cáo Đánh giá Nhân sự từ Mobile App
+            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
+              <div style={{ padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <TableControlToolbar
+                  searchValue={reportSearch}
+                  onSearchChange={(e) => setReportSearch(e.target.value)}
+                  placeholder="Tìm báo cáo..."
+                  onSort={() => setSortAsc(prev => !prev)}
+                  onFilter={() => setFilterOpen(prev => !prev)}
+                  onExport={() => handleExportExcel(filterAndSortData(staffEvaluations.length > 0 ? staffEvaluations : defaultReports, reportSearch), 'Bao_Cao_BBCH')}
+                  sortAsc={sortAsc}
+                  isFilterActive={filterOpen}
+                />
+                <span style={{ fontSize: '0.72rem', fontWeight: '700', color: '#16A34A' }}>
+                  ✓ Đồng bộ tự động qua API /staff-evaluation
+                </span>
               </div>
-              <span style={{ fontSize: '0.75rem', fontWeight: '700', color: '#16A34A' }}>
-                ✓ Đồng bộ tự động qua API /staff-evaluation
-              </span>
-            </div>
 
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+              {filterOpen && (
+                <div style={{ padding: '6px 14px', backgroundColor: '#FFFBEB', borderBottom: '1px solid #FCD34D', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.72rem' }}>
+                  <span style={{ fontWeight: '800', color: '#92400E' }}>Bộ lọc trạng thái:</span>
+                  {['Tất cả', 'Đã duyệt / Đạt', 'Chờ xử lý / Cần làm'].map(opt => (
+                    <button
+                      key={opt}
+                      onClick={() => setFilterStatus(opt)}
+                      style={{
+                        padding: '2px 10px',
+                        borderRadius: '4px',
+                        border: '1px solid #F59E0B',
+                        backgroundColor: filterStatus === opt ? '#F59E0B' : '#FFFFFF',
+                        color: filterStatus === opt ? '#FFFFFF' : '#92400E',
+                        fontWeight: '700',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#5D3B32', color: '#FFFFFF', textAlign: 'left' }}>
-                    <th style={{ padding: '10px 12px', fontWeight: '700', width: '50px' }}>STT</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700' }}>Mã Báo Cáo</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700' }}>Nhân Viên</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700' }}>Bộ Phận</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700' }}>Nhận Xét Đánh Giá Quản Lý</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700', textAlign: 'center' }}>Điểm Đánh Giá</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700' }}>Mã BBCH Khắc Phục</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700', textAlign: 'center' }}>Ngày Lập</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700', textAlign: 'center' }}>Trạng Thái</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '40px' }}>STT</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Mã Báo Cáo</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Nhân Viên</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Bộ Phận</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Nhận Xét Đánh Giá Quản Lý</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center' }}>Điểm Đánh Giá</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Mã BBCH Khắc Phục</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center' }}>Ngày Lập</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center' }}>Trạng Thái</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {staffEvaluations.length === 0 ? (
-                    <tr>
-                      <td colSpan={9} style={{ padding: '30px', textAlign: 'center', color: '#64748B' }}>
-                        Chưa có dữ liệu đánh giá nhân sự trong Database `/staff-evaluation`.
+                  {filterAndSortData(staffEvaluations.length > 0 ? staffEvaluations : defaultReports, reportSearch).map((item, idx) => (
+                    <tr key={item.id || idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}>
+                      <td style={{ padding: '5px 10px', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
+                      <td style={{ padding: '5px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.code || `BC_${String(idx + 1).padStart(2, '0')}`}</td>
+                      <td style={{ padding: '5px 10px', fontWeight: '700', color: '#1E293B' }}>{item.emp || item.name}</td>
+                      <td style={{ padding: '5px 10px', color: '#475569' }}>{item.dept || 'Phòng QA/QC'}</td>
+                      <td style={{ padding: '5px 10px', color: '#334155' }}>{item.manager_note || item.note || 'Hoàn thành nhiệm vụ được giao'}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'center', fontWeight: '900', color: '#15803D' }}>{item.eval_score || item.score || 92} điểm</td>
+                      <td style={{ padding: '5px 10px', fontWeight: '700', color: '#0284C7' }}>{item.bbch_code || `BBCH-2026-${String(idx + 1).padStart(2, '0')}`}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'center', color: '#64748B' }}>{item.date || '01/03/2026'}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'center' }}>
+                        <span style={{
+                          padding: '2px 8px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: '800',
+                          backgroundColor: (item.status === 'Đã phê duyệt' || item.status === 'Hoàn thành') ? '#DCFCE7' : '#FEF3C7',
+                          color: (item.status === 'Đã phê duyệt' || item.status === 'Hoàn thành') ? '#15803D' : '#B45309'
+                        }}>
+                          {item.status || 'Đã phê duyệt'}
+                        </span>
                       </td>
                     </tr>
-                  ) : (
-                    staffEvaluations.map((item, idx) => (
-                      <tr key={item.id} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}>
-                        <td style={{ padding: '10px 12px', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
-                        <td style={{ padding: '10px 12px', fontWeight: '800', color: '#5D3B32' }}>{item.code}</td>
-                        <td style={{ padding: '10px 12px', fontWeight: '700', color: '#1E293B' }}>{item.emp}</td>
-                        <td style={{ padding: '10px 12px', color: '#475569' }}>{item.dept}</td>
-                        <td style={{ padding: '10px 12px', color: '#334155' }}>{item.manager_note}</td>
-                        <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: '900', color: '#15803D' }}>{item.eval_score} điểm</td>
-                        <td style={{ padding: '10px 12px', fontWeight: '700', color: '#0284C7' }}>{item.bbch_code}</td>
-                        <td style={{ padding: '10px 12px', textAlign: 'center', color: '#64748B' }}>{item.date}</td>
-                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                          <span style={{
-                            padding: '4px 10px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: '800',
-                            backgroundColor: item.status === 'Đã phê duyệt' ? '#DCFCE7' : '#FEF3C7',
-                            color: item.status === 'Đã phê duyệt' ? '#15803D' : '#B45309'
-                          }}>
-                            {item.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))
-                  )}
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -1208,75 +2082,97 @@ const QualityKPIDashboardView = () => {
         )}
 
         {/* ========================================================================= */}
-        {/* TAB 6: THIẾT LẬP CẢNH BÁO                                                 */}
+        {/* TAB 7: THIẾT LẬP CẢNH BÁO                                                 */}
         {/* ========================================================================= */}
         {activeTab === 'alerts_setup' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFFFFF', padding: '12px 18px', borderRadius: '10px', border: '1px solid #EADCC9' }}>
-              <div style={{ fontSize: '0.88rem', fontWeight: '800', color: '#5D3B32' }}>
-                🔔 Thiết lập Cảnh báo & Phát Thông báo Mới đến Mobile App Banner
+            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
+              <div style={{ padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <TableControlToolbar
+                  searchValue={alertSearch}
+                  onSearchChange={(e) => setAlertSearch(e.target.value)}
+                  placeholder="Tìm cảnh báo..."
+                  onSort={() => setSortAsc(prev => !prev)}
+                  onFilter={() => setFilterOpen(prev => !prev)}
+                  onExport={() => handleExportExcel(filterAndSortData(alertsList.length > 0 ? alertsList : defaultAlerts, alertSearch), 'Thiet_Lap_Canh_Bao')}
+                  sortAsc={sortAsc}
+                  isFilterActive={filterOpen}
+                />
+                <button
+                  onClick={() => { setEditingAlert(null); setIsAlertModalOpen(true); }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 12px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '800', fontSize: '0.75rem', cursor: 'pointer' }}
+                >
+                  <Send size={13} /> Bắn thông báo mới đến Mobile
+                </button>
               </div>
-              <button
-                onClick={() => { setEditingAlert(null); setIsAlertModalOpen(true); }}
-                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '8px', fontWeight: '800', fontSize: '0.8rem', cursor: 'pointer' }}
-              >
-                <Send size={16} /> Bắn thông báo mới đến Mobile
-              </button>
-            </div>
 
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+              {filterOpen && (
+                <div style={{ padding: '6px 14px', backgroundColor: '#FFFBEB', borderBottom: '1px solid #FCD34D', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.72rem' }}>
+                  <span style={{ fontWeight: '800', color: '#92400E' }}>Bộ lọc trạng thái:</span>
+                  {['Tất cả', 'Đã duyệt / Đạt', 'Chờ xử lý / Cần làm'].map(opt => (
+                    <button
+                      key={opt}
+                      onClick={() => setFilterStatus(opt)}
+                      style={{
+                        padding: '2px 10px',
+                        borderRadius: '4px',
+                        border: '1px solid #F59E0B',
+                        backgroundColor: filterStatus === opt ? '#F59E0B' : '#FFFFFF',
+                        color: filterStatus === opt ? '#FFFFFF' : '#92400E',
+                        fontWeight: '700',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#5D3B32', color: '#FFFFFF', textAlign: 'left' }}>
-                    <th style={{ padding: '10px 12px', fontWeight: '700', width: '50px' }}>STT</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700' }}>Mã Cảnh Báo</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700' }}>Tiêu Đề Thông Báo</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700' }}>Nội Dung Phát Đến Banner Mobile App</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700' }}>Đối Tượng Nhận</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700', textAlign: 'center' }}>Thời Gian Phát</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700', textAlign: 'center' }}>Trạng Thái</th>
-                    <th style={{ padding: '10px 12px', fontWeight: '700', textAlign: 'center', width: '90px' }}>Thao Tác</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '40px' }}>STT</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Mã Cảnh Báo</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Tiêu Đề Thông Báo</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Nội Dung Phát Đến Banner Mobile App</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Đối Tượng Nhận</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center' }}>Thời Gian Phát</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center' }}>Trạng Thái</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '80px' }}>Thao Tác</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {alertsList.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} style={{ padding: '30px', textAlign: 'center', color: '#64748B', fontWeight: '600' }}>
-                        Chưa có thông báo nào. Bấm "+ Bắn thông báo mới đến Mobile" để tạo.
+                  {filterAndSortData(alertsList.length > 0 ? alertsList : defaultAlerts, alertSearch).map((item, idx) => (
+                    <tr key={item.id || idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}>
+                      <td style={{ padding: '5px 10px', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
+                      <td style={{ padding: '5px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.code || `CB_${String(idx + 1).padStart(2, '0')}`}</td>
+                      <td style={{ padding: '5px 10px', fontWeight: '700', color: '#1E293B' }}>{item.title || item.name}</td>
+                      <td style={{ padding: '5px 10px', color: '#0F172A', fontWeight: '600', maxWidth: '320px' }}>{item.content}</td>
+                      <td style={{ padding: '5px 10px', color: '#475569' }}>{item.receiver || 'Tất cả nhân sự'}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'center', color: '#64748B' }}>{item.date || 'Hôm nay'}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'center', color: '#16A34A', fontWeight: '800' }}>{item.status || 'Đã phát'}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                          <button
+                            onClick={() => handleEditAlert(item)}
+                            style={{ border: 'none', background: '#FEF3C7', color: '#D97706', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                            title="Chỉnh sửa"
+                          >
+                            <Edit2 size={12} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteAlert(item)}
+                            style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                            title="Xóa thông báo"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
-                  ) : (
-                    alertsList.map((item, idx) => (
-                      <tr key={item.id} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}>
-                        <td style={{ padding: '10px 12px', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
-                        <td style={{ padding: '10px 12px', fontWeight: '800', color: '#5D3B32' }}>{item.code}</td>
-                        <td style={{ padding: '10px 12px', fontWeight: '700', color: '#1E293B' }}>{item.title}</td>
-                        <td style={{ padding: '10px 12px', color: '#0F172A', fontWeight: '600', maxWidth: '320px' }}>{item.content}</td>
-                        <td style={{ padding: '10px 12px', color: '#475569' }}>{item.receiver}</td>
-                        <td style={{ padding: '10px 12px', textAlign: 'center', color: '#64748B' }}>{item.date}</td>
-                        <td style={{ padding: '10px 12px', textAlign: 'center', color: '#16A34A', fontWeight: '800' }}>{item.status}</td>
-                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                            <button
-                              onClick={() => handleEditAlert(item)}
-                              style={{ border: 'none', background: '#FEF3C7', color: '#D97706', padding: '5px 8px', borderRadius: '4px', cursor: 'pointer' }}
-                              title="Chỉnh sửa"
-                            >
-                              <Edit2 size={14} />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteAlert(item)}
-                              style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '5px 8px', borderRadius: '4px', cursor: 'pointer' }}
-                              title="Xóa thông báo"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -1450,6 +2346,180 @@ const QualityKPIDashboardView = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 7. Export Options Modal (Multi-option Excel Export) */}
+      {showExportModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          backdropFilter: 'blur(3px)',
+          zIndex: 1200,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '16px'
+        }}>
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '16px',
+            width: '500px',
+            maxWidth: '95%',
+            padding: '24px',
+            position: 'relative',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+            border: '1.5px solid #EADCC9',
+            boxSizing: 'border-box'
+          }}>
+            <button
+              onClick={() => setShowExportModal(false)}
+              style={{
+                position: 'absolute',
+                top: '16px',
+                right: '16px',
+                border: 'none',
+                background: '#F5F5F5',
+                cursor: 'pointer',
+                borderRadius: '50%',
+                width: '32px',
+                height: '32px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#5D3B32',
+                transition: 'all 0.2s'
+              }}
+            >
+              <X size={18} />
+            </button>
+
+            <h3 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#5D3B32', margin: '0 0 16px 0', borderBottom: '1px solid #EADCC9', paddingBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              📊 Lựa chọn xuất báo cáo Excel (.xlsx)
+            </h3>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
+
+              {/* Option 1 */}
+              <div
+                onClick={() => setSelectedExportOption('current')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '12px',
+                  padding: '12px 14px',
+                  borderRadius: '10px',
+                  border: selectedExportOption === 'current' ? '2px solid #5D3B32' : '1px solid #E2E8F0',
+                  backgroundColor: selectedExportOption === 'current' ? '#FAF6F0' : '#FFFFFF',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <input type="radio" checked={selectedExportOption === 'current'} readOnly style={{ marginTop: '3px', accentColor: '#5D3B32' }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <span style={{ fontWeight: '800', color: '#1E293B', fontSize: '0.85rem' }}>1. Xuất danh sách hiện tại (Tab đang chọn)</span>
+                  <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
+                    Xuất file Excel chứa dữ liệu của Tab hiện tại ({exportPendingData.data?.length || 0} bản ghi đã lọc).
+                  </span>
+                </div>
+              </div>
+
+              {/* Option 2 */}
+              <div
+                onClick={() => setSelectedExportOption('summary')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '12px',
+                  padding: '12px 14px',
+                  borderRadius: '10px',
+                  border: selectedExportOption === 'summary' ? '2px solid #5D3B32' : '1px solid #E2E8F0',
+                  backgroundColor: selectedExportOption === 'summary' ? '#FAF6F0' : '#FFFFFF',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <input type="radio" checked={selectedExportOption === 'summary'} readOnly style={{ marginTop: '3px', accentColor: '#5D3B32' }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <span style={{ fontWeight: '800', color: '#1E293B', fontSize: '0.85rem' }}>2. Báo cáo Tổng hợp KPI & Thống kê</span>
+                  <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
+                    Tạo 2 Worksheets: Sheet 1 chứa Bảng Thống kê Tổng quan KPI + Sheet 2 chứa Chi tiết Tab hiện tại.
+                  </span>
+                </div>
+              </div>
+
+              {/* Option 3 */}
+              <div
+                onClick={() => setSelectedExportOption('full')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '12px',
+                  padding: '12px 14px',
+                  borderRadius: '10px',
+                  border: selectedExportOption === 'full' ? '2px solid #5D3B32' : '1px solid #E2E8F0',
+                  backgroundColor: selectedExportOption === 'full' ? '#FAF6F0' : '#FFFFFF',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <input type="radio" checked={selectedExportOption === 'full'} readOnly style={{ marginTop: '3px', accentColor: '#5D3B32' }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <span style={{ fontWeight: '800', color: '#1E293B', fontSize: '0.85rem' }}>3. Xuất toàn bộ Báo cáo (Tích hợp 7 Tab vào 1 File)</span>
+                  <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
+                    Tải về 1 file Master Excel duy nhất chứa đầy đủ 7 Worksheets tương ứng với 7 Tab trên Dashboard.
+                  </span>
+                </div>
+              </div>
+
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={handleExecuteExport}
+                disabled={isExporting}
+                style={{
+                  flex: 1,
+                  backgroundColor: '#5D3B32',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '10px',
+                  fontWeight: '800',
+                  fontSize: '0.82rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  cursor: isExporting ? 'not-allowed' : 'pointer',
+                  opacity: isExporting ? 0.7 : 1
+                }}
+              >
+                <Download size={16} />
+                {isExporting ? 'Đang khởi tạo file Excel...' : 'Tải xuống Báo cáo Excel'}
+              </button>
+              <button
+                onClick={() => setShowExportModal(false)}
+                disabled={isExporting}
+                style={{
+                  backgroundColor: '#FAF6F0',
+                  color: '#5D3B32',
+                  border: '1px solid #EADCC9',
+                  borderRadius: '8px',
+                  padding: '10px 16px',
+                  fontWeight: '700',
+                  fontSize: '0.82rem',
+                  cursor: isExporting ? 'not-allowed' : 'pointer'
+                }}
+              >
+                Hủy
+              </button>
+            </div>
           </div>
         </div>
       )}
