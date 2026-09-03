@@ -37,6 +37,7 @@ import KPITargetFormModal from '../components/KPITargetFormModal';
 import KPINewTrainingModal from '../components/KPINewTrainingModal';
 import KPISendAlertModal from '../components/KPISendAlertModal';
 import KPITrainingDetailModal from '../components/KPITrainingDetailModal';
+import KPIViolationFormModal from '../components/KPIViolationFormModal';
 import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
 
 {/* Component thanh điều khiển chuẩn hóa: Ô Tìm kiếm + Icon A-Z Sort + Icon Filter + Nút Nâu [↑] Xuất dữ liệu */}
@@ -625,6 +626,9 @@ const QualityKPIDashboardView = () => {
   const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
   const [editingAlert, setEditingAlert] = useState(null);
 
+  const [isViolationModalOpen, setIsViolationModalOpen] = useState(false);
+  const [editingViolation, setEditingViolation] = useState(null);
+
   const [isChecklistModalOpen, setIsChecklistModalOpen] = useState(false);
   const [editingChecklist, setEditingChecklist] = useState(null);
   const [checklistFormData, setChecklistFormData] = useState({ content: '', frequency: 'Hàng ngày', employee_id: 'NV_QLCL_004', status_today: 'Chưa làm' });
@@ -667,28 +671,29 @@ const QualityKPIDashboardView = () => {
   // Tab 7: Checklist Công Việc List (Full CRUD from DB `/kpi-management/checklists`)
   const [allChecklists, setAllChecklists] = useState([]);
 
-  // FETCH REAL DATA FROM DATABASE APIS
+  // FETCH REAL DATA FROM DATABASE APIS (100% Dynamic)
   const fetchDatabaseData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch Violations from Mobile `/awards-discipline` in DB
-      const awardsResp = await api.get('/awards-discipline/').catch(() => null);
-      if (awardsResp && Array.isArray(awardsResp) && awardsResp.length > 0) {
-        const mapped = awardsResp.map((v, idx) => ({
+      // 1. Fetch Violations from DB `/awards-discipline/?limit=1000`
+      const awardsResp = await api.get('/awards-discipline/?limit=1000').catch(() => null);
+      const awardsItems = Array.isArray(awardsResp) ? awardsResp : (awardsResp?.items || []);
+      if (awardsItems.length > 0) {
+        const mapped = awardsItems.map((v, idx) => ({
           id: v.id || idx + 1,
-          code: v.code || `VP-2026-${String(v.id || idx + 1).padStart(3, '0')}`,
+          code: v.rule_code || v.code || `VP-2026-${String(v.id || idx + 1).padStart(3, '0')}`,
           emp: v.staff_name || v.employee_name || 'Nhân sự QC',
           dept: v.department || 'Tổ Sản Xuất',
-          rule: v.issue || v.content || 'Lỗi quy trình QC',
+          rule: v.rule_name || v.issue || v.content || 'Lỗi quy trình QC',
           score: -Math.abs(v.points || 5),
           fine: v.fine_amount || (v.points ? v.points * 20000 : 100000),
-          reporter: v.created_by || 'QC Mobile App',
+          reporter: v.reporter_name || v.created_by || 'QC Mobile App',
           date: v.created_at || v.date || '25/08/2026',
           status: v.status === 'approved' ? 'Đã duyệt' : 'Chờ duyệt'
         }));
         setViolations(mapped);
 
-        // Update stats from DB if records exist
+        // Update stats from DB
         const totalViolationsCount = mapped.length;
         const totalPointsSum = mapped.reduce((acc, curr) => acc + Math.abs(curr.score), 0);
         setSummaryStats(prev => ({
@@ -700,41 +705,45 @@ const QualityKPIDashboardView = () => {
 
       // 2. Fetch KPI Targets Pool from DB `/kpi-management/kpi-pool`
       const kpiPoolResp = await api.get('/kpi-management/kpi-pool').catch(() => null);
-      if (kpiPoolResp && Array.isArray(kpiPoolResp) && kpiPoolResp.length > 0) {
-        const mappedKpis = kpiPoolResp.map((k, idx) => ({
+      const kpiPoolItems = Array.isArray(kpiPoolResp) ? kpiPoolResp : (kpiPoolResp?.items || []);
+      if (kpiPoolItems.length > 0) {
+        const mappedKpis = kpiPoolItems.map((k, idx) => ({
           id: k.id || idx + 1,
           code: k.kpi_code || `KPI${String(11 - idx).padStart(2, '0')}`,
           name: k.content,
-          dept: 'Phòng QA/QC',
+          dept: k.calc_method || 'Phòng QA/QC',
           target: k.target || '>= 98%',
           weight: '20%',
           unit: '%',
           status: 'Áp dụng'
         }));
         setKpiTargets(mappedKpis);
+        setWorkIndicators(mappedKpis);
       }
 
       // 3. Fetch Staff Evaluations from DB `/staff-evaluation`
       const evalResp = await api.get('/staff-evaluation/').catch(() => null);
-      if (evalResp && Array.isArray(evalResp) && evalResp.length > 0) {
-        const mappedEvals = evalResp.map((e, idx) => ({
+      const evalItems = Array.isArray(evalResp) ? evalResp : (evalResp?.items || []);
+      if (evalItems.length > 0) {
+        const mappedEvals = evalItems.map((e, idx) => ({
           id: e.id || idx + 1,
-          code: `DG-2026-${String(e.id || idx + 1).padStart(2, '0')}`,
-          emp: e.employee_name || e.staff_name || 'Nhân sự',
+          code: e.employee_id || `DG-2026-${String(e.id || idx + 1).padStart(2, '0')}`,
+          emp: e.staff_name || e.employee_name || 'Nhân sự',
           dept: e.department || 'Phòng QA/QC',
-          manager_note: e.note || e.content || 'Hoàn thành tốt nhiệm vụ',
-          eval_score: e.score || 90,
-          bbch_code: e.bbch_code || `BBCH-2026-0${idx + 1}`,
-          date: e.date || '28/08/2026',
-          status: 'Đã phê duyệt'
+          manager_note: e.manager_note || e.content || 'Hoàn thành tốt nhiệm vụ',
+          eval_score: e.actual_score || e.score || 90,
+          bbch_code: `BBCH-2026-0${idx + 1}`,
+          date: e.eval_date || e.date || '28/08/2026',
+          status: e.status || 'Đã phê duyệt'
         }));
         setStaffEvaluations(mappedEvals);
       }
 
       // 4. Fetch Checklists / Training Plans from DB `/kpi-management/checklists`
       const checklistResp = await api.get('/kpi-management/checklists?employee_id=admin').catch(() => null);
-      if (checklistResp && Array.isArray(checklistResp) && checklistResp.length > 0) {
-        const mappedPlans = checklistResp.map((c, idx) => ({
+      const checklistItems = Array.isArray(checklistResp) ? checklistResp : (checklistResp?.items || []);
+      if (checklistItems.length > 0) {
+        const mappedPlans = checklistItems.map((c, idx) => ({
           id: c.id !== undefined && c.id !== null ? c.id : idx + 1,
           code: c.task_code || `KH-ĐT-${String(idx + 1).padStart(2, '0')}`,
           name: c.content,
@@ -750,21 +759,16 @@ const QualityKPIDashboardView = () => {
 
       // 4b. Fetch All Checklists for Tab Checklist Công Việc
       const allChecklistsResp = await api.get('/kpi-management/checklists').catch(() => null);
-      if (allChecklistsResp && Array.isArray(allChecklistsResp) && allChecklistsResp.length > 0) {
-        setAllChecklists(allChecklistsResp);
-      } else {
-        setAllChecklists([
-          { id: 1, task_code: 'CL-001', content: 'Kiểm tra 5S khu vực bàn kiểm định QC', frequency: 'Hàng ngày', status_today: 'Hoàn thành', perform_count: 5, last_performed: '31/08/2026', result: 'Đạt 100%', employee_id: 'admin' },
-          { id: 2, task_code: 'CL-002', content: 'Đối chiếu tem nhãn với lệnh sản xuất ISO', frequency: 'Theo ca', status_today: 'Đang thực hiện', perform_count: 2, last_performed: '31/08/2026', result: 'Đạt yêu cầu', employee_id: 'admin' },
-          { id: 3, task_code: 'CL-003', content: 'Kiểm tra thông số kỹ thuật máy đo kích thước', frequency: 'Hàng tuần', status_today: 'Hoàn thành', perform_count: 12, last_performed: '28/08/2026', result: 'Đạt chuẩn', employee_id: 'admin' }
-        ]);
+      const allChecklistsItems = Array.isArray(allChecklistsResp) ? allChecklistsResp : (allChecklistsResp?.items || []);
+      if (allChecklistsItems.length > 0) {
+        setAllChecklists(allChecklistsItems);
       }
 
       // 5. Fetch Notifications / Alerts from DB `/notifications/?all=true`
       let notifResp = await api.get('/notifications/?all=true').catch(() => null);
-
-      if (notifResp && Array.isArray(notifResp) && notifResp.length > 0) {
-        const mappedNotifs = notifResp.map((n, idx) => {
+      const notifItems = Array.isArray(notifResp) ? notifResp : (notifResp?.items || []);
+      if (notifItems.length > 0) {
+        const mappedNotifs = notifItems.map((n, idx) => {
           let title = 'Hiển thị thông báo mới';
           let content = n.content || '';
           if (n.priority_status && n.priority_status.startsWith('BANNER:')) {
@@ -789,8 +793,6 @@ const QualityKPIDashboardView = () => {
           };
         });
         setAlertsList(mappedNotifs);
-      } else {
-        setAlertsList([]);
       }
 
     } catch (err) {
@@ -804,16 +806,52 @@ const QualityKPIDashboardView = () => {
     fetchDatabaseData();
   }, []);
 
-  // Open Modal CL03.2
-  const handleOpenDetailModal = (violation) => {
-    setSelectedTaskData({
-      employee_id: violation.code || 'VP-2026-081',
-      employee_name: violation.emp || 'Nguyễn Văn A',
-      position: violation.dept || 'Tổ Sơn Mạ',
-      score_prev_month: 120,
-      score_current: 95
-    });
-    setIsDetailModalOpen(true);
+  // Open Modal Chi tiết / Ghi nhận Vi phạm QC
+  const handleOpenViolationModal = (item = null) => {
+    setEditingViolation(item);
+    setIsViolationModalOpen(true);
+  };
+
+  const handleSaveViolation = async (violationItem) => {
+    try {
+      const evidenceImagesStr = Array.isArray(violationItem.evidence_images)
+        ? JSON.stringify(violationItem.evidence_images)
+        : (typeof violationItem.evidence_images === 'string' ? violationItem.evidence_images : '[]');
+
+      if (editingViolation) {
+        await api.put(`/awards-discipline/${violationItem.id}`, {
+          staff_name: violationItem.emp,
+          issue: violationItem.rule,
+          points: Math.abs(violationItem.score),
+          severity: violationItem.severity,
+          department: violationItem.dept,
+          reporter_name: violationItem.reporter,
+          evidence_images: evidenceImagesStr,
+          status: violationItem.status === 'Đã duyệt' ? 'approved' : 'pending'
+        }).catch(() => null);
+        
+        setViolations(prev => prev.map(v => v.id === violationItem.id ? violationItem : v));
+      } else {
+        const res = await api.post('/awards-discipline/', {
+          staff_name: violationItem.emp,
+          issue: violationItem.rule,
+          points: Math.abs(violationItem.score),
+          severity: violationItem.severity,
+          department: violationItem.dept,
+          reporter_name: violationItem.reporter,
+          rule_code: violationItem.code,
+          evidence_images: evidenceImagesStr,
+          status: violationItem.status === 'Đã duyệt' ? 'approved' : 'pending'
+        }).catch(() => null);
+        
+        const newId = res?.id || Date.now();
+        setViolations(prev => [{ ...violationItem, id: newId }, ...prev]);
+      }
+      await fetchDatabaseData();
+    } catch (err) {
+      console.error('Error saving violation record:', err);
+    }
+    setEditingViolation(null);
   };
 
   // CRUD Handlers for Tab 2 (Persisted directly to Backend DB API `/kpi-management/kpi-pool`)
@@ -1778,7 +1816,7 @@ const QualityKPIDashboardView = () => {
                   isFilterActive={filterOpen}
                 />
                 <button
-                  onClick={() => handleOpenDetailModal(null)}
+                  onClick={() => handleOpenViolationModal(null)}
                   style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 12px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '800', fontSize: '0.75rem', cursor: 'pointer' }}
                 >
                   <Plus size={13} /> Thêm mới
@@ -1841,9 +1879,9 @@ const QualityKPIDashboardView = () => {
                       <td style={{ padding: '5px 10px', color: '#475569' }}>{item.reporter}</td>
                       <td style={{ padding: '5px 10px', textAlign: 'center' }}>
                         <button
-                          onClick={() => handleOpenDetailModal(item)}
+                          onClick={() => handleOpenViolationModal(item)}
                           style={{ border: 'none', background: '#EFF6FF', color: '#2563EB', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
-                          title="Xem chi tiết"
+                          title="Xem chi tiết / Chỉnh sửa"
                         >
                           <Eye size={12} />
                         </button>
@@ -2220,6 +2258,14 @@ const QualityKPIDashboardView = () => {
         onClose={() => { setIsAlertModalOpen(false); setEditingAlert(null); }}
         alertData={editingAlert}
         onSend={handleSendAlert}
+      />
+
+      {/* 4b. Modal Form Ghi nhận / Xem chi tiết Biên bản Vi phạm QC (KPIViolationFormModal) */}
+      <KPIViolationFormModal
+        isOpen={isViolationModalOpen}
+        onClose={() => { setIsViolationModalOpen(false); setEditingViolation(null); }}
+        violationData={editingViolation}
+        onSave={handleSaveViolation}
       />
 
       {/* 5. Custom Project Delete Confirmation Modal (BeautifulConfirmModal) */}

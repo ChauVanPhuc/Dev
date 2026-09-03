@@ -48,7 +48,7 @@ def get_award_disciplines(
     search: Optional[str] = Query(None, description="Tìm kiếm theo tên nhân sự, mã quy tắc..."),
     sort_order: Optional[str] = Query("desc", description="Sắp xếp: desc (mới nhất) hoặc asc (cũ nhất)"),
     skip: int = Query(0, ge=0),
-    limit: int = Query(10, ge=1, le=100),
+    limit: int = Query(1000, ge=1, le=10000),
     db: Session = Depends(get_db)
 ):
     """
@@ -106,6 +106,15 @@ def get_award_disciplines(
     # Seed dữ liệu mẫu nếu trống
     if total == 0 and not status and not search and not month:
         seed_records = [
+            AwardDiscipline(
+                staff_name="Bùi Công Sự", issue="Bỏ qua bước đo độ ẩm phôi gỗ", note="Ghi nhận vi phạm từ quy trình QC sơn mạ",
+                impact="Nặng", points=15, date=datetime.now().strftime("%d.%m.%Y"),
+                rule_code="VP-001", rule_name="Bỏ qua bước đo độ ẩm phôi gỗ",
+                severity="Nặng", employee_id="NV_QC_001", department="Tổ Sơn Mạ",
+                position="Nhân sự QC", section="Tổ Sơn Mạ", violation_time=datetime.now().strftime("%H:%M | %d/%m/%Y"),
+                reporter_name="QC Lead", status="approved",
+                evidence_images="[]", created_at=datetime.utcnow()
+            ),
             AwardDiscipline(
                 staff_name="Ngô Diễm My", issue="Thiếu tem mẫu", note="Kiểm tra phát hiện thiếu tem mẫu trên cont hàng",
                 impact="Cao", points=50, date=datetime.now().strftime("%d.%m.%Y"),
@@ -303,8 +312,9 @@ def delete_award_discipline(id: int, db: Session = Depends(get_db)):
 async def upload_violation_image(file: UploadFile = File(...)):
     """
     [POST] Upload ảnh bằng chứng vi phạm.
+    Lưu vào BackEnd/static/uploads/violations/
     """
-    upload_dir = os.path.join("uploads", "violations")
+    upload_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "static", "uploads", "violations"))
     os.makedirs(upload_dir, exist_ok=True)
 
     ext = os.path.splitext(file.filename)[1] or ".jpg"

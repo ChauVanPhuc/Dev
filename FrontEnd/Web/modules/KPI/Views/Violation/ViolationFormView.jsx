@@ -280,11 +280,37 @@ const ViolationFormView = () => {
     }));
   };
 
-  const handleAddPhoto = (e) => {
+  const handleAddPhoto = async (e) => {
     const file = e.target.files[0];
     if (file) {
-      setPhotos(prev => [...prev, { id: Date.now(), url: URL.createObjectURL(file), file }]);
-      toast('success', 'Đã thêm hình ảnh.');
+      const localPreview = URL.createObjectURL(file);
+      const photoId = Date.now();
+      setPhotos(prev => [...prev, { id: photoId, url: localPreview, file, uploading: true }]);
+      
+      try {
+        const formDataUpload = new FormData();
+        formDataUpload.append('file', file);
+        const res = await api.post('/awards-discipline/upload-image', formDataUpload, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        if (res && res.path) {
+          setPhotos(prev => prev.map(p => p.id === photoId ? { ...p, url: res.path, uploading: false } : p));
+          toast('success', 'Đã tải ảnh bằng chứng lên máy chủ.');
+        } else {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            setPhotos(prev => prev.map(p => p.id === photoId ? { ...p, url: reader.result, uploading: false } : p));
+          };
+          reader.readAsDataURL(file);
+        }
+      } catch (err) {
+        console.error("Lỗi upload ảnh vi phạm:", err);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setPhotos(prev => prev.map(p => p.id === photoId ? { ...p, url: reader.result, uploading: false } : p));
+        };
+        reader.readAsDataURL(file);
+      }
     }
     e.target.value = null;
   };
@@ -305,6 +331,32 @@ const ViolationFormView = () => {
       const now = new Date();
       const formattedDate = `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()}`;
       
+      // Đảm bảo tất cả các file đều được upload lên máy chủ trước khi lưu biên bản
+      const processedPhotos = await Promise.all(photos.map(async (p) => {
+        if (p.url && (p.url.startsWith('/uploads/') || p.url.startsWith('http://') || p.url.startsWith('https://') || p.url.startsWith('data:'))) {
+          return p.url;
+        }
+        if (p.file) {
+          try {
+            const formDataUpload = new FormData();
+            formDataUpload.append('file', p.file);
+            const res = await api.post('/awards-discipline/upload-image', formDataUpload, {
+              headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            if (res && res.path) return res.path;
+          } catch (err) {
+            console.error('Lỗi upload file khi submit:', err);
+          }
+          return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = () => resolve(p.url);
+            reader.readAsDataURL(p.file);
+          });
+        }
+        return p.url;
+      }));
+
       const payload = {
         staff_name: formData.staff_name,
         issue: formData.rule_name,
@@ -312,7 +364,7 @@ const ViolationFormView = () => {
         impact: formData.severity,
         points: formData.points,
         date: formattedDate,
-        evidence_images: JSON.stringify(photos.map(p => p.url)),
+        evidence_images: JSON.stringify(processedPhotos),
         rule_code: formData.rule_code,
         rule_name: formData.rule_name,
         severity: formData.severity,

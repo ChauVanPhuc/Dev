@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { X, Plus, MoreHorizontal, Edit2, Trash2, AlertTriangle, CheckCircle2 } from 'lucide-react';
-import api from '@webShared/Services/api.service';
+import React, { useState, useEffect, useMemo } from 'react';
+import { X, Plus, MoreHorizontal, Edit2, Trash2, AlertTriangle, CheckCircle2, Image as ImageIcon } from 'lucide-react';
+import api, { getFullImageUrl } from '@webShared/Services/api.service';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import '@styles/components.css';
 
@@ -32,7 +32,7 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
     employee_id: data.employee_id || 'NV_IT_002',
     position: data.position || data.position_name || 'Trưởng nhóm PQC',
     department: data.department || data.section_name || data.department_name || 'Phòng QA/QC',
-    selected_month: data.selected_month || 'Tháng 8',
+    selected_month: data.selected_month || `Tháng ${new Date().getMonth() + 1}`,
     score_prev_month: data.score_prev_month || 120,
     score_current: data.score_current || 40,
     level_code: data.level_code || 'LV-02',
@@ -52,6 +52,8 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
   const [checklist, setChecklist] = useState([]);
   const [managerEvaluations, setManagerEvaluations] = useState([]);
   const [violations, setViolations] = useState([]);
+  const [previewImage, setPreviewImage] = useState(null);
+  const [imageError, setImageError] = useState(false);
 
   // Popup Modal States & Sub-modal control state
   const [subModalType, setSubModalType] = useState(null); // 'kpi' | 'checklist' | 'parent'
@@ -64,6 +66,129 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
   const [kpiPool, setKpiPool] = useState([]);
   const [checklistPool, setChecklistPool] = useState([]);
   const [employeeOptions, setEmployeeOptions] = useState([]);
+
+  // Helper trích xuất Tháng từ mọi định dạng ngày (ISO YYYY-MM-DD..., VN DD/MM/YYYY, text...)
+  const extractMonthNumber = (dateVal) => {
+    if (!dateVal) return null;
+    const str = String(dateVal).trim();
+    if (!str) return null;
+
+    // 1. Tìm định dạng VN: DD/MM/YYYY hoặc DD.MM.YYYY hoặc DD-MM-YYYY (VD: "10:07 | 03/09/2026" hoặc "03.09.2026")
+    const vnMatch = str.match(/(\d{1,2})[-/\.](\d{1,2})[-/\.](\d{4})/);
+    if (vnMatch && vnMatch[2]) {
+      const monthNum = parseInt(vnMatch[2], 10);
+      if (!isNaN(monthNum) && monthNum >= 1 && monthNum <= 12) {
+        return monthNum;
+      }
+    }
+
+    // 2. Tìm định dạng ISO: YYYY-MM-DD... (VD: "2026-09-03T02:06:52.170000")
+    const isoMatch = str.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    if (isoMatch && isoMatch[2]) {
+      const monthNum = parseInt(isoMatch[2], 10);
+      if (!isNaN(monthNum) && monthNum >= 1 && monthNum <= 12) {
+        return monthNum;
+      }
+    }
+
+    // 3. Chuỗi chứa "Tháng X"
+    const monthTextMatch = str.match(/Tháng\s*(\d{1,2})/i);
+    if (monthTextMatch && monthTextMatch[1]) {
+      const monthNum = parseInt(monthTextMatch[1], 10);
+      if (!isNaN(monthNum) && monthNum >= 1 && monthNum <= 12) {
+        return monthNum;
+      }
+    }
+
+    // 4. Fallback qua Date Object
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      return d.getMonth() + 1;
+    }
+
+    return null;
+  };
+
+  // Tự động quét và tổng hợp danh sách các Tháng có dữ liệu thực tế từ tất cả các nguồn (Vi phạm, Đánh giá, KPI, Checklist)
+  const availableMonths = useMemo(() => {
+    const monthsSet = new Set();
+
+    (violations || []).forEach(v => {
+      const m = extractMonthNumber(v.raw_date || v.time);
+      if (m) monthsSet.add(`Tháng ${m}`);
+    });
+
+    (managerEvaluations || []).forEach(m => {
+      const mon = m.month ? parseInt(m.month, 10) : extractMonthNumber(m.time || m.eval_date || m.created_at);
+      if (mon) monthsSet.add(`Tháng ${mon}`);
+    });
+
+    (kpiList || []).forEach(k => {
+      const mon = k.month ? parseInt(k.month, 10) : extractMonthNumber(k.period || k.created_at);
+      if (mon) monthsSet.add(`Tháng ${mon}`);
+    });
+
+    (checklist || []).forEach(c => {
+      const mon = c.month ? parseInt(c.month, 10) : extractMonthNumber(c.date || c.created_at);
+      if (mon) monthsSet.add(`Tháng ${mon}`);
+    });
+
+    // Luôn bổ sung Tháng hiện tại (VD: Tháng 9)
+    const currentMonthNum = new Date().getMonth() + 1;
+    monthsSet.add(`Tháng ${currentMonthNum}`);
+
+    return Array.from(monthsSet).sort((a, b) => {
+      const mA = parseInt(a.replace('Tháng ', ''), 10) || 0;
+      const mB = parseInt(b.replace('Tháng ', ''), 10) || 0;
+      return mB - mA;
+    });
+  }, [violations, managerEvaluations, kpiList, checklist]);
+
+  // Xác định số tháng đang được chọn
+  const selectedMonthNum = useMemo(() => {
+    const str = formData.selected_month || availableMonths[0] || 'Tháng 9';
+    return parseInt(str.replace('Tháng ', ''), 10) || (new Date().getMonth() + 1);
+  }, [formData.selected_month, availableMonths]);
+
+  // Lọc dữ liệu vi phạm của riêng tháng đang chọn
+  const filteredViolationsByMonth = useMemo(() => {
+    if (!violations || violations.length === 0) return [];
+    return violations.filter(v => {
+      const m = extractMonthNumber(v.raw_date || v.time);
+      if (!m) return true;
+      return m === selectedMonthNum;
+    });
+  }, [violations, selectedMonthNum]);
+
+  // Lọc dữ liệu Đánh giá từ quản lý của riêng tháng đang chọn
+  const filteredManagerEvalsByMonth = useMemo(() => {
+    if (!managerEvaluations || managerEvaluations.length === 0) return [];
+    return managerEvaluations.filter(e => {
+      const m = e.month ? parseInt(e.month, 10) : extractMonthNumber(e.time || e.eval_date || e.created_at);
+      if (!m) return true;
+      return m === selectedMonthNum;
+    });
+  }, [managerEvaluations, selectedMonthNum]);
+
+  // Lọc dữ liệu KPI của riêng tháng đang chọn
+  const filteredKpiByMonth = useMemo(() => {
+    if (!kpiList || kpiList.length === 0) return [];
+    return kpiList.filter(k => {
+      const m = k.month ? parseInt(k.month, 10) : extractMonthNumber(k.period || k.created_at);
+      if (!m) return true;
+      return m === selectedMonthNum;
+    });
+  }, [kpiList, selectedMonthNum]);
+
+  // Lọc dữ liệu Checklist của riêng tháng đang chọn
+  const filteredChecklistByMonth = useMemo(() => {
+    if (!checklist || checklist.length === 0) return [];
+    return checklist.filter(c => {
+      const m = c.month ? parseInt(c.month, 10) : extractMonthNumber(c.date || c.created_at);
+      if (!m) return true;
+      return m === selectedMonthNum;
+    });
+  }, [checklist, selectedMonthNum]);
 
   useEffect(() => {
     // 1. Fetch KPI Pool from Database
@@ -227,34 +352,83 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
     };
     fetchManagerEvals();
 
-    // 4. Fetch Violation Points from Mobile `/awards-discipline`
-    api.get('/awards-discipline/')
+    // 4. Fetch Violation Points from Mobile `/awards-discipline/?limit=1000`
+    api.get('/awards-discipline/?limit=1000')
       .then(res => {
         const list = res?.items || (Array.isArray(res) ? res : []);
         if (list.length > 0) {
-          const filtered = list.filter(v => 
-            (v.staff_name && v.staff_name.toLowerCase().includes((empName || '').toLowerCase())) ||
-            (v.employee_name && v.employee_name.toLowerCase().includes((empName || '').toLowerCase())) ||
-            (v.employee_id && String(v.employee_id) === String(empId))
-          );
+          const empNameClean = (empName || '').trim().toLowerCase();
+          const empIdClean = (empId || '').trim().toLowerCase();
+
+          const filtered = list.filter(v => {
+            const vStaffName = (v.staff_name || v.employee_name || v.emp || '').trim().toLowerCase();
+            const vEmpId = (v.employee_id || v.code || '').trim().toLowerCase();
+
+            // Nếu không truyền nhân sự cụ thể thì bỏ qua lọc
+            if (!empNameClean && !empIdClean) return true;
+
+            return (
+              (empNameClean && vStaffName.includes(empNameClean)) ||
+              (empNameClean && empNameClean.includes(vStaffName)) ||
+              (empIdClean && vEmpId.includes(empIdClean)) ||
+              (empIdClean && vEmpId === empIdClean)
+            );
+          });
+
           if (filtered.length > 0) {
-            setViolations(filtered.map((v, idx) => ({
-              id: v.id || idx + 1,
-              time: v.violation_time || (v.created_at ? new Date(v.created_at).toLocaleString('vi-VN') : '25/08/2026 09:30'),
-              type: v.rule_name || v.issue || v.content || 'Vi phạm quy trình QC',
-              description: v.note || v.description || v.rule_code || 'Ghi nhận từ ứng dụng Mobile',
-              image: v.evidence_images && v.evidence_images !== '[]' ? 'Xem ảnh' : 'Không có ảnh',
-              reporter: v.reporter_name || v.created_by || 'QC Supervisor',
-              point: `-${Math.abs(v.points || 0)}`
-            })));
+            setViolations(filtered.map((v, idx) => {
+              const rawImgs = v.evidence_images || v.images || v.image || v.photos || v.photo_url;
+              let imagesList = [];
+              if (rawImgs) {
+                if (Array.isArray(rawImgs)) {
+                  imagesList = rawImgs.filter(Boolean);
+                } else if (typeof rawImgs === 'string') {
+                  const trimmed = rawImgs.trim();
+                  if (trimmed.startsWith('[')) {
+                    try {
+                      const parsed = JSON.parse(trimmed);
+                      if (Array.isArray(parsed)) imagesList = parsed.filter(Boolean);
+                    } catch (e) {
+                      imagesList = [];
+                    }
+                  } else if (trimmed && trimmed !== '[]' && trimmed !== 'null' && trimmed !== 'undefined') {
+                    imagesList = [trimmed];
+                  }
+                }
+              }
+
+              return {
+                id: v.id || idx + 1,
+                time: v.violation_time || v.date || (v.created_at ? new Date(v.created_at).toLocaleString('vi-VN') : '25/08/2026 09:30'),
+                type: v.rule_name || v.issue || v.content || 'Vi phạm quy trình QC',
+                description: v.note || v.description || v.rule_code || 'Ghi nhận từ ứng dụng Mobile',
+                imagesList: imagesList,
+                image: imagesList.length > 0 ? 'Xem ảnh' : 'Không có ảnh',
+                reporter: v.reporter_name || v.created_by || 'QC Supervisor',
+                point: `-${Math.abs(v.points || 0)}`,
+                raw_date: v.date || v.created_at || v.violation_time
+              };
+            }));
+
+            // Tính tổng số điểm vi phạm để tự động hiển thị lên ô "Vi phạm" trên header modal
+            const totalViolationPoints = filtered.reduce((acc, curr) => acc + Math.abs(curr.points || 0), 0);
+            setFormData(prev => ({
+              ...prev,
+              violation_score: totalViolationPoints > 0 ? `-${totalViolationPoints}` : '0'
+            }));
           } else {
             setViolations([]);
+            setFormData(prev => ({ ...prev, violation_score: '0' }));
           }
         } else {
           setViolations([]);
+          setFormData(prev => ({ ...prev, violation_score: '0' }));
         }
       })
-      .catch(() => setViolations([]));
+      .catch(() => {
+        setViolations([]);
+        setFormData(prev => ({ ...prev, violation_score: '0' }));
+      });
   };
 
   // Load employee-specific data when modal opens or taskData changes
@@ -921,12 +1095,13 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                   Chọn tháng <span style={{ color: '#DC2626' }}>*</span>
                 </label>
                 <select
-                  value={formData.selected_month}
+                  value={formData.selected_month || availableMonths[0] || 'Tháng 9'}
                   onChange={(e) => handleInputChange('selected_month', e.target.value)}
                   style={{ width: '100%', padding: '5px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
                 >
-                  <option value="Tháng 8">Tháng 8</option>
-                  <option value="Tháng 7">Tháng 7</option>
+                  {availableMonths.map(m => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
                 </select>
               </div>
 
@@ -1002,18 +1177,18 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
 
           {/* Row 6: Dynamic Calculated Scores (Tháng hiển thị * | Điểm tổng | KPI | QLĐG | Vi phạm) */}
           {(() => {
-            const calculatedViolationScore = violations.reduce((sum, item) => {
+            const calculatedViolationScore = filteredViolationsByMonth.reduce((sum, item) => {
               const pt = parseInt(String(item.point).replace('+', '')) || 0;
               return sum + pt;
             }, 0);
 
-            const calculatedQldgScore = managerEvaluations.reduce((sum, item) => {
+            const calculatedQldgScore = filteredManagerEvalsByMonth.reduce((sum, item) => {
               const pt = parseInt(String(item.total_point).replace('+', '')) || 0;
               return sum + pt;
             }, 0);
 
-            const rawKpiScore = kpiList.length > 0 
-              ? Math.round(kpiList.reduce((sum, item) => sum + (parseFloat(String(item.actual).replace('%', '')) || 95), 0) / kpiList.length)
+            const rawKpiScore = filteredKpiByMonth.length > 0 
+              ? Math.round(filteredKpiByMonth.reduce((sum, item) => sum + (parseFloat(String(item.actual).replace('%', '')) || 95), 0) / filteredKpiByMonth.length)
               : 95;
 
             // KPI score max 100%
@@ -1029,12 +1204,13 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                     Tháng hiển thị <span style={{ color: '#DC2626' }}>*</span>
                   </label>
                   <select
-                    value={formData.selected_month || 'Tháng 8'}
+                    value={formData.selected_month || availableMonths[0] || 'Tháng 9'}
                     onChange={(e) => handleInputChange('selected_month', e.target.value)}
                     style={{ width: '100%', padding: '5px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
                   >
-                    <option value="Tháng 1">Tháng 1</option>
-                    <option value="Tháng 8">Tháng 8</option>
+                    {availableMonths.map(m => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
                   </select>
                 </div>
 
@@ -1188,35 +1364,43 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                       </tr>
                     </thead>
                     <tbody>
-                      {kpiList.map((item, idx) => (
-                        <tr key={item.id} style={{ borderTop: '1px solid #E2E8F0' }}>
-                          <td style={{ padding: '6px 10px', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
-                          <td style={{ padding: '6px 10px', color: '#1E293B', fontWeight: '700' }}>{item.target}</td>
-                          <td style={{ padding: '6px 10px', color: '#475569' }}>{item.threshold}</td>
-                          <td style={{ padding: '6px 10px', color: '#15803D', fontWeight: '800' }}>{item.actual}</td>
-                          <td style={{ padding: '6px 10px', textAlign: 'center', fontWeight: '700', color: '#5D3B32' }}>{item.weight}</td>
-                          <td style={{ padding: '6px 10px', textAlign: 'center' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                              <button
-                                type="button"
-                                title="Chỉnh sửa"
-                                onClick={() => handleEditKpi(item)}
-                                style={{ border: 'none', background: '#EFF6FF', cursor: 'pointer', padding: '4px 6px', borderRadius: '4px', display: 'flex', alignItems: 'center', color: '#2563EB' }}
-                              >
-                                <Edit2 size={13} />
-                              </button>
-                              <button
-                                type="button"
-                                title="Xóa"
-                                onClick={() => handleDeleteKpi(item)}
-                                style={{ border: 'none', background: '#FEF2F2', cursor: 'pointer', padding: '4px 6px', borderRadius: '4px', display: 'flex', alignItems: 'center', color: '#DC2626' }}
-                              >
-                                <Trash2 size={13} />
-                              </button>
-                            </div>
+                      {filteredKpiByMonth.length > 0 ? (
+                        filteredKpiByMonth.map((item, idx) => (
+                          <tr key={item.id} style={{ borderTop: '1px solid #E2E8F0' }}>
+                            <td style={{ padding: '6px 10px', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
+                            <td style={{ padding: '6px 10px', color: '#1E293B', fontWeight: '700' }}>{item.target}</td>
+                            <td style={{ padding: '6px 10px', color: '#475569' }}>{item.threshold}</td>
+                            <td style={{ padding: '6px 10px', color: '#15803D', fontWeight: '800' }}>{item.actual}</td>
+                            <td style={{ padding: '6px 10px', textAlign: 'center', fontWeight: '700', color: '#5D3B32' }}>{item.weight}</td>
+                            <td style={{ padding: '6px 10px', textAlign: 'center' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                                <button
+                                  type="button"
+                                  title="Chỉnh sửa"
+                                  onClick={() => handleEditKpi(item)}
+                                  style={{ border: 'none', background: '#EFF6FF', cursor: 'pointer', padding: '4px 6px', borderRadius: '4px', display: 'flex', alignItems: 'center', color: '#2563EB' }}
+                                >
+                                  <Edit2 size={13} />
+                                </button>
+                                <button
+                                  type="button"
+                                  title="Xóa"
+                                  onClick={() => handleDeleteKpi(item)}
+                                  style={{ border: 'none', background: '#FEF2F2', cursor: 'pointer', padding: '4px 6px', borderRadius: '4px', display: 'flex', alignItems: 'center', color: '#DC2626' }}
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={6} style={{ padding: '16px', textAlign: 'center', color: '#94A3B8' }}>
+                            Chưa có mục tiêu KPI ghi nhận cho tháng này.
                           </td>
                         </tr>
-                      ))}
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -1285,35 +1469,43 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                       </tr>
                     </thead>
                     <tbody>
-                      {checklist.map((item, idx) => (
-                        <tr key={item.id} style={{ borderTop: '1px solid #E2E8F0' }}>
-                          <td style={{ padding: '6px 10px', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
-                          <td style={{ padding: '6px 10px', color: '#1E293B', fontWeight: '700' }}>{item.task}</td>
-                          <td style={{ padding: '6px 10px', color: '#475569' }}>{item.tracking}</td>
-                          <td style={{ padding: '6px 10px', color: '#15803D', fontWeight: '700' }}>{item.status}</td>
-                          <td style={{ padding: '6px 10px', color: '#64748B' }}>{item.note}</td>
-                          <td style={{ padding: '6px 10px', textAlign: 'center' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                              <button
-                                type="button"
-                                title="Chỉnh sửa"
-                                onClick={() => handleEditChecklist(item)}
-                                style={{ border: 'none', background: '#EFF6FF', cursor: 'pointer', padding: '4px 6px', borderRadius: '4px', display: 'flex', alignItems: 'center', color: '#2563EB' }}
-                              >
-                                <Edit2 size={13} />
-                              </button>
-                              <button
-                                type="button"
-                                title="Xóa"
-                                onClick={() => handleDeleteChecklist(item)}
-                                style={{ border: 'none', background: '#FEF2F2', cursor: 'pointer', padding: '4px 6px', borderRadius: '4px', display: 'flex', alignItems: 'center', color: '#DC2626' }}
-                              >
-                                <Trash2 size={13} />
-                              </button>
-                            </div>
+                      {filteredChecklistByMonth.length > 0 ? (
+                        filteredChecklistByMonth.map((item, idx) => (
+                          <tr key={item.id} style={{ borderTop: '1px solid #E2E8F0' }}>
+                            <td style={{ padding: '6px 10px', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
+                            <td style={{ padding: '6px 10px', color: '#1E293B', fontWeight: '700' }}>{item.task}</td>
+                            <td style={{ padding: '6px 10px', color: '#475569' }}>{item.tracking}</td>
+                            <td style={{ padding: '6px 10px', color: '#15803D', fontWeight: '700' }}>{item.status}</td>
+                            <td style={{ padding: '6px 10px', color: '#64748B' }}>{item.note}</td>
+                            <td style={{ padding: '6px 10px', textAlign: 'center' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                                <button
+                                  type="button"
+                                  title="Chỉnh sửa"
+                                  onClick={() => handleEditChecklist(item)}
+                                  style={{ border: 'none', background: '#EFF6FF', cursor: 'pointer', padding: '4px 6px', borderRadius: '4px', display: 'flex', alignItems: 'center', color: '#2563EB' }}
+                                >
+                                  <Edit2 size={13} />
+                                </button>
+                                <button
+                                  type="button"
+                                  title="Xóa"
+                                  onClick={() => handleDeleteChecklist(item)}
+                                  style={{ border: 'none', background: '#FEF2F2', cursor: 'pointer', padding: '4px 6px', borderRadius: '4px', display: 'flex', alignItems: 'center', color: '#DC2626' }}
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={6} style={{ padding: '16px', textAlign: 'center', color: '#94A3B8' }}>
+                            Chưa có nhiệm vụ checklist ghi nhận cho tháng này.
                           </td>
                         </tr>
-                      ))}
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -1353,8 +1545,8 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                       </tr>
                     </thead>
                     <tbody>
-                      {managerEvaluations.length > 0 ? (
-                        managerEvaluations.map((item, idx) => (
+                      {filteredManagerEvalsByMonth.length > 0 ? (
+                        filteredManagerEvalsByMonth.map((item, idx) => (
                           <tr key={item.id} style={{ borderTop: '1px solid #E2E8F0' }}>
                             <td style={{ padding: '6px 10px', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
                             <td style={{ padding: '6px 10px', color: '#475569' }}>{item.time}</td>
@@ -1406,14 +1598,70 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                       </tr>
                     </thead>
                     <tbody>
-                      {violations.length > 0 ? (
-                        violations.map((item, idx) => (
+                      {filteredViolationsByMonth.length > 0 ? (
+                        filteredViolationsByMonth.map((item, idx) => (
                           <tr key={item.id} style={{ borderTop: '1px solid #E2E8F0' }}>
                             <td style={{ padding: '6px 10px', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
                             <td style={{ padding: '6px 10px', color: '#475569' }}>{item.time}</td>
                             <td style={{ padding: '6px 10px', fontWeight: '700', color: '#DC2626' }}>{item.type}</td>
                             <td style={{ padding: '6px 10px', color: '#1E293B' }}>{item.description}</td>
-                            <td style={{ padding: '6px 10px', color: '#2563EB', cursor: 'pointer' }}>{item.image}</td>
+                            <td style={{ padding: '6px 10px' }}>
+                              {item.imagesList && item.imagesList.length > 0 ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                  {item.imagesList.map((imgUrl, imgIdx) => {
+                                    const fullSrc = getFullImageUrl(imgUrl);
+                                    return (
+                                      <div
+                                        key={imgIdx}
+                                        style={{
+                                          position: 'relative',
+                                          width: '42px',
+                                          height: '42px',
+                                          borderRadius: '6px',
+                                          overflow: 'hidden',
+                                          border: '1.5px solid #CBD5E1',
+                                          cursor: 'pointer',
+                                          backgroundColor: '#F8FAFC',
+                                          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                                          transition: 'all 0.2s ease'
+                                        }}
+                                        onClick={() => {
+                                          setImageError(false);
+                                          setPreviewImage(fullSrc);
+                                        }}
+                                        onMouseEnter={(e) => {
+                                          e.currentTarget.style.transform = 'scale(1.1)';
+                                          e.currentTarget.style.borderColor = '#7B5233';
+                                          e.currentTarget.style.zIndex = '10';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                          e.currentTarget.style.transform = 'scale(1)';
+                                          e.currentTarget.style.borderColor = '#CBD5E1';
+                                          e.currentTarget.style.zIndex = '1';
+                                        }}
+                                        title="Nhấn để xem ảnh phóng to"
+                                      >
+                                        <img
+                                          src={fullSrc}
+                                          alt={`Bằng chứng ${imgIdx + 1}`}
+                                          style={{
+                                            width: '100%',
+                                            height: '100%',
+                                            objectFit: 'cover'
+                                          }}
+                                          onError={(e) => {
+                                            e.target.onerror = null;
+                                            e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="%2394A3B8" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>';
+                                          }}
+                                        />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <span style={{ color: '#94A3B8', fontSize: '0.75rem', fontStyle: 'italic' }}>Không có ảnh</span>
+                              )}
+                            </td>
                             <td style={{ padding: '6px 10px', color: '#475569' }}>{item.reporter}</td>
                             <td style={{ padding: '6px 10px', textAlign: 'center', fontWeight: '800', color: '#DC2626' }}>{item.point}</td>
                             <td style={{ padding: '6px 10px', textAlign: 'center', color: '#94A3B8' }}>
@@ -1891,6 +2139,100 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                 Xác nhận
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-modal Xem Ảnh Bằng Chứng Vi Phạm (Lightbox) */}
+      {previewImage && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.85)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 4000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px'
+          }}
+          onClick={() => {
+            setPreviewImage(null);
+            setImageError(false);
+          }}
+        >
+          <div
+            style={{
+              position: 'relative',
+              maxWidth: '90vw',
+              maxHeight: '90vh',
+              minWidth: '360px',
+              backgroundColor: '#FFFFFF',
+              borderRadius: '12px',
+              padding: '18px',
+              boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '14px', borderBottom: '1px solid #E2E8F0', paddingBottom: '10px' }}>
+              <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '800', color: '#7B5233', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <ImageIcon size={18} /> Ảnh bằng chứng vi phạm QC
+              </h4>
+              <button
+                type="button"
+                onClick={() => {
+                  setPreviewImage(null);
+                  setImageError(false);
+                }}
+                style={{
+                  border: 'none',
+                  background: '#F1F5F9',
+                  borderRadius: '50%',
+                  width: '28px',
+                  height: '28px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justify: 'center',
+                  cursor: 'pointer',
+                  color: '#64748B'
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {imageError || (typeof previewImage === 'string' && previewImage.startsWith('blob:')) ? (
+              <div style={{ padding: '24px 20px', textAlign: 'center', backgroundColor: '#FEF2F2', borderRadius: '10px', border: '1px solid #FECACA', color: '#991B1B', maxWidth: '440px' }}>
+                <AlertTriangle size={36} style={{ color: '#DC2626', marginBottom: '8px' }} />
+                <h4 style={{ margin: '0 0 6px 0', fontSize: '0.95rem', fontWeight: '800', color: '#991B1B' }}>
+                  Ảnh bằng chứng không khả dụng
+                </h4>
+                <p style={{ margin: 0, fontSize: '0.82rem', color: '#7F1D1D', lineHeight: '1.5' }}>
+                  Bản ghi này lưu liên kết ảnh tạm thời <code>blob:</code> từ bộ nhớ ứng dụng mobile cũ và đã hết hạn.<br/><br/>
+                  💡 <em>Đã cập nhật hệ thống: Mọi ảnh vi phạm tải lên từ bây giờ sẽ tự động được mã hóa Base64 vĩnh viễn trong Database.</em>
+                </p>
+              </div>
+            ) : (
+              <img
+                src={previewImage}
+                alt="Bằng chứng vi phạm"
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '75vh',
+                  objectFit: 'contain',
+                  borderRadius: '8px',
+                  border: '1px solid #CBD5E1'
+                }}
+                onError={() => setImageError(true)}
+              />
+            )}
           </div>
         </div>
       )}

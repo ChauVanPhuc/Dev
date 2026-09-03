@@ -111,13 +111,27 @@ const AwardDiscipline = () => {
       try {
         let staffList = []
         
-        // Try /kpi-management/employees first
+        // 1. Fetch Staff List từ DB `/quality-employees` (Khớp 100% với trang Danh sách nhân sự /admin/kpi/quality-employees)
         try {
-          const resp = await apiClient.get('/kpi-management/employees')
-          const raw = resp.data || resp
-          staffList = raw?.items || (Array.isArray(raw) ? raw : [])
+          const qResp = await apiClient.get('/quality-employees/?size=1000').catch(() => null)
+          const qRaw = qResp?.data || qResp
+          const qItems = qRaw?.items || (Array.isArray(qRaw) ? qRaw : [])
+          if (qItems && qItems.length > 0) {
+            staffList = qItems
+          }
         } catch (e) {
-          console.warn('/kpi-management/employees failed, trying /hr/employees...', e)
+          console.warn('/quality-employees failed, trying fallback...', e)
+        }
+
+        // Try /kpi-management/employees if empty
+        if (!staffList || staffList.length === 0) {
+          try {
+            const resp = await apiClient.get('/kpi-management/employees')
+            const raw = resp.data || resp
+            staffList = raw?.items || (Array.isArray(raw) ? raw : [])
+          } catch (e) {
+            console.warn('/kpi-management/employees failed, trying /hr/employees...', e)
+          }
         }
 
         // Backup: Try /hr/employees if empty
@@ -229,10 +243,26 @@ const AwardDiscipline = () => {
     }
   }
 
-  const handleFileChange = (e) => {
+  const handleFileChange = async (e) => {
     const file = e.target.files[0]
     if (file && photos.length < 3) {
-      setPhotos([...photos, { id: Date.now(), url: URL.createObjectURL(file), file }])
+      const localUrl = URL.createObjectURL(file)
+      const photoId = Date.now()
+      setPhotos(prev => [...prev, { id: photoId, url: localUrl, file }])
+      
+      try {
+        const formDataUpload = new FormData()
+        formDataUpload.append('file', file)
+        const res = await apiClient.post('/awards-discipline/upload-image', formDataUpload, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        })
+        const path = res?.data?.path || res?.path
+        if (path) {
+          setPhotos(prev => prev.map(p => p.id === photoId ? { ...p, url: path } : p))
+        }
+      } catch (err) {
+        console.error("Lỗi upload ảnh trên mobile:", err)
+      }
     }
     if (e.target) e.target.value = null
   }
@@ -257,6 +287,27 @@ const AwardDiscipline = () => {
     const selectedStaff = staffOptions.find(s => s.value === formData.staff)
     const selectedRule = issueOptions.find(r => r.value === formData.issue)
 
+    // Đảm bảo tất cả ảnh đều được upload lên máy chủ trước khi lưu
+    const processedPhotos = await Promise.all(photos.map(async (p) => {
+      if (p.url && (p.url.startsWith('/uploads/') || p.url.startsWith('http://') || p.url.startsWith('https://') || p.url.startsWith('data:'))) {
+        return p.url
+      }
+      if (p.file) {
+        try {
+          const formDataUpload = new FormData()
+          formDataUpload.append('file', p.file)
+          const res = await apiClient.post('/awards-discipline/upload-image', formDataUpload, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          })
+          const path = res?.data?.path || res?.path
+          if (path) return path
+        } catch (e) {
+          console.error('Lỗi upload file mobile:', e)
+        }
+      }
+      return p.url
+    }))
+
     const payload = {
       staff_name: formData.staff,
       issue: formData.issue,
@@ -264,7 +315,7 @@ const AwardDiscipline = () => {
       impact: selectedRule?.impact || 'Trung bình',
       points: parseInt(formData.points) || 0,
       date: formattedDate,
-      evidence_images: JSON.stringify(photos.map(p => p.url)),
+      evidence_images: JSON.stringify(processedPhotos),
       rule_code: selectedRule?.rule_code || '',
       rule_name: formData.issue,
       severity: selectedRule?.impact || 'Trung bình',

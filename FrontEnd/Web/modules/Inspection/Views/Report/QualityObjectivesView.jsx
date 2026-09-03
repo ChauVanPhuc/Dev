@@ -96,7 +96,7 @@ const QualityObjectivesView = () => {
   const fetchViolationsData = async () => {
     setLoading(true);
     try {
-      const resp = await api.get('/awards-discipline/');
+      const resp = await api.get('/awards-discipline/?limit=1000');
       setViolationsList(Array.isArray(resp) ? resp : (resp?.items || []));
     } catch (err) {
       console.error('Lỗi khi tải danh sách vi phạm:', err);
