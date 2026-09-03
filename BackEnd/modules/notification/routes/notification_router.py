@@ -46,7 +46,9 @@ def create_notification(
             announcer_id=announcer_id,
             target_group=request.target_group,
             target_stage=request.target_stage,
-            priority_status=request.priority_status
+            priority_status=request.priority_status,
+            issued_at=request.issued_at,
+            expires_at=request.expires_at
         )
         db.add(new_notification)
         db.commit()
@@ -387,6 +389,10 @@ def update_notification(
             notification.target_stage = request.target_stage
         if request.priority_status:
             notification.priority_status = request.priority_status
+        if request.issued_at:
+            notification.issued_at = request.issued_at
+        if request.expires_at:
+            notification.expires_at = request.expires_at
         if request.announcer_id:
             acc = db.query(AccountModel).filter(AccountModel.id == request.announcer_id).first()
             if acc:

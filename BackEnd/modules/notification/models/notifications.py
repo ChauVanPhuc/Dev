@@ -30,5 +30,11 @@ class Notification(Base):
     # Thời gian tạo thông báo
     created_at = Column(DateTime, default=get_vietnam_time)
 
+    # Thời gian ban hành thông báo (vd: 2026-09-03 10:30)
+    issued_at = Column(NVARCHAR(100), nullable=True)
+
+    # Thời gian kết thúc thông báo (vd: 2026-09-10 17:00)
+    expires_at = Column(NVARCHAR(100), nullable=True)
+
     # Quan hệ liên kết tới bảng Account để lấy thông tin người gửi
     announcer = relationship("Account")

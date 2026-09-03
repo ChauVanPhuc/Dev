@@ -526,13 +526,13 @@ const QualityKPIDashboardView = () => {
     styleTableHeaderRow(sheetSummary, 10, 4);
 
     const kpiSummaryRows = [
-      ['1. Tổng Số Mục Tiêu Chất Lượng (KPI Targets)', defaultKpiTargets.length, 'Mục tiêu', 'Áp dụng 100%'],
-      ['2. Tổng Số Nhân Sự Được Đánh Giá KPI', defaultWorkIndicators.length, 'Nhân sự', 'Đã duyệt 95%'],
-      ['3. Tổng Số Công Việc Checklist Chất Lượng', defaultChecklists.length, 'Nhiệm vụ', 'Đang thực hiện'],
-      ['4. Tổng Số Vi Phạm Ghi Nhận Từ Mobile App', defaultViolations.length, 'Biên bản', 'Chờ xử lý'],
-      ['5. Tổng Kế Hoạch Đào Tạo An Toàn & QC', defaultTrainingPlans.length, 'Kế hoạch', 'Đã hoàn thành'],
-      ['6. Tổng Báo Cáo Đánh Giá & BBCH Khắc Phục', defaultStaffEvaluations.length, 'Báo cáo', 'Phê duyệt 92%'],
-      ['7. Tổng Cảnh Báo Phát Đến Mobile Banner', defaultAlertsList.length, 'Thông báo', 'Đã phát']
+      ['1. Tổng Số Mục Tiêu Chất Lượng (KPI Targets)', hasFetchedDb ? kpiTargets.length : defaultKpiTargets.length, 'Mục tiêu', 'Áp dụng 100%'],
+      ['2. Tổng Số Nhân Sự Được Đánh Giá KPI', hasFetchedDb ? workIndicators.length : defaultWorkIndicators.length, 'Nhân sự', 'Đã duyệt 95%'],
+      ['3. Tổng Số Công Việc Checklist Chất Lượng', hasFetchedDb ? allChecklists.length : defaultChecklists.length, 'Nhiệm vụ', 'Đang thực hiện'],
+      ['4. Tổng Số Vi Phạm Ghi Nhận Từ Mobile App', hasFetchedDb ? violations.length : defaultViolations.length, 'Biên bản', 'Chờ xử lý'],
+      ['5. Tổng Kế Hoạch Đào Tạo An Toàn & QC', hasFetchedDb ? trainingPlans.length : defaultTrainingPlans.length, 'Kế hoạch', 'Đã hoàn thành'],
+      ['6. Tổng Báo Cáo Đánh Giá & BBCH Khắc Phục', hasFetchedDb ? staffEvaluations.length : defaultStaffEvaluations.length, 'Báo cáo', 'Phê duyệt 92%'],
+      ['7. Tổng Cảnh Báo Phát Đến Mobile Banner', alertsList.length, 'Thông báo', 'Đã phát']
     ];
 
     kpiSummaryRows.forEach(row => sheetSummary.addRow(row));
@@ -563,13 +563,13 @@ const QualityKPIDashboardView = () => {
     const workbook = new ExcelJS.Workbook();
 
     const tabsMap = [
-      { name: '🎯 Mục Tiêu KPI', data: defaultKpiTargets, suffix: 'Muc_Tieu_Chat_Luong', title: '1. BÁO CÁO MỤC TIÊU CHẤT LƯỢNG (KPI TARGETS)' },
-      { name: '📊 Chỉ Số Nhân Sự', data: defaultWorkIndicators, suffix: 'Chi_So_Cong_Viec', title: '2. BÁO CÁO CHỈ SỐ CÔNG VIỆC NHÂN SỰ KPI' },
-      { name: '📝 Checklist QC', data: defaultChecklists, suffix: 'Checklist_Cong_Viec', title: '3. CHECKLIST CÔNG VIỆC CHẤT LƯỢNG' },
-      { name: '⚠️ Vi Phạm Mobile', data: defaultViolations, suffix: 'Danh_Sach_Vi_Pham', title: '4. DANH SÁCH VI PHẠM TỪ MOBILE APP' },
-      { name: '🎓 Đào Tạo QC', data: defaultTrainingPlans, suffix: 'Ke_Hoach_Dao_Tao', title: '5. KẾ HOẠCH ĐÀO TẠO CHẤT LƯỢNG' },
-      { name: '📋 Báo Cáo BBCH', data: defaultStaffEvaluations, suffix: 'Bao_Cao_BBCH', title: '6. BÁO CÁO ĐÁNH GIÁ & BIÊN BẢN KHẮC PHỤC (BBCH)' },
-      { name: '🔔 Cảnh Báo Banner', data: defaultAlertsList, suffix: 'Thiet_Lap_Canh_Bao', title: '7. DỊCH VỤ CẢNH BÁO & PUSH MOBILE BANNER' }
+      { name: '🎯 Mục Tiêu KPI', data: hasFetchedDb ? kpiTargets : (kpiTargets.length > 0 ? kpiTargets : defaultKpiTargets), suffix: 'Muc_Tieu_Chat_Luong', title: '1. BÁO CÁO MỤC TIÊU CHẤT LƯỢNG (KPI TARGETS)' },
+      { name: '📊 Chỉ Số Nhân Sự', data: hasFetchedDb ? workIndicators : (workIndicators.length > 0 ? workIndicators : defaultWorkIndicators), suffix: 'Chi_So_Cong_Viec', title: '2. BÁO CÁO CHỈ SỐ CÔNG VIỆC NHÂN SỰ KPI' },
+      { name: '📝 Checklist QC', data: hasFetchedDb ? allChecklists : (allChecklists.length > 0 ? allChecklists : defaultChecklists), suffix: 'Checklist_Cong_Viec', title: '3. CHECKLIST CÔNG VIỆC CHẤT LƯỢNG' },
+      { name: '⚠️ Vi Phạm Mobile', data: hasFetchedDb ? violations : (violations.length > 0 ? violations : defaultViolations), suffix: 'Danh_Sach_Vi_Pham', title: '4. DANH SÁCH VI PHẠM TỪ MOBILE APP' },
+      { name: '🎓 Đào Tạo QC', data: hasFetchedDb ? trainingPlans : (trainingPlans.length > 0 ? trainingPlans : defaultTrainingPlans), suffix: 'Ke_Hoach_Dao_Tao', title: '5. KẾ HOẠCH ĐÀO TẠO CHẤT LƯỢNG' },
+      { name: '📋 Báo Cáo BBCH', data: hasFetchedDb ? staffEvaluations : (staffEvaluations.length > 0 ? staffEvaluations : defaultStaffEvaluations), suffix: 'Bao_Cao_BBCH', title: '6. BÁO CÁO ĐÁNH GIÁ & BIÊN BẢN KHẮC PHỤC (BBCH)' },
+      { name: '🔔 Cảnh Báo Banner', data: alertsList, suffix: 'Thiet_Lap_Canh_Bao', title: '7. DỊCH VỤ CẢNH BÁO & PUSH MOBILE BANNER' }
     ];
 
     tabsMap.forEach(item => {
@@ -670,6 +670,58 @@ const QualityKPIDashboardView = () => {
 
   // Tab 7: Checklist Công Việc List (Full CRUD from DB `/kpi-management/checklists`)
   const [allChecklists, setAllChecklists] = useState([]);
+  const [hasFetchedDb, setHasFetchedDb] = useState(false);
+  // Helper: Tính khoảng cách thời gian giữa Ban hành & Kết thúc
+  const calculateDuration = (startStr, endStr) => {
+    if (!startStr || !endStr) return '';
+    const parseDateTime = (str) => {
+      if (!str) return null;
+      if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(str)) {
+        return new Date(str);
+      }
+      const dMatch = str.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+      const tMatch = str.match(/(\d{1,2}):(\d{2})/);
+      if (dMatch && tMatch) {
+        const day = parseInt(dMatch[1], 10);
+        const month = parseInt(dMatch[2], 10) - 1;
+        const year = parseInt(dMatch[3], 10);
+        const hour = parseInt(tMatch[1], 10);
+        const min = parseInt(tMatch[2], 10);
+        return new Date(year, month, day, hour, min);
+      }
+      const d = new Date(str);
+      return isNaN(d.getTime()) ? null : d;
+    };
+
+    const startDate = parseDateTime(startStr);
+    const endDate = parseDateTime(endStr);
+    if (!startDate || !endDate) return '';
+    const diffMs = endDate.getTime() - startDate.getTime();
+    if (diffMs <= 0) return '0 phút';
+
+    const totalMins = Math.floor(diffMs / (1000 * 60));
+    const days = Math.floor(totalMins / (24 * 60));
+    const hours = Math.floor((totalMins % (24 * 60)) / 60);
+    const mins = totalMins % 60;
+
+    let res = [];
+    if (days > 0) res.push(`${days} ngày`);
+    if (hours > 0) res.push(`${hours} giờ`);
+    if (mins > 0 || (days === 0 && hours === 0)) res.push(`${mins} phút`);
+    return res.join(' ');
+  };
+
+  // Helper: Định dạng ngày gọn gàng (DD/MM/YYYY HH:mm)
+  const formatCompactDate = (str) => {
+    if (!str) return '';
+    if (typeof str !== 'string') return String(str);
+    const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})(?:T|\s+)(\d{2}):(\d{2})/);
+    if (isoMatch) {
+      const [, y, m, d, hh, mm] = isoMatch;
+      return `${d}/${m}/${y} ${hh}:${mm}`;
+    }
+    return str;
+  };
 
   // FETCH REAL DATA FROM DATABASE APIS (100% Dynamic)
   const fetchDatabaseData = async () => {
@@ -677,8 +729,8 @@ const QualityKPIDashboardView = () => {
     try {
       // 1. Fetch Violations from DB `/awards-discipline/?limit=1000`
       const awardsResp = await api.get('/awards-discipline/?limit=1000').catch(() => null);
-      const awardsItems = Array.isArray(awardsResp) ? awardsResp : (awardsResp?.items || []);
-      if (awardsItems.length > 0) {
+      if (awardsResp !== null) {
+        const awardsItems = Array.isArray(awardsResp) ? awardsResp : (awardsResp?.items || []);
         const mapped = awardsItems.map((v, idx) => ({
           id: v.id || idx + 1,
           code: v.rule_code || v.code || `VP-2026-${String(v.id || idx + 1).padStart(3, '0')}`,
@@ -688,7 +740,7 @@ const QualityKPIDashboardView = () => {
           score: -Math.abs(v.points || 5),
           fine: v.fine_amount || (v.points ? v.points * 20000 : 100000),
           reporter: v.reporter_name || v.created_by || 'QC Mobile App',
-          date: v.created_at || v.date || '25/08/2026',
+          date: formatCompactDate(v.created_at || v.date || '25/08/2026'),
           status: v.status === 'approved' ? 'Đã duyệt' : 'Chờ duyệt'
         }));
         setViolations(mapped);
@@ -705,15 +757,17 @@ const QualityKPIDashboardView = () => {
 
       // 2. Fetch KPI Targets Pool from DB `/kpi-management/kpi-pool`
       const kpiPoolResp = await api.get('/kpi-management/kpi-pool').catch(() => null);
-      const kpiPoolItems = Array.isArray(kpiPoolResp) ? kpiPoolResp : (kpiPoolResp?.items || []);
-      if (kpiPoolItems.length > 0) {
+      if (kpiPoolResp !== null) {
+        const kpiPoolItems = Array.isArray(kpiPoolResp) ? kpiPoolResp : (kpiPoolResp?.items || []);
         const mappedKpis = kpiPoolItems.map((k, idx) => ({
           id: k.id || idx + 1,
-          code: k.kpi_code || `KPI${String(11 - idx).padStart(2, '0')}`,
+          code: k.kpi_code || `KPI${String(idx + 1).padStart(2, '0')}`,
           name: k.content,
+          calc_method: k.calc_method,
           dept: k.calc_method || 'Phòng QA/QC',
           target: k.target || '>= 98%',
           weight: '20%',
+          category: k.category || 'D',
           unit: '%',
           status: 'Áp dụng'
         }));
@@ -723,8 +777,8 @@ const QualityKPIDashboardView = () => {
 
       // 3. Fetch Staff Evaluations from DB `/staff-evaluation`
       const evalResp = await api.get('/staff-evaluation/').catch(() => null);
-      const evalItems = Array.isArray(evalResp) ? evalResp : (evalResp?.items || []);
-      if (evalItems.length > 0) {
+      if (evalResp !== null) {
+        const evalItems = Array.isArray(evalResp) ? evalResp : (evalResp?.items || []);
         const mappedEvals = evalItems.map((e, idx) => ({
           id: e.id || idx + 1,
           code: e.employee_id || `DG-2026-${String(e.id || idx + 1).padStart(2, '0')}`,
@@ -739,35 +793,35 @@ const QualityKPIDashboardView = () => {
         setStaffEvaluations(mappedEvals);
       }
 
-      // 4. Fetch Checklists / Training Plans from DB `/kpi-management/checklists`
-      const checklistResp = await api.get('/kpi-management/checklists?employee_id=admin').catch(() => null);
-      const checklistItems = Array.isArray(checklistResp) ? checklistResp : (checklistResp?.items || []);
-      if (checklistItems.length > 0) {
-        const mappedPlans = checklistItems.map((c, idx) => ({
+      // 4a. Fetch Training Plans directly from DB `/kpi-management/training-plans` (Bảng kpi_training_plans riêng biệt 100%)
+      const trainingResp = await api.get('/kpi-management/training-plans').catch(() => null);
+      if (trainingResp !== null) {
+        const rawTrainingItems = Array.isArray(trainingResp) ? trainingResp : (trainingResp?.items || []);
+        const mappedPlans = rawTrainingItems.map((c, idx) => ({
           id: c.id !== undefined && c.id !== null ? c.id : idx + 1,
-          code: c.task_code || `KH-ĐT-${String(idx + 1).padStart(2, '0')}`,
-          name: c.content,
-          target: 'Nhân viên QC & Tổ trưởng',
-          time: c.last_performed || '15/09/2026',
-          teacher: 'Phòng Đào Tạo',
-          fileName: c.result || 'TaiLieu_DaoTao_QC.pdf',
-          fileUrl: c.result ? (c.result.startsWith('http') ? c.result : getFullImageUrl(`/uploads/${c.result}`)) : null,
-          status: c.status_today || 'Sắp diễn ra'
+          code: c.code || `KH-ĐT-${String(idx + 1).padStart(2, '0')}`,
+          name: c.name,
+          target: c.target || 'Nhân viên QC & Tổ trưởng',
+          time: c.time || '15/09/2026',
+          teacher: c.teacher || 'Phòng Đào Tạo',
+          fileName: c.file_name || 'TaiLieu_DaoTao_QC.pdf',
+          fileUrl: c.file_url ? (c.file_url.startsWith('http') ? c.file_url : getFullImageUrl(`/uploads/${c.file_url}`)) : null,
+          status: c.status || 'Sắp diễn ra'
         }));
         setTrainingPlans(mappedPlans);
       }
 
-      // 4b. Fetch All Checklists for Tab Checklist Công Việc
-      const allChecklistsResp = await api.get('/kpi-management/checklists').catch(() => null);
-      const allChecklistsItems = Array.isArray(allChecklistsResp) ? allChecklistsResp : (allChecklistsResp?.items || []);
-      if (allChecklistsItems.length > 0) {
-        setAllChecklists(allChecklistsItems);
+      // 4b. Fetch Work Checklists directly from DB `/kpi-management/checklists` (Bảng kpi_checklists)
+      const checklistResp = await api.get('/kpi-management/checklists').catch(() => null);
+      if (checklistResp !== null) {
+        const rawChecklistItems = Array.isArray(checklistResp) ? checklistResp : (checklistResp?.items || []);
+        setAllChecklists(rawChecklistItems.length > 0 ? rawChecklistItems : defaultChecklists);
       }
 
       // 5. Fetch Notifications / Alerts from DB `/notifications/?all=true`
       let notifResp = await api.get('/notifications/?all=true').catch(() => null);
-      const notifItems = Array.isArray(notifResp) ? notifResp : (notifResp?.items || []);
-      if (notifItems.length > 0) {
+      if (notifResp !== null) {
+        const notifItems = Array.isArray(notifResp) ? notifResp : (notifResp?.items || []);
         const mappedNotifs = notifItems.map((n, idx) => {
           let title = 'Hiển thị thông báo mới';
           let content = n.content || '';
@@ -789,12 +843,15 @@ const QualityKPIDashboardView = () => {
             channel: 'Mobile App Banner',
             receiver: n.target_group || 'Bộ phận Sản xuất',
             date: n.created_at ? new Date(n.created_at).toLocaleString('vi-VN') : '31/08/2026 08:30',
+            issuedAt: n.issued_at || (n.created_at ? new Date(n.created_at).toLocaleString('vi-VN') : '03/09/2026 10:00'),
+            expiresAt: n.expires_at || '10/09/2026 17:00',
             status: 'Đang phát'
           };
         });
         setAlertsList(mappedNotifs);
       }
 
+      setHasFetchedDb(true);
     } catch (err) {
       console.error('Error fetching DB data:', err);
     } finally {
@@ -925,28 +982,28 @@ const QualityKPIDashboardView = () => {
 
       if (editingTrainingPlan) {
         // Edit mode
-        await api.put(`/kpi-management/checklists/${editingTrainingPlan.id}`, {
-          employee_id: 'admin',
-          task_code: newPlan.code,
-          content: newPlan.name,
-          frequency: 'Đào tạo',
-          status_today: newPlan.status || 'Sắp diễn ra',
-          perform_count: 1,
-          last_performed: newPlan.time || '15/09/2026',
-          result: fileName
+        await api.put(`/kpi-management/training-plans/${editingTrainingPlan.id}`, {
+          code: newPlan.code,
+          name: newPlan.name,
+          target: newPlan.target || 'Nhân viên QC & Tổ trưởng',
+          time: newPlan.time || '15/09/2026',
+          teacher: newPlan.teacher || 'Phòng Đào Tạo',
+          file_name: fileName,
+          file_url: `/uploads/${fileName}`,
+          status: newPlan.status || 'Sắp diễn ra'
         }).catch(() => null);
         setTrainingPlans(prev => prev.map(p => p.id === newPlan.id ? { ...newPlan, fileName, fileUrl: `/uploads/${fileName}` } : p));
       } else {
         // Create mode
-        await api.post('/kpi-management/checklists', {
-          employee_id: 'admin',
-          task_code: newPlan.code,
-          content: newPlan.name,
-          frequency: 'Đào tạo',
-          status_today: newPlan.status || 'Sắp diễn ra',
-          perform_count: 1,
-          last_performed: newPlan.time || '15/09/2026',
-          result: fileName
+        await api.post('/kpi-management/training-plans', {
+          code: newPlan.code,
+          name: newPlan.name,
+          target: newPlan.target || 'Nhân viên QC & Tổ trưởng',
+          time: newPlan.time || '15/09/2026',
+          teacher: newPlan.teacher || 'Phòng Đào Tạo',
+          file_name: fileName,
+          file_url: `/uploads/${fileName}`,
+          status: newPlan.status || 'Sắp diễn ra'
         }).catch(() => null);
 
         setTrainingPlans(prev => [...prev, { ...newPlan, fileName, fileUrl: `/uploads/${fileName}`, id: Date.now() }]);
@@ -966,7 +1023,7 @@ const QualityKPIDashboardView = () => {
     try {
       if (deleteConfirmState.isTrainingPlan) {
         if (item.id !== undefined && item.id !== null) {
-          await api.delete(`/kpi-management/checklists/${item.id}`).catch(err => console.error('Delete checklist error:', err));
+          await api.delete(`/kpi-management/training-plans/${item.id}`).catch(err => console.error('Delete training plan error:', err));
         }
         setTrainingPlans(prev => prev.filter(p => p.id !== item.id));
       } else if (deleteConfirmState.isAlert) {
@@ -996,6 +1053,8 @@ const QualityKPIDashboardView = () => {
       });
 
       const updatedDate = alertPayload.date || new Date().toLocaleString('vi-VN');
+      const issuedAtStr = alertPayload.issuedAt || alertPayload.issued_at || updatedDate;
+      const expiresAtStr = alertPayload.expiresAt || alertPayload.expires_at || '10/09/2026 17:00';
 
       if (editingAlert && editingAlert.id) {
         // 1. Cập nhật ngay trên Giao diện Web (Optimistic UI Update)
@@ -1006,7 +1065,9 @@ const QualityKPIDashboardView = () => {
                 title: alertPayload.title || 'Hiển thị thông báo mới',
                 content: alertPayload.content,
                 receiver: alertPayload.receiver || 'Bộ phận Sản xuất',
-                date: updatedDate
+                date: updatedDate,
+                issuedAt: issuedAtStr,
+                expiresAt: expiresAtStr
               }
             : item
         ));
@@ -1016,7 +1077,9 @@ const QualityKPIDashboardView = () => {
           content: payloadContent,
           target_group: alertPayload.receiver || 'Bộ phận Sản xuất',
           target_stage: 'MOBILE_BANNER',
-          priority_status: `BANNER:${alertPayload.title || 'Hiển thị thông báo mới'}`
+          priority_status: `BANNER:${alertPayload.title || 'Hiển thị thông báo mới'}`,
+          issued_at: issuedAtStr,
+          expires_at: expiresAtStr
         }).catch(err => console.error('Error updating notification:', err));
       } else {
         // Create mode
@@ -1024,7 +1087,9 @@ const QualityKPIDashboardView = () => {
           content: payloadContent,
           target_group: alertPayload.receiver || 'Bộ phận Sản xuất',
           target_stage: 'MOBILE_BANNER',
-          priority_status: `BANNER:${alertPayload.title || 'Hiển thị thông báo mới'}`
+          priority_status: `BANNER:${alertPayload.title || 'Hiển thị thông báo mới'}`,
+          issued_at: issuedAtStr,
+          expires_at: expiresAtStr
         }).catch(err => console.error('Error creating notification:', err));
       }
 
@@ -1286,7 +1351,7 @@ const QualityKPIDashboardView = () => {
                   placeholder="Tìm kiếm mục tiêu..."
                   onSort={() => setSortAsc(prev => !prev)}
                   onFilter={() => setFilterOpen(prev => !prev)}
-                  onExport={() => handleExportExcel(filterAndSortData(kpiTargets.length > 0 ? kpiTargets : defaultKpiTargets, targetSearch), 'Muc_Tieu_Chat_Luong')}
+                  onExport={() => handleExportExcel(filterAndSortData(hasFetchedDb ? kpiTargets : (kpiTargets.length > 0 ? kpiTargets : defaultKpiTargets), targetSearch), 'Muc_Tieu_Chat_Luong')}
                   sortAsc={sortAsc}
                   isFilterActive={filterOpen}
                 />
@@ -1337,7 +1402,7 @@ const QualityKPIDashboardView = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filterAndSortData(kpiTargets.length > 0 ? kpiTargets : defaultKpiTargets, targetSearch).map((item, idx) => (
+                  {filterAndSortData(hasFetchedDb ? kpiTargets : (kpiTargets.length > 0 ? kpiTargets : defaultKpiTargets), targetSearch).map((item, idx) => (
                     <tr
                       key={item.id || idx}
                       style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}
@@ -1488,7 +1553,7 @@ const QualityKPIDashboardView = () => {
                   placeholder="Tìm kiếm chỉ số KPI công việc..."
                   onSort={() => setSortAsc(prev => !prev)}
                   onFilter={() => setFilterOpen(prev => !prev)}
-                  onExport={() => handleExportExcel(filterAndSortData(workIndicators.length > 0 ? workIndicators : defaultWorkIndicators, indicatorSearch), 'Chi_So_Cong_Viec')}
+                  onExport={() => handleExportExcel(filterAndSortData(hasFetchedDb ? workIndicators : (workIndicators.length > 0 ? workIndicators : defaultWorkIndicators), indicatorSearch), 'Chi_So_Cong_Viec')}
                   sortAsc={sortAsc}
                   isFilterActive={filterOpen}
                 />
@@ -1523,56 +1588,64 @@ const QualityKPIDashboardView = () => {
                 </div>
               )}
 
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', tableLayout: 'fixed' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#5D3B32', color: '#FFFFFF', textAlign: 'left' }}>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '40px' }}>STT</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '110px' }}>Mã Chỉ Số KPI</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Tên Chỉ Số KPI Công Việc</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '130px' }}>Phòng Ban / Bộ Phận</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '80px' }}>Tỷ Trọng</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '110px' }}>Mục Tiêu Đạt</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '100px' }}>Tần Suất</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '100px' }}>Trạng Thái</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '80px' }}>Thao Tác</th>
+                    <th style={{ padding: '8px 6px', fontWeight: '700', width: '40px', textAlign: 'center' }}>STT</th>
+                    <th style={{ padding: '8px 8px', fontWeight: '700', width: '80px', textAlign: 'center' }}>Mã KPI</th>
+                    <th style={{ padding: '8px 12px', fontWeight: '700', width: '32%' }}>Tên Chỉ Số KPI Công Việc</th>
+                    <th style={{ padding: '8px 12px', fontWeight: '700', width: '38%' }}>Công Thức / Cách Tính</th>
+                    <th style={{ padding: '8px 6px', fontWeight: '700', textAlign: 'center', width: '75px' }}>Tỷ Trọng</th>
+                    <th style={{ padding: '8px 8px', fontWeight: '700', textAlign: 'center', width: '100px' }}>Mục Tiêu Đạt</th>
+                    <th style={{ padding: '8px 8px', fontWeight: '700', textAlign: 'center', width: '95px' }}>Tần Suất</th>
+                    <th style={{ padding: '8px 8px', fontWeight: '700', textAlign: 'center', width: '95px' }}>Trạng Thái</th>
+                    <th style={{ padding: '8px 6px', fontWeight: '700', textAlign: 'center', width: '80px' }}>Thao Tác</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filterAndSortData(workIndicators.length > 0 ? workIndicators : defaultWorkIndicators, indicatorSearch).map((item, idx) => (
+                  {filterAndSortData(hasFetchedDb ? workIndicators : (workIndicators.length > 0 ? workIndicators : defaultWorkIndicators), indicatorSearch).map((item, idx) => (
                     <tr
                       key={item.id || idx}
-                      style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}
+                      style={{ borderBottom: '1px solid #E2E8F0', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}
                     >
-                      <td style={{ padding: '5px 10px', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
-                      <td style={{ padding: '5px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.code || `KPI-IND-${String(idx + 1).padStart(2, '0')}`}</td>
-                      <td style={{ padding: '5px 10px', fontWeight: '700', color: '#1E293B' }}>{item.name}</td>
-                      <td style={{ padding: '5px 10px', color: '#475569', fontWeight: '600' }}>{item.dept || 'Tổ QC Sơn'}</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'center', fontWeight: '800', color: '#5D3B32' }}>{item.weight || '20%'}</td>
-                      <td style={{ padding: '5px 10px', color: '#15803D', fontWeight: '700' }}>{item.target || item.standard || '>= 98%'}</td>
-                      <td style={{ padding: '5px 10px', color: '#475569' }}>{item.unit || 'Hàng ngày'}</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'center' }}>
+                      <td style={{ padding: '8px 6px', fontWeight: '700', color: '#64748B', textAlign: 'center' }}>{idx + 1}</td>
+                      <td style={{ padding: '8px 8px', fontWeight: '800', color: '#5D3B32', textAlign: 'center' }}>{item.code || `KPI${String(idx + 1).padStart(2, '0')}`}</td>
+                      <td style={{ padding: '8px 12px', fontWeight: '700', color: '#1E293B', wordBreak: 'break-word', lineHeight: '1.4' }}>{item.name}</td>
+                      <td style={{ padding: '8px 12px', color: '#334155', fontWeight: '500', lineHeight: '1.45', wordBreak: 'break-word' }}>{item.calc_method || item.dept || '-'}</td>
+                      <td style={{ padding: '8px 6px', textAlign: 'center', fontWeight: '800', color: '#5D3B32' }}>{item.weight || '20%'}</td>
+                      <td style={{ padding: '8px 8px', textAlign: 'center' }}>
+                        <span style={{ backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', color: '#15803D', padding: '3px 8px', borderRadius: '6px', fontWeight: '700', display: 'inline-block', fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
+                          {item.target || item.standard || '>= 98%'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '8px 8px', textAlign: 'center', color: '#475569', fontWeight: '600' }}>
+                        <span style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', padding: '3px 8px', borderRadius: '4px', fontSize: '0.68rem', whiteSpace: 'nowrap', display: 'inline-block' }}>
+                          {item.unit && item.unit !== '%' ? item.unit : 'Hàng tháng'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '8px 8px', textAlign: 'center' }}>
                         <span style={{
-                          padding: '2px 8px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: '800',
-                          backgroundColor: '#ECFDF5', color: '#059669'
+                          padding: '3px 10px', borderRadius: '6px', fontSize: '0.68rem', fontWeight: '800',
+                          backgroundColor: '#ECFDF5', color: '#059669', border: '1px solid #A7F3D0', whiteSpace: 'nowrap', display: 'inline-block'
                         }}>
                           {item.status || 'Áp dụng'}
                         </span>
                       </td>
-                      <td style={{ padding: '5px 10px', textAlign: 'center' }}>
-                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                      <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
                           <button
                             onClick={() => { setEditingTarget(item); setIsTargetModalOpen(true); }}
-                            style={{ border: 'none', background: '#E0F2FE', color: '#0369A1', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                            style={{ border: 'none', background: '#E0F2FE', color: '#0369A1', padding: '4px 7px', borderRadius: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
                             title="Sửa"
                           >
-                            <Edit2 size={12} />
+                            <Edit2 size={13} />
                           </button>
                           <button
                             onClick={() => handleOpenDeleteConfirm(item)}
-                            style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                            style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '4px 7px', borderRadius: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
                             title="Xóa"
                           >
-                            <Trash2 size={12} />
+                            <Trash2 size={13} />
                           </button>
                         </div>
                       </td>
@@ -1707,7 +1780,7 @@ const QualityKPIDashboardView = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filterAndSortData(allChecklists.length > 0 ? allChecklists : defaultChecklists, checklistSearch).map((item, idx) => (
+                  {filterAndSortData(hasFetchedDb ? allChecklists : (allChecklists.length > 0 ? allChecklists : defaultChecklists), checklistSearch).map((item, idx) => (
                     <tr
                       key={item.id || idx}
                       style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}
@@ -1811,7 +1884,7 @@ const QualityKPIDashboardView = () => {
                   placeholder="Tìm vi phạm..."
                   onSort={() => setSortAsc(prev => !prev)}
                   onFilter={() => setFilterOpen(prev => !prev)}
-                  onExport={() => handleExportExcel(filterAndSortData(violations.length > 0 ? violations : defaultViolations, violationSearch), 'Danh_Sach_Vi_Pham')}
+                  onExport={() => handleExportExcel(filterAndSortData(hasFetchedDb ? violations : (violations.length > 0 ? violations : defaultViolations), violationSearch), 'Danh_Sach_Vi_Pham')}
                   sortAsc={sortAsc}
                   isFilterActive={filterOpen}
                 />
@@ -1860,7 +1933,7 @@ const QualityKPIDashboardView = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filterAndSortData(violations.length > 0 ? violations : defaultViolations, violationSearch).map((item, idx) => (
+                  {filterAndSortData(hasFetchedDb ? violations : (violations.length > 0 ? violations : defaultViolations), violationSearch).map((item, idx) => (
                     <tr key={item.id || idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}>
                       <td style={{ padding: '5px 10px', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
                       <td style={{ padding: '5px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.code} • {item.emp}</td>
@@ -1875,7 +1948,7 @@ const QualityKPIDashboardView = () => {
                         </span>
                       </td>
                       <td style={{ padding: '5px 10px', textAlign: 'center', fontWeight: '900', color: '#DC2626' }}>{item.score} điểm</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'center', color: '#64748B' }}>{item.date}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'center', color: '#64748B', whiteSpace: 'nowrap', fontWeight: '600' }}>{formatCompactDate(item.date)}</td>
                       <td style={{ padding: '5px 10px', color: '#475569' }}>{item.reporter}</td>
                       <td style={{ padding: '5px 10px', textAlign: 'center' }}>
                         <button
@@ -1909,7 +1982,7 @@ const QualityKPIDashboardView = () => {
                   placeholder="Tìm khóa đào tạo..."
                   onSort={() => setSortAsc(prev => !prev)}
                   onFilter={() => setFilterOpen(prev => !prev)}
-                  onExport={() => handleExportExcel(filterAndSortData(trainingPlans.length > 0 ? trainingPlans : defaultTrainingPlans, trainingSearch), 'Ke_Hoach_Dao_Tao')}
+                  onExport={() => handleExportExcel(filterAndSortData(hasFetchedDb ? trainingPlans : (trainingPlans.length > 0 ? trainingPlans : defaultTrainingPlans), trainingSearch), 'Ke_Hoach_Dao_Tao')}
                   sortAsc={sortAsc}
                   isFilterActive={filterOpen}
                 />
@@ -1959,7 +2032,7 @@ const QualityKPIDashboardView = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filterAndSortData(trainingPlans.length > 0 ? trainingPlans : defaultTrainingPlans, trainingSearch).map((item, idx) => (
+                  {filterAndSortData(hasFetchedDb ? trainingPlans : (trainingPlans.length > 0 ? trainingPlans : defaultTrainingPlans), trainingSearch).map((item, idx) => (
                     <tr
                       key={item.id || idx}
                       onClick={() => handleOpenTrainingDetail(item)}
@@ -2044,7 +2117,7 @@ const QualityKPIDashboardView = () => {
                   placeholder="Tìm báo cáo..."
                   onSort={() => setSortAsc(prev => !prev)}
                   onFilter={() => setFilterOpen(prev => !prev)}
-                  onExport={() => handleExportExcel(filterAndSortData(staffEvaluations.length > 0 ? staffEvaluations : defaultStaffEvaluations, reportSearch), 'Bao_Cao_BBCH')}
+                  onExport={() => handleExportExcel(filterAndSortData(hasFetchedDb ? staffEvaluations : (staffEvaluations.length > 0 ? staffEvaluations : defaultStaffEvaluations), reportSearch), 'Bao_Cao_BBCH')}
                   sortAsc={sortAsc}
                   isFilterActive={filterOpen}
                 />
@@ -2091,7 +2164,7 @@ const QualityKPIDashboardView = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filterAndSortData(staffEvaluations.length > 0 ? staffEvaluations : defaultStaffEvaluations, reportSearch).map((item, idx) => (
+                  {filterAndSortData(hasFetchedDb ? staffEvaluations : (staffEvaluations.length > 0 ? staffEvaluations : defaultStaffEvaluations), reportSearch).map((item, idx) => (
                     <tr key={item.id || idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}>
                       <td style={{ padding: '5px 10px', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
                       <td style={{ padding: '5px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.code || `BC_${String(idx + 1).padStart(2, '0')}`}</td>
@@ -2176,7 +2249,9 @@ const QualityKPIDashboardView = () => {
                     <th style={{ padding: '6px 10px', fontWeight: '700' }}>Tiêu Đề Thông Báo</th>
                     <th style={{ padding: '6px 10px', fontWeight: '700' }}>Nội Dung Phát Đến Banner Mobile App</th>
                     <th style={{ padding: '6px 10px', fontWeight: '700' }}>Đối Tượng Nhận</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center' }}>Thời Gian Phát</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center' }}>Thời Gian Ban Hành</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center' }}>Thời Gian Kết Thúc</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center' }}>Tổng Thời Gian</th>
                     <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center' }}>Trạng Thái</th>
                     <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '80px' }}>Thao Tác</th>
                   </tr>
@@ -2189,7 +2264,9 @@ const QualityKPIDashboardView = () => {
                       <td style={{ padding: '5px 10px', fontWeight: '700', color: '#1E293B' }}>{item.title || item.name}</td>
                       <td style={{ padding: '5px 10px', color: '#0F172A', fontWeight: '600', maxWidth: '320px' }}>{item.content}</td>
                       <td style={{ padding: '5px 10px', color: '#475569' }}>{item.receiver || 'Tất cả nhân sự'}</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'center', color: '#64748B' }}>{item.date || 'Hôm nay'}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'center', color: '#5D3B32', fontWeight: '700' }}>{item.issuedAt || item.date || '03/09/2026 10:00'}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'center', color: '#DC2626', fontWeight: '700' }}>{item.expiresAt || '10/09/2026 17:00'}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'center', color: '#15803D', fontWeight: '800' }}>{calculateDuration(item.issuedAt, item.expiresAt) || '7 ngày'}</td>
                       <td style={{ padding: '5px 10px', textAlign: 'center', color: '#16A34A', fontWeight: '800' }}>{item.status || 'Đã phát'}</td>
                       <td style={{ padding: '5px 10px', textAlign: 'center' }}>
                         <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>

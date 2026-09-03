@@ -1,6 +1,7 @@
-from sqlalchemy import Column, Integer, ForeignKey
+from sqlalchemy import Column, Integer, Float, DateTime, ForeignKey
 from sqlalchemy.dialects.mssql import NVARCHAR
 from config.database import Base
+from datetime import datetime
 
 class KPIChecklist(Base):
     """
@@ -28,12 +29,13 @@ class KPIEmployeeItem(Base):
     employee_id = Column(NVARCHAR(50), nullable=False, index=True) # Liên kết với accounts.employee_id
     kpi_code    = Column(NVARCHAR(50), nullable=False) # e.g. "KPI01"
     content     = Column(NVARCHAR(255), nullable=False) # e.g. "Duy trì họp giao việc"
-    score       = Column(Integer, nullable=False, default=0) # Điểm số tối đa của KPI này
+    score       = Column(Integer, nullable=False, default=0) # Điểm số tối đa/Trọng số của KPI này
     calc_method = Column(NVARCHAR(500), nullable=False) # Công thức / cách tính
     target      = Column(NVARCHAR(100), nullable=False) # e.g. ">= 1 Biên bản/tuần"
     actual      = Column(NVARCHAR(100), nullable=True) # e.g. "1.2 biên bản/tuần"
     status      = Column(NVARCHAR(50), nullable=True) # e.g. "Đạt KPI", "Chưa đạt KPI"
     icon        = Column(NVARCHAR(50), nullable=True) # Tên icon indicator
+    category    = Column(NVARCHAR(10), nullable=True, default="D") # A, B, C, D, E, F
 
 class KPIViolation(Base):
     """
@@ -97,6 +99,60 @@ class KPIItemPool(Base):
     id          = Column(Integer, primary_key=True, index=True)
     kpi_code    = Column(NVARCHAR(50), nullable=False) # e.g. "KPI01"
     content     = Column(NVARCHAR(255), nullable=False) # e.g. "Tỷ lệ lọt lỗi"
-    # score     = Column(Integer, nullable=False, default=50) # Điểm số (Đã loại bỏ)
     calc_method = Column(NVARCHAR(500), nullable=False) # Cách tính
     target      = Column(NVARCHAR(100), nullable=False) # Mục tiêu
+    category    = Column(NVARCHAR(10), nullable=True, default="D") # A, B, C, D, E, F
+
+class KPITrainingPlan(Base):
+    """
+    Model quản lý Kế hoạch đào tạo độc lập (Tab 5 trong KPI Dashboard).
+    """
+    __tablename__ = "kpi_training_plans"
+
+    id        = Column(Integer, primary_key=True, index=True)
+    code      = Column(NVARCHAR(50), nullable=False) # e.g. "KH-ĐT-01"
+    name      = Column(NVARCHAR(255), nullable=False) # Tên chương trình đào tạo
+    target    = Column(NVARCHAR(255), nullable=False) # Đối tượng tham gia
+    time      = Column(NVARCHAR(100), nullable=False) # Thời gian tổ chức
+    teacher   = Column(NVARCHAR(255), nullable=False) # Giảng viên / Đơn vị đào tạo
+    file_name = Column(NVARCHAR(255), nullable=True) # Tài liệu đính kèm
+    file_url  = Column(NVARCHAR(500), nullable=True) # Đường dẫn file
+    status    = Column(NVARCHAR(50), nullable=False, default="Sắp diễn ra")
+
+class KPIMonthlyScore(Base):
+    """
+    Model lưu trữ kết quả tính điểm KPI và Xếp loại tổng kết của nhân viên theo tháng.
+    """
+    __tablename__ = "kpi_monthly_scores"
+
+    id              = Column(Integer, primary_key=True, index=True)
+    employee_id     = Column(NVARCHAR(50), nullable=False, index=True) # Mã nhân viên
+    month           = Column(Integer, nullable=False) # Tháng (1 - 12)
+    year            = Column(Integer, nullable=False) # Năm (e.g. 2026)
+    kpi_score       = Column(Float, nullable=False, default=0.0) # Điểm KPI trọng số
+    checklist_score = Column(Float, nullable=False, default=0.0) # Điểm Checklist
+    violation_score = Column(Float, nullable=False, default=0.0) # Điểm vi phạm (bị trừ)
+    manager_score   = Column(Float, nullable=False, default=0.0) # Điểm QLĐG
+    total_score     = Column(Float, nullable=False, default=0.0) # Điểm tổng kết cuối cùng
+    rating          = Column(NVARCHAR(20), nullable=True) # Xếp loại (A+, A, B, C, D)
+    details_json    = Column(NVARCHAR(None), nullable=True) # JSON chi tiết từng KPI
+    calculated_at   = Column(DateTime, default=datetime.utcnow)
+
+class KPIAuditLog(Base):
+    """
+    Model lưu vết lịch sử sửa đổi giá trị thực tế (actual) của các KPI (Audit Trail).
+    """
+    __tablename__ = "kpi_audit_logs"
+
+    id          = Column(Integer, primary_key=True, index=True)
+    item_id     = Column(Integer, nullable=True, index=True) # Liên kết kpi_employee_items.id
+    employee_id = Column(NVARCHAR(50), nullable=False, index=True)
+    kpi_code    = Column(NVARCHAR(50), nullable=False) # e.g. "KPI04"
+    old_value   = Column(NVARCHAR(100), nullable=True) # Giá trị trước khi sửa
+    new_value   = Column(NVARCHAR(100), nullable=False) # Giá trị mới
+    modified_by = Column(NVARCHAR(100), nullable=True, default="Quản lý QC") # Người sửa
+    modified_at = Column(DateTime, default=datetime.utcnow) # Thời gian
+    reason      = Column(NVARCHAR(500), nullable=True) # Ghi chú/Lý do
+
+
+

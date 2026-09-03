@@ -3,7 +3,7 @@ import os
 import shutil
 from sqlalchemy.orm import Session
 from config.database import get_db
-from modules.kpi.models.kpi_management import KPIChecklist, KPIEmployeeItem, KPIViolation, KPIFeedback, KPIPointRule, KPIChecklistPool, KPIItemPool
+from modules.kpi.models.kpi_management import KPIChecklist, KPIEmployeeItem, KPIViolation, KPIFeedback, KPIPointRule, KPIChecklistPool, KPIItemPool, KPITrainingPlan, KPIMonthlyScore, KPIAuditLog
 from modules.auth.models.accounts import Account
 from modules.auth.models.employees import Employee
 from modules.auth.models.departments import Department
@@ -83,6 +83,16 @@ class KPIItemPoolBase(BaseModel):
     content: str
     calc_method: str
     target: str
+
+class KPITrainingPlanBase(BaseModel):
+    code: str
+    name: str
+    target: str
+    time: str
+    teacher: str
+    file_name: Optional[str] = None
+    file_url: Optional[str] = None
+    status: Optional[str] = "Sắp diễn ra"
 
 # --- DEFAULT DATA GENERATOR (SEEDERS) ---
 
@@ -618,30 +628,33 @@ def get_kpi_pool(db: Session = Depends(get_db)):
     """
     [GET] Lấy danh sách KPI mẫu chung. Nếu trống, tự động seed các giá trị mặc định.
     """
-    items = db.query(KPIItemPool).order_by(KPIItemPool.id.desc()).all()
+    items = db.query(KPIItemPool).order_by(KPIItemPool.id.asc()).all()
     if not items:
         default_items = [
-            ("KPI01", "Hiệu suất máy OEE", "Điểm OEE trung bình đạt mục tiêu", "OEE >= 85%"),
-            ("KPI02", "Vệ sinh 5S xưởng", "Kết quả đánh giá 5S tuần", "Điểm đánh giá >= 90"),
-            ("KPI03", "Báo cáo OQA", "Số báo cáo gửi đúng hạn", "100% đúng hạn"),
-            ("KPI04", "Họp team", "> 1 buổi / tuần", ">= 1 buổi"),
-            ("KPI05", "Hiệu quả kiểm tra chéo & Thử nghiệm phá hủy", "> 1 báo cáo / tháng", ">= 1 báo cáo"),
-            ("KPI06", "Tiến độ đánh giá nhân sự", "Hoàn thành đánh giá nhân sự", "Hoàn thành"),
-            ("KPI07", "Báo cáo tình hình", ">1 báo cáo/ tháng", ">= 1 báo cáo"),
-            ("KPI08", "Xây dựng CAPA", "Đóng CAPA đúng hạn", "Đúng hạn"),
-            ("KPI09", "Tỷ lệ lọt lỗi", "Tỷ lệ lọt lỗi nhỏ hơn mục tiêu", "< 0.5%"),
-            ("KPI10", "Tỷ lệ claim", "Tỷ lệ khiếu nại khách hàng", "0 claim"),
-            ("KPI11", "Tỷ lệ sản phẩm đạt lần đầu", "Tỷ lệ sản phẩm đạt chất lượng lần đầu (FTY)", ">= 98%")
+            ("KPI01", "Tỷ lệ lỗi lọt lưới do vật tư đầu vào", "(Số lô lỗi phát hiện) / (Tổng số lô lỗi thực tế dựa trên Phiếu NCR) * 100", "> 98%", "A"),
+            ("KPI02", "Tỷ lệ hoàn thành CAPA đúng hạn", "(Số phiếu quá hạn 5 ngày) / (Tổng số phiếu nhận) * 100", "> 98%", "B"),
+            ("KPI03", "Số lần sai sót nghiệp vụ (Báo cáo, quy trình...)", "Mỗi một báo cáo ghi nhận đều -2%", "> 96%", "C"),
+            ("KPI04", "Tỷ lệ ngày công làm việc", "(Số ngày đi làm) / (Tổng số ngày cần đi làm) * 100", "> 97%", "D"),
+            ("KPI05", "Tỷ lệ tham gia đào tạo", "(Số lần tham gia đào tạo) / (Tổng số lần cần tham gia đào tạo) * 100", "100%", "E"),
+            ("KPI06", "Tỷ lệ tuân thủ tuần tra mẫu (30 phút/lần)", "Mỗi một báo cáo sai sót được phòng QA ghi nhận đều -2%", ">= 98%", "C"),
+            ("KPI07", "Tỷ lệ lọt pass hàng thành công (Pallet)", "(1 - (Tổng số pallet bị trả về / Tổng số pallet được bàn giao)) * 100", "100%", "A"),
+            ("KPI08", "Tỷ lệ tuân thủ tuần tra mẫu đầu tiên", "Mỗi một báo cáo ghi nhận đều -2%", ">= 98%", "C"),
+            ("KPI09", "Tỷ lệ pass hàng thành công (Sản phẩm)", "(1 - (Tổng số sản phẩm bị trả về / Tổng số sản phẩm được bàn giao)) * 100", "> 95%", "A"),
+            ("KPI10", "Tỷ lệ hàng đạt final", "(Tổng cont final đạt + cont Final fail (được xử lý trong 24h)) / Tổng số cont được final * 100", "100%", "A"),
+            ("KPI11", "Tỷ lệ khiếu nại từ khách hàng", "(Tổng tiền phạt) / (Tổng doanh thu) * 100", "< 98%", "F"),
+            ("KPI12", "Tỷ lệ pass hàng thành công (Mục tiêu tối đa)", "(1 - (Tổng số sản phẩm bị trả về / Tổng số sản phẩm được bàn giao)) * 100", "100%", "A"),
+            ("KPI13", "Tỷ lệ tuân thủ tuần tra mẫu (Mục tiêu tối đa)", "Mỗi một báo cáo ghi nhận đều -2%", "100%", "C")
         ]
-        for code, content, calc, target in default_items:
+        for code, content, calc, target, cat in default_items:
             db.add(KPIItemPool(
                 kpi_code=code,
                 content=content,
                 calc_method=calc,
-                target=target
+                target=target,
+                category=cat
             ))
         db.commit()
-        items = db.query(KPIItemPool).order_by(KPIItemPool.id.desc()).all()
+        items = db.query(KPIItemPool).order_by(KPIItemPool.id.asc()).all()
     
     return [
         {
@@ -649,10 +662,12 @@ def get_kpi_pool(db: Session = Depends(get_db)):
             "kpi_code": r.kpi_code,
             "content": r.content,
             "calc_method": r.calc_method,
-            "target": r.target
+            "target": r.target,
+            "category": r.category or "D"
         }
         for r in items
     ]
+
 
 @router.post("/kpi-pool", response_model=dict)
 def create_kpi_pool_item(item: KPIItemPoolBase, db: Session = Depends(get_db)):
@@ -831,3 +846,685 @@ def get_export_data(db: Session = Depends(get_db)):
         "kpis": kpi_list,
         "violations": viol_list
     }
+
+# 9. Kế hoạch đào tạo CRUD (/training-plans)
+@router.get("/training-plans", response_model=List[dict])
+def get_training_plans(db: Session = Depends(get_db)):
+    items = db.query(KPITrainingPlan).order_by(KPITrainingPlan.id.desc()).all()
+    return [
+        {
+            "id": r.id,
+            "code": r.code,
+            "name": r.name,
+            "target": r.target,
+            "time": r.time,
+            "teacher": r.teacher,
+            "file_name": r.file_name or "",
+            "file_url": r.file_url or "",
+            "status": r.status or "Sắp diễn ra"
+        }
+        for r in items
+    ]
+
+@router.post("/training-plans", response_model=dict)
+def create_training_plan(item: KPITrainingPlanBase, db: Session = Depends(get_db)):
+    db_item = KPITrainingPlan(**item.model_dump())
+    db.add(db_item)
+    db.commit()
+    db.refresh(db_item)
+    return {"status": "success", "id": db_item.id, "message": "Thêm kế hoạch đào tạo thành công"}
+
+@router.put("/training-plans/{id}", response_model=dict)
+def update_training_plan(id: int, item: KPITrainingPlanBase, db: Session = Depends(get_db)):
+    db_item = db.query(KPITrainingPlan).filter(KPITrainingPlan.id == id).first()
+    if not db_item:
+        raise HTTPException(status_code=404, detail="Không tìm thấy kế hoạch đào tạo")
+    for key, value in item.model_dump().items():
+        setattr(db_item, key, value)
+    db.commit()
+    return {"status": "success", "message": "Cập nhật kế hoạch đào tạo thành công"}
+
+@router.delete("/training-plans/{id}", response_model=dict)
+def delete_training_plan(id: int, db: Session = Depends(get_db)):
+    db_item = db.query(KPITrainingPlan).filter(KPITrainingPlan.id == id).first()
+    if not db_item:
+        raise HTTPException(status_code=404, detail="Không tìm thấy kế hoạch đào tạo")
+    db.delete(db_item)
+    db.commit()
+    return {"status": "success", "message": "Xóa kế hoạch đào tạo thành công"}
+
+
+# 10. KPI Scoring Engine APIs
+class KPIActualUpdate(BaseModel):
+    actual: str
+
+def calculate_employee_kpi_score(db: Session, employee_id: str, month: int, year: int):
+    # 1. Fetch employee details for name matching
+    emp = db.query(Employee).filter(Employee.employee_id == employee_id).first()
+    emp_name = emp.full_name if emp else ""
+
+    # 2. Fetch employee KPI items
+    raw_kpi_items = db.query(KPIEmployeeItem).filter(KPIEmployeeItem.employee_id == employee_id).all()
+
+    # If no KPI items assigned yet, fetch from global pool KPIItemPool
+    if not raw_kpi_items:
+        pool_items = db.query(KPIItemPool).order_by(KPIItemPool.id.asc()).all()
+        kpi_items = []
+        for p in pool_items:
+            kpi_items.append(KPIEmployeeItem(
+                employee_id=employee_id,
+                kpi_code=p.kpi_code,
+                content=p.content,
+                score=20,
+                calc_method=p.calc_method,
+                target=p.target,
+                actual=p.target,
+                status="Đang theo dõi",
+                category=p.category or "D"
+            ))
+    else:
+        # Gom/Lọc trùng tự động các mục có trùng tên nội dung
+        seen_keys = set()
+        kpi_items = []
+        for item in raw_kpi_items:
+            key = (item.content or '').strip().lower()
+            if key not in seen_keys:
+                seen_keys.add(key)
+                kpi_items.append(item)
+
+    processed_details = []
+    total_weighted_earned = 0.0
+    total_weight = 0.0
+
+    # Danh sách giá trị mặc định/seed cần bỏ qua (không phải dữ liệu thực tế)
+    DEFAULT_PLACEHOLDERS = {'95%', '95.0%', '97%', '97.0%', '98%', '98.0%', '100%'}
+
+    for item in kpi_items:
+        cat = getattr(item, 'category', None) or "D"
+        raw_actual = (item.actual or '').strip()
+        weight = item.score or 20
+
+        calc_actual = raw_actual
+        earned_percentage = 100.0
+
+        if cat == 'A':
+            try:
+                from modules.inspection.models.input_inspection import InputInspection
+                query = db.query(InputInspection)
+                if emp_name:
+                    query = query.filter(InputInspection.inspector_name.ilike(f"%{emp_name}%"))
+                inspections = query.all()
+                filtered = [i for i in inspections if getattr(i, 'inspected_at', None) and i.inspected_at.month == month and i.inspected_at.year == year]
+
+                if filtered:
+                    ticket_rates = []
+                    for i in filtered:
+                        sample = float(getattr(i, 'sample_qty', None) or getattr(i, 'required_qty', None) or 0)
+                        err = float(getattr(i, 'error_qty', None) or 0)
+                        
+                        if sample > 0:
+                            rate = max(0.0, min(100.0, ((sample - err) / sample) * 100.0))
+                        else:
+                            res_str = str(getattr(i, 'result', None) or getattr(i, 'conclusion', None) or 'PASS').upper()
+                            rate = 100.0 if res_str in ['PASS', 'ĐẠT', 'SUCCESS', 'OK'] else 0.0
+                        
+                        ticket_rates.append(rate)
+
+                    calc_rate = round(sum(ticket_rates) / len(ticket_rates), 1)
+                    calc_actual = f"{calc_rate:.1f}%"
+                    earned_percentage = calc_rate
+                else:
+                    earned_percentage = 100.0
+                    calc_actual = "Chưa có dữ liệu"
+            except Exception:
+                earned_percentage = 100.0
+                calc_actual = "Chưa có dữ liệu"
+
+        elif cat == 'B':
+            try:
+                from modules.capa.models.capa import CAPA
+                capas = db.query(CAPA).all()
+                if emp_name:
+                    capas = [c for c in capas if emp_name.lower() in (c.handler_name or '').lower() or emp_name.lower() in (c.creator_name or '').lower()]
+                
+                filtered_capas = [c for c in capas if getattr(c, 'created_at', None) and c.created_at.month == month and c.created_at.year == year]
+                if filtered_capas:
+                    overdue = sum(1 for c in filtered_capas if 'quá hạn' in (c.ticket_status or '').lower())
+                    rate = round(((len(filtered_capas) - overdue) / len(filtered_capas)) * 100, 1)
+                    calc_actual = f"{rate:.1f}%"
+                    earned_percentage = rate
+                else:
+                    earned_percentage = 100.0
+                    calc_actual = "Chưa có dữ liệu"
+            except Exception:
+                earned_percentage = 100.0
+                calc_actual = "Chưa có dữ liệu"
+
+        elif cat == 'C':
+            try:
+                v_query = db.query(AwardDiscipline)
+                if employee_id:
+                    v_query = v_query.filter(AwardDiscipline.employee_id == employee_id)
+                violations = v_query.all()
+                filtered_v = [v for v in violations if getattr(v, 'created_at', None) and v.created_at.month == month and v.created_at.year == year]
+                if filtered_v:
+                    v_count = len(filtered_v)
+                    calc_rate = max(0.0, 100.0 - (v_count * 2.0))
+                    calc_actual = f"{calc_rate:.1f}%"
+                    earned_percentage = calc_rate
+                else:
+                    # Kiểm tra xem nhân sự có hoạt động kiểm tra trong tháng không
+                    from modules.inspection.models.input_inspection import InputInspection
+                    emp_insps = db.query(InputInspection).filter(InputInspection.inspector_name.ilike(f"%{emp_name}%")).all() if emp_name else []
+                    m_insps = [i for i in emp_insps if i.inspected_at and i.inspected_at.month == month and i.inspected_at.year == year]
+                    if m_insps:
+                        earned_percentage = 100.0
+                        calc_actual = "100.0%"
+                    else:
+                        earned_percentage = 100.0
+                        calc_actual = "Chưa có dữ liệu"
+            except Exception:
+                earned_percentage = 100.0
+                calc_actual = "Chưa có dữ liệu"
+
+        elif cat == 'D':
+            try:
+                from modules.inspection.models.input_inspection import InputInspection
+                query = db.query(InputInspection)
+                if emp_name:
+                    query = query.filter(InputInspection.inspector_name.ilike(f"%{emp_name}%"))
+                inspections = query.all()
+                filtered = [i for i in inspections if i.inspected_at and i.inspected_at.month == month and i.inspected_at.year == year]
+                if filtered:
+                    distinct_days = len(set(i.inspected_at.date() for i in filtered if i.inspected_at))
+                    attendance_rate = min(100.0, round((distinct_days / 26.0) * 100, 1))
+                    calc_actual = f"{attendance_rate:.1f}%"
+                    earned_percentage = attendance_rate
+                else:
+                    earned_percentage = 100.0
+                    calc_actual = "Chưa có dữ liệu"
+            except Exception:
+                earned_percentage = 100.0
+                calc_actual = "Chưa có dữ liệu"
+
+        elif cat == 'E':
+            try:
+                t_plans = db.query(KPITrainingPlan).all()
+                filtered_t = [t for t in t_plans if getattr(t, 'created_at', None) and t.created_at.month == month and t.created_at.year == year]
+                if filtered_t:
+                    completed = sum(1 for t in filtered_t if (t.status or '').lower() in ['hoàn thành', 'đã diễn ra'])
+                    rate = round((completed / len(filtered_t)) * 100, 1)
+                    calc_actual = f"{rate:.1f}%"
+                    earned_percentage = rate
+                else:
+                    earned_percentage = 100.0
+                    calc_actual = "Chưa có dữ liệu"
+            except Exception:
+                earned_percentage = 100.0
+                calc_actual = "Chưa có dữ liệu"
+
+        elif cat == 'F':
+            try:
+                from modules.claim.models.claim_models import CustomerClaim
+                claims = db.query(CustomerClaim).all()
+                filtered_c = [c for c in claims if getattr(c, 'created_at', None) and c.created_at.month == month and c.created_at.year == year]
+                if filtered_c:
+                    earned_percentage = max(0.0, 100.0 - (len(filtered_c) * 5.0))
+                    calc_actual = f"{earned_percentage:.1f}% ({len(filtered_c)} khiếu nại)"
+                else:
+                    earned_percentage = 100.0
+                    calc_actual = "Chưa có dữ liệu"
+            except Exception:
+                earned_percentage = 100.0
+                calc_actual = "Chưa có dữ liệu"
+
+        total_weighted_earned += (earned_percentage * weight)
+        total_weight += weight
+
+        processed_details.append({
+            "id": getattr(item, 'id', 0),
+            "kpi_code": item.kpi_code,
+            "content": item.content,
+            "score": weight,
+            "calc_method": item.calc_method,
+            "target": item.target,
+            "actual": calc_actual,
+            "earned_percentage": round(earned_percentage, 1),
+            "category": cat
+        })
+
+    kpi_score = round(total_weighted_earned / total_weight, 1) if total_weight > 0 else 95.0
+
+    violation_score = 0.0
+    try:
+        adv_list = db.query(AwardDiscipline).all()
+        if employee_id or emp_name:
+            adv_list = [v for v in adv_list if (employee_id and v.employee_id == employee_id) or (emp_name and emp_name.lower() in (v.staff_name or '').lower())]
+        violation_score = float(sum(abs(v.points or 0) for v in adv_list))
+    except Exception:
+        violation_score = 0.0
+
+    manager_score = 0.0
+    try:
+        from modules.kpi.models.staff_evaluation import StaffEvaluation
+        evals = db.query(StaffEvaluation).filter(StaffEvaluation.employee_id == employee_id).all()
+        if evals:
+            manager_score = float(sum(e.actual_score or 0 for e in evals if e.actual_score))
+    except Exception:
+        manager_score = 0.0
+
+    total_score = max(0.0, round(kpi_score + manager_score - violation_score, 1))
+
+    rating = "A"
+    if total_score >= 105:
+        rating = "A+"
+    elif total_score >= 90:
+        rating = "A"
+    elif total_score >= 75:
+        rating = "B"
+    elif total_score >= 60:
+        rating = "C"
+    else:
+        rating = "D"
+
+    import json
+    monthly_record = db.query(KPIMonthlyScore).filter(
+        KPIMonthlyScore.employee_id == employee_id,
+        KPIMonthlyScore.month == month,
+        KPIMonthlyScore.year == year
+    ).first()
+
+    if not monthly_record:
+        monthly_record = KPIMonthlyScore(
+            employee_id=employee_id,
+            month=month,
+            year=year,
+            kpi_score=kpi_score,
+            checklist_score=100.0,
+            violation_score=violation_score,
+            manager_score=manager_score,
+            total_score=total_score,
+            rating=rating,
+            details_json=json.dumps(processed_details, ensure_ascii=False)
+        )
+        db.add(monthly_record)
+    else:
+        monthly_record.kpi_score = kpi_score
+        monthly_record.violation_score = violation_score
+        monthly_record.manager_score = manager_score
+        monthly_record.total_score = total_score
+        monthly_record.rating = rating
+        monthly_record.details_json = json.dumps(processed_details, ensure_ascii=False)
+
+    db.commit()
+    db.refresh(monthly_record)
+
+    return {
+        "id": monthly_record.id,
+        "employee_id": employee_id,
+        "month": month,
+        "year": year,
+        "kpi_score": monthly_record.kpi_score,
+        "checklist_score": monthly_record.checklist_score,
+        "violation_score": monthly_record.violation_score,
+        "manager_score": monthly_record.manager_score,
+        "total_score": monthly_record.total_score,
+        "rating": monthly_record.rating,
+        "details": processed_details
+    }
+
+
+@router.get("/calculate-score", response_model=dict)
+def get_calculated_kpi_score(
+    employee_id: str = Query(...),
+    month: int = Query(9),
+    year: int = Query(2026),
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Tính toán lại điểm số KPI realtime cho nhân sự dựa trên dữ liệu thực tế.
+    """
+    return calculate_employee_kpi_score(db, employee_id, month, year)
+
+
+@router.get("/monthly-score", response_model=dict)
+def get_monthly_kpi_score(
+    employee_id: str = Query(...),
+    month: int = Query(9),
+    year: int = Query(2026),
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Lấy điểm số KPI đã lưu theo tháng của nhân viên.
+    """
+    record = db.query(KPIMonthlyScore).filter(
+        KPIMonthlyScore.employee_id == employee_id,
+        KPIMonthlyScore.month == month,
+        KPIMonthlyScore.year == year
+    ).first()
+
+    if not record:
+        return calculate_employee_kpi_score(db, employee_id, month, year)
+
+    import json
+    details = []
+    if record.details_json:
+        try:
+            details = json.loads(record.details_json)
+        except Exception:
+            details = []
+
+    return {
+        "id": record.id,
+        "employee_id": record.employee_id,
+        "month": record.month,
+        "year": record.year,
+        "kpi_score": record.kpi_score,
+        "checklist_score": record.checklist_score,
+        "violation_score": record.violation_score,
+        "manager_score": record.manager_score,
+        "total_score": record.total_score,
+        "rating": record.rating,
+        "details": details
+    }
+
+
+@router.put("/employee-items/{id}/actual", response_model=dict)
+def update_kpi_employee_item_actual(id: int, payload: KPIActualUpdate, db: Session = Depends(get_db)):
+    """
+    [PUT] Cập nhật giá trị thực tế (actual) cho 1 KPI item của nhân sự (dành cho KPI nhập thủ công) và ghi Audit Log.
+    """
+    item = db.query(KPIEmployeeItem).filter(KPIEmployeeItem.id == id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Không tìm thấy mục KPI")
+
+    old_val = item.actual
+    item.actual = payload.actual
+
+    # Record Audit Log
+    audit = KPIAuditLog(
+        item_id=item.id,
+        employee_id=item.employee_id,
+        kpi_code=item.kpi_code or "KPI04",
+        old_value=old_val,
+        new_value=payload.actual,
+        modified_by="Quản lý QC",
+        reason="Cập nhật giá trị thực tế từ giao diện Web"
+    )
+    db.add(audit)
+
+    db.commit()
+    db.refresh(item)
+    return {"status": "success", "id": item.id, "actual": item.actual, "message": "Cập nhật giá trị thực tế và ghi Audit Log thành công"}
+
+
+@router.get("/score-evidence", response_model=dict)
+def get_kpi_score_evidence(
+    employee_id: str = Query(...),
+    kpi_code: str = Query(...),
+    month: int = Query(9),
+    year: int = Query(2026),
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Lấy danh sách các bản ghi dữ liệu gốc (Raw Evidence Records) chứng minh cho kết quả tính toán KPI.
+    """
+    emp_name = ""
+    try:
+        from modules.kpi.models.quality_employee import QualityEmployee
+        emp = db.query(QualityEmployee).filter(QualityEmployee.employee_id == employee_id).first()
+        if emp:
+            emp_name = emp.full_name
+    except Exception:
+        pass
+
+    if not emp_name:
+        try:
+            emp = db.query(Employee).filter(Employee.employee_id == employee_id).first()
+            if emp:
+                emp_name = emp.full_name
+        except Exception:
+            pass
+
+    # Find KPI Item definition
+    pool_item = db.query(KPIItemPool).filter(KPIItemPool.kpi_code == kpi_code).first()
+    emp_item = db.query(KPIEmployeeItem).filter(
+        KPIEmployeeItem.employee_id == employee_id,
+        KPIEmployeeItem.kpi_code == kpi_code
+    ).first()
+
+    content = emp_item.content if emp_item else (pool_item.content if pool_item else kpi_code)
+    target = emp_item.target if emp_item else (pool_item.target if pool_item else ">= 95%")
+    category = emp_item.category if (emp_item and emp_item.category) else (pool_item.category if (pool_item and pool_item.category) else "D")
+    calc_method = emp_item.calc_method if emp_item else (pool_item.calc_method if pool_item else "")
+
+    records = []
+    summary_text = ""
+
+    def clean_img(raw):
+        if not raw:
+            return None
+        s = str(raw).strip()
+        if s in ['', '[]', '{}', 'null', 'undefined']:
+            return None
+        if s.startswith('['):
+            try:
+                import json
+                p = json.loads(s)
+                if isinstance(p, list):
+                    c = [x for x in p if x and str(x).strip() not in ['', '[]', '{}', 'null']]
+                    return c if c else None
+            except Exception:
+                pass
+        return s
+
+    # --- CATEGORY A: QC Inspections ---
+    if category == 'A':
+        try:
+            from modules.inspection.models.input_inspection import InputInspection
+            query = db.query(InputInspection)
+            if emp_name:
+                query = query.filter(InputInspection.inspector_name.ilike(f"%{emp_name}%"))
+            all_inspections = query.all()
+            filtered = [i for i in all_inspections if getattr(i, 'inspected_at', None) and i.inspected_at.month == month and i.inspected_at.year == year]
+
+            ticket_rates = []
+            for i in filtered:
+                sample = int(getattr(i, 'sample_qty', None) or getattr(i, 'required_qty', None) or 0)
+                err = int(getattr(i, 'error_qty', None) or 0)
+                res_str = str(getattr(i, 'result', None) or getattr(i, 'conclusion', None) or 'PASS').upper()
+                is_pass = res_str in ['PASS', 'ĐẠT', 'SUCCESS', 'OK']
+
+                if sample > 0:
+                    t_rate = round(max(0.0, min(100.0, ((sample - err) / float(sample)) * 100.0)), 1)
+                else:
+                    t_rate = 100.0 if is_pass else 0.0
+
+                ticket_rates.append(t_rate)
+
+                title_val = getattr(i, 'part_name', None) or getattr(i, 'cont_name', None) or getattr(i, 'stage_name', None) or "Kiểm tra chất lượng lô hàng"
+                note_val = getattr(i, 'note', None) or getattr(i, 'notes', None) or f"Mẫu kiểm: {sample}, Số lỗi: {err}"
+                img_val = clean_img(getattr(i, 'images_json', None) or getattr(i, 'image_path_1', None) or getattr(i, 'image_path_2', None) or getattr(i, 'image_path_3', None))
+
+                records.append({
+                    "id": i.id,
+                    "code": getattr(i, 'ticket_code', None) or f"DA-{i.id:04d}",
+                    "title": title_val,
+                    "date": i.inspected_at.strftime("%d/%m/%Y %H:%M") if getattr(i, 'inspected_at', None) else "01/09/2026",
+                    "result": f"{t_rate:.1f}%",
+                    "sample_qty": sample,
+                    "error_qty": err,
+                    "is_pass": is_pass,
+                    "performer": getattr(i, 'inspector_name', None) or emp_name,
+                    "note": note_val,
+                    "images": img_val,
+                    "nav_url": f"/admin/quality/reports?search={getattr(i, 'ticket_code', '') or ''}"
+                })
+            
+            if filtered:
+                avg_rate = round(sum(ticket_rates) / len(ticket_rates), 1) if ticket_rates else 100.0
+                summary_text = f"Tỷ lệ % Đạt trung bình: {avg_rate}% ({len(filtered)} phiếu kiểm tra do {emp_name or 'nhân sự'} thực hiện)"
+            else:
+                summary_text = f"Nhân sự {emp_name or employee_id} chưa phát sinh phiếu kiểm tra QC nào trong Tháng {month}/{year}"
+        except Exception as e:
+            summary_text = f"Dữ liệu kiểm tra QC trực tuyến ({str(e)})"
+
+    # --- CATEGORY B: CAPA ---
+    elif category == 'B':
+        try:
+            from modules.capa.models.capa import CAPA
+            capas = db.query(CAPA).all()
+            if emp_name:
+                capas = [c for c in capas if emp_name.lower() in (getattr(c, 'handler_name', '') or '').lower() or emp_name.lower() in (getattr(c, 'creator_name', '') or '').lower()]
+            
+            overdue_count = 0
+            for c in capas:
+                is_overdue = 'quá hạn' in (getattr(c, 'ticket_status', '') or '').lower()
+                if is_overdue:
+                    overdue_count += 1
+                records.append({
+                    "id": c.id,
+                    "code": getattr(c, 'code', None) or getattr(c, 'ticket_code', None) or f"CAPA-{c.id:03d}",
+                    "title": getattr(c, 'issue_description', None) or getattr(c, 'title', None) or getattr(c, 'content', None) or "Hành động khắc phục CAPA",
+                    "date": c.created_at.strftime("%d/%m/%Y") if getattr(c, 'created_at', None) else "15/08/2026",
+                    "result": "Quá hạn" if is_overdue else "Hoàn thành đúng hạn",
+                    "performer": getattr(c, 'handler_name', None) or emp_name,
+                    "note": f"Hạn chót: {getattr(c, 'due_date', None) or 'Theo dõi'}",
+                    "images": clean_img(getattr(c, 'images', None) or getattr(c, 'evidence_image', None)),
+                    "nav_url": f"/admin/capa?search={getattr(c, 'code', '') or ''}"
+                })
+
+            if capas:
+                rate = round(((len(capas) - overdue_count) / len(capas)) * 100, 1)
+                summary_text = f"Tỷ lệ đúng hạn: {rate}% ({len(capas) - overdue_count} / {len(capas)} phiếu CAPA do {emp_name} phụ trách)"
+            else:
+                summary_text = f"Không có phiếu CAPA nào cho {emp_name or employee_id} trong Tháng {month}/{year}"
+        except Exception:
+            summary_text = "Dữ liệu hành động khắc phục CAPA"
+
+    # --- CATEGORY C: Patrol / Violation ---
+    elif category == 'C':
+        try:
+            v_query = db.query(AwardDiscipline)
+            if employee_id or emp_name:
+                v_query = v_query.filter(AwardDiscipline.employee_id == employee_id)
+            violations = v_query.all()
+            
+            for v in violations:
+                raw_imgs = clean_img(getattr(v, 'evidence_images', None) or getattr(v, 'images', None) or getattr(v, 'image', None))
+                records.append({
+                    "id": v.id,
+                    "code": f"VP-{v.id:03d}",
+                    "title": getattr(v, 'rule_name', None) or getattr(v, 'issue', None) or getattr(v, 'description', None) or "Vi phạm quy trình tuần tra QC",
+                    "date": getattr(v, 'violation_time', None) or getattr(v, 'date', None) or "25/08/2026",
+                    "result": f"-{abs(getattr(v, 'points', 2) or 2)} điểm",
+                    "performer": getattr(v, 'staff_name', None) or emp_name,
+                    "note": f"Ghi nhận bởi: {getattr(v, 'reporter_name', None) or 'Quản lý'}",
+                    "images": raw_imgs,
+                    "nav_url": f"/admin/kpi/dashboard?tab=violations_list&search=VP-{v.id:03d}"
+                })
+            
+            if violations:
+                summary_text = f"Ghi nhận {len(violations)} lần vi phạm/sai sót đối với {emp_name or employee_id} (Mỗi lần -2%)"
+            else:
+                summary_text = f"Không phát sinh biên bản vi phạm/sai sót nào đối với {emp_name or employee_id} trong Tháng {month}/{year} (Đạt 100% tuân thủ)"
+        except Exception:
+            summary_text = "Dữ liệu vi phạm từ Mobile App"
+
+    # --- CATEGORY D: Reports / Báo cáo tình hình ---
+    elif category == 'D':
+        try:
+            from modules.inspection.models.input_inspection import InputInspection
+            query = db.query(InputInspection)
+            if emp_name:
+                query = query.filter(InputInspection.inspector_name.ilike(f"%{emp_name}%"))
+            all_inspections = query.all()
+            filtered = [i for i in all_inspections if getattr(i, 'inspected_at', None) and i.inspected_at.month == month and i.inspected_at.year == year]
+
+            for i in filtered:
+                title_val = f"Báo cáo kiểm tra - {getattr(i, 'part_name', None) or getattr(i, 'cont_name', None) or 'Lô hàng'}"
+                note_val = getattr(i, 'note', None) or getattr(i, 'notes', None) or "Báo cáo tình hình kiểm tra thực tế"
+                img_val = clean_img(getattr(i, 'images_json', None) or getattr(i, 'image_path_1', None) or getattr(i, 'image_path_2', None) or getattr(i, 'image_path_3', None))
+
+                records.append({
+                    "id": i.id,
+                    "code": getattr(i, 'ticket_code', None) or f"BC-{i.id:04d}",
+                    "title": title_val,
+                    "date": i.inspected_at.strftime("%d/%m/%Y %H:%M") if getattr(i, 'inspected_at', None) else "",
+                    "result": str(getattr(i, 'result', None) or getattr(i, 'conclusion', None) or "Đã hoàn thành"),
+                    "performer": getattr(i, 'inspector_name', None) or emp_name,
+                    "note": note_val,
+                    "images": img_val,
+                    "nav_url": f"/admin/quality/reports?search={getattr(i, 'ticket_code', '') or ''}"
+                })
+
+            if filtered:
+                summary_text = f"Tổng cộng {len(filtered)} báo cáo tình hình do {emp_name or employee_id} thực hiện trong Tháng {month}/{year}"
+            else:
+                summary_text = f"Chưa phát sinh báo cáo tình hình nào do {emp_name or employee_id} thực hiện trong Tháng {month}/{year}"
+        except Exception:
+            summary_text = "Dữ liệu báo cáo tình hình"
+
+    # --- CATEGORY E: Training ---
+    elif category == 'E':
+        try:
+            t_plans = db.query(KPITrainingPlan).all()
+            filtered_t = [t for t in t_plans if getattr(t, 'created_at', None) and t.created_at.month == month and t.created_at.year == year]
+            for t in filtered_t:
+                records.append({
+                    "id": t.id,
+                    "code": getattr(t, 'code', None) or f"ĐT-{t.id:03d}",
+                    "title": getattr(t, 'name', None) or "Kế hoạch đào tạo nghiệp vụ",
+                    "date": getattr(t, 'time', None) or "Tháng 9/2026",
+                    "result": getattr(t, 'status', None) or "Đã hoàn thành",
+                    "performer": emp_name or getattr(t, 'teacher', 'Giảng viên'),
+                    "note": f"Mục tiêu: {getattr(t, 'target', 'Tham gia đầy đủ')}",
+                    "images": None,
+                    "nav_url": "/admin/kpi/items"
+                })
+            if filtered_t:
+                summary_text = f"Ghi nhận {len(filtered_t)} chương trình đào tạo trong Tháng {month}/{year}"
+            else:
+                summary_text = f"Chưa có chương trình đào tạo phân công cho {emp_name or employee_id} trong Tháng {month}/{year}"
+        except Exception:
+            summary_text = "Dữ liệu kế hoạch đào tạo"
+
+    # --- CATEGORY F: Customer Claims ---
+    elif category == 'F':
+        try:
+            from modules.claim.models.claim_models import CustomerClaim
+            claims = db.query(CustomerClaim).all()
+            filtered_c = [c for c in claims if getattr(c, 'created_at', None) and c.created_at.month == month and c.created_at.year == year]
+            for c in filtered_c:
+                records.append({
+                    "id": c.id,
+                    "code": getattr(c, 'claim_code', None) or f"CLM-{c.id:03d}",
+                    "title": f"Khiếu nại từ {getattr(c, 'customer_name', 'Khách hàng')}",
+                    "date": c.claim_date.strftime("%d/%m/%Y") if getattr(c, 'claim_date', None) else "",
+                    "result": "Khiếu nại",
+                    "performer": emp_name,
+                    "note": f"Phạt: {getattr(c, 'penalty_amount', 0):,} VNĐ",
+                    "images": clean_img(getattr(c, 'evidence_image', None) or getattr(c, 'images', None)),
+                    "nav_url": f"/admin/claim?search={getattr(c, 'claim_code', '') or ''}"
+                })
+            if filtered_c:
+                summary_text = f"Ghi nhận {len(filtered_c)} khiếu nại liên quan trong Tháng {month}/{year}"
+            else:
+                summary_text = f"Không có khiếu nại khách hàng nào đối với {emp_name or employee_id} trong Tháng {month}/{year}"
+        except Exception:
+            summary_text = "Dữ liệu khiếu nại khách hàng"
+
+    return {
+        "employee_id": employee_id,
+        "kpi_code": kpi_code,
+        "kpi_name": content,
+        "category": category,
+        "target": target,
+        "calc_method": calc_method,
+        "summary_text": summary_text,
+        "records_count": len(records),
+        "records": records
+    }
+
+
+

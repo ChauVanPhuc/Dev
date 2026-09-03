@@ -2,10 +2,52 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { Edit2, Trash2, Plus, Minus, ChevronLeft, ChevronRight, ChevronDown, User, Calendar, Clock, Eye, LayoutGrid, Search, Filter, Download } from 'lucide-react';
 import apiClient from '@shared/services/api';
-import QualityEmployeeModal from './Components/QualityEmployeeModal';
+import QualityEmployeeModal from './components/QualityEmployeeModal';
 import KPITaskDetailModal from './components/KPITaskDetailModal';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import '@styles/components.css';
+
+class ModalErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error("Modal Error Boundary caught an error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(4px)', zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px'
+        }}>
+          <div style={{ backgroundColor: '#FFFFFF', padding: '24px', borderRadius: '12px', maxWidth: '480px', width: '90%', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.3)', textAlign: 'center' }}>
+            <h3 style={{ color: '#DC2626', margin: '0 0 10px 0', fontSize: '1.1rem', fontWeight: '800' }}>⚠️ Không thể hiển thị chi tiết nhân sự</h3>
+            <p style={{ fontSize: '0.85rem', color: '#475569', backgroundColor: '#FEF2F2', padding: '10px', borderRadius: '6px', border: '1px solid #FECACA' }}>
+              {String(this.state.error?.message || 'Lỗi xử lý dữ liệu nhân sự')}
+            </p>
+            <button
+              type="button"
+              onClick={() => { this.setState({ hasError: false, error: null }); this.props.onClose?.(); }}
+              style={{ padding: '8px 20px', background: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '6px', cursor: 'pointer', marginTop: '14px', fontWeight: '700', fontSize: '0.85rem' }}
+            >
+              Đóng Cửa Sổ
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const QualityEmployeeListView = () => {
   const navigate = useNavigate();
@@ -945,12 +987,14 @@ const QualityEmployeeListView = () => {
       />
 
       {/* KPI & Checklist Detail Modal CL03.2 */}
-      <KPITaskDetailModal
-        isOpen={kpiModalOpen}
-        onClose={() => setKpiModalOpen(false)}
-        taskData={selectedKpiEmployee}
-        onSave={() => { setKpiModalOpen(false); loadData(); }}
-      />
+      <ModalErrorBoundary onClose={() => setKpiModalOpen(false)}>
+        <KPITaskDetailModal
+          isOpen={kpiModalOpen}
+          onClose={() => setKpiModalOpen(false)}
+          taskData={selectedKpiEmployee}
+          onSave={() => { setKpiModalOpen(false); loadData(); }}
+        />
+      </ModalErrorBoundary>
     </div>
   );
 };

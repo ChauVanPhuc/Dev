@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Plus, MoreHorizontal, Edit2, Trash2, AlertTriangle, CheckCircle2, Image as ImageIcon } from 'lucide-react';
+import { X, Plus, MoreHorizontal, Edit2, Trash2, AlertTriangle, CheckCircle2, Image as ImageIcon, FileText, Search } from 'lucide-react';
 import api, { getFullImageUrl } from '@webShared/Services/api.service';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import '@styles/components.css';
@@ -36,7 +36,7 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
     score_prev_month: data.score_prev_month || 120,
     score_current: data.score_current || 40,
     level_code: data.level_code || 'LV-02',
-    note: data.note || '',
+    note: typeof data.note === 'string' && data.note.trim().startsWith('{') ? '' : (data.note || ''),
     display_month: data.display_month || 'Tháng 1',
     total_score: data.total_score || '160',
     kpi_score: data.kpi_score || '95',
@@ -60,12 +60,105 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
   const [activeMenuId, setActiveMenuId] = useState(null);
   const [editingKpiId, setEditingKpiId] = useState(null);
   const [editingChecklistId, setEditingChecklistId] = useState(null);
-  const [newKpiForm, setNewKpiForm] = useState({ target: '', threshold: '>= 95%', weight: '30%' });
+  const [newKpiForm, setNewKpiForm] = useState({ target: '', operator: '≥', thresholdVal: '95', unitSuffix: '%', weightVal: '20' });
   const [newChecklistForm, setNewChecklistForm] = useState({ task: '', tracking: 'Hàng ngày' });
 
   const [kpiPool, setKpiPool] = useState([]);
   const [checklistPool, setChecklistPool] = useState([]);
   const [employeeOptions, setEmployeeOptions] = useState([]);
+
+  // KPI Score Evidence Sub-modal States & Handler
+  const [evidenceModalOpen, setEvidenceModalOpen] = useState(false);
+  const [evidenceData, setEvidenceData] = useState(null);
+  const [evidenceLoading, setEvidenceLoading] = useState(false);
+
+  // Helper kiểm tra Đạt / Chưa đạt giữa Kết quả hiện tại và Ngưỡng chấp nhận
+  // Helper làm sạch giá trị Kết quả hiện tại thành 100% định dạng % thuần túy
+    const cleanActual = (val) => {
+    if (!val) return 'Chưa có dữ liệu';
+    const str = String(val).trim();
+    if (str.includes('Chưa')) return str;
+    const pctMatch = str.match(/-?\d+(\.\d+)?%/);
+    if (pctMatch) return pctMatch[0];
+    const numMatch = str.match(/-?\d+(\.\d+)?/);
+    if (numMatch) return `${parseFloat(numMatch[0]).toFixed(1)}%`;
+    return str;
+  };
+
+  const checkKpiStatus = (actualVal, thresholdVal) => {
+    if (!actualVal || String(actualVal).includes('Chưa')) {
+      return { isPass: null, isNoData: true, label: 'Chưa có dữ liệu', color: '#64748B', bg: '#F1F5F9', border: '#CBD5E1' };
+    }
+    
+    const actStr = String(actualVal).trim();
+    const threshStr = String(thresholdVal || '').trim();
+
+    const actMatch = actStr.match(/-?\d+(\.\d+)?/);
+    const actNum = actMatch ? parseFloat(actMatch[0]) : null;
+
+    const threshMatch = threshStr.match(/-?\d+(\.\d+)?/);
+    const threshNum = threshMatch ? parseFloat(threshMatch[0]) : null;
+
+    if (actNum === null || threshNum === null) {
+      return { isPass: null, isNoData: true, label: 'Chưa có dữ liệu', color: '#64748B', bg: '#F1F5F9', border: '#CBD5E1' };
+    }
+
+    let isPass = true;
+    if (threshStr.includes('<=')) {
+      isPass = actNum <= threshNum;
+    } else if (threshStr.includes('<')) {
+      isPass = actNum < threshNum;
+    } else if (threshStr.includes('>=')) {
+      isPass = actNum >= threshNum;
+    } else if (threshStr.includes('>')) {
+      isPass = actNum > threshNum;
+    } else if (threshStr.includes('=')) {
+      isPass = Math.abs(actNum - threshNum) < 0.01;
+    } else {
+      isPass = actNum >= threshNum;
+    }
+
+    return isPass
+      ? { isPass: true, isNoData: false, label: 'Đạt', color: '#15803D', bg: '#F0FDF4', border: '#BBF7D0' }
+      : { isPass: false, isNoData: false, label: 'Chưa đạt', color: '#DC2626', bg: '#FEF2F2', border: '#FECACA' };
+  };
+
+  const handleOpenEvidenceModal = async (kpiItem) => {
+    setEvidenceModalOpen(true);
+    setEvidenceLoading(true);
+    setEvidenceData(null);
+
+    const empId = formData.employee_id || taskData?.employee_id || '';
+    const selectedMonthStr = formData.selected_month || 'Tháng 9';
+    const monthNum = parseInt(String(selectedMonthStr).replace(/\D/g, '') || '9', 10);
+    const kpiCode = kpiItem?.kpi_code || kpiItem?.code || 'KPI07';
+
+    try {
+      const resp = await api.get(`/kpi-management/score-evidence?employee_id=${empId}&kpi_code=${kpiCode}&month=${monthNum}&year=2026`);
+      setEvidenceData({
+        kpi_code: resp?.kpi_code || kpiCode,
+        kpi_name: resp?.kpi_name || kpiItem?.target || 'Chỉ số đánh giá',
+        target: resp?.target || kpiItem?.threshold || '>= 95%',
+        category: resp?.category || kpiItem?.category || 'A',
+        calc_method: resp?.calc_method || 'Truy xuất 1:1 từ CSDL SmartFlow',
+        summary_text: resp?.summary_text || `Tổng số bản ghi: ${resp?.records?.length || 0}`,
+        records: resp?.records || []
+      });
+    } catch (err) {
+      console.error('Lỗi tải bằng chứng KPI:', err);
+      setEvidenceData({
+        kpi_code: kpiCode,
+        kpi_name: kpiItem?.target || 'Chỉ số đánh giá',
+        target: kpiItem?.threshold || '>= 95%',
+        category: kpiItem?.category || 'A',
+        calc_method: 'Lỗi truy xuất CSDL',
+        summary_text: 'Không thể tải bản ghi xác thực nguồn.',
+        records: []
+      });
+    } finally {
+      setEvidenceLoading(false);
+    }
+  };
 
   // Helper trích xuất Tháng từ mọi định dạng ngày (ISO YYYY-MM-DD..., VN DD/MM/YYYY, text...)
   const extractMonthNumber = (dateVal) => {
@@ -108,6 +201,41 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
 
     return null;
   };
+
+  // Helper bóc tách thông minh Ngưỡng KPI (Toán tử, Con số, Hậu tố đơn vị)
+  const parseTargetStringToComponents = (rawStr) => {
+    if (!rawStr) return { operator: '≥', value: '95', unitSuffix: '%' };
+    let str = String(rawStr).trim();
+
+    let operator = '≥';
+    if (str.includes('>=')) { operator = '≥'; str = str.replace(/>=/g, ''); }
+    else if (str.includes('<=')) { operator = '≤'; str = str.replace(/<=/g, ''); }
+    else if (str.includes('≥')) { operator = '≥'; str = str.replace(/≥/g, ''); }
+    else if (str.includes('≤')) { operator = '≤'; str = str.replace(/≤/g, ''); }
+    else if (str.includes('>')) { operator = '>'; str = str.replace(/>/g, ''); }
+    else if (str.includes('<')) { operator = '<'; str = str.replace(/</g, ''); }
+    else if (str.includes('=')) { operator = '='; str = str.replace(/=/g, ''); }
+
+    let unitSuffix = '%';
+    const lower = str.toLowerCase();
+    if (lower.includes('báo cáo')) unitSuffix = 'báo cáo';
+    else if (lower.includes('biên bản') || lower.includes('capa')) unitSuffix = 'biên bản';
+    else if (lower.includes('điểm')) unitSuffix = 'điểm';
+    else if (lower.includes('lần') || lower.includes('lượt') || lower.includes('claim')) unitSuffix = 'lần';
+    else if (lower.includes('hành động')) unitSuffix = 'hành động';
+    else if (lower.includes('%')) unitSuffix = '%';
+
+    let cleanVal = str
+      .replace(/báo cáo|biên bản|capa|điểm|lần|lượt|claim|hành động|%/gi, '')
+      .replace(/[>=<=≥≤=]/g, '')
+      .trim();
+
+    if (!cleanVal) cleanVal = '95';
+
+    return { operator, value: cleanVal, unitSuffix };
+  };
+
+
 
   // Tự động quét và tổng hợp danh sách các Tháng có dữ liệu thực tế từ tất cả các nguồn (Vi phạm, Đánh giá, KPI, Checklist)
   const availableMonths = useMemo(() => {
@@ -170,14 +298,27 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
     });
   }, [managerEvaluations, selectedMonthNum]);
 
-  // Lọc dữ liệu KPI của riêng tháng đang chọn
+  // Lọc dữ liệu KPI của riêng tháng đang chọn (và tự động gom/lọc trùng mục tiêu giống nhau)
   const filteredKpiByMonth = useMemo(() => {
     if (!kpiList || kpiList.length === 0) return [];
-    return kpiList.filter(k => {
+    const list = kpiList.filter(k => {
       const m = k.month ? parseInt(k.month, 10) : extractMonthNumber(k.period || k.created_at);
       if (!m) return true;
       return m === selectedMonthNum;
     });
+
+    const seen = new Set();
+    const deduped = [];
+    list.forEach(item => {
+      const name = (item.target || item.content || '').trim().toLowerCase();
+      if (name && !seen.has(name)) {
+        seen.add(name);
+        deduped.push(item);
+      } else if (!name) {
+        deduped.push(item);
+      }
+    });
+    return deduped;
   }, [kpiList, selectedMonthNum]);
 
   // Lọc dữ liệu Checklist của riêng tháng đang chọn
@@ -254,33 +395,50 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
       return;
     }
 
-    // 1. Fetch KPI items for this employee from Database
-    api.get(`/kpi-management/employee-items?employee_id=${empId}`)
-      .then(res => {
-        const list = res?.items || (Array.isArray(res) ? res : []);
-        if (list.length > 0) {
-          const uniqueList = [];
-          const seen = new Set();
-          for (const k of list) {
-            const key = (k.content || k.target || '').trim();
-            if (key && !seen.has(key)) {
-              seen.add(key);
-              uniqueList.push(k);
-            }
-          }
-          setKpiList(uniqueList.map((k, idx) => ({
+    // 1. Fetch Calculated KPI items and real-time scores from Backend Engine
+    const selectedMonthStr = formData.selected_month || 'Tháng 9';
+    const monthNum = parseInt(selectedMonthStr.replace(/\D/g, '') || '9', 10);
+    api.get(`/kpi-management/calculate-score?employee_id=${empId}&month=${monthNum}&year=2026`)
+      .then(scoreRes => {
+        if (scoreRes && scoreRes.details) {
+          setKpiList(scoreRes.details.map((k, idx) => ({
             id: k.id || idx + 1,
             db_id: k.id,
+            kpi_code: k.kpi_code,
             target: k.content || k.target || 'Mục tiêu KPI',
             threshold: k.target || '>= 95%',
             actual: k.actual || '95%',
-            weight: k.score ? `${k.score}%` : '30%'
+            weight: k.score ? `${k.score}%` : '20%',
+            category: k.category || 'D',
+            earned_percentage: k.earned_percentage
           })));
-        } else {
-          setKpiList([]);
+
+          setFormData(prev => ({
+            ...prev,
+            score_current: scoreRes.total_score || 0,
+            score_kpi: scoreRes.kpi_score || 0,
+            score_violation: scoreRes.violation_score || 0,
+            score_manager: scoreRes.manager_score || 0
+          }));
         }
       })
-      .catch(() => setKpiList([]));
+      .catch(() => {
+        setKpiList([]);
+      });
+
+    // Fetch previous month score for comparison
+    const prevMonth = monthNum > 1 ? monthNum - 1 : 12;
+    const prevYear = monthNum > 1 ? 2026 : 2025;
+    api.get(`/kpi-management/monthly-score?employee_id=${empId}&month=${prevMonth}&year=${prevYear}`)
+      .then(prevRes => {
+        if (prevRes && prevRes.total_score !== undefined) {
+          setFormData(prev => ({
+            ...prev,
+            score_prev_month: prevRes.total_score
+          }));
+        }
+      })
+      .catch(() => {});
 
     // 2. Fetch Checklist items for this employee
     api.get(`/kpi-management/checklists?employee_id=${empId}`)
@@ -325,11 +483,18 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
           }
         }
         if (list && list.length > 0) {
-          const filtered = list.filter(e => 
-            (e.staff_name && e.staff_name.toLowerCase().includes((empName || '').toLowerCase())) ||
-            (e.employee_name && e.employee_name.toLowerCase().includes((empName || '').toLowerCase())) ||
-            (e.employee_id && String(e.employee_id) === String(empId))
-          );
+          const empSearchName = String(empName || '').toLowerCase();
+          const empSearchId = String(empId || '');
+          const filtered = list.filter(e => {
+            const sName = String(e.staff_name || '').toLowerCase();
+            const eName = String(e.employee_name || '').toLowerCase();
+            const eId = String(e.employee_id || '');
+            return (
+              (e.staff_name && empSearchName && sName.includes(empSearchName)) ||
+              (e.employee_name && empSearchName && eName.includes(empSearchName)) ||
+              (e.employee_id && empSearchId && eId === empSearchId)
+            );
+          });
           if (filtered.length > 0) {
             setManagerEvaluations(filtered.map((e, idx) => ({
               id: e.id || idx + 1,
@@ -357,12 +522,12 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
       .then(res => {
         const list = res?.items || (Array.isArray(res) ? res : []);
         if (list.length > 0) {
-          const empNameClean = (empName || '').trim().toLowerCase();
-          const empIdClean = (empId || '').trim().toLowerCase();
+          const empNameClean = String(empName || '').trim().toLowerCase();
+          const empIdClean = String(empId || '').trim().toLowerCase();
 
           const filtered = list.filter(v => {
-            const vStaffName = (v.staff_name || v.employee_name || v.emp || '').trim().toLowerCase();
-            const vEmpId = (v.employee_id || v.code || '').trim().toLowerCase();
+            const vStaffName = String(v.staff_name || v.employee_name || v.emp || '').trim().toLowerCase();
+            const vEmpId = String(v.employee_id || v.code || '').trim().toLowerCase();
 
             // Nếu không truyền nhân sự cụ thể thì bỏ qua lọc
             if (!empNameClean && !empIdClean) return true;
@@ -447,7 +612,7 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
 
       // Xác định top leader cho danh sách QLCL
       const topLeader = qItems.find(e => {
-        const pos = (e.stage || e.position || '').toLowerCase();
+        const pos = String(e.stage || e.position || '').toLowerCase();
         return pos.includes('giám đốc') || pos.includes('trưởng') || pos.includes('phó');
       }) || qItems[0];
 
@@ -462,8 +627,8 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
             noteLevel = emp.note;
           }
 
-          const noteStr = (noteLevel || emp.note || '').toLowerCase();
-          const posStr = (emp.stage || emp.position || '').toLowerCase();
+          const noteStr = String(noteLevel || emp.note || '').toLowerCase();
+          const posStr = String(emp.stage || emp.position || '').toLowerCase();
           const isTop = (topLeader && emp.id === topLeader.id) || posStr.includes('giám đốc') || noteStr.includes('cấp 1');
           
           let lvl = 'Cấp 5';
@@ -489,7 +654,7 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
       hrItems.forEach(emp => {
         const name = emp.full_name || emp.name;
         if (name && !uniqueMap.has(name)) {
-          const posStr = (emp.position_name || emp.stage || emp.position || '').toLowerCase();
+          const posStr = String(emp.position_name || emp.stage || emp.position || '').toLowerCase();
           let lvl = 'Cấp 5';
           if (posStr.includes('giám đốc')) lvl = 'Cấp 1';
           else if (posStr.includes('trưởng phòng') || posStr.includes('trưởng')) lvl = 'Cấp 2';
@@ -511,8 +676,8 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
       setEmployeeOptions(Array.from(uniqueMap.values()));
     }).catch(() => null);
 
-    const empName = taskData?.full_name || taskData?.employee_name || '';
-    const empId = taskData?.employee_id || '';
+    const empName = taskData?.full_name || taskData?.employee_name || taskData?.name || '';
+    const empId = taskData?.employee_id || (taskData?.id ? `NV_${taskData.id}` : '') || '';
     const pos = taskData?.stage || taskData?.position_name || taskData?.position || '';
     const dept = taskData?.department || taskData?.section_name || taskData?.department_name || '';
     const fac = taskData?.factory || taskData?.factory_name || '';
@@ -521,6 +686,7 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
     let curLevel = taskData?.current_level;
     let savedParentLevel = taskData?.parent_level || '';
     let savedParentId = taskData?.parent_id || null;
+    let userNote = '';
 
     if (taskData?.note) {
       if (typeof taskData.note === 'string' && taskData.note.trim().startsWith('{')) {
@@ -529,9 +695,15 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
           if (parsed.level) curLevel = parsed.level;
           if (parsed.parent_level) savedParentLevel = parsed.parent_level;
           if (parsed.parent_id) savedParentId = parsed.parent_id;
-        } catch (e) {}
+          userNote = parsed.note || '';
+        } catch (e) {
+          userNote = '';
+        }
       } else if (typeof taskData.note === 'string' && taskData.note.includes('Cấp')) {
         curLevel = taskData.note;
+        userNote = '';
+      } else {
+        userNote = String(taskData.note);
       }
     }
 
@@ -548,7 +720,8 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
       factory: fac,
       current_level: curLevel,
       parent_level: savedParentLevel,
-      parent_id: savedParentId
+      parent_id: savedParentId,
+      note: userNote
     }));
 
     fetchEmployeeData(empId, empName);
@@ -562,7 +735,7 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
 
   const handleOpenAddKpiModal = () => {
     setEditingKpiId(null);
-    setNewKpiForm({ target: '', threshold: '>= 95%', weight: '30%' });
+    setNewKpiForm({ target: '', operator: '≥', thresholdVal: '95', unitSuffix: '%', weightVal: '20' });
     setSubModalType('kpi');
   };
 
@@ -574,10 +747,15 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
 
   const handleEditKpi = (item) => {
     setEditingKpiId(item.id);
+    const parsed = parseTargetStringToComponents(item.threshold || item.target);
+    let weightVal = String(item.weight || '20').replace('%', '').trim();
+
     setNewKpiForm({
-      target: item.target,
-      threshold: item.threshold || '>= 95%',
-      weight: item.weight || '30%'
+      target: item.target || item.content || '',
+      operator: parsed.operator,
+      thresholdVal: parsed.value,
+      unitSuffix: parsed.unitSuffix,
+      weightVal: weightVal || '20'
     });
     setSubModalType('kpi');
     setActiveMenuId(null);
@@ -636,8 +814,12 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
     if (!newKpiForm.target) return;
     const empId = formData.employee_id || taskData?.employee_id;
 
+    const unitFormatted = newKpiForm.unitSuffix === '%' ? '%' : ` ${newKpiForm.unitSuffix}`;
+    const thresholdStr = newKpiForm.operator ? `${newKpiForm.operator} ${newKpiForm.thresholdVal}${unitFormatted}` : `${newKpiForm.thresholdVal}${unitFormatted}`;
+    const weightStr = `${newKpiForm.weightVal}%`;
+
     // Kiểm tra tổng trọng số không được vượt quá 100%
-    const inputWeight = parseFloat(String(newKpiForm.weight).replace('%', '')) || 0;
+    const inputWeight = parseFloat(newKpiForm.weightVal) || 0;
     const currentTotalWeight = kpiList
       .filter(k => k.id !== editingKpiId)
       .reduce((sum, item) => sum + (parseFloat(String(item.weight).replace('%', '')) || 0), 0);
@@ -663,8 +845,8 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
           return {
             ...k,
             target: newKpiForm.target,
-            threshold: newKpiForm.threshold || '>= 95%',
-            weight: newKpiForm.weight.includes('%') ? newKpiForm.weight : `${newKpiForm.weight}%`
+            threshold: thresholdStr,
+            weight: weightStr
           };
         }
         return k;
@@ -677,9 +859,9 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
           await api.put(`/kpi-management/employee-items/${dbId}`, {
             kpi_code: targetItem?.kpi_code || `KPI_${dbId}`,
             content: newKpiForm.target,
-            score: parseInt(newKpiForm.weight) || 30,
-            calc_method: newKpiForm.weight,
-            target: newKpiForm.threshold,
+            score: parseInt(newKpiForm.weightVal) || 20,
+            calc_method: weightStr,
+            target: thresholdStr,
             actual: targetItem?.actual || '95%',
             status: 'Đang theo dõi'
           });
@@ -696,9 +878,9 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
             employee_id: empId,
             kpi_code: `KPI_${Date.now()}`,
             content: newKpiForm.target,
-            score: parseInt(newKpiForm.weight) || 30,
-            calc_method: newKpiForm.weight,
-            target: newKpiForm.threshold,
+            score: parseInt(newKpiForm.weightVal) || 20,
+            calc_method: weightStr,
+            target: thresholdStr,
             actual: '95%',
             status: 'Đang theo dõi'
           });
@@ -711,9 +893,9 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
         id: dbId || Date.now(),
         db_id: dbId,
         target: newKpiForm.target,
-        threshold: newKpiForm.threshold || '>= 95%',
+        threshold: thresholdStr,
         actual: '95%',
-        weight: newKpiForm.weight.includes('%') ? newKpiForm.weight : `${newKpiForm.weight}%`,
+        weight: weightStr,
         _isUnsaved: !isSaved
       };
       setKpiList(prev => {
@@ -809,7 +991,8 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
     const notePayload = JSON.stringify({
       level: formData.current_level || 'Cấp 2',
       parent_level: formData.parent_level || '',
-      parent_id: formData.parent_id || ''
+      parent_id: formData.parent_id || '',
+      note: formData.note || ''
     });
 
     try {
@@ -1175,30 +1358,63 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
             />
           </div>
 
-          {/* Row 6: Dynamic Calculated Scores (Tháng hiển thị * | Điểm tổng | KPI | QLĐG | Vi phạm) */}
+          {/* Row 6: Dynamic Calculated Scores (Tháng hiển thị * | Điểm tổng | KPI (70%) | Checklist (30%) | QLĐG | Vi phạm | Xếp loại) */}
           {(() => {
+            // 1. Điểm trừ Vi phạm
             const calculatedViolationScore = filteredViolationsByMonth.reduce((sum, item) => {
               const pt = parseInt(String(item.point).replace('+', '')) || 0;
-              return sum + pt;
+              return sum + Math.abs(pt);
             }, 0);
 
+            // 2. Điểm thưởng/cộng Quản lý
             const calculatedQldgScore = filteredManagerEvalsByMonth.reduce((sum, item) => {
               const pt = parseInt(String(item.total_point).replace('+', '')) || 0;
               return sum + pt;
             }, 0);
 
-            const rawKpiScore = filteredKpiByMonth.length > 0 
-              ? Math.round(filteredKpiByMonth.reduce((sum, item) => sum + (parseFloat(String(item.actual).replace('%', '')) || 95), 0) / filteredKpiByMonth.length)
-              : 95;
+            // 3. Điểm Checklist (30% Trọng số)
+            let calculatedChecklistScore = 100;
+            if (filteredChecklistByMonth && filteredChecklistByMonth.length > 0) {
+              let earned = 0;
+              filteredChecklistByMonth.forEach(c => {
+                const st = (c.status || c.status_today || '').toLowerCase();
+                if (st.includes('hoàn thành') || st.includes('đạt')) earned += 100;
+                else if (st.includes('trễ') || st.includes('đang thực hiện') || st.includes('cần làm')) earned += 50;
+                else earned += 0;
+              });
+              calculatedChecklistScore = Math.round(earned / filteredChecklistByMonth.length);
+            }
 
-            // KPI score max 100%
-            const calculatedKpiScore = Math.min(100, Math.max(0, rawKpiScore));
+            // 4. Điểm KPI Trọng Số (70% Trọng số)
+            let calculatedKpiScore = 95;
+            if (filteredKpiByMonth && filteredKpiByMonth.length > 0) {
+              let weightedSum = 0;
+              let totalWeight = 0;
+              filteredKpiByMonth.forEach(k => {
+                const act = parseFloat(String(k.actual).replace('%', '')) || 95;
+                const w = parseFloat(String(k.weight || k.calc_method).replace('%', '')) || (100 / filteredKpiByMonth.length);
+                weightedSum += (act * w);
+                totalWeight += w;
+              });
+              if (totalWeight > 0) {
+                calculatedKpiScore = Math.min(120, Math.round(weightedSum / totalWeight));
+              }
+            }
 
-            // Điểm tổng max 100%
-            const calculatedTotalScore = Math.min(100, Math.max(0, Math.round(calculatedKpiScore + calculatedQldgScore + calculatedViolationScore)));
+            // 5. Điểm Tổng = (30% Checklist + 70% KPI) + QLĐG - Vi phạm
+            const basePerformanceScore = (0.3 * calculatedChecklistScore) + (0.7 * calculatedKpiScore);
+            const calculatedTotalScore = Math.max(0, Math.round(basePerformanceScore + calculatedQldgScore - calculatedViolationScore));
+
+            // 6. Ma trận Xếp loại (Rating Matrix)
+            let ratingBadge = { label: 'A (Tốt)', color: '#16A34A', bg: '#F0FDF4' };
+            if (calculatedTotalScore >= 105) ratingBadge = { label: 'A+ (Xuất sắc)', color: '#15803D', bg: '#DCFCE7' };
+            else if (calculatedTotalScore >= 90) ratingBadge = { label: 'A (Tốt)', color: '#16A34A', bg: '#F0FDF4' };
+            else if (calculatedTotalScore >= 75) ratingBadge = { label: 'B (Khá)', color: '#2563EB', bg: '#EFF6FF' };
+            else if (calculatedTotalScore >= 60) ratingBadge = { label: 'C (Cần cải thiện)', color: '#D97706', bg: '#FEF3C7' };
+            else ratingBadge = { label: 'D (Không đạt)', color: '#DC2626', bg: '#FEE2E2' };
 
             return (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', gap: '10px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1fr 1fr 1.2fr', gap: '8px', alignItems: 'flex-end' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginBottom: '2px' }}>
                     Tháng hiển thị <span style={{ color: '#DC2626' }}>*</span>
@@ -1222,31 +1438,31 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                     type="text"
                     value={calculatedTotalScore}
                     readOnly
-                    style={{ width: '100%', padding: '5px 10px', borderRadius: '6px', border: '1px solid #E2E8F0', backgroundColor: '#EFEFEF', fontSize: '0.8rem', color: '#1E293B', fontWeight: '800', outline: 'none', boxSizing: 'border-box' }}
+                    style={{ width: '100%', padding: '5px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', backgroundColor: '#FAF6F0', fontSize: '0.85rem', color: '#7B5233', fontWeight: '900', outline: 'none', boxSizing: 'border-box', textAlign: 'center' }}
                   />
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginBottom: '2px' }}>
-                    KPI
+                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginBottom: '2px' }} title="Mục tiêu KPI (Trọng số 70%)">
+                    KPI (70%)
                   </label>
                   <input
                     type="text"
-                    value={calculatedKpiScore}
+                    value={`${calculatedKpiScore}%`}
                     readOnly
-                    style={{ width: '100%', padding: '5px 10px', borderRadius: '6px', border: '1px solid #E2E8F0', backgroundColor: '#EFEFEF', fontSize: '0.8rem', color: '#64748B', outline: 'none', boxSizing: 'border-box' }}
+                    style={{ width: '100%', padding: '5px 10px', borderRadius: '6px', border: '1px solid #E2E8F0', backgroundColor: '#EFEFEF', fontSize: '0.8rem', color: '#1E293B', fontWeight: '700', outline: 'none', boxSizing: 'border-box', textAlign: 'center' }}
                   />
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginBottom: '2px' }}>
-                    QLĐG
+                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginBottom: '2px' }} title="Hoàn thành Checklist hàng ngày (Trọng số 30%)">
+                    Checklist (30%)
                   </label>
                   <input
                     type="text"
-                    value={calculatedQldgScore >= 0 ? `+${calculatedQldgScore}` : calculatedQldgScore}
+                    value={`${calculatedChecklistScore}%`}
                     readOnly
-                    style={{ width: '100%', padding: '5px 10px', borderRadius: '6px', border: '1px solid #E2E8F0', backgroundColor: '#EFEFEF', fontSize: '0.8rem', color: '#64748B', outline: 'none', boxSizing: 'border-box' }}
+                    style={{ width: '100%', padding: '5px 10px', borderRadius: '6px', border: '1px solid #E2E8F0', backgroundColor: '#EFEFEF', fontSize: '0.8rem', color: '#1E293B', fontWeight: '700', outline: 'none', boxSizing: 'border-box', textAlign: 'center' }}
                   />
                 </div>
 
@@ -1256,10 +1472,29 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                   </label>
                   <input
                     type="text"
-                    value={calculatedViolationScore}
+                    value={calculatedViolationScore > 0 ? `-${calculatedViolationScore}` : '0'}
                     readOnly
-                    style={{ width: '100%', padding: '5px 10px', borderRadius: '6px', border: '1px solid #E2E8F0', backgroundColor: '#EFEFEF', fontSize: '0.8rem', color: calculatedViolationScore < 0 ? '#DC2626' : '#64748B', fontWeight: '800', outline: 'none', boxSizing: 'border-box' }}
+                    style={{ width: '100%', padding: '5px 10px', borderRadius: '6px', border: '1px solid #E2E8F0', backgroundColor: '#EFEFEF', fontSize: '0.8rem', color: calculatedViolationScore > 0 ? '#DC2626' : '#64748B', fontWeight: '800', outline: 'none', boxSizing: 'border-box', textAlign: 'center' }}
                   />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginBottom: '2px' }}>
+                    Xếp loại
+                  </label>
+                  <div style={{
+                    padding: '4px 8px',
+                    borderRadius: '6px',
+                    backgroundColor: ratingBadge.bg,
+                    color: ratingBadge.color,
+                    fontWeight: '800',
+                    fontSize: '0.78rem',
+                    textAlign: 'center',
+                    border: `1px solid ${ratingBadge.color}40`,
+                    whiteSpace: 'nowrap'
+                  }}>
+                    {ratingBadge.label}
+                  </div>
                 </div>
               </div>
             );
@@ -1360,7 +1595,7 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                         <th style={{ padding: '6px 10px', fontWeight: '700', width: '150px' }}>Ngưỡng chấp nhận</th>
                         <th style={{ padding: '6px 10px', fontWeight: '700', width: '150px' }}>Kết quả hiện tại</th>
                         <th style={{ padding: '6px 10px', fontWeight: '700', width: '90px', textAlign: 'center' }}>Trọng số</th>
-                        <th style={{ padding: '6px 10px', fontWeight: '700', width: '90px', textAlign: 'center' }}>Thao tác</th>
+                        <th style={{ padding: '6px 10px', fontWeight: '700', width: '160px', textAlign: 'center' }}>Thao tác</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1370,10 +1605,36 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                             <td style={{ padding: '6px 10px', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
                             <td style={{ padding: '6px 10px', color: '#1E293B', fontWeight: '700' }}>{item.target}</td>
                             <td style={{ padding: '6px 10px', color: '#475569' }}>{item.threshold}</td>
-                            <td style={{ padding: '6px 10px', color: '#15803D', fontWeight: '800' }}>{item.actual}</td>
+                            <td style={{ padding: '4px 8px' }}>
+                              {(() => {
+                                const status = checkKpiStatus(item.actual, item.threshold);
+                                return (
+                                  <span style={{
+                                    color: status.color,
+                                    fontWeight: '800',
+                                    fontSize: '0.82rem',
+                                    padding: '3px 8px',
+                                    borderRadius: '4px',
+                                    backgroundColor: status.bg,
+                                    border: `1px solid ${status.border}`,
+                                    display: 'inline-block'
+                                  }}>
+                                    {cleanActual(item.actual)}
+                                  </span>
+                                );
+                              })()}
+                            </td>
                             <td style={{ padding: '6px 10px', textAlign: 'center', fontWeight: '700', color: '#5D3B32' }}>{item.weight}</td>
                             <td style={{ padding: '6px 10px', textAlign: 'center' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
+                                <button
+                                  type="button"
+                                  title="Xem lịch sử & Bằng chứng xác thực điểm số"
+                                  onClick={() => handleOpenEvidenceModal(item)}
+                                  style={{ border: 'none', background: '#F0F9FF', cursor: 'pointer', padding: '4px 6px', borderRadius: '4px', display: 'flex', alignItems: 'center', color: '#0284C7' }}
+                                >
+                                  <Search size={13} />
+                                </button>
                                 <button
                                   type="button"
                                   title="Chỉnh sửa"
@@ -1717,24 +1978,26 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
             onClick={(e) => e.stopPropagation()}
             style={{
             backgroundColor: '#FFFFFF',
-            borderRadius: '8px',
-            width: '420px',
-            maxWidth: '90%',
-            padding: '20px',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+            borderRadius: '16px',
+            width: subModalType === 'kpi' ? '560px' : '460px',
+            maxWidth: '92%',
+            padding: '24px',
+            boxShadow: '0 20px 35px -10px rgba(74, 46, 43, 0.18), 0 10px 15px -5px rgba(0, 0, 0, 0.04)',
+            border: '1px solid #E2E8F0'
           }}>
             {subModalType === 'parent' && (
               <div>
-                <h3 style={{ fontSize: '1rem', fontWeight: '800', color: '#1E293B', marginBottom: '12px', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>Chọn Cấp Trên Quản Lý</span>
-                  <button type="button" onClick={() => setSubModalType(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#64748B', fontWeight: '700' }}>✕</button>
+                <h3 style={{ fontSize: '1rem', fontWeight: '800', color: '#1E293B', marginBottom: '14px', borderBottom: '1px solid #E2E8F0', paddingBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>🎯 Chọn Cấp Trên Quản Lý</span>
+                  <button type="button" onClick={() => setSubModalType(null)} style={{ border: 'none', backgroundColor: '#F1F5F9', width: '28px', height: '28px', borderRadius: '50%', cursor: 'pointer', color: '#64748B', fontWeight: '800', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
                 </h3>
                 <div style={{ maxHeight: '300px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '14px' }}>
                   {(() => {
-                    const currentLevel = (formData.current_level || 'Cấp 2').toLowerCase();
+                    const currentLevel = String(formData.current_level || 'Cấp 2').toLowerCase();
                     const filtered = employeeOptions.filter(e => {
-                      const pos = (e.position_name || e.position || e.stage || '').toLowerCase();
-                      const lvl = (e.current_level || (e.note && e.note.includes('Cấp') ? e.note : '')).toLowerCase();
+                      const pos = String(e.position_name || e.position || e.stage || '').toLowerCase();
+                      const noteVal = typeof e.note === 'string' && e.note.includes('Cấp') ? e.note : '';
+                      const lvl = String(e.current_level || noteVal).toLowerCase();
 
                       if (currentLevel.includes('cấp 1')) {
                         // Chọn Cấp 1 -> Cấp trên gồm Ban Giám Đốc / Ban Quản Trị (Cấp 1)
@@ -1815,40 +2078,49 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
 
             {subModalType === 'kpi' && (
               <form onSubmit={handleSaveKpi}>
-                <h3 style={{ fontSize: '1rem', fontWeight: '800', color: '#1E293B', marginBottom: '12px', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>{editingKpiId ? 'Chỉnh Sửa Mục Tiêu KPI' : 'Thêm Mục Tiêu KPI Mới'}</span>
-                  <button type="button" onClick={() => setSubModalType(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#64748B', fontWeight: '700' }}>✕</button>
+                <h3 style={{ fontSize: '1.05rem', fontWeight: '800', color: '#1E293B', marginBottom: '16px', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>{editingKpiId ? '✏️' : '🎯'}</span>
+                    <span>{editingKpiId ? 'Chỉnh Sửa Mục Tiêu KPI' : 'Thêm Mục Tiêu KPI Mới'}</span>
+                  </span>
+                  <button type="button" onClick={() => setSubModalType(null)} style={{ border: 'none', backgroundColor: '#F1F5F9', width: '28px', height: '28px', borderRadius: '50%', cursor: 'pointer', color: '#64748B', fontWeight: '800', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
                 </h3>
 
-                <div style={{ marginBottom: '12px' }}>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#4A2E2B', marginBottom: '4px' }}>
-                    📌 Chọn từ Thư viện KPI trong Database:
-                  </label>
-                  <select
-                    onChange={(e) => {
-                      const selectedId = e.target.value;
-                      const found = kpiPool.find(k => String(k.id) === selectedId);
-                      if (found) {
-                        setNewKpiForm({
-                          target: found.content,
-                          threshold: found.target || '>= 95%',
-                          weight: '25%'
-                        });
-                      }
-                    }}
-                    style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #4A2E2B', backgroundColor: '#FAF6F0', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box', fontWeight: '600' }}
-                  >
-                    <option value="">-- Bấm để chọn danh mục KPI mẫu từ DB --</option>
-                    {kpiPool.map(item => (
-                      <option key={item.id} value={item.id}>
-                        {item.content} (Target: {item.target})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {!editingKpiId && (
+                  <div style={{ marginBottom: '14px', backgroundColor: '#FAF6F0', padding: '10px 14px', borderRadius: '10px', border: '1px solid #E5D5C5' }}>
+                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#4A2E2B', marginBottom: '6px' }}>
+                      📌 Chọn nhanh tiêu chí từ Thư viện KPI trong Database:
+                    </label>
+                    <select
+                      onChange={(e) => {
+                        const selectedId = e.target.value;
+                        const found = kpiPool.find(k => String(k.id) === selectedId);
+                        if (found) {
+                          const parsed = parseTargetStringToComponents(found.target);
 
-                <div style={{ marginBottom: '12px' }}>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#475569', marginBottom: '4px' }}>
+                          setNewKpiForm({
+                            target: found.content,
+                            operator: parsed.operator,
+                            thresholdVal: parsed.value,
+                            unitSuffix: parsed.unitSuffix,
+                            weightVal: '20'
+                          });
+                        }
+                      }}
+                      style={{ width: '100%', padding: '7px 10px', borderRadius: '8px', border: '1.5px solid #7B5233', backgroundColor: '#FFFFFF', color: '#334155', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box', fontWeight: '600' }}
+                    >
+                      <option value="">-- Bấm để chọn danh mục KPI mẫu từ DB --</option>
+                      {kpiPool.map(item => (
+                        <option key={item.id} value={item.id}>
+                          {item.content} (Target: {item.target})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div style={{ marginBottom: '14px' }}>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#475569', marginBottom: '6px' }}>
                     Tên mục tiêu KPI <span style={{ color: '#DC2626' }}>*</span>
                   </label>
                   <input
@@ -1857,48 +2129,130 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                     placeholder="VD: Tỷ lệ tuân thủ quy trình QC..."
                     value={newKpiForm.target}
                     onChange={(e) => setNewKpiForm(prev => ({ ...prev, target: e.target.value }))}
-                    style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.83rem', outline: 'none', boxSizing: 'border-box', backgroundColor: '#F8FAFC', fontWeight: '600', color: '#0F172A' }}
                   />
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#475569', marginBottom: '4px' }}>
-                      Ngưỡng chấp nhận
+                {/* Layout 2 cột căn chỉnh chuẩn 100%: 1. Ngưỡng đạt * | 2. Trọng số * */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1.35fr 1fr', gap: '12px', marginBottom: '20px', width: '100%', boxSizing: 'border-box' }}>
+                  {/* 1. Ngưỡng đạt * */}
+                  <div style={{ minWidth: 0 }}>
+                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#475569', marginBottom: '6px' }}>
+                      1. Ngưỡng đạt <span style={{ color: '#DC2626' }}>*</span>
                     </label>
-                    <input
-                      type="text"
-                      placeholder="VD: >= 95%"
-                      value={newKpiForm.threshold}
-                      onChange={(e) => setNewKpiForm(prev => ({ ...prev, threshold: e.target.value }))}
-                      style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
-                    />
+                    <div style={{ display: 'flex', border: '1px solid #CBD5E1', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#F8FAFC', width: '100%', boxSizing: 'border-box' }}>
+                      <select
+                        value={newKpiForm.operator}
+                        onChange={(e) => setNewKpiForm(prev => ({ ...prev, operator: e.target.value }))}
+                        style={{
+                          border: 'none',
+                          borderRight: '1px solid #CBD5E1',
+                          padding: '8px 8px',
+                          fontSize: '0.85rem',
+                          fontWeight: '700',
+                          color: '#4A2E2B',
+                          backgroundColor: '#FAF6F0',
+                          outline: 'none',
+                          cursor: 'pointer',
+                          flexShrink: 0
+                        }}
+                      >
+                        <option value="≥">≥</option>
+                        <option value="≤">≤</option>
+                        <option value="=">=</option>
+                        <option value=">">&gt;</option>
+                        <option value="<">&lt;</option>
+                      </select>
+                      <input
+                        type="text"
+                        placeholder="95"
+                        value={newKpiForm.thresholdVal}
+                        onChange={(e) => setNewKpiForm(prev => ({ ...prev, thresholdVal: e.target.value.replace(/[>=<=≥≤=]/g, '').trim() }))}
+                        style={{
+                          flex: 1,
+                          width: 0,
+                          minWidth: 0,
+                          border: 'none',
+                          padding: '8px 6px',
+                          fontSize: '0.85rem',
+                          fontWeight: '700',
+                          color: '#0F172A',
+                          backgroundColor: 'transparent',
+                          outline: 'none',
+                          textAlign: 'center'
+                        }}
+                      />
+                      <div style={{
+                        padding: '8px 10px',
+                        backgroundColor: '#F1F5F9',
+                        borderLeft: '1px solid #CBD5E1',
+                        fontSize: '0.8rem',
+                        fontWeight: '700',
+                        color: '#475569',
+                        display: 'flex',
+                        alignItems: 'center',
+                        whiteSpace: 'nowrap',
+                        userSelect: 'none',
+                        flexShrink: 0
+                      }}>
+                        {newKpiForm.unitSuffix || '%'}
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#475569', marginBottom: '4px' }}>
-                      Trọng số (%)
+
+                  {/* 2. Trọng số * */}
+                  <div style={{ minWidth: 0 }}>
+                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#475569', marginBottom: '6px' }}>
+                      2. Trọng số <span style={{ color: '#DC2626' }}>*</span>
                     </label>
-                    <input
-                      type="text"
-                      placeholder="VD: 30%"
-                      value={newKpiForm.weight}
-                      onChange={(e) => setNewKpiForm(prev => ({ ...prev, weight: e.target.value }))}
-                      style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
-                    />
+                    <div style={{ display: 'flex', border: '1px solid #CBD5E1', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#F8FAFC', width: '100%', boxSizing: 'border-box' }}>
+                      <input
+                        type="number"
+                        placeholder="20"
+                        value={newKpiForm.weightVal}
+                        onChange={(e) => setNewKpiForm(prev => ({ ...prev, weightVal: e.target.value }))}
+                        style={{
+                          flex: 1,
+                          width: 0,
+                          minWidth: 0,
+                          border: 'none',
+                          padding: '8px 6px',
+                          fontSize: '0.85rem',
+                          fontWeight: '800',
+                          color: '#0F172A',
+                          textAlign: 'center',
+                          backgroundColor: 'transparent',
+                          outline: 'none'
+                        }}
+                      />
+                      <div style={{
+                        padding: '8px 10px',
+                        backgroundColor: '#F1F5F9',
+                        borderLeft: '1px solid #CBD5E1',
+                        fontSize: '0.8rem',
+                        fontWeight: '700',
+                        color: '#475569',
+                        display: 'flex',
+                        alignItems: 'center',
+                        flexShrink: 0
+                      }}>
+                        %
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                   <button
                     type="button"
                     onClick={() => setSubModalType(null)}
-                    style={{ padding: '6px 16px', borderRadius: '6px', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', fontSize: '0.8rem', fontWeight: '600', cursor: 'pointer' }}
+                    style={{ padding: '8px 20px', borderRadius: '8px', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', color: '#475569', fontSize: '0.82rem', fontWeight: '700', cursor: 'pointer' }}
                   >
                     Hủy
                   </button>
                   <button
                     type="submit"
-                    style={{ padding: '6px 18px', borderRadius: '6px', border: 'none', backgroundColor: '#4A2E2B', color: '#FFFFFF', fontSize: '0.8rem', fontWeight: '700', cursor: 'pointer' }}
+                    style={{ padding: '8px 24px', borderRadius: '8px', border: 'none', backgroundColor: '#4A2E2B', color: '#FFFFFF', fontSize: '0.82rem', fontWeight: '700', cursor: 'pointer', boxShadow: '0 4px 12px rgba(74, 46, 43, 0.25)' }}
                   >
                     Xác nhận
                   </button>
@@ -1908,13 +2262,16 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
 
             {subModalType === 'checklist' && (
               <form onSubmit={handleSaveChecklist}>
-                <h3 style={{ fontSize: '1rem', fontWeight: '800', color: '#1E293B', marginBottom: '12px', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>{editingChecklistId ? 'Chỉnh Sửa Nhiệm Vụ Checklist' : 'Thêm Nhiệm Vụ Checklist Mới'}</span>
-                  <button type="button" onClick={() => setSubModalType(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#64748B', fontWeight: '700' }}>✕</button>
+                <h3 style={{ fontSize: '1.05rem', fontWeight: '800', color: '#1E293B', marginBottom: '16px', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>{editingChecklistId ? '✏️' : '📋'}</span>
+                    <span>{editingChecklistId ? 'Chỉnh Sửa Nhiệm Vụ Checklist' : 'Thêm Nhiệm Vụ Checklist Mới'}</span>
+                  </span>
+                  <button type="button" onClick={() => setSubModalType(null)} style={{ border: 'none', backgroundColor: '#F1F5F9', width: '28px', height: '28px', borderRadius: '50%', cursor: 'pointer', color: '#64748B', fontWeight: '800', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
                 </h3>
 
-                <div style={{ marginBottom: '12px' }}>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#4A2E2B', marginBottom: '4px' }}>
+                <div style={{ marginBottom: '14px', backgroundColor: '#FAF6F0', padding: '10px 14px', borderRadius: '10px', border: '1px solid #E5D5C5' }}>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#4A2E2B', marginBottom: '6px' }}>
                     📌 Chọn từ Thư viện Checklist trong Database:
                   </label>
                   <select
@@ -1928,7 +2285,7 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                         });
                       }
                     }}
-                    style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #4A2E2B', backgroundColor: '#FAF6F0', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box', fontWeight: '600' }}
+                    style={{ width: '100%', padding: '7px 10px', borderRadius: '8px', border: '1.5px solid #7B5233', backgroundColor: '#FFFFFF', color: '#334155', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box', fontWeight: '600' }}
                   >
                     <option value="">-- Bấm để chọn nhiệm vụ Checklist mẫu từ DB --</option>
                     {checklistPool.map(item => (
@@ -1939,8 +2296,8 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                   </select>
                 </div>
 
-                <div style={{ marginBottom: '12px' }}>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#475569', marginBottom: '4px' }}>
+                <div style={{ marginBottom: '14px' }}>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#475569', marginBottom: '6px' }}>
                     Tên nhiệm vụ Checklist <span style={{ color: '#DC2626' }}>*</span>
                   </label>
                   <input
@@ -1949,18 +2306,18 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                     placeholder="VD: Kiểm tra thông số thiết bị đầu ca..."
                     value={newChecklistForm.task}
                     onChange={(e) => setNewChecklistForm(prev => ({ ...prev, task: e.target.value }))}
-                    style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.83rem', outline: 'none', boxSizing: 'border-box', backgroundColor: '#F8FAFC', fontWeight: '600', color: '#0F172A' }}
                   />
                 </div>
 
-                <div style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#475569', marginBottom: '4px' }}>
+                <div style={{ marginBottom: '20px' }}>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#475569', marginBottom: '6px' }}>
                     Cách theo dõi
                   </label>
                   <select
                     value={newChecklistForm.tracking}
                     onChange={(e) => setNewChecklistForm(prev => ({ ...prev, tracking: e.target.value }))}
-                    style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.83rem', outline: 'none', boxSizing: 'border-box', backgroundColor: '#F8FAFC', fontWeight: '600', color: '#0F172A' }}
                   >
                     <option value="Hàng ngày">Hàng ngày</option>
                     <option value="Theo ca">Theo ca</option>
@@ -1970,17 +2327,17 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                   </select>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                   <button
                     type="button"
                     onClick={() => setSubModalType(null)}
-                    style={{ padding: '6px 16px', borderRadius: '6px', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', fontSize: '0.8rem', fontWeight: '600', cursor: 'pointer' }}
+                    style={{ padding: '8px 20px', borderRadius: '8px', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', color: '#475569', fontSize: '0.82rem', fontWeight: '700', cursor: 'pointer' }}
                   >
                     Hủy
                   </button>
                   <button
                     type="submit"
-                    style={{ padding: '6px 18px', borderRadius: '6px', border: 'none', backgroundColor: '#4A2E2B', color: '#FFFFFF', fontSize: '0.8rem', fontWeight: '700', cursor: 'pointer' }}
+                    style={{ padding: '8px 24px', borderRadius: '8px', border: 'none', backgroundColor: '#4A2E2B', color: '#FFFFFF', fontSize: '0.82rem', fontWeight: '700', cursor: 'pointer', boxShadow: '0 4px 12px rgba(74, 46, 43, 0.25)' }}
                   >
                     Xác nhận
                   </button>
@@ -2143,6 +2500,244 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
         </div>
       )}
 
+      {/* Sub-modal Bằng Chứng Xác Thực KPI (Audit Trail Evidence Sub-modal) */}
+      {evidenceModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.75)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 3500,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px'
+          }}
+          onClick={() => setEvidenceModalOpen(false)}
+        >
+          <div
+            style={{
+              position: 'relative',
+              width: '850px',
+              maxWidth: '95vw',
+              maxHeight: '88vh',
+              backgroundColor: '#FFFFFF',
+              borderRadius: '12px',
+              padding: '20px',
+              boxShadow: '0 25px 50px -12px rgba(0,0,0,0.4)',
+              display: 'flex',
+              flexDirection: 'column'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #E2E8F0', paddingBottom: '12px', marginBottom: '16px' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '800', color: '#5D3B32', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <FileText size={20} color="#5D3B32" />
+                  BẰNG CHỨNG XÁC THỰC KPI: {evidenceData?.kpi_code || ''} - {evidenceData?.kpi_name || ''}
+                </h3>
+                <span style={{ fontSize: '0.78rem', color: '#64748B', fontWeight: '500' }}>
+                  Hệ thống truy xuất dữ liệu gốc xác thực 1:1 từ CSDL SmartFlow
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEvidenceModalOpen(false)}
+                style={{ border: 'none', background: '#F1F5F9', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748B' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Content Body */}
+            {evidenceLoading ? (
+              <div style={{ padding: '40px', textAlign: 'center', color: '#64748B' }}>
+                Đang truy xuất bản ghi dữ liệu gốc...
+              </div>
+            ) : evidenceData ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', overflowY: 'auto', paddingRight: '4px' }}>
+                {/* Information Card */}
+                <div style={{ backgroundColor: '#FAF6F0', border: '1px solid #EADCC9', borderRadius: '8px', padding: '12px 16px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.8rem' }}>
+                    <div><strong>Mục tiêu:</strong> <span style={{ color: '#15803D', fontWeight: '700' }}>{evidenceData.target}</span></div>
+                    <div><strong>Nhóm dữ liệu:</strong> <span style={{ color: '#5D3B32', fontWeight: '700' }}>Nhóm {evidenceData.category}</span></div>
+                    <div style={{ gridColumn: 'span 2' }}><strong>Công thức tính:</strong> <span style={{ color: '#334155' }}>{evidenceData.calc_method || 'Truy xuất theo kết quả thực tế'}</span></div>
+                    <div style={{ gridColumn: 'span 2', marginTop: '4px', borderTop: '1px dashed #CBD5E1', paddingTop: '6px' }}>
+                      <strong style={{ color: '#0369A1' }}>📌 Tổng kết dữ liệu xác thực:</strong> <span style={{ color: '#0F172A', fontWeight: '700' }}>{evidenceData.summary_text}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Raw Records Table */}
+                <div style={{ border: '1px solid #CBD5E1', borderRadius: '8px', overflow: 'hidden' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#5D3B32', color: '#FFFFFF', textAlign: 'left' }}>
+                        <th style={{ padding: '8px 10px', width: '45px', textAlign: 'center' }}>STT</th>
+                        <th style={{ padding: '8px 10px', width: '110px' }}>Mã Phiếu</th>
+                        <th style={{ padding: '8px 10px' }}>Nội dung / Tiêu đề</th>
+                        <th style={{ padding: '8px 10px', width: '120px' }}>Thời gian</th>
+                        <th style={{ padding: '8px 10px', width: '120px', textAlign: 'center' }}>Kết quả</th>
+                        <th style={{ padding: '8px 10px', width: '110px' }}>Người thực hiện</th>
+                        <th style={{ padding: '8px 10px', width: '90px', textAlign: 'center' }}>Chi tiết</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {evidenceData.records && evidenceData.records.length > 0 ? (
+                        evidenceData.records.map((rec, idx) => (
+                          <tr key={rec.id || idx} style={{ borderTop: '1px solid #E2E8F0', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC' }}>
+                            <td style={{ padding: '8px 10px', textAlign: 'center', color: '#64748B', fontWeight: '700' }}>{idx + 1}</td>
+                            <td style={{ padding: '8px 10px', fontWeight: '800', color: '#5D3B32' }}>{rec.code}</td>
+                            <td style={{ padding: '8px 10px', color: '#1E293B', fontWeight: '600' }}>
+                              <div>{rec.title}</div>
+                              {rec.note && <div style={{ fontSize: '0.72rem', color: '#64748B', marginTop: '2px' }}>{rec.note}</div>}
+                            </td>
+                            <td style={{ padding: '8px 10px', color: '#475569' }}>{rec.date}</td>
+                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                              {(() => {
+                                const resStr = String(rec.result || '');
+                                let rateVal = null;
+                                if (resStr.endsWith('%')) {
+                                  rateVal = parseFloat(resStr.replace('%', ''));
+                                }
+
+                                let bgColor = '#FEF2F2';
+                                let textColor = '#DC2626';
+                                let borderColor = '#FECACA';
+
+                                if (rateVal !== null && !isNaN(rateVal)) {
+                                  if (rateVal >= 95) {
+                                    bgColor = '#F0FDF4'; textColor = '#15803D'; borderColor = '#BBF7D0';
+                                  } else if (rateVal >= 80) {
+                                    bgColor = '#FFFBEB'; textColor = '#D97706'; borderColor = '#FDE68A';
+                                  }
+                                } else if (resStr.includes('PASS') || resStr.includes('Đạt') || resStr.includes('đúng hạn')) {
+                                  bgColor = '#F0FDF4'; textColor = '#15803D'; borderColor = '#BBF7D0';
+                                }
+
+                                return (
+                                  <div>
+                                    <span style={{
+                                      padding: '3px 8px',
+                                      borderRadius: '4px',
+                                      fontWeight: '800',
+                                      fontSize: '0.75rem',
+                                      backgroundColor: bgColor,
+                                      color: textColor,
+                                      border: `1px solid ${borderColor}`,
+                                      display: 'inline-block'
+                                    }}>
+                                      {rec.result}
+                                    </span>
+                                    {rec.sample_qty !== undefined && rec.sample_qty > 0 ? (
+                                      <div style={{ fontSize: '0.68rem', color: '#64748B', marginTop: '2px', fontWeight: '500' }}>
+                                        (Kiểm {rec.sample_qty}, Lỗi {rec.error_qty})
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                );
+                              })()}
+                            </td>
+                            <td style={{ padding: '8px 10px', color: '#334155', fontWeight: '500' }}>{rec.performer}</td>
+                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                              {(() => {
+                                const hasValidImg = (() => {
+                                  const imgData = rec.images;
+                                  if (!imgData) return false;
+                                  if (Array.isArray(imgData)) {
+                                    return imgData.length > 0 && imgData.some(url => url && String(url).trim() !== '[]' && String(url).trim() !== '{}');
+                                  }
+                                  if (typeof imgData === 'string') {
+                                    const s = imgData.trim();
+                                    if (!s || s === '[]' || s === '{}' || s === 'null' || s === 'undefined') return false;
+                                    if (s.startsWith('[')) {
+                                      try {
+                                        const parsed = JSON.parse(s);
+                                        if (Array.isArray(parsed)) return parsed.length > 0 && parsed.some(url => url && String(url).trim() !== '[]');
+                                      } catch (e) { return false; }
+                                    }
+                                    return true;
+                                  }
+                                  return false;
+                                })();
+
+                                if (hasValidImg) {
+                                  let imgUrl = rec.images;
+                                  if (typeof imgUrl === 'string' && imgUrl.startsWith('[')) {
+                                    try {
+                                      const parsed = JSON.parse(imgUrl);
+                                      if (Array.isArray(parsed) && parsed.length > 0) imgUrl = parsed[0];
+                                    } catch (e) {}
+                                  } else if (Array.isArray(imgUrl) && imgUrl.length > 0) {
+                                    imgUrl = imgUrl[0];
+                                  }
+                                  const fullSrc = getFullImageUrl(imgUrl);
+
+                                  return (
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                      <img
+                                        src={fullSrc}
+                                        alt="Bằng chứng"
+                                        onClick={() => setPreviewImage(fullSrc)}
+                                        onError={(e) => {
+                                          e.target.onerror = null;
+                                          e.target.style.display = 'none';
+                                        }}
+                                        style={{
+                                          width: '48px',
+                                          height: '48px',
+                                          objectFit: 'cover',
+                                          borderRadius: '6px',
+                                          border: '2px solid #F59E0B',
+                                          cursor: 'pointer',
+                                          boxShadow: '0 2px 5px rgba(0,0,0,0.15)',
+                                          backgroundColor: '#F8FAFC'
+                                        }}
+                                        title="Bấm vào ảnh để phóng to"
+                                      />
+                                    </div>
+                                  );
+                                }
+
+                                if (rec.nav_url) {
+                                  return (
+                                    <a
+                                      href={rec.nav_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      style={{ color: '#2563EB', textDecoration: 'none', fontWeight: '700', fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: '2px' }}
+                                    >
+                                      Xem ↗
+                                    </a>
+                                  );
+                                }
+
+                                return <span style={{ color: '#94A3B8' }}>-</span>;
+                              })()}
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={7} style={{ padding: '24px', textAlign: 'center', color: '#64748B', fontWeight: '500' }}>
+                            {evidenceData.summary_text || 'Chưa phát sinh bản ghi nghiệp vụ nào cho nhân sự này trong khoảng thời gian được chọn.'}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      )}
+
       {/* Sub-modal Xem Ảnh Bằng Chứng Vi Phạm (Lightbox) */}
       {previewImage && (
         <div
@@ -2241,3 +2836,4 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
 };
 
 export default KPITaskDetailModal;
+

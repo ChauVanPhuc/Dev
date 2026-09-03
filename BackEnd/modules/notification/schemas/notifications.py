@@ -8,6 +8,8 @@ class NotificationBase(BaseModel):
     target_group: Optional[str] = "Toàn công ty"
     target_stage: Optional[str] = None
     priority_status: Optional[str] = "Bình thường"
+    issued_at: Optional[str] = None
+    expires_at: Optional[str] = None
 
 # Schema dùng để gửi lên khi tạo mới
 class NotificationCreate(NotificationBase):
@@ -18,6 +20,8 @@ class Notification(NotificationBase):
     id: int
     announcer_id: Optional[int] = None
     created_at: datetime
+    issued_at: Optional[str] = None
+    expires_at: Optional[str] = None
 
     class Config:
         from_attributes = True # Cho phép Pydantic đọc dữ liệu từ SQLAlchemy Models
