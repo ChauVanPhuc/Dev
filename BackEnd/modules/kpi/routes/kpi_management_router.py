@@ -894,9 +894,42 @@ def delete_training_plan(id: int, db: Session = Depends(get_db)):
     return {"status": "success", "message": "Xóa kế hoạch đào tạo thành công"}
 
 
-# 10. KPI Scoring Engine APIs
-class KPIActualUpdate(BaseModel):
-    actual: str
+def filter_inspections_by_kpi_code(kpi_code: str, inspections: list) -> list:
+    if not kpi_code or not inspections:
+        return inspections
+    
+    code = kpi_code.upper().strip()
+    res = []
+    
+    for i in inspections:
+        stage = str(getattr(i, 'stage', '') or '').lower()
+        itype = str(getattr(i, 'inspection_type', '') or '').lower()
+        cont = str(getattr(i, 'cont_name', '') or '').lower()
+        pallet = str(getattr(i, 'pallet_code', '') or '').lower()
+
+        if code == 'KPI01': # IQC Vật tư đầu vào
+            if 'đầu vào' in stage or 'nhập kho' in stage or 'iqc' in itype or 'vật tư' in stage:
+                res.append(i)
+        elif code in ['KPI06', 'KPI13']: # Patrol Tuần tra
+            if 'patrol' in itype or 'tuần tra' in stage or 'tuần tra' in itype:
+                res.append(i)
+        elif code == 'KPI07': # Pallet bàn giao kho
+            if 'pallet' in stage or 'pallet' in itype or (pallet and pallet.startswith('pl')):
+                res.append(i)
+        elif code == 'KPI08': # First Article Mẫu đầu tiên
+            if itype == 'first_sample' or 'mẫu đầu' in stage or 'first' in stage:
+                res.append(i)
+        elif code in ['KPI09', 'KPI12']: # PQC Công đoạn Sản phẩm
+            if any(s in stage for s in ['định hình', 'tạo phôi', 'lắp ráp', 'sơn', 'phôi', 'pqc', 'công đoạn']) or itype == 'first_sample':
+                res.append(i)
+        elif code == 'KPI10': # OQC Cont Final
+            if itype == 'final' or bool(cont) or 'final' in stage or 'oqc' in stage or 'xuất hàng' in stage:
+                res.append(i)
+        else:
+            res.append(i)
+
+    return res
+
 
 def calculate_employee_kpi_score(db: Session, employee_id: str, month: int, year: int):
     # 1. Fetch employee details for name matching
@@ -954,7 +987,10 @@ def calculate_employee_kpi_score(db: Session, employee_id: str, month: int, year
                 if emp_name:
                     query = query.filter(InputInspection.inspector_name.ilike(f"%{emp_name}%"))
                 inspections = query.all()
-                filtered = [i for i in inspections if getattr(i, 'inspected_at', None) and i.inspected_at.month == month and i.inspected_at.year == year]
+                month_filtered = [i for i in inspections if getattr(i, 'inspected_at', None) and i.inspected_at.month == month and i.inspected_at.year == year]
+
+                # Lọc riêng theo đúng loại công đoạn và mã KPI để không nhảy trùng số liệu
+                filtered = filter_inspections_by_kpi_code(item.kpi_code, month_filtered)
 
                 if filtered:
                     ticket_rates = []
@@ -1326,7 +1362,8 @@ def get_kpi_score_evidence(
             if emp_name:
                 query = query.filter(InputInspection.inspector_name.ilike(f"%{emp_name}%"))
             all_inspections = query.all()
-            filtered = [i for i in all_inspections if getattr(i, 'inspected_at', None) and i.inspected_at.month == month and i.inspected_at.year == year]
+            month_filtered = [i for i in all_inspections if getattr(i, 'inspected_at', None) and i.inspected_at.month == month and i.inspected_at.year == year]
+            filtered = filter_inspections_by_kpi_code(kpi_code, month_filtered)
 
             ticket_rates = []
             for i in filtered:
