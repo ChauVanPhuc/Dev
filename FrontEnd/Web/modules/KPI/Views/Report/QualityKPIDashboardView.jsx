@@ -2006,7 +2006,7 @@ const QualityKPIDashboardView = () => {
                   placeholder="Tìm báo cáo..."
                   onSort={() => setSortAsc(prev => !prev)}
                   onFilter={() => setFilterOpen(prev => !prev)}
-                  onExport={() => handleExportExcel(filterAndSortData(staffEvaluations.length > 0 ? staffEvaluations : defaultReports, reportSearch), 'Bao_Cao_BBCH')}
+                  onExport={() => handleExportExcel(filterAndSortData(staffEvaluations.length > 0 ? staffEvaluations : defaultStaffEvaluations, reportSearch), 'Bao_Cao_BBCH')}
                   sortAsc={sortAsc}
                   isFilterActive={filterOpen}
                 />
@@ -2053,7 +2053,7 @@ const QualityKPIDashboardView = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filterAndSortData(staffEvaluations.length > 0 ? staffEvaluations : defaultReports, reportSearch).map((item, idx) => (
+                  {filterAndSortData(staffEvaluations.length > 0 ? staffEvaluations : defaultStaffEvaluations, reportSearch).map((item, idx) => (
                     <tr key={item.id || idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}>
                       <td style={{ padding: '5px 10px', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
                       <td style={{ padding: '5px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.code || `BC_${String(idx + 1).padStart(2, '0')}`}</td>
@@ -2095,7 +2095,7 @@ const QualityKPIDashboardView = () => {
                   placeholder="Tìm cảnh báo..."
                   onSort={() => setSortAsc(prev => !prev)}
                   onFilter={() => setFilterOpen(prev => !prev)}
-                  onExport={() => handleExportExcel(filterAndSortData(alertsList.length > 0 ? alertsList : defaultAlerts, alertSearch), 'Thiet_Lap_Canh_Bao')}
+                  onExport={() => handleExportExcel(filterAndSortData(alertsList.length > 0 ? alertsList : defaultAlertsList, alertSearch), 'Thiet_Lap_Canh_Bao')}
                   sortAsc={sortAsc}
                   isFilterActive={filterOpen}
                 />
@@ -2144,7 +2144,7 @@ const QualityKPIDashboardView = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filterAndSortData(alertsList.length > 0 ? alertsList : defaultAlerts, alertSearch).map((item, idx) => (
+                  {filterAndSortData(alertsList.length > 0 ? alertsList : defaultAlertsList, alertSearch).map((item, idx) => (
                     <tr key={item.id || idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}>
                       <td style={{ padding: '5px 10px', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
                       <td style={{ padding: '5px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.code || `CB_${String(idx + 1).padStart(2, '0')}`}</td>
