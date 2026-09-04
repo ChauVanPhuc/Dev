@@ -467,6 +467,7 @@ const KPITargetFormModal = ({ isOpen, onClose, targetData, onSave }) => {
                   style={{ width: '100%', padding: '7px 10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.8rem', fontWeight: '600', color: '#1E293B', outline: 'none', backgroundColor: '#FFFFFF' }}
                 >
                   <option value="inspection">Phiếu kiểm tra QC sản xuất</option>
+                  <option value="attendance">Bảng chấm công & Chuyên cần QC</option>
                   <option value="capa">Phiếu khắc phục sự cố CAPA</option>
                   <option value="violation">Biên bản vi phạm & Điểm thưởng</option>
                   <option value="training">Kế hoạch đào tạo & Đánh giá</option>

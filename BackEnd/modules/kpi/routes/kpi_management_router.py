@@ -998,6 +998,20 @@ def calculate_dynamic_kpi_metric(db: Session, item, emp: Employee, month: int, y
         violations = v_query.all()
         records_list = [v for v in violations if getattr(v, 'created_at', None) and v.created_at.month == month and v.created_at.year == year]
 
+    elif ds == 'attendance':
+        from modules.kpi.models.quality_employee_attendance import QualityEmployeeAttendance
+        from sqlalchemy import extract
+        att_q = db.query(QualityEmployeeAttendance).filter(
+            extract('month', QualityEmployeeAttendance.work_date) == month,
+            extract('year', QualityEmployeeAttendance.work_date) == year
+        )
+        if employee_id or emp_name:
+            att_q = att_q.filter(
+                (QualityEmployeeAttendance.employee_id == employee_id) | 
+                (QualityEmployeeAttendance.full_name.ilike(f"%{emp_name}%"))
+            )
+        records_list = att_q.all()
+
     elif ds == 'training':
         t_plans = db.query(KPITrainingPlan).all()
         records_list = [t for t in t_plans if getattr(t, 'created_at', None) and t.created_at.month == month and t.created_at.year == year]
@@ -1008,7 +1022,7 @@ def calculate_dynamic_kpi_metric(db: Session, item, emp: Employee, month: int, y
         records_list = [c for c in claims if getattr(c, 'created_at', None) and c.created_at.month == month and c.created_at.year == year]
 
     # 2. TÍNH TOÁN THEO PHƯƠNG PHÁP (CALC METHOD)
-    if records_list:
+    if records_list or cm == 'attendance_days':
         if cm == 'avg_ticket_rate':
             ticket_rates = []
             for i in records_list:
@@ -1052,11 +1066,30 @@ def calculate_dynamic_kpi_metric(db: Session, item, emp: Employee, month: int, y
             earned_percentage = rate
             calc_actual = f"{rate:.1f}%"
 
-        elif cm == 'attendance_days':
-            distinct_days = len(set(i.inspected_at.date() for i in records_list if getattr(i, 'inspected_at', None)))
-            rate = min(100.0, round((distinct_days / (denom if denom > 0 else 26.0)) * 100.0, 1))
+        elif cm == 'attendance_days' or ds == 'attendance':
+            from modules.kpi.models.quality_employee_attendance import QualityEmployeeAttendance
+            from sqlalchemy import extract
+            att_records = db.query(QualityEmployeeAttendance).filter(
+                extract('month', QualityEmployeeAttendance.work_date) == month,
+                extract('year', QualityEmployeeAttendance.work_date) == year
+            )
+            if employee_id or emp_name:
+                att_records = att_records.filter(
+                    (QualityEmployeeAttendance.employee_id == employee_id) | 
+                    (QualityEmployeeAttendance.full_name.ilike(f"%{emp_name}%"))
+                )
+            att_list = att_records.all()
+
+            if att_list:
+                working_recs = [r for r in att_list if getattr(r, 'status', '') in ['WORKING', 'EARLY_LEAVE_1630', 'OT_20H', 'OT_22H', 'LEAVE_PAID'] or getattr(r, 'status_label', '') in ['Đi làm', 'Vắng CP', 'Về 16h30', '20h', '22h']]
+                half_recs = [r for r in att_list if getattr(r, 'status', '') == 'HALF_DAY' or getattr(r, 'status_label', '') == 'Nghỉ 0.5 ngày']
+                total_days = float(len(working_recs)) + (float(len(half_recs)) * 0.5)
+            else:
+                total_days = float(len(set(i.inspected_at.date() for i in records_list if getattr(i, 'inspected_at', None))))
+
+            rate = min(100.0, round((total_days / (denom if denom > 0 else 26.0)) * 100.0, 1))
             earned_percentage = rate
-            calc_actual = f"{rate:.1f}%"
+            calc_actual = f"{rate:.1f}% ({total_days:.1f}/{int(denom)} ngày công)"
 
         elif cm == 'inverse_count':
             c_count = len(records_list)
@@ -1603,6 +1636,40 @@ def get_kpi_score_evidence(
                 summary_text = f"Không có khiếu nại khách hàng nào đối với {emp_name or employee_id} trong Tháng {month}/{year}"
         except Exception:
             summary_text = "Dữ liệu khiếu nại khách hàng"
+
+    # --- CATEGORY G / ATTENDANCE: Bảng chấm công & Quân số ---
+    elif category in ['G', 'ATTENDANCE'] or any(k in content.lower() for k in ['cơm', 'tăng ca', 'ngày công', 'chấm công', 'chuyên cần']):
+        try:
+            from modules.kpi.models.quality_employee_attendance import QualityEmployeeAttendance
+            from sqlalchemy import extract
+            att_query = db.query(QualityEmployeeAttendance).filter(
+                extract('month', QualityEmployeeAttendance.work_date) == month,
+                extract('year', QualityEmployeeAttendance.work_date) == year
+            )
+            if employee_id or emp_name:
+                att_query = att_query.filter(
+                    (QualityEmployeeAttendance.employee_id == employee_id) | 
+                    (QualityEmployeeAttendance.full_name.ilike(f"%{emp_name}%"))
+                )
+            att_records = att_query.all()
+            for a in att_records:
+                records.append({
+                    "id": a.id,
+                    "code": f"CC-{a.id:04d}",
+                    "title": f"Chấm công ngày {a.work_date.strftime('%d/%m/%Y')}",
+                    "date": a.work_date.strftime("%d/%m/%Y"),
+                    "result": a.status_label or a.status,
+                    "performer": a.full_name or emp_name,
+                    "note": f"Ghi chú: {a.note or 'Đã ghi nhận quân số'}",
+                    "images": None,
+                    "nav_url": f"/admin/kpi/employees?search={a.employee_id}"
+                })
+            if att_records:
+                summary_text = f"Đã trích xuất {len(att_records)} ngày chấm công/chuyên cần của {emp_name or employee_id} trong Tháng {month}/{year}"
+            else:
+                summary_text = f"Chưa có dữ liệu chấm công cho {emp_name or employee_id} trong Tháng {month}/{year}"
+        except Exception as ex:
+            summary_text = f"Dữ liệu bảng chấm công ({str(ex)})"
 
     return {
         "employee_id": employee_id,
