@@ -75,11 +75,26 @@ const KPITargetFormModal = ({ isOpen, onClose, targetData, onSave }) => {
     { code: 'FQC', name: 'QC Final' }
   ]);
 
-  // Fetch real departments from System Config API `/departments`
+  // Default fallback matching system config 'Danh mục Công đoạn SX' (/stages/)
+  const [dbStages, setDbStages] = useState([
+    { code: 'CD01', name: 'Nhập Kho/Đầu Vào' },
+    { code: 'CD02', name: 'Tạo Phôi' },
+    { code: 'CD03', name: 'Định Hình' },
+    { code: 'CD04', name: 'Lắp Ráp' },
+    { code: 'CD05', name: 'Sơn' },
+    { code: 'CD06', name: 'Đóng Gói' },
+    { code: 'CD07', name: 'Lưu Kho' }
+  ]);
+
+  // Fetch real departments and stages from System Config APIs `/departments` & `/stages`
   useEffect(() => {
-    const fetchDepartmentsFromSystemConfig = async () => {
+    const fetchSystemConfigs = async () => {
       try {
-        const deptResp = await api.get('/departments/').catch(() => null);
+        const [deptResp, stageResp] = await Promise.all([
+          api.get('/departments/').catch(() => null),
+          api.get('/stages/').catch(() => null)
+        ]);
+
         if (deptResp && Array.isArray(deptResp) && deptResp.length > 0) {
           const mapped = deptResp.map(d => ({
             code: d.code || '',
@@ -95,12 +110,24 @@ const KPITargetFormModal = ({ isOpen, onClose, targetData, onSave }) => {
             }
           }
         }
+
+        if (stageResp && Array.isArray(stageResp) && stageResp.length > 0) {
+          const mappedStages = stageResp
+            .filter(s => s.is_active !== false)
+            .map(s => ({
+              code: s.code || '',
+              name: s.name || ''
+            }));
+          if (mappedStages.length > 0) {
+            setDbStages(mappedStages);
+          }
+        }
       } catch (err) {
-        console.error('Error loading system departments:', err);
+        console.error('Error loading system configs (departments/stages):', err);
       }
     };
 
-    fetchDepartmentsFromSystemConfig();
+    fetchSystemConfigs();
   }, []);
 
   // Parse existing target string e.g. ">= 95%", "0 claim", "Đúng hạn" into operator + targetVal
@@ -455,23 +482,17 @@ const KPITargetFormModal = ({ isOpen, onClose, targetData, onSave }) => {
                     style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.75rem', fontWeight: '700', outline: 'none', backgroundColor: '#FFFFFF' }}
                   >
                     <option value="">-- Tất cả công đoạn (Không lọc) --</option>
-                    <optgroup label="📍 Công đoạn riêng lẻ">
-                      <option value="Đầu Vào">Đầu Vào (IQC)</option>
-                      <option value="Nhập Kho">Nhập Kho (Nguyên vật liệu)</option>
-                      <option value="Tạo Phôi">Tạo Phôi / Cắt Gọt</option>
-                      <option value="Định Hình">Định Hình / Gia Công</option>
-                      <option value="Lắp Ráp">Lắp Ráp (PQC)</option>
-                      <option value="Sơn">Sơn / Phủ Bề Mặt</option>
-                      <option value="Đóng Gói">Đóng Gói (PQC)</option>
-                      <option value="Final">Final Inspection (OQC)</option>
-                      <option value="Xuất Hàng">Xuất Hàng</option>
-                      <option value="Pallet">Đóng Pallet / Lưu Kho</option>
+                    <optgroup label="🏭 Danh mục Công đoạn SX (Từ Cấu hình hệ thống)">
+                      {dbStages.map((stg, idx) => (
+                        <option key={stg.code || idx} value={stg.name || stg.code}>
+                          {stg.code ? `[${stg.code}] ${stg.name}` : stg.name}
+                        </option>
+                      ))}
                     </optgroup>
                     <optgroup label="📦 Nhóm công đoạn phổ biến">
-                      <option value="Đầu Vào,Nhập Kho,IQC,Vật tư">Đầu vào & Nhập kho (IQC / Vật tư)</option>
+                      <option value="Nhập Kho/Đầu Vào,Nhập Kho,Đầu Vào,IQC">Nhập Kho / Đầu Vào (IQC / Vật tư)</option>
                       <option value="Tạo Phôi,Định Hình,Lắp Ráp,Sơn">Công đoạn Sản xuất (PQC)</option>
-                      <option value="Final,OQC,Xuất Hàng">Thành phẩm & OQC (Final / Xuất hàng)</option>
-                      <option value="Pallet,Kho">Đóng Pallet & Kho bãi</option>
+                      <option value="Đóng Gói,Final,Lưu Kho">Đóng Gói, Final & Lưu Kho</option>
                     </optgroup>
                   </select>
                 </div>
