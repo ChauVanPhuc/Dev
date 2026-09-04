@@ -171,18 +171,7 @@ def upgrade():
                     {"title": "Lịch sử bàn giao", "route_path": "/delivery-history", "icon": None, "sort_order": 3, "permission_key": None},
                 ]
             },
-            {
-                "title": "Phiếu kiểm tra", "icon": "MessageSquare", "sort_order": 3,
-                "children": [
-                    {"title": "Kiểm tra nhập kho", "route_path": "/inspection-stage", "icon": None, "sort_order": 1, "permission_key": None},
-                    {"title": "Kiểm tra công đoạn", "route_path": "/inspection-stage-moisture", "icon": None, "sort_order": 2, "permission_key": None},
-                    {"title": "Kiểm tra quy trình", "route_path": "/inspection-stage-process", "icon": None, "sort_order": 3, "permission_key": None},
-                    {"title": "Kiểm tra mẫu đầu tiên", "route_path": "/inspection-first-article", "icon": None, "sort_order": 4, "permission_key": None},
-                    {"title": "Kiểm tra bám dính", "route_path": "/inspection-stage-adhesion", "icon": None, "sort_order": 5, "permission_key": None},
-                    {"title": "Nhập lỗi", "route_path": "/inspection-daily", "icon": None, "sort_order": 6, "permission_key": None},
-                    {"title": "Lịch sử kiểm tra", "route_path": "/logs", "icon": None, "sort_order": 7, "permission_key": None},
-                ]
-            },
+
             {
                 "title": "Báo cáo công việc", "icon": "Gamepad2", "sort_order": 4,
                 "children": [

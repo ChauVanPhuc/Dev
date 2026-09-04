@@ -57,6 +57,7 @@ def run_migration():
                     {"title": "Tạo phiếu luân chuyển", "route_path": "/production_v2/transfer", "icon": "MessageSquare", "sort_order": 1},
                     {"title": "Danh sách luân chuyển", "route_path": "/production_v2/transfer-list", "icon": "MessageSquare", "sort_order": 2},
                     {"title": "Tạo phiếu kiểm tra", "route_path": "/production_v2/inspection", "icon": "MessageSquare", "sort_order": 3},
+                    {"title": "Kiểm tra nhập kho", "route_path": "/inspection-stage", "icon": "MessageSquare", "sort_order": 4},
                 ]
             },
             {

@@ -389,8 +389,12 @@ async def create_stage_inspection(
     extracted_pallet = parsed_data.get('palletCode') or parsed_data.get('pallet_code') or batch_no
     extracted_stage = parsed_data.get('stage') or inspection_type
     extracted_req_qty = parsed_data.get('requiredQty') or parsed_data.get('required_qty')
-    extracted_sample_qty = parsed_data.get('sampleQty') or parsed_data.get('sample_qty')
+    extracted_sample_qty = parsed_data.get('sampleQty') or parsed_data.get('sample_qty') or (len(parsed_data.get('samples', [])) if isinstance(parsed_data.get('samples'), list) and len(parsed_data.get('samples')) > 0 else 0)
     extracted_error_qty = parsed_data.get('errorQty') or parsed_data.get('error_qty') or 0
+    if not extracted_error_qty and parsed_data:
+        defs = parsed_data.get('defects') or parsed_data.get('errors') or []
+        if isinstance(defs, list) and len(defs) > 0:
+            extracted_error_qty = sum(int(d.get('quantity') or d.get('qty') or 1) for d in defs if isinstance(d, dict))
 
     try:
         new_record = InputInspection(

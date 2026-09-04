@@ -153,16 +153,41 @@ const KPITargetFormModal = ({ isOpen, onClose, targetData, onSave }) => {
     return { operator: op, targetVal: val || '95' };
   };
 
+  // Helper khớp linh hoạt nhãn bộ phận với danh sách dbDepartments
+  const findMatchingDeptLabel = (rawDept) => {
+    if (!rawDept) return null;
+    const searchStr = String(rawDept).toLowerCase().trim();
+    const match = dbDepartments.find(d => {
+      const fullLabel = d.code ? `${d.code} - ${d.name}` : d.name;
+      return (
+        fullLabel.toLowerCase() === searchStr ||
+        (d.code && d.code.toLowerCase() === searchStr) ||
+        (d.name && d.name.toLowerCase() === searchStr) ||
+        fullLabel.toLowerCase().includes(searchStr) ||
+        searchStr.includes(d.name.toLowerCase())
+      );
+    });
+    if (match) {
+      return match.code ? `${match.code} - ${match.name}` : match.name;
+    }
+    return rawDept;
+  };
+
   useEffect(() => {
+    const defaultDept = dbDepartments[0] 
+      ? (dbDepartments[0].code ? `${dbDepartments[0].code} - ${dbDepartments[0].name}` : dbDepartments[0].name)
+      : 'IQC - QC Kiểm Tra Nhập Kho';
+
     if (targetData) {
       const rawWeight = (targetData.weight || '20').toString().replace(/%/g, '').trim();
       const unitVal = targetData.unit || '%';
       const parsedTarget = parseTargetStr(targetData.target, unitVal);
+      const matchedDept = findMatchingDeptLabel(targetData.dept || targetData.department);
 
       setFormData({
         code: targetData.code || 'KPI01',
         name: targetData.name || targetData.content || '',
-        dept: targetData.dept || targetData.department || (dbDepartments[0]?.name || 'IQC - QC Kiểm Tra Nhập Kho'),
+        dept: matchedDept || defaultDept,
         unit: unitVal,
         operator: targetData.operator || parsedTarget.operator,
         targetVal: targetData.target_val || parsedTarget.targetVal,
@@ -178,14 +203,10 @@ const KPITargetFormModal = ({ isOpen, onClose, targetData, onSave }) => {
         no_data_behavior: targetData.no_data_behavior || 'full_score'
       });
     } else {
-      const firstDeptLabel = dbDepartments[0] 
-        ? (dbDepartments[0].code ? `${dbDepartments[0].code} - ${dbDepartments[0].name}` : dbDepartments[0].name)
-        : 'IQC - QC Kiểm Tra Nhập Kho';
-
       setFormData({
         code: `KPI${Math.floor(Math.random() * 89) + 10}`,
         name: '',
-        dept: firstDeptLabel,
+        dept: defaultDept,
         unit: '%',
         operator: '>=',
         targetVal: '95',
@@ -250,8 +271,8 @@ const KPITargetFormModal = ({ isOpen, onClose, targetData, onSave }) => {
       bottom: 0,
       width: '100vw',
       height: '100vh',
-      backgroundColor: 'rgba(15, 23, 42, 0.45)',
-      backdropFilter: 'blur(3px)',
+      backgroundColor: 'rgba(15, 23, 42, 0.55)',
+      backdropFilter: 'blur(4px)',
       zIndex: 9999,
       display: 'flex',
       alignItems: 'center',
@@ -263,234 +284,236 @@ const KPITargetFormModal = ({ isOpen, onClose, targetData, onSave }) => {
       <div style={{
         margin: 'auto',
         backgroundColor: '#FFFFFF',
-        borderRadius: '12px',
+        borderRadius: '16px',
         width: '100%',
-        maxWidth: '540px',
-        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)',
-        overflow: 'hidden'
+        maxWidth: '680px',
+        maxHeight: '90vh',
+        boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25)',
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column'
       }} onClick={(e) => e.stopPropagation()}>
         
-        {/* Header */}
+        {/* Modal Header */}
         <div style={{
           display: 'flex',
           justify: 'space-between',
           alignItems: 'center',
-          padding: '12px 18px',
-          borderBottom: '1px solid #E2E8F0',
+          padding: '16px 24px',
+          borderBottom: '1px solid #EADCC9',
           backgroundColor: '#FAF6F0'
         }}>
-          <h3 style={{ margin: 0, fontSize: '1.05rem', color: '#5D3B32', fontWeight: '800' }}>
-            {targetData ? '✏️ Chỉnh sửa Chỉ số KPI' : '➕ Thêm Mục tiêu KPI mới'}
-          </h3>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#5D3B32', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {targetData ? 'Chỉnh sửa Chỉ số KPI' : 'Thiết lập Mục tiêu KPI Mới'}
+            </h3>
+            <p style={{ margin: '2px 0 0 0', fontSize: '0.75rem', color: '#7B5233' }}>
+              Cấu hình chỉ số công việc và công thức tính toán tự động cho nhân sự QC
+            </p>
+          </div>
           <button 
             type="button" 
             onClick={onClose} 
-            style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#64748B' }}
+            style={{ border: 'none', background: '#EFE5DC', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#5D3B32', transition: 'all 0.2s' }}
           >
             <X size={18} />
           </button>
         </div>
 
-        {/* Body Form */}
-        <form onSubmit={handleSubmit} style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        {/* Body Form - Scrollable if screen is small */}
+        <form onSubmit={handleSubmit} style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto' }}>
           
-          {/* Row 1: Mã KPI & Bộ phận áp dụng */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '10px' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#475569', marginBottom: '3px' }}>
-                Mã KPI *
-              </label>
-              <input
-                type="text"
-                value={formData.code}
-                onChange={(e) => setFormData(prev => ({ ...prev, code: e.target.value }))}
-                style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
-                required
-              />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#475569', marginBottom: '3px' }}>
-                Bộ phận áp dụng
-              </label>
-              <select
-                value={formData.dept}
-                onChange={(e) => setFormData(prev => ({ ...prev, dept: e.target.value }))}
-                style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
-              >
-                {dbDepartments.map((deptItem, idx) => {
-                  const label = deptItem.code ? `${deptItem.code} - ${deptItem.name}` : deptItem.name;
-                  return (
-                    <option key={idx} value={label}>
-                      {label}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-          </div>
-
-          {/* Row 2: Tên chỉ số công việc */}
-          <div>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#475569', marginBottom: '3px' }}>
-              Tên chỉ số công việc *
-            </label>
-            <input
-              type="text"
-              placeholder="VD: Tỷ lệ hàng đạt lần đầu FTY"
-              value={formData.name}
-              onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-              style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
-              required
-            />
-          </div>
-
-          {/* Row 3: BƯỚC 1: Đơn vị tính -> BƯỚC 2: Ngưỡng đạt -> BƯỚC 3: Trọng số (%) */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr 0.9fr', gap: '10px' }}>
+          {/* Group 1: Thông tin chỉ số & Ngưỡng mục tiêu */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             
-            {/* 1. Chọn Đơn vị tính trước */}
-            <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#5D3B32', marginBottom: '3px' }}>
-                1. Đơn vị tính *
-              </label>
-              <select
-                value={formData.unit}
-                onChange={(e) => handleUnitChange(e.target.value)}
-                style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1.5px solid #5D3B32', fontSize: '0.8rem', fontWeight: '700', color: '#5D3B32', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FAF6F0' }}
-              >
-                <option value="%">% (Phần trăm)</option>
-                <option value="claim">claim (Khiếu nại)</option>
-                <option value="báo cáo">báo cáo</option>
-                <option value="buổi">buổi (Đào tạo/Họp)</option>
-                <option value="lỗi">lỗi (Số lỗi)</option>
-                <option value="đơn">đơn (Đơn hàng)</option>
-                <option value="điểm">điểm (Thang điểm)</option>
-                <option value="ca">ca (Ca làm việc)</option>
-                <option value="giờ">giờ (Thời gian)</option>
-              </select>
-            </div>
-
-            {/* 2. Ngưỡng đạt: [Chọn toán tử] + [Gõ số] + [Badge đơn vị cố định] */}
-            <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#475569', marginBottom: '3px' }}>
-                2. Ngưỡng đạt *
-              </label>
-              <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #CBD5E1', borderRadius: '6px', overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
-                <select 
-                  value={formData.operator}
-                  onChange={(e) => setFormData(prev => ({ ...prev, operator: e.target.value }))}
-                  style={{ padding: '6px 4px', border: 'none', borderRight: '1px solid #CBD5E1', backgroundColor: '#F8FAFC', fontSize: '0.78rem', fontWeight: '800', color: '#334155', outline: 'none', cursor: 'pointer' }}
-                >
-                  <option value=">=">&ge;</option>
-                  <option value="<=">&le;</option>
-                  <option value="=">=</option>
-                  <option value="<">&lt;</option>
-                  <option value=">">&gt;</option>
-                  <option value="">---</option>
-                </select>
+            {/* Row 1: Mã KPI & Tên chỉ số công việc */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2.5fr', gap: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#4A3E3B', marginBottom: '4px' }}>
+                  Mã chỉ số KPI <span style={{ color: '#A04020' }}>*</span>
+                </label>
                 <input
                   type="text"
-                  placeholder="95"
-                  value={formData.targetVal}
-                  onChange={(e) => setFormData(prev => ({ ...prev, targetVal: e.target.value }))}
-                  style={{ width: '100%', padding: '6px 8px', border: 'none', fontSize: '0.8rem', outline: 'none', textAlign: 'center', fontWeight: '700', color: '#1E293B', boxSizing: 'border-box' }}
+                  value={formData.code}
+                  onChange={(e) => setFormData(prev => ({ ...prev, code: e.target.value }))}
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.82rem', fontWeight: '700', color: '#1E293B', outline: 'none', boxSizing: 'border-box' }}
                   required
                 />
-                <span style={{ padding: '6px 8px', backgroundColor: '#F1F5F9', color: '#5D3B32', fontWeight: '800', fontSize: '0.78rem', borderLeft: '1px solid #CBD5E1', whiteSpace: 'nowrap', userSelect: 'none' }}>
-                  {formData.unit}
-                </span>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#4A3E3B', marginBottom: '4px' }}>
+                  Tên chỉ số công việc <span style={{ color: '#A04020' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="VD: Tỷ lệ hàng đạt lần đầu FTY / Tỷ lệ hoàn thành kế hoạch CAPA"
+                  value={formData.name}
+                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.82rem', fontWeight: '600', outline: 'none', boxSizing: 'border-box' }}
+                  required
+                />
               </div>
             </div>
 
-            {/* 3. Trọng số: chỉ nhập số, % cố định bên phải */}
-            <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#475569', marginBottom: '3px' }}>
-                3. Trọng số *
-              </label>
-              <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #CBD5E1', borderRadius: '6px', overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
-                <input
-                  type="number"
-                  min="1"
-                  max="100"
-                  placeholder="20"
-                  value={formData.weight}
-                  onChange={(e) => setFormData(prev => ({ ...prev, weight: e.target.value }))}
-                  style={{ width: '100%', padding: '6px 6px', border: 'none', fontSize: '0.8rem', outline: 'none', textAlign: 'right', fontWeight: '700', color: '#1E293B', boxSizing: 'border-box' }}
-                  required
-                />
-                <span style={{ padding: '6px 8px', backgroundColor: '#F1F5F9', color: '#475569', fontWeight: '800', fontSize: '0.8rem', borderLeft: '1px solid #CBD5E1', userSelect: 'none' }}>
-                  %
-                </span>
+            {/* Row 3: Đơn vị tính -> Ngưỡng đạt -> Trọng số (%) */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.3fr 0.9fr', gap: '12px' }}>
+              
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#5D3B32', marginBottom: '4px' }}>
+                  1. Chọn Đơn vị tính <span style={{ color: '#A04020' }}>*</span>
+                </label>
+                <select
+                  value={formData.unit}
+                  onChange={(e) => handleUnitChange(e.target.value)}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1.5px solid #5D3B32', fontSize: '0.82rem', fontWeight: '700', color: '#5D3B32', outline: 'none', boxSizing: 'border-box', backgroundColor: '#FAF6F0' }}
+                >
+                  <option value="%">% (Phần trăm)</option>
+                  <option value="claim">claim (Số vụ khiếu nại)</option>
+                  <option value="báo cáo">báo cáo (Báo cáo QC)</option>
+                  <option value="buổi">buổi (Đào tạo / Họp)</option>
+                  <option value="lỗi">lỗi (Số lượng lỗi phát hiện)</option>
+                  <option value="đơn">đơn (Đơn hàng / Lô hàng)</option>
+                  <option value="điểm">điểm (Thang điểm đánh giá)</option>
+                  <option value="ca">ca (Ca làm việc)</option>
+                  <option value="giờ">giờ (Thời gian xử lý)</option>
+                </select>
               </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#4A3E3B', marginBottom: '4px' }}>
+                  2. Ngưỡng đạt chỉ số <span style={{ color: '#A04020' }}>*</span>
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #CBD5E1', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
+                  <select 
+                    value={formData.operator}
+                    onChange={(e) => setFormData(prev => ({ ...prev, operator: e.target.value }))}
+                    style={{ padding: '8px 6px', border: 'none', borderRight: '1px solid #CBD5E1', backgroundColor: '#FAF6F0', fontSize: '0.82rem', fontWeight: '800', color: '#5D3B32', outline: 'none', cursor: 'pointer' }}
+                  >
+                    <option value=">=">&ge;</option>
+                    <option value="<=">&le;</option>
+                    <option value="=">=</option>
+                    <option value="<">&lt;</option>
+                    <option value=">">&gt;</option>
+                    <option value="">---</option>
+                  </select>
+                  <input
+                    type="text"
+                    placeholder="95"
+                    value={formData.targetVal}
+                    onChange={(e) => setFormData(prev => ({ ...prev, targetVal: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 10px', border: 'none', fontSize: '0.85rem', outline: 'none', textAlign: 'center', fontWeight: '700', color: '#1E293B', boxSizing: 'border-box' }}
+                    required
+                  />
+                  <span style={{ padding: '8px 10px', backgroundColor: '#FAF6F0', color: '#5D3B32', fontWeight: '800', fontSize: '0.8rem', borderLeft: '1px solid #CBD5E1', whiteSpace: 'nowrap', userSelect: 'none' }}>
+                    {formData.unit}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#4A3E3B', marginBottom: '4px' }}>
+                  3. Trọng số điểm <span style={{ color: '#A04020' }}>*</span>
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #CBD5E1', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    placeholder="20"
+                    value={formData.weight}
+                    onChange={(e) => setFormData(prev => ({ ...prev, weight: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 8px', border: 'none', fontSize: '0.85rem', outline: 'none', textAlign: 'right', fontWeight: '700', color: '#1E293B', boxSizing: 'border-box' }}
+                    required
+                  />
+                  <span style={{ padding: '8px 10px', backgroundColor: '#FAF6F0', color: '#5D3B32', fontWeight: '800', fontSize: '0.85rem', borderLeft: '1px solid #CBD5E1', userSelect: 'none' }}>
+                    %
+                  </span>
+                </div>
+              </div>
+
             </div>
 
           </div>
 
-          {/* SECTION: ⚡ CAU HINH NGUON DU LIEU & CONG THUC DONG (15 TRUONG) */}
-          <div style={{ backgroundColor: '#F8FAFC', borderRadius: '8px', padding: '12px 14px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div style={{ fontSize: '0.78rem', fontWeight: '800', color: '#1E293B', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              ⚡ Cấu Hình Nguồn Dữ Liệu & Công Thức Động
+          {/* Group 2: CARD CẤU HÌNH NGUỒN DỮ LIỆU & CÔNG THỨC ĐỘNG (NÂU GỖ TÔN NỀN NHÀ) */}
+          <div style={{
+            backgroundColor: '#FAF6F0',
+            borderRadius: '12px',
+            padding: '14px 16px',
+            border: '1px solid #EADCC9',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: '0.82rem', fontWeight: '800', color: '#5D3B32', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                Cấu Hình Nguồn Dữ Liệu & Công Thức Động
+              </div>
+              <span style={{ fontSize: '0.68rem', backgroundColor: '#EFE5DC', color: '#5D3B32', padding: '2px 8px', borderRadius: '10px', fontWeight: '700' }}>
+                Engine Tự Động
+              </span>
             </div>
 
             {/* Row Nguồn dữ liệu & Phương pháp tính */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginBottom: '3px' }}>
-                  Nguồn dữ liệu (Data Source) *
+                <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '700', color: '#4A3E3B', marginBottom: '4px' }}>
+                  Nguồn dữ liệu truy vấn <span style={{ color: '#A04020' }}>*</span>
                 </label>
                 <select
                   value={formData.data_source || 'inspection'}
                   onChange={(e) => setFormData(prev => ({ ...prev, data_source: e.target.value }))}
-                  style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.78rem', fontWeight: '700', color: '#0F172A', outline: 'none', backgroundColor: '#FFFFFF' }}
+                  style={{ width: '100%', padding: '7px 10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.8rem', fontWeight: '600', color: '#1E293B', outline: 'none', backgroundColor: '#FFFFFF' }}
                 >
-                  <option value="inspection">📋 Phiếu kiểm tra QC (input_inspections)</option>
-                  <option value="capa">🔧 Phiếu CAPA khắc phục (capas)</option>
-                  <option value="violation">⚠️ Biên bản vi phạm (award_disciplines)</option>
-                  <option value="training">📚 Kế hoạch đào tạo (kpi_training_plans)</option>
-                  <option value="claim">📑 Khiếu nại khách hàng (customer_claims)</option>
+                  <option value="inspection">Phiếu kiểm tra QC sản xuất</option>
+                  <option value="capa">Phiếu khắc phục sự cố CAPA</option>
+                  <option value="violation">Biên bản vi phạm & Điểm thưởng</option>
+                  <option value="training">Kế hoạch đào tạo & Đánh giá</option>
+                  <option value="claim">Khiếu nại từ Khách hàng</option>
                 </select>
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginBottom: '3px' }}>
-                  Phương pháp tính (Calc Method) *
+                <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '700', color: '#4A3E3B', marginBottom: '4px' }}>
+                  Phương pháp tính điểm <span style={{ color: '#A04020' }}>*</span>
                 </label>
                 <select
                   value={formData.calc_method || 'avg_ticket_rate'}
                   onChange={(e) => setFormData(prev => ({ ...prev, calc_method: e.target.value }))}
-                  style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.78rem', fontWeight: '700', color: '#0F172A', outline: 'none', backgroundColor: '#FFFFFF' }}
+                  style={{ width: '100%', padding: '7px 10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.8rem', fontWeight: '600', color: '#1E293B', outline: 'none', backgroundColor: '#FFFFFF' }}
                 >
                   <option value="avg_ticket_rate">TB cộng % Đạt từng phiếu (Mẫu - Lỗi)</option>
                   <option value="completion_ratio">Tỷ lệ hoàn thành đúng hạn (%)</option>
-                  <option value="count_penalty">Trừ % theo số lượt vi phạm (100% - N × phạt)</option>
-                  <option value="attendance_days">Tỷ lệ ngày công làm việc (Ngày/Mẫu số)</option>
-                  <option value="inverse_count">Trừ % theo số vụ claim (100% - N × phạt)</option>
+                  <option value="count_penalty">Trừ điểm theo lượt vi phạm (100% - N × phạt)</option>
+                  <option value="attendance_days">Tỷ lệ ngày công thực tế (Ngày / Mẫu số)</option>
+                  <option value="inverse_count">Trừ điểm theo vụ claim (100% - N × phạt)</option>
                 </select>
               </div>
             </div>
 
-            {/* Row Điều kiện lọc bổ sung */}
+            {/* Row Điều kiện lọc bổ sung (Nếu nguồn là Inspection) */}
             {formData.data_source === 'inspection' && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '10px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginBottom: '3px' }}>
-                    Lọc theo Công đoạn (stage_filter)
+                  <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '700', color: '#4A3E3B', marginBottom: '4px' }}>
+                    Lọc theo Công đoạn SX
                   </label>
                   <select
                     value={formData.stage_filter || ''}
                     onChange={(e) => setFormData(prev => ({ ...prev, stage_filter: e.target.value }))}
-                    style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.75rem', fontWeight: '700', outline: 'none', backgroundColor: '#FFFFFF' }}
+                    style={{ width: '100%', padding: '7px 10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.8rem', fontWeight: '600', outline: 'none', backgroundColor: '#FFFFFF' }}
                   >
                     <option value="">-- Tất cả công đoạn (Không lọc) --</option>
-                    <optgroup label="🏭 Danh mục Công đoạn SX (Từ Cấu hình hệ thống)">
+                    <optgroup label="Danh mục Công đoạn SX (Hệ thống)">
                       {dbStages.map((stg, idx) => (
                         <option key={stg.code || idx} value={stg.name || stg.code}>
                           {stg.code ? `[${stg.code}] ${stg.name}` : stg.name}
                         </option>
                       ))}
                     </optgroup>
-                    <optgroup label="📦 Nhóm công đoạn phổ biến">
-                      <option value="Nhập Kho/Đầu Vào,Nhập Kho,Đầu Vào,IQC">Nhập Kho / Đầu Vào (IQC / Vật tư)</option>
+                    <optgroup label="Nhóm công đoạn phổ biến">
+                      <option value="Nhập Kho/Đầu Vào,Nhập Kho,Đầu Vào,IQC">Nhập Kho / Đầu Vào (IQC)</option>
                       <option value="Tạo Phôi,Định Hình,Lắp Ráp,Sơn">Công đoạn Sản xuất (PQC)</option>
                       <option value="Đóng Gói,Final,Lưu Kho">Đóng Gói, Final & Lưu Kho</option>
                     </optgroup>
@@ -498,83 +521,82 @@ const KPITargetFormModal = ({ isOpen, onClose, targetData, onSave }) => {
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginBottom: '3px' }}>
-                    Loại kiểm tra áp dụng (type_filter)
+                  <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '700', color: '#4A3E3B', marginBottom: '4px' }}>
+                    Phân loại kiểm tra
                   </label>
                   <select
                     value={formData.type_filter || ''}
                     onChange={(e) => setFormData(prev => ({ ...prev, type_filter: e.target.value }))}
-                    style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.75rem', fontWeight: '700', outline: 'none', backgroundColor: '#FFFFFF' }}
+                    style={{ width: '100%', padding: '7px 10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.8rem', fontWeight: '600', outline: 'none', backgroundColor: '#FFFFFF' }}
                   >
-                    <option value="">-- Tất cả các loại kiểm tra --</option>
-                    <option value="first_sample">Mẫu đầu tiên (first_sample)</option>
-                    <option value="patrol">Kiểm tra tuần tra (patrol)</option>
-                    <option value="final">Final / OQC xuất hàng (final)</option>
+                    <option value="">-- Tất cả loại kiểm tra --</option>
+                    <option value="first_sample">Mẫu đầu tiên (First sample)</option>
+                    <option value="patrol">Kiểm tra tuần tra (Patrol)</option>
+                    <option value="final">Final / OQC xuất hàng (Final)</option>
                   </select>
                 </div>
               </div>
             )}
 
-            {/* Row Cấu hình hệ số phạt & mẫu số & hành vi khi thiếu dữ liệu */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+            {/* Row Cấu hình hệ số phạt & Mẫu số & Trường nhân sự */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               {(formData.calc_method === 'count_penalty' || formData.calc_method === 'inverse_count') && (
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginBottom: '3px' }}>
-                    Hệ số phạt (%/lần)
+                  <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '700', color: '#4A3E3B', marginBottom: '4px' }}>
+                    Hệ số trừ điểm (% / lần)
                   </label>
                   <input
                     type="number"
                     step="0.5"
                     value={formData.penalty_factor || '2.0'}
                     onChange={(e) => setFormData(prev => ({ ...prev, penalty_factor: e.target.value }))}
-                    style={{ width: '100%', padding: '5px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.75rem', fontWeight: '700', outline: 'none' }}
+                    style={{ width: '100%', padding: '7px 10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.8rem', fontWeight: '700', outline: 'none', boxSizing: 'border-box' }}
                   />
                 </div>
               )}
 
               {formData.calc_method === 'attendance_days' && (
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginBottom: '3px' }}>
-                    Mẫu số ngày công (ngày)
+                  <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '700', color: '#4A3E3B', marginBottom: '4px' }}>
+                    Số ngày công quy chuẩn
                   </label>
                   <input
                     type="number"
                     value={formData.denominator || '26'}
                     onChange={(e) => setFormData(prev => ({ ...prev, denominator: e.target.value }))}
-                    style={{ width: '100%', padding: '5px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.75rem', fontWeight: '700', outline: 'none' }}
+                    style={{ width: '100%', padding: '7px 10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.8rem', fontWeight: '700', outline: 'none', boxSizing: 'border-box' }}
                   />
                 </div>
               )}
 
               <div>
-                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginBottom: '3px' }}>
+                <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '700', color: '#4A3E3B', marginBottom: '4px' }}>
                   Xử lý khi thiếu dữ liệu
                 </label>
                 <select
                   value={formData.no_data_behavior || 'full_score'}
                   onChange={(e) => setFormData(prev => ({ ...prev, no_data_behavior: e.target.value }))}
-                  style={{ width: '100%', padding: '5px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.75rem', outline: 'none', backgroundColor: '#FFFFFF' }}
+                  style={{ width: '100%', padding: '7px 10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.8rem', fontWeight: '600', outline: 'none', backgroundColor: '#FFFFFF' }}
                 >
                   <option value="full_score">Tính 100% Đạt (Mặc định)</option>
-                  <option value="zero_score">Tính 0%</option>
+                  <option value="zero_score">Tính 0% Đạt</option>
                   <option value="no_data">Hiển thị "Chưa có dữ liệu"</option>
                   <option value="target_value">Gán bằng Ngưỡng đạt</option>
                 </select>
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginBottom: '3px' }}>
-                  Trường khớp dữ liệu Nhân viên
+                <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '700', color: '#4A3E3B', marginBottom: '4px' }}>
+                  Trường đối soát Nhân viên
                 </label>
                 <select
                   value={formData.employee_field || 'inspector_name'}
                   onChange={(e) => setFormData(prev => ({ ...prev, employee_field: e.target.value }))}
-                  style={{ width: '100%', padding: '5px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.75rem', outline: 'none', backgroundColor: '#FFFFFF' }}
-                  title="Chọn cột trong CSDL dùng để xác định dữ liệu của nhân viên được tính KPI"
+                  style={{ width: '100%', padding: '7px 10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.8rem', fontWeight: '600', outline: 'none', backgroundColor: '#FFFFFF' }}
                 >
-                  <option value="inspector_name">Tên QC Kiểm tra (inspector_name)</option>
+                  <option value="inspector_name">QC Kiểm tra (inspector_name)</option>
                   <option value="employee_id">Mã nhân viên (employee_id)</option>
-                  <option value="handler_name">Tên Người xử lý (handler_name)</option>
+                  <option value="handler_name">Người xử lý (handler_name)</option>
                   <option value="all">Tính chung toàn bộ nhân sự (all)</option>
                 </select>
               </div>
@@ -582,11 +604,11 @@ const KPITargetFormModal = ({ isOpen, onClose, targetData, onSave }) => {
 
           </div>
 
-          {/* Quick Preset Chips - Thân thiện với đơn vị tính đang chọn */}
+          {/* Quick Presets Badge Chips */}
           {currentPresets.length > 0 && (
             <div style={{ backgroundColor: '#FAF6F0', borderRadius: '8px', padding: '8px 12px', border: '1px solid #EADCC9' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.7rem', color: '#7B5233', fontWeight: '700', marginBottom: '4px' }}>
-                <Sparkles size={12} /> Bấm chọn nhanh giá trị mẫu cho "{formData.unit}":
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', color: '#5D3B32', fontWeight: '700', marginBottom: '4px' }}>
+                Gợi ý chọn nhanh ngưỡng đạt mẫu cho "{formData.unit}":
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                 {currentPresets.map((p, idx) => {
@@ -598,10 +620,10 @@ const KPITargetFormModal = ({ isOpen, onClose, targetData, onSave }) => {
                       type="button"
                       onClick={() => setFormData(prev => ({ ...prev, operator: p.op, targetVal: p.val }))}
                       style={{
-                        padding: '3px 9px',
-                        fontSize: '0.72rem',
-                        borderRadius: '5px',
-                        border: '1px solid #EADCC9',
+                        padding: '4px 10px',
+                        fontSize: '0.75rem',
+                        borderRadius: '6px',
+                        border: isSelected ? '1px solid #5D3B32' : '1px solid #EADCC9',
                         backgroundColor: isSelected ? '#5D3B32' : '#FFFFFF',
                         color: isSelected ? '#FFFFFF' : '#5D3B32',
                         cursor: 'pointer',
@@ -617,38 +639,60 @@ const KPITargetFormModal = ({ isOpen, onClose, targetData, onSave }) => {
             </div>
           )}
 
-          {/* Mô tả */}
+          {/* Mô tả chi tiết */}
           <div>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#475569', marginBottom: '3px' }}>
-              Mô tả chi tiết / Phương pháp đo
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#4A3E3B', marginBottom: '4px' }}>
+              Mô tả chi tiết & Hướng dẫn đo lường
             </label>
             <textarea
               rows={2}
-              placeholder="VD: Đo lường tỷ lệ sản phẩm không bị trả lại tại công đoạn PQC..."
+              placeholder="VD: Đo lường tỷ lệ sản phẩm đạt tiêu chuẩn chất lượng QC không bị trả lại tại công đoạn PQC..."
               value={formData.description}
               onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-              style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
+              style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
             />
           </div>
 
-          {/* Footer Buttons */}
-          <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '4px' }}>
+          {/* Modal Footer Buttons */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', paddingTop: '8px', borderTop: '1px solid #F1F5F9' }}>
             <button
               type="button"
               onClick={onClose}
-              style={{ padding: '6px 16px', border: '1px solid #CBD5E1', borderRadius: '6px', backgroundColor: '#FFFFFF', color: '#334155', fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer' }}
+              style={{
+                padding: '8px 18px',
+                borderRadius: '8px',
+                border: '1px solid #CBD5E1',
+                backgroundColor: '#FFFFFF',
+                color: '#475569',
+                fontSize: '0.82rem',
+                fontWeight: '700',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
             >
               Hủy bỏ
             </button>
             <button
               type="submit"
-              style={{ padding: '6px 20px', border: 'none', borderRadius: '6px', backgroundColor: '#5D3B32', color: '#FFFFFF', fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer' }}
+              style={{
+                padding: '8px 22px',
+                borderRadius: '8px',
+                border: 'none',
+                backgroundColor: '#5D3B32',
+                color: '#FFFFFF',
+                fontSize: '0.82rem',
+                fontWeight: '700',
+                cursor: 'pointer',
+                boxShadow: '0 2px 4px rgba(93, 59, 50, 0.25)',
+                transition: 'all 0.15s ease'
+              }}
             >
-              Lưu chỉ số KPI
+              {targetData ? 'Cập nhật KPI' : 'Lưu chỉ số KPI'}
             </button>
           </div>
 
         </form>
+
       </div>
     </div>
   );

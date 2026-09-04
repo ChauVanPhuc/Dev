@@ -4,6 +4,10 @@ import { Edit2, Trash2, Plus, Minus, ChevronLeft, ChevronRight, ChevronDown, Use
 import apiClient from '@shared/services/api';
 import QualityEmployeeModal from './components/QualityEmployeeModal';
 import KPITaskDetailModal from './components/KPITaskDetailModal';
+import QualityEmployeeCalendarView from './components/QualityEmployeeCalendarView';
+import QualityLeaveReportModal from './components/QualityLeaveReportModal';
+import QualityOvertimeReportModal from './components/QualityOvertimeReportModal';
+import DailyHeadcountSummaryModal from './components/DailyHeadcountSummaryModal';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import '@styles/components.css';
 
@@ -54,19 +58,24 @@ const QualityEmployeeListView = () => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/kpi/quality-employees');
 
-  // State chế độ xem (chart vs table)
-  const [viewMode, setViewMode] = useState('chart'); // 'chart' or 'table'
+  // State chế độ xem (chart, table, calendar)
+  const [viewMode, setViewMode] = useState('chart'); // 'chart', 'table', 'calendar'
+
+  // Modals cho Lịch & Chấm công
+  const [leaveModalOpen, setLeaveModalOpen] = useState(false);
+  const [otModalOpen, setOtModalOpen] = useState(false);
+  const [summaryModalOpen, setSummaryModalOpen] = useState(false);
 
   useEffect(() => {
     if (typeof setCustomTitle === 'function') setCustomTitle(title || 'Danh sách nhân sự');
-    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(viewMode === 'chart' ? 'CL03: Sơ đồ bố trí nhân sự' : (subtitle || 'Quản lý nhân sự QC/QA, phân công nhà máy, công đoạn & Đánh giá KPI chuyên trách'));
+    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(viewMode === 'calendar' ? 'Lịch trình chấm công, báo phép & tăng ca nhân sự QLCL' : (viewMode === 'chart' ? 'CL03: Sơ đồ bố trí nhân sự' : (subtitle || 'Quản lý nhân sự QC/QA, phân công nhà máy, công đoạn & Đánh giá KPI chuyên trách')));
     if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || '');
   }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode, viewMode]);
 
   const [employees, setEmployees] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [size, setSize] = useState(1000);
+  const [size, setSize] = useState(15);
   const [pages, setPages] = useState(1);
   const [search, setSearch] = useState('');
   
@@ -84,9 +93,26 @@ const QualityEmployeeListView = () => {
   const [kpiModalOpen, setKpiModalOpen] = useState(false);
   const [selectedKpiEmployee, setSelectedKpiEmployee] = useState(null);
 
-  // Tree interaction state
+  // Tree & Calendar interaction state
   const [collapsedIds, setCollapsedIds] = useState(new Set());
   const [zoom, setZoom] = useState(1);
+  const [calendarRefreshTrigger, setCalendarRefreshTrigger] = useState(0);
+  const [modalInitialDate, setModalInitialDate] = useState(null);
+
+  const handleOpenLeaveModal = (dateStr = null) => {
+    setModalInitialDate(dateStr);
+    setLeaveModalOpen(true);
+  };
+
+  const handleOpenOtModal = (dateStr = null) => {
+    setModalInitialDate(dateStr);
+    setOtModalOpen(true);
+  };
+
+  const handleModalSuccess = () => {
+    loadData();
+    setCalendarRefreshTrigger(prev => prev + 1);
+  };
 
   const containerRef = useRef(null);
   const contentRef = useRef(null);
@@ -150,16 +176,22 @@ const QualityEmployeeListView = () => {
     loadData();
   }, [page, size, search, selectedFactory]);
 
-  const handleEdit = (employee) => {
-    setSelectedKpiEmployee({
-      ...(employee || {}),
-      schema_name: selectedScheme
-    });
-    setKpiModalOpen(true);
+  // Mở modal Thêm mới Nhân sự QLCL (QualityEmployeeModal)
+  const handleAddEmployee = () => {
+    setSelectedKpiEmployee(null);
+    setModalOpen(true);
   };
 
-  const handleAddEmployee = () => {
+  // Mở modal Sửa hồ sơ Nhân sự QLCL (QualityEmployeeModal)
+  const handleEditProfile = (employee) => {
+    setSelectedKpiEmployee(employee);
+    setModalOpen(true);
+  };
+
+  // Mở modal Đánh giá KPI & Checklist (KPITaskDetailModal)
+  const handleViewKpi = (employee) => {
     setSelectedKpiEmployee({
+      ...(employee || {}),
       schema_name: selectedScheme
     });
     setKpiModalOpen(true);
@@ -348,17 +380,17 @@ const QualityEmployeeListView = () => {
         }}
         onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#7B5233'; e.currentTarget.style.boxShadow = '0 6px 12px rgba(123, 82, 51, 0.1)'; }}
         onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#EADCC9'; e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.05)'; }}
-        onClick={() => handleEdit(node.raw_data || node)}
+        onClick={() => handleViewKpi(node.raw_data || node)}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '0.65rem', fontWeight: 700, backgroundColor: '#FAF6F0', color: '#7B5233', padding: '2px 8px', borderRadius: '12px', textTransform: 'uppercase' }}>
               {node.level_name}
             </span>
             <div style={{ display: 'flex', gap: '4px' }} onClick={(e) => e.stopPropagation()}>
-              <button onClick={() => handleEdit(node.raw_data || node)} style={{ background: 'none', border: 'none', color: '#4F46E5', cursor: 'pointer', padding: '2px' }}>
+              <button onClick={() => handleEditProfile(node.raw_data || node)} style={{ background: 'none', border: 'none', color: '#4F46E5', cursor: 'pointer', padding: '2px' }} title="Sửa hồ sơ nhân sự">
                 <Edit2 size={12} />
               </button>
-              <button onClick={() => handleDelete(node.id, node.occupants?.[0]?.full_name || 'nhân sự')} style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', padding: '2px' }}>
+              <button onClick={() => handleDelete(node.id, node.occupants?.[0]?.full_name || 'nhân sự')} style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', padding: '2px' }} title="Xóa">
                 <Trash2 size={12} />
               </button>
             </div>
@@ -465,7 +497,7 @@ const QualityEmployeeListView = () => {
   };
 
   return (
-    <div className="gold-layout" style={{ padding: '0', display: 'flex', flexDirection: 'column', flex: 1, height: '100%' }}>
+    <div className="gold-layout" style={{ padding: '0', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 85px)', overflow: 'hidden' }}>
       {/* ── STICKY TOP ZONE ── */}
       <div className="sticky-top-zone">
         <div style={{
@@ -562,15 +594,15 @@ const QualityEmployeeListView = () => {
               <span>Thêm nhân sự</span>
             </button>
 
-            {/* Nút Xem lịch nghỉ (Màu nâu nhạt) */}
+            {/* Nút Xem lịch nghỉ (Màu nâu nhạt / Nâu đậm khi active) */}
             <button
               type="button"
-              onClick={() => alert('Tính năng Xem lịch nghỉ nhân sự đang phát triển.')}
+              onClick={() => setViewMode(viewMode === 'calendar' ? 'chart' : 'calendar')}
               style={{
                 height: '38px',
                 padding: '0 16px',
                 borderRadius: '8px',
-                backgroundColor: '#A27B5C',
+                backgroundColor: viewMode === 'calendar' ? '#3D2B1F' : '#A27B5C',
                 color: '#ffffff',
                 border: 'none',
                 fontWeight: '700',
@@ -584,7 +616,7 @@ const QualityEmployeeListView = () => {
               }}
             >
               <Calendar size={16} />
-              <span>Xem lịch nghỉ</span>
+              <span>{viewMode === 'calendar' ? 'Xem dạng sơ đồ' : 'Xem lịch nghỉ'}</span>
             </button>
 
             {/* Nút Xem dạng bảng / Xem dạng sơ đồ (Màu espresso đậm) */}
@@ -615,7 +647,7 @@ const QualityEmployeeListView = () => {
             {/* Nút Báo tăng ca (Màu espresso đậm) */}
             <button
               type="button"
-              onClick={() => alert('Tính năng Báo tăng ca nhân sự.')}
+              onClick={() => handleOpenOtModal()}
               style={{
                 height: '38px',
                 padding: '0 16px',
@@ -640,7 +672,7 @@ const QualityEmployeeListView = () => {
             {/* Nút Báo nghỉ phép (Màu espresso đậm) */}
             <button
               type="button"
-              onClick={() => handleAddEmployee()}
+              onClick={() => handleOpenLeaveModal()}
               style={{
                 height: '38px',
                 padding: '0 16px',
@@ -816,9 +848,16 @@ const QualityEmployeeListView = () => {
         </div>
       )}
 
-      {/* ── WORKSPACE CHÍNH (DẠNG SƠ ĐỒ CÂY HOẶC DẠNG BẢNG) ── */}
+      {/* ── WORKSPACE CHÍNH (DẠNG LỊCH, DẠNG SƠ ĐỒ CÂY HOẶC DẠNG BẢNG) ── */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, marginTop: '4px' }}>
-        {viewMode === 'chart' ? (
+        {viewMode === 'calendar' ? (
+          <QualityEmployeeCalendarView
+            onOpenLeaveModal={(d) => handleOpenLeaveModal(d)}
+            onOpenOtModal={(d) => handleOpenOtModal(d)}
+            onOpenSummaryModal={() => setSummaryModalOpen(true)}
+            refreshTrigger={calendarRefreshTrigger}
+          />
+        ) : viewMode === 'chart' ? (
           /* Sơ đồ cây phân cấp */
           <div 
             ref={containerRef}
@@ -874,17 +913,18 @@ const QualityEmployeeListView = () => {
           </div>
         ) : (
           /* Dạng bảng chuẩn ERP */
-          <div className="admin-list-layout">
-            <div className="mgmt-table card admin-table-card">
-              <div className="table-responsive desktop-only admin-table-scroll">
+          <div className="admin-list-layout" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+            <div className="mgmt-table card admin-table-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden', backgroundColor: '#ffffff', borderRadius: '12px', border: '1px solid #EADCC9' }}>
+              <div className="table-responsive desktop-only admin-table-scroll" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
                 <table className="data-table">
-                  <thead>
+                  <thead style={{ position: 'sticky', top: 0, zIndex: 5, backgroundColor: '#FAF6F0' }}>
                     <tr>
                       <th>MÃ NV</th>
                       <th>HỌ TÊN</th>
                       <th>PHÒNG BAN</th>
                       <th>VỊ TRÍ</th>
                       <th>BỘ PHẬN</th>
+                      <th>TRẠNG THÁI</th>
                       <th>NGÀY VÀO LÀM</th>
                       <th style={{ textAlign: 'center' }}>THAO TÁC</th>
                     </tr>
@@ -892,30 +932,47 @@ const QualityEmployeeListView = () => {
                   <tbody>
                     {employees.length === 0 ? (
                       <tr>
-                        <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: '#9CA3AF' }}>
+                        <td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: '#9CA3AF' }}>
                           Không tìm thấy nhân sự nào.
                         </td>
                       </tr>
                     ) : employees.map((emp) => (
                       <tr
                         key={emp.id}
-                        onClick={() => handleEdit(emp)}
+                        onClick={() => handleViewKpi(emp)}
                         style={{ cursor: 'pointer' }}
                       >
                         <td style={{ fontWeight: 700, color: '#7B5233' }}>{emp.employee_id}</td>
                         <td style={{ fontWeight: 600, color: '#2D1A12' }}>{emp.full_name}</td>
                         <td>{emp.department || 'QLCL'}</td>
-                        <td>{emp.stage || 'VP'}</td>
+                        <td>{emp.stage || 'Nhân viên QC'}</td>
                         <td>{emp.factory || '-'}</td>
                         <td>
-                          {emp.created_at ? new Date(emp.created_at).toLocaleDateString('vi-VN') : '1/2/2024'}
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '3px 10px',
+                            borderRadius: '12px',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            backgroundColor: '#ECFDF5',
+                            color: '#047857',
+                            border: '1px solid #A7F3D0'
+                          }}>
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#10B981' }}></span>
+                            {(!emp.status || emp.status.includes('?')) ? 'Đang làm việc' : emp.status}
+                          </span>
+                        </td>
+                        <td>
+                          {emp.created_at ? new Date(emp.created_at).toLocaleDateString('vi-VN') : '-'}
                         </td>
                         <td onClick={(e) => e.stopPropagation()} style={{ textAlign: 'center' }}>
                           <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', alignItems: 'center' }}>
                             <button
-                              onClick={() => handleEdit(emp)}
+                              onClick={() => handleEditProfile(emp)}
                               style={{ background: 'none', border: 'none', color: '#4F46E5', cursor: 'pointer', padding: '4px' }}
-                              title="Sửa thông tin nhân sự (CL03.2)"
+                              title="Sửa hồ sơ nhân sự"
                             >
                               <Edit2 size={16} />
                             </button>
@@ -935,7 +992,7 @@ const QualityEmployeeListView = () => {
               </div>
 
               {/* Phân trang cố định đáy */}
-              <div className="admin-pagination-desktop desktop-only">
+              <div className="admin-pagination-desktop desktop-only" style={{ flexShrink: 0, padding: '12px 16px', borderTop: '1px solid #EADCC9', backgroundColor: '#FAF6F0' }}>
                 <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
                   Hiển thị <b>{total > 0 ? (page - 1) * size + 1 : 0} - {Math.min(page * size, total)}</b> trên <b>{total}</b> nhân sự
                 </div>
@@ -995,6 +1052,28 @@ const QualityEmployeeListView = () => {
           onSave={() => { setKpiModalOpen(false); loadData(); }}
         />
       </ModalErrorBoundary>
+
+      {/* Modal Báo Nghỉ Phép */}
+      <QualityLeaveReportModal
+        isOpen={leaveModalOpen}
+        onClose={() => setLeaveModalOpen(false)}
+        onSuccess={handleModalSuccess}
+        initialDate={modalInitialDate}
+      />
+
+      {/* Modal Báo Tăng Ca */}
+      <QualityOvertimeReportModal
+        isOpen={otModalOpen}
+        onClose={() => setOtModalOpen(false)}
+        onSuccess={handleModalSuccess}
+        initialDate={modalInitialDate}
+      />
+
+      {/* Modal Báo Cáo Quân Số Hàng Ngày */}
+      <DailyHeadcountSummaryModal
+        isOpen={summaryModalOpen}
+        onClose={() => setSummaryModalOpen(false)}
+      />
     </div>
   );
 };

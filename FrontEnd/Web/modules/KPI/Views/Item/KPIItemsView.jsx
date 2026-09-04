@@ -6,6 +6,21 @@ import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import '@styles/components.css';
 
+const CALC_METHOD_MAP = {
+  'avg_ticket_rate': 'TB cộng % Đạt từng phiếu (Mẫu - Lỗi)',
+  'completion_ratio': 'Tỷ lệ hoàn thành đúng hạn (%)',
+  'count_penalty': 'Trừ điểm theo lượt vi phạm (100% - N × phạt)',
+  'inverse_count': 'Trừ điểm theo vụ claim (100% - N × phạt)',
+  'attendance_days': 'Tỷ lệ ngày công thực tế (Ngày / 26)'
+};
+
+const getCalcMethodLabel = (val, fallback = '') => {
+  if (!val) return fallback || 'TB cộng % Đạt từng phiếu';
+  const key = String(val).trim().toLowerCase();
+  if (CALC_METHOD_MAP[key]) return CALC_METHOD_MAP[key];
+  return String(val).replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu, '').trim();
+};
+
 const KPIItemsView = () => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
   const navigate = useNavigate();
@@ -228,7 +243,11 @@ const KPIItemsView = () => {
                     <tr key={item.id}>
                       <td style={{ fontWeight: '700', color: '#7B5233' }}>{item.kpi_code}</td>
                       <td style={{ fontWeight: '600' }}>{item.content}</td>
-                      <td>{item.calc_method}</td>
+                      <td style={{ fontWeight: '600', color: '#334155' }}>
+                        <span style={{ backgroundColor: '#FAF6F0', border: '1px solid #EADCC9', color: '#5D3B32', padding: '3px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: '700', display: 'inline-block' }}>
+                          {getCalcMethodLabel(item.calc_method)}
+                        </span>
+                      </td>
                       <td style={{ fontWeight: '700', color: '#0f766e' }}>{item.target}</td>
                       <td>
                         <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>

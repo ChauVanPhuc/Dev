@@ -63,7 +63,8 @@ const Sidebar = () => {
             children: [
               { id: 'sub-pv2-1', title: 'Tạo phiếu luân chuyển', route_path: '/production_v2/transfer', icon: 'MessageSquare' },
               { id: 'sub-pv2-2', title: 'Danh sách luân chuyển', route_path: '/production_v2/transfer-list', icon: 'MessageSquare' },
-              { id: 'sub-pv2-3', title: 'Tạo phiếu kiểm tra', route_path: '/production_v2/inspection', icon: 'MessageSquare' }
+              { id: 'sub-pv2-3', title: 'Tạo phiếu kiểm tra', route_path: '/production_v2/inspection', icon: 'MessageSquare' },
+              { id: 'sub-pv2-4', title: 'Kiểm tra nhập kho', route_path: '/inspection-stage', icon: 'MessageSquare' }
             ]
           },
           {

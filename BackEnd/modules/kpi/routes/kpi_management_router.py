@@ -117,51 +117,8 @@ def seed_employee_defaults(db: Session, employee_id: str):
     rng = random.Random(seed_val)
 
     # 1. Checklist mẫu tiếng Việt (trích từ ảnh 2)
-    existing_checklist = db.query(KPIChecklist).filter(KPIChecklist.employee_id == employee_id).first()
-    if not existing_checklist:
-        checklist_pool = [
-            ("Duyệt báo cáo", "Hàng ngày"),
-            ("Họp giao việc đầu ca", "Hàng ngày"),
-            ("Báo cáo các hình hình chất lượng", "Hằng tháng"),
-            ("Kiểm tra ngẫu nhiên (Spot-check)", "Hàng ngày"),
-            ("Gửi cảnh báo lỗi", "Hàng tuần"),
-            ("Phân tích Pareto & Đóng CAPA", "Hàng tuần"),
-            ("Kiểm tra nhật ký ghi chép", "Hàng tuần"),
-            ("Báo cáo xu hướng lỗi hằng tháng", "Hàng tuần"),
-            ("Báo phép, công, tăng ca", "Hàng ngày"),
-            ("Theo dõi hồ sơ chất lượng", "Hàng tháng"),
-            ("Đi tuần xưởng", "Hàng ngày"),
-            ("Kiểm tra thiết bị", "Hàng ngày"),
-            ("Họp giao ca đứng (Toolbox)", "Hàng ngày"),
-            ("Kiểm tra chéo ngẫu nhiên & Test lỗi", "Hàng ngày"),
-            ("Đóng CAPA", "Khi phát sinh"),
-            ("Đánh giá nhân sự", "Hằng tháng"),
-            ("Báo cáo tình hình", "Hằng tuần"),
-            ("Ký duyệt đầu mẫu (FAI)", "Hàng ngày"),
-            ("Thực thi & Theo dõi CAPA tại chỗ", "Liên tục trong ca"),
-            ("Cập nhật sự thay đổi bản vẽ", "Hằng tháng"),
-        ]
-        # Xáo trộn và lấy một số lượng ngẫu nhiên từ 7 đến 12 công việc cho nhân sự này
-        num_tasks = rng.randint(7, 12)
-        selected_tasks = rng.sample(checklist_pool, num_tasks)
-        
-        for idx, (content, freq) in enumerate(selected_tasks):
-            code = f"CV{idx+1:02d}"
-            status_today = rng.choice(["Đã hoàn thành", "Chưa hoàn thành"])
-            perform_count = rng.randint(1, 3) if status_today == "Đã hoàn thành" else 0
-            last_performed = "2026-06-30" if status_today == "Đã hoàn thành" else "-"
-            result = rng.choice(["Đầy đủ dữ liệu", "Đạt chuẩn QC", "Đạt yêu cầu", "Tốt"]) if status_today == "Đã hoàn thành" else "-"
-            
-            db.add(KPIChecklist(
-                employee_id=employee_id,
-                task_code=code,
-                content=content,
-                frequency=freq,
-                status_today=status_today,
-                perform_count=perform_count,
-                last_performed=last_performed,
-                result=result
-            ))
+    # 1. Checklist mẫu (Tắt tự động sinh dữ liệu mẫu giả lập theo yêu cầu người dùng)
+    pass
 
     # 2. KPI mẫu tiếng Việt (trích từ ảnh 1)
     existing_kpis = db.query(KPIEmployeeItem).filter(KPIEmployeeItem.employee_id == employee_id).first()
@@ -194,8 +151,6 @@ def seed_employee_defaults(db: Session, employee_id: str):
         
         for idx, (content, score, calc, target, actual) in enumerate(selected_kpis):
             code = f"KPI{idx+1:02d}"
-            status = rng.choice(["Đạt KPI", "Chưa đạt KPI"])
-            icon = "check" if status == "Đạt KPI" else "x"
             item_score = base_score + (remainder if idx == 0 else 0)
             
             db.add(KPIEmployeeItem(
@@ -205,9 +160,10 @@ def seed_employee_defaults(db: Session, employee_id: str):
                 score=item_score,
                 calc_method=calc,
                 target=target,
-                actual=actual,
-                status=status,
-                icon=icon
+                actual="Chưa có dữ liệu",
+                status="Chưa có dữ liệu",
+                icon="clock",
+                no_data_behavior="no_data"
             ))
 
     # 3. Vi phạm mẫu (Quy tắc cộng trừ điểm)
@@ -930,8 +886,8 @@ def filter_inspections_by_kpi_code(kpi_code: str, inspections: list) -> list:
         cont = str(getattr(i, 'cont_name', '') or '').lower()
         pallet = str(getattr(i, 'pallet_code', '') or '').lower()
 
-        if code == 'KPI01': # IQC Vật tư đầu vào
-            if 'đầu vào' in stage or 'nhập kho' in stage or 'iqc' in itype or 'vật tư' in stage:
+        if code in ['KPI01', 'KPI_1788164683841']: # IQC Vật tư đầu vào
+            if any(k in stage for k in ['đầu vào', 'nhập kho', 'nhap-kho', 'vật tư', 'phôi']) or any(k in itype for k in ['iqc', 'nhap-kho', 'dau-vao', 'đầu vào', 'nhập kho']):
                 res.append(i)
         elif code in ['KPI06', 'KPI13']: # Patrol Tuần tra
             if 'patrol' in itype or 'tuần tra' in stage or 'tuần tra' in itype:
@@ -986,13 +942,23 @@ def calculate_dynamic_kpi_metric(db: Session, item, emp: Employee, month: int, y
     employee_id = emp.employee_id if emp else ""
 
     ds = (getattr(item, 'data_source', None) or 'inspection').lower().strip()
-    cm = (getattr(item, 'calc_method', None) or 'avg_ticket_rate').lower().strip()
+    cm_raw = str(getattr(item, 'calc_method', None) or 'avg_ticket_rate').lower().strip()
+    valid_methods = ['avg_ticket_rate', 'completion_ratio', 'count_penalty', 'inverse_count', 'attendance_days']
+    if cm_raw in valid_methods:
+        cm = cm_raw
+    else:
+        if any(k in cm_raw for k in ['hoàn thành', 'đúng hạn']):
+            cm = 'completion_ratio'
+        elif any(k in cm_raw for k in ['phạt', 'vi phạm', 'claim', 'trừ']):
+            cm = 'count_penalty' if 'lượt' in cm_raw else 'inverse_count'
+        else:
+            cm = 'avg_ticket_rate'
     stage_f = getattr(item, 'stage_filter', None) or ""
     type_f = getattr(item, 'type_filter', None) or ""
     emp_f = getattr(item, 'employee_field', None) or "inspector_name"
     penalty = float(getattr(item, 'penalty_factor', None) or 2.0)
     denom = float(getattr(item, 'denominator', None) or 26.0)
-    no_data_beh = getattr(item, 'no_data_behavior', None) or "full_score"
+    no_data_beh = getattr(item, 'no_data_behavior', None) or "no_data"
 
     calc_actual = "Chưa có dữ liệu"
     earned_percentage = 100.0
@@ -1048,6 +1014,22 @@ def calculate_dynamic_kpi_metric(db: Session, item, emp: Employee, month: int, y
             for i in records_list:
                 sample = float(getattr(i, 'sample_qty', None) or getattr(i, 'required_qty', None) or 0)
                 err = float(getattr(i, 'error_qty', None) or 0)
+
+                # Fallback: Trích xuất mẫu & số lỗi từ data_json nếu cột DB là 0
+                if (sample <= 0 or err <= 0) and getattr(i, 'data_json', None):
+                    try:
+                        import json
+                        dj = json.loads(i.data_json) if isinstance(i.data_json, str) else i.data_json
+                        if isinstance(dj, dict):
+                            if sample <= 0:
+                                sample = float(dj.get('sample_qty') or dj.get('sampleQty') or len(dj.get('samples', [])) or 0)
+                            if err <= 0:
+                                defs = dj.get('defects') or dj.get('errors') or []
+                                if isinstance(defs, list):
+                                    err = float(sum(int(d.get('quantity') or d.get('qty') or 1) for d in defs if isinstance(d, dict)))
+                    except Exception:
+                        pass
+
                 if sample > 0:
                     rate = max(0.0, min(100.0, ((sample - err) / sample) * 100.0))
                 else:
@@ -1409,8 +1391,8 @@ def get_kpi_score_evidence(
                 pass
         return s
 
-    # --- CATEGORY A: QC Inspections ---
-    if category == 'A':
+    # --- CATEGORY A & QC Inspections ---
+    if category in ['A', 'D'] or any(k in (content or '').lower() for k in ['kiểm tra', 'phiếu', 'báo cáo', 'lỗi']):
         try:
             from modules.inspection.models.input_inspection import InputInspection
             query = db.query(InputInspection)
@@ -1424,6 +1406,22 @@ def get_kpi_score_evidence(
             for i in filtered:
                 sample = int(getattr(i, 'sample_qty', None) or getattr(i, 'required_qty', None) or 0)
                 err = int(getattr(i, 'error_qty', None) or 0)
+
+                # Fallback: Trích xuất mẫu & số lỗi từ data_json nếu cột DB là 0
+                if (sample <= 0 or err <= 0) and getattr(i, 'data_json', None):
+                    try:
+                        import json
+                        dj = json.loads(i.data_json) if isinstance(i.data_json, str) else i.data_json
+                        if isinstance(dj, dict):
+                            if sample <= 0:
+                                sample = int(dj.get('sample_qty') or dj.get('sampleQty') or len(dj.get('samples', [])) or 0)
+                            if err <= 0:
+                                defs = dj.get('defects') or dj.get('errors') or []
+                                if isinstance(defs, list):
+                                    err = int(sum(int(d.get('quantity') or d.get('qty') or 1) for d in defs if isinstance(d, dict)))
+                    except Exception:
+                        pass
+
                 res_str = str(getattr(i, 'result', None) or getattr(i, 'conclusion', None) or 'PASS').upper()
                 is_pass = res_str in ['PASS', 'ĐẠT', 'SUCCESS', 'OK']
 

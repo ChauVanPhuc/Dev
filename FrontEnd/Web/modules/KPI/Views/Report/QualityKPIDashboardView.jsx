@@ -40,14 +40,30 @@ import KPITrainingDetailModal from '../components/KPITrainingDetailModal';
 import KPIViolationFormModal from '../components/KPIViolationFormModal';
 import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
 
-{/* Component thanh điều khiển chuẩn hóa: Ô Tìm kiếm + Icon A-Z Sort + Icon Filter + Nút Nâu [↑] Xuất dữ liệu */}
+// Map technical calculation method codes into human-readable Vietnamese descriptions
+const CALC_METHOD_MAP = {
+  'avg_ticket_rate': 'TB cộng % Đạt từng phiếu (Mẫu - Lỗi)',
+  'completion_ratio': 'Tỷ lệ hoàn thành đúng hạn (%)',
+  'count_penalty': 'Trừ điểm theo lượt vi phạm (100% - N × phạt)',
+  'inverse_count': 'Trừ điểm theo vụ claim (100% - N × phạt)',
+  'attendance_days': 'Tỷ lệ ngày công thực tế (Ngày / 26)'
+};
+
+const getCalcMethodLabel = (val, fallback = '') => {
+  if (!val) return fallback || 'TB cộng % Đạt từng phiếu';
+  const key = String(val).trim().toLowerCase();
+  if (CALC_METHOD_MAP[key]) return CALC_METHOD_MAP[key];
+  return String(val).replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu, '').trim();
+};
+
 // Default Datasets for complete functional fallback
 const defaultKpiTargets = [
-  { id: 1, code: 'KPI-01', name: 'Tỷ lệ sản xuất đúng quy trình Sơn QC', target: '>= 98%', weight: '25%', unit: 'Hàng ngày', standard: 'Tiêu chuẩn ISO-9001', status: 'Áp dụng' },
-  { id: 2, code: 'KPI-02', name: 'Kiểm soát tỷ lệ hàng lỗi Đóng gói', target: '<= 1.5%', weight: '20%', unit: 'Hàng tuần', standard: 'Đạt chuẩn 100%', status: 'Áp dụng' },
-  { id: 3, code: 'KPI-03', name: 'Độ chính xác kiểm định Cưa xẻ phôi', target: '100%', weight: '20%', unit: 'Hàng ngày', standard: 'Sai số < 0.5mm', status: 'Áp dụng' },
-  { id: 4, code: 'KPI-04', name: 'Thời gian xử lý Biên bản khắc phục (BBCH)', target: '<= 24h', weight: '15%', unit: 'Hàng tháng', standard: 'Phản hồi tức thì', status: 'Áp dụng' },
-  { id: 5, code: 'KPI-05', name: 'Tỷ lệ hoàn thành Đào tạo An toàn & Chất lượng', target: '100%', weight: '20%', unit: 'Hàng tháng', standard: 'Chứng chỉ QA', status: 'Áp dụng' }
+  { id: 1, code: 'KPI-01', name: 'Tỷ lệ sản xuất đúng quy trình Sơn QC', dept: 'PQC2 - QC Sơn - Đóng Gói', target: '>= 98%', weight: '25%', unit: 'Hàng ngày', standard: 'Tiêu chuẩn ISO-9001', status: 'Áp dụng' },
+  { id: 2, code: 'KPI-02', name: 'Kiểm soát tỷ lệ hàng lỗi Đóng gói', dept: 'PQC2 - QC Sơn - Đóng Gói', target: '<= 1.5%', weight: '20%', unit: 'Hàng tuần', standard: 'Đạt chuẩn 100%', status: 'Áp dụng' },
+  { id: 3, code: 'KPI-03', name: 'Độ chính xác kiểm định Cưa xẻ phôi', dept: 'PQC1 - QC Định Hình - Lắp Ráp', target: '100%', weight: '20%', unit: 'Hàng ngày', standard: 'Sai số < 0.5mm', status: 'Áp dụng' },
+  { id: 4, code: 'KPI-04', name: 'Thời gian xử lý Biên bản khắc phục (BBCH)', dept: 'QA - Nhân Viên Kiểm Soát Quy Trình', target: '<= 24h', weight: '15%', unit: 'Hàng tháng', standard: 'Phản hồi tức thì', status: 'Áp dụng' },
+  { id: 5, code: 'KPI-05', name: 'Tỷ lệ hoàn thành Đào tạo An toàn & Chất lượng', dept: 'QA - Nhân Viên Kiểm Soát Quy Trình', target: '100%', weight: '20%', unit: 'Hàng tháng', standard: 'Chứng chỉ QA', status: 'Áp dụng' },
+  { id: 6, code: 'KPI-06', name: 'Tỷ lệ nguyên vật liệu nhập kho đạt tiêu chuẩn IQC', dept: 'IQC - QC Kiểm Tra Nhập Kho', target: '>= 99%', weight: '20%', unit: 'Hàng ngày', standard: 'Đạt chuẩn 100%', status: 'Áp dụng' }
 ];
 
 const defaultWorkIndicators = [
@@ -413,6 +429,7 @@ const QualityKPIDashboardView = () => {
           emp: 'Họ và Tên Nhân Sự',
           dept: 'Phòng Ban / Bộ Phận',
           role: 'Vị Trí Công Việc',
+          calc_method: 'Công Thức / Cách Tính',
           target: 'Mục Tiêu Chỉ Số',
           weight: 'Tỷ Trọng',
           unit: 'Tần Suất / Đơn Vị',
@@ -436,7 +453,8 @@ const QualityKPIDashboardView = () => {
           channel: 'Kênh Phát Thông Báo',
           receiver: 'Đối Tượng Nhận Thông Báo'
         };
-        cleanRow[keyMap[key] || key] = item[key];
+        const mappedVal = key === 'calc_method' ? getCalcMethodLabel(item[key]) : item[key];
+        cleanRow[keyMap[key] || key] = mappedVal;
       });
       return cleanRow;
     });
@@ -764,11 +782,21 @@ const QualityKPIDashboardView = () => {
           code: k.kpi_code || `KPI${String(idx + 1).padStart(2, '0')}`,
           name: k.content,
           calc_method: k.calc_method,
-          dept: k.calc_method || 'Phòng QA/QC',
+          dept: k.department || k.dept || 'QA - Nhân Viên Kiểm Soát Quy Trình',
           target: k.target || '>= 98%',
           weight: '20%',
           category: k.category || 'D',
-          unit: '%',
+          unit: k.unit || '%',
+          operator: k.operator || '>=',
+          target_val: k.target_val || '95',
+          description: k.description || k.calc_method || '',
+          data_source: k.data_source || 'inspection',
+          stage_filter: k.stage_filter || '',
+          type_filter: k.type_filter || '',
+          employee_field: k.employee_field || 'inspector_name',
+          penalty_factor: k.penalty_factor || 2.0,
+          denominator: k.denominator || 26.0,
+          no_data_behavior: k.no_data_behavior || 'full_score',
           status: 'Áp dụng'
         }));
         setKpiTargets(mappedKpis);
@@ -1399,12 +1427,12 @@ const QualityKPIDashboardView = () => {
                     <th style={{ padding: '6px 10px', fontWeight: '700', width: '40px' }}>STT</th>
                     <th style={{ padding: '6px 10px', fontWeight: '700', width: '100px' }}>Mã công việc</th>
                     <th style={{ padding: '6px 10px', fontWeight: '700' }}>Tên công việc / Mục tiêu</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '110px' }}>Mức độ ưu tiên</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '80px' }}>Tỷ trọng</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '100px' }}>Tần suất</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '110px' }}>Tiêu chuẩn</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '110px' }}>Hạn hoàn thành</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '100px' }}>Tiến độ</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '100px' }}>Mức độ ưu tiên</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '70px' }}>Tỷ trọng</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '90px' }}>Tần suất</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '100px' }}>Tiêu chuẩn</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '100px' }}>Hạn hoàn thành</th>
+                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '90px' }}>Tiến độ</th>
                     <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '80px' }}>Thao tác</th>
                   </tr>
                 </thead>
@@ -1618,7 +1646,22 @@ const QualityKPIDashboardView = () => {
                       <td style={{ padding: '8px 6px', fontWeight: '700', color: '#64748B', textAlign: 'center' }}>{idx + 1}</td>
                       <td style={{ padding: '8px 8px', fontWeight: '800', color: '#5D3B32', textAlign: 'center' }}>{item.code || `KPI${String(idx + 1).padStart(2, '0')}`}</td>
                       <td style={{ padding: '8px 12px', fontWeight: '700', color: '#1E293B', wordBreak: 'break-word', lineHeight: '1.4' }}>{item.name}</td>
-                      <td style={{ padding: '8px 12px', color: '#334155', fontWeight: '500', lineHeight: '1.45', wordBreak: 'break-word' }}>{item.calc_method || item.dept || '-'}</td>
+                      <td style={{ padding: '8px 12px', color: '#334155', fontWeight: '500', lineHeight: '1.45', wordBreak: 'break-word' }}>
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          backgroundColor: '#FAF6F0',
+                          border: '1px solid #EADCC9',
+                          color: '#5D3B32',
+                          padding: '4px 9px',
+                          borderRadius: '6px',
+                          fontSize: '0.72rem',
+                          fontWeight: '700'
+                        }}>
+                          {getCalcMethodLabel(item.calc_method || item.description)}
+                        </span>
+                      </td>
                       <td style={{ padding: '8px 6px', textAlign: 'center', fontWeight: '800', color: '#5D3B32' }}>{item.weight || '20%'}</td>
                       <td style={{ padding: '8px 8px', textAlign: 'center' }}>
                         <span style={{ backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', color: '#15803D', padding: '3px 8px', borderRadius: '6px', fontWeight: '700', display: 'inline-block', fontSize: '0.72rem', whiteSpace: 'nowrap' }}>

@@ -1,0 +1,6 @@
+TOTAL DEPTS: 5
+ID: 1 | Code: IQC | Name: QC Kiểm Tra Nhập Kho
+ID: 2 | Code: QA | Name: Nhân Viên Kiểm Soát Quy Trình
+ID: 3 | Code: PQC1 | Name: QC Định Hình - Lắp Ráp
+ID: 4 | Code: PQC2 | Name: QC Sơn - Đóng Gói
+ID: 5 | Code: FQC | Name: QC Final

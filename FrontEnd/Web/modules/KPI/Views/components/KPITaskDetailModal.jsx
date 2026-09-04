@@ -862,8 +862,8 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
             score: parseInt(newKpiForm.weightVal) || 20,
             calc_method: weightStr,
             target: thresholdStr,
-            actual: targetItem?.actual || '95%',
-            status: 'Đang theo dõi'
+            actual: targetItem?.actual || 'Chưa có dữ liệu',
+            status: 'Chưa có dữ liệu'
           });
         } catch (err) {}
       }
@@ -881,8 +881,8 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
             score: parseInt(newKpiForm.weightVal) || 20,
             calc_method: weightStr,
             target: thresholdStr,
-            actual: '95%',
-            status: 'Đang theo dõi'
+            actual: 'Chưa có dữ liệu',
+            status: 'Chưa có dữ liệu'
           });
           if (res?.id) dbId = res.id;
           isSaved = true;
@@ -894,7 +894,7 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
         db_id: dbId,
         target: newKpiForm.target,
         threshold: thresholdStr,
-        actual: '95%',
+        actual: 'Chưa có dữ liệu',
         weight: weightStr,
         _isUnsaved: !isSaved
       };
@@ -1386,18 +1386,25 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
             }
 
             // 4. Điểm KPI Trọng Số (70% Trọng số)
-            let calculatedKpiScore = 95;
+            let calculatedKpiScore = 100;
             if (filteredKpiByMonth && filteredKpiByMonth.length > 0) {
               let weightedSum = 0;
               let totalWeight = 0;
+              let hasValidData = false;
               filteredKpiByMonth.forEach(k => {
-                const act = parseFloat(String(k.actual).replace('%', '')) || 95;
-                const w = parseFloat(String(k.weight || k.calc_method).replace('%', '')) || (100 / filteredKpiByMonth.length);
-                weightedSum += (act * w);
-                totalWeight += w;
+                const actStr = String(k.actual || '');
+                if (!actStr.includes('Chưa')) {
+                  const act = parseFloat(actStr.replace('%', '')) || 0;
+                  const w = parseFloat(String(k.weight || k.calc_method).replace('%', '')) || (100 / filteredKpiByMonth.length);
+                  weightedSum += (act * w);
+                  totalWeight += w;
+                  hasValidData = true;
+                }
               });
-              if (totalWeight > 0) {
+              if (hasValidData && totalWeight > 0) {
                 calculatedKpiScore = Math.min(120, Math.round(weightedSum / totalWeight));
+              } else {
+                calculatedKpiScore = 100;
               }
             }
 
