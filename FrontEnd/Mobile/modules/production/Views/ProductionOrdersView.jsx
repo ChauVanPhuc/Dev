@@ -12,7 +12,81 @@ const ProductionOrdersView = () => {
 
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeCategory, setActiveCategory] = useState('Tất cả');
+
+  // Role & Permission Calculation
+  const userRoleStr = (user?.role_name || user?.role_description || '').toLowerCase();
+  const userDeptStr = (user?.department_name || user?.permission_name || '').toLowerCase();
+  const combinedAuth = `${userRoleStr} | ${userDeptStr}`;
+
+  const isFullAccess = ['qa', 'quan ly', 'manager', 'bgd', 'admin', 'it', 'lead'].some(r => combinedAuth.includes(r)) || !user;
+
+  const [dbFactories, setDbFactories] = useState([]);
+
+  // Helper động xác định nhà máy từ tài khoản đối soát với CSDL dbFactories
+  const getUserFactoryDynamic = (u, factories) => {
+    if (!u) return 'NM1';
+
+    // 1. Tra cứu theo factory_id / factoryId
+    const facId = String(u.factory_id || u.factoryId || '');
+    if (facId && factories.length > 0) {
+      const matchId = factories.find(f => String(f.id) === facId);
+      if (matchId) return matchId.code;
+    }
+
+    // 2. Tra cứu theo assigned_factory / factory_code
+    const assigned = String(u.assigned_factory || u.factory_code || u.factoryCode || '').trim().toUpperCase();
+    if (assigned && factories.length > 0) {
+      const matchCode = factories.find(f => 
+        f.code.toUpperCase() === assigned || 
+        assigned.includes(f.code.toUpperCase()) || 
+        f.code.toUpperCase().includes(assigned)
+      );
+      if (matchCode) return matchCode.code;
+    }
+
+    // 3. Tra cứu theo factory_name từ CSDL (ví dụ: "Vaniti Phân Xưởng 2")
+    const facName = String(u.factory_name || u.factoryName || u.factory || u.factory_description || '').trim().toUpperCase();
+    if (facName && factories.length > 0) {
+      const matchName = factories.find(f => 
+        f.name.toUpperCase() === facName || 
+        facName.includes(f.name.toUpperCase()) || 
+        f.name.toUpperCase().includes(facName) ||
+        (f.code && facName.includes(f.code.toUpperCase()))
+      );
+      if (matchName) return matchName.code;
+    }
+
+    // 4. Tra cứu theo ngữ cảnh phòng ban / bộ phận / vai trò đối soát danh mục CSDL
+    const strContext = `${u.department_name || ''} ${u.permission_name || ''} ${u.role_name || ''} ${u.activeStageName || ''} ${u.stage_name || ''}`.toUpperCase();
+    if (strContext && factories.length > 0) {
+      const matchContext = factories.find(f => 
+        strContext.includes(f.code.toUpperCase()) || 
+        (f.name && strContext.includes(f.name.toUpperCase()))
+      );
+      if (matchContext) return matchContext.code;
+    }
+
+    // Fallback theo số phân xưởng nếu chưa tải xong dbFactories
+    if (assigned.includes('2') || facName.includes('2') || strContext.includes('2') || facId === '2') return 'NM2';
+    if (assigned.includes('3') || facName.includes('3') || strContext.includes('3') || facId === '3') return 'NM3';
+
+    return factories[0]?.code || 'NM1';
+  };
+
+  const userFactory = getUserFactoryDynamic(user, dbFactories);
+
+  const getInitialCategoryDynamic = (isFull, facCode, factories) => {
+    if (!isFull && facCode) {
+      const matchFac = factories.find(f => f.code === facCode);
+      if (matchFac) return matchFac.category_key;
+      if (facCode === 'NM2') return 'Vanity 2';
+      if (facCode === 'NM3') return 'Furniture';
+      return 'Vanity 1';
+    }
+    return 'Tất cả';
+  };
+
+  const [activeCategory, setActiveCategory] = useState(() => getInitialCategoryDynamic(isFullAccess, userFactory, dbFactories));
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [availableMonths, setAvailableMonths] = useState([]);
   const [expandedPo, setExpandedPo] = useState(null);
@@ -28,54 +102,56 @@ const ProductionOrdersView = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOrder, setSortOrder] = useState('DEFAULT');
 
-  // Role & Permission Calculation
-  const userRoleStr = (user?.role_name || user?.role_description || '').toLowerCase();
-  const userDeptStr = (user?.department_name || user?.permission_name || '').toLowerCase();
-  const combinedAuth = `${userRoleStr} | ${userDeptStr}`;
-
-  const isFullAccess = ['qa', 'quan ly', 'manager', 'bgd', 'admin', 'it', 'lead'].some(r => combinedAuth.includes(r)) || !user;
-
-  // Map category tab labels
-  const categoriesList = [
-    { key: 'Tất cả', label: 'Tất cả' },
-    { key: 'Vanity 1', label: 'Vanity 1 (NM1)' },
-    { key: 'Vanity 2', label: 'Vanity 2 (NM2)' },
-    { key: 'Furniture', label: 'Furniture (NM3)' }
-  ];
-
-  // User assigned factory
-  const userFactory = user?.assigned_factory || (combinedAuth.includes('nm2') ? 'NM2' : (combinedAuth.includes('nm3') ? 'NM3' : 'NM1'));
-
-  // Fetch available months from product_plans table on mount
+  // Fetch available months & factories from CSDL table on mount
   useEffect(() => {
-    const fetchMonths = async () => {
+    const fetchInitialData = async () => {
       try {
-        const resp = await apiClient.get('/production-v2/available-months');
-        const months = resp.data?.months || [];
+        const [monthResp, facResp] = await Promise.all([
+          apiClient.get('/production-v2/available-months'),
+          apiClient.get('/production-v2/factories')
+        ]);
+
+        const months = monthResp.data?.months || [];
         setAvailableMonths(months);
-        // Auto-select current month if available, otherwise first in list
-        const currentMonth = resp.data?.default_month || new Date().getMonth() + 1;
+        const currentMonth = monthResp.data?.default_month || new Date().getMonth() + 1;
         const hasCurrentMonth = months.some(m => m.month === currentMonth);
         if (hasCurrentMonth) {
           setSelectedMonth(currentMonth);
         } else if (months.length > 0) {
           setSelectedMonth(months[0].month);
         }
+
+        const facs = facResp.data?.factories || [];
+        setDbFactories(facs);
       } catch (err) {
-        console.error('Lỗi khi tải danh sách tháng:', err);
+        console.error('Lỗi khi tải dữ liệu khởi tạo:', err);
         setSelectedMonth(new Date().getMonth() + 1);
       }
     };
-    fetchMonths();
+    fetchInitialData();
   }, []);
+
+  // Map category tab labels dynamically from CSDL factories
+  const categoriesList = [
+    { key: 'Tất cả', label: 'Tất cả', code: 'ALL' },
+    ...(dbFactories.length > 0
+      ? dbFactories.map(f => ({ key: f.category_key, label: f.label, code: f.code }))
+      : [
+          { key: 'Vanity 1', label: 'Vanity 1 (NM1)', code: 'NM1' },
+          { key: 'Vanity 2', label: 'Vanity 2 (NM2)', code: 'NM2' },
+          { key: 'Furniture', label: 'Furniture (NM3)', code: 'NM3' }
+        ]
+    )
+  ];
 
   useEffect(() => {
     if (!isFullAccess) {
-      if (userFactory === 'NM1' && activeCategory !== 'Vanity 1') setActiveCategory('Vanity 1');
-      if (userFactory === 'NM2' && activeCategory !== 'Vanity 2') setActiveCategory('Vanity 2');
-      if (userFactory === 'NM3' && activeCategory !== 'Furniture') setActiveCategory('Furniture');
+      const targetCat = getInitialCategoryDynamic(false, userFactory, dbFactories);
+      if (activeCategory !== targetCat) {
+        setActiveCategory(targetCat);
+      }
     }
-  }, [isFullAccess, userFactory, activeCategory]);
+  }, [isFullAccess, userFactory, dbFactories, activeCategory]);
 
   useEffect(() => {
     if (selectedMonth === null) return;
@@ -296,9 +372,8 @@ const ProductionOrdersView = () => {
           <div style={{ display: 'flex', borderTop: '1px solid #f1f5f9', backgroundColor: '#fff', padding: '0 8px', overflowX: 'auto' }}>
             {categoriesList.map(cat => {
               const isDisabled = !isFullAccess && (
-                (userFactory === 'NM1' && cat.key !== 'Vanity 1') ||
-                (userFactory === 'NM2' && cat.key !== 'Vanity 2') ||
-                (userFactory === 'NM3' && cat.key !== 'Furniture')
+                cat.key === 'Tất cả' ||
+                (cat.code && cat.code !== 'ALL' && cat.code !== userFactory && !userFactory.includes(cat.code) && !cat.code.includes(userFactory))
               );
               const isActive = activeCategory === cat.key;
               return (

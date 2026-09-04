@@ -157,11 +157,21 @@ async def save_qc_results(
                 message={"type": "QC_CONFIRMED", "delivery_id": delivery_id, "status": "Hoàn Thành QC"}
             )
             
-            # [Firebase Push] Báo tin nhắn Notification khi App đang đóng
-            from shared.services.notification_service import notify_stage
-            push_title = "QC đã kiểm tra xong"
-            push_body = f"Hàng '{delivery.part_name}' (DLV-{delivery_id}) đã kiểm xong, mời bạn vào nhận hàng."
+            # [Firebase Push] Báo tin nhắn Notification khi App đang đóng kèm Deep-link
+            from shared.services.notification_service import notify_stage, send_push_to_group
+            push_title = "🚨 QC từ chối hàng" if delivery.status == "Trả Hàng" else "✅ QC đã kiểm tra xong"
+            push_body = f"Hàng '{delivery.part_name}' (DLV-{delivery_id}): Trạng thái {delivery.status}."
+            route_target = f"/production_v2/inspection/re-inspect/{delivery_id}" if delivery.status == "Trả Hàng" else f"/production_v2/transfer-list?id={delivery_id}"
+
             notify_stage(db, delivery.receiving_stage, push_title, push_body)
+            send_push_to_group(
+                db=db,
+                target_group="SX",
+                title=push_title,
+                body=push_body,
+                route_path=route_target,
+                stage_name=delivery.receiving_stage
+            )
             
         except Exception as e:
             print(f"Lỗi gửi tin realtime/push QC confirm: {e}")

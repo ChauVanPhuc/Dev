@@ -1,4 +1,4 @@
-﻿import { PushNotifications } from '@capacitor/push-notifications';
+import { PushNotifications } from '@capacitor/push-notifications';
 import { Capacitor } from '@capacitor/core';
 import apiClient from './api';
 
@@ -56,8 +56,22 @@ class PushNotificationService {
       });
 
       // 7. Xử lý khi người dùng NHẤN vào thông báo (App đang đóng hoặc chạy ngầm)
-      PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
-        // Tại đây có thể code để chuyển hướng người dùng đến màn hình chi tiết phiếu giao
+      PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
+        try {
+          const data = action.notification?.data || {};
+          const targetRoute = data.route_path || data.screen || data.url;
+
+          if (targetRoute && targetRoute !== '#') {
+            // Chuyển hướng Hash-based hoặc Router URL
+            if (window.location.hash) {
+              window.location.hash = `#${targetRoute}`;
+            } else {
+              window.location.href = targetRoute.startsWith('/') ? targetRoute : `/${targetRoute}`;
+            }
+          }
+        } catch (e) {
+          console.error("Lỗi điều hướng Deep-link khi nhấp Push Notification:", e);
+        }
       });
 
     } catch (error) {

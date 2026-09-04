@@ -109,8 +109,13 @@ const ProductionOrderDetailView = () => {
       header: 'Tên chi tiết',
       key: 'part_name',
       render: (row) => (
-        <div style={{ textAlign: 'left', fontWeight: '700', color: '#1e293b' }}>
-          {row.part_name}
+        <div style={{ textAlign: 'left' }}>
+          <div style={{ fontWeight: '700', color: '#1e293b' }}>{row.part_name}</div>
+          {row.output_stage && row.output_stage !== '—' && (
+            <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '2px' }}>
+              👉 Nhận: <span style={{ fontWeight: '600', color: '#0284c7' }}>{row.output_stage}</span>
+            </div>
+          )}
         </div>
       )
     },

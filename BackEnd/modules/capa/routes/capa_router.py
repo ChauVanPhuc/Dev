@@ -205,7 +205,7 @@ def get_capa_detail(capa_id: int, db: Session = Depends(get_db)):
 from modules.notification.models.notifications import Notification
 from modules.auth.models.accounts import Account as AccountModel
 
-def trigger_capa_notification(db: Session, capa_code: str, creator: str, handler: str, status: str):
+def trigger_capa_notification(db: Session, capa_code: str, creator: str, handler: str, status: str, capa_id: int = None):
     try:
         admin = db.query(AccountModel).first()
         announcer_id = admin.id if admin else 1
@@ -218,6 +218,17 @@ def trigger_capa_notification(db: Session, capa_code: str, creator: str, handler
         )
         db.add(notif)
         db.commit()
+
+        # Gửi Push Notification kèm Deep-link
+        from shared.services.notification_service import send_push_to_group
+        route_link = f"/capa-detail/{capa_id}" if capa_id else "/capa-list"
+        send_push_to_group(
+            db=db,
+            target_group="QC",
+            title=f"🛠️ [CAPA Update] {capa_code}",
+            body=f"Người phụ trách: {handler} | Trạng thái: {status}",
+            route_path=route_link
+        )
     except Exception as e:
         print("Capa Notification Error:", e)
 
@@ -257,7 +268,7 @@ def create_capa(payload: CAPACreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_capa)
 
-    trigger_capa_notification(db, new_capa.code, new_capa.creator_name, new_capa.handler_name, new_capa.ticket_status)
+    trigger_capa_notification(db, new_capa.code, new_capa.creator_name, new_capa.handler_name, new_capa.ticket_status, new_capa.id)
 
     return {"status": "success", "id": new_capa.id, "code": new_capa.code, "message": "Tạo báo cáo CAPA thành công"}
 
@@ -282,7 +293,7 @@ def update_capa(capa_id: int, payload: CAPAUpdate, db: Session = Depends(get_db)
 
     db.commit()
 
-    trigger_capa_notification(db, c.code, c.creator_name, c.handler_name, c.ticket_status)
+    trigger_capa_notification(db, c.code, c.creator_name, c.handler_name, c.ticket_status, c.id)
 
     return {"status": "success", "id": c.id, "message": "Cập nhật báo cáo CAPA thành công"}
 

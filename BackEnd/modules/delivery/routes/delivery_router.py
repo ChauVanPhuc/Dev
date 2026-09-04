@@ -498,10 +498,19 @@ async def create_delivery(
         if background_tasks:
             push_title = "Có phiếu bàn giao mới"
             push_body = f"{display_sender} đã chuyển '{part_name}' (SL: {quantity}) đến công đoạn của bạn. Mời xác nhận nhận hàng."
-            from shared.services.notification_service import notify_stage
+            from shared.services.notification_service import notify_stage, send_push_to_group
             from shared.services.websocket_service import socket_manager
             
             background_tasks.add_task(notify_stage, db, canonical_receiving_stage, push_title, push_body, role_filter="SX")
+            background_tasks.add_task(
+                send_push_to_group,
+                db=db,
+                target_group="SX",
+                title=push_title,
+                body=push_body,
+                route_path=f"/production_v2/transfer-list?id={new_delivery.id}",
+                stage_name=canonical_receiving_stage
+            )
             background_tasks.add_task(
                 socket_manager.broadcast_to_stage,
                 db, 

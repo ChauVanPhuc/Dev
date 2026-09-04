@@ -48,9 +48,12 @@ def create_quick_report(payload: QuickReportCreate, db: Session = Depends(get_db
         db.commit()
         db.refresh(report)
 
-        # Trigger system notification
+        # Trigger system notification & Push Notification
         try:
             author_text = "Ẩn danh" if report.is_anonymous else report.creator_name
+            noti_title = f"🔔 [Báo Cáo Nhanh] {report.code}"
+            noti_body = f"{report.report_type} từ {author_text}: {report.main_content[:60]}..."
+            
             noti = NotificationModel(
                 content=f"🔔 [SmartFlow Báo Cáo Nhanh] Mã phiếu {report.code} ({report.report_type}) vừa được khởi tạo bởi {author_text}.",
                 announcer_id=1,
@@ -59,6 +62,16 @@ def create_quick_report(payload: QuickReportCreate, db: Session = Depends(get_db
             )
             db.add(noti)
             db.commit()
+
+            # Gửi Push Notification với Deep-link đến danh sách báo cáo
+            from shared.services.notification_service import send_push_to_group
+            send_push_to_group(
+                db=db,
+                target_group="BGD",
+                title=noti_title,
+                body=noti_body,
+                route_path=f"/quick-report-list?id={report.id}"
+            )
         except Exception as n_err:
             logger.warning(f"Không thể tạo thông báo báo cáo nhanh: {n_err}")
 

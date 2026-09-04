@@ -157,9 +157,76 @@ const CL07_TransferCreateView = () => {
     return windowMonths
   }, [])
 
+  const cleanAndSplitStages = (stageStr) => {
+    if (!stageStr) return []
+    const cleaned = String(stageStr).replace(/\b(QC|PQC1|PQC2|PQC|IQC|FQC)\b/gi, '').trim()
+    const parts = cleaned.split(/[-/,|+]|\bhoặc\b/i).map((s) => s.trim()).filter(Boolean)
+    return parts.length > 0 ? parts : [String(stageStr).trim()]
+  }
+
+  // Helper phân tách công đoạn nhận và cập nhật options + values cho TẤT CẢ các chi tiết được chọn
+  const updateStageOptionsForDetails = useCallback((detailsList, partsDataList = partsData) => {
+    const userStage = user?.activeStageName || user?.stage_name || ''
+    const names = Array.isArray(detailsList) ? detailsList : [detailsList]
+
+    const matchedParts = names
+      .map((dName) => {
+        const nameStr = typeof dName === 'string' ? dName : (dName?.part_name || dName?.name)
+        return partsDataList.find((p) => (p.part_name || p.name) === nameStr) || (typeof dName === 'object' ? dName : null)
+      })
+      .filter(Boolean)
+
+    const firstPart = matchedParts[0]
+    const fromSt = firstPart?.input_stage || userStage || 'Tạo phôi'
+
+    let possibleToStagesSet = new Set()
+    matchedParts.forEach((partObj) => {
+      const outStr = partObj?.output_stage || ''
+      if (outStr) {
+        outStr.split(/[,/|+]|\bhoặc\b/i).forEach((s) => {
+          const trimmed = s.trim()
+          if (trimmed) possibleToStagesSet.add(trimmed)
+        })
+      }
+    })
+
+    let possibleToStages = Array.from(possibleToStagesSet)
+
+    if (possibleToStages.length === 0) {
+      const nextSt = getNextStageName(fromSt, stageOptions)
+      if (nextSt) {
+        possibleToStages = [nextSt]
+      }
+    }
+
+    let newToStageOpts = []
+    let selectedToStage = ''
+
+    if (possibleToStages.length === 1) {
+      selectedToStage = possibleToStages[0]
+      newToStageOpts = [{ value: selectedToStage, label: selectedToStage }]
+    } else if (possibleToStages.length > 1) {
+      newToStageOpts = [
+        { value: '', label: 'Chọn công đoạn' },
+        ...possibleToStages.map((s) => ({ value: s, label: s }))
+      ]
+      selectedToStage = possibleToStages[0]
+    } else {
+      newToStageOpts = stageOptions
+    }
+
+    setStageOptions(newToStageOpts)
+    setForm((prev) => ({
+      ...prev,
+      fromStage: fromSt,
+      toStage: (prev.toStage && possibleToStages.includes(prev.toStage)) ? prev.toStage : (selectedToStage || prev.toStage)
+    }))
+  }, [user, partsData, stageOptions])
+
   // Hàm tải danh sách chi tiết (Component Parts) linh hoạt
   const loadPartsList = useCallback(async (isNoPalletMode, baseMonth = selectedMonth) => {
     try {
+      const activeStage = user?.activeStageName || user?.stage_name || user?.department_name || ''
       let partsList = []
       if (isNoPalletMode) {
         const fiveMonths = get5MonthWindow(baseMonth)
@@ -167,20 +234,37 @@ const CL07_TransferCreateView = () => {
           months: fiveMonths,
           department_id: user?.department_id,
           department_name: user?.department_name,
-          stage: user?.activeStageName || user?.stage_name,
+          stage: activeStage,
           exclude_completed: true
         })
       } else {
         partsList = await transferService.getParts({
           month: baseMonth,
           department_id: user?.department_id,
-          department_name: user?.department_name
+          department_name: user?.department_name,
+          stage: activeStage
         })
       }
 
       if (Array.isArray(partsList)) {
-        setPartsData(partsList)
-        const opts = partsList.map((p) => {
+        // Lọc nghiêm ngặt chỉ hiển thị chi tiết thuộc công đoạn tài khoản (hỗ trợ tên công đoạn ghép như QC Sơn - Đóng Gói)
+        let filteredList = partsList
+        if (activeStage) {
+          const userTokens = cleanAndSplitStages(activeStage).map((s) => s.toLowerCase())
+          filteredList = partsList.filter((p) => {
+            const inSt = (p.input_stage || '').toLowerCase().trim()
+            if (!inSt) return true
+            return userTokens.some((tok) =>
+              inSt.includes(tok) || tok.includes(inSt)
+            )
+          })
+        }
+        if (filteredList.length === 0 && partsList.length > 0) {
+          filteredList = partsList
+        }
+
+        setPartsData(filteredList)
+        const opts = filteredList.map((p) => {
           const name = typeof p === 'string' ? p : (p.part_name || p.name)
           const remText = p.remaining_qty !== undefined ? ` (Còn: ${p.remaining_qty})` : ''
           return { value: name, label: `${name}${remText}`, rawName: name }
@@ -307,15 +391,8 @@ const CL07_TransferCreateView = () => {
 
     const fallbackTargetQty = Number(currentPalletInfo?.remaining_qty ?? currentPalletInfo?.requiredQty ?? 40)
 
-    // Cập nhật công đoạn giao/nhận từ chi tiết đầu tiên nếu có
-    const firstPartObj = partsData.find((p) => (p.part_name || p.name) === newDetails[0])
-    if (firstPartObj) {
-      setForm((prev) => ({
-        ...prev,
-        fromStage: firstPartObj.input_stage || prev.fromStage,
-        toStage: firstPartObj.output_stage || prev.toStage
-      }))
-    }
+    // Cập nhật công đoạn giao/nhận tự động từ TẤT CẢ các chi tiết được chọn
+    updateStageOptionsForDetails(newDetails, partsData)
 
     // Giữ lại các dòng items thuộc các chi tiết còn được chọn
     const retainedItems = items.filter((it) => newDetails.includes(it.detail))
@@ -442,10 +519,11 @@ const CL07_TransferCreateView = () => {
         detail: inspectedList.join(', '),
         spec: `${newItems.length} quy cách đã chọn`,
         totalQty: '0',
-        surplus: '',
-        fromStage: fromSt,
-        toStage: nextSt || prev.toStage,
+        surplus: ''
       }))
+
+      updateStageOptionsForDetails(inspectedList, partsData)
+
       updateSpecsForDetails(inspectedList, palletInfo)
     } catch (err) {
       console.warn(`Lỗi khi tải chi tiết mã pallet ${val}:`, err)

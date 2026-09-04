@@ -249,6 +249,63 @@ def get_production_dashboard(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 # ----------------------------------------------------------------------
+# 2.1: Danh sách Cấu trúc Nhà máy từ CSDL (HRFactoryStructure)
+# ----------------------------------------------------------------------
+@router.get("/factories")
+def get_factories(db: Session = Depends(get_db)):
+    """Trả về danh sách Nhà máy thực tế từ bảng hr_factory_structures trong CSDL."""
+    try:
+        from modules.hr.models.hr_models import HRFactoryStructure
+        facs = db.query(HRFactoryStructure).filter(
+            or_(
+                HRFactoryStructure.structure_type == "Nhà máy",
+                HRFactoryStructure.structure_type == "NHA_MAY"
+            )
+        ).order_by(HRFactoryStructure.id.asc()).all()
+
+        res = []
+        for f in facs:
+            code = (f.structure_code or "").strip().upper()
+            name = (f.structure_name or "").strip()
+            
+            # Map category key & label
+            if code == "NM1":
+                cat_key = "Vanity 1"
+                label = "Vanity 1 (NM1)"
+            elif code == "NM2":
+                cat_key = "Vanity 2"
+                label = "Vanity 2 (NM2)"
+            elif code == "NM3":
+                cat_key = "Furniture"
+                label = "Furniture (NM3)"
+            else:
+                cat_key = name or code
+                label = f"{name} ({code})" if code and code not in name else name
+
+            res.append({
+                "id": f.id,
+                "code": code,
+                "name": name,
+                "category_key": cat_key,
+                "label": label
+            })
+
+        if not res:
+            res = [
+                {"id": 1, "code": "NM1", "name": "Vaniti Phân Xưởng 1", "category_key": "Vanity 1", "label": "Vanity 1 (NM1)"},
+                {"id": 2, "code": "NM2", "name": "Vaniti Phân Xưởng 2", "category_key": "Vanity 2", "label": "Vanity 2 (NM2)"},
+                {"id": 3, "code": "NM3", "name": "Furniture nhà máy 3", "category_key": "Furniture", "label": "Furniture (NM3)"}
+            ]
+        return {"factories": res}
+    except Exception as e:
+        logger.error(f"Lỗi khi lấy danh sách nhà máy từ CSDL: {e}")
+        return {"factories": [
+            {"id": 1, "code": "NM1", "name": "Vaniti Phân Xưởng 1", "category_key": "Vanity 1", "label": "Vanity 1 (NM1)"},
+            {"id": 2, "code": "NM2", "name": "Vaniti Phân Xưởng 2", "category_key": "Vanity 2", "label": "Vanity 2 (NM2)"},
+            {"id": 3, "code": "NM3", "name": "Furniture nhà máy 3", "category_key": "Furniture", "label": "Furniture (NM3)"}
+        ]}
+
+# ----------------------------------------------------------------------
 # 2. CL02: Danh sách Lệnh sản xuất (POs Accordion) từ Kế hoạch sản xuất & Phân quyền CSDL
 # ----------------------------------------------------------------------
 @router.get("/orders")
@@ -512,12 +569,27 @@ def get_production_order_detail(po_code: Optional[str] = None, po: Optional[str]
             if not stage_name_or_code:
                 return 0
             s_str = stage_name_or_code.lower().strip()
+            
+            # 1. Khớp chính xác tuyệt đối Tên hoặc Mã công đoạn
             for idx, st_item in enumerate(stage_list, 1):
                 st_n = st_item["name"].lower().strip()
-                st_c = st_item["code"].lower().strip()
-                if st_n in s_str or s_str in st_n or st_c in s_str:
+                st_c = (st_item.get("code") or "").lower().strip()
+                if s_str == st_n or (st_c and s_str == st_c):
                     return idx
-                if ("định hình" in s_str or "dinh hinh" in s_str or "phôi" in s_str) and ("định hình" in st_n or "phôi" in st_n):
+
+            # 2. Khớp chuỗi con (substring)
+            for idx, st_item in enumerate(stage_list, 1):
+                st_n = st_item["name"].lower().strip()
+                st_c = (st_item.get("code") or "").lower().strip()
+                if st_n in s_str or s_str in st_n or (st_c and st_c in s_str):
+                    return idx
+
+            # 3. Khớp Từ khóa chuẩn xác (tách riêng Tạo Phôi và Định Hình)
+            for idx, st_item in enumerate(stage_list, 1):
+                st_n = st_item["name"].lower().strip()
+                if ("định hình" in s_str or "dinh hinh" in s_str) and "định hình" in st_n:
+                    return idx
+                if ("tạo phôi" in s_str or "phôi" in s_str) and "phôi" in st_n:
                     return idx
                 if ("lắp ráp" in s_str or "lap rap" in s_str) and ("lắp ráp" in st_n or "nhám" in st_n):
                     return idx
@@ -525,19 +597,16 @@ def get_production_order_detail(po_code: Optional[str] = None, po: Optional[str]
                     return idx
                 if ("đóng gói" in s_str or "dong goi" in s_str) and "đóng gói" in st_n:
                     return idx
-                if ("load" in s_str or "cont" in s_str or "lưu kho" in s_str or "kho" in s_str) and ("load" in st_n or "kho" in st_n or "cont" in st_n):
+                if ("load" in s_str or "cont" in s_str or "lưu kho" in s_str) and ("load" in st_n or "kho" in st_n or "cont" in st_n):
                     return idx
+
             return 1
 
         def matches_stage(bom_item, current_st_idx: int) -> bool:
+            # Bốc tách 1:1 theo đúng Công đoạn Giao (input_stage) để không lặp lại chi tiết ở các công đoạn khác
             inp_seq = get_stage_seq(bom_item.input_stage) if bom_item.input_stage else 1
-            out_seq = get_stage_seq(bom_item.output_stage) if bom_item.output_stage else len(stage_list)
-
-            if out_seq < inp_seq:
-                out_seq = len(stage_list)
-
             curr_seq = current_st_idx + 1
-            return inp_seq <= curr_seq <= out_seq
+            return inp_seq == curr_seq
 
         stages = []
         if db_order and db_order.products:
@@ -593,6 +662,8 @@ def get_production_order_detail(po_code: Optional[str] = None, po: Optional[str]
                                 "part_name": part_title,
                                 "quantity_str": f"{actual_qty}/{required_qty}",
                                 "progress": prog,
+                                "input_stage": b.input_stage or st_name,
+                                "output_stage": b.output_stage or "—",
                                 "area": "NM2" if "nm2" in (b.input_stage or "").lower() else ("NM3" if "nm3" in (b.input_stage or "").lower() else "NM1"),
                                 "status": st_status,
                                 "status_color": st_color
@@ -1074,34 +1145,39 @@ def get_parts_by_month(
         # 1. Xác định danh sách công đoạn được phép theo Bộ phận / Stage
         allowed_stages = []
         if stage and str(stage).strip():
-            allowed_stages.append(str(stage).strip())
+            raw_stage = str(stage).strip()
+            # Tự động làm sạch tiền tố QC/PQC/IQC/FQC và phân tách các công đoạn kết hợp (vd: "QC Sơn - Đóng Gói" -> ["Sơn", "Đóng Gói"])
+            cleaned_stage = re.sub(r'\b(QC|PQC1|PQC2|PQC|IQC|FQC)\b', '', raw_stage, flags=re.IGNORECASE).strip()
+            split_tokens = [s.strip() for s in re.split(r'[-/,|+]', cleaned_stage) if s.strip()]
+            allowed_stages.extend(split_tokens if split_tokens else [raw_stage])
+        elif department_id or department_name:
+            if department_id:
+                dept = db.query(Department).filter(Department.id == department_id).first()
+                if dept:
+                    d_name = (dept.name or "").lower()
+                    d_code = (dept.code or "").lower()
+                    if "iqc" in d_code or "nhập kho" in d_name or "đầu vào" in d_name:
+                        allowed_stages.extend(["Nhập Kho/Đầu Vào", "Tạo Phôi", "Đầu Vào"])
+                    elif "pqc1" in d_code or "định hình" in d_name:
+                        allowed_stages.extend(["Định Hình"])
+                    elif "pqc2" in d_code or "sơn" in d_name:
+                        allowed_stages.extend(["Sơn"])
+                    elif "fqc" in d_code or "đóng gói" in d_name:
+                        allowed_stages.extend(["Đóng Gói"])
+                    if dept.input_stage: allowed_stages.append(dept.input_stage)
 
-        if department_id:
-            dept = db.query(Department).filter(Department.id == department_id).first()
-            if dept:
-                d_name = (dept.name or "").lower()
-                d_code = (dept.code or "").lower()
-                if "iqc" in d_code or "nhập kho" in d_name or "đầu vào" in d_name:
-                    allowed_stages.extend(["Nhập Kho/Đầu Vào", "Tạo Phôi", "Đầu Vào", "IQC"])
-                elif "pqc1" in d_code or "định hình" in d_name or "lắp ráp" in d_name:
-                    allowed_stages.extend(["Tạo Phôi", "Định Hình", "Lắp Ráp", "PQC1"])
-                elif "pqc2" in d_code or "sơn" in d_name or "đóng gói" in d_name:
-                    allowed_stages.extend(["Lắp Ráp", "Sơn", "Đóng Gói", "PQC2"])
-                elif "fqc" in d_code or "final" in d_name or "lưu kho" in d_name:
-                    allowed_stages.extend(["Đóng Gói", "Lưu Kho", "FQC"])
-                if dept.input_stage: allowed_stages.append(dept.input_stage)
-                if dept.output_stage: allowed_stages.append(dept.output_stage)
-
-        if department_name and not allowed_stages:
-            d_name = str(department_name).lower()
-            if "iqc" in d_name or "nhập kho" in d_name or "đầu vào" in d_name:
-                allowed_stages.extend(["Nhập Kho/Đầu Vào", "Tạo Phôi", "Đầu Vào", "IQC"])
-            elif "pqc1" in d_name or "định hình" in d_name or "lắp ráp" in d_name:
-                allowed_stages.extend(["Tạo Phôi", "Định Hình", "Lắp Ráp", "PQC1"])
-            elif "pqc2" in d_name or "sơn" in d_name or "đóng gói" in d_name:
-                allowed_stages.extend(["Lắp Ráp", "Sơn", "Đóng Gói", "PQC2"])
-            elif "fqc" in d_name or "final" in d_name or "lưu kho" in d_name:
-                allowed_stages.extend(["Đóng Gói", "Lưu Kho", "FQC"])
+            if department_name and not allowed_stages:
+                d_name = str(department_name).lower()
+                if "iqc" in d_name or "nhập kho" in d_name or "đầu vào" in d_name:
+                    allowed_stages.extend(["Nhập Kho/Đầu Vào", "Tạo Phôi", "Đầu Vào"])
+                elif "định hình" in d_name:
+                    allowed_stages.extend(["Định Hình"])
+                elif "lắp ráp" in d_name:
+                    allowed_stages.extend(["Lắp Ráp"])
+                elif "sơn" in d_name:
+                    allowed_stages.extend(["Sơn"])
+                elif "đóng gói" in d_name:
+                    allowed_stages.extend(["Đóng Gói"])
 
         # 2. Lấy chi tiết từ bom_details (BOM đơn hàng thực tế)
         month_filter_sql = ""
@@ -1203,19 +1279,19 @@ def get_parts_by_month(
         except Exception:
             pass
 
-        # 5. Build kết quả với số lượng còn lại chính xác và lọc theo Bộ phận / Hoàn thành
+        # 5. Build kết quả với số lượng còn lại chính xác và lọc tường minh theo Công đoạn Giao (input_stage)
         result = []
         for name, data in parts_map.items():
             stages = stage_map.get(name, {})
             in_stage = data.get("input_stage") or stages.get("input_stage", "")
             out_stage = data.get("output_stage") or stages.get("output_stage", "")
 
-            # Lọc theo bộ phận nếu có allowed_stages
+            # Lọc chính xác 1:1 theo Công đoạn Giao (input_stage)
             if allowed_stages:
                 matches_dept = any(
-                    st.lower() in in_stage.lower() or st.lower() in out_stage.lower()
+                    st.lower() in in_stage.lower() or in_stage.lower() in st.lower()
                     for st in allowed_stages
-                ) if (in_stage or out_stage) else True
+                ) if in_stage else True
 
                 if not matches_dept:
                     continue
