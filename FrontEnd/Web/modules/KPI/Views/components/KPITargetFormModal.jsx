@@ -444,14 +444,60 @@ const KPITargetFormModal = ({ isOpen, onClose, targetData, onSave }) => {
 
             {/* Row Điều kiện lọc bổ sung */}
             {formData.data_source === 'inspection' && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '10px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginBottom: '3px' }}>
-                    Lọc theo Công đoạn (stage_filter)
-                  </label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <label style={{ fontSize: '0.72rem', fontWeight: '700', color: '#475569' }}>
+                      Lọc theo Công đoạn (stage_filter)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, stage_filter: '' }))}
+                      style={{ background: 'none', border: 'none', color: '#6366F1', fontSize: '0.7rem', fontWeight: '700', cursor: 'pointer', padding: 0 }}
+                    >
+                      ↺ Tất cả công đoạn
+                    </button>
+                  </div>
+
+                  {/* Danh sách các công đoạn chọn nhanh dạng Chips */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '6px' }}>
+                    {['Đầu Vào', 'Nhập Kho', 'IQC', 'Tạo Phôi', 'Định Hình', 'Lắp Ráp', 'Sơn', 'Đóng Gói', 'Final', 'OQC', 'Xuất Hàng', 'Pallet'].map(stg => {
+                      const selectedList = (formData.stage_filter || '').split(',').map(s => s.trim()).filter(Boolean);
+                      const isSelected = selectedList.includes(stg);
+                      return (
+                        <button
+                          key={stg}
+                          type="button"
+                          onClick={() => {
+                            let newList;
+                            if (isSelected) {
+                              newList = selectedList.filter(s => s !== stg);
+                            } else {
+                              newList = [...selectedList, stg];
+                            }
+                            setFormData(prev => ({ ...prev, stage_filter: newList.join(',') }));
+                          }}
+                          style={{
+                            padding: '2px 8px',
+                            borderRadius: '12px',
+                            fontSize: '0.7rem',
+                            fontWeight: '700',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease',
+                            border: isSelected ? '1px solid #4F46E5' : '1px solid #CBD5E1',
+                            backgroundColor: isSelected ? '#EEF2FF' : '#F8FAFC',
+                            color: isSelected ? '#4338CA' : '#475569'
+                          }}
+                        >
+                          {isSelected ? `✓ ${stg}` : `+ ${stg}`}
+                        </button>
+                      );
+                    })}
+                  </div>
+
                   <input
                     type="text"
-                    placeholder="VD: Đầu Vào,Nhập Kho (Phân cách bởi dấu phẩy)"
+                    placeholder="Chọn ở trên hoặc tự gõ (phân cách bởi dấu phẩy): VD: Đầu Vào,Nhập Kho"
                     value={formData.stage_filter || ''}
                     onChange={(e) => setFormData(prev => ({ ...prev, stage_filter: e.target.value }))}
                     style={{ width: '100%', padding: '5px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.75rem', outline: 'none', backgroundColor: '#FFFFFF' }}
@@ -460,17 +506,17 @@ const KPITargetFormModal = ({ isOpen, onClose, targetData, onSave }) => {
 
                 <div>
                   <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginBottom: '3px' }}>
-                    Loại kiểm tra (type_filter)
+                    Loại kiểm tra áp dụng (type_filter)
                   </label>
                   <select
                     value={formData.type_filter || ''}
                     onChange={(e) => setFormData(prev => ({ ...prev, type_filter: e.target.value }))}
                     style={{ width: '100%', padding: '5px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.75rem', outline: 'none', backgroundColor: '#FFFFFF' }}
                   >
-                    <option value="">-- Tất cả các loại --</option>
-                    <option value="first_sample">first_sample (Mẫu đầu tiên)</option>
-                    <option value="patrol">patrol (Tuần tra)</option>
-                    <option value="final">final (Final/OQC)</option>
+                    <option value="">-- Tất cả các loại kiểm tra --</option>
+                    <option value="first_sample">Mẫu đầu tiên (first_sample)</option>
+                    <option value="patrol">Kiểm tra tuần tra (patrol)</option>
+                    <option value="final">Final / OQC xuất hàng (final)</option>
                   </select>
                 </div>
               </div>
@@ -525,17 +571,18 @@ const KPITargetFormModal = ({ isOpen, onClose, targetData, onSave }) => {
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginBottom: '3px' }}>
-                  Ánh xạ nhân sự
+                  Trường khớp dữ liệu Nhân viên
                 </label>
                 <select
                   value={formData.employee_field || 'inspector_name'}
                   onChange={(e) => setFormData(prev => ({ ...prev, employee_field: e.target.value }))}
                   style={{ width: '100%', padding: '5px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.75rem', outline: 'none', backgroundColor: '#FFFFFF' }}
+                  title="Chọn cột trong CSDL dùng để xác định dữ liệu của nhân viên được tính KPI"
                 >
-                  <option value="inspector_name">inspector_name (QC Kiểm tra)</option>
-                  <option value="employee_id">employee_id (Mã nhân viên)</option>
-                  <option value="handler_name">handler_name (Người xử lý)</option>
-                  <option value="all">all (Không phân biệt nhân sự)</option>
+                  <option value="inspector_name">Tên QC Kiểm tra (inspector_name)</option>
+                  <option value="employee_id">Mã nhân viên (employee_id)</option>
+                  <option value="handler_name">Tên Người xử lý (handler_name)</option>
+                  <option value="all">Tính chung toàn bộ nhân sự (all)</option>
                 </select>
               </div>
             </div>
