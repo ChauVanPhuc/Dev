@@ -554,36 +554,66 @@ def export_attendance_excel(payload: ExportAttendanceRequest, db: Session = Depe
     wb = openpyxl.Workbook()
     ws = wb.active
 
-    # Styles
-    font_title = Font(name='Calibri', size=14, bold=True, color='4A2E1B')
-    font_sub = Font(name='Calibri', size=10, italic=True, color='6B7280')
-    font_header = Font(name='Calibri', size=10, bold=True, color='FFFFFF')
-    font_body = Font(name='Calibri', size=10)
-    font_bold = Font(name='Calibri', size=10, bold=True)
+    # Bật hiển thị đường lưới GridLines trong Excel viewer
+    try:
+        ws.views.sheetView[0].showGridLines = True
+    except Exception:
+        pass
 
-    fill_header = PatternFill(start_color='7B5233', end_color='7B5233', fill_type='solid')
-    fill_total = PatternFill(start_color='FAF6F0', end_color='FAF6F0', fill_type='solid')
-    
+    # Fonts
+    font_title = Font(name='Segoe UI', size=14, bold=True, color='3D2314')
+    font_sub = Font(name='Segoe UI', size=9.5, italic=True, color='64748B')
+    font_header = Font(name='Segoe UI', size=10, bold=True, color='FFFFFF')
+    font_body = Font(name='Segoe UI', size=9.5)
+    font_body_center = Font(name='Segoe UI', size=9.5)
+    font_bold = Font(name='Segoe UI', size=9.5, bold=True)
+    font_total = Font(name='Segoe UI', size=10, bold=True, color='0F172A')
+
+    # Status Fonts with contrasting colors for readability
+    STATUS_FONTS = {
+        "LEAVE_PAID": Font(name='Segoe UI', size=9.5, bold=True, color='B45309'),        # Dark Amber
+        "LEAVE_UNPAID": Font(name='Segoe UI', size=9.5, bold=True, color='B91C1C'),      # Dark Red
+        "EARLY_LEAVE_1630": Font(name='Segoe UI', size=9.5, bold=True, color='C2410C'),  # Dark Orange
+        "HALF_DAY": Font(name='Segoe UI', size=9.5, bold=True, color='A16207'),          # Dark Yellow
+        "OT_20H": Font(name='Segoe UI', size=9.5, bold=True, color='4338CA'),            # Dark Indigo
+        "OT_22H": Font(name='Segoe UI', size=9.5, bold=True, color='7E22CE'),            # Dark Purple
+        "SUNDAY_OFF": Font(name='Segoe UI', size=9.5, color='64748B'),                   # Gray
+        "WORKING": Font(name='Segoe UI', size=9.5, color='15803D')                        # Dark Green
+    }
+
+    # Fills
+    fill_header = PatternFill(start_color='4A2E1B', end_color='4A2E1B', fill_type='solid') # Coffee Dark Brown
+    fill_total = PatternFill(start_color='F1F5F9', end_color='F1F5F9', fill_type='solid')  # Soft Slate Total
+    fill_zebra = PatternFill(start_color='F8FAFC', end_color='F8FAFC', fill_type='solid')  # Light Zebra
+
     thin_border = Border(
-        left=Side(style='thin', color='D1D5DB'),
-        right=Side(style='thin', color='D1D5DB'),
-        top=Side(style='thin', color='D1D5DB'),
-        bottom=Side(style='thin', color='D1D5DB')
+        left=Side(style='thin', color='E2E8F0'),
+        right=Side(style='thin', color='E2E8F0'),
+        top=Side(style='thin', color='E2E8F0'),
+        bottom=Side(style='thin', color='E2E8F0')
+    )
+
+    total_border = Border(
+        left=Side(style='thin', color='CBD5E1'),
+        right=Side(style='thin', color='CBD5E1'),
+        top=Side(style='thin', color='475569'),
+        bottom=Side(style='double', color='475569')
     )
 
     align_center = Alignment(horizontal='center', vertical='center', wrap_text=True)
     align_left = Alignment(horizontal='left', vertical='center')
+    align_right = Alignment(horizontal='right', vertical='center')
 
-    # Color Fills for Attendance Statuses
+    # Color Fills for Attendance Statuses (Pastel palette)
     STATUS_FILLS = {
-        "LEAVE_PAID": PatternFill(start_color='FEF3C7', end_color='FEF3C7', fill_type='solid'), # Yellow
-        "LEAVE_UNPAID": PatternFill(start_color='FEE2E2', end_color='FEE2E2', fill_type='solid'), # Red
-        "EARLY_LEAVE_1630": PatternFill(start_color='FFEDD5', end_color='FFEDD5', fill_type='solid'), # Orange
+        "LEAVE_PAID": PatternFill(start_color='FEF3C7', end_color='FEF3C7', fill_type='solid'), # Soft Amber
+        "LEAVE_UNPAID": PatternFill(start_color='FEE2E2', end_color='FEE2E2', fill_type='solid'), # Soft Red
+        "EARLY_LEAVE_1630": PatternFill(start_color='FFEDD5', end_color='FFEDD5', fill_type='solid'), # Soft Orange
         "HALF_DAY": PatternFill(start_color='FEF9C3', end_color='FEF9C3', fill_type='solid'), # Soft Yellow
-        "OT_20H": PatternFill(start_color='E0E7FF', end_color='E0E7FF', fill_type='solid'), # Indigo
-        "OT_22H": PatternFill(start_color='F3E8FF', end_color='F3E8FF', fill_type='solid'), # Purple
-        "SUNDAY_OFF": PatternFill(start_color='F3F4F6', end_color='F3F4F6', fill_type='solid'), # Grey
-        "WORKING": PatternFill(start_color='DCFCE7', end_color='DCFCE7', fill_type='solid') # Green
+        "OT_20H": PatternFill(start_color='E0E7FF', end_color='E0E7FF', fill_type='solid'), # Soft Indigo
+        "OT_22H": PatternFill(start_color='F3E8FF', end_color='F3E8FF', fill_type='solid'), # Soft Purple
+        "SUNDAY_OFF": PatternFill(start_color='F1F5F9', end_color='F1F5F9', fill_type='solid'), # Soft Grey
+        "WORKING": PatternFill(start_color='DCFCE7', end_color='DCFCE7', fill_type='solid') # Soft Green
     }
 
     STATUS_CODES = {
@@ -631,19 +661,33 @@ def export_attendance_excel(payload: ExportAttendanceRequest, db: Session = Depe
             att_map[(a.employee_id, a.work_date.strftime("%Y-%m-%d"))] = a
 
         current_row = 5
+        day_working_counts = [0] * len(date_list)
+        total_all_leave = 0
+        total_all_ot = 0.0
+
         for idx, emp in enumerate(employees, 1):
             ws.row_dimensions[current_row].height = 22
-            ws.cell(row=current_row, column=1, value=idx).alignment = align_center
-            ws.cell(row=current_row, column=2, value=emp.employee_id).alignment = align_center
-            ws.cell(row=current_row, column=3, value=emp.full_name).alignment = align_left
-            ws.cell(row=current_row, column=4, value=emp.department or 'QLCL').alignment = align_center
-            ws.cell(row=current_row, column=5, value=emp.stage or 'QC').alignment = align_center
-            ws.cell(row=current_row, column=6, value=emp.factory or '-').alignment = align_center
+            row_fill = fill_zebra if idx % 2 == 0 else PatternFill(fill_type=None)
+
+            c1 = ws.cell(row=current_row, column=1, value=idx)
+            c1.alignment = align_center
+            c2 = ws.cell(row=current_row, column=2, value=emp.employee_id)
+            c2.alignment = align_center
+            c3 = ws.cell(row=current_row, column=3, value=emp.full_name)
+            c3.alignment = align_left
+            c4 = ws.cell(row=current_row, column=4, value=emp.department or 'QLCL')
+            c4.alignment = align_center
+            c5 = ws.cell(row=current_row, column=5, value=emp.stage or 'QC')
+            c5.alignment = align_center
+            c6 = ws.cell(row=current_row, column=6, value=emp.factory or '-')
+            c6.alignment = align_center
 
             for c in range(1, 7):
                 cell = ws.cell(row=current_row, column=c)
                 cell.font = font_body
                 cell.border = thin_border
+                if idx % 2 == 0:
+                    cell.fill = row_fill
 
             total_leave = 0
             total_ot = 0.0
@@ -652,38 +696,105 @@ def export_attendance_excel(payload: ExportAttendanceRequest, db: Session = Depe
                 d_str = d.strftime("%Y-%m-%d")
                 att = att_map.get((emp.employee_id, d_str))
                 cell = ws.cell(row=current_row, column=d_idx)
-                cell.font = font_body
-                cell.alignment = align_center
                 cell.border = thin_border
+                cell.alignment = align_center
 
                 if att:
                     code = STATUS_CODES.get(att.status, att.status)
                     cell.value = code
                     if att.status in STATUS_FILLS:
                         cell.fill = STATUS_FILLS[att.status]
+                    if att.status in STATUS_FONTS:
+                        cell.font = STATUS_FONTS[att.status]
+                    else:
+                        cell.font = font_body
+
                     if att.status in ['LEAVE_PAID', 'LEAVE_UNPAID', 'HALF_DAY', 'EARLY_LEAVE_1630']:
                         total_leave += (0.5 if att.status == 'HALF_DAY' else 1)
+                    else:
+                        day_working_counts[d_idx - 7] += 1
+
                     if att.overtime_hours:
                         total_ot += att.overtime_hours
                 else:
                     if d.weekday() == 6:
                         cell.value = "CN"
                         cell.fill = STATUS_FILLS["SUNDAY_OFF"]
+                        cell.font = STATUS_FONTS["SUNDAY_OFF"]
                     else:
                         cell.value = "X"
                         cell.fill = STATUS_FILLS["WORKING"]
+                        cell.font = STATUS_FONTS["WORKING"]
+                        day_working_counts[d_idx - 7] += 1
 
             cell_leave = ws.cell(row=current_row, column=len(headers) - 1, value=total_leave)
             cell_leave.font = font_bold
             cell_leave.alignment = align_center
             cell_leave.border = thin_border
+            if idx % 2 == 0: cell_leave.fill = row_fill
 
             cell_ot = ws.cell(row=current_row, column=len(headers), value=total_ot)
             cell_ot.font = font_bold
             cell_ot.alignment = align_center
             cell_ot.border = thin_border
+            if idx % 2 == 0: cell_ot.fill = row_fill
 
+            total_all_leave += total_leave
+            total_all_ot += total_ot
             current_row += 1
+
+        # Dòng Tổng Cộng Quân Số & Giờ Công cuối bảng
+        ws.row_dimensions[current_row].height = 24
+        ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=6)
+        tot_label = ws.cell(row=current_row, column=1, value="TỔNG CỘNG QUÂN SỐ CÔNG TÁC & TĂNG CA")
+        tot_label.font = font_total
+        tot_label.alignment = align_center
+        
+        for c in range(1, 7):
+            ws.cell(row=current_row, column=c).fill = fill_total
+            ws.cell(row=current_row, column=c).border = total_border
+
+        for d_i, wc in enumerate(day_working_counts, 7):
+            c_tot = ws.cell(row=current_row, column=d_i, value=wc)
+            c_tot.font = font_total
+            c_tot.alignment = align_center
+            c_tot.fill = fill_total
+            c_tot.border = total_border
+
+        c_tot_leave = ws.cell(row=current_row, column=len(headers) - 1, value=total_all_leave)
+        c_tot_leave.font = font_total
+        c_tot_leave.alignment = align_center
+        c_tot_leave.fill = fill_total
+        c_tot_leave.border = total_border
+
+        c_tot_ot = ws.cell(row=current_row, column=len(headers), value=total_all_ot)
+        c_tot_ot.font = font_total
+        c_tot_ot.alignment = align_center
+        c_tot_ot.fill = fill_total
+        c_tot_ot.border = total_border
+
+        # 📌 THÊM TÍNH NĂNG FREEZE PANES (Cố định 4 dòng tiêu đề & Cột thông tin nhân sự A-F)
+        # G5 có nghĩa là: giữ cố định dòng 1-4 ở trên và cột A-F ở bên trái khi cuộn ngang sang các ngày!
+        ws.freeze_panes = 'G5'
+
+        # 📌 THÊM BỘ LỌC AUTOFILTER TỰ ĐỘNG CHO DÒNG TIÊU ĐỀ
+        max_col_letter = get_column_letter(len(headers))
+        ws.auto_filter.ref = f"A4:{max_col_letter}{current_row}"
+
+        # Đặt độ rộng chuẩn cho các cột
+        ws.column_dimensions['A'].width = 6    # STT
+        ws.column_dimensions['B'].width = 10   # Mã NV
+        ws.column_dimensions['C'].width = 24   # Họ và Tên
+        ws.column_dimensions['D'].width = 16   # Phòng Ban
+        ws.column_dimensions['E'].width = 16   # Vị Trí
+        ws.column_dimensions['F'].width = 10   # Nhà Máy
+        
+        for d_idx in range(7, 7 + len(date_list)):
+            c_letter = get_column_letter(d_idx)
+            ws.column_dimensions[c_letter].width = 6.5
+
+        ws.column_dimensions[get_column_letter(len(headers) - 1)].width = 13
+        ws.column_dimensions[get_column_letter(len(headers))].width = 13
 
     elif rep_type == "log":
         ws.title = "Nhật Ký Chi Tiết"
@@ -704,6 +815,7 @@ def export_attendance_excel(payload: ExportAttendanceRequest, db: Session = Depe
         current_row = 5
         for idx, att in enumerate(attendances, 1):
             ws.row_dimensions[current_row].height = 20
+            row_fill = fill_zebra if idx % 2 == 0 else PatternFill(fill_type=None)
             r_vals = [
                 idx,
                 att.employee_id,
@@ -720,11 +832,20 @@ def export_attendance_excel(payload: ExportAttendanceRequest, db: Session = Depe
                 cell = ws.cell(row=current_row, column=c_idx, value=val)
                 cell.font = font_body
                 cell.border = thin_border
+                if idx % 2 == 0: cell.fill = row_fill
                 if c_idx in [1, 2, 4, 5, 6, 7, 8, 9]:
                     cell.alignment = align_center
                 else:
                     cell.alignment = align_left
             current_row += 1
+
+        ws.freeze_panes = 'A5'
+        ws.auto_filter.ref = f"A4:J{current_row - 1}"
+
+        for col in ws.columns:
+            max_len = max(len(str(cell.value or '')) for cell in col)
+            col_letter = get_column_letter(col[0].column)
+            ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
 
     elif rep_type == "overtime":
         ws.title = "Tổng Hợp Tăng Ca"
@@ -750,6 +871,7 @@ def export_attendance_excel(payload: ExportAttendanceRequest, db: Session = Depe
 
         current_row = 5
         for idx, emp in enumerate(employees, 1):
+            row_fill = fill_zebra if idx % 2 == 0 else PatternFill(fill_type=None)
             emp_records = emp_att_map.get(emp.employee_id, [])
             leave_cp = sum(1 for r in emp_records if r.status == 'LEAVE_PAID')
             ot_20h_count = sum(1 for r in emp_records if r.status == 'OT_20H')
@@ -772,11 +894,20 @@ def export_attendance_excel(payload: ExportAttendanceRequest, db: Session = Depe
                 cell = ws.cell(row=current_row, column=c_idx, value=val)
                 cell.font = font_body
                 cell.border = thin_border
+                if idx % 2 == 0: cell.fill = row_fill
                 if c_idx in [1, 2, 4, 5, 6, 7, 8, 9]:
                     cell.alignment = align_center
                 else:
                     cell.alignment = align_left
             current_row += 1
+
+        ws.freeze_panes = 'D5'
+        ws.auto_filter.ref = f"A4:I{current_row - 1}"
+
+        for col in ws.columns:
+            max_len = max(len(str(cell.value or '')) for cell in col)
+            col_letter = get_column_letter(col[0].column)
+            ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
 
     else:
         ws.title = "Tổng Hợp Quân Số"
@@ -824,7 +955,8 @@ def export_attendance_excel(payload: ExportAttendanceRequest, db: Session = Depe
             elif st == "WORKING": matrix[cat]["working"] += 1
 
         current_row = 5
-        for cat in categories:
+        for idx, cat in enumerate(categories, 1):
+            row_fill = fill_zebra if idx % 2 == 0 else PatternFill(fill_type=None)
             d = matrix[cat]
             r_vals = [cat, d["total"], d["working"], d["leave_paid"], d["leave_unpaid"], d["early_1630"], d["half_day"], d["ot_20h"], d["ot_22h"], d["sunday_off"]]
             ws.row_dimensions[current_row].height = 22
@@ -832,18 +964,17 @@ def export_attendance_excel(payload: ExportAttendanceRequest, db: Session = Depe
                 cell = ws.cell(row=current_row, column=c_idx, value=val)
                 cell.font = font_body
                 cell.border = thin_border
+                if idx % 2 == 0: cell.fill = row_fill
                 cell.alignment = align_center if c_idx > 1 else align_left
             current_row += 1
 
-    # Auto-fit column widths
-    for col in ws.columns:
-        max_len = 0
-        col_letter = get_column_letter(col[0].column)
-        for cell in col:
-            val_str = str(cell.value or '')
-            if len(val_str) > max_len:
-                max_len = len(val_str)
-        ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
+        ws.freeze_panes = 'A5'
+        ws.auto_filter.ref = f"A4:J{current_row - 1}"
+
+        for col in ws.columns:
+            max_len = max(len(str(cell.value or '')) for cell in col)
+            col_letter = get_column_letter(col[0].column)
+            ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
 
     output = io.BytesIO()
     wb.save(output)
