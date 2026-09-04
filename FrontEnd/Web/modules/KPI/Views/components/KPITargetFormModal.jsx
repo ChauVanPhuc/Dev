@@ -444,64 +444,36 @@ const KPITargetFormModal = ({ isOpen, onClose, targetData, onSave }) => {
 
             {/* Row Điều kiện lọc bổ sung */}
             {formData.data_source === 'inspection' && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '10px' }}>
                 <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                    <label style={{ fontSize: '0.72rem', fontWeight: '700', color: '#475569' }}>
-                      Lọc theo Công đoạn (stage_filter)
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setFormData(prev => ({ ...prev, stage_filter: '' }))}
-                      style={{ background: 'none', border: 'none', color: '#6366F1', fontSize: '0.7rem', fontWeight: '700', cursor: 'pointer', padding: 0 }}
-                    >
-                      ↺ Tất cả công đoạn
-                    </button>
-                  </div>
-
-                  {/* Danh sách các công đoạn chọn nhanh dạng Chips */}
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '6px' }}>
-                    {['Đầu Vào', 'Nhập Kho', 'IQC', 'Tạo Phôi', 'Định Hình', 'Lắp Ráp', 'Sơn', 'Đóng Gói', 'Final', 'OQC', 'Xuất Hàng', 'Pallet'].map(stg => {
-                      const selectedList = (formData.stage_filter || '').split(',').map(s => s.trim()).filter(Boolean);
-                      const isSelected = selectedList.includes(stg);
-                      return (
-                        <button
-                          key={stg}
-                          type="button"
-                          onClick={() => {
-                            let newList;
-                            if (isSelected) {
-                              newList = selectedList.filter(s => s !== stg);
-                            } else {
-                              newList = [...selectedList, stg];
-                            }
-                            setFormData(prev => ({ ...prev, stage_filter: newList.join(',') }));
-                          }}
-                          style={{
-                            padding: '2px 8px',
-                            borderRadius: '12px',
-                            fontSize: '0.7rem',
-                            fontWeight: '700',
-                            cursor: 'pointer',
-                            transition: 'all 0.15s ease',
-                            border: isSelected ? '1px solid #4F46E5' : '1px solid #CBD5E1',
-                            backgroundColor: isSelected ? '#EEF2FF' : '#F8FAFC',
-                            color: isSelected ? '#4338CA' : '#475569'
-                          }}
-                        >
-                          {isSelected ? `✓ ${stg}` : `+ ${stg}`}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  <input
-                    type="text"
-                    placeholder="Chọn ở trên hoặc tự gõ (phân cách bởi dấu phẩy): VD: Đầu Vào,Nhập Kho"
+                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginBottom: '3px' }}>
+                    Lọc theo Công đoạn (stage_filter)
+                  </label>
+                  <select
                     value={formData.stage_filter || ''}
                     onChange={(e) => setFormData(prev => ({ ...prev, stage_filter: e.target.value }))}
-                    style={{ width: '100%', padding: '5px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.75rem', outline: 'none', backgroundColor: '#FFFFFF' }}
-                  />
+                    style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.75rem', fontWeight: '700', outline: 'none', backgroundColor: '#FFFFFF' }}
+                  >
+                    <option value="">-- Tất cả công đoạn (Không lọc) --</option>
+                    <optgroup label="📍 Công đoạn riêng lẻ">
+                      <option value="Đầu Vào">Đầu Vào (IQC)</option>
+                      <option value="Nhập Kho">Nhập Kho (Nguyên vật liệu)</option>
+                      <option value="Tạo Phôi">Tạo Phôi / Cắt Gọt</option>
+                      <option value="Định Hình">Định Hình / Gia Công</option>
+                      <option value="Lắp Ráp">Lắp Ráp (PQC)</option>
+                      <option value="Sơn">Sơn / Phủ Bề Mặt</option>
+                      <option value="Đóng Gói">Đóng Gói (PQC)</option>
+                      <option value="Final">Final Inspection (OQC)</option>
+                      <option value="Xuất Hàng">Xuất Hàng</option>
+                      <option value="Pallet">Đóng Pallet / Lưu Kho</option>
+                    </optgroup>
+                    <optgroup label="📦 Nhóm công đoạn phổ biến">
+                      <option value="Đầu Vào,Nhập Kho,IQC,Vật tư">Đầu vào & Nhập kho (IQC / Vật tư)</option>
+                      <option value="Tạo Phôi,Định Hình,Lắp Ráp,Sơn">Công đoạn Sản xuất (PQC)</option>
+                      <option value="Final,OQC,Xuất Hàng">Thành phẩm & OQC (Final / Xuất hàng)</option>
+                      <option value="Pallet,Kho">Đóng Pallet & Kho bãi</option>
+                    </optgroup>
+                  </select>
                 </div>
 
                 <div>
@@ -511,7 +483,7 @@ const KPITargetFormModal = ({ isOpen, onClose, targetData, onSave }) => {
                   <select
                     value={formData.type_filter || ''}
                     onChange={(e) => setFormData(prev => ({ ...prev, type_filter: e.target.value }))}
-                    style={{ width: '100%', padding: '5px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.75rem', outline: 'none', backgroundColor: '#FFFFFF' }}
+                    style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.75rem', fontWeight: '700', outline: 'none', backgroundColor: '#FFFFFF' }}
                   >
                     <option value="">-- Tất cả các loại kiểm tra --</option>
                     <option value="first_sample">Mẫu đầu tiên (first_sample)</option>
