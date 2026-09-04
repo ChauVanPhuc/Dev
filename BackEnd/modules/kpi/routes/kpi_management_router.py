@@ -83,6 +83,18 @@ class KPIItemPoolBase(BaseModel):
     content: str
     calc_method: str
     target: str
+    category: Optional[str] = "D"
+    department: Optional[str] = None
+    data_source: Optional[str] = "inspection"
+    stage_filter: Optional[str] = None
+    type_filter: Optional[str] = None
+    employee_field: Optional[str] = "inspector_name"
+    penalty_factor: Optional[float] = 2.0
+    denominator: Optional[float] = 26.0
+    no_data_behavior: Optional[str] = "full_score"
+    unit: Optional[str] = "%"
+    operator: Optional[str] = ">="
+    target_val: Optional[str] = "95"
 
 class KPITrainingPlanBase(BaseModel):
     code: str
@@ -663,7 +675,18 @@ def get_kpi_pool(db: Session = Depends(get_db)):
             "content": r.content,
             "calc_method": r.calc_method,
             "target": r.target,
-            "category": r.category or "D"
+            "category": r.category or "D",
+            "department": r.department,
+            "data_source": r.data_source,
+            "stage_filter": r.stage_filter,
+            "type_filter": r.type_filter,
+            "employee_field": r.employee_field,
+            "penalty_factor": r.penalty_factor,
+            "denominator": r.denominator,
+            "no_data_behavior": r.no_data_behavior,
+            "unit": r.unit,
+            "operator": r.operator,
+            "target_val": r.target_val
         }
         for r in items
     ]
@@ -931,6 +954,157 @@ def filter_inspections_by_kpi_code(kpi_code: str, inspections: list) -> list:
     return res
 
 
+def evaluate_kpi_target_status(actual_val: float, operator: str, target_val_str: str) -> str:
+    if actual_val is None:
+        return "Đang theo dõi"
+    try:
+        t_val = float(str(target_val_str or '95').replace('%', '').strip())
+        op = (operator or '>=').strip()
+        is_pass = False
+        if op == '>=':
+            is_pass = actual_val >= t_val
+        elif op == '<=':
+            is_pass = actual_val <= t_val
+        elif op == '>':
+            is_pass = actual_val > t_val
+        elif op == '<':
+            is_pass = actual_val < t_val
+        elif op == '=':
+            is_pass = abs(actual_val - t_val) < 0.01
+        else:
+            is_pass = actual_val >= t_val
+        return "Đạt KPI" if is_pass else "Chưa đạt KPI"
+    except Exception:
+        return "Đạt KPI" if actual_val >= 90.0 else "Chưa đạt KPI"
+
+
+def calculate_dynamic_kpi_metric(db: Session, item, emp: Employee, month: int, year: int):
+    """
+    Hàm tính toán chỉ số KPI hoàn toàn dựa trên các tham số cấu hình động.
+    """
+    emp_name = emp.full_name if emp else ""
+    employee_id = emp.employee_id if emp else ""
+
+    ds = (getattr(item, 'data_source', None) or 'inspection').lower().strip()
+    cm = (getattr(item, 'calc_method', None) or 'avg_ticket_rate').lower().strip()
+    stage_f = getattr(item, 'stage_filter', None) or ""
+    type_f = getattr(item, 'type_filter', None) or ""
+    emp_f = getattr(item, 'employee_field', None) or "inspector_name"
+    penalty = float(getattr(item, 'penalty_factor', None) or 2.0)
+    denom = float(getattr(item, 'denominator', None) or 26.0)
+    no_data_beh = getattr(item, 'no_data_behavior', None) or "full_score"
+
+    calc_actual = "Chưa có dữ liệu"
+    earned_percentage = 100.0
+    records_list = []
+
+    # 1. TRUY VẤN NGUỒN DỮ LIỆU (DATA SOURCE)
+    if ds == 'inspection':
+        from modules.inspection.models.input_inspection import InputInspection
+        query = db.query(InputInspection)
+        if emp_f == 'inspector_name' and emp_name:
+            query = query.filter(InputInspection.inspector_name.ilike(f"%{emp_name}%"))
+        inspections = query.all()
+        m_insps = [i for i in inspections if getattr(i, 'inspected_at', None) and i.inspected_at.month == month and i.inspected_at.year == year]
+
+        # Lọc theo stage_filter
+        if stage_f:
+            stages_list = [s.strip().lower() for s in stage_f.split(',') if s.strip()]
+            m_insps = [i for i in m_insps if any(st in str(getattr(i, 'stage', '') or '').lower() for st in stages_list)]
+
+        # Lọc theo type_filter
+        if type_f:
+            m_insps = [i for i in m_insps if type_f.lower() in str(getattr(i, 'inspection_type', '') or '').lower()]
+
+        records_list = m_insps
+
+    elif ds == 'capa':
+        from modules.capa.models.capa import CAPA
+        capas = db.query(CAPA).all()
+        if emp_name and emp_f != 'all':
+            capas = [c for c in capas if emp_name.lower() in (c.handler_name or '').lower() or emp_name.lower() in (c.creator_name or '').lower()]
+        records_list = [c for c in capas if getattr(c, 'created_at', None) and c.created_at.month == month and c.created_at.year == year]
+
+    elif ds == 'violation':
+        v_query = db.query(AwardDiscipline)
+        if employee_id and emp_f != 'all':
+            v_query = v_query.filter(AwardDiscipline.employee_id == employee_id)
+        violations = v_query.all()
+        records_list = [v for v in violations if getattr(v, 'created_at', None) and v.created_at.month == month and v.created_at.year == year]
+
+    elif ds == 'training':
+        t_plans = db.query(KPITrainingPlan).all()
+        records_list = [t for t in t_plans if getattr(t, 'created_at', None) and t.created_at.month == month and t.created_at.year == year]
+
+    elif ds == 'claim':
+        from modules.claim.models.claim_models import CustomerClaim
+        claims = db.query(CustomerClaim).all()
+        records_list = [c for c in claims if getattr(c, 'created_at', None) and c.created_at.month == month and c.created_at.year == year]
+
+    # 2. TÍNH TOÁN THEO PHƯƠNG PHÁP (CALC METHOD)
+    if records_list:
+        if cm == 'avg_ticket_rate':
+            ticket_rates = []
+            for i in records_list:
+                sample = float(getattr(i, 'sample_qty', None) or getattr(i, 'required_qty', None) or 0)
+                err = float(getattr(i, 'error_qty', None) or 0)
+                if sample > 0:
+                    rate = max(0.0, min(100.0, ((sample - err) / sample) * 100.0))
+                else:
+                    res_str = str(getattr(i, 'result', None) or getattr(i, 'conclusion', None) or 'PASS').upper()
+                    rate = 100.0 if res_str in ['PASS', 'ĐẠT', 'SUCCESS', 'OK'] else 0.0
+                ticket_rates.append(rate)
+            calc_rate = round(sum(ticket_rates) / len(ticket_rates), 1)
+            earned_percentage = calc_rate
+            calc_actual = f"{calc_rate:.1f}%"
+
+        elif cm == 'completion_ratio':
+            overdue_or_failed = sum(1 for r in records_list if 'quá hạn' in (getattr(r, 'ticket_status', '') or '').lower() or (getattr(r, 'status', '') or '').lower() not in ['hoàn thành', 'đã diễn ra', 'đạt'])
+            rate = round(((len(records_list) - overdue_or_failed) / len(records_list)) * 100.0, 1)
+            earned_percentage = rate
+            calc_actual = f"{rate:.1f}%"
+
+        elif cm == 'count_penalty':
+            v_count = len(records_list)
+            rate = max(0.0, 100.0 - (v_count * penalty))
+            earned_percentage = rate
+            calc_actual = f"{rate:.1f}%"
+
+        elif cm == 'attendance_days':
+            distinct_days = len(set(i.inspected_at.date() for i in records_list if getattr(i, 'inspected_at', None)))
+            rate = min(100.0, round((distinct_days / (denom if denom > 0 else 26.0)) * 100.0, 1))
+            earned_percentage = rate
+            calc_actual = f"{rate:.1f}%"
+
+        elif cm == 'inverse_count':
+            c_count = len(records_list)
+            rate = max(0.0, 100.0 - (c_count * penalty))
+            earned_percentage = rate
+            calc_actual = f"{rate:.1f}% ({c_count} bản ghi)"
+
+        else:
+            earned_percentage = 100.0
+            calc_actual = "100.0%"
+    else:
+        # XỬ LÝ KHI KHÔNG CÓ DỮ LIỆU (NO DATA BEHAVIOR)
+        if no_data_beh == 'full_score':
+            earned_percentage = 100.0
+            calc_actual = "100.0%"
+        elif no_data_beh == 'zero_score':
+            earned_percentage = 0.0
+            calc_actual = "0.0%"
+        elif no_data_beh == 'target_value':
+            earned_percentage = float(getattr(item, 'target_val', 95) or 95)
+            calc_actual = f"{earned_percentage:.1f}%"
+        else: # 'no_data'
+            earned_percentage = 100.0
+            calc_actual = "Chưa có dữ liệu"
+
+    status = evaluate_kpi_target_status(earned_percentage if calc_actual != "Chưa có dữ liệu" else None, getattr(item, 'operator', '>='), getattr(item, 'target_val', '95'))
+
+    return calc_actual, earned_percentage, status, records_list
+
+
 def calculate_employee_kpi_score(db: Session, employee_id: str, month: int, year: int):
     # 1. Fetch employee details for name matching
     emp = db.query(Employee).filter(Employee.employee_id == employee_id).first()
@@ -953,7 +1127,18 @@ def calculate_employee_kpi_score(db: Session, employee_id: str, month: int, year
                 target=p.target,
                 actual=p.target,
                 status="Đang theo dõi",
-                category=p.category or "D"
+                category=p.category or "D",
+                department=p.department,
+                data_source=p.data_source,
+                stage_filter=p.stage_filter,
+                type_filter=p.type_filter,
+                employee_field=p.employee_field,
+                penalty_factor=p.penalty_factor,
+                denominator=p.denominator,
+                no_data_behavior=p.no_data_behavior,
+                unit=p.unit,
+                operator=p.operator,
+                target_val=p.target_val
             ))
     else:
         # Gom/Lọc trùng tự động các mục có trùng tên nội dung
@@ -969,150 +1154,9 @@ def calculate_employee_kpi_score(db: Session, employee_id: str, month: int, year
     total_weighted_earned = 0.0
     total_weight = 0.0
 
-    # Danh sách giá trị mặc định/seed cần bỏ qua (không phải dữ liệu thực tế)
-    DEFAULT_PLACEHOLDERS = {'95%', '95.0%', '97%', '97.0%', '98%', '98.0%', '100%'}
-
     for item in kpi_items:
-        cat = getattr(item, 'category', None) or "D"
-        raw_actual = (item.actual or '').strip()
         weight = item.score or 20
-
-        calc_actual = raw_actual
-        earned_percentage = 100.0
-
-        if cat == 'A':
-            try:
-                from modules.inspection.models.input_inspection import InputInspection
-                query = db.query(InputInspection)
-                if emp_name:
-                    query = query.filter(InputInspection.inspector_name.ilike(f"%{emp_name}%"))
-                inspections = query.all()
-                month_filtered = [i for i in inspections if getattr(i, 'inspected_at', None) and i.inspected_at.month == month and i.inspected_at.year == year]
-
-                # Lọc riêng theo đúng loại công đoạn và mã KPI để không nhảy trùng số liệu
-                filtered = filter_inspections_by_kpi_code(item.kpi_code, month_filtered)
-
-                if filtered:
-                    ticket_rates = []
-                    for i in filtered:
-                        sample = float(getattr(i, 'sample_qty', None) or getattr(i, 'required_qty', None) or 0)
-                        err = float(getattr(i, 'error_qty', None) or 0)
-                        
-                        if sample > 0:
-                            rate = max(0.0, min(100.0, ((sample - err) / sample) * 100.0))
-                        else:
-                            res_str = str(getattr(i, 'result', None) or getattr(i, 'conclusion', None) or 'PASS').upper()
-                            rate = 100.0 if res_str in ['PASS', 'ĐẠT', 'SUCCESS', 'OK'] else 0.0
-                        
-                        ticket_rates.append(rate)
-
-                    calc_rate = round(sum(ticket_rates) / len(ticket_rates), 1)
-                    calc_actual = f"{calc_rate:.1f}%"
-                    earned_percentage = calc_rate
-                else:
-                    earned_percentage = 100.0
-                    calc_actual = "Chưa có dữ liệu"
-            except Exception:
-                earned_percentage = 100.0
-                calc_actual = "Chưa có dữ liệu"
-
-        elif cat == 'B':
-            try:
-                from modules.capa.models.capa import CAPA
-                capas = db.query(CAPA).all()
-                if emp_name:
-                    capas = [c for c in capas if emp_name.lower() in (c.handler_name or '').lower() or emp_name.lower() in (c.creator_name or '').lower()]
-                
-                filtered_capas = [c for c in capas if getattr(c, 'created_at', None) and c.created_at.month == month and c.created_at.year == year]
-                if filtered_capas:
-                    overdue = sum(1 for c in filtered_capas if 'quá hạn' in (c.ticket_status or '').lower())
-                    rate = round(((len(filtered_capas) - overdue) / len(filtered_capas)) * 100, 1)
-                    calc_actual = f"{rate:.1f}%"
-                    earned_percentage = rate
-                else:
-                    earned_percentage = 100.0
-                    calc_actual = "Chưa có dữ liệu"
-            except Exception:
-                earned_percentage = 100.0
-                calc_actual = "Chưa có dữ liệu"
-
-        elif cat == 'C':
-            try:
-                v_query = db.query(AwardDiscipline)
-                if employee_id:
-                    v_query = v_query.filter(AwardDiscipline.employee_id == employee_id)
-                violations = v_query.all()
-                filtered_v = [v for v in violations if getattr(v, 'created_at', None) and v.created_at.month == month and v.created_at.year == year]
-                if filtered_v:
-                    v_count = len(filtered_v)
-                    calc_rate = max(0.0, 100.0 - (v_count * 2.0))
-                    calc_actual = f"{calc_rate:.1f}%"
-                    earned_percentage = calc_rate
-                else:
-                    # Kiểm tra xem nhân sự có hoạt động kiểm tra trong tháng không
-                    from modules.inspection.models.input_inspection import InputInspection
-                    emp_insps = db.query(InputInspection).filter(InputInspection.inspector_name.ilike(f"%{emp_name}%")).all() if emp_name else []
-                    m_insps = [i for i in emp_insps if i.inspected_at and i.inspected_at.month == month and i.inspected_at.year == year]
-                    if m_insps:
-                        earned_percentage = 100.0
-                        calc_actual = "100.0%"
-                    else:
-                        earned_percentage = 100.0
-                        calc_actual = "Chưa có dữ liệu"
-            except Exception:
-                earned_percentage = 100.0
-                calc_actual = "Chưa có dữ liệu"
-
-        elif cat == 'D':
-            try:
-                from modules.inspection.models.input_inspection import InputInspection
-                query = db.query(InputInspection)
-                if emp_name:
-                    query = query.filter(InputInspection.inspector_name.ilike(f"%{emp_name}%"))
-                inspections = query.all()
-                filtered = [i for i in inspections if i.inspected_at and i.inspected_at.month == month and i.inspected_at.year == year]
-                if filtered:
-                    distinct_days = len(set(i.inspected_at.date() for i in filtered if i.inspected_at))
-                    attendance_rate = min(100.0, round((distinct_days / 26.0) * 100, 1))
-                    calc_actual = f"{attendance_rate:.1f}%"
-                    earned_percentage = attendance_rate
-                else:
-                    earned_percentage = 100.0
-                    calc_actual = "Chưa có dữ liệu"
-            except Exception:
-                earned_percentage = 100.0
-                calc_actual = "Chưa có dữ liệu"
-
-        elif cat == 'E':
-            try:
-                t_plans = db.query(KPITrainingPlan).all()
-                filtered_t = [t for t in t_plans if getattr(t, 'created_at', None) and t.created_at.month == month and t.created_at.year == year]
-                if filtered_t:
-                    completed = sum(1 for t in filtered_t if (t.status or '').lower() in ['hoàn thành', 'đã diễn ra'])
-                    rate = round((completed / len(filtered_t)) * 100, 1)
-                    calc_actual = f"{rate:.1f}%"
-                    earned_percentage = rate
-                else:
-                    earned_percentage = 100.0
-                    calc_actual = "Chưa có dữ liệu"
-            except Exception:
-                earned_percentage = 100.0
-                calc_actual = "Chưa có dữ liệu"
-
-        elif cat == 'F':
-            try:
-                from modules.claim.models.claim_models import CustomerClaim
-                claims = db.query(CustomerClaim).all()
-                filtered_c = [c for c in claims if getattr(c, 'created_at', None) and c.created_at.month == month and c.created_at.year == year]
-                if filtered_c:
-                    earned_percentage = max(0.0, 100.0 - (len(filtered_c) * 5.0))
-                    calc_actual = f"{earned_percentage:.1f}% ({len(filtered_c)} khiếu nại)"
-                else:
-                    earned_percentage = 100.0
-                    calc_actual = "Chưa có dữ liệu"
-            except Exception:
-                earned_percentage = 100.0
-                calc_actual = "Chưa có dữ liệu"
+        calc_actual, earned_percentage, status, _ = calculate_dynamic_kpi_metric(db, item, emp, month, year)
 
         total_weighted_earned += (earned_percentage * weight)
         total_weight += weight
@@ -1126,7 +1170,18 @@ def calculate_employee_kpi_score(db: Session, employee_id: str, month: int, year
             "target": item.target,
             "actual": calc_actual,
             "earned_percentage": round(earned_percentage, 1),
-            "category": cat
+            "status": status,
+            "category": getattr(item, 'category', 'D'),
+            "department": getattr(item, 'department', None),
+            "data_source": getattr(item, 'data_source', 'inspection'),
+            "stage_filter": getattr(item, 'stage_filter', None),
+            "type_filter": getattr(item, 'type_filter', None),
+            "penalty_factor": getattr(item, 'penalty_factor', 2.0),
+            "denominator": getattr(item, 'denominator', 26.0),
+            "no_data_behavior": getattr(item, 'no_data_behavior', 'full_score'),
+            "unit": getattr(item, 'unit', '%'),
+            "operator": getattr(item, 'operator', '>='),
+            "target_val": getattr(item, 'target_val', '95')
         })
 
     kpi_score = round(total_weighted_earned / total_weight, 1) if total_weight > 0 else 95.0

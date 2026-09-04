@@ -25,17 +25,30 @@ class KPIEmployeeItem(Base):
     """
     __tablename__ = "kpi_employee_items"
 
-    id          = Column(Integer, primary_key=True, index=True)
-    employee_id = Column(NVARCHAR(50), nullable=False, index=True) # Liên kết với accounts.employee_id
-    kpi_code    = Column(NVARCHAR(50), nullable=False) # e.g. "KPI01"
-    content     = Column(NVARCHAR(255), nullable=False) # e.g. "Duy trì họp giao việc"
-    score       = Column(Integer, nullable=False, default=0) # Điểm số tối đa/Trọng số của KPI này
-    calc_method = Column(NVARCHAR(500), nullable=False) # Công thức / cách tính
-    target      = Column(NVARCHAR(100), nullable=False) # e.g. ">= 1 Biên bản/tuần"
-    actual      = Column(NVARCHAR(100), nullable=True) # e.g. "1.2 biên bản/tuần"
-    status      = Column(NVARCHAR(50), nullable=True) # e.g. "Đạt KPI", "Chưa đạt KPI"
-    icon        = Column(NVARCHAR(50), nullable=True) # Tên icon indicator
-    category    = Column(NVARCHAR(10), nullable=True, default="D") # A, B, C, D, E, F
+    id               = Column(Integer, primary_key=True, index=True)
+    employee_id      = Column(NVARCHAR(50), nullable=False, index=True) # Liên kết với accounts.employee_id
+    kpi_code         = Column(NVARCHAR(50), nullable=False) # e.g. "KPI01"
+    content          = Column(NVARCHAR(255), nullable=False) # e.g. "Duy trì họp giao việc"
+    score            = Column(Integer, nullable=False, default=0) # Điểm số tối đa/Trọng số của KPI này
+    calc_method      = Column(NVARCHAR(500), nullable=False) # Công thức / cách tính e.g. "avg_ticket_rate"
+    target           = Column(NVARCHAR(100), nullable=False) # e.g. ">= 95%"
+    actual           = Column(NVARCHAR(100), nullable=True) # e.g. "98.5%"
+    status           = Column(NVARCHAR(50), nullable=True) # e.g. "Đạt KPI", "Chưa đạt KPI"
+    icon             = Column(NVARCHAR(50), nullable=True) # Tên icon indicator
+    category         = Column(NVARCHAR(10), nullable=True, default="D") # A, B, C, D, E, F
+    
+    # 🆕 Các cột cấu hình động chi tiết bao phủ mọi tình huống
+    department       = Column(NVARCHAR(100), nullable=True)
+    data_source      = Column(NVARCHAR(50), nullable=True, default="inspection") # inspection, capa, violation, training, claim
+    stage_filter     = Column(NVARCHAR(255), nullable=True) # e.g. "Đầu Vào,Nhập Kho"
+    type_filter      = Column(NVARCHAR(100), nullable=True) # e.g. "first_sample", "patrol", "final"
+    employee_field   = Column(NVARCHAR(50), nullable=True, default="inspector_name") # inspector_name, employee_id, handler_name
+    penalty_factor   = Column(Float, nullable=True, default=2.0) # Hệ số trừ điểm/lần vi phạm
+    denominator      = Column(Float, nullable=True, default=26.0) # Mẫu số tính tỷ lệ (ngày công, công việc...)
+    no_data_behavior = Column(NVARCHAR(50), nullable=True, default="full_score") # full_score, zero_score, no_data, target_value
+    unit             = Column(NVARCHAR(50), nullable=True, default="%")
+    operator         = Column(NVARCHAR(10), nullable=True, default=">=")
+    target_val       = Column(NVARCHAR(50), nullable=True, default="95")
 
 class KPIViolation(Base):
     """
@@ -96,12 +109,25 @@ class KPIItemPool(Base):
     """
     __tablename__ = "kpi_item_pool"
 
-    id          = Column(Integer, primary_key=True, index=True)
-    kpi_code    = Column(NVARCHAR(50), nullable=False) # e.g. "KPI01"
-    content     = Column(NVARCHAR(255), nullable=False) # e.g. "Tỷ lệ lọt lỗi"
-    calc_method = Column(NVARCHAR(500), nullable=False) # Cách tính
-    target      = Column(NVARCHAR(100), nullable=False) # Mục tiêu
-    category    = Column(NVARCHAR(10), nullable=True, default="D") # A, B, C, D, E, F
+    id               = Column(Integer, primary_key=True, index=True)
+    kpi_code         = Column(NVARCHAR(50), nullable=False) # e.g. "KPI01"
+    content          = Column(NVARCHAR(255), nullable=False) # e.g. "Tỷ lệ lọt lỗi"
+    calc_method      = Column(NVARCHAR(500), nullable=False) # Cách tính
+    target           = Column(NVARCHAR(100), nullable=False) # Mục tiêu
+    category         = Column(NVARCHAR(10), nullable=True, default="D") # A, B, C, D, E, F
+    
+    # 🆕 Các cột cấu hình động chi tiết bao phủ mọi tình huống
+    department       = Column(NVARCHAR(100), nullable=True)
+    data_source      = Column(NVARCHAR(50), nullable=True, default="inspection") # inspection, capa, violation, training, claim
+    stage_filter     = Column(NVARCHAR(255), nullable=True) # e.g. "Đầu Vào,Nhập Kho"
+    type_filter      = Column(NVARCHAR(100), nullable=True) # e.g. "first_sample", "patrol", "final"
+    employee_field   = Column(NVARCHAR(50), nullable=True, default="inspector_name") # inspector_name, employee_id, handler_name
+    penalty_factor   = Column(Float, nullable=True, default=2.0) # Hệ số trừ điểm/lần vi phạm
+    denominator      = Column(Float, nullable=True, default=26.0) # Mẫu số tính tỷ lệ (ngày công, công việc...)
+    no_data_behavior = Column(NVARCHAR(50), nullable=True, default="full_score") # full_score, zero_score, no_data, target_value
+    unit             = Column(NVARCHAR(50), nullable=True, default="%")
+    operator         = Column(NVARCHAR(10), nullable=True, default=">=")
+    target_val       = Column(NVARCHAR(50), nullable=True, default="95")
 
 class KPITrainingPlan(Base):
     """

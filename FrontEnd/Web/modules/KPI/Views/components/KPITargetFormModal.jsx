@@ -133,14 +133,22 @@ const KPITargetFormModal = ({ isOpen, onClose, targetData, onSave }) => {
       const parsedTarget = parseTargetStr(targetData.target, unitVal);
 
       setFormData({
-        code: targetData.code || 'KPI-QC-01',
-        name: targetData.name || '',
-        dept: targetData.dept || (dbDepartments[0]?.name || 'IQC - QC Kiểm Tra Nhập Kho'),
+        code: targetData.code || 'KPI01',
+        name: targetData.name || targetData.content || '',
+        dept: targetData.dept || targetData.department || (dbDepartments[0]?.name || 'IQC - QC Kiểm Tra Nhập Kho'),
         unit: unitVal,
-        operator: parsedTarget.operator,
-        targetVal: parsedTarget.targetVal,
+        operator: targetData.operator || parsedTarget.operator,
+        targetVal: targetData.target_val || parsedTarget.targetVal,
         weight: rawWeight,
-        description: targetData.description || ''
+        description: targetData.description || targetData.calc_method || '',
+        data_source: targetData.data_source || 'inspection',
+        calc_method: targetData.calc_method || 'avg_ticket_rate',
+        stage_filter: targetData.stage_filter || '',
+        type_filter: targetData.type_filter || '',
+        employee_field: targetData.employee_field || 'inspector_name',
+        penalty_factor: targetData.penalty_factor || 2.0,
+        denominator: targetData.denominator || 26.0,
+        no_data_behavior: targetData.no_data_behavior || 'full_score'
       });
     } else {
       const firstDeptLabel = dbDepartments[0] 
@@ -148,14 +156,22 @@ const KPITargetFormModal = ({ isOpen, onClose, targetData, onSave }) => {
         : 'IQC - QC Kiểm Tra Nhập Kho';
 
       setFormData({
-        code: `KPI-QC-0${Math.floor(Math.random() * 90) + 10}`,
+        code: `KPI${Math.floor(Math.random() * 89) + 10}`,
         name: '',
         dept: firstDeptLabel,
         unit: '%',
         operator: '>=',
         targetVal: '95',
         weight: '20',
-        description: ''
+        description: '',
+        data_source: 'inspection',
+        calc_method: 'avg_ticket_rate',
+        stage_filter: '',
+        type_filter: '',
+        employee_field: 'inspector_name',
+        penalty_factor: 2.0,
+        denominator: 26.0,
+        no_data_behavior: 'full_score'
       });
     }
   }, [targetData, dbDepartments]);
@@ -378,6 +394,149 @@ const KPITargetFormModal = ({ isOpen, onClose, targetData, onSave }) => {
                 <span style={{ padding: '6px 8px', backgroundColor: '#F1F5F9', color: '#475569', fontWeight: '800', fontSize: '0.8rem', borderLeft: '1px solid #CBD5E1', userSelect: 'none' }}>
                   %
                 </span>
+              </div>
+            </div>
+
+          </div>
+
+          {/* SECTION: ⚡ CAU HINH NGUON DU LIEU & CONG THUC DONG (15 TRUONG) */}
+          <div style={{ backgroundColor: '#F8FAFC', borderRadius: '8px', padding: '12px 14px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ fontSize: '0.78rem', fontWeight: '800', color: '#1E293B', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              ⚡ Cấu Hình Nguồn Dữ Liệu & Công Thức Động
+            </div>
+
+            {/* Row Nguồn dữ liệu & Phương pháp tính */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginBottom: '3px' }}>
+                  Nguồn dữ liệu (Data Source) *
+                </label>
+                <select
+                  value={formData.data_source || 'inspection'}
+                  onChange={(e) => setFormData(prev => ({ ...prev, data_source: e.target.value }))}
+                  style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.78rem', fontWeight: '700', color: '#0F172A', outline: 'none', backgroundColor: '#FFFFFF' }}
+                >
+                  <option value="inspection">📋 Phiếu kiểm tra QC (input_inspections)</option>
+                  <option value="capa">🔧 Phiếu CAPA khắc phục (capas)</option>
+                  <option value="violation">⚠️ Biên bản vi phạm (award_disciplines)</option>
+                  <option value="training">📚 Kế hoạch đào tạo (kpi_training_plans)</option>
+                  <option value="claim">📑 Khiếu nại khách hàng (customer_claims)</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginBottom: '3px' }}>
+                  Phương pháp tính (Calc Method) *
+                </label>
+                <select
+                  value={formData.calc_method || 'avg_ticket_rate'}
+                  onChange={(e) => setFormData(prev => ({ ...prev, calc_method: e.target.value }))}
+                  style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.78rem', fontWeight: '700', color: '#0F172A', outline: 'none', backgroundColor: '#FFFFFF' }}
+                >
+                  <option value="avg_ticket_rate">TB cộng % Đạt từng phiếu (Mẫu - Lỗi)</option>
+                  <option value="completion_ratio">Tỷ lệ hoàn thành đúng hạn (%)</option>
+                  <option value="count_penalty">Trừ % theo số lượt vi phạm (100% - N × phạt)</option>
+                  <option value="attendance_days">Tỷ lệ ngày công làm việc (Ngày/Mẫu số)</option>
+                  <option value="inverse_count">Trừ % theo số vụ claim (100% - N × phạt)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Row Điều kiện lọc bổ sung */}
+            {formData.data_source === 'inspection' && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '10px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginBottom: '3px' }}>
+                    Lọc theo Công đoạn (stage_filter)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="VD: Đầu Vào,Nhập Kho (Phân cách bởi dấu phẩy)"
+                    value={formData.stage_filter || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, stage_filter: e.target.value }))}
+                    style={{ width: '100%', padding: '5px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.75rem', outline: 'none', backgroundColor: '#FFFFFF' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginBottom: '3px' }}>
+                    Loại kiểm tra (type_filter)
+                  </label>
+                  <select
+                    value={formData.type_filter || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, type_filter: e.target.value }))}
+                    style={{ width: '100%', padding: '5px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.75rem', outline: 'none', backgroundColor: '#FFFFFF' }}
+                  >
+                    <option value="">-- Tất cả các loại --</option>
+                    <option value="first_sample">first_sample (Mẫu đầu tiên)</option>
+                    <option value="patrol">patrol (Tuần tra)</option>
+                    <option value="final">final (Final/OQC)</option>
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {/* Row Cấu hình hệ số phạt & mẫu số & hành vi khi thiếu dữ liệu */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+              {(formData.calc_method === 'count_penalty' || formData.calc_method === 'inverse_count') && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginBottom: '3px' }}>
+                    Hệ số phạt (%/lần)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    value={formData.penalty_factor || '2.0'}
+                    onChange={(e) => setFormData(prev => ({ ...prev, penalty_factor: e.target.value }))}
+                    style={{ width: '100%', padding: '5px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.75rem', fontWeight: '700', outline: 'none' }}
+                  />
+                </div>
+              )}
+
+              {formData.calc_method === 'attendance_days' && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginBottom: '3px' }}>
+                    Mẫu số ngày công (ngày)
+                  </label>
+                  <input
+                    type="number"
+                    value={formData.denominator || '26'}
+                    onChange={(e) => setFormData(prev => ({ ...prev, denominator: e.target.value }))}
+                    style={{ width: '100%', padding: '5px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.75rem', fontWeight: '700', outline: 'none' }}
+                  />
+                </div>
+              )}
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginBottom: '3px' }}>
+                  Xử lý khi thiếu dữ liệu
+                </label>
+                <select
+                  value={formData.no_data_behavior || 'full_score'}
+                  onChange={(e) => setFormData(prev => ({ ...prev, no_data_behavior: e.target.value }))}
+                  style={{ width: '100%', padding: '5px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.75rem', outline: 'none', backgroundColor: '#FFFFFF' }}
+                >
+                  <option value="full_score">Tính 100% Đạt (Mặc định)</option>
+                  <option value="zero_score">Tính 0%</option>
+                  <option value="no_data">Hiển thị "Chưa có dữ liệu"</option>
+                  <option value="target_value">Gán bằng Ngưỡng đạt</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginBottom: '3px' }}>
+                  Ánh xạ nhân sự
+                </label>
+                <select
+                  value={formData.employee_field || 'inspector_name'}
+                  onChange={(e) => setFormData(prev => ({ ...prev, employee_field: e.target.value }))}
+                  style={{ width: '100%', padding: '5px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.75rem', outline: 'none', backgroundColor: '#FFFFFF' }}
+                >
+                  <option value="inspector_name">inspector_name (QC Kiểm tra)</option>
+                  <option value="employee_id">employee_id (Mã nhân viên)</option>
+                  <option value="handler_name">handler_name (Người xử lý)</option>
+                  <option value="all">all (Không phân biệt nhân sự)</option>
+                </select>
               </div>
             </div>
 

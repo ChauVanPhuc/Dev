@@ -914,22 +914,29 @@ const QualityKPIDashboardView = () => {
   // CRUD Handlers for Tab 2 (Persisted directly to Backend DB API `/kpi-management/kpi-pool`)
   const handleSaveKpiTarget = async (targetItem) => {
     try {
+      const payload = {
+        kpi_code: targetItem.code,
+        content: targetItem.name,
+        calc_method: targetItem.calc_method || 'avg_ticket_rate',
+        target: targetItem.target,
+        department: targetItem.dept,
+        data_source: targetItem.data_source || 'inspection',
+        stage_filter: targetItem.stage_filter || '',
+        type_filter: targetItem.type_filter || '',
+        employee_field: targetItem.employee_field || 'inspector_name',
+        penalty_factor: parseFloat(targetItem.penalty_factor || 2.0),
+        denominator: parseFloat(targetItem.denominator || 26.0),
+        no_data_behavior: targetItem.no_data_behavior || 'full_score',
+        unit: targetItem.unit || '%',
+        operator: targetItem.operator || '>=',
+        target_val: targetItem.targetVal || '95'
+      };
+
       if (editingTarget) {
-        await api.put(`/kpi-management/kpi-pool/${targetItem.id}`, {
-          kpi_code: targetItem.code,
-          content: targetItem.name,
-          calc_method: targetItem.dept,
-          target: targetItem.target
-        }).catch(() => null);
-        setKpiTargets(prev => prev.map(t => t.id === targetItem.id ? targetItem : t));
+        await api.put(`/kpi-management/kpi-pool/${targetItem.id}`, payload).catch(() => null);
+        setKpiTargets(prev => prev.map(t => t.id === targetItem.id ? { ...t, ...targetItem } : t));
       } else {
-        const createRes = await api.post('/kpi-management/kpi-pool', {
-          kpi_code: targetItem.code,
-          content: targetItem.name,
-          calc_method: targetItem.dept,
-          target: targetItem.target
-        }).catch(() => null);
-        
+        const createRes = await api.post('/kpi-management/kpi-pool', payload).catch(() => null);
         const newId = createRes?.id || Date.now();
         setKpiTargets(prev => [...prev, { ...targetItem, id: newId }]);
       }
