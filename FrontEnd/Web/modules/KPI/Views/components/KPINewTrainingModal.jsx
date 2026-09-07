@@ -31,26 +31,7 @@ const KPINewTrainingModal = ({ isOpen, onClose, planData, onSave }) => {
   // Uploaded files list (multi-file)
   const [selectedFiles, setSelectedFiles] = useState([]);
 
-  // Default QLCL staff fallback list
-  const defaultQlclStaff = [
-    { full_name: 'Phạm Văn Trưởng QC', position: 'Trưởng phòng QLCL', department: 'Phòng QA/QC' },
-    { full_name: 'Đặng Văn Nam', position: 'Kỹ thuật viên OQC', department: 'Phòng QA/QC', employee_id: 'LCL_001' },
-    { full_name: 'Đặng Quý Hải', position: 'Kỹ thuật viên IQC', department: 'Phòng QA/QC', employee_id: 'LCL_002' },
-    { full_name: 'Hà Đình Thành', position: 'Kỹ thuật viên PQC', department: 'Phòng QA/QC', employee_id: 'LCL_003' },
-    { full_name: 'Đậu Thị Tâm', position: 'Nhân viên QC', department: 'QC Định Hình - Lắp Ráp', employee_id: 'LCL_004' },
-    { full_name: 'Huỳnh Hoàng Sơn', position: 'Kỹ thuật viên PQC', department: 'QC Sơn - Đóng Gói', employee_id: 'LCL_005' },
-    { full_name: 'Hồ Sỹ Khẩn', position: 'Tổ trưởng QC', department: 'Phòng QA/QC', employee_id: 'LCL_006' },
-    { full_name: 'Phan Thị Lượng', position: 'Nhân viên QC', department: 'QC Sơn - Đóng Gói', employee_id: 'LCL_007' },
-    { full_name: 'Đỗ Hữu Phúc', position: 'Nhân viên QC', department: 'QC Sơn - Đóng Gói', employee_id: 'LCL_008' },
-    { full_name: 'Phạm Thị Mai', position: 'Nhân viên QC', department: 'QC Sơn - Đóng Gói', employee_id: 'LCL_009' },
-    { full_name: 'Nguyễn Thị Mỹ Kim', position: 'Nhân viên QC', department: 'QC Sơn - Đóng Gói', employee_id: 'LCL_010' },
-    { full_name: 'Lê Hoàng Anh', position: 'Kỹ thuật viên OQC', department: 'Phòng QA/QC', employee_id: 'NV_QLCL_004' },
-    { full_name: 'Ngô Diễm My', position: 'Trưởng nhóm PQC', department: 'Phòng QA/QC', employee_id: 'NV_IT_002' },
-    { full_name: 'Nhân viên QC mới & Tổ trưởng', position: 'Nhóm QLCL', department: 'Phòng QA/QC' },
-    { full_name: 'Tổ trưởng QC & KCS', position: 'Bộ phận QLCL', department: 'Phòng QA/QC' }
-  ];
-
-  // Fetch accounts & KPI staff list to populate dropdown options
+  // Fetch accounts & KPI staff list from DB to populate dropdown options dynamically
   useEffect(() => {
     const fetchStaff = async () => {
       try {
@@ -60,23 +41,18 @@ const KPINewTrainingModal = ({ isOpen, onClose, planData, onSave }) => {
         ]);
 
         const map = new Map();
-        // Add defaults first
-        defaultQlclStaff.forEach(s => map.set(s.full_name, s));
 
         if (accRes.status === 'fulfilled' && accRes.value) {
           const items = accRes.value?.items || (Array.isArray(accRes.value) ? accRes.value : []);
           items.forEach(acc => {
             if (acc.full_name) {
               const dept = acc.department || acc.department_name || '';
-              const isQlcl = dept.toUpperCase().includes('QC') || dept.toUpperCase().includes('QA') || dept.toUpperCase().includes('QLCL') || dept.toUpperCase().includes('CHẤT LƯỢNG');
-              if (isQlcl || !map.has(acc.full_name)) {
-                map.set(acc.full_name, {
-                  full_name: acc.full_name,
-                  position: acc.role_name || acc.permission_name || 'Nhân sự QLCL',
-                  department: dept || 'Phòng QA/QC',
-                  employee_id: acc.employee_id
-                });
-              }
+              map.set(acc.full_name, {
+                full_name: acc.full_name,
+                position: acc.role_name || acc.permission_name || 'Nhân sự QLCL',
+                department: dept || 'Phòng QA/QC',
+                employee_id: acc.employee_id
+              });
             }
           });
         }
@@ -97,7 +73,8 @@ const KPINewTrainingModal = ({ isOpen, onClose, planData, onSave }) => {
 
         setStaffOptions(Array.from(map.values()));
       } catch (e) {
-        setStaffOptions(defaultQlclStaff);
+        console.error('Error fetching staff from DB:', e);
+        setStaffOptions([]);
       }
     };
 
@@ -141,12 +118,22 @@ const KPINewTrainingModal = ({ isOpen, onClose, planData, onSave }) => {
       if (Array.isArray(planData.files) && planData.files.length > 0) {
         setSelectedFiles(planData.files);
       } else if (planData.fileName) {
-        setSelectedFiles([{
-          id: 1,
-          name: planData.fileName,
-          size: planData.fileSize || '1.24 MB',
-          url: planData.fileUrl || null
-        }]);
+        if (planData.fileName.includes(',')) {
+          const names = planData.fileName.split(',').map(s => s.trim()).filter(Boolean);
+          setSelectedFiles(names.map((name, idx) => ({
+            id: idx + 1,
+            name: name,
+            size: '1.24 MB',
+            url: `/uploads/${name}`
+          })));
+        } else {
+          setSelectedFiles([{
+            id: 1,
+            name: planData.fileName,
+            size: planData.fileSize || '1.24 MB',
+            url: planData.fileUrl || null
+          }]);
+        }
       } else {
         setSelectedFiles([]);
       }

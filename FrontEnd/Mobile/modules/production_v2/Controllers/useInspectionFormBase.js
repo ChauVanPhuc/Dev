@@ -19,8 +19,15 @@ const initErrors = () => [{ id: 1, name: '', qty: 0 }]
 
 const compactSpec = (spec) => {
   if (!spec) return ''
-  const firstPart = String(spec).split(/\s*[-–—]\s*/)[0]?.trim() || ''
-  return firstPart || spec
+  const str = String(spec).trim()
+  if (str === 'Tiêu chuẩn') return str
+  if (str.includes(' - ')) {
+    const parts = str.split(/\s+-\s+/)
+    if (parts[0] && parts[0].trim().length > 0) {
+      return parts[0].trim()
+    }
+  }
+  return str
 }
 
 const parseDimensionsFromText = (text) => {
@@ -1014,7 +1021,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
     setParamProduct(combinedStr)
 
     const selectedParts = bomData.filter((p) => partNamesArray.includes(p.part_name))
-    let specOpts = []
+    let specOptsMap = new Map()
     let totalQtySum = 0
     let autoSelectedSpecs = []
 
@@ -1024,28 +1031,22 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
         : [{ specification: 'Tiêu chuẩn' }]
 
       partSpecs.forEach((s) => {
-        const rawSpec = s.specification || 'Tiêu chuẩn'
-        const displayLabel = selectedParts.length > 1
-          ? `[${part.part_name}] ${rawSpec}`
-          : rawSpec
-        const val = selectedParts.length > 1
-          ? `[${part.part_name}] ${rawSpec}`
-          : rawSpec
-
-        specOpts.push({
-          value: val,
-          label: displayLabel,
-          partName: part.part_name,
-          rawSpec
-        })
+        const rawSpec = (s.specification || 'Tiêu chuẩn').trim()
+        if (!specOptsMap.has(rawSpec)) {
+          specOptsMap.set(rawSpec, {
+            value: rawSpec,
+            label: rawSpec,
+            partName: part.part_name,
+            rawSpec
+          })
+        }
       })
 
-      // Tự động chọn quy cách ăn theo chi tiết
       if (partSpecs.length >= 1) {
-        const firstVal = selectedParts.length > 1
-          ? `[${part.part_name}] ${partSpecs[0].specification || 'Tiêu chuẩn'}`
-          : (partSpecs[0].specification || 'Tiêu chuẩn')
-        autoSelectedSpecs.push(firstVal)
+        const firstVal = (partSpecs[0].specification || 'Tiêu chuẩn').trim()
+        if (!autoSelectedSpecs.includes(firstVal)) {
+          autoSelectedSpecs.push(firstVal)
+        }
       }
 
       if (part.total_qty) {
@@ -1054,6 +1055,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
       }
     })
 
+    const specOpts = Array.from(specOptsMap.values())
     setSpecOptions(specOpts)
     setSelectedSpecs(autoSelectedSpecs)
     setSpec(autoSelectedSpecs.join(', '))

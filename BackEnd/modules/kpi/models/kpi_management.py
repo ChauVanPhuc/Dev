@@ -142,11 +142,11 @@ class KPITrainingPlan(Base):
     id        = Column(Integer, primary_key=True, index=True)
     code      = Column(NVARCHAR(50), nullable=False) # e.g. "KH-ĐT-01"
     name      = Column(NVARCHAR(255), nullable=False) # Tên chương trình đào tạo
-    target    = Column(NVARCHAR(255), nullable=False) # Đối tượng tham gia
+    target    = Column(NVARCHAR(None), nullable=False) # Đối tượng tham gia (NVARCHAR(MAX))
     time      = Column(NVARCHAR(100), nullable=False) # Thời gian tổ chức
     teacher   = Column(NVARCHAR(255), nullable=False) # Giảng viên / Đơn vị đào tạo
-    file_name = Column(NVARCHAR(255), nullable=True) # Tài liệu đính kèm
-    file_url  = Column(NVARCHAR(500), nullable=True) # Đường dẫn file
+    file_name = Column(NVARCHAR(None), nullable=True) # Tài liệu đính kèm (NVARCHAR(MAX))
+    file_url  = Column(NVARCHAR(None), nullable=True) # Đường dẫn file (NVARCHAR(MAX))
     status    = Column(NVARCHAR(50), nullable=False, default="Sắp diễn ra")
 
 class KPIMonthlyScore(Base):

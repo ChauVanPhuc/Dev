@@ -879,51 +879,100 @@ async def get_image_proxy(path: str, as_base64: bool = False):
 @router.get("/po/{order_code}", response_model=List[DeliveryDashboardResponse])
 def get_handover_history_by_po(order_code: str, db: Session = Depends(get_db)):
     """
-    [GET] Lấy lịch sử bàn giao của một PO dựa trên mã order_code.
-    Kết quả bao gồm cả các phiếu giao gán trực tiếp order_id và các phiếu giao qua delivery_details.
-    Số lượng hiển thị là số lượng thực tế gán cho PO này (không phải quantity_total của phiếu).
+    [GET] Lấy lịch sử bàn giao của một PO dựa trên mã order_code / PO code.
+    Kết quả bao gồm:
+    1. Phiếu bàn giao gán trực tiếp order_id hoặc delivery_details.order_id
+    2. Phiếu bàn giao khớp ghi chú (note) hoặc mã Pallet (backup_qr)
+    3. Phiếu bàn giao từ ứng dụng di động có tên chi tiết / SKU khớp với danh mục sản phẩm/BOM của PO này.
     """
     from modules.delivery.models.order import Order as OrderModel
+    from modules.production.models.product import Product as ProductModel
+    from modules.production.models.bom_detail import BOMDetail as BomDetailModel
     from modules.delivery.models.delivery_images import DeliveryImage
     from sqlalchemy.orm import aliased, joinedload
 
-    order = db.query(OrderModel).filter(OrderModel.order_code == order_code).first()
-    if not order:
+    clean_code = (order_code or "").strip()
+    if not clean_code:
         return []
+
+    order = db.query(OrderModel).filter(
+        or_(
+            OrderModel.order_code == clean_code,
+            OrderModel.order_code.ilike(f"%{clean_code}%")
+        )
+    ).first()
+
+    matched_delivery_ids = set()
+
+    if order:
+        # 1. Gán trực tiếp order_id trong Delivery
+        d_ids1 = [r[0] for r in db.query(DeliveryModel.id).filter(DeliveryModel.order_id == order.id).all()]
+        matched_delivery_ids.update(d_ids1)
+
+        # 2. Gán trực tiếp order_id trong DeliveryDetails
+        d_ids2 = [r[0] for r in db.query(DeliveryDetailsModel.delivery_id).filter(DeliveryDetailsModel.order_id == order.id).all() if r[0]]
+        matched_delivery_ids.update(d_ids2)
+
+        # 3. Thu thập danh mục SKU và tên sản phẩm/BOM của PO này
+        products = db.query(ProductModel).filter(ProductModel.order_id == order.id).all()
+        keywords = set()
+        for p in products:
+            if p.sku and len(p.sku.strip()) >= 3:
+                keywords.add(p.sku.strip())
+            if p.name and len(p.name.strip()) >= 3:
+                keywords.add(p.name.strip())
+            
+            boms = db.query(BomDetailModel).filter(BomDetailModel.product_id == p.id).all()
+            for b in boms:
+                if b.sku and len(b.sku.strip()) >= 3:
+                    keywords.add(b.sku.strip())
+                if b.name and len(b.name.strip()) >= 5:
+                    keywords.add(b.name.strip())
+
+        if keywords:
+            kw_filters = [DeliveryModel.part_name.ilike(f"%{kw}%") for kw in keywords]
+            d_ids3 = [r[0] for r in db.query(DeliveryModel.id).filter(or_(*kw_filters)).all()]
+            matched_delivery_ids.update(d_ids3)
+
+            dt_kw_filters = [DeliveryDetailsModel.part_name.ilike(f"%{kw}%") for kw in keywords]
+            d_ids4 = [r[0] for r in db.query(DeliveryDetailsModel.delivery_id).filter(or_(*dt_kw_filters)).all() if r[0]]
+            matched_delivery_ids.update(d_ids4)
+
+    # 4. Tìm theo ghi chú / mã QR / tên chi tiết khớp clean_code
+    d_ids_note = [r[0] for r in db.query(DeliveryModel.id).filter(
+        or_(
+            DeliveryModel.note.ilike(f"%{clean_code}%"),
+            DeliveryModel.backup_qr.ilike(f"%{clean_code}%"),
+            DeliveryModel.part_name.ilike(f"%{clean_code}%")
+        )
+    ).all()]
+    matched_delivery_ids.update(d_ids_note)
+
+    if not matched_delivery_ids:
+        return []
+
+    deliveries = db.query(DeliveryModel).options(
+        joinedload(DeliveryModel.images)
+    ).filter(
+        DeliveryModel.id.in_(matched_delivery_ids)
+    ).order_by(DeliveryModel.created_at.desc()).all()
 
     Sender = aliased(AccountModel)
     Receiver = aliased(AccountModel)
 
-    # Truy vấn các phiếu giao có liên quan đến order_id này
-    query = db.query(DeliveryModel).options(
-        joinedload(DeliveryModel.images)
-    ).filter(
-        or_(
-            DeliveryModel.order_id == order.id,
-            DeliveryModel.id.in_(
-                db.query(DeliveryDetailsModel.delivery_id).filter(DeliveryDetailsModel.order_id == order.id)
-            )
-        )
-    ).order_by(DeliveryModel.created_at.desc())
-
-    deliveries = query.all()
-
     results = []
     for d in deliveries:
-        # Lấy tên người giao/nhận thủ công
         sender = db.query(AccountModel).filter(AccountModel.id == d.sx_delivery).first()
         receiver = db.query(AccountModel).filter(AccountModel.id == d.sx_receipt).first()
 
-        # Tính số lượng thực tế gán cho PO này
-        if d.order_id == order.id:
-            # Phiếu giao gán trực tiếp cho PO này
-            actual_quantity = d.quantity_total
-        else:
-            # Phiếu giao chia nhỏ qua delivery_details, lấy tổng quantity cho order_id này
-            actual_quantity = db.query(func.sum(DeliveryDetailsModel.quantity)).filter(
+        actual_quantity = d.quantity_total
+        if order and d.order_id and d.order_id != order.id:
+            detail_qty = db.query(func.sum(DeliveryDetailsModel.quantity)).filter(
                 DeliveryDetailsModel.delivery_id == d.id,
                 DeliveryDetailsModel.order_id == order.id
-            ).scalar() or 0
+            ).scalar()
+            if detail_qty and detail_qty > 0:
+                actual_quantity = detail_qty
 
         results.append({
             "id": d.id,
@@ -931,16 +980,16 @@ def get_handover_history_by_po(order_code: str, db: Session = Depends(get_db)):
             "receiving_stage": d.receiving_stage,
             "part_name": d.part_name,
             "specification": d.specification,
-            "quantity_total": actual_quantity,  # [FIX] Số lượng thực tế gán cho PO này
-            "quantity_received": d.quantity_received,
-            "quantity_returned": d.quantity_returned,
-            "status": d.status,
+            "quantity_total": actual_quantity,
+            "quantity_received": d.quantity_received or 0,
+            "quantity_returned": d.quantity_returned or 0,
+            "status": d.status or "Chờ Nhận Hàng",
             "created_at": d.created_at,
             "note": d.note,
-            "residual": d.residual,
+            "residual": d.residual or 0,
             "sx_delivery_name": sender.full_name if sender else "N/A",
             "sx_receipt_name": receiver.full_name if receiver else "---",
-            "images": [{"image_path": img.image_path} for img in d.images if img.description == "ảnh giao"]
+            "images": [{"image_path": img.image_path} for img in (d.images or []) if img.description == "ảnh giao"]
         })
 
     return results
@@ -1579,106 +1628,7 @@ async def upload_delivery_image(
 
     return {"url": f"/static/uploads/deliveries/{new_filename}", "success": True}
 
-@router.get("/po/{po_code}")
-def get_deliveries_by_po(po_code: str, db: Session = Depends(get_db)):
-    """
-    [GET] Lấy toàn bộ lịch sử bàn giao theo mã PO / Đơn hàng / Mã Pallet.
-    Phục vụ cho Tab 1 Lịch sử bàn giao tại /admin/quality-records/:id.
-    """
-    from modules.delivery.models.order import Order as OrderModel
-    from modules.auth.models.accounts import Account as AccountModel
-    
-    clean_code = (po_code or "").strip()
-    
-    # 1. Tìm order theo order_code
-    order = db.query(OrderModel).filter(
-        or_(
-            OrderModel.order_code == clean_code,
-            OrderModel.order_code.ilike(f"%{clean_code}%")
-        )
-    ).first()
-    
-    # 2. Truy vấn deliveries thuộc riêng về order này
-    deliveries = []
-    if order:
-        order_delivery_ids = db.query(DeliveryDetailsModel.delivery_id).filter(DeliveryDetailsModel.order_id == order.id).all()
-        deliv_ids = [r[0] for r in order_delivery_ids]
-        specific_filters = [
-            DeliveryModel.order_id == order.id,
-            DeliveryModel.note.ilike(f"%{clean_code}%"),
-            DeliveryModel.backup_qr.ilike(f"%{clean_code}%")
-        ]
-        if deliv_ids:
-            specific_filters.append(DeliveryModel.id.in_(deliv_ids))
-            
-        deliveries = db.query(DeliveryModel).filter(or_(*specific_filters)).order_by(DeliveryModel.created_at.asc()).all()
-        
-    if not deliveries:
-        deliveries = db.query(DeliveryModel).filter(
-            or_(
-                DeliveryModel.note.ilike(f"%{clean_code}%"),
-                DeliveryModel.backup_qr.ilike(f"%{clean_code}%"),
-                DeliveryModel.part_name.ilike(f"%{clean_code}%")
-            )
-        ).order_by(DeliveryModel.created_at.asc()).limit(30).all()
-        
-    if not deliveries and order and order.plan_id:
-        deliveries = db.query(DeliveryModel).filter(DeliveryModel.plan_id == order.plan_id).order_by(DeliveryModel.created_at.asc()).limit(30).all()
-    elif not deliveries:
-        deliveries = db.query(DeliveryModel).order_by(DeliveryModel.created_at.desc()).limit(20).all()
-        
-    # Batch load accounts
-    acc_ids = set()
-    for d in deliveries:
-        if d.sx_delivery: acc_ids.add(d.sx_delivery)
-        if d.sx_receipt: acc_ids.add(d.sx_receipt)
-        if d.qc_receipt: acc_ids.add(d.qc_receipt)
-        
-    acc_map = {}
-    if acc_ids:
-        accs = db.query(AccountModel.id, AccountModel.full_name).filter(AccountModel.id.in_(list(acc_ids))).all()
-        acc_map = {a.id: a.full_name for a in accs}
-        
-    # Batch load images
-    deliv_ids_list = [d.id for d in deliveries]
-    img_map = {}
-    if deliv_ids_list:
-        imgs = db.query(DeliveryImage).filter(DeliveryImage.delivery_id.in_(deliv_ids_list)).all()
-        for img in imgs:
-            if img.delivery_id not in img_map:
-                img_map[img.delivery_id] = []
-            img_map[img.delivery_id].append({"image_path": img.image_path, "description": img.description})
-            
-    results = []
-    for d in deliveries:
-        q_tot = d.quantity_total or 0
-        q_err = d.quantity_error or 0
-        q_ok = max(0, q_tot - q_err)
-        
-        results.append({
-            "id": d.id,
-            "delivery_id": d.backup_qr or f"BG-{d.created_at.strftime('%y%m%d') if d.created_at else '260726'}-{d.id:03d}",
-            "po_code": clean_code,
-            "created_at": d.created_at,
-            "status": d.status or "Hoàn thành",
-            "delivery_stage": d.delivery_stage or "Lắp Ráp 1",
-            "receiving_stage": d.receiving_stage or "Sơn 1",
-            "part_name": d.part_name or "Chi tiết sản phẩm",
-            "product_name": d.part_name or "Chi tiết sản phẩm",
-            "specification": d.specification or "Tiêu chuẩn kỹ thuật",
-            "quantity_total": q_tot,
-            "quantity_ok": q_ok,
-            "quantity_ng": q_err,
-            "quantity_returned": d.quantity_returned or 0,
-            "residual": d.residual or 0,
-            "note": d.note or "",
-            "sx_delivery_name": acc_map.get(d.sx_delivery, "Công nhân giao"),
-            "sx_receipt_name": acc_map.get(d.sx_receipt, "Công nhân nhận"),
-            "qc_receipt_name": acc_map.get(d.qc_receipt, "QC xác nhận"),
-            "images": img_map.get(d.id, [])
-        })
-        
-    return results
+
 
 @router.get("/history")
 def get_deliveries_history(

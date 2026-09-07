@@ -237,15 +237,19 @@ def create_capa(payload: CAPACreate, db: Session = Depends(get_db)):
     """
     [POST] Tạo mới phiếu CAPA
     """
-    # Tự động sinh mã nếu chưa có
-    if not payload.code:
+    # Tự động sinh mã nếu chưa có hoặc có định dạng cũ CAPA-xx
+    if not payload.code or payload.code.startswith("CAPA-"):
         count = db.query(CAPA).count() + 1
-        payload.code = f"CAPA-{count:02d}"
+        payload.code = f"G7.CAPA.{count:03d}"
         
     if not payload.created_at_time:
         now_str = datetime.now().strftime("%H:%M | %d/%m/%Y")
         payload.created_at_time = now_str
         
+    # Mặc định ticket_status là "Mở" nếu không truyền
+    status_val = payload.ticket_status or "Mở"
+    tab_val = "history" if status_val == "Đóng" else "tracking"
+
     new_capa = CAPA(
         code=payload.code,
         created_at_time=payload.created_at_time,
@@ -257,8 +261,8 @@ def create_capa(payload: CAPACreate, db: Session = Depends(get_db)):
         images=payload.images or "[]",
         evaluator_name=payload.evaluator_name,
         evaluation_time=payload.evaluation_time,
-        ticket_status=payload.ticket_status or "Vừa tạo",
-        tab_status=payload.tab_status or "tracking",
+        ticket_status=status_val,
+        tab_status=tab_val,
         causes_json=payload.causes_json or "[]",
         corrective_actions_json=payload.corrective_actions_json or "[]",
         preventive_plans_json=payload.preventive_plans_json or "[]",
@@ -285,10 +289,10 @@ def update_capa(capa_id: int, payload: CAPAUpdate, db: Session = Depends(get_db)
         if val is not None:
             setattr(c, field, val)
 
-    # Cập nhật tab_status tự động nếu ticket_status chuyển thành "Đạt (đóng CAPA)"
-    if c.ticket_status == "Đạt (đóng CAPA)":
+    # Cập nhật tab_status tự động nếu ticket_status chuyển thành "Đóng" hoặc "Đạt (đóng CAPA)"
+    if c.ticket_status in ["Đóng", "Đạt (đóng CAPA)"]:
         c.tab_status = "history"
-    elif c.ticket_status in ["Không đạt (làm lại)", "Đang theo dõi", "Vừa tạo", "Lưu nháp"]:
+    else:
         c.tab_status = "tracking"
 
     db.commit()

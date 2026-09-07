@@ -131,6 +131,15 @@ except Exception as migration_err:
     # Ignore if column already exists
     pass
 
+# [MIGRATION] Expand kpi_training_plans target, file_name, and file_url columns to NVARCHAR(MAX)
+try:
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE kpi_training_plans ALTER COLUMN target NVARCHAR(MAX) NOT NULL"))
+        conn.execute(text("ALTER TABLE kpi_training_plans ALTER COLUMN file_name NVARCHAR(MAX) NULL"))
+        conn.execute(text("ALTER TABLE kpi_training_plans ALTER COLUMN file_url NVARCHAR(MAX) NULL"))
+except Exception as alter_err:
+    print(f"[MIGRATION] Alter kpi_training_plans columns warning: {alter_err}")
+
 # [MIGRATION] Add created_at column to roles table (fix SQL error 42S22)
 try:
     with engine.begin() as conn:

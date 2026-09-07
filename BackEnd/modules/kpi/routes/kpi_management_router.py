@@ -292,14 +292,15 @@ async def upload_kpi_file(file: UploadFile = File(...)):
     static_uploads = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "static", "uploads"))
     os.makedirs(static_uploads, exist_ok=True)
     
-    file_location = os.path.join(static_uploads, file.filename)
+    filename = file.filename
+    file_location = os.path.join(static_uploads, filename)
     with open(file_location, "wb+") as buffer:
         shutil.copyfileobj(file.file, buffer)
         
     return {
         "status": "success",
-        "fileName": file.filename,
-        "fileUrl": f"/uploads/{file.filename}"
+        "fileName": filename,
+        "fileUrl": f"/uploads/{filename}"
     }
 
 # 3. Danh sách KPI CRUD

@@ -93,51 +93,7 @@ const getCalcMethodLabel = (val, fallback = '') => {
   return String(val).replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu, '').trim();
 };
 
-// Default Datasets for complete functional fallback
-const defaultKpiTargets = [
-  { id: 1, code: 'KPI-01', name: 'Tỷ lệ sản xuất đúng quy trình Sơn QC', dept: 'PQC2 - QC Sơn - Đóng Gói', target: '>= 98%', weight: '25%', unit: 'Hàng ngày', standard: 'Tiêu chuẩn ISO-9001', status: 'Áp dụng' },
-  { id: 2, code: 'KPI-02', name: 'Kiểm soát tỷ lệ hàng lỗi Đóng gói', dept: 'PQC2 - QC Sơn - Đóng Gói', target: '<= 1.5%', weight: '20%', unit: 'Hàng tuần', standard: 'Đạt chuẩn 100%', status: 'Áp dụng' },
-  { id: 3, code: 'KPI-03', name: 'Độ chính xác kiểm định Cưa xẻ phôi', dept: 'PQC1 - QC Định Hình - Lắp Ráp', target: '100%', weight: '20%', unit: 'Hàng ngày', standard: 'Sai số < 0.5mm', status: 'Áp dụng' },
-  { id: 4, code: 'KPI-04', name: 'Thời gian xử lý Biên bản khắc phục (BBCH)', dept: 'QA - Nhân Viên Kiểm Soát Quy Trình', target: '<= 24h', weight: '15%', unit: 'Hàng tháng', standard: 'Phản hồi tức thì', status: 'Áp dụng' },
-  { id: 5, code: 'KPI-05', name: 'Tỷ lệ hoàn thành Đào tạo An toàn & Chất lượng', dept: 'QA - Nhân Viên Kiểm Soát Quy Trình', target: '100%', weight: '20%', unit: 'Hàng tháng', standard: 'Chứng chỉ QA', status: 'Áp dụng' },
-  { id: 6, code: 'KPI-06', name: 'Tỷ lệ nguyên vật liệu nhập kho đạt tiêu chuẩn IQC', dept: 'IQC - QC Kiểm Tra Nhập Kho', target: '>= 99%', weight: '20%', unit: 'Hàng ngày', standard: 'Đạt chuẩn 100%', status: 'Áp dụng' }
-];
-
-const defaultWorkIndicators = [
-  { id: 1, code: 'KPI-IND-01', name: 'Kiểm soát tỷ lệ lỗi sơn UV & phủ bóng', dept: 'Tổ QC Sơn', target: '>= 98%', weight: '25%', unit: 'Hàng ngày', standard: 'Sai số < 1.0%', score: 98, status: 'Áp dụng' },
-  { id: 2, code: 'KPI-IND-02', name: 'Tỷ lệ dán nhãn niêm phong & tem PASS đóng gói', dept: 'Tổ Đóng Gói', target: '100%', weight: '20%', unit: 'Hàng ngày', standard: 'Không bỏ sót kiện', score: 95, status: 'Áp dụng' },
-  { id: 3, code: 'KPI-IND-03', name: 'Kiểm định kích thước & độ ẩm phôi gỗ cưa phôi', dept: 'Tổ Cưa Xẻ', target: '100%', weight: '20%', unit: 'Theo lô', standard: 'Độ ẩm 10-12%', score: 92, status: 'Áp dụng' },
-  { id: 4, code: 'KPI-IND-04', name: 'Thời gian xử lý & nghiệm thu biên bản khắc phục BBCH', dept: 'Phòng QA/QC', target: '<= 24h', weight: '15%', unit: 'Hàng tuần', standard: 'Phản hồi tức thì', score: 88, status: 'Áp dụng' },
-  { id: 5, code: 'KPI-IND-05', name: 'Tuân thủ quy trình kiểm định 5S & An toàn thiết bị', dept: 'Tổ QC Lắp Ráp', target: '>= 95%', weight: '20%', unit: 'Hàng tháng', standard: 'Đạt chuẩn 5S', score: 85, status: 'Áp dụng' }
-];
-
-const defaultChecklists = [
-  { id: 1, code: 'CL-01', content: 'Kiểm tra độ ẩm gỗ trước khi vào lò sấy', frequency: 'Hàng ngày', status_today: 'Đã hoàn thành', last_run: '08:00 Today', result: 'Đạt (12% độ ẩm)', status: 'Đã hoàn thành' },
-  { id: 2, code: 'CL-02', content: 'Kiểm tra độ bám dính lớp sơn phủ bóng', frequency: 'Hàng ngày', status_today: 'Đang thực hiện', last_run: '10:30 Today', result: 'Đang test Cross-cut', status: 'Chưa làm' },
-  { id: 3, code: 'CL-03', content: 'Đo kích thước ván mộc cắt quy cách', frequency: 'Hàng tuần', status_today: 'Chưa làm', last_run: 'Hôm qua', result: 'Chờ kiểm định', status: 'Chưa làm' },
-  { id: 4, code: 'CL-04', content: 'Vệ sinh và hiệu chuẩn thước kẹp Palmer', frequency: 'Hàng tuần', status_today: 'Đã hoàn thành', last_run: '07:30 Today', result: 'Đạt chuẩn 0.01mm', status: 'Đã hoàn thành' }
-];
-
-const defaultViolations = [
-  { id: 1, code: 'VP-001', emp: 'Bùi Công Sự', rule: 'Bỏ qua bước đo độ ẩm phôi gỗ', score: -15, date: '01/09/2026', reporter: 'QC Lead', status: 'Đã duyệt' },
-  { id: 2, code: 'VP-002', emp: 'Nguyễn Văn Nam', rule: 'Không dán tem PASS lên kiện đóng gói', score: -10, date: '31/08/2026', reporter: 'Trưởng ca Sơn', status: 'Chờ duyệt' },
-  { id: 3, code: 'VP-003', emp: 'Trần Văn Hải', rule: 'Sai số kích thước khoan vượt ngưỡng 1mm', score: -20, date: '30/08/2026', reporter: 'Giám sát QA', status: 'Đã duyệt' }
-];
-
-const defaultTrainingPlans = [
-  { id: 1, code: 'KH-DT01', name: 'Đào tạo Quy chuẩn Kiểm soát Sơn UV', target: 'Toàn bộ QC Sơn', time: '05/09/2026', teacher: 'Nguyễn Văn Minh (Trưởng QA)', fileName: 'Quy_trinh_Son_UV.pdf', status: 'Chờ xử lý' },
-  { id: 2, code: 'KH-DT02', name: 'Hướng dẫn Sử dụng Máy đo độ ẩm Gỗ', target: 'Tổ QC Cưa phôi', time: '01/09/2026', teacher: 'Trần Thu Hà', fileName: 'Huong_dan_may_do_am.pdf', status: 'Đã hoàn thành' }
-];
-
-const defaultStaffEvaluations = [
-  { id: 1, code: 'DG-2026-01', emp: 'Nguyễn Văn A', dept: 'Tổ QC Sơn', manager_note: 'Thực hiện xuất sắc quy trình kiểm định', eval_score: 95, bbch_code: 'BBCH-01', date: '01/09/2026', status: 'Đã phê duyệt' },
-  { id: 2, code: 'DG-2026-02', emp: 'Trần Thị B', dept: 'Tổ Đóng Gói', manager_note: 'Cần chú ý tem nhãn niêm phong', eval_score: 85, bbch_code: 'BBCH-02', date: '30/08/2026', status: 'Chờ phê duyệt' }
-];
-
-const defaultAlertsList = [
-  { id: 1, code: 'ALT-01', title: 'Hiển thị thông báo mới', content: "Bùi Công Sự đã giao 'APT8-48-GRY' (SL: 12). Mời bộ phận Sản xuất công đoạn Đóng Gói tiếp nhận.", channel: 'Mobile App Banner', receiver: 'Tổ Đóng Gói', date: '31/08/2026 08:30', status: 'Đã duyệt' },
-  { id: 2, code: 'ALT-02', title: 'Cảnh báo vi phạm điểm KPI', content: 'Hệ thống ghi nhận 2 nhân sự có điểm vi phạm > 15 điểm trong tháng 8.', channel: 'App Mobile & Push Email', receiver: 'Ban Giám Đốc, Trưởng QC', date: '30/08/2026 16:45', status: 'Chờ xử lý' }
-];
+// 100% Dynamic Database Datasets
 
 {/* Component thanh điều khiển chuẩn hóa: Ô Tìm kiếm + Icon A-Z Sort + Icon Filter + Nút Nâu [↑] Xuất dữ liệu */}
 const TableControlToolbar = ({
@@ -752,12 +708,12 @@ const QualityKPIDashboardView = () => {
     styleTableHeaderRow(sheetSummary, 10, 4);
 
     const kpiSummaryRows = [
-      ['1. Tổng Số Mục Tiêu Chất Lượng (KPI Targets)', hasFetchedDb ? kpiTargets.length : defaultKpiTargets.length, 'Mục tiêu', 'Áp dụng 100%'],
-      ['2. Tổng Số Nhân Sự Được Đánh Giá KPI', hasFetchedDb ? workIndicators.length : defaultWorkIndicators.length, 'Nhân sự', 'Đã duyệt 95%'],
-      ['3. Tổng Số Công Việc Checklist Chất Lượng', hasFetchedDb ? allChecklists.length : defaultChecklists.length, 'Nhiệm vụ', 'Đang thực hiện'],
-      ['4. Tổng Số Vi Phạm Ghi Nhận Từ Mobile App', hasFetchedDb ? violations.length : defaultViolations.length, 'Biên bản', 'Chờ xử lý'],
-      ['5. Tổng Kế Hoạch Đào Tạo An Toàn & QC', hasFetchedDb ? trainingPlans.length : defaultTrainingPlans.length, 'Kế hoạch', 'Đã hoàn thành'],
-      ['6. Tổng Báo Cáo Đánh Giá & BBCH Khắc Phục', hasFetchedDb ? staffEvaluations.length : defaultStaffEvaluations.length, 'Báo cáo', 'Phê duyệt 92%'],
+      ['1. Tổng Số Mục Tiêu Chất Lượng (KPI Targets)', kpiTargets.length, 'Mục tiêu', 'Áp dụng 100%'],
+      ['2. Tổng Số Nhân Sự Được Đánh Giá KPI', workIndicators.length, 'Nhân sự', 'Đã duyệt 95%'],
+      ['3. Tổng Số Công Việc Checklist Chất Lượng', allChecklists.length, 'Nhiệm vụ', 'Đang thực hiện'],
+      ['4. Tổng Số Vi Phạm Ghi Nhận Từ Mobile App', violations.length, 'Biên bản', 'Chờ xử lý'],
+      ['5. Tổng Kế Hoạch Đào Tạo An Toàn & QC', trainingPlans.length, 'Kế hoạch', 'Đã hoàn thành'],
+      ['6. Tổng Báo Cáo Đánh Giá & BBCH Khắc Phục', staffEvaluations.length, 'Báo cáo', 'Phê duyệt 92%'],
       ['7. Tổng Cảnh Báo Phát Đến Mobile Banner', alertsList.length, 'Thông báo', 'Đã phát']
     ];
 
@@ -789,12 +745,12 @@ const QualityKPIDashboardView = () => {
     const workbook = new ExcelJS.Workbook();
 
     const tabsMap = [
-      { name: '🎯 Mục Tiêu KPI', data: hasFetchedDb ? kpiTargets : (kpiTargets.length > 0 ? kpiTargets : defaultKpiTargets), suffix: 'Muc_Tieu_Chat_Luong', title: '1. BÁO CÁO MỤC TIÊU CHẤT LƯỢNG (KPI TARGETS)' },
-      { name: '📊 Chỉ Số Nhân Sự', data: hasFetchedDb ? workIndicators : (workIndicators.length > 0 ? workIndicators : defaultWorkIndicators), suffix: 'Chi_So_Cong_Viec', title: '2. BÁO CÁO CHỈ SỐ CÔNG VIỆC NHÂN SỰ KPI' },
-      { name: '📝 Checklist QC', data: hasFetchedDb ? allChecklists : (allChecklists.length > 0 ? allChecklists : defaultChecklists), suffix: 'Checklist_Cong_Viec', title: '3. CHECKLIST CÔNG VIỆC CHẤT LƯỢNG' },
-      { name: '⚠️ Vi Phạm Mobile', data: hasFetchedDb ? violations : (violations.length > 0 ? violations : defaultViolations), suffix: 'Danh_Sach_Vi_Pham', title: '4. DANH SÁCH VI PHẠM TỪ MOBILE APP' },
-      { name: '🎓 Đào Tạo QC', data: hasFetchedDb ? trainingPlans : (trainingPlans.length > 0 ? trainingPlans : defaultTrainingPlans), suffix: 'Ke_Hoach_Dao_Tao', title: '5. KẾ HOẠCH ĐÀO TẠO CHẤT LƯỢNG' },
-      { name: '📋 Báo Cáo BBCH', data: hasFetchedDb ? staffEvaluations : (staffEvaluations.length > 0 ? staffEvaluations : defaultStaffEvaluations), suffix: 'Bao_Cao_BBCH', title: '6. BÁO CÁO ĐÁNH GIÁ & BIÊN BẢN KHẮC PHỤC (BBCH)' },
+      { name: '🎯 Mục Tiêu KPI', data: kpiTargets, suffix: 'Muc_Tieu_Chat_Luong', title: '1. BÁO CÁO MỤC TIÊU CHẤT LƯỢNG (KPI TARGETS)' },
+      { name: '📊 Chỉ Số Nhân Sự', data: workIndicators, suffix: 'Chi_So_Cong_Viec', title: '2. BÁO CÁO CHẤT LƯỢNG NHÂN SỰ KPI' },
+      { name: '📝 Checklist QC', data: allChecklists, suffix: 'Checklist_Cong_Viec', title: '3. CHECKLIST CÔNG VIỆC CHẤT LƯỢNG' },
+      { name: '⚠️ Vi Phạm Mobile', data: violations, suffix: 'Danh_Sach_Vi_Pham', title: '4. DANH SÁCH VI PHẠM TỪ MOBILE APP' },
+      { name: '🎓 Đào Tạo QC', data: trainingPlans, suffix: 'Ke_Hoach_Dao_Tao', title: '5. KẾ HOẠCH ĐÀO TẠO CHẤT LƯỢNG' },
+      { name: '📋 Báo Cáo BBCH', data: staffEvaluations, suffix: 'Bao_Cao_BBCH', title: '6. BÁO CÁO ĐÁNH GIÁ & BIÊN BẢN KHẮC PHỤC (BBCH)' },
       { name: '🔔 Cảnh Báo Banner', data: alertsList, suffix: 'Thiet_Lap_Canh_Bao', title: '7. DỊCH VỤ CẢNH BÁO & PUSH MOBILE BANNER' }
     ];
 
@@ -1032,20 +988,62 @@ const QualityKPIDashboardView = () => {
       }
 
       // 4a. Fetch Training Plans directly from DB `/kpi-management/training-plans` (Bảng kpi_training_plans riêng biệt 100%)
+      const parseFilesList = (fileName, fileUrl) => {
+        if (!fileUrl && !fileName) return [];
+        try {
+          if (fileUrl && fileUrl.startsWith('[')) {
+            const parsed = JSON.parse(fileUrl);
+            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          }
+          if (fileName && fileName.startsWith('[')) {
+            const parsed = JSON.parse(fileName);
+            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          }
+        } catch (e) {}
+
+        if (fileName && fileName.includes(',')) {
+          const names = fileName.split(',').map(s => s.trim()).filter(Boolean);
+          return names.map((name, idx) => ({
+            id: idx + 1,
+            name: name,
+            size: '1.24 MB',
+            url: `/uploads/${name}`
+          }));
+        }
+
+        if (fileName || fileUrl) {
+          const fName = fileName || 'TaiLieu.pdf';
+          const fUrl = fileUrl ? (fileUrl.startsWith('/') || fileUrl.startsWith('http') ? fileUrl : `/uploads/${fileUrl}`) : `/uploads/${fName}`;
+          return [{
+            id: 1,
+            name: fName,
+            size: '1.24 MB',
+            url: fUrl
+          }];
+        }
+        return [];
+      };
+
       const trainingResp = await api.get('/kpi-management/training-plans').catch(() => null);
       if (trainingResp !== null) {
         const rawTrainingItems = Array.isArray(trainingResp) ? trainingResp : (trainingResp?.items || []);
-        const mappedPlans = rawTrainingItems.map((c, idx) => ({
-          id: c.id !== undefined && c.id !== null ? c.id : idx + 1,
-          code: c.code || `KH-ĐT-${String(idx + 1).padStart(2, '0')}`,
-          name: c.name,
-          target: c.target || 'Nhân viên QC & Tổ trưởng',
-          time: c.time || '15/09/2026',
-          teacher: c.teacher || 'Phòng Đào Tạo',
-          fileName: c.file_name || 'TaiLieu_DaoTao_QC.pdf',
-          fileUrl: c.file_url ? (c.file_url.startsWith('http') ? c.file_url : getFullImageUrl(`/uploads/${c.file_url}`)) : null,
-          status: c.status || 'Sắp diễn ra'
-        }));
+        const mappedPlans = rawTrainingItems.map((c, idx) => {
+          const files = parseFilesList(c.file_name, c.file_url);
+          const mainFileName = files.length > 0 ? files[0].name : (c.file_name || 'TaiLieu_DaoTao_QC.pdf');
+          const mainFileUrl = files.length > 0 ? files[0].url : (c.file_url ? (c.file_url.startsWith('http') || c.file_url.startsWith('/') ? c.file_url : `/uploads/${c.file_url}`) : null);
+          return {
+            id: c.id !== undefined && c.id !== null ? c.id : idx + 1,
+            code: c.code || `KH-ĐT-${String(idx + 1).padStart(2, '0')}`,
+            name: c.name,
+            target: c.target || 'Nhân viên QC & Tổ trưởng',
+            time: c.time || '15/09/2026',
+            teacher: c.teacher || 'Phòng Đào Tạo',
+            fileName: mainFileName,
+            fileUrl: mainFileUrl,
+            files: files,
+            status: c.status || 'Sắp diễn ra'
+          };
+        });
         setTrainingPlans(mappedPlans);
       }
 
@@ -1213,46 +1211,76 @@ const QualityKPIDashboardView = () => {
 
   const handleSaveTrainingPlan = async (newPlan) => {
     try {
-      let fileName = newPlan.fileName || 'TaiLieu.pdf';
-      if (newPlan.fileObject) {
+      let filesList = [];
+      
+      // Upload all files in selectedFiles array
+      if (Array.isArray(newPlan.files) && newPlan.files.length > 0) {
+        for (const fileItem of newPlan.files) {
+          if (fileItem.fileObject) {
+            const formData = new FormData();
+            formData.append('file', fileItem.fileObject);
+            const uploadRes = await api.post('/kpi-management/upload-file', formData, {
+              headers: { 'Content-Type': 'multipart/form-data' }
+            }).catch(err => console.error('Upload file error:', err));
+
+            if (uploadRes && uploadRes.fileName) {
+              const safeUrl = uploadRes.fileUrl || `/uploads/${uploadRes.fileName}`;
+              filesList.push({
+                id: fileItem.id || Date.now() + Math.random(),
+                name: uploadRes.fileName,
+                size: fileItem.size || '1.24 MB',
+                url: safeUrl
+              });
+            }
+          } else if (fileItem.name) {
+            // Pre-existing uploaded file
+            filesList.push({
+              id: fileItem.id || Date.now() + Math.random(),
+              name: fileItem.name,
+              size: fileItem.size || '1.24 MB',
+              url: fileItem.url || `/uploads/${fileItem.name}`
+            });
+          }
+        }
+      }
+
+      // Single file fallback
+      if (filesList.length === 0 && newPlan.fileObject) {
         const formData = new FormData();
         formData.append('file', newPlan.fileObject);
         const uploadRes = await api.post('/kpi-management/upload-file', formData, {
           headers: { 'Content-Type': 'multipart/form-data' }
         }).catch(err => console.error('Upload file error:', err));
         if (uploadRes && uploadRes.fileName) {
-          fileName = uploadRes.fileName;
+          filesList.push({
+            id: 1,
+            name: uploadRes.fileName,
+            size: newPlan.fileSize || '1.24 MB',
+            url: uploadRes.fileUrl || `/uploads/${uploadRes.fileName}`
+          });
         }
       }
 
-      if (editingTrainingPlan) {
-        // Edit mode
-        await api.put(`/kpi-management/training-plans/${editingTrainingPlan.id}`, {
-          code: newPlan.code,
-          name: newPlan.name,
-          target: newPlan.target || 'Nhân viên QC & Tổ trưởng',
-          time: newPlan.time || '15/09/2026',
-          teacher: newPlan.teacher || 'Phòng Đào Tạo',
-          file_name: fileName,
-          file_url: `/uploads/${fileName}`,
-          status: newPlan.status || 'Sắp diễn ra'
-        }).catch(() => null);
-        setTrainingPlans(prev => prev.map(p => p.id === newPlan.id ? { ...newPlan, fileName, fileUrl: `/uploads/${fileName}` } : p));
-      } else {
-        // Create mode
-        await api.post('/kpi-management/training-plans', {
-          code: newPlan.code,
-          name: newPlan.name,
-          target: newPlan.target || 'Nhân viên QC & Tổ trưởng',
-          time: newPlan.time || '15/09/2026',
-          teacher: newPlan.teacher || 'Phòng Đào Tạo',
-          file_name: fileName,
-          file_url: `/uploads/${fileName}`,
-          status: newPlan.status || 'Sắp diễn ra'
-        }).catch(() => null);
+      const mainFileName = filesList.length > 0 ? filesList.map(f => f.name).join(', ') : (newPlan.fileName || 'TaiLieu.pdf');
+      const filesJsonString = filesList.length > 0 ? JSON.stringify(filesList) : (newPlan.fileUrl || '/uploads/TaiLieu.pdf');
 
-        setTrainingPlans(prev => [...prev, { ...newPlan, fileName, fileUrl: `/uploads/${fileName}`, id: Date.now() }]);
+      const payload = {
+        code: newPlan.code,
+        name: newPlan.name,
+        target: newPlan.target || 'Nhân viên QC & Tổ trưởng',
+        time: newPlan.time || '15/09/2026',
+        teacher: newPlan.teacher || 'Phòng Đào Tạo',
+        file_name: mainFileName,
+        file_url: filesJsonString,
+        status: newPlan.status || 'Sắp diễn ra'
+      };
+
+      if (editingTrainingPlan) {
+        await api.put(`/kpi-management/training-plans/${editingTrainingPlan.id}`, payload).catch(() => null);
+      } else {
+        await api.post('/kpi-management/training-plans', payload).catch(() => null);
       }
+
       await fetchDatabaseData();
     } catch (err) {
       console.error('Error saving training plan to DB:', err);
@@ -1610,7 +1638,7 @@ const QualityKPIDashboardView = () => {
                   placeholder="Tìm kiếm mục tiêu..."
                   onSort={() => setSortAsc(prev => !prev)}
                   onFilter={() => setFilterOpen(prev => !prev)}
-                  onExport={() => handleExportExcel(filterAndSortData(hasFetchedDb ? kpiTargets : (kpiTargets.length > 0 ? kpiTargets : defaultKpiTargets), targetSearch), 'Muc_Tieu_Chat_Luong')}
+                  onExport={() => handleExportExcel(filterAndSortData(kpiTargets, targetSearch), 'Muc_Tieu_Chat_Luong')}
                   sortAsc={sortAsc}
                   isFilterActive={filterOpen}
                 />
@@ -1664,7 +1692,7 @@ const QualityKPIDashboardView = () => {
                   </thead>
                   <tbody>
                     {(() => {
-                      const allData = filterAndSortData(hasFetchedDb ? kpiTargets : (kpiTargets.length > 0 ? kpiTargets : defaultKpiTargets), targetSearch);
+                      const allData = filterAndSortData(kpiTargets, targetSearch);
                       const pagedData = allData.slice((targetPage - 1) * targetPageSize, targetPage * targetPageSize);
                       return pagedData.map((item, idx) => {
                         const globalIdx = (targetPage - 1) * targetPageSize + idx;
@@ -1723,7 +1751,7 @@ const QualityKPIDashboardView = () => {
                 </table>
               </div>
 
-              {renderPaginationControl(targetPage, setTargetPage, targetPageSize, filterAndSortData(hasFetchedDb ? kpiTargets : (kpiTargets.length > 0 ? kpiTargets : defaultKpiTargets), targetSearch).length, 'mục tiêu')}
+              {renderPaginationControl(targetPage, setTargetPage, targetPageSize, filterAndSortData(kpiTargets, targetSearch).length, 'mục tiêu')}
             </div>
 
           </div>
@@ -1824,7 +1852,7 @@ const QualityKPIDashboardView = () => {
                   placeholder="Tìm kiếm chỉ số KPI công việc..."
                   onSort={() => setSortAsc(prev => !prev)}
                   onFilter={() => setFilterOpen(prev => !prev)}
-                  onExport={() => handleExportExcel(filterAndSortData(hasFetchedDb ? workIndicators : (workIndicators.length > 0 ? workIndicators : defaultWorkIndicators), indicatorSearch), 'Chi_So_Cong_Viec')}
+                  onExport={() => handleExportExcel(filterAndSortData(workIndicators, indicatorSearch), 'Chi_So_Cong_Viec')}
                   sortAsc={sortAsc}
                   isFilterActive={filterOpen}
                 />
@@ -1877,7 +1905,7 @@ const QualityKPIDashboardView = () => {
                   </thead>
                   <tbody>
                     {(() => {
-                      const allData = filterAndSortData(hasFetchedDb ? workIndicators : (workIndicators.length > 0 ? workIndicators : defaultWorkIndicators), indicatorSearch);
+                      const allData = filterAndSortData(workIndicators, indicatorSearch);
                       const pagedData = allData.slice((indicatorPage - 1) * indicatorPageSize, indicatorPage * indicatorPageSize);
                       return pagedData.map((item, idx) => {
                         const globalIdx = (indicatorPage - 1) * indicatorPageSize + idx;
@@ -1950,7 +1978,7 @@ const QualityKPIDashboardView = () => {
                 </table>
               </div>
 
-              {renderPaginationControl(indicatorPage, setIndicatorPage, indicatorPageSize, filterAndSortData(hasFetchedDb ? workIndicators : (workIndicators.length > 0 ? workIndicators : defaultWorkIndicators), indicatorSearch).length, 'chỉ số')}
+              {renderPaginationControl(indicatorPage, setIndicatorPage, indicatorPageSize, filterAndSortData(workIndicators, indicatorSearch).length, 'chỉ số')}
             </div>
 
           </div>
@@ -2194,7 +2222,7 @@ const QualityKPIDashboardView = () => {
                   placeholder="Tìm vi phạm..."
                   onSort={() => setSortAsc(prev => !prev)}
                   onFilter={() => setFilterOpen(prev => !prev)}
-                  onExport={() => handleExportExcel(filterAndSortData(hasFetchedDb ? violations : (violations.length > 0 ? violations : defaultViolations), violationSearch), 'Danh_Sach_Vi_Pham')}
+                  onExport={() => handleExportExcel(filterAndSortData(violations, violationSearch), 'Danh_Sach_Vi_Pham')}
                   sortAsc={sortAsc}
                   isFilterActive={filterOpen}
                 />
@@ -2246,7 +2274,7 @@ const QualityKPIDashboardView = () => {
                   </thead>
                   <tbody>
                     {(() => {
-                      const allData = filterAndSortData(hasFetchedDb ? violations : (violations.length > 0 ? violations : defaultViolations), violationSearch);
+                      const allData = filterAndSortData(violations, violationSearch);
                       const pagedData = allData.slice((violationPage - 1) * violationPageSize, violationPage * violationPageSize);
                       return pagedData.map((item, idx) => {
                         const globalIdx = (violationPage - 1) * violationPageSize + idx;
@@ -2284,7 +2312,7 @@ const QualityKPIDashboardView = () => {
                 </table>
               </div>
 
-              {renderPaginationControl(violationPage, setViolationPage, violationPageSize, filterAndSortData(hasFetchedDb ? violations : (violations.length > 0 ? violations : defaultViolations), violationSearch).length, 'vi phạm')}
+              {renderPaginationControl(violationPage, setViolationPage, violationPageSize, filterAndSortData(violations, violationSearch).length, 'vi phạm')}
             </div>
 
           </div>
@@ -2304,7 +2332,7 @@ const QualityKPIDashboardView = () => {
                   placeholder="Tìm khóa đào tạo..."
                   onSort={() => setSortAsc(prev => !prev)}
                   onFilter={() => setFilterOpen(prev => !prev)}
-                  onExport={() => handleExportExcel(filterAndSortData(hasFetchedDb ? trainingPlans : (trainingPlans.length > 0 ? trainingPlans : defaultTrainingPlans), trainingSearch), 'Ke_Hoach_Dao_Tao')}
+                  onExport={() => handleExportExcel(filterAndSortData(trainingPlans, trainingSearch), 'Ke_Hoach_Dao_Tao')}
                   sortAsc={sortAsc}
                   isFilterActive={filterOpen}
                 />
@@ -2357,7 +2385,7 @@ const QualityKPIDashboardView = () => {
                   </thead>
                   <tbody>
                     {(() => {
-                      const allData = filterAndSortData(hasFetchedDb ? trainingPlans : (trainingPlans.length > 0 ? trainingPlans : defaultTrainingPlans), trainingSearch);
+                      const allData = filterAndSortData(trainingPlans, trainingSearch);
                       const pagedData = allData.slice((trainingPage - 1) * trainingPageSize, trainingPage * trainingPageSize);
                       return pagedData.map((item, idx) => {
                         const globalIdx = (trainingPage - 1) * trainingPageSize + idx;
@@ -2370,23 +2398,39 @@ const QualityKPIDashboardView = () => {
                             <td style={{ padding: '5px 10px', fontWeight: '700', color: '#64748B' }}>{globalIdx + 1}</td>
                             <td style={{ padding: '5px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.code}</td>
                             <td style={{ padding: '5px 10px', fontWeight: '700', color: '#1E293B' }}>{item.name}</td>
-                            <td style={{ padding: '5px 10px', color: '#475569' }}>{item.target}</td>
+                            <td style={{ padding: '5px 10px', color: '#475569', fontWeight: '500' }}>
+                              {(() => {
+                                if (!item.target) return 'Tất cả nhân sự QLCL';
+                                const list = item.target.split(',').map(s => s.trim()).filter(Boolean);
+                                if (list.length <= 2) return item.target;
+                                return (
+                                  <span>
+                                    {list[0]}, {list[1]}{' '}
+                                    <span style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8', padding: '1px 6px', borderRadius: '10px', fontSize: '0.68rem', fontWeight: '700', border: '1px solid #BFDBFE' }}>
+                                      +{list.length - 2} nhân sự khác
+                                    </span>
+                                  </span>
+                                );
+                              })()}
+                            </td>
                             <td style={{ padding: '5px 10px', textAlign: 'center', color: '#64748B' }}>{item.time}</td>
                             <td style={{ padding: '5px 10px', color: '#334155' }}>{item.teacher}</td>
                             <td style={{ padding: '5px 10px' }}>
                               <div
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  if (item.fileUrl) {
-                                    window.open(item.fileUrl, '_blank');
-                                  } else {
-                                    handleOpenTrainingDetail(item);
-                                  }
+                                  handleOpenTrainingDetail(item);
                                 }}
                                 style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#2563EB', fontWeight: '700', cursor: 'pointer' }}
-                                title={item.fileUrl ? 'Nhấn để mở file trên trang riêng' : 'Nhấn để xem chi tiết'}
+                                title="Nhấn để xem danh sách tài liệu"
                               >
-                                <ExternalLink size={12} /> {item.fileName}
+                                <ExternalLink size={12} />
+                                {(() => {
+                                  const filesArr = Array.isArray(item.files) && item.files.length > 0 ? item.files : (item.fileName ? item.fileName.split(',').map(n => ({ name: n.trim() })) : []);
+                                  if (filesArr.length === 0) return 'Chưa có file';
+                                  if (filesArr.length === 1) return filesArr[0].name;
+                                  return `${filesArr[0].name} (+${filesArr.length - 1} file đính kèm)`;
+                                })()}
                               </div>
                             </td>
                             <td style={{ padding: '5px 10px', textAlign: 'center' }}>
@@ -2431,7 +2475,7 @@ const QualityKPIDashboardView = () => {
                 </table>
               </div>
 
-              {renderPaginationControl(trainingPage, setTrainingPage, trainingPageSize, filterAndSortData(hasFetchedDb ? trainingPlans : (trainingPlans.length > 0 ? trainingPlans : defaultTrainingPlans), trainingSearch).length, 'khóa học')}
+              {renderPaginationControl(trainingPage, setTrainingPage, trainingPageSize, filterAndSortData(trainingPlans, trainingSearch).length, 'khóa học')}
             </div>
 
           </div>
@@ -2451,7 +2495,7 @@ const QualityKPIDashboardView = () => {
                   placeholder="Tìm báo cáo..."
                   onSort={() => setSortAsc(prev => !prev)}
                   onFilter={() => setFilterOpen(prev => !prev)}
-                  onExport={() => handleExportExcel(filterAndSortData(hasFetchedDb ? staffEvaluations : (staffEvaluations.length > 0 ? staffEvaluations : defaultStaffEvaluations), reportSearch), 'Bao_Cao_BBCH')}
+                  onExport={() => handleExportExcel(filterAndSortData(staffEvaluations, reportSearch), 'Bao_Cao_BBCH')}
                   sortAsc={sortAsc}
                   isFilterActive={filterOpen}
                 />
@@ -2501,7 +2545,7 @@ const QualityKPIDashboardView = () => {
                   </thead>
                   <tbody>
                     {(() => {
-                      const allData = filterAndSortData(hasFetchedDb ? staffEvaluations : (staffEvaluations.length > 0 ? staffEvaluations : defaultStaffEvaluations), reportSearch);
+                      const allData = filterAndSortData(staffEvaluations, reportSearch);
                       const pagedData = allData.slice((reportPage - 1) * reportPageSize, reportPage * reportPageSize);
                       return pagedData.map((item, idx) => {
                         const globalIdx = (reportPage - 1) * reportPageSize + idx;
@@ -2532,7 +2576,7 @@ const QualityKPIDashboardView = () => {
                 </table>
               </div>
 
-              {renderPaginationControl(reportPage, setReportPage, reportPageSize, filterAndSortData(hasFetchedDb ? staffEvaluations : (staffEvaluations.length > 0 ? staffEvaluations : defaultStaffEvaluations), reportSearch).length, 'báo cáo')}
+              {renderPaginationControl(reportPage, setReportPage, reportPageSize, filterAndSortData(staffEvaluations, reportSearch).length, 'báo cáo')}
             </div>
 
           </div>
@@ -2552,7 +2596,7 @@ const QualityKPIDashboardView = () => {
                   placeholder="Tìm cảnh báo..."
                   onSort={() => setSortAsc(prev => !prev)}
                   onFilter={() => setFilterOpen(prev => !prev)}
-                  onExport={() => handleExportExcel(filterAndSortData(alertsList.length > 0 ? alertsList : defaultAlertsList, alertSearch), 'Thiet_Lap_Canh_Bao')}
+                  onExport={() => handleExportExcel(filterAndSortData(alertsList, alertSearch), 'Thiet_Lap_Canh_Bao')}
                   sortAsc={sortAsc}
                   isFilterActive={filterOpen}
                 />
@@ -2606,7 +2650,7 @@ const QualityKPIDashboardView = () => {
                   </thead>
                   <tbody>
                     {(() => {
-                      const allData = filterAndSortData(alertsList.length > 0 ? alertsList : defaultAlertsList, alertSearch);
+                      const allData = filterAndSortData(alertsList, alertSearch);
                       const pagedData = allData.slice((alertPage - 1) * alertPageSize, alertPage * alertPageSize);
                       return pagedData.map((item, idx) => {
                         const globalIdx = (alertPage - 1) * alertPageSize + idx;
@@ -2647,7 +2691,7 @@ const QualityKPIDashboardView = () => {
                 </table>
               </div>
 
-              {renderPaginationControl(alertPage, setAlertPage, alertPageSize, filterAndSortData(alertsList.length > 0 ? alertsList : defaultAlertsList, alertSearch).length, 'cảnh báo')}
+              {renderPaginationControl(alertPage, setAlertPage, alertPageSize, filterAndSortData(alertsList, alertSearch).length, 'cảnh báo')}
             </div>
 
           </div>

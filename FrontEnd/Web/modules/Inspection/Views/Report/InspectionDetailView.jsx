@@ -376,9 +376,9 @@ const InspectionDetailView = () => {
           .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; background: #faf6f0; padding: 15px; border-radius: 8px; border: 1px solid #eadcc9; margin-bottom: 20px; }
           .info-item { font-size: 14px; }
           .info-item label { color: #78350f; font-weight: bold; }
-          .signatures { display: flex; justify-content: space-between; margin-top: 50px; text-align: center; }
+          .signatures { display: flex; justify-content: space-between; margin-top: 25px; text-align: center; }
           .sig-box { width: 45%; }
-          .sig-title { font-weight: bold; font-size: 14px; margin-bottom: 60px; }
+          .sig-title { font-weight: bold; font-size: 14px; margin-bottom: 8px; }
           .confirm-status { margin-top: 15px; background: #f0fdf4; border: 1px solid #bbf7d0; color: #16a34a; padding: 8px 12px; border-radius: 6px; font-weight: bold; font-size: 13px; }
           @media print {
             body { margin: 0; }
@@ -433,11 +433,23 @@ const InspectionDetailView = () => {
         <div class="signatures">
           <div class="sig-box">
             <div class="sig-title">NGƯỜI LẬP PHIẾU (QC)</div>
-            <div>${item.inspector_name || 'Ký tên'}</div>
+            <div style="margin-top: 4px; border: 1.5px dashed #0284c7; background: #f0f9ff; padding: 8px 14px; border-radius: 8px; display: inline-block;">
+              <div style="font-weight: 800; color: #0284c7; font-size: 13px; letter-spacing: 0.5px;">✓ ĐÃ KÝ SỐ (QC)</div>
+              <div style="font-weight: 700; color: #0369a1; font-size: 12px; margin-top: 2px;">${item.inspector_name || 'Hồ Sỹ Khẩn'}</div>
+              <div style="font-size: 10px; color: #075985; margin-top: 1px;">Thời gian: ${new Date(dateVal).toLocaleString('vi-VN')}</div>
+            </div>
           </div>
           <div class="sig-box">
             <div class="sig-title">TRƯỞNG BỘ PHẬN QUẢN LÝ CHẤT LƯỢNG</div>
-            <div>Ký tên & Đóng dấu</div>
+            ${item.is_confirmed ? `
+              <div style="margin-top: 4px; border: 1.5px dashed #059669; background: #f0fdf4; padding: 8px 14px; border-radius: 8px; display: inline-block;">
+                <div style="font-weight: 800; color: #059669; font-size: 13px; letter-spacing: 0.5px;">✓ ĐÃ KÝ SỐ & PHÊ DUYỆT</div>
+                <div style="font-weight: 700; color: #047857; font-size: 12px; margin-top: 2px;">Trưởng Phòng QLCL</div>
+                <div style="font-size: 10px; color: #065f46; margin-top: 1px;">Thời gian: ${new Date(item.confirmed_at || Date.now()).toLocaleString('vi-VN')}</div>
+              </div>
+            ` : `
+              <div style="font-size: 13px; color: #94a3b8; font-style: italic; margin-top: 12px;">(Chờ ký số & đóng dấu)</div>
+            `}
           </div>
         </div>
 

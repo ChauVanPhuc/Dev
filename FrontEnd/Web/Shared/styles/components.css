@@ -3317,8 +3317,7 @@ tbody tr:nth-child(10) { animation-delay: 0.3s !important; }
     flex-grow: 0 !important;
     margin-bottom: 0 !important;
   }
-  .gold-layout > .admin-list-layout,
-  .gold-layout > .admin-list-layout-wrapper > .admin-list-layout {
+  .gold-layout .admin-list-layout {
     flex: 1 1 0% !important;
     height: 100% !important;
     min-height: 0 !important;

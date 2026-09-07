@@ -11,6 +11,7 @@ const FormMultiSearchSelect = ({
   onChange,    // Nhận mảng các ID/value đã chọn sau khi click: (newValues) => {}
   options = [],
   placeholder = 'Chọn...',
+  itemType = '', // 'chi tiết', 'sản phẩm', 'quy cách'
   required = false,
   disabled = false
 }) => {
@@ -68,11 +69,16 @@ const FormMultiSearchSelect = ({
   const selectedLabel = useMemo(() => {
     if (!values || values.length === 0) return placeholder
     const matched = options.filter(opt => values.includes(opt.value?.toString()))
-    if (matched.length === 0) return placeholder
-    return matched
-      .map(opt => String(opt.label).split(' (')[0])
-      .join(', ')
-  }, [options, values, placeholder])
+    const count = matched.length > 0 ? matched.length : values.length
+    if (count > 1) {
+      const typeStr = itemType ? itemType.toLowerCase() : 'mục'
+      return `Đã chọn ${count} ${typeStr}`
+    }
+    if (matched.length === 1) {
+      return String(matched[0].label).split(' (')[0]
+    }
+    return values[0] || placeholder
+  }, [options, values, placeholder, itemType])
 
   const handleToggleOption = (val) => {
     if (disabled) return

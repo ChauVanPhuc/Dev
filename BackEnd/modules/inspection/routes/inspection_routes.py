@@ -3529,6 +3529,126 @@ def get_inspection_detail(id: str, db: Session = Depends(get_db)):
     }
 
 
+@router.get("/all-by-po/{po_code}")
+def get_all_inspections_by_po(po_code: str, db: Session = Depends(get_db)):
+    """
+    [GET] Lấy TẤT CẢ phiếu kiểm tra từ mobile (/production_v2/inspection/) liên quan đến PO code.
+    """
+    clean_po = po_code.strip()
+    records = db.query(InputInspection).filter(
+        or_(
+            InputInspection.batch_no == clean_po,
+            InputInspection.batch_no.ilike(f"%{clean_po}%"),
+            InputInspection.cont_name == clean_po,
+            InputInspection.cont_name.ilike(f"%{clean_po}%"),
+            InputInspection.data_json.ilike(f"%{clean_po}%")
+        )
+    ).order_by(InputInspection.created_at.desc(), InputInspection.id.desc()).all()
+
+    items = []
+    for rec in records:
+        data_dict = {}
+        if rec.data_json:
+            try:
+                data_dict = json.loads(rec.data_json) if isinstance(rec.data_json, str) else rec.data_json
+            except Exception:
+                pass
+
+        img_list = []
+        if rec.images_json:
+            try:
+                ij = json.loads(rec.images_json) if isinstance(rec.images_json, str) else rec.images_json
+                if isinstance(ij, dict):
+                    img_list = ij.get("images") or ij.get("Ảnh kiểm tra mẫu") or []
+                elif isinstance(ij, list):
+                    img_list = ij
+            except Exception:
+                pass
+        if not img_list:
+            img_list = [img for img in [rec.image_path_1, rec.image_path_2, rec.image_path_3] if img]
+
+        mode = rec.inspection_type or data_dict.get("mode") or "first_sample"
+        
+        mode_labels = {
+            "first_sample": "Mẫu đầu tiên",
+            "re_inspect": "Tái kiểm tra",
+            "re-inspect": "Tái kiểm tra",
+            "stage": "Công đoạn",
+            "parameter": "Thông số kỹ thuật",
+            "input": "Đầu vào",
+            "inbound": "Đầu vào"
+        }
+        mode_label = mode_labels.get(mode.lower(), mode)
+        ticket_code = rec.ticket_code or f"DA{rec.id:03d}"
+
+        inspector_name = rec.inspector_name
+        if not inspector_name and rec.inspector_id:
+            acc = db.query(Account).filter(Account.id == rec.inspector_id).first()
+            if acc:
+                inspector_name = acc.full_name
+        if not inspector_name:
+            inspector_name = data_dict.get("creator") or "QC"
+
+        result = rec.conclusion or data_dict.get("result") or rec.result or "pass"
+        is_pass = str(result).lower() in ["pass", "đạt", "1", "true", "ok"]
+
+        part_name_val = rec.product_sku or rec.part_name or data_dict.get("product") or data_dict.get("paramProduct") or "Chi tiết sản phẩm"
+        
+        parts_list = [p.strip() for p in str(part_name_val).split(",") if p.strip()]
+        parts_count = len(parts_list) if parts_list else 1
+
+        raw_spec = rec.specification or data_dict.get("spec") or "N/A"
+        specs_list = [s.strip() for s in str(raw_spec).split(",") if s.strip()]
+
+        parts_with_specs = []
+        for i, part in enumerate(parts_list):
+            spec_val = specs_list[i] if i < len(specs_list) else (specs_list[0] if specs_list else "N/A")
+            parts_with_specs.append({
+                "name": part,
+                "spec": spec_val
+            })
+
+        raw_sample = data_dict.get("sampleQty") or data_dict.get("sample_qty") or data_dict.get("paramSample") or data_dict.get("quantity") or getattr(rec, "sample_size", None) or getattr(rec, "quantity", None)
+        try:
+            sample_qty = int(raw_sample) if raw_sample else parts_count
+        except (ValueError, TypeError):
+            sample_qty = parts_count
+
+        raw_error = data_dict.get("errorQty") or data_dict.get("error_qty") or getattr(rec, "defect_qty", None) or getattr(rec, "ng_qty", None)
+        try:
+            error_qty = int(raw_error) if raw_error is not None else 0
+        except (ValueError, TypeError):
+            error_qty = 0
+
+        items.append({
+            "id": rec.id,
+            "ticket_code": ticket_code,
+            "code": ticket_code,
+            "po_code": clean_po,
+            "inspection_type": mode,
+            "type_label": mode_label,
+            "stage": rec.stage or data_dict.get("stage") or data_dict.get("paramStage") or "Kiểm tra",
+            "part_name": part_name_val,
+            "parts_count": parts_count,
+            "parts_list": parts_list,
+            "parts_with_specs": parts_with_specs,
+            "specification": raw_spec,
+            "inspector_name": inspector_name,
+            "result": "Đạt" if is_pass else "Lỗi",
+            "is_pass": is_pass,
+            "created_at": rec.created_at.isoformat() if rec.created_at else None,
+            "inspected_at": rec.inspected_at.isoformat() if rec.inspected_at else (rec.created_at.isoformat() if rec.created_at else None),
+            "note": rec.notes or rec.note or data_dict.get("note") or "",
+            "sample_qty": sample_qty,
+            "error_qty": error_qty,
+            "images": img_list,
+            "data_json": data_dict,
+            "is_confirmed": bool(rec.is_confirmed)
+        })
+
+    return items
+
+
 # ----------------------------------------------------------------------
 # QC SAMPLING RULES (AQL Sampling Plan)
 # ----------------------------------------------------------------------

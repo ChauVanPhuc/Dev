@@ -28,6 +28,16 @@ export const qualityService = {
         return await api.get(`/qc/po/${poCode}`);
     },
 
+    // Lấy tất cả phiếu kiểm tra từ mobile (/production_v2/inspection/) theo PO
+    getAllPOInspections: async (poCode) => {
+        return await api.get(`/inspections/all-by-po/${poCode}`);
+    },
+
+    // Lấy danh sách BOM chi tiết theo PO & Stage
+    getPOBOM: async (poCode, stage = '') => {
+        return await api.get(`/production-v2/order_bom?order_code=${encodeURIComponent(poCode)}${stage ? `&stage=${encodeURIComponent(stage)}` : ''}`);
+    },
+
     // Lấy lịch sử bàn giao theo Kế hoạch
     getHandoverHistoryByPlan: async (planId) => {
         return await api.get(`/deliveries/plan/${planId}?limit=100000`);

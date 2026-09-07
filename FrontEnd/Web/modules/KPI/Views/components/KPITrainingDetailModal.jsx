@@ -1,58 +1,113 @@
 import React, { useState, useMemo } from 'react';
-import { X, FileText, Calendar, User, Users, Download, ExternalLink, Eye, EyeOff } from 'lucide-react';
+import { X, FileText, Calendar, User, Users, Download, ExternalLink, Eye, EyeOff, ChevronDown, ChevronUp } from 'lucide-react';
 import { getFullImageUrl } from '@webShared/Services/api.service';
 import '@styles/components.css';
 
 /**
  * KPITrainingDetailModal
  * - Hiển thị thông tin chi tiết kế hoạch đào tạo
- * - Nếu có file thật (fileUrl) → nhúng iframe xem trực tiếp nội dung file thật
- * - Nếu không có file → không hiển thị phần xem trước
- * - Nút "Mở trang riêng" → window.open file thật ra tab mới
+ * - Click vào Đối tượng để mở rộng/thu gọn danh sách chi tiết tất cả nhân sự tham gia
+ * - Tự động nhận mảng nhiều file đính kèm & cho phép chuyển đổi Tab xem trước/tải về
+ * - Chuẩn hóa mã hóa URL tệp đính kèm tránh lỗi Not Found khi chứa khoảng trắng / tiếng Việt
  */
 const KPITrainingDetailModal = ({ isOpen, onClose, planData }) => {
   if (!isOpen || !planData) return null;
 
   const [showPreview, setShowPreview] = useState(true);
-  const rawFileUrl = planData.fileUrl || (planData.fileName ? (planData.fileName.startsWith('http') || planData.fileName.startsWith('/') ? planData.fileName : `/uploads/${planData.fileName}`) : null);
+  const [selectedFileIdx, setSelectedFileIdx] = useState(0);
+  const [isTargetExpanded, setIsTargetExpanded] = useState(false);
 
-  const fileUrl = useMemo(() => {
-    if (!rawFileUrl) return null;
-    if (rawFileUrl.startsWith('data:') || rawFileUrl.startsWith('blob:')) return rawFileUrl;
-    try {
-      return getFullImageUrl(encodeURI(rawFileUrl));
-    } catch (e) {
-      return getFullImageUrl(rawFileUrl);
+  // Parse all attached files into clean list
+  const filesList = useMemo(() => {
+    if (Array.isArray(planData.files) && planData.files.length > 0) {
+      return planData.files.map((f, i) => ({
+        id: f.id || i + 1,
+        name: f.name || f.fileName || `Tài liệu ${i + 1}`,
+        url: f.url || (f.name ? `/uploads/${f.name}` : null),
+        size: f.size || '1.24 MB'
+      }));
     }
-  }, [rawFileUrl]);
+    if (planData.fileName) {
+      if (planData.fileName.includes(',')) {
+        const names = planData.fileName.split(',').map(s => s.trim()).filter(Boolean);
+        return names.map((name, i) => ({
+          id: i + 1,
+          name: name,
+          url: `/uploads/${name}`,
+          size: '1.24 MB'
+        }));
+      }
+      return [{
+        id: 1,
+        name: planData.fileName,
+        url: planData.fileUrl || `/uploads/${planData.fileName}`,
+        size: '1.24 MB'
+      }];
+    }
+    return [];
+  }, [planData]);
 
-  const hasRealFile = !!(planData.fileUrl || planData.fileName);
+  const activeFile = filesList[selectedFileIdx] || filesList[0] || null;
 
-  // Determine preview type from file extension
+  // Safe encoding for URL retrieval
+  const activeFileUrl = useMemo(() => {
+    if (!activeFile || !activeFile.url) return null;
+    let urlStr = activeFile.url;
+    if (urlStr.startsWith('data:') || urlStr.startsWith('blob:')) return urlStr;
+
+    if (!urlStr.startsWith('http') && !urlStr.startsWith('/')) {
+      urlStr = `/uploads/${urlStr}`;
+    }
+
+    try {
+      const parts = urlStr.split('/');
+      const filename = parts.pop();
+      const encodedFilename = encodeURIComponent(filename);
+      const encodedPath = [...parts, encodedFilename].join('/');
+      return getFullImageUrl(encodedPath);
+    } catch (e) {
+      return getFullImageUrl(urlStr);
+    }
+  }, [activeFile]);
+
+  const hasRealFile = filesList.length > 0 && !!activeFileUrl;
+
+  // Determine preview type from active file extension
   const fileExtension = useMemo(() => {
-    const name = planData.fileName || '';
-    const ext = name.split('.').pop()?.toLowerCase();
+    if (!activeFile?.name) return 'pdf';
+    const ext = activeFile.name.split('.').pop()?.toLowerCase();
     return ext || 'pdf';
-  }, [planData.fileName]);
+  }, [activeFile]);
 
   const canPreviewInBrowser = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'svg', 'bmp', 'webp', 'txt', 'html'].includes(fileExtension);
 
   const handleOpenNewTab = () => {
-    if (fileUrl) {
-      window.open(fileUrl, '_blank');
+    if (activeFileUrl) {
+      window.open(activeFileUrl, '_blank');
     }
   };
 
   const handleDownload = () => {
-    if (fileUrl) {
+    if (activeFileUrl) {
       const a = document.createElement('a');
-      a.href = fileUrl;
-      a.download = planData.fileName || 'TaiLieu.pdf';
+      a.href = activeFileUrl;
+      a.download = activeFile?.name || 'TaiLieu.pdf';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
     }
   };
+
+  // Target list & display formatting
+  const targetList = useMemo(() => {
+    const rawTarget = planData.target || 'Tất cả nhân sự QLCL';
+    return rawTarget.split(',').map(s => s.trim()).filter(Boolean);
+  }, [planData.target]);
+
+  const targetFormatted = useMemo(() => {
+    if (targetList.length <= 2) return planData.target || 'Tất cả nhân sự QLCL';
+    return `${targetList[0]}, ${targetList[1]} (+${targetList.length - 2} nhân sự khác)`;
+  }, [targetList, planData.target]);
 
   return (
     <div style={{
@@ -70,7 +125,7 @@ const KPITrainingDetailModal = ({ isOpen, onClose, planData }) => {
         backgroundColor: '#FFFFFF',
         borderRadius: '14px',
         width: '100%',
-        maxWidth: hasRealFile && showPreview ? '920px' : '600px',
+        maxWidth: hasRealFile && showPreview ? '940px' : '620px',
         maxHeight: '94vh',
         boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
         display: 'flex', flexDirection: 'column',
@@ -121,14 +176,125 @@ const KPITrainingDetailModal = ({ isOpen, onClose, planData }) => {
             </span>
           </div>
 
-          {/* Metadata */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+          {/* Metadata Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.3fr', gap: '10px' }}>
             <InfoCard icon={<User size={13} />} label="Giảng viên" value={planData.teacher || '—'} />
             <InfoCard icon={<Calendar size={13} />} label="Thời gian" value={planData.time || '—'} />
-            <InfoCard icon={<Users size={13} />} label="Đối tượng" value={planData.target || '—'} />
+            
+            {/* Interactive Target Card */}
+            <div
+              onClick={() => setIsTargetExpanded(v => !v)}
+              style={{
+                padding: '10px 12px',
+                backgroundColor: isTargetExpanded ? '#FEF3C7' : '#FAF6F0',
+                borderRadius: '8px',
+                border: isTargetExpanded ? '1.5px solid #F59E0B' : '1px solid #EADCC9',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                userSelect: 'none'
+              }}
+              title="Nhấn để xem / thu gọn danh sách tất cả nhân sự tham gia"
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.72rem', color: '#7B5233', fontWeight: '700' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <Users size={13} /> Đối tượng
+                </span>
+                {targetList.length > 2 && (
+                  <span style={{ color: '#2563EB', fontSize: '0.68rem', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '2px' }}>
+                    {isTargetExpanded ? <>Thu gọn <ChevronUp size={12} /></> : <>Chi tiết ({targetList.length}) <ChevronDown size={12} /></>}
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: '0.85rem', fontWeight: '800', color: '#5D3B32', marginTop: '3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {targetFormatted}
+              </div>
+            </div>
           </div>
 
-          {/* ──── FILE SECTION ──── */}
+          {/* Expandable Target Participants Box */}
+          {isTargetExpanded && (
+            <div style={{
+              backgroundColor: '#FAF6F0',
+              border: '1.5px solid #EADCC9',
+              borderRadius: '10px',
+              padding: '12px 14px',
+              display: 'flex', flexDirection: 'column', gap: '10px',
+              animation: 'fadeIn 0.2s ease-in-out'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontSize: '0.82rem', fontWeight: '800', color: '#5D3B32', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Users size={15} /> Danh Sách Chi Tiết ({targetList.length} Nhân Sự Tham Gia)
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsTargetExpanded(false)}
+                  style={{
+                    border: 'none', background: '#E2E8F0', color: '#475569',
+                    padding: '3px 10px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: '800', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: '4px'
+                  }}
+                >
+                  <ChevronUp size={13} /> Thu gọn
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', maxHeight: '180px', overflowY: 'auto', padding: '4px' }}>
+                {targetList.map((name, idx) => (
+                  <span
+                    key={idx}
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      color: '#5D3B32',
+                      border: '1px solid #EADCC9',
+                      padding: '4px 10px',
+                      borderRadius: '12px',
+                      fontSize: '0.74rem',
+                      fontWeight: '700',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                    }}
+                  >
+                    <span style={{ color: '#94A3B8', fontSize: '0.68rem', fontWeight: '600' }}>#{idx + 1}</span> {name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Multi-file tab selector */}
+          {filesList.length > 1 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', backgroundColor: '#F8FAFC', padding: '8px 12px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: '800', color: '#475569' }}>
+                📁 {filesList.length} File Đính Kèm:
+              </span>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {filesList.map((f, idx) => (
+                  <button
+                    key={f.id || idx}
+                    type="button"
+                    onClick={() => setSelectedFileIdx(idx)}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      fontSize: '0.73rem',
+                      fontWeight: '800',
+                      border: '1px solid ' + (selectedFileIdx === idx ? '#5D3B32' : '#CBD5E1'),
+                      backgroundColor: selectedFileIdx === idx ? '#5D3B32' : '#FFFFFF',
+                      color: selectedFileIdx === idx ? '#FFFFFF' : '#475569',
+                      cursor: 'pointer',
+                      display: 'inline-flex', alignItems: 'center', gap: '5px'
+                    }}
+                  >
+                    <FileText size={12} /> {f.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ──── FILE BAR ──── */}
           <div style={{
             backgroundColor: '#5D3B32', color: '#FFFFFF',
             padding: '10px 16px', borderRadius: '10px',
@@ -137,13 +303,11 @@ const KPITrainingDetailModal = ({ isOpen, onClose, planData }) => {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', fontWeight: '800' }}>
               <FileText size={16} />
-              <span>Tài Liệu:</span>
-              <span style={{ color: '#FDE68A' }}>{planData.fileName || 'Chưa có file'}</span>
+              <span>Đang xem:</span>
+              <span style={{ color: '#FDE68A' }}>{activeFile?.name || 'Chưa có file'}</span>
             </div>
 
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-
-              {/* Toggle preview */}
               {hasRealFile && (
                 <ToolbarBtn
                   icon={showPreview ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -154,7 +318,6 @@ const KPITrainingDetailModal = ({ isOpen, onClose, planData }) => {
                 />
               )}
 
-              {/* Open in new tab */}
               {hasRealFile && (
                 <ToolbarBtn
                   icon={<ExternalLink size={14} />}
@@ -164,7 +327,6 @@ const KPITrainingDetailModal = ({ isOpen, onClose, planData }) => {
                 />
               )}
 
-              {/* Download */}
               {hasRealFile && (
                 <ToolbarBtn
                   icon={<Download size={14} />}
@@ -182,7 +344,6 @@ const KPITrainingDetailModal = ({ isOpen, onClose, planData }) => {
               border: '1px solid #CBD5E1', borderRadius: '10px',
               overflow: 'hidden', backgroundColor: '#E2E8F0'
             }}>
-
               {/* Browser-like bar */}
               <div style={{
                 display: 'flex', alignItems: 'center', gap: '8px',
@@ -200,7 +361,7 @@ const KPITrainingDetailModal = ({ isOpen, onClose, planData }) => {
                   padding: '3px 8px', fontSize: '0.7rem', color: '#94A3B8',
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
                 }}>
-                  📄 {planData.fileName}
+                  📄 {activeFile?.name}
                 </div>
                 <button
                   onClick={handleOpenNewTab}
@@ -214,9 +375,10 @@ const KPITrainingDetailModal = ({ isOpen, onClose, planData }) => {
               {/* Iframe showing actual file content */}
               {canPreviewInBrowser ? (
                 <iframe
-                  src={fileUrl}
-                  title={`Xem trước: ${planData.fileName}`}
-                  style={{ width: '100%', height: '450px', border: 'none', display: 'block', backgroundColor: '#FFFFFF' }}
+                  key={activeFileUrl}
+                  src={activeFileUrl}
+                  title={`Xem trước: ${activeFile?.name}`}
+                  style={{ width: '100%', height: '480px', border: 'none', display: 'block', backgroundColor: '#FFFFFF' }}
                 />
               ) : (
                 <div style={{
@@ -307,12 +469,12 @@ const KPITrainingDetailModal = ({ isOpen, onClose, planData }) => {
 
 /* ─── Sub-components ─── */
 
-const InfoCard = ({ icon, label, value }) => (
-  <div style={{ padding: '10px 12px', backgroundColor: '#FAF6F0', borderRadius: '8px', border: '1px solid #EADCC9' }}>
+const InfoCard = ({ icon, label, value, tooltip }) => (
+  <div style={{ padding: '10px 12px', backgroundColor: '#FAF6F0', borderRadius: '8px', border: '1px solid #EADCC9' }} title={tooltip}>
     <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.72rem', color: '#7B5233', fontWeight: '700' }}>
       {icon} {label}
     </div>
-    <div style={{ fontSize: '0.85rem', fontWeight: '800', color: '#5D3B32', marginTop: '3px' }}>
+    <div style={{ fontSize: '0.85rem', fontWeight: '800', color: '#5D3B32', marginTop: '3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
       {value}
     </div>
   </div>

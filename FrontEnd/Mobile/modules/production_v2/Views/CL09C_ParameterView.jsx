@@ -163,6 +163,7 @@ const CL09C_ParameterView = () => {
                   options={safeProductOptions}
                   onChange={handleMultiProductChange}
                   placeholder={productPlaceholder}
+                  itemType="sản phẩm"
                   required
                   disabled={isProductDisabled}
                 />
@@ -215,24 +216,7 @@ const CL09C_ParameterView = () => {
             </div>
           </div>
 
-          {samplingRule && (
-            <div style={{
-              margin: '4px 0 12px 0',
-              padding: '6px 12px',
-              backgroundColor: '#FFFBEB',
-              border: '1px solid #FDE68A',
-              borderRadius: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              fontSize: '11px',
-              color: '#92400E',
-              fontWeight: '600'
-            }}>
-              <span>📏 Mốc AQL ({samplingRule.sample_rate_desc})</span>
-              <span>Nặng ≤ <strong>{samplingRule.major_ac}</strong> | Nhẹ ≤ <strong>{samplingRule.minor_ac}</strong></span>
-            </div>
-          )}
+
 
           <button type="button" className="pv2-btn-dark-pill" onClick={() => setGuideVisible((v) => !v)} style={{ marginTop: '8px' }}>
             👁 Xem hướng dẫn kiểm tra

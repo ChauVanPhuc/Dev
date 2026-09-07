@@ -63,6 +63,10 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
   const productPlaceholder = !hasStage ? 'Chọn công đoạn trước' : (!hasPo ? 'Chọn PO trước' : 'Chọn sản phẩm...')
   const specPlaceholder = !hasStage ? 'Chọn công đoạn trước' : (!hasPo ? 'Chọn PO trước' : (!hasProduct ? 'Chọn sản phẩm trước' : 'Chọn quy cách...'))
 
+  const isComponentStage = stage && ['tạo phôi', 'phôi', 'định hình', 'lắp ráp'].some(s => stage.toLowerCase().includes(s))
+  const isFinishedStage = stage && ['sơn', 'đóng gói'].some(s => stage.toLowerCase().includes(s))
+  const itemLabel = isComponentStage ? 'Chi tiết' : (isFinishedStage ? 'Sản phẩm' : 'Chi tiết / Sản phẩm')
+
   return (
     <>
       <div className="pv2-field-row pv2-field-row--2col">
@@ -92,12 +96,13 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
 
       <div className="pv2-field-row pv2-field-row--2col">
         <div className="pv2-field">
-          <label>Chi tiết / Sản phẩm <span className="pv2-req">*</span></label>
+          <label>{itemLabel} <span className="pv2-req">*</span></label>
           <FormMultiSearchSelect
             values={selectedProducts}
             options={productOptions.filter((o) => Boolean(o.value))}
             onChange={handleMultiProductChange}
             placeholder={productPlaceholder}
+            itemType={itemLabel ? itemLabel.toLowerCase() : 'mục'}
             required
             disabled={isProductDisabled}
           />
@@ -109,6 +114,7 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
             options={specOptions.filter((o) => Boolean(o.value))}
             onChange={handleMultiSpecChange}
             placeholder={specPlaceholder}
+            itemType="quy cách"
             disabled={isSpecDisabled}
           />
         </div>
@@ -138,24 +144,7 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
         </div>
       </div>
 
-      {samplingRule && (
-        <div style={{
-          margin: '4px 0 12px 0',
-          padding: '6px 12px',
-          backgroundColor: '#FFFBEB',
-          border: '1px solid #FDE68A',
-          borderRadius: '8px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          fontSize: '11px',
-          color: '#92400E',
-          fontWeight: '600'
-        }}>
-          <span>📏 Mốc AQL ({samplingRule.sample_rate_desc})</span>
-          <span>Nặng ≤ <strong>{samplingRule.major_ac}</strong> | Nhẹ ≤ <strong>{samplingRule.minor_ac}</strong></span>
-        </div>
-      )}
+
 
       <div className="pv2-section-title">Hướng dẫn kiểm tra</div>
       <InspectionStepsTable steps={steps} onStepChange={handleStepResultChange} sampleQty={sampleQty} disabled={readOnly} />

@@ -832,57 +832,146 @@ def get_order_bom(
                         parts_map[name]["specs_map"][spec] = 0
                     parts_map[name]["specs_map"][spec] += qty
 
-        def extract_spec_from_name_and_content(name: str, item_code: str = "", content: str = "") -> str:
+        def extract_spec_from_name_and_content(name: str, item_code: str = "", content: str = "", master_prod: Any = None) -> str:
             content_str = (content or "").strip()
-            if content_str and content_str != item_code and content_str.lower() != "tiêu chuẩn":
+            if content_str and content_str != item_code and content_str.lower() not in ["tiêu chuẩn", "quy cách tiêu chuẩn", "quy cách thành phẩm"]:
                 return content_str
                 
-            if not name:
-                return item_code or "Tiêu chuẩn"
-                
-            # 1. 3D Dimensions: e.g. 18*42*1636, 18x42x1636
-            m3d = re.search(r'(\d+(?:\.\d+)?\s*[*xX×]\s*\d+(?:\.\d+)?\s*[*xX×]\s*\d+(?:\.\d+)?(?:\s*mm|\s*cm)?)', name)
+            name_str = (name or "").strip()
+            
+            # 1. 3D Dimensions: e.g. 50*50*876, 12*486*717, 18*1220*2440, 18x536x876
+            m3d = re.search(r'(\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?(?:\s*mm|\s*cm)?)', name_str)
             if m3d:
                 return m3d.group(1).replace(' ', '')
-                
-            # 2. Hardware Model & Size: e.g. 5018-350mm, 5018-350
-            m_hw = re.search(r'(\b\d{3,5}\s*[-–—*xX×]\s*\d{2,4}(?:mm|cm)?\b)', name)
-            if m_hw:
-                return m_hw.group(1).replace(' ', '')
-                
-            # 3. 2D Dimensions: e.g. 295*540, 295x540
-            m2d = re.search(r'(\d+(?:\.\d+)?\s*[*xX×]\s*\d+(?:\.\d+)?(?:\s*mm|\s*cm)?)', name)
+
+            # 2. 2D Dimensions: e.g. 295*540, 295x540
+            m2d = re.search(r'(\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?(?:\s*mm|\s*cm)?)', name_str)
             if m2d:
                 return m2d.group(1).replace(' ', '')
 
-            # 4. Threaded / Screw / Dowel: e.g. M8x40, Ø10x50, D10x50
-            m_bolt = re.search(r'([MØOD]?\d+(?:\.\d+)?\s*[*xX×-]\s*\d+(?:\.\d+)?(?:\s*mm)?)', name, re.IGNORECASE)
+            # 3. Threaded / Screw / Dowel: e.g. M8x40, Ø10x50, D10x50
+            m_bolt = re.search(r'([MØOD]?\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?(?:\s*mm)?)', name_str, re.IGNORECASE)
             if m_bolt:
                 return m_bolt.group(1).replace(' ', '')
 
-            # 5. Model code with dash: e.g. SS10-350
-            m_code = re.search(r'(\b[A-Z0-9]{2,6}\s*[-–—]\s*\d{2,4}(?:mm|cm)?\b)', name, re.IGNORECASE)
-            if m_code:
-                return m_code.group(1).replace(' ', '')
+            # 4. Hardware Model & Size: e.g. 5018x350, 5018-350mm
+            m_hw = re.search(r'(\b\d{4,5}\s*[-–—*xX×]\s*\d{3,4}(?:mm|cm)?\b)', name_str)
+            if m_hw:
+                return m_hw.group(1).replace(' ', '')
 
-            # 6. Single size with unit: e.g. 350mm, 500mm
-            m_unit = re.search(r'(\b\d+(?:\.\d+)?\s*(?:mm|cm|m)\b)', name, re.IGNORECASE)
-            if m_unit:
-                return m_unit.group(1).replace(' ', '')
-                
-            return item_code or "Tiêu chuẩn"
+            # 5. Dynamic dimension from MasterProduct DB record
+            if master_prod:
+                mp_spec = (getattr(master_prod, 'specification', '') or '').strip()
+                if mp_spec and mp_spec.lower() not in ["tiêu chuẩn", "quy cách tiêu chuẩn", "quy cách thành phẩm"]:
+                    return mp_spec
+                l = getattr(master_prod, 'length', 0) or 0
+                w = getattr(master_prod, 'width', 0) or 0
+                h = getattr(master_prod, 'height', 0) or 0
+                if l and w and h:
+                    return f"{int(l)}*{int(w)}*{int(h)}"
 
-        # Fallback to products if order has no BOM entries
+            return item_code or name_str
+
+        # Fallback handling if order has no BOM entries in bom_details table
         if not parts_map and order and order.products:
+            stage_str = (stage or "").lower().strip()
+            is_component_stage = any(s in stage_str for s in ["phôi", "phoi", "định hình", "dinh hinh", "lắp ráp", "lap rap"])
+
+            # Check master_bom_details for real manufacturing components
+            from modules.master.models.master_product import MasterProduct
+            from modules.master.models.master_bom_detail import MasterBOMDetail
             for p in order.products:
-                name = p.sku or p.name or f"Sản phẩm {p.id}"
-                qty = int(p.order_qty or p.quantity or 1)
-                spec = extract_spec_from_name_and_content(name, getattr(p, 'sku', '') or '')
-                parts_map[name] = {
-                    "part_name": name,
-                    "total_qty": qty,
-                    "specs_map": {spec: qty}
-                }
+                prod_sku = p.sku or p.name or ""
+                p_qty = int(p.order_qty or p.quantity or 1)
+                
+                # Step 1: Try exact SKU match
+                master_prods = db.query(MasterProduct).filter(
+                    or_(MasterProduct.sku == prod_sku, MasterProduct.sku.ilike(f"%{prod_sku}%"))
+                ).all() if prod_sku else []
+
+                # Step 2: If no exact match, try size pattern match (e.g. APT7-48-GRY -> size 48 -> APT%-48%)
+                if not master_prods and prod_sku and "-" in prod_sku:
+                    parts = prod_sku.split("-")
+                    if len(parts) >= 2 and parts[1]:
+                        size_code = parts[1]
+                        master_prods = db.query(MasterProduct).filter(
+                            or_(
+                                MasterProduct.sku.ilike(f"APT%-{size_code}%"),
+                                MasterProduct.sku.ilike(f"%{size_code}%")
+                            )
+                        ).all()
+
+                first_mp = master_prods[0] if master_prods else None
+                mb_found = False
+                if master_prods:
+                    mp_ids = [mp.id for mp in master_prods]
+                    mb_query = db.query(MasterBOMDetail).filter(
+                        MasterBOMDetail.master_product_id.in_(mp_ids),
+                        MasterBOMDetail.name != None,
+                        MasterBOMDetail.name != ""
+                    )
+                    
+                    master_boms = mb_query.all()
+                    if master_boms:
+                        # Stage-based filtering of BOM components
+                        filtered_boms = []
+                        if stage_str:
+                            for mb in master_boms:
+                                in_st = (mb.input_stage or "").lower().strip()
+                                if "phôi" in stage_str or "phoi" in stage_str:
+                                    if "phôi" in in_st or in_st == "" or "chưa phân công" in in_st:
+                                        filtered_boms.append(mb)
+                                elif "định hình" in stage_str or "dinh hinh" in stage_str:
+                                    if "định hình" in in_st or "dinh hinh" in in_st:
+                                        filtered_boms.append(mb)
+                                elif "lắp ráp" in stage_str or "lap rap" in stage_str:
+                                    if "lắp ráp" in in_st or "lap rap" in in_st:
+                                        filtered_boms.append(mb)
+                                elif "sơn" in stage_str or "son" in stage_str:
+                                    if "sơn" in in_st or "son" in in_st:
+                                        filtered_boms.append(mb)
+                                elif "đóng gói" in stage_str or "dong goi" in stage_str:
+                                    if "đóng gói" in in_st or "dong goi" in in_st:
+                                        filtered_boms.append(mb)
+                        
+                        target_boms = filtered_boms if (filtered_boms or not is_component_stage) else master_boms
+                        if target_boms:
+                            mb_found = True
+                            for mb in target_boms:
+                                part_n = mb.name.strip()
+                                spec_raw = (mb.specification or "").strip()
+                                if not spec_raw or spec_raw.lower() in ["tiêu chuẩn", "quy cách tiêu chuẩn", "quy cách thành phẩm"]:
+                                    spec_n = extract_spec_from_name_and_content(mb.name, prod_sku, master_prod=first_mp)
+                                else:
+                                    spec_n = spec_raw
+
+                                b_qty = max(1, int(p_qty * float(mb.quantity or 1.0)))
+
+                                if part_n not in parts_map:
+                                    parts_map[part_n] = {"part_name": part_n, "total_qty": 0, "specs_map": {}}
+                                parts_map[part_n]["total_qty"] += b_qty
+                                parts_map[part_n]["specs_map"][spec_n] = parts_map[part_n]["specs_map"].get(spec_n, 0) + b_qty
+
+                if not mb_found:
+                    if is_component_stage:
+                        # For component stages without BOM, generate component parts
+                        st_prefix = "Chi tiết phôi" if ("phôi" in stage_str or "phoi" in stage_str) else ("Chi tiết định hình" if ("định hình" in stage_str or "dinh hinh" in stage_str) else "Cụm chi tiết lắp ráp")
+                        part_n = f"{st_prefix} ({prod_sku})"
+                        spec_n = extract_spec_from_name_and_content(part_n, prod_sku, p.specification, master_prod=first_mp)
+
+                        if part_n not in parts_map:
+                            parts_map[part_n] = {"part_name": part_n, "total_qty": 0, "specs_map": {}}
+                        parts_map[part_n]["total_qty"] += p_qty
+                        parts_map[part_n]["specs_map"][spec_n] = parts_map[part_n]["specs_map"].get(spec_n, 0) + p_qty
+                    else:
+                        # For finished goods stages (Sơn, Đóng gói), return product SKU
+                        part_n = prod_sku
+                        spec_n = extract_spec_from_name_and_content(prod_sku, prod_sku, p.specification, master_prod=first_mp)
+
+                        if part_n not in parts_map:
+                            parts_map[part_n] = {"part_name": part_n, "total_qty": 0, "specs_map": {}}
+                        parts_map[part_n]["total_qty"] += p_qty
+                        parts_map[part_n]["specs_map"][spec_n] = parts_map[part_n]["specs_map"].get(spec_n, 0) + p_qty
 
         # Fallback to PurchaseRequisition items if order not found in Order table
         if not parts_map and not order:
@@ -1990,3 +2079,50 @@ def get_production_transfers(
     except Exception as e:
         logger.error(f"Lỗi khi lấy Lịch sử luân chuyển: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/order_bom", response_model=List[dict])
+def get_order_bom(
+    order_code: str,
+    stage: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Lấy danh sách BOM chi tiết theo mã PO (order_code) và công đoạn tùy chọn.
+    """
+    if not order_code:
+        return []
+    
+    clean_po = order_code.strip()
+    order = db.query(Order).filter(
+        or_(
+            Order.order_code == clean_po,
+            Order.order_code.ilike(f"%{clean_po}%")
+        )
+    ).first()
+    
+    if not order:
+        return []
+
+    bom_items = []
+    for prod in order.products:
+        for b in prod.bom_details:
+            if stage and stage.strip() and stage.lower() not in ["all", "tất cả"]:
+                b_stage = f"{b.input_stage or ''} {b.output_stage or ''}".lower()
+                if stage.lower() not in b_stage:
+                    continue
+            
+            bom_items.append({
+                "id": b.id,
+                "sku": b.sku or "N/A",
+                "name": b.name,
+                "specification": b.specification or "N/A",
+                "quantity": float(b.quantity or 0),
+                "unit": b.unit or "cái",
+                "material": b.material or "-",
+                "input_stage": b.input_stage or "-",
+                "output_stage": b.output_stage or "-",
+                "product_name": prod.name,
+                "product_sku": prod.sku
+            })
+            
+    return bom_items

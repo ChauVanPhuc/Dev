@@ -849,7 +849,7 @@ const QualityEmployeeListView = () => {
       )}
 
       {/* ── WORKSPACE CHÍNH (DẠNG LỊCH, DẠNG SƠ ĐỒ CÂY HOẶC DẠNG BẢNG) ── */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, marginTop: '4px' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, marginTop: '4px', overflow: 'hidden' }}>
         {viewMode === 'calendar' ? (
           <QualityEmployeeCalendarView
             onOpenLeaveModal={(d) => handleOpenLeaveModal(d)}

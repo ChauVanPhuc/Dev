@@ -81,7 +81,7 @@ const CAPADetailView = () => {
     showConfirm(
       'Xác nhận gửi phản hồi',
       'Bạn có chắc chắn muốn gửi phản hồi báo cáo CAPA này cho người phụ trách không?',
-      () => handleSave(formData.ticket_status || 'Vừa tạo')
+      () => handleSave('Đang xử lý')
     );
   };
 
@@ -494,7 +494,7 @@ const CAPADetailView = () => {
         onBackClick={() => navigate('/mobile/capa/list')}
       />
 
-      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0, padding: '12px 14px 120px 14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      <div style={{ flex: 1, height: 0, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain', padding: '12px 14px 140px 14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
 
         {/* Title Header Card & Export Button */}
         <div style={{
@@ -595,7 +595,7 @@ const CAPADetailView = () => {
           </button>
         </div>
 
-        {/* TAB 1: THÔNG TIN CHUNG */}
+        {/* TAB 1: THÔNG TIN CHUNG (Read-only trên Mobile) */}
         {activeTab === 'general' && (
           <div style={{ backgroundColor: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '14px', boxSizing: 'border-box', maxWidth: '100%', overflow: 'hidden' }}>
             <h3 style={{ margin: '0 0 4px 0', fontSize: '0.95rem', fontWeight: '800', color: '#1e293b' }}>
@@ -610,7 +610,7 @@ const CAPADetailView = () => {
                   type="text"
                   value={formData.code}
                   readOnly
-                  style={{ width: '100%', boxSizing: 'border-box', minWidth: 0, padding: '8px 10px', borderRadius: '8px', border: '1px solid #c5c5c5', fontSize: '0.82rem', backgroundColor: '#e0e0e0', color: '#1e293b', fontWeight: '700', cursor: 'not-allowed' }}
+                  style={{ width: '100%', boxSizing: 'border-box', minWidth: 0, padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', backgroundColor: '#f1f5f9', color: '#1e293b', fontWeight: '700', cursor: 'not-allowed' }}
                 />
               </div>
 
@@ -620,7 +620,7 @@ const CAPADetailView = () => {
                   type="text"
                   value={formData.created_at_time}
                   readOnly
-                  style={{ width: '100%', boxSizing: 'border-box', minWidth: 0, padding: '8px 10px', borderRadius: '8px', border: '1px solid #c5c5c5', fontSize: '0.82rem', backgroundColor: '#e0e0e0', color: '#1e293b', cursor: 'not-allowed' }}
+                  style={{ width: '100%', boxSizing: 'border-box', minWidth: 0, padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', backgroundColor: '#f1f5f9', color: '#1e293b', cursor: 'not-allowed' }}
                 />
               </div>
             </div>
@@ -633,7 +633,7 @@ const CAPADetailView = () => {
                   type="text"
                   value={formData.creator_name}
                   readOnly
-                  style={{ width: '100%', boxSizing: 'border-box', minWidth: 0, padding: '8px 10px', borderRadius: '8px', border: '1px solid #c5c5c5', fontSize: '0.82rem', backgroundColor: '#e0e0e0', color: '#1e293b', fontWeight: '600', cursor: 'not-allowed' }}
+                  style={{ width: '100%', boxSizing: 'border-box', minWidth: 0, padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', backgroundColor: '#f1f5f9', color: '#1e293b', fontWeight: '600', cursor: 'not-allowed' }}
                 />
               </div>
 
@@ -643,7 +643,7 @@ const CAPADetailView = () => {
                   type="text"
                   value={formData.handler_name}
                   readOnly
-                  style={{ width: '100%', boxSizing: 'border-box', minWidth: 0, padding: '8px 10px', borderRadius: '8px', border: '1px solid #c5c5c5', fontSize: '0.82rem', backgroundColor: '#e0e0e0', color: '#1e293b', fontWeight: '600', cursor: 'not-allowed' }}
+                  style={{ width: '100%', boxSizing: 'border-box', minWidth: 0, padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', backgroundColor: '#f1f5f9', color: '#1e293b', fontWeight: '600', cursor: 'not-allowed' }}
                 />
               </div>
             </div>
@@ -653,12 +653,12 @@ const CAPADetailView = () => {
               <label style={{ fontSize: '0.78rem', fontWeight: '700', color: '#475569' }}>Mức độ sự cố</label>
               <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                 {['Khẩn cấp', 'Nghiêm trọng', 'Bình thường', 'Nhẹ'].map(item => (
-                  <label key={item} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', cursor: 'pointer' }}>
+                  <label key={item} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', cursor: 'not-allowed', color: formData.urgency === item ? '#7B5233' : '#64748b', fontWeight: formData.urgency === item ? '700' : '400' }}>
                     <input
                       type="radio"
                       name="urgency"
+                      disabled
                       checked={formData.urgency === item}
-                      onChange={() => setFormData({ ...formData, urgency: item })}
                     />
                     {item}
                   </label>
@@ -671,12 +671,12 @@ const CAPADetailView = () => {
               <label style={{ fontSize: '0.78rem', fontWeight: '700', color: '#475569' }}>Phạm vi</label>
               <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                 {['Sản phẩm lỗi', 'Quy trình', 'Khiếu nại từ KH', 'Khác'].map(item => (
-                  <label key={item} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', cursor: 'pointer' }}>
+                  <label key={item} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', cursor: 'not-allowed', color: formData.scope === item ? '#7B5233' : '#64748b', fontWeight: formData.scope === item ? '700' : '400' }}>
                     <input
                       type="radio"
                       name="scope"
+                      disabled
                       checked={formData.scope === item}
-                      onChange={() => setFormData({ ...formData, scope: item })}
                     />
                     {item}
                   </label>
@@ -690,42 +690,34 @@ const CAPADetailView = () => {
               <textarea
                 rows={3}
                 value={formData.issue_description}
-                onChange={(e) => setFormData({ ...formData, issue_description: e.target.value })}
-                placeholder="Nhập chi tiết mô tả sự cố..."
-                style={{ width: '100%', boxSizing: 'border-box', minWidth: 0, padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', resize: 'vertical' }}
+                readOnly
+                placeholder="Chưa có mô tả..."
+                style={{ width: '100%', boxSizing: 'border-box', minWidth: 0, padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', resize: 'vertical', backgroundColor: '#f1f5f9', color: '#1e293b', cursor: 'not-allowed' }}
               />
             </div>
 
-            {/* Upload Ảnh đính kèm (3 slots) */}
+            {/* Upload Ảnh đính kèm (Read-only view) */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <label style={{ fontSize: '0.78rem', fontWeight: '700', color: '#475569' }}>Hình ảnh minh họa</label>
               <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)', gap: '10px' }}>
                 {[0, 1, 2].map(idx => (
                   <div
                     key={idx}
-                    onClick={() => {
-                      triggerImageCapture((dataUrl) => {
-                        const updated = [...formData.images];
-                        updated[idx] = dataUrl;
-                        setFormData({ ...formData, images: updated });
-                      });
-                    }}
                     style={{
                       height: '75px',
                       borderRadius: '8px',
-                      border: '2px dashed #cbd5e1',
+                      border: '1px dashed #cbd5e1',
                       backgroundColor: '#f8fafc',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      cursor: 'pointer',
                       overflow: 'hidden'
                     }}
                   >
                     {formData.images[idx] ? (
                       <img src={formData.images[idx]} alt="thumb" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     ) : (
-                      <Camera size={22} color="#94a3b8" />
+                      <Camera size={22} color="#cbd5e1" />
                     )}
                   </div>
                 ))}
@@ -740,7 +732,7 @@ const CAPADetailView = () => {
                   type="text"
                   value={formData.evaluator_name}
                   readOnly
-                  style={{ width: '100%', boxSizing: 'border-box', minWidth: 0, padding: '8px 10px', borderRadius: '8px', border: '1px solid #c5c5c5', fontSize: '0.82rem', backgroundColor: '#e0e0e0', color: '#1e293b', cursor: 'not-allowed' }}
+                  style={{ width: '100%', boxSizing: 'border-box', minWidth: 0, padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', backgroundColor: '#f1f5f9', color: '#1e293b', cursor: 'not-allowed' }}
                 />
               </div>
 
@@ -750,7 +742,7 @@ const CAPADetailView = () => {
                   type="text"
                   value={formData.evaluation_time}
                   readOnly
-                  style={{ width: '100%', boxSizing: 'border-box', minWidth: 0, padding: '8px 10px', borderRadius: '8px', border: '1px solid #c5c5c5', fontSize: '0.82rem', backgroundColor: '#e0e0e0', color: '#1e293b', cursor: 'not-allowed' }}
+                  style={{ width: '100%', boxSizing: 'border-box', minWidth: 0, padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', backgroundColor: '#f1f5f9', color: '#1e293b', cursor: 'not-allowed' }}
                 />
               </div>
             </div>
@@ -759,22 +751,22 @@ const CAPADetailView = () => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <label style={{ fontSize: '0.78rem', fontWeight: '700', color: '#475569' }}>Trạng thái phiếu</label>
               <div style={{ display: 'flex', gap: '16px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.82rem', fontWeight: '600', color: '#15803d', cursor: 'pointer' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.82rem', fontWeight: '600', color: '#15803d', cursor: 'not-allowed' }}>
                   <input
                     type="radio"
                     name="ticket_status"
+                    disabled
                     checked={formData.ticket_status === 'Đạt (đóng CAPA)'}
-                    onChange={() => setFormData({ ...formData, ticket_status: 'Đạt (đóng CAPA)' })}
                   />
                   Đạt (đóng CAPA)
                 </label>
 
-                <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.82rem', fontWeight: '600', color: '#dc2626', cursor: 'pointer' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.82rem', fontWeight: '600', color: '#dc2626', cursor: 'not-allowed' }}>
                   <input
                     type="radio"
                     name="ticket_status"
+                    disabled
                     checked={formData.ticket_status === 'Không đạt (làm lại)'}
-                    onChange={() => setFormData({ ...formData, ticket_status: 'Không đạt (làm lại)' })}
                   />
                   Không đạt (làm lại)
                 </label>
@@ -951,9 +943,9 @@ const CAPADetailView = () => {
                 <thead>
                   <tr style={{ backgroundColor: '#7B5233', color: '#fff' }}>
                     <th style={{ padding: '8px 6px', width: '38px', textAlign: 'center' }}>STT</th>
-                    <th style={{ padding: '8px 6px', textAlign: 'left' }}>Hành động</th>
-                    <th style={{ padding: '8px 6px', textAlign: 'center' }}>Người đánh giá</th>
-                    <th style={{ padding: '8px 6px', textAlign: 'center' }}>Ngày đánh giá</th>
+                    <th style={{ padding: '8px 6px', textAlign: 'left' }}>Nội dung</th>
+                    <th style={{ padding: '8px 6px', textAlign: 'center' }}>Ngày</th>
+                    <th style={{ padding: '8px 6px', textAlign: 'left' }}>Mong đợi</th>
                     <th style={{ padding: '8px 6px', textAlign: 'center', width: '65px' }}>Kết quả</th>
                   </tr>
                 </thead>
@@ -962,8 +954,8 @@ const CAPADetailView = () => {
                     <tr key={idx} style={{ borderBottom: '1px solid #e2e8f0' }}>
                       <td style={{ padding: '8px 6px', textAlign: 'center', fontWeight: '700' }}>{idx + 1}</td>
                       <td style={{ padding: '8px 6px' }}>{ev.content}</td>
-                      <td style={{ padding: '8px 6px', textAlign: 'center' }}>{ev.executor || formData.evaluator_name || 'Trần Thị B'}</td>
                       <td style={{ padding: '8px 6px', textAlign: 'center' }}>{ev.execution_date}</td>
+                      <td style={{ padding: '8px 6px' }}>{ev.expected || 'Đạt 100% tiêu chuẩn kỹ thuật SOP'}</td>
                       <td style={{ padding: '8px 6px', textAlign: 'center' }}>
                         <span style={{
                           backgroundColor: ev.result === 'Fail' ? '#dc2626' : '#65a30d',
