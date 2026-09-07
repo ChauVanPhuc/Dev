@@ -293,25 +293,25 @@ const QualityKPIDashboardView = () => {
 
   // Pagination States for all 7 tabs
   const [targetPage, setTargetPage] = useState(1);
-  const [targetPageSize, setTargetPageSize] = useState(10);
+  const [targetPageSize, setTargetPageSize] = useState(15);
 
   const [indicatorPage, setIndicatorPage] = useState(1);
-  const [indicatorPageSize, setIndicatorPageSize] = useState(10);
+  const [indicatorPageSize, setIndicatorPageSize] = useState(15);
 
   const [checklistPage, setChecklistPage] = useState(1);
-  const [checklistPageSize, setChecklistPageSize] = useState(10);
+  const [checklistPageSize, setChecklistPageSize] = useState(15);
 
   const [violationPage, setViolationPage] = useState(1);
-  const [violationPageSize, setViolationPageSize] = useState(10);
+  const [violationPageSize, setViolationPageSize] = useState(15);
 
   const [trainingPage, setTrainingPage] = useState(1);
-  const [trainingPageSize, setTrainingPageSize] = useState(10);
+  const [trainingPageSize, setTrainingPageSize] = useState(15);
 
   const [reportPage, setReportPage] = useState(1);
-  const [reportPageSize, setReportPageSize] = useState(10);
+  const [reportPageSize, setReportPageSize] = useState(15);
 
   const [alertPage, setAlertPage] = useState(1);
-  const [alertPageSize, setAlertPageSize] = useState(10);
+  const [alertPageSize, setAlertPageSize] = useState(15);
 
   // Multi-option Excel Export Modal States
   const [showExportModal, setShowExportModal] = useState(false);
@@ -379,12 +379,10 @@ const QualityKPIDashboardView = () => {
           outline: 'none'
         }}
       >
-        <option value={5}>5 / trang</option>
-        <option value={8}>8 / trang</option>
-        <option value={10}>10 / trang</option>
         <option value={15}>15 / trang</option>
-        <option value={20}>20 / trang</option>
+        <option value={30}>30 / trang</option>
         <option value={50}>50 / trang</option>
+        <option value={100}>100 / trang</option>
       </select>
     </div>
   );
