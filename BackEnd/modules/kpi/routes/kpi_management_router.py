@@ -238,26 +238,6 @@ def get_checklists(employee_id: Optional[str] = None, db: Session = Depends(get_
     if employee_id:
         query = query.filter(KPIChecklist.employee_id == employee_id)
     items = query.order_by(KPIChecklist.id.asc()).all()
-    if not items and not employee_id:
-        default_items = [
-            ("CL-01", "Kiểm tra độ ẩm gỗ trước khi vào lò sấy", "Hàng ngày", "Đã hoàn thành", 1, "08:00 Today", "Đạt (12% độ ẩm)"),
-            ("CL-02", "Kiểm tra độ bám dính lớp sơn phủ bóng", "Hàng ngày", "Đang thực hiện", 1, "10:30 Today", "Đang test Cross-cut"),
-            ("CL-03", "Đo kích thước ván mộc cắt quy cách", "Hàng tuần", "Chưa làm", 0, "Hôm qua", "Chờ kiểm định"),
-            ("CL-04", "Vệ sinh và hiệu chuẩn thước kẹp Palmer", "Hàng tuần", "Đã hoàn thành", 1, "07:30 Today", "Đạt chuẩn 0.01mm")
-        ]
-        for code, content, freq, st, cnt, last_run, res_str in default_items:
-            db.add(KPIChecklist(
-                employee_id="NV_QLCL_004",
-                task_code=code,
-                content=content,
-                frequency=freq,
-                status_today=st,
-                perform_count=cnt,
-                last_performed=last_run,
-                result=res_str
-            ))
-        db.commit()
-        items = db.query(KPIChecklist).order_by(KPIChecklist.id.asc()).all()
     return [
         {
             "id": idx.id,

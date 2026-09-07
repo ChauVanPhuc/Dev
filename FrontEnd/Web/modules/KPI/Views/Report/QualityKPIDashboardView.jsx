@@ -843,7 +843,7 @@ const QualityKPIDashboardView = () => {
       const checklistResp = await api.get('/kpi-management/checklists').catch(() => null);
       if (checklistResp !== null) {
         const rawChecklistItems = Array.isArray(checklistResp) ? checklistResp : (checklistResp?.items || []);
-        setAllChecklists(rawChecklistItems.length > 0 ? rawChecklistItems : defaultChecklists);
+        setAllChecklists(rawChecklistItems);
       }
 
       // 5. Fetch Notifications / Alerts from DB `/notifications/?all=true`
@@ -1785,7 +1785,7 @@ const QualityKPIDashboardView = () => {
                   placeholder="Tìm kiếm checklist..."
                   onSort={() => setSortAsc(prev => !prev)}
                   onFilter={() => setFilterOpen(prev => !prev)}
-                  onExport={() => handleExportExcel(filterAndSortData(allChecklists.length > 0 ? allChecklists : defaultChecklists, checklistSearch), 'Checklist_Cong_Viec')}
+                  onExport={() => handleExportExcel(filterAndSortData(allChecklists, checklistSearch), 'Checklist_Cong_Viec')}
                   sortAsc={sortAsc}
                   isFilterActive={filterOpen}
                 />
@@ -1834,7 +1834,7 @@ const QualityKPIDashboardView = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filterAndSortData(hasFetchedDb ? allChecklists : (allChecklists.length > 0 ? allChecklists : defaultChecklists), checklistSearch).map((item, idx) => (
+                  {filterAndSortData(allChecklists, checklistSearch).map((item, idx) => (
                     <tr
                       key={item.id || idx}
                       style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}
