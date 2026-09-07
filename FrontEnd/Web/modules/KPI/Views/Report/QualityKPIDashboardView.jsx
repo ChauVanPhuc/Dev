@@ -1065,6 +1065,11 @@ const QualityKPIDashboardView = () => {
         if (item.id !== undefined && item.id !== null) {
           await api.delete(`/notifications/${item.id}`).catch(err => console.error('Delete alert error:', err));
         }
+      } else if (deleteConfirmState.isChecklist) {
+        if (item.id !== undefined && item.id !== null) {
+          await api.delete(`/kpi-management/checklists/${item.id}`).catch(err => console.error('Delete checklist error:', err));
+        }
+        setAllChecklists(prev => prev.filter(c => c.id !== item.id));
       } else {
         if (item.id !== undefined && item.id !== null) {
           await api.delete(`/kpi-management/kpi-pool/${item.id}`).catch(err => console.error('Delete kpi pool error:', err));
@@ -1075,7 +1080,7 @@ const QualityKPIDashboardView = () => {
     } catch (err) {
       console.error('Error deleting item from DB:', err);
     } finally {
-      setDeleteConfirmState({ isOpen: false, itemToDelete: null, isTrainingPlan: false, isAlert: false });
+      setDeleteConfirmState({ isOpen: false, itemToDelete: null, isTrainingPlan: false, isAlert: false, isChecklist: false });
     }
   };
 
@@ -1204,15 +1209,14 @@ const QualityKPIDashboardView = () => {
     }
   };
 
-  const handleDeleteDashboardChecklist = async (item) => {
-    if (window.confirm(`Bạn có chắc chắn muốn xóa công việc checklist "${item.content}"?`)) {
-      try {
-        await api.delete(`/kpi-management/checklists/${item.id}`);
-        await fetchDatabaseData();
-      } catch (e) {
-        console.error('Error deleting checklist:', e);
-      }
-    }
+  const handleDeleteDashboardChecklist = (item) => {
+    setDeleteConfirmState({
+      isOpen: true,
+      itemToDelete: item,
+      isTrainingPlan: false,
+      isAlert: false,
+      isChecklist: true
+    });
   };
 
   return (
@@ -2402,6 +2406,7 @@ const QualityKPIDashboardView = () => {
         title={
           deleteConfirmState.isTrainingPlan ? "Xác nhận xóa kế hoạch đào tạo"
           : deleteConfirmState.isAlert ? "Xác nhận xóa thông báo cảnh báo"
+          : deleteConfirmState.isChecklist ? "Xác nhận xóa công việc checklist"
           : "Xác nhận xóa chỉ số KPI"
         }
         message={
@@ -2409,12 +2414,14 @@ const QualityKPIDashboardView = () => {
             ? `Bạn có chắc chắn muốn xóa kế hoạch đào tạo "${deleteConfirmState.itemToDelete?.name || ''}" (${deleteConfirmState.itemToDelete?.code || ''}) khỏi hệ thống không?`
             : deleteConfirmState.isAlert
             ? `Bạn có chắc chắn muốn xóa thông báo "${deleteConfirmState.itemToDelete?.title || ''}" (${deleteConfirmState.itemToDelete?.code || ''}) khỏi hệ thống không?`
+            : deleteConfirmState.isChecklist
+            ? `Bạn có chắc chắn muốn xóa công việc checklist "${deleteConfirmState.itemToDelete?.content || ''}" khỏi hệ thống không?`
             : `Bạn có chắc chắn muốn xóa chỉ số KPI "${deleteConfirmState.itemToDelete?.name || ''}" (${deleteConfirmState.itemToDelete?.code || ''}) khỏi Database hệ thống không?`
         }
         confirmText="Xóa dữ liệu"
         cancelText="Hủy bỏ"
         onConfirm={handleGeneralConfirmDelete}
-        onClose={() => setDeleteConfirmState({ isOpen: false, itemToDelete: null, isTrainingPlan: false, isAlert: false })}
+        onClose={() => setDeleteConfirmState({ isOpen: false, itemToDelete: null, isTrainingPlan: false, isAlert: false, isChecklist: false })}
       />
 
       {/* 6. Custom Checklist React Modal Popup */}
