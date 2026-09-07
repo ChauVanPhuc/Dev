@@ -186,11 +186,11 @@ const ISOFormEditorView = () => {
       });
 
       generateNextCode().then(nextCode => {
-        // Kiểm tra xem parsed.code có phải là mã hợp lệ hay không (không chứa chữ 'mẫu' và không có khoảng trắng)
-        const isCodeValid = parsed.code && !parsed.code.toLowerCase().includes('mẫu') && !/\s/.test(parsed.code);
+        // Chỉ chấp nhận mã bóc tách từ Word nếu đã có định dạng G7.TL.
+        const isCodeValid = parsed.code && parsed.code.toUpperCase().startsWith('G7.TL.');
         setFormData(prev => ({
           ...prev,
-          code: isCodeValid ? parsed.code : nextCode,
+          code: isCodeValid ? parsed.code.trim() : nextCode,
           name: (parsed.name && (parsed.name.trim() === '[Tên quy trình]' || parsed.name.trim() === 'Tên quy trình' || parsed.name.trim() === '[Tên tài liệu]' || parsed.name.trim() === 'Tên tài liệu')) ? '' : (parsed.name || ''),
           version: parsed.version || '01',
           issue_date: getCurrentFormattedDate(),
@@ -221,15 +221,28 @@ const ISOFormEditorView = () => {
       if (Array.isArray(data)) {
         data.forEach(item => {
           if (item && item.code) {
-            const match = item.code.match(/G7\.TL\.(\d+)/i) || item.code.match(/M(\d+)/i) || item.code.match(/(\d+)$/);
-            if (match) {
-              const num = parseInt(match[1], 10);
+            const matchG7 = item.code.match(/G7\.TL\.(\d+)/i);
+            if (matchG7) {
+              const num = parseInt(matchG7[1], 10);
               if (!isNaN(num) && num > maxNum) {
                 maxNum = num;
               }
             }
           }
         });
+        if (maxNum === 0) {
+          data.forEach(item => {
+            if (item && item.code) {
+              const matchM = item.code.match(/M(\d+)/i);
+              if (matchM) {
+                const num = parseInt(matchM[1], 10);
+                if (!isNaN(num) && num > maxNum) {
+                  maxNum = num;
+                }
+              }
+            }
+          });
+        }
       }
       const nextNum = maxNum + 1;
       return `G7.TL.${String(nextNum).padStart(3, '0')}`;
@@ -338,7 +351,7 @@ const ISOFormEditorView = () => {
 
       setFormData(prev => ({
         ...prev,
-        code: (parsedData.code && !parsedData.code.toLowerCase().includes('mẫu') && !/\s/.test(parsedData.code)) ? parsedData.code : prev.code,
+        code: (parsedData.code && parsedData.code.toUpperCase().startsWith('G7.TL.')) ? parsedData.code.trim() : prev.code,
         name: (parsedData.name && parsedData.name.trim() !== '[Tên quy trình]' && parsedData.name.trim() !== 'Tên quy trình' && parsedData.name.trim() !== '[Tên tài liệu]' && parsedData.name.trim() !== 'Tên tài liệu') ? parsedData.name : prev.name,
         symbol: parsedData.symbol || prev.symbol,
         version: parsedData.version || prev.version || '01',
