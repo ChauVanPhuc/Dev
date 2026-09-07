@@ -112,7 +112,8 @@ def save_iso_document(
     now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # Kiểm tra trùng mã code nếu tạo mới
-    if not doc_id:
+    is_new_doc = (doc_id is None or doc_id == "" or doc_id == "new")
+    if is_new_doc:
         existing = db.query(ISODocument).filter(ISODocument.code == code).first()
         if existing:
             raise HTTPException(status_code=400, detail=f"Mã quy trình '{code}' đã tồn tại trong hệ thống")
@@ -138,9 +139,13 @@ def save_iso_document(
         db.add(doc)
         db.flush() # Để lấy doc.id
     else:
-        doc = db.query(ISODocument).filter(ISODocument.id == doc_id).first()
+        doc = db.query(ISODocument).filter(ISODocument.id == int(doc_id)).first()
         if not doc:
             raise HTTPException(status_code=404, detail="Không tìm thấy tài liệu quy trình")
+        
+        existing = db.query(ISODocument).filter(ISODocument.code == code, ISODocument.id != int(doc_id)).first()
+        if existing:
+            raise HTTPException(status_code=400, detail=f"Mã quy trình '{code}' đã tồn tại ở một tài liệu khác")
         
         # Cập nhật thông tin chung
         doc.code = code
@@ -420,18 +425,19 @@ def save_iso_process(
     name = payload.get("name")
     iso_doc_id = payload.get("iso_document_id")
 
-    if not code or not name or not iso_doc_id:
+    if not code or not name or iso_doc_id is None or iso_doc_id == "":
         raise HTTPException(status_code=400, detail="Mã quy trình, Tên quy trình và Khuôn mẫu ISO gốc không được bỏ trống")
 
     now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # Kiểm tra khuôn mẫu ISO gốc có tồn tại không
-    iso_doc = db.query(ISODocument).filter(ISODocument.id == iso_doc_id).first()
+    iso_doc = db.query(ISODocument).filter(ISODocument.id == int(iso_doc_id)).first()
     if not iso_doc:
         raise HTTPException(status_code=404, detail="Không tìm thấy khuôn mẫu ISO gốc được chọn")
 
     # Kiểm tra trùng mã code nếu tạo mới
-    if not proc_id:
+    is_new_proc = (proc_id is None or proc_id == "" or proc_id == "new")
+    if is_new_proc:
         existing = db.query(ISOProcess).filter(ISOProcess.code == code).first()
         if existing:
             raise HTTPException(status_code=400, detail=f"Mã quy trình áp dụng '{code}' đã tồn tại trong hệ thống")
@@ -492,9 +498,13 @@ def save_iso_process(
                 )
                 db.add(db_step)
     else:
-        proc = db.query(ISOProcess).filter(ISOProcess.id == proc_id).first()
+        proc = db.query(ISOProcess).filter(ISOProcess.id == int(proc_id)).first()
         if not proc:
             raise HTTPException(status_code=404, detail="Không tìm thấy thông tin quy trình thực tế")
+
+        existing = db.query(ISOProcess).filter(ISOProcess.code == code, ISOProcess.id != int(proc_id)).first()
+        if existing:
+            raise HTTPException(status_code=400, detail=f"Mã quy trình áp dụng '{code}' đã tồn tại ở một quy trình khác")
 
         # Cập nhật thông tin chung
         proc.code = code
@@ -735,6 +745,45 @@ def delete_iso_process(id: int, db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Lỗi khi xóa quy trình thực tế: {str(e)}")
+
+
+@router.get("/{id}/download-raw")
+def download_raw_iso_document(id: int, db: Session = Depends(get_db)):
+    """
+    [GET] Tải tệp tin gốc (raw file) mà người dùng đã upload lên cho tài liệu ISO này.
+    """
+    from fastapi.responses import FileResponse
+
+    doc_obj = db.query(ISODocument).filter(ISODocument.id == id).first()
+    if not doc_obj or not doc_obj.file_path:
+        raise HTTPException(status_code=404, detail="Không tìm thấy tệp tin gốc của tài liệu này")
+
+    # Tìm đường dẫn file thực tế trên đĩa (hỗ trợ cả chạy từ / hoặc /BackEnd)
+    resolved_path = doc_obj.file_path
+    if resolved_path:
+        if not os.path.exists(resolved_path):
+            alt_path = os.path.join("BackEnd", resolved_path)
+            if os.path.exists(alt_path):
+                resolved_path = alt_path
+            else:
+                alt_path2 = os.path.join("..", resolved_path)
+                if os.path.exists(alt_path2):
+                    resolved_path = alt_path2
+
+    if not resolved_path or not os.path.exists(resolved_path):
+        raise HTTPException(status_code=404, detail="Không tìm thấy tệp tin gốc trên hệ thống đĩa máy chủ")
+
+    # Lấy định dạng đuôi file thực tế (.docx, .pdf, .doc, ...)
+    ext = os.path.splitext(resolved_path)[1]
+    safe_code = (doc_obj.code or "ISO").replace("/", "_").replace("\\", "_")
+    safe_name = (doc_obj.name or "Tai_lieu").replace("/", "_").replace("\\", "_")
+    download_filename = f"{safe_code}_{safe_name}{ext}"
+
+    return FileResponse(
+        path=resolved_path,
+        filename=download_filename,
+        media_type="application/octet-stream"
+    )
 
 
 @router.get("/{id}/download-docx")

@@ -69,12 +69,27 @@ const HierarchyChartView = ({ diagramDropdown }) => {
     }
   };
 
+  const [generating, setGenerating] = useState(false);
+
   const loadData = async () => {
     try {
       const res = await hrService.getHierarchyNodes();
       setNodes(res || []);
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleAutoGenerate = async () => {
+    if (!window.confirm('Hệ thống sẽ tự động khởi tạo sơ đồ cấp bậc dựa trên dữ liệu Chức danh & Cấp bậc. Bạn có muốn tiếp tục?')) return;
+    setGenerating(true);
+    try {
+      const res = await hrService.autoGenerateHierarchyNodes();
+      setNodes(res || []);
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Lỗi khi tự động khởi tạo sơ đồ cấp bậc.');
+    } finally {
+      setGenerating(false);
     }
   };
 
@@ -294,7 +309,7 @@ const HierarchyChartView = ({ diagramDropdown }) => {
         ]}
         showFilter={true}
         extraActions={[
-          { label: 'Cấu hình cấp bậc', onClick: () => {} }
+          { label: generating ? 'Đang khởi tạo...' : 'Tự động sinh cấp bậc', onClick: handleAutoGenerate }
         ]}
         importActions={[
           { label: 'Nhập từ file Excel', onClick: () => {} }
@@ -471,8 +486,17 @@ const HierarchyChartView = ({ diagramDropdown }) => {
                   flexShrink: 0
                 }}>
                 {roots.length === 0 ? (
-                  <div style={{ color: '#9CA3AF', textAlign: 'center', marginTop: '100px', fontSize: '0.9rem' }}>
-                    Không tìm thấy sơ đồ cấp bậc phù hợp. Nhấp "+ Thêm mới" để bắt đầu tạo sơ đồ.
+                  <div style={{ color: '#6B7280', textAlign: 'center', marginTop: '60px', padding: '30px', backgroundColor: '#FFFFFF', border: '1.5px solid #EADCC9', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                    <p style={{ fontSize: '0.95rem', fontWeight: 600, color: '#3D2B1F', marginBottom: '12px' }}>Chưa có nút sơ đồ cấp bậc nào được tạo.</p>
+                    <button
+                      onClick={handleAutoGenerate}
+                      disabled={generating}
+                      style={{
+                        padding: '8px 20px', backgroundColor: '#7B5233', color: '#FFFFFF', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: generating ? 'not-allowed' : 'pointer', fontSize: '0.85rem'
+                      }}
+                    >
+                      {generating ? 'Đang khởi tạo...' : '⚡ Tự động tạo Sơ đồ Cấp bậc Chức danh'}
+                    </button>
                   </div>
                 ) : roots.map(root => (
                   <TreeNode key={root.id} node={root} />

@@ -897,6 +897,38 @@ const ISOFormEditorView = () => {
             {/* Action Toolbar */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', width: '100%' }}>
               <button
+                type="button"
+                onClick={() => {
+                  if (!formData.id) {
+                    showFeedback('info', 'Vui lòng lưu thông tin tài liệu trước khi tải tệp tin gốc.');
+                    return;
+                  }
+                  if (!formData.file_path) {
+                    showFeedback('error', 'Không tìm thấy tệp tin gốc trên hệ thống');
+                    return;
+                  }
+                  const downloadUrl = api.defaults.baseURL.replace(new RegExp('/api/v1/?$'), '') + '/api/v1/iso-documents/' + formData.id + '/download-raw';
+                  window.open(downloadUrl, '_blank');
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 16px',
+                  backgroundColor: '#FAF6F0',
+                  color: '#7B5233',
+                  border: '1px solid #7B5233',
+                  borderRadius: '6px',
+                  fontSize: '0.82rem',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                }}
+              >
+                <Download size={16} /> Tải tệp tin gốc nguyên bản
+              </button>
+              <button
+                type="button"
                 onClick={() => {
                   if (!formData.id) {
                     showFeedback('info', 'Vui lòng lưu thông tin tài liệu trước khi tải tệp tin Word đã điền.');
@@ -924,7 +956,7 @@ const ISOFormEditorView = () => {
                   boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                 }}
               >
-                <Download size={16} /> Tải tệp tin Word gốc (.docx)
+                <Download size={16} /> Tải tệp tin Word đã tự động điền (.docx)
               </button>
             </div>
 

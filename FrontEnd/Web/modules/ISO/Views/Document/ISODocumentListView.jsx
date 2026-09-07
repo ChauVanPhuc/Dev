@@ -248,7 +248,8 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
 
   const handleCreateProcess = async (e) => {
     e.preventDefault();
-    if (!newProcessData.code || !newProcessData.name || !newProcessData.iso_document_id) {
+    const hasIsoDocId = newProcessData.iso_document_id !== '' && newProcessData.iso_document_id !== null && newProcessData.iso_document_id !== undefined;
+    if (!newProcessData.code || !newProcessData.name || !hasIsoDocId) {
       showFeedback('error', 'Vui lòng điền đầy đủ các thông tin bắt buộc');
       return;
     }
@@ -598,10 +599,11 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                         <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                           {doc.file_path ? (
                             <a
-                              href={`${api.defaults.baseURL.replace(/\/$/, '')}/iso-documents/${doc.id}/download-docx`}
+                              href={`${api.defaults.baseURL.replace(/\/$/, '')}/iso-documents/${doc.id}/download-raw`}
                               download
                               target="_blank"
                               rel="noreferrer"
+                              title="Tải tệp tin gốc nguyên bản"
                               style={{ color: '#7B5233', display: 'inline-flex', padding: '4px', borderRadius: '4px', backgroundColor: '#FAF6F0', cursor: 'pointer' }}
                             >
                               <Download size={14} />

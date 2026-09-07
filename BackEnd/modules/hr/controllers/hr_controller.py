@@ -218,8 +218,178 @@ def delete_section(db: Session, sec_id: int):
 
 
 # --- ORG CHART NODES CONTROLLER ---
+# --- ORG CHART NODES CONTROLLER ---
+def auto_generate_org_nodes(db: Session):
+    """
+    Tự động khởi tạo cây sơ đồ tổ chức 4 tầng chuẩn hóa:
+    - Level 1: Ban Giám Đốc / Ban Điều Hành (Nút Gốc)
+    - Level 2: Các Phòng Ban (Phòng QLCL, Phòng IT, Ban Giám Đốc, Khối Sản Xuất...)
+    - Level 3: Các Bộ Phận / Tổ thuộc Phòng Ban (IQC, QA, PQC1, PQC2, FQC...)
+    - Level 4: Chức Danh & Danh Sách Nhân Sự Đương Nhiệm
+    """
+    # 1. Clear legacy org nodes & assignments
+    db.query(HRNodeAssignment).delete()
+    db.query(HROrgNode).delete()
+    db.commit()
+
+    # 2. Get master catalogs
+    depts = db.query(HRDepartment).all()
+    sections = db.query(HRSection).filter(HRSection.name.isnot(None), HRSection.account_id.is_(None)).all()
+    positions = db.query(HRPosition).all()
+    employees = db.query(HREmployee).all()
+
+    # 3. Create Root Node (Level 1)
+    root_node = HROrgNode(
+        level_name="Cấp 1",
+        parent_id=None,
+        department_id=None,
+        position_id=None,
+        section_id=None,
+        note="Ban Giám Đốc / Điều Hành Chất Lượng"
+    )
+    db.add(root_node)
+    db.commit()
+    db.refresh(root_node)
+
+    # 4. Create Level 2 Nodes (Phòng Ban)
+    dept_node_map = {}
+    if depts:
+        for dept in depts:
+            d_name = dept.name or dept.description or "Bộ phận"
+            if not d_name.startswith("Phòng") and not d_name.startswith("Ban") and not d_name.startswith("Khối"):
+                d_name = f"Phòng {d_name}"
+            node = HROrgNode(
+                level_name="Cấp 2",
+                parent_id=root_node.id,
+                department_id=dept.id,
+                position_id=None,
+                section_id=None,
+                note=d_name
+            )
+            db.add(node)
+            db.commit()
+            db.refresh(node)
+            dept_node_map[dept.id] = node
+
+    # 5. Create Level 3 Nodes (Bộ Phận / Tổ Công Đoạn)
+    sec_node_map = {}
+    
+    # Group sections by department / role_id
+    for sec in sections:
+        p_dept_id = sec.role_id or (list(dept_node_map.keys())[0] if dept_node_map else None)
+        parent_n = dept_node_map.get(p_dept_id, root_node)
+        
+        node = HROrgNode(
+            level_name="Cấp 3",
+            parent_id=parent_n.id,
+            department_id=p_dept_id if isinstance(p_dept_id, int) else None,
+            position_id=None,
+            section_id=sec.id,
+            note=sec.name or f"Tổ {sec.code}"
+        )
+        db.add(node)
+        db.commit()
+        db.refresh(node)
+        sec_node_map[sec.id] = node
+
+    # Ensure every department has at least one Level 3 node for positions/employees
+    for d_id, d_node in dept_node_map.items():
+        children = db.query(HROrgNode).filter(HROrgNode.parent_id == d_node.id).all()
+        if not children:
+            gen_node = HROrgNode(
+                level_name="Cấp 3",
+                parent_id=d_node.id,
+                department_id=d_id,
+                position_id=None,
+                section_id=None,
+                note=f"Bộ phận {d_node.note}"
+            )
+            db.add(gen_node)
+            db.commit()
+            db.refresh(gen_node)
+            sec_node_map[f"dept_gen_{d_id}"] = gen_node
+
+    # 6. Create Level 4 Nodes (Vị Trí & Chức Danh)
+    pos_node_map = {}
+    pos_by_name = {p.name.lower(): p for p in positions} if positions else {}
+
+    # Define standard position roles
+    standard_roles = [
+        ("Trưởng Phòng", "Cấp 4 - Trưởng Phòng / Quản Đốc"),
+        ("Tổ Trưởng / Lead", "Cấp 4 - Tổ Trưởng / QC Lead"),
+        ("Nhân Viên", "Cấp 4 - QC Staff / Chuyên Viên")
+    ]
+
+    for sec_key, sec_node in sec_node_map.items():
+        for role_name, level_label in standard_roles:
+            p_obj = pos_by_name.get(role_name.lower())
+            p_id = p_obj.id if p_obj else None
+            
+            node = HROrgNode(
+                level_name="Cấp 4",
+                parent_id=sec_node.id,
+                department_id=sec_node.department_id,
+                position_id=p_id,
+                section_id=sec_node.section_id,
+                note=role_name
+            )
+            db.add(node)
+            db.commit()
+            db.refresh(node)
+            pos_node_map[f"{sec_key}_{role_name}"] = node
+
+    # 7. Assign employees to Level 4 Org Nodes
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    assigned_emp_ids = set()
+
+    for emp in employees:
+        target_node_id = None
+        
+        # Match section first
+        sec_key = emp.section_id if emp.section_id and emp.section_id in sec_node_map else None
+        if not sec_key and emp.department_id and f"dept_gen_{emp.department_id}" in sec_node_map:
+            sec_key = f"dept_gen_{emp.department_id}"
+
+        if not sec_key:
+            sec_key = list(sec_node_map.keys())[0] if sec_node_map else None
+
+        if sec_key:
+            pos_obj = db.query(HRPosition).filter(HRPosition.id == emp.position_id).first() if emp.position_id else None
+            pos_title = pos_obj.name if pos_obj else ""
+
+            if "Trưởng" in pos_title or "Quản Đốc" in pos_title:
+                role_slot = "Trưởng Phòng"
+            elif "Lead" in pos_title or "Tổ Trưởng" in pos_title or "QA" in pos_title:
+                role_slot = "Tổ Trưởng / Lead"
+            else:
+                role_slot = "Nhân Viên"
+
+            slot_key = f"{sec_key}_{role_slot}"
+            if slot_key in pos_node_map:
+                target_node_id = pos_node_map[slot_key].id
+            elif f"{sec_key}_Nhân Viên" in pos_node_map:
+                target_node_id = pos_node_map[f"{sec_key}_Nhân Viên"].id
+
+        if not target_node_id and sec_key and isinstance(sec_key, int) and sec_key in sec_node_map:
+            target_node_id = sec_node_map[sec_key].id
+
+        if target_node_id and emp.id not in assigned_emp_ids:
+            ass = HRNodeAssignment(
+                node_id=target_node_id,
+                employee_id=emp.id,
+                assigned_date=today_str
+            )
+            db.add(ass)
+            assigned_emp_ids.add(emp.id)
+
+    db.commit()
+
 def get_org_nodes(db: Session):
     nodes = db.query(HROrgNode).order_by(HROrgNode.id.asc()).all()
+    if not nodes:
+        auto_generate_org_nodes(db)
+        nodes = db.query(HROrgNode).order_by(HROrgNode.id.asc()).all()
+
     res = []
     for node in nodes:
         dept_name = None
@@ -229,7 +399,7 @@ def get_org_nodes(db: Session):
         
         if node.department_id:
             dept = db.query(HRDepartment).filter(HRDepartment.id == node.department_id).first()
-            if dept: dept_name = dept.name
+            if dept: dept_name = dept.name or dept.description
         if node.position_id:
             pos = db.query(HRPosition).filter(HRPosition.id == node.position_id).first()
             if pos: pos_name = pos.name
@@ -264,7 +434,7 @@ def get_org_nodes(db: Session):
             "note": node.note,
             "created_at": node.created_at,
             "department_name": dept_name,
-            "position_name": pos_name,
+            "position_name": pos_name or node.note,
             "section_name": sec_name,
             "parent_level_name": parent_level,
             "occupants": occupants
@@ -330,8 +500,69 @@ def unassign_employee_from_node(db: Session, assignment_id: int):
 
 
 # --- HIERARCHY NODES CONTROLLER ---
+def auto_generate_hierarchy_nodes(db: Session):
+    """
+    Tự động sinh phân cấp sơ đồ cấp bậc (NS03):
+    - Level 1: Ban Giám Đốc / Ban Điều Hành
+    - Level 2: Trưởng Phòng / Quản Đốc
+    - Level 3: Phó Phòng / Tổ Trưởng / QC Lead
+    - Level 4: Chuyên Viên / QC Staff / Công Nhân
+    """
+    db.query(HRHierarchyNode).delete()
+    db.commit()
+
+    positions = db.query(HRPosition).all()
+    pos_map = {p.name.lower(): p for p in positions} if positions else {}
+
+    # Level 1 Node
+    l1 = HRHierarchyNode(
+        rank_level="Cấp 1",
+        parent_id=None,
+        position_id=pos_map.get("vp").id if pos_map.get("vp") else None,
+        description="Ban Giám Đốc & Tổng Giám Đốc Điều Hành"
+    )
+    db.add(l1)
+    db.commit()
+    db.refresh(l1)
+
+    # Level 2 Node
+    l2 = HRHierarchyNode(
+        rank_level="Cấp 2",
+        parent_id=l1.id,
+        position_id=pos_map.get("trưởng phòng").id if pos_map.get("trưởng phòng") else None,
+        description="Quản Lý Các Phòng Ban & Quản Đốc Sản Xuất"
+    )
+    db.add(l2)
+    db.commit()
+    db.refresh(l2)
+
+    # Level 3 Node
+    l3 = HRHierarchyNode(
+        rank_level="Cấp 3",
+        parent_id=l2.id,
+        position_id=pos_map.get("nhân viên qa").id if pos_map.get("nhân viên qa") else None,
+        description="Phó Phòng, Tổ Trưởng & Trưởng Ca QC"
+    )
+    db.add(l3)
+    db.commit()
+    db.refresh(l3)
+
+    # Level 4 Node
+    l4 = HRHierarchyNode(
+        rank_level="Cấp 4",
+        parent_id=l3.id,
+        position_id=pos_map.get("nhân viên").id if pos_map.get("nhân viên") else None,
+        description="Chuyên Viên, QC Staff & Nhân Sự Sản Xuất"
+    )
+    db.add(l4)
+    db.commit()
+
 def get_hierarchy_nodes(db: Session):
     nodes = db.query(HRHierarchyNode).order_by(HRHierarchyNode.id.asc()).all()
+    if not nodes:
+        auto_generate_hierarchy_nodes(db)
+        nodes = db.query(HRHierarchyNode).order_by(HRHierarchyNode.id.asc()).all()
+
     res = []
     for node in nodes:
         pos_name = None
@@ -351,7 +582,7 @@ def get_hierarchy_nodes(db: Session):
             "position_id": node.position_id,
             "description": node.description,
             "created_at": node.created_at,
-            "position_name": pos_name,
+            "position_name": pos_name or node.description,
             "parent_rank_level": parent_rank
         })
     return res
@@ -384,8 +615,74 @@ def delete_hierarchy_node(db: Session, node_id: int):
 
 
 # --- PERSONNEL NODES CONTROLLER ---
+def auto_generate_personnel_nodes(db: Session):
+    """
+    Tự động tính toán & sinh cây phân bổ nhân sự (NS04) theo Phòng ban & Bộ phận/Tổ công đoạn
+    """
+    db.query(HRPersonnelNode).delete()
+    db.commit()
+
+    total_emps = db.query(HREmployee).count()
+    depts = db.query(HRDepartment).all()
+    sections = db.query(HRSection).filter(HRSection.name.isnot(None), HRSection.account_id.is_(None)).all()
+
+    # Root Node
+    root_node = HRPersonnelNode(
+        node_name="Tổng Nhân Sự Công Ty",
+        parent_id=None,
+        department_id=None,
+        section_id=None,
+        employee_count=total_emps,
+        description=f"Tổng hợp toàn bộ {total_emps} nhân sự đang làm việc"
+    )
+    db.add(root_node)
+    db.commit()
+    db.refresh(root_node)
+
+    # Department Nodes (Level 2)
+    dept_pnode_map = {}
+    for dept in depts:
+        d_count = db.query(HREmployee).filter(HREmployee.department_id == dept.id).count()
+        d_name = dept.name or dept.description or "Bộ phận"
+        if not d_name.startswith("Phòng") and not d_name.startswith("Ban") and not d_name.startswith("Khối"):
+            d_name = f"Phòng {d_name}"
+
+        node = HRPersonnelNode(
+            node_name=d_name,
+            parent_id=root_node.id,
+            department_id=dept.id,
+            section_id=None,
+            employee_count=d_count,
+            description=f"Quân số hiện tại: {d_count} người"
+        )
+        db.add(node)
+        db.commit()
+        db.refresh(node)
+        dept_pnode_map[dept.id] = node
+
+    # Section Nodes (Level 3)
+    for sec in sections:
+        s_count = db.query(HREmployee).filter(HREmployee.section_id == sec.id).count()
+        p_dept_id = sec.role_id or (list(dept_pnode_map.keys())[0] if dept_pnode_map else None)
+        parent_node = dept_pnode_map.get(p_dept_id, root_node)
+
+        node = HRPersonnelNode(
+            node_name=sec.name or f"Tổ {sec.code}",
+            parent_id=parent_node.id,
+            department_id=p_dept_id if isinstance(p_dept_id, int) else None,
+            section_id=sec.id,
+            employee_count=s_count,
+            description=f"Phân bổ {s_count} lao động"
+        )
+        db.add(node)
+        db.commit()
+
 def get_personnel_nodes(db: Session):
     nodes = db.query(HRPersonnelNode).order_by(HRPersonnelNode.id.asc()).all()
+    if not nodes:
+        auto_generate_personnel_nodes(db)
+        nodes = db.query(HRPersonnelNode).order_by(HRPersonnelNode.id.asc()).all()
+
     res = []
     for node in nodes:
         dept_name = None
@@ -394,7 +691,7 @@ def get_personnel_nodes(db: Session):
         
         if node.department_id:
             dept = db.query(HRDepartment).filter(HRDepartment.id == node.department_id).first()
-            if dept: dept_name = dept.name
+            if dept: dept_name = dept.name or dept.description
         if node.section_id:
             sec = db.query(HRSection).filter(HRSection.id == node.section_id).first()
             if sec: sec_name = sec.name

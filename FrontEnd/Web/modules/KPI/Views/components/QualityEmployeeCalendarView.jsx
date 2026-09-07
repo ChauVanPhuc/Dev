@@ -25,9 +25,38 @@ const QualityEmployeeCalendarView = ({ onOpenLeaveModal, onOpenOtModal, onOpenSu
   const [exportModalOpen, setExportModalOpen] = useState(false);
 
   
-  // Selected Day Detail Modal
+  // Selected Day Detail Modal & Tab
   const [selectedDay, setSelectedDay] = useState(null);
   const [dayEvents, setDayEvents] = useState([]);
+  const [dayTab, setDayTab] = useState('OT'); // 'OT' | 'LEAVE'
+
+  const otEvents = dayEvents.filter(e => e.status === 'OT_20H' || e.status === 'OT_22H');
+  const leaveEvents = dayEvents.filter(e => ['LEAVE_PAID', 'LEAVE_UNPAID', 'EARLY_LEAVE_1630', 'HALF_DAY', 'SUNDAY_OFF'].includes(e.status));
+
+  const handleQuickUpdateRecord = async (id, newStatus) => {
+    try {
+      await apiClient.put(`/quality-employees/attendance/${id}`, { status: newStatus });
+      setDayEvents(prev => prev.map(item => {
+        if (item.id === id) {
+          const STATUS_LABEL_MAP_LOCAL = {
+            'OT_20H': '20h', 'OT_22H': '22h',
+            'LEAVE_PAID': 'Vắng CP', 'LEAVE_UNPAID': 'Vắng KP',
+            'EARLY_LEAVE_1630': 'Về 16h30', 'HALF_DAY': 'Nghỉ 0.5d', 'SUNDAY_OFF': 'Vắng CN'
+          };
+          return {
+            ...item,
+            status: newStatus,
+            status_label: STATUS_LABEL_MAP_LOCAL[newStatus] || newStatus,
+            overtime_hours: newStatus === 'OT_22H' ? 4.0 : (newStatus === 'OT_20H' ? 2.0 : 0.0)
+          };
+        }
+        return item;
+      }));
+      loadData();
+    } catch (err) {
+      console.error('Lỗi khi cập nhật nhanh bản ghi:', err);
+    }
+  };
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1; // 1-12
@@ -429,19 +458,20 @@ const QualityEmployeeCalendarView = ({ onOpenLeaveModal, onOpenOtModal, onOpenSu
                           color: st.color,
                           border: `1px solid ${st.border}`,
                           borderRadius: '4px',
-                          padding: '2px 5px',
+                          padding: '2px 6px',
                           fontSize: '0.7rem',
                           fontWeight: 700,
                           display: 'flex',
-                          justify: 'space-between',
+                          justifyContent: 'space-between',
                           alignItems: 'center',
-                          lineHeight: 1.2
+                          lineHeight: 1.2,
+                          gap: '4px'
                         }}
                       >
-                        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '75%' }}>
+                        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 0 }}>
                           {ev.full_name}
                         </span>
-                        <span style={{ fontSize: '0.65rem', opacity: 0.9 }}>
+                        <span style={{ fontSize: '0.65rem', opacity: 0.95, fontWeight: 800, flexShrink: 0, marginLeft: 'auto' }}>
                           {ev.status_label || st.label}
                         </span>
                       </div>
@@ -459,7 +489,7 @@ const QualityEmployeeCalendarView = ({ onOpenLeaveModal, onOpenOtModal, onOpenSu
         </div>
       </div>
 
-      {/* ── MODAL POPUP CHI TIẾT NGÀY ĐƯỢC CHỌN ── */}
+      {/* ── MODAL POPUP CHI TIẾT NGÀY ĐƯỢC CHỌN (2 TAB & EDIT NHANH) ── */}
       {selectedDay && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -483,38 +513,122 @@ const QualityEmployeeCalendarView = ({ onOpenLeaveModal, onOpenOtModal, onOpenSu
               </button>
             </div>
 
-            {/* Content List */}
-            <div style={{ padding: '20px', maxHeight: '420px', overflowY: 'auto' }}>
-              {dayEvents.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px 20px', color: '#6B7280' }}>
+            {/* TAB CONTROLS: TĂNG CA (X) | NGHỈ / VẮNG (Y) */}
+            <div style={{ display: 'flex', borderBottom: '1px solid #EADCC9', backgroundColor: '#FAF6F0', padding: '0 16px' }}>
+              <button
+                type="button"
+                onClick={() => setDayTab('OT')}
+                style={{
+                  padding: '10px 16px', border: 'none', background: 'transparent',
+                  borderBottom: dayTab === 'OT' ? '3px solid #7B5233' : '3px solid transparent',
+                  fontWeight: 800, fontSize: '0.85rem', color: dayTab === 'OT' ? '#3D2B1F' : '#6B7280',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
+                }}
+              >
+                <span>Tăng ca</span>
+                <span style={{
+                  fontSize: '0.72rem', backgroundColor: dayTab === 'OT' ? '#7B5233' : '#E5E7EB',
+                  color: dayTab === 'OT' ? '#FFF' : '#374151', padding: '1px 8px', borderRadius: '10px', fontWeight: 700
+                }}>
+                  {otEvents.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDayTab('LEAVE')}
+                style={{
+                  padding: '10px 16px', border: 'none', background: 'transparent',
+                  borderBottom: dayTab === 'LEAVE' ? '3px solid #7B5233' : '3px solid transparent',
+                  fontWeight: 800, fontSize: '0.85rem', color: dayTab === 'LEAVE' ? '#3D2B1F' : '#6B7280',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
+                }}
+              >
+                <span>Nghỉ / Vắng</span>
+                <span style={{
+                  fontSize: '0.72rem', backgroundColor: dayTab === 'LEAVE' ? '#7B5233' : '#E5E7EB',
+                  color: dayTab === 'LEAVE' ? '#FFF' : '#374151', padding: '1px 8px', borderRadius: '10px', fontWeight: 700
+                }}>
+                  {leaveEvents.length}
+                </span>
+              </button>
+            </div>
+
+            {/* Content List - CỐ ĐỊNH CHIỀU CAO */}
+            <div style={{ padding: '16px 20px', height: '360px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+              {((dayTab === 'OT' ? otEvents : leaveEvents)).length === 0 ? (
+                <div style={{ textAlign: 'center', color: '#6B7280', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                   <AlertCircle size={32} style={{ color: '#9CA3AF', marginBottom: '8px' }} />
-                  <p style={{ margin: 0, fontWeight: 600 }}>Không có sự kiện vắng / báo phép / tăng ca nào trong ngày này.</p>
-                  <p style={{ fontSize: '0.8rem', color: '#9CA3AF', marginTop: '4px' }}>Tất cả nhân sự mặc định đi làm bình thường (8h).</p>
+                  <p style={{ margin: 0, fontWeight: 600, fontSize: '0.85rem' }}>
+                    {dayTab === 'OT' ? 'Không có ai báo tăng ca trong ngày này.' : 'Không có ai vắng / báo nghỉ phép trong ngày này.'}
+                  </p>
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {dayEvents.map(ev => {
+                  {(dayTab === 'OT' ? otEvents : leaveEvents).map(ev => {
                     const st = STATUS_BADGE_STYLE[ev.status] || STATUS_BADGE_STYLE.LEAVE_PAID;
                     return (
                       <div key={ev.id} style={{
                         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                        backgroundColor: '#FAF8F5', border: '1px solid #EADCC9', padding: '12px 16px', borderRadius: '10px'
+                        backgroundColor: '#FAF8F5', border: '1px solid #EADCC9', padding: '10px 14px', borderRadius: '10px',
+                        gap: '10px'
                       }}>
-                        <div>
-                          <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#2D1A12' }}>{ev.full_name} ({ev.employee_id})</div>
-                          <div style={{ fontSize: '0.75rem', color: '#6B7280', marginTop: '2px' }}>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ fontWeight: 800, fontSize: '0.88rem', color: '#2D1A12' }}>{ev.full_name} ({ev.employee_id})</div>
+                          <div style={{ fontSize: '0.73rem', color: '#6B7280', marginTop: '2px' }}>
                             Phòng ban: {ev.department} • Nhà máy: {ev.factory}
                           </div>
-                          {ev.note && <div style={{ fontSize: '0.75rem', color: '#7B5233', fontStyle: 'italic', marginTop: '4px' }}>Ghi chú: {ev.note}</div>}
+                          {ev.note && <div style={{ fontSize: '0.72rem', color: '#7B5233', fontStyle: 'italic', marginTop: '3px' }}>Ghi chú: {ev.note}</div>}
                         </div>
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <span style={{
-                            backgroundColor: st.bg, color: st.color, border: `1px solid ${st.border}`,
-                            padding: '4px 10px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 800
-                          }}>
-                            {ev.status_label || st.label}
-                          </span>
+                        {/* EDIT NHANH TRỰC TIẾP */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                          {dayTab === 'OT' ? (
+                            /* SỬA NHANH CA TĂNG CA: 20H HOẶC 22H */
+                            <div style={{ display: 'flex', gap: '4px', backgroundColor: '#EFEAE3', padding: '2px', borderRadius: '8px' }}>
+                              <button
+                                type="button"
+                                onClick={() => handleQuickUpdateRecord(ev.id, 'OT_20H')}
+                                style={{
+                                  padding: '4px 10px', borderRadius: '6px', border: 'none',
+                                  backgroundColor: ev.status === 'OT_20H' ? '#6366F1' : 'transparent',
+                                  color: ev.status === 'OT_20H' ? '#FFFFFF' : '#6B7280',
+                                  fontSize: '0.75rem', fontWeight: 800, cursor: 'pointer', transition: 'all 0.15s'
+                                }}
+                              >
+                                20h
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleQuickUpdateRecord(ev.id, 'OT_22H')}
+                                style={{
+                                  padding: '4px 10px', borderRadius: '6px', border: 'none',
+                                  backgroundColor: ev.status === 'OT_22H' ? '#9333EA' : 'transparent',
+                                  color: ev.status === 'OT_22H' ? '#FFFFFF' : '#6B7280',
+                                  fontSize: '0.75rem', fontWeight: 800, cursor: 'pointer', transition: 'all 0.15s'
+                                }}
+                              >
+                                22h
+                              </button>
+                            </div>
+                          ) : (
+                            /* SỬA NHANH TRẠNG THÁI NGHỈ / VẮNG */
+                            <select
+                              value={ev.status}
+                              onChange={(e) => handleQuickUpdateRecord(ev.id, e.target.value)}
+                              style={{
+                                padding: '4px 8px', borderRadius: '6px', border: '1px solid #EADCC9',
+                                backgroundColor: st.bg, color: st.color, fontWeight: 800, fontSize: '0.78rem',
+                                outline: 'none', cursor: 'pointer'
+                              }}
+                            >
+                              <option value="LEAVE_PAID">Vắng CP (Nghỉ phép)</option>
+                              <option value="LEAVE_UNPAID">Vắng KP (Không lương)</option>
+                              <option value="EARLY_LEAVE_1630">Về 16h30</option>
+                              <option value="HALF_DAY">Nghỉ 0.5d</option>
+                              <option value="SUNDAY_OFF">Vắng CN</option>
+                            </select>
+                          )}
 
                           <button
                             onClick={() => handleDeleteRecord(ev.id)}

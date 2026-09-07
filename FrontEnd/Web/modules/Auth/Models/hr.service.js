@@ -116,6 +116,10 @@ export const hrService = {
     return await api.get('/hr/org-nodes');
   },
 
+  autoGenerateOrgNodes: async () => {
+    return await api.post('/hr/org-nodes/auto-generate');
+  },
+
   createOrgNode: async (data) => {
     return await api.post('/hr/org-nodes', data);
   },
@@ -142,6 +146,10 @@ export const hrService = {
     return await api.get('/hr/hierarchy-nodes');
   },
 
+  autoGenerateHierarchyNodes: async () => {
+    return await api.post('/hr/hierarchy-nodes/auto-generate');
+  },
+
   createHierarchyNode: async (data) => {
     return await api.post('/hr/hierarchy-nodes', data);
   },
@@ -157,6 +165,10 @@ export const hrService = {
   // --- PERSONNEL NODES ---
   getPersonnelNodes: async () => {
     return await api.get('/hr/personnel-nodes');
+  },
+
+  autoGeneratePersonnelNodes: async () => {
+    return await api.post('/hr/personnel-nodes/auto-generate');
   },
 
   createPersonnelNode: async (data) => {

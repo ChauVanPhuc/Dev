@@ -1,3 +1,4 @@
+from ctypes import Union
 from typing import Optional
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -77,6 +78,8 @@ def get_accounts(db: Session, skip: int = 0, limit: int = 10, search: str = None
 
     for account in accounts:
         acc_dict = {c.name: getattr(account, c.name) for c in account.__table__.columns}
+        if acc_dict.get("status") and ("s? d?ng" in acc_dict["status"] or "Ðang" in acc_dict["status"]):
+            acc_dict["status"] = "Đang sử dụng"
         
         # Lấy danh sách liên kết Department (legacy junction)
         depts = db.query(Department).filter(Department.account_id == account.id).all()

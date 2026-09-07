@@ -54,14 +54,12 @@ class AttendanceBase(BaseModel):
     overtime_hours: Optional[float] = 0.0
     note: Optional[str] = None
 
-class AttendanceCreate(AttendanceBase):
-    pass
-
 class BatchAttendanceCreate(BaseModel):
     employee_ids: List[str]
+    employee_shifts: Optional[Dict[str, str]] = None  # Dict mapping employee_id -> status (vd: {"0027": "OT_20H", "0090": "OT_22H"})
     start_date: date
     end_date: date
-    status: str  # LEAVE_PAID, LEAVE_UNPAID, EARLY_LEAVE_1630, HALF_DAY, OT_20H, OT_22H, SUNDAY_OFF, WORKING
+    status: Optional[str] = "OT_22H"  # Fallback LEAVE_PAID, LEAVE_UNPAID, EARLY_LEAVE_1630, HALF_DAY, OT_20H, OT_22H, SUNDAY_OFF, WORKING
     status_label: Optional[str] = None
     overtime_hours: Optional[float] = 0.0
     note: Optional[str] = None
@@ -81,7 +79,7 @@ class AttendanceResponse(AttendanceBase):
 @router.post("/seed-initial-data")
 def seed_attendance_from_excel(db: Session = Depends(get_db)):
     """
-    Tự động import dữ liệu lịch chấm công từ file Excel D:\\File\\Báo cáo quân số 2026 .xlsx nếu DB chưa có
+    Tự động import dữ liệu lịch chấm công từ file Excel D:\File\Báo cáo quân số 2026 .xlsx nếu DB chưa có
     """
     excel_path = r'D:\File\Báo cáo quân số 2026 .xlsx'
     if not os.path.exists(excel_path):
@@ -170,6 +168,35 @@ def seed_attendance_from_excel(db: Session = Depends(get_db)):
 
     db.commit()
     return {"message": f"Đã khởi tạo thành công {count} bản ghi chấm công từ Excel!", "count": count}
+
+
+@router.get("/day-details")
+def get_attendance_day_details(
+    work_date: date = Query(..., description="Ngày dạng YYYY-MM-DD"),
+    db: Session = Depends(get_db)
+):
+    """
+    Lấy danh sách chấm công / báo phép / tăng ca của một ngày cụ thể
+    """
+    records = db.query(QualityEmployeeAttendance).filter(
+        QualityEmployeeAttendance.work_date == work_date
+    ).all()
+
+    return [
+        {
+            "id": r.id,
+            "employee_id": r.employee_id,
+            "full_name": r.full_name,
+            "department": r.department,
+            "stage": r.stage,
+            "factory": r.factory,
+            "status": r.status,
+            "status_label": r.status_label or STATUS_LABEL_MAP.get(r.status, r.status),
+            "overtime_hours": r.overtime_hours,
+            "note": r.note
+        }
+        for r in records
+    ]
 
 
 @router.get("/calendar")
@@ -265,7 +292,8 @@ def get_attendance_calendar(
 @router.post("/batch-log", status_code=status.HTTP_201_CREATED)
 def create_batch_attendance(payload: BatchAttendanceCreate, db: Session = Depends(get_db)):
     """
-    Đăng ký Báo phép / Báo tăng ca hàng loạt cho 1 hoặc nhiều nhân sự theo khoảng ngày
+    Đăng ký Báo phép / Báo tăng ca hàng loạt cho 1 hoặc nhiều nhân sự theo khoảng ngày.
+    Hỗ trợ gán ca tăng ca linh hoạt riêng biệt cho từng nhân sự (payload.employee_shifts).
     """
     if payload.start_date > payload.end_date:
         raise HTTPException(status_code=400, detail="Ngày bắt đầu không được lớn hơn ngày kết thúc")
@@ -280,17 +308,20 @@ def create_batch_attendance(payload: BatchAttendanceCreate, db: Session = Depend
 
     created_records = []
     curr_date = payload.start_date
-    status_lbl = payload.status_label or STATUS_LABEL_MAP.get(payload.status, payload.status)
 
     while curr_date <= payload.end_date:
         # Check skip weekend option (Saturday = 5, Sunday = 6)
-        # Exception: If start_date == end_date, do not skip the explicitly chosen single date
         is_single_day_selection = (payload.start_date == payload.end_date)
         if payload.skip_weekends and not is_single_day_selection and curr_date.weekday() in (5, 6):
             curr_date += timedelta(days=1)
             continue
 
         for emp in employees:
+            # Xác định ca làm việc / ca tăng ca cụ thể của từng nhân sự
+            emp_st = (payload.employee_shifts.get(emp.employee_id) if payload.employee_shifts else None) or payload.status or "OT_22H"
+            emp_st_lbl = STATUS_LABEL_MAP.get(emp_st, emp_st)
+            emp_ot_hrs = 4.0 if emp_st == "OT_22H" else (2.0 if emp_st == "OT_20H" else (payload.overtime_hours or 0.0))
+
             # Check existing record for employee & date
             existing = db.query(QualityEmployeeAttendance).filter(
                 QualityEmployeeAttendance.employee_id == emp.employee_id,
@@ -298,9 +329,9 @@ def create_batch_attendance(payload: BatchAttendanceCreate, db: Session = Depend
             ).first()
 
             if existing:
-                existing.status = payload.status
-                existing.status_label = status_lbl
-                existing.overtime_hours = payload.overtime_hours or (4.0 if payload.status == "OT_22H" else (2.0 if payload.status == "OT_20H" else 0.0))
+                existing.status = emp_st
+                existing.status_label = emp_st_lbl
+                existing.overtime_hours = emp_ot_hrs
                 existing.note = payload.note
                 existing.updated_at = datetime.utcnow()
                 created_records.append(existing)
@@ -312,9 +343,9 @@ def create_batch_attendance(payload: BatchAttendanceCreate, db: Session = Depend
                     stage=emp.stage or "QLCL",
                     factory=emp.factory or "Nhà máy 1",
                     work_date=curr_date,
-                    status=payload.status,
-                    status_label=status_lbl,
-                    overtime_hours=payload.overtime_hours or (4.0 if payload.status == "OT_22H" else (2.0 if payload.status == "OT_20H" else 0.0)),
+                    status=emp_st,
+                    status_label=emp_st_lbl,
+                    overtime_hours=emp_ot_hrs,
                     note=payload.note
                 )
                 db.add(new_rec)
@@ -433,32 +464,62 @@ def get_daily_headcount_summary(
             summary_matrix[cat]["leave_unpaid"] += 1
         elif st == "EARLY_LEAVE_1630":
             summary_matrix[cat]["early_1630"] += 1
-            summary_matrix[cat]["working"] += 1
         elif st == "HALF_DAY":
             summary_matrix[cat]["half_day"] += 1
         elif st == "OT_20H":
             summary_matrix[cat]["ot_20h"] += 1
-            summary_matrix[cat]["working"] += 1
         elif st == "OT_22H":
             summary_matrix[cat]["ot_22h"] += 1
-            summary_matrix[cat]["working"] += 1
         elif st == "SUNDAY_OFF":
             summary_matrix[cat]["sunday_off"] += 1
-        elif st == "WORKING":
-            summary_matrix[cat]["working"] += 1
 
-    # Total row
-    totals = {
-        "total": sum(v["total"] for v in summary_matrix.values()),
-        "working": sum(v["working"] for v in summary_matrix.values()),
-        "leave_paid": sum(v["leave_paid"] for v in summary_matrix.values()),
-        "leave_unpaid": sum(v["leave_unpaid"] for v in summary_matrix.values()),
-        "early_1630": sum(v["early_1630"] for v in summary_matrix.values()),
-        "half_day": sum(v["half_day"] for v in summary_matrix.values()),
-        "ot_20h": sum(v["ot_20h"] for v in summary_matrix.values()),
-        "ot_22h": sum(v["ot_22h"] for v in summary_matrix.values()),
-        "sunday_off": sum(v["sunday_off"] for v in summary_matrix.values())
-    }
+    # Calculate default working headcount (Total - Absences)
+    for cat, item in summary_matrix.items():
+        absent_count = item["leave_paid"] + item["leave_unpaid"] + item["half_day"] + item["sunday_off"]
+        item["working"] = max(0, item["total"] - absent_count)
+
+    # Construct detailed list for ALL active employees
+    employee_details = []
+    att_by_emp = {}
+    for att in attendances:
+        if att.employee_id not in att_by_emp:
+            att_by_emp[att.employee_id] = []
+        att_by_emp[att.employee_id].append(att)
+
+    for emp in employees:
+        cat = emp_cat_map.get(emp.employee_id, "QC")
+        emp_atts = att_by_emp.get(emp.employee_id, [])
+        statuses = [a.status for a in emp_atts]
+        ot_hours = sum(a.overtime_hours or 0.0 for a in emp_atts)
+        notes = [a.note for a in emp_atts if a.note and not any(k in a.note for k in ['Excel', 'Imported', 'Đồng bộ'])]
+        
+        status_display = "Đi làm"
+        if "OT_22H" in statuses:
+            status_display = "Tăng ca 22h"
+        elif "OT_20H" in statuses:
+            status_display = "Tăng ca 20h"
+        elif "LEAVE_PAID" in statuses:
+            status_display = "Vắng CP (Phép)"
+        elif "LEAVE_UNPAID" in statuses:
+            status_display = "Vắng KP"
+        elif "EARLY_LEAVE_1630" in statuses:
+            status_display = "Về 16h30"
+        elif "HALF_DAY" in statuses:
+            status_display = "Nghỉ 0.5d"
+        elif "SUNDAY_OFF" in statuses:
+            status_display = "Vắng CN"
+
+        employee_details.append({
+            "employee_id": emp.employee_id,
+            "full_name": emp.full_name,
+            "category": cat,
+            "department": emp.department or "",
+            "stage": emp.stage or "",
+            "factory": emp.factory or "",
+            "status_display": status_display,
+            "overtime_hours": ot_hours,
+            "note": "; ".join(notes) if notes else ""
+        })
 
     return {
         "period_type": period_type,
@@ -467,7 +528,53 @@ def get_daily_headcount_summary(
         "start_date": start_date.strftime("%Y-%m-%d"),
         "end_date": end_date.strftime("%Y-%m-%d"),
         "summary": summary_matrix,
-        "totals": totals
+        "totals": totals,
+        "details": employee_details
+    }
+
+
+class UpdateAttendanceRequest(BaseModel):
+    status: str
+    note: Optional[str] = None
+
+@router.put("/{id}")
+def update_attendance_record(id: int, payload: UpdateAttendanceRequest, db: Session = Depends(get_db)):
+    """
+    Cập nhật nhanh ca tăng ca (OT_20H / OT_22H) hoặc trạng thái nghỉ phép của 1 bản ghi
+    """
+    rec = db.query(QualityEmployeeAttendance).filter(QualityEmployeeAttendance.id == id).first()
+    if not rec:
+        raise HTTPException(status_code=404, detail="Không tìm thấy bản ghi chấm công")
+
+    rec.status = payload.status
+    rec.status_label = STATUS_LABEL_MAP.get(payload.status, payload.status)
+    if payload.status == "OT_22H":
+        rec.overtime_hours = 4.0
+    elif payload.status == "OT_20H":
+        rec.overtime_hours = 2.0
+    else:
+        rec.overtime_hours = 0.0
+
+    if payload.note is not None:
+        rec.note = payload.note
+
+    rec.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(rec)
+    return {
+        "message": "Cập nhật bản ghi chấm công thành công",
+        "record": {
+            "id": rec.id,
+            "employee_id": rec.employee_id,
+            "full_name": rec.full_name,
+            "department": rec.department,
+            "stage": rec.stage,
+            "factory": rec.factory,
+            "status": rec.status,
+            "status_label": rec.status_label,
+            "overtime_hours": rec.overtime_hours,
+            "note": rec.note
+        }
     }
 
 

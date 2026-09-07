@@ -319,6 +319,11 @@ def update_existing_section(id: int, sec: hr_schemas.HRSectionCreate, db: Sessio
 def list_org_nodes(db: Session = Depends(get_db)):
     return hr_controller.get_org_nodes(db)
 
+@router.post("/org-nodes/auto-generate")
+def auto_generate_org_nodes(db: Session = Depends(get_db)):
+    hr_controller.auto_generate_org_nodes(db)
+    return hr_controller.get_org_nodes(db)
+
 @router.post("/org-nodes", response_model=hr_schemas.HROrgNodeResponse)
 def create_org_node(node: hr_schemas.HROrgNodeCreate, db: Session = Depends(get_db)):
     return hr_controller.create_org_node(db, node)
@@ -358,6 +363,11 @@ def unassign_employee(id: int, db: Session = Depends(get_db)):
 def list_hierarchy_nodes(db: Session = Depends(get_db)):
     return hr_controller.get_hierarchy_nodes(db)
 
+@router.post("/hierarchy-nodes/auto-generate")
+def auto_generate_hierarchy_nodes(db: Session = Depends(get_db)):
+    hr_controller.auto_generate_hierarchy_nodes(db)
+    return hr_controller.get_hierarchy_nodes(db)
+
 @router.post("/hierarchy-nodes", response_model=hr_schemas.HRHierarchyNodeResponse)
 def create_hierarchy_node(node: hr_schemas.HRHierarchyNodeCreate, db: Session = Depends(get_db)):
     return hr_controller.create_hierarchy_node(db, node)
@@ -381,6 +391,11 @@ def delete_hierarchy_node(id: int, db: Session = Depends(get_db)):
 
 @router.get("/personnel-nodes", response_model=List[hr_schemas.HRPersonnelNodeResponse])
 def list_personnel_nodes(db: Session = Depends(get_db)):
+    return hr_controller.get_personnel_nodes(db)
+
+@router.post("/personnel-nodes/auto-generate")
+def auto_generate_personnel_nodes(db: Session = Depends(get_db)):
+    hr_controller.auto_generate_personnel_nodes(db)
     return hr_controller.get_personnel_nodes(db)
 
 @router.post("/personnel-nodes", response_model=hr_schemas.HRPersonnelNodeResponse)
