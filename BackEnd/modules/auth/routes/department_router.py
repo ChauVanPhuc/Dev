@@ -17,6 +17,7 @@ class DepartmentItemResponse(BaseModel):
     code: Optional[str] = None
     role_id: Optional[int] = None
     role_name: Optional[str] = None
+    responsibility_scope: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -25,6 +26,7 @@ class DepartmentItemCreate(BaseModel):
     name: str
     code: Optional[str] = None
     role_id: int
+    responsibility_scope: Optional[str] = None
 
 @router.get("/", response_model=List[DepartmentItemResponse])
 def get_departments(
@@ -63,7 +65,8 @@ def get_departments(
             name=d.name,
             code=d.code,
             role_id=d.role_id,
-            role_name=roles_map.get(d.role_id)
+            role_name=roles_map.get(d.role_id),
+            responsibility_scope=d.responsibility_scope
         ))
     return result
 
@@ -78,16 +81,20 @@ def create_department(
     new_dept = Department(
         name=dept_data.name,
         code=dept_data.code,
-        role_id=dept_data.role_id
+        role_id=dept_data.role_id,
+        responsibility_scope=dept_data.responsibility_scope
     )
     db.add(new_dept)
     db.commit()
     db.refresh(new_dept)
+    roles_map = {r.id: r.name for r in db.query(Role).all()}
     return DepartmentItemResponse(
         id=new_dept.id,
         name=new_dept.name,
         code=new_dept.code,
-        role_id=new_dept.role_id
+        role_id=new_dept.role_id,
+        role_name=roles_map.get(new_dept.role_id),
+        responsibility_scope=new_dept.responsibility_scope
     )
 
 @router.put("/{id}", response_model=DepartmentItemResponse)
@@ -99,6 +106,7 @@ def update_department(id: int, dept_data: DepartmentItemCreate, db: Session = De
     dept.name = dept_data.name
     dept.code = dept_data.code
     dept.role_id = dept_data.role_id
+    dept.responsibility_scope = dept_data.responsibility_scope
     db.commit()
     db.refresh(dept)
 
@@ -108,7 +116,8 @@ def update_department(id: int, dept_data: DepartmentItemCreate, db: Session = De
         name=dept.name,
         code=dept.code,
         role_id=dept.role_id,
-        role_name=roles_map.get(dept.role_id)
+        role_name=roles_map.get(dept.role_id),
+        responsibility_scope=dept.responsibility_scope
     )
 
 @router.delete("/{id}")

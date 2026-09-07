@@ -21,4 +21,6 @@ class Department(Base):
     output_stage = Column(NVARCHAR(50), nullable=True) # Tên công đoạn đầu ra
     name = Column(NVARCHAR(100), nullable=True) # Tên bộ phận
     code = Column(NVARCHAR(50), nullable=True) # Mã bộ phận
+    responsibility_scope = Column(NVARCHAR(1000), nullable=True) # Phạm vi trách nhiệm chốt
+
 

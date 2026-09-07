@@ -70,7 +70,9 @@ export default function SystemConfigView() {
   const [generalName, setGeneralName] = useState('');
   const [generalDesc, setGeneralDesc] = useState('');
   const [deptRoleId, setDeptRoleId] = useState('');
+  const [deptResponsibilityScope, setDeptResponsibilityScope] = useState('');
   const [roleOptions, setRoleOptions] = useState([]);
+
 
   // --- CATEGORY (Dòng hàng) FORM STATES ---
   const [catName, setCatName] = useState('');
@@ -534,6 +536,7 @@ export default function SystemConfigView() {
       setGeneralName('');
       setGeneralDesc('');
       setDeptRoleId('');
+      setDeptResponsibilityScope('');
     } else if (activeTab === 'position') {
       setGeneralCode('');
       setGeneralName('');
@@ -605,6 +608,7 @@ export default function SystemConfigView() {
       setGeneralName(item.name || '');
       setGeneralDesc('');
       setDeptRoleId(item.role_id ? String(item.role_id) : '');
+      setDeptResponsibilityScope(item.responsibility_scope || '');
     } else if (activeTab === 'position') {
       setGeneralCode(item.code || '');
       setGeneralName(item.name || '');
@@ -705,7 +709,8 @@ export default function SystemConfigView() {
         const payload = {
           code: generalCode.trim(),
           name: generalName.trim(),
-          role_id: parseInt(deptRoleId)
+          role_id: parseInt(deptRoleId),
+          responsibility_scope: deptResponsibilityScope.trim() || null
         };
         if (selectedItem) {
           await api.put(`/departments/${selectedItem.id}`, payload);
@@ -1542,6 +1547,7 @@ export default function SystemConfigView() {
                           <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Mã viết tắt</th>
                           <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Tên bộ phận</th>
                           <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Phòng ban</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Phạm vi trách nhiệm chốt</th>
                         </>
                       )}
                       {activeTab === 'position' && (
@@ -1655,6 +1661,7 @@ export default function SystemConfigView() {
                               <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1F2937', fontWeight: 'bold' }}>{item.code}</td>
                               <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#4B5563', fontWeight: 600 }}>{item.name}</td>
                               <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#6B7280' }}>{item.role_name || '---'}</td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#4B5563' }}>{item.responsibility_scope || '---'}</td>
                             </>
                           )}
                           {activeTab === 'position' && (
@@ -2530,20 +2537,32 @@ export default function SystemConfigView() {
                     </div>
 
                     {activeTab === 'department' && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>THUỘC PHÒNG BAN *</label>
-                        <select
-                          value={deptRoleId}
-                          onChange={(e) => setDeptRoleId(e.target.value)}
-                          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none', backgroundColor: '#FFFFFF' }}
-                          required
-                        >
-                          <option value="">-- Chọn Phòng Ban trực thuộc --</option>
-                          {roleOptions.map(role => (
-                            <option key={role.id} value={role.id}>{role.name}</option>
-                          ))}
-                        </select>
-                      </div>
+                      <>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>THUỘC PHÒNG BAN *</label>
+                          <select
+                            value={deptRoleId}
+                            onChange={(e) => setDeptRoleId(e.target.value)}
+                            style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none', backgroundColor: '#FFFFFF' }}
+                            required
+                          >
+                            <option value="">-- Chọn Phòng Ban trực thuộc --</option>
+                            {roleOptions.map(role => (
+                              <option key={role.id} value={role.id}>{role.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>PHẠM VI TRÁCH NHIỆM CHỐT</label>
+                          <textarea
+                            value={deptResponsibilityScope}
+                            onChange={(e) => setDeptResponsibilityScope(e.target.value)}
+                            placeholder="Mô tả phạm vi trách nhiệm chốt của bộ phận..."
+                            rows="3"
+                            style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none', resize: 'vertical' }}
+                          />
+                        </div>
+                      </>
                     )}
 
                     {activeTab === 'position' && (

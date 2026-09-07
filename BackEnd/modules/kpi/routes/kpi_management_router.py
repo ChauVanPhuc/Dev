@@ -28,6 +28,8 @@ class KPIChecklistBase(BaseModel):
     perform_count: int
     last_performed: Optional[str] = None
     result: Optional[str] = None
+    department_code: Optional[str] = None
+
 
 class KPIChecklistCreate(KPIChecklistBase):
     employee_id: str
@@ -77,6 +79,8 @@ class KPIChecklistPoolBase(BaseModel):
     task_code: str
     content: str
     frequency: str
+    department_code: Optional[str] = None
+
 
 class KPIItemPoolBase(BaseModel):
     kpi_code: str
@@ -233,10 +237,12 @@ def get_kpi_employees(db: Session = Depends(get_db)):
 
 # 2. Checklist công việc CRUD
 @router.get("/checklists", response_model=List[dict])
-def get_checklists(employee_id: Optional[str] = None, db: Session = Depends(get_db)):
+def get_checklists(employee_id: Optional[str] = None, department_code: Optional[str] = None, db: Session = Depends(get_db)):
     query = db.query(KPIChecklist)
     if employee_id:
         query = query.filter(KPIChecklist.employee_id == employee_id)
+    if department_code and department_code.strip() and department_code.upper() not in ['ALL', 'TẤT CẢ']:
+        query = query.filter(KPIChecklist.department_code == department_code.strip())
     items = query.order_by(KPIChecklist.id.asc()).all()
     return [
         {
@@ -248,7 +254,8 @@ def get_checklists(employee_id: Optional[str] = None, db: Session = Depends(get_
             "status_today": idx.status_today,
             "perform_count": idx.perform_count,
             "last_performed": idx.last_performed,
-            "result": idx.result
+            "result": idx.result,
+            "department_code": idx.department_code
         }
         for idx in items
     ]
@@ -527,38 +534,22 @@ def delete_point_rule(id: int, db: Session = Depends(get_db)):
 
 # 7. Danh mục Checklist mẫu chung (Checklist Pool) CRUD
 @router.get("/checklist-pool", response_model=List[dict])
-def get_checklist_pool(db: Session = Depends(get_db)):
+def get_checklist_pool(department_code: Optional[str] = None, db: Session = Depends(get_db)):
     """
-    [GET] Lấy danh sách checklist mẫu chung. Nếu trống, tự động seed các giá trị mặc định.
+    [GET] Lấy danh sách checklist mẫu chung.
     """
-    items = db.query(KPIChecklistPool).order_by(KPIChecklistPool.id.desc()).all()
-    if not items:
-        default_items = [
-            ("CV01", "Báo cáo OQA", "Hàng ngày"),
-            ("CV02", "Vệ sinh 5S", "Hàng ngày"),
-            ("CV03", "Báo cáo năng suất thiết bị OEE", "Hàng tuần"),
-            ("CV04", "Họp giao ban", "Hàng ngày"),
-            ("CV05", "Kiểm tra chéo công việc", "Hàng tuần"),
-            ("CV06", "Thử nghiệm phá hủy mẫu", "Hằng tháng"),
-            ("CV07", "Báo cáo hiệu suất máy", "Khi phát sinh"),
-            ("CV08", "Họp team tuần", "Hàng tuần"),
-            ("CV09", "Cập nhật CAPA", "Hằng tháng")
-        ]
-        for code, content, freq in default_items:
-            db.add(KPIChecklistPool(
-                task_code=code,
-                content=content,
-                frequency=freq
-            ))
-        db.commit()
-        items = db.query(KPIChecklistPool).order_by(KPIChecklistPool.id.desc()).all()
+    query = db.query(KPIChecklistPool)
+    if department_code and department_code.strip() and department_code.upper() not in ['ALL', 'TẤT CẢ']:
+        query = query.filter(KPIChecklistPool.department_code == department_code.strip())
+    items = query.order_by(KPIChecklistPool.id.asc()).all()
     
     return [
         {
             "id": r.id,
             "task_code": r.task_code,
             "content": r.content,
-            "frequency": r.frequency
+            "frequency": r.frequency,
+            "department_code": r.department_code
         }
         for r in items
     ]

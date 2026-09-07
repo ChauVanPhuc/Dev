@@ -106,6 +106,22 @@ try:
 except Exception:
     pass
 
+# [MIGRATION] Seed QLCL Departments & responsibility_scope column
+try:
+    from database.migrations.seed_qlcl_departments import seed_qlcl_departments
+    seed_qlcl_departments()
+except Exception as err:
+    print(f"[MIGRATION] Seed QLCL departments warning: {err}")
+
+# [MIGRATION] Seed QLCL Checklists & department_code column
+try:
+    from database.migrations.seed_qlcl_checklists import seed_qlcl_checklists
+    seed_qlcl_checklists()
+except Exception as err:
+    print(f"[MIGRATION] Seed QLCL checklists warning: {err}")
+
+
+
 # [MIGRATION] Add workshop column to machines table
 from sqlalchemy import text
 try:

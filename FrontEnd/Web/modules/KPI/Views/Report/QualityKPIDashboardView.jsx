@@ -49,6 +49,43 @@ const CALC_METHOD_MAP = {
   'attendance_days': 'Tỷ lệ ngày công thực tế (Ngày / 26)'
 };
 
+const qlclDepartmentsList = [
+  { code: 'ALL', name: 'Tất cả Bộ phận QLCL' },
+  { code: 'MANAGER', name: 'Trưởng phòng QLCL' },
+  { code: 'QA', name: 'Control QA' },
+  { code: 'CQA', name: 'Customer QA' },
+  { code: 'QSE', name: 'Quality System Eng (QSE)' },
+  { code: 'QA_ADMIN', name: 'QA Admin (Tài liệu & Th.bị)' },
+  { code: 'PQA', name: 'Process QA (PQA)' },
+  { code: 'QC_LEAD', name: 'Tổ trưởng QC (QC Lead)' },
+  { code: 'IQC', name: 'IQC (Kiểm tra nhập kho)' },
+  { code: 'PQC1', name: 'PQC1 (QC Định hình - Lắp ráp)' },
+  { code: 'PQC2', name: 'PQC2 (QC Sơn - Đóng gói)' },
+  { code: 'FQC', name: 'FQC (QC Final thành phẩm)' }
+];
+
+const getDeptBadgeStyle = (code) => {
+  const labelMap = {
+    'IQC': 'IQC',
+    'PQC1': 'PQC1',
+    'PQC2': 'PQC2',
+    'FQC': 'FQC',
+    'QC_LEAD': 'QC Lead',
+    'QA': 'QA',
+    'QA_ADMIN': 'QA Admin',
+    'QSE': 'QSE',
+    'CQA': 'CQA',
+    'PQA': 'PQA',
+    'MANAGER': 'Manager'
+  };
+  return {
+    bg: '#F5EBE6',
+    color: '#5D3B32',
+    border: '#EADCC9',
+    label: labelMap[code] || code || 'QLCL'
+  };
+};
+
 const getCalcMethodLabel = (val, fallback = '') => {
   if (!val) return fallback || 'TB cộng % Đạt từng phiếu';
   const key = String(val).trim().toLowerCase();
@@ -254,6 +291,28 @@ const QualityKPIDashboardView = () => {
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState('Tất cả');
 
+  // Pagination States for all 7 tabs
+  const [targetPage, setTargetPage] = useState(1);
+  const [targetPageSize, setTargetPageSize] = useState(10);
+
+  const [indicatorPage, setIndicatorPage] = useState(1);
+  const [indicatorPageSize, setIndicatorPageSize] = useState(10);
+
+  const [checklistPage, setChecklistPage] = useState(1);
+  const [checklistPageSize, setChecklistPageSize] = useState(10);
+
+  const [violationPage, setViolationPage] = useState(1);
+  const [violationPageSize, setViolationPageSize] = useState(10);
+
+  const [trainingPage, setTrainingPage] = useState(1);
+  const [trainingPageSize, setTrainingPageSize] = useState(10);
+
+  const [reportPage, setReportPage] = useState(1);
+  const [reportPageSize, setReportPageSize] = useState(10);
+
+  const [alertPage, setAlertPage] = useState(1);
+  const [alertPageSize, setAlertPageSize] = useState(10);
+
   // Multi-option Excel Export Modal States
   const [showExportModal, setShowExportModal] = useState(false);
   const [selectedExportOption, setSelectedExportOption] = useState('current'); // 'current' | 'summary' | 'full'
@@ -299,6 +358,157 @@ const QualityKPIDashboardView = () => {
     });
 
     return result;
+  };
+
+  // Reusable Page Size Select Component for Filter Panel
+  const RenderPageSizeSelect = ({ pageSize, setPageSize, setCurrentPage }) => (
+    <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px' }}>
+      <span style={{ fontWeight: '800', color: '#5D3B32', fontSize: '0.72rem' }}>Hiển thị:</span>
+      <select
+        value={pageSize}
+        onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
+        style={{
+          padding: '3px 8px',
+          borderRadius: '6px',
+          border: '1px solid #EADCC9',
+          fontSize: '0.72rem',
+          color: '#5D3B32',
+          backgroundColor: '#FAF6F0',
+          fontWeight: '700',
+          cursor: 'pointer',
+          outline: 'none'
+        }}
+      >
+        <option value={5}>5 / trang</option>
+        <option value={8}>8 / trang</option>
+        <option value={10}>10 / trang</option>
+        <option value={15}>15 / trang</option>
+        <option value={20}>20 / trang</option>
+        <option value={50}>50 / trang</option>
+      </select>
+    </div>
+  );
+
+  // Reusable Pagination Control Component (Matched to Reference UI)
+  const renderPaginationControl = (currentPage, setCurrentPage, pageSize, totalItems, entityLabel = 'bản ghi') => {
+    const totalPages = Math.ceil(totalItems / pageSize) || 1;
+    const startIdx = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+    const endIdx = Math.min(currentPage * pageSize, totalItems);
+
+    // Generate page numbers array [1, 2, 3...]
+    const getPageNumbers = () => {
+      const pages = [];
+      const maxVisible = 5;
+      let start = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+      let end = Math.min(totalPages, start + maxVisible - 1);
+
+      if (end - start + 1 < maxVisible) {
+        start = Math.max(1, end - maxVisible + 1);
+      }
+
+      for (let i = start; i <= end; i++) {
+        pages.push(i);
+      }
+      return pages;
+    };
+
+    const pageNumbers = getPageNumbers();
+
+    return (
+      <div className="admin-pagination-desktop" style={{
+        padding: '10px 16px',
+        backgroundColor: '#FFFFFF',
+        borderTop: '1px solid #EADCC9',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        fontSize: '0.75rem',
+        color: '#64748B',
+        marginTop: 'auto',
+        flexShrink: 0
+      }}>
+        {/* Left: Info text */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span style={{ color: '#78716C', fontSize: '0.75rem', fontWeight: '500' }}>
+            Hiển thị <b style={{ color: '#44403C' }}>{startIdx} - {endIdx}</b> trên <b style={{ color: '#44403C' }}>{totalItems}</b> {entityLabel}
+          </span>
+        </div>
+
+        {/* Right: Page number buttons matching reference design */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+          {/* Previous Page Button */}
+          <button
+            disabled={currentPage === 1}
+            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+            style={{
+              width: '28px',
+              height: '28px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '4px',
+              border: '1px solid #EADCC9',
+              backgroundColor: currentPage === 1 ? '#FAF6F0' : '#FFFFFF',
+              color: currentPage === 1 ? '#D6C7B2' : '#5D3B32',
+              cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+              fontWeight: '700',
+              fontSize: '0.85rem'
+            }}
+            title="Trang trước"
+          >
+            ‹
+          </button>
+
+          {/* Page Number Buttons */}
+          {pageNumbers.map(pg => (
+            <button
+              key={pg}
+              onClick={() => setCurrentPage(pg)}
+              style={{
+                width: '28px',
+                height: '28px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '4px',
+                border: pg === currentPage ? 'none' : '1px solid #EADCC9',
+                backgroundColor: pg === currentPage ? '#7B5233' : '#FFFFFF',
+                color: pg === currentPage ? '#FFFFFF' : '#5D3B32',
+                cursor: 'pointer',
+                fontWeight: pg === currentPage ? '800' : '600',
+                fontSize: '0.78rem',
+                boxShadow: pg === currentPage ? '0 1px 3px rgba(123, 82, 51, 0.3)' : 'none'
+              }}
+            >
+              {pg}
+            </button>
+          ))}
+
+          {/* Next Page Button */}
+          <button
+            disabled={currentPage >= totalPages}
+            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+            style={{
+              width: '28px',
+              height: '28px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '4px',
+              border: '1px solid #EADCC9',
+              backgroundColor: currentPage >= totalPages ? '#FAF6F0' : '#FFFFFF',
+              color: currentPage >= totalPages ? '#D6C7B2' : '#5D3B32',
+              cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer',
+              fontWeight: '700',
+              fontSize: '0.85rem'
+            }}
+            title="Trang sau"
+          >
+            ›
+          </button>
+        </div>
+      </div>
+    );
   };
 
   // --- HELPER KHUNG HÌNH THỨC EXCEL ĐẸP (THEO TRANG QUALITY RECORDS) ---
@@ -649,7 +859,9 @@ const QualityKPIDashboardView = () => {
 
   const [isChecklistModalOpen, setIsChecklistModalOpen] = useState(false);
   const [editingChecklist, setEditingChecklist] = useState(null);
-  const [checklistFormData, setChecklistFormData] = useState({ content: '', frequency: 'Hàng ngày', employee_id: 'NV_QLCL_004', status_today: 'Chưa làm' });
+  const [selectedChecklistDept, setSelectedChecklistDept] = useState('ALL');
+  const [checklistFormData, setChecklistFormData] = useState({ content: '', frequency: 'Hàng ngày', employee_id: 'NV_IQC_001', status_today: 'Chưa làm', department_code: 'IQC' });
+
 
   // Dynamic Summary Stats from DB
   const [summaryStats, setSummaryStats] = useState({
@@ -1159,7 +1371,13 @@ const QualityKPIDashboardView = () => {
   // CRUD Handlers for Tab Checklist Công Việc (Custom React Popup Modal)
   const handleAddDashboardChecklist = () => {
     setEditingChecklist(null);
-    setChecklistFormData({ content: '', frequency: 'Hàng ngày', employee_id: 'NV_QLCL_004', status_today: 'Chưa làm' });
+    setChecklistFormData({
+      content: '',
+      frequency: 'Hàng ngày',
+      employee_id: selectedChecklistDept !== 'ALL' ? `NV_${selectedChecklistDept}_001` : 'NV_IQC_001',
+      status_today: 'Chưa làm',
+      department_code: selectedChecklistDept !== 'ALL' ? selectedChecklistDept : 'IQC'
+    });
     setIsChecklistModalOpen(true);
   };
 
@@ -1168,8 +1386,9 @@ const QualityKPIDashboardView = () => {
     setChecklistFormData({
       content: item.content || '',
       frequency: item.frequency || 'Hàng ngày',
-      employee_id: item.employee_id || 'NV_QLCL_004',
-      status_today: item.status_today || 'Đang thực hiện'
+      employee_id: item.employee_id || 'NV_IQC_001',
+      status_today: item.status_today || 'Đang thực hiện',
+      department_code: item.department_code || 'IQC'
     });
     setIsChecklistModalOpen(true);
   };
@@ -1188,7 +1407,8 @@ const QualityKPIDashboardView = () => {
           status_today: checklistFormData.status_today,
           perform_count: editingChecklist.perform_count || 1,
           last_performed: new Date().toISOString().split('T')[0],
-          result: editingChecklist.result || 'Đã cập nhật'
+          result: editingChecklist.result || 'Đã cập nhật',
+          department_code: checklistFormData.department_code || 'IQC'
         });
       } else {
         await api.post('/kpi-management/checklists', {
@@ -1199,7 +1419,8 @@ const QualityKPIDashboardView = () => {
           status_today: checklistFormData.status_today,
           perform_count: 0,
           last_performed: new Date().toISOString().split('T')[0],
-          result: 'Mới tạo'
+          result: 'Mới tạo',
+          department_code: checklistFormData.department_code || 'IQC'
         });
       }
       setIsChecklistModalOpen(false);
@@ -1220,20 +1441,21 @@ const QualityKPIDashboardView = () => {
   };
 
   return (
-    <div style={{ padding: '12px 14px', backgroundColor: '#FAF6F0', minHeight: '100vh', boxSizing: 'border-box' }}>
+    <div className="gold-layout" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 68px)', backgroundColor: '#FAF6F0', padding: '12px 14px', boxSizing: 'border-box', overflow: 'hidden' }}>
       
       {/* 7 MAIN TAB BUTTONS (CLEAN TEXT-ONLY, COMPACT DESIGN) */}
       <div style={{
         display: 'flex',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
         gap: '8px',
         borderBottom: '2px solid #EADCC9',
-        marginBottom: '14px',
-        overflowX: 'auto',
+        marginBottom: '10px',
         paddingBottom: '2px',
-        alignItems: 'center',
-        justifyContent: 'space-between'
+        flexShrink: 0
       }}>
-        <div style={{ display: 'flex', gap: '6px', overflowX: 'auto' }}>
+        <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', flex: 1, alignItems: 'center' }}>
           {[
             { id: 'quality_targets', label: 'Mục tiêu chất lượng' },
             { id: 'work_indicators', label: 'Chỉ số công việc' },
@@ -1269,7 +1491,7 @@ const QualityKPIDashboardView = () => {
         </div>
 
         {/* Live DB Indicator & Refresh Button */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
           <button
             onClick={fetchDatabaseData}
             disabled={loading}
@@ -1282,16 +1504,16 @@ const QualityKPIDashboardView = () => {
       </div>
 
       {/* TAB CONTENT AREA */}
-      <div>
+      <div className="admin-list-layout" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
 
         {/* ========================================================================= */}
         {/* TAB 1: MỤC TIÊU CHẤT LƯỢNG                                                 */}
         {/* ========================================================================= */}
         {activeTab === 'quality_targets' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0, overflow: 'hidden' }}>
             
             {/* TOP 2 CARDS matching Mockup Screen 1 */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '10px' }}>
+            <div style={{ flexShrink: 0, display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '10px' }}>
               
               {/* CARD 1: Tỉ lệ đạt lỗi định kỳ (Monthly defect rate chart) */}
               <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9' }}>
@@ -1382,8 +1604,8 @@ const QualityKPIDashboardView = () => {
             </div>
 
             {/* TABLE: Danh sách Mục tiêu chất lượng */}
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
-              <div style={{ padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="mgmt-table card admin-table-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, backgroundColor: '#FFFFFF', borderRadius: '10px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
+              <div style={{ flexShrink: 0, padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <TableControlToolbar
                   searchValue={targetSearch}
                   onSearchChange={(e) => setTargetSearch(e.target.value)}
@@ -1403,8 +1625,8 @@ const QualityKPIDashboardView = () => {
               </div>
 
               {filterOpen && (
-                <div style={{ padding: '6px 14px', backgroundColor: '#FFFBEB', borderBottom: '1px solid #FCD34D', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.72rem' }}>
-                  <span style={{ fontWeight: '800', color: '#92400E' }}>Bộ lọc trạng thái:</span>
+                <div style={{ flexShrink: 0, padding: '6px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.72rem' }}>
+                  <span style={{ fontWeight: '800', color: '#5D3B32' }}>Bộ lọc trạng thái:</span>
                   {['Tất cả', 'Đã duyệt / Đạt', 'Chờ xử lý / Cần làm'].map(opt => (
                     <button
                       key={opt}
@@ -1412,86 +1634,98 @@ const QualityKPIDashboardView = () => {
                       style={{
                         padding: '2px 10px',
                         borderRadius: '4px',
-                        border: '1px solid #F59E0B',
-                        backgroundColor: filterStatus === opt ? '#F59E0B' : '#FFFFFF',
-                        color: filterStatus === opt ? '#FFFFFF' : '#92400E',
-                        fontWeight: '700',
+                        border: '1px solid ' + (filterStatus === opt ? '#5D3B32' : '#EADCC9'),
+                        backgroundColor: filterStatus === opt ? '#5D3B32' : '#FFFFFF',
+                        color: filterStatus === opt ? '#FFFFFF' : '#5D3B32',
+                        fontWeight: filterStatus === opt ? '800' : '600',
                         cursor: 'pointer'
                       }}
                     >
                       {opt}
                     </button>
                   ))}
+                  <RenderPageSizeSelect pageSize={targetPageSize} setPageSize={setTargetPageSize} setCurrentPage={setTargetPage} />
                 </div>
               )}
 
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#5D3B32', color: '#FFFFFF', textAlign: 'left' }}>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '40px' }}>STT</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '100px' }}>Mã công việc</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Tên công việc / Mục tiêu</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '100px' }}>Mức độ ưu tiên</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '70px' }}>Tỷ trọng</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '90px' }}>Tần suất</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '100px' }}>Tiêu chuẩn</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '100px' }}>Hạn hoàn thành</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '90px' }}>Tiến độ</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '80px' }}>Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filterAndSortData(hasFetchedDb ? kpiTargets : (kpiTargets.length > 0 ? kpiTargets : defaultKpiTargets), targetSearch).map((item, idx) => (
-                    <tr
-                      key={item.id || idx}
-                      style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}
-                    >
-                      <td style={{ padding: '5px 10px', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
-                      <td style={{ padding: '5px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.code || `MT-${String(idx + 1).padStart(2, '0')}`}</td>
-                      <td style={{ padding: '5px 10px', fontWeight: '700', color: '#1E293B' }}>{item.name}</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'center' }}>
-                        <span style={{
-                          padding: '2px 8px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: '800',
-                          backgroundColor: idx % 3 === 0 ? '#FEE2E2' : idx % 3 === 1 ? '#FEF3C7' : '#DCFCE7',
-                          color: idx % 3 === 0 ? '#DC2626' : idx % 3 === 1 ? '#B45309' : '#15803D'
-                        }}>
-                          {idx % 3 === 0 ? 'Cao' : idx % 3 === 1 ? 'Trung bình' : 'Thấp'}
-                        </span>
-                      </td>
-                      <td style={{ padding: '5px 10px', textAlign: 'center', fontWeight: '800', color: '#5D3B32' }}>{item.weight || '20%'}</td>
-                      <td style={{ padding: '5px 10px', color: '#475569' }}>{item.unit || 'Hàng tháng'}</td>
-                      <td style={{ padding: '5px 10px', color: '#15803D', fontWeight: '700' }}>{item.target || '100%'}</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'center', color: '#64748B' }}>31/12/2026</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <div style={{ flex: 1, height: '5px', backgroundColor: '#E2E8F0', borderRadius: '2px', overflow: 'hidden' }}>
-                            <div style={{ width: `${80 - (idx % 5) * 10}%`, height: '100%', backgroundColor: '#5D3B32' }}></div>
-                          </div>
-                          <span style={{ fontSize: '0.68rem', fontWeight: '800', color: '#5D3B32' }}>{80 - (idx % 5) * 10}%</span>
-                        </div>
-                      </td>
-                      <td style={{ padding: '5px 10px', textAlign: 'center' }}>
-                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
-                          <button
-                            onClick={() => { setEditingTarget(item); setIsTargetModalOpen(true); }}
-                            style={{ border: 'none', background: '#E0F2FE', color: '#0369A1', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
-                            title="Sửa"
-                          >
-                            <Edit2 size={12} />
-                          </button>
-                          <button
-                            onClick={() => handleOpenDeleteConfirm(item)}
-                            style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
-                            title="Xóa"
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
-                      </td>
+              <div className="admin-table-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+                  <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
+                    <tr style={{ backgroundColor: '#FAF6F0', color: '#5D3B32', borderBottom: '1px solid #EADCC9', textAlign: 'left' }}>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '40px' }}>STT</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '100px' }}>Mã công việc</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Tên công việc / Mục tiêu</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '100px' }}>Mức độ ưu tiên</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '70px' }}>Tỷ trọng</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '90px' }}>Tần suất</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '100px' }}>Tiêu chuẩn</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '100px' }}>Hạn hoàn thành</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '90px' }}>Tiến độ</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '80px' }}>Thao tác</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      const allData = filterAndSortData(hasFetchedDb ? kpiTargets : (kpiTargets.length > 0 ? kpiTargets : defaultKpiTargets), targetSearch);
+                      const pagedData = allData.slice((targetPage - 1) * targetPageSize, targetPage * targetPageSize);
+                      return pagedData.map((item, idx) => {
+                        const globalIdx = (targetPage - 1) * targetPageSize + idx;
+                        return (
+                          <tr
+                            key={item.id || idx}
+                            style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}
+                          >
+                            <td style={{ padding: '5px 10px', fontWeight: '700', color: '#64748B' }}>{globalIdx + 1}</td>
+                            <td style={{ padding: '5px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.code || `MT-${String(globalIdx + 1).padStart(2, '0')}`}</td>
+                            <td style={{ padding: '5px 10px', fontWeight: '700', color: '#1E293B' }}>{item.name}</td>
+                            <td style={{ padding: '5px 10px', textAlign: 'center' }}>
+                              <span style={{
+                                padding: '2px 8px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: '800',
+                                backgroundColor: idx % 3 === 0 ? '#FEE2E2' : idx % 3 === 1 ? '#FEF3C7' : '#DCFCE7',
+                                color: idx % 3 === 0 ? '#DC2626' : idx % 3 === 1 ? '#B45309' : '#15803D'
+                              }}>
+                                {idx % 3 === 0 ? 'Cao' : idx % 3 === 1 ? 'Trung bình' : 'Thấp'}
+                              </span>
+                            </td>
+                            <td style={{ padding: '5px 10px', textAlign: 'center', fontWeight: '800', color: '#5D3B32' }}>{item.weight || '20%'}</td>
+                            <td style={{ padding: '5px 10px', color: '#475569' }}>{item.unit || 'Hàng tháng'}</td>
+                            <td style={{ padding: '5px 10px', color: '#15803D', fontWeight: '700' }}>{item.target || '100%'}</td>
+                            <td style={{ padding: '5px 10px', textAlign: 'center', color: '#64748B' }}>31/12/2026</td>
+                            <td style={{ padding: '5px 10px', textAlign: 'center' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <div style={{ flex: 1, height: '5px', backgroundColor: '#E2E8F0', borderRadius: '2px', overflow: 'hidden' }}>
+                                  <div style={{ width: `${80 - (idx % 5) * 10}%`, height: '100%', backgroundColor: '#5D3B32' }}></div>
+                                </div>
+                                <span style={{ fontSize: '0.68rem', fontWeight: '800', color: '#5D3B32' }}>{80 - (idx % 5) * 10}%</span>
+                              </div>
+                            </td>
+                            <td style={{ padding: '5px 10px', textAlign: 'center' }}>
+                              <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                                <button
+                                  onClick={() => { setEditingTarget(item); setIsTargetModalOpen(true); }}
+                                  style={{ border: 'none', background: '#E0F2FE', color: '#0369A1', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                                  title="Sửa"
+                                >
+                                  <Edit2 size={12} />
+                                </button>
+                                <button
+                                  onClick={() => handleOpenDeleteConfirm(item)}
+                                  style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                                  title="Xóa"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+
+              {renderPaginationControl(targetPage, setTargetPage, targetPageSize, filterAndSortData(hasFetchedDb ? kpiTargets : (kpiTargets.length > 0 ? kpiTargets : defaultKpiTargets), targetSearch).length, 'mục tiêu')}
             </div>
 
           </div>
@@ -1501,10 +1735,10 @@ const QualityKPIDashboardView = () => {
         {/* TAB 2: CHỈ SỐ CÔNG VIỆC                                                   */}
         {/* ========================================================================= */}
         {activeTab === 'work_indicators' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0, overflow: 'hidden' }}>
             
             {/* TOP 4 CARDS matching Mockup Screen 2 */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr 1.3fr 1.3fr', gap: '10px' }}>
+            <div style={{ flexShrink: 0, display: 'grid', gridTemplateColumns: '1.1fr 1fr 1.3fr 1.3fr', gap: '10px' }}>
               
               {/* Card 1: Điểm KPI Trung bình */}
               <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9' }}>
@@ -1584,8 +1818,8 @@ const QualityKPIDashboardView = () => {
             </div>
 
             {/* TABLE: Danh mục Chỉ số KPI công việc */}
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
-              <div style={{ padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="mgmt-table card admin-table-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, backgroundColor: '#FFFFFF', borderRadius: '10px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
+              <div style={{ flexShrink: 0, padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <TableControlToolbar
                   searchValue={indicatorSearch}
                   onSearchChange={(e) => setIndicatorSearch(e.target.value)}
@@ -1605,8 +1839,8 @@ const QualityKPIDashboardView = () => {
               </div>
 
               {filterOpen && (
-                <div style={{ padding: '6px 14px', backgroundColor: '#FFFBEB', borderBottom: '1px solid #FCD34D', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.72rem' }}>
-                  <span style={{ fontWeight: '800', color: '#92400E' }}>Bộ lọc trạng thái:</span>
+                <div style={{ flexShrink: 0, padding: '6px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.72rem' }}>
+                  <span style={{ fontWeight: '800', color: '#5D3B32' }}>Bộ lọc trạng thái:</span>
                   {['Tất cả', 'Đã duyệt / Đạt', 'Chờ xử lý / Cần làm'].map(opt => (
                     <button
                       key={opt}
@@ -1614,99 +1848,111 @@ const QualityKPIDashboardView = () => {
                       style={{
                         padding: '2px 10px',
                         borderRadius: '4px',
-                        border: '1px solid #F59E0B',
-                        backgroundColor: filterStatus === opt ? '#F59E0B' : '#FFFFFF',
-                        color: filterStatus === opt ? '#FFFFFF' : '#92400E',
-                        fontWeight: '700',
+                        border: '1px solid ' + (filterStatus === opt ? '#5D3B32' : '#EADCC9'),
+                        backgroundColor: filterStatus === opt ? '#5D3B32' : '#FFFFFF',
+                        color: filterStatus === opt ? '#FFFFFF' : '#5D3B32',
+                        fontWeight: filterStatus === opt ? '800' : '600',
                         cursor: 'pointer'
                       }}
                     >
                       {opt}
                     </button>
                   ))}
+                  <RenderPageSizeSelect pageSize={indicatorPageSize} setPageSize={setIndicatorPageSize} setCurrentPage={setIndicatorPage} />
                 </div>
               )}
 
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', tableLayout: 'fixed' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#5D3B32', color: '#FFFFFF', textAlign: 'left' }}>
-                    <th style={{ padding: '8px 6px', fontWeight: '700', width: '40px', textAlign: 'center' }}>STT</th>
-                    <th style={{ padding: '8px 8px', fontWeight: '700', width: '80px', textAlign: 'center' }}>Mã KPI</th>
-                    <th style={{ padding: '8px 12px', fontWeight: '700', width: '32%' }}>Tên Chỉ Số KPI Công Việc</th>
-                    <th style={{ padding: '8px 12px', fontWeight: '700', width: '38%' }}>Công Thức / Cách Tính</th>
-                    <th style={{ padding: '8px 6px', fontWeight: '700', textAlign: 'center', width: '75px' }}>Tỷ Trọng</th>
-                    <th style={{ padding: '8px 8px', fontWeight: '700', textAlign: 'center', width: '100px' }}>Mục Tiêu Đạt</th>
-                    <th style={{ padding: '8px 8px', fontWeight: '700', textAlign: 'center', width: '95px' }}>Tần Suất</th>
-                    <th style={{ padding: '8px 8px', fontWeight: '700', textAlign: 'center', width: '95px' }}>Trạng Thái</th>
-                    <th style={{ padding: '8px 6px', fontWeight: '700', textAlign: 'center', width: '80px' }}>Thao Tác</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filterAndSortData(hasFetchedDb ? workIndicators : (workIndicators.length > 0 ? workIndicators : defaultWorkIndicators), indicatorSearch).map((item, idx) => (
-                    <tr
-                      key={item.id || idx}
-                      style={{ borderBottom: '1px solid #E2E8F0', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}
-                    >
-                      <td style={{ padding: '8px 6px', fontWeight: '700', color: '#64748B', textAlign: 'center' }}>{idx + 1}</td>
-                      <td style={{ padding: '8px 8px', fontWeight: '800', color: '#5D3B32', textAlign: 'center' }}>{item.code || `KPI${String(idx + 1).padStart(2, '0')}`}</td>
-                      <td style={{ padding: '8px 12px', fontWeight: '700', color: '#1E293B', wordBreak: 'break-word', lineHeight: '1.4' }}>{item.name}</td>
-                      <td style={{ padding: '8px 12px', color: '#334155', fontWeight: '500', lineHeight: '1.45', wordBreak: 'break-word' }}>
-                        <span style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          backgroundColor: '#FAF6F0',
-                          border: '1px solid #EADCC9',
-                          color: '#5D3B32',
-                          padding: '4px 9px',
-                          borderRadius: '6px',
-                          fontSize: '0.72rem',
-                          fontWeight: '700'
-                        }}>
-                          {getCalcMethodLabel(item.calc_method || item.description)}
-                        </span>
-                      </td>
-                      <td style={{ padding: '8px 6px', textAlign: 'center', fontWeight: '800', color: '#5D3B32' }}>{item.weight || '20%'}</td>
-                      <td style={{ padding: '8px 8px', textAlign: 'center' }}>
-                        <span style={{ backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', color: '#15803D', padding: '3px 8px', borderRadius: '6px', fontWeight: '700', display: 'inline-block', fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
-                          {item.target || item.standard || '>= 98%'}
-                        </span>
-                      </td>
-                      <td style={{ padding: '8px 8px', textAlign: 'center', color: '#475569', fontWeight: '600' }}>
-                        <span style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', padding: '3px 8px', borderRadius: '4px', fontSize: '0.68rem', whiteSpace: 'nowrap', display: 'inline-block' }}>
-                          {item.unit && item.unit !== '%' ? item.unit : 'Hàng tháng'}
-                        </span>
-                      </td>
-                      <td style={{ padding: '8px 8px', textAlign: 'center' }}>
-                        <span style={{
-                          padding: '3px 10px', borderRadius: '6px', fontSize: '0.68rem', fontWeight: '800',
-                          backgroundColor: '#ECFDF5', color: '#059669', border: '1px solid #A7F3D0', whiteSpace: 'nowrap', display: 'inline-block'
-                        }}>
-                          {item.status || 'Áp dụng'}
-                        </span>
-                      </td>
-                      <td style={{ padding: '8px 6px', textAlign: 'center' }}>
-                        <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
-                          <button
-                            onClick={() => { setEditingTarget(item); setIsTargetModalOpen(true); }}
-                            style={{ border: 'none', background: '#E0F2FE', color: '#0369A1', padding: '4px 7px', borderRadius: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-                            title="Sửa"
-                          >
-                            <Edit2 size={13} />
-                          </button>
-                          <button
-                            onClick={() => handleOpenDeleteConfirm(item)}
-                            style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '4px 7px', borderRadius: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-                            title="Xóa"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      </td>
+              <div className="admin-table-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', tableLayout: 'fixed' }}>
+                  <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
+                    <tr style={{ backgroundColor: '#FAF6F0', color: '#5D3B32', borderBottom: '1px solid #EADCC9', textAlign: 'left' }}>
+                      <th style={{ padding: '8px 6px', fontWeight: '800', width: '40px', textAlign: 'center' }}>STT</th>
+                      <th style={{ padding: '8px 8px', fontWeight: '800', width: '80px', textAlign: 'center' }}>Mã KPI</th>
+                      <th style={{ padding: '8px 12px', fontWeight: '800', width: '32%' }}>Tên Chỉ Số KPI Công Việc</th>
+                      <th style={{ padding: '8px 12px', fontWeight: '800', width: '38%' }}>Công Thức / Cách Tính</th>
+                      <th style={{ padding: '8px 6px', fontWeight: '800', textAlign: 'center', width: '75px' }}>Tỷ Trọng</th>
+                      <th style={{ padding: '8px 8px', fontWeight: '800', textAlign: 'center', width: '100px' }}>Mục Tiêu Đạt</th>
+                      <th style={{ padding: '8px 8px', fontWeight: '800', textAlign: 'center', width: '95px' }}>Tần Suất</th>
+                      <th style={{ padding: '8px 8px', fontWeight: '800', textAlign: 'center', width: '95px' }}>Trạng Thái</th>
+                      <th style={{ padding: '8px 6px', fontWeight: '800', textAlign: 'center', width: '80px' }}>Thao Tác</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      const allData = filterAndSortData(hasFetchedDb ? workIndicators : (workIndicators.length > 0 ? workIndicators : defaultWorkIndicators), indicatorSearch);
+                      const pagedData = allData.slice((indicatorPage - 1) * indicatorPageSize, indicatorPage * indicatorPageSize);
+                      return pagedData.map((item, idx) => {
+                        const globalIdx = (indicatorPage - 1) * indicatorPageSize + idx;
+                        return (
+                          <tr
+                            key={item.id || idx}
+                            style={{ borderBottom: '1px solid #E2E8F0', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}
+                          >
+                            <td style={{ padding: '8px 6px', fontWeight: '700', color: '#64748B', textAlign: 'center' }}>{globalIdx + 1}</td>
+                            <td style={{ padding: '8px 8px', fontWeight: '800', color: '#5D3B32', textAlign: 'center' }}>{item.code || `KPI${String(globalIdx + 1).padStart(2, '0')}`}</td>
+                            <td style={{ padding: '8px 12px', fontWeight: '700', color: '#1E293B', wordBreak: 'break-word', lineHeight: '1.4' }}>{item.name}</td>
+                            <td style={{ padding: '8px 12px', color: '#334155', fontWeight: '500', lineHeight: '1.45', wordBreak: 'break-word' }}>
+                              <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                backgroundColor: '#FAF6F0',
+                                border: '1px solid #EADCC9',
+                                color: '#5D3B32',
+                                padding: '4px 9px',
+                                borderRadius: '6px',
+                                fontSize: '0.72rem',
+                                fontWeight: '700'
+                              }}>
+                                {getCalcMethodLabel(item.calc_method || item.description)}
+                              </span>
+                            </td>
+                            <td style={{ padding: '8px 6px', textAlign: 'center', fontWeight: '800', color: '#5D3B32' }}>{item.weight || '20%'}</td>
+                            <td style={{ padding: '8px 8px', textAlign: 'center' }}>
+                              <span style={{ backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', color: '#15803D', padding: '3px 8px', borderRadius: '6px', fontWeight: '700', display: 'inline-block', fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
+                                {item.target || item.standard || '>= 98%'}
+                              </span>
+                            </td>
+                            <td style={{ padding: '8px 8px', textAlign: 'center', color: '#475569', fontWeight: '600' }}>
+                              <span style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', padding: '3px 8px', borderRadius: '4px', fontSize: '0.68rem', whiteSpace: 'nowrap', display: 'inline-block' }}>
+                                {item.unit && item.unit !== '%' ? item.unit : 'Hàng tháng'}
+                              </span>
+                            </td>
+                            <td style={{ padding: '8px 8px', textAlign: 'center' }}>
+                              <span style={{
+                                padding: '3px 10px', borderRadius: '6px', fontSize: '0.68rem', fontWeight: '800',
+                                backgroundColor: '#ECFDF5', color: '#059669', border: '1px solid #A7F3D0', whiteSpace: 'nowrap', display: 'inline-block'
+                              }}>
+                                {item.status || 'Áp dụng'}
+                              </span>
+                            </td>
+                            <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+                              <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
+                                <button
+                                  onClick={() => { setEditingTarget(item); setIsTargetModalOpen(true); }}
+                                  style={{ border: 'none', background: '#E0F2FE', color: '#0369A1', padding: '4px 7px', borderRadius: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                                  title="Sửa"
+                                >
+                                  <Edit2 size={13} />
+                                </button>
+                                <button
+                                  onClick={() => handleOpenDeleteConfirm(item)}
+                                  style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '4px 7px', borderRadius: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                                  title="Xóa"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+
+              {renderPaginationControl(indicatorPage, setIndicatorPage, indicatorPageSize, filterAndSortData(hasFetchedDb ? workIndicators : (workIndicators.length > 0 ? workIndicators : defaultWorkIndicators), indicatorSearch).length, 'chỉ số')}
             </div>
 
           </div>
@@ -1716,10 +1962,10 @@ const QualityKPIDashboardView = () => {
         {/* TAB 3: CHECKLIST CÔNG VIỆC                                                */}
         {/* ========================================================================= */}
         {activeTab === 'checklist_work' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0, overflow: 'hidden' }}>
             
             {/* TOP 3 CARDS matching Mockup Screen 3 */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr 1.6fr', gap: '10px' }}>
+            <div style={{ flexShrink: 0, display: 'grid', gridTemplateColumns: '1fr 1.2fr 1.6fr', gap: '10px' }}>
               
               {/* Card 1: Điểm KPI Trung bình */}
               <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9' }}>
@@ -1777,15 +2023,15 @@ const QualityKPIDashboardView = () => {
             </div>
 
             {/* TABLE AREA WITH SEARCH & FILTER */}
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
-              <div style={{ padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="mgmt-table card admin-table-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, backgroundColor: '#FFFFFF', borderRadius: '10px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
+              <div style={{ flexShrink: 0, padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <TableControlToolbar
                   searchValue={checklistSearch}
                   onSearchChange={(e) => setChecklistSearch(e.target.value)}
-                  placeholder="Tìm kiếm checklist..."
+                  placeholder="Tìm nội dung checklist..."
                   onSort={() => setSortAsc(prev => !prev)}
                   onFilter={() => setFilterOpen(prev => !prev)}
-                  onExport={() => handleExportExcel(filterAndSortData(allChecklists, checklistSearch), 'Checklist_Cong_Viec')}
+                  onExport={() => handleExportExcel(filterAndSortData(allChecklists, checklistSearch).filter(item => selectedChecklistDept === 'ALL' || item.department_code === selectedChecklistDept), 'Checklist_Cong_Viec')}
                   sortAsc={sortAsc}
                   isFilterActive={filterOpen}
                 />
@@ -1797,85 +2043,97 @@ const QualityKPIDashboardView = () => {
                 </button>
               </div>
 
+              {/* BAR BỘ LỌC BỘ PHẬN QLCL - NẰM TRONG BỘ LỌC PHỄU (filterOpen) - COMPACT GỖ NÂU */}
               {filterOpen && (
-                <div style={{ padding: '6px 14px', backgroundColor: '#FFFBEB', borderBottom: '1px solid #FCD34D', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.72rem' }}>
-                  <span style={{ fontWeight: '800', color: '#92400E' }}>Bộ lọc trạng thái:</span>
-                  {['Tất cả', 'Đã duyệt / Đạt', 'Chờ xử lý / Cần làm'].map(opt => (
-                    <button
-                      key={opt}
-                      onClick={() => setFilterStatus(opt)}
-                      style={{
-                        padding: '2px 10px',
-                        borderRadius: '4px',
-                        border: '1px solid #F59E0B',
-                        backgroundColor: filterStatus === opt ? '#F59E0B' : '#FFFFFF',
-                        color: filterStatus === opt ? '#FFFFFF' : '#92400E',
-                        fontWeight: '700',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {opt}
-                    </button>
-                  ))}
+                <div style={{ flexShrink: 0, padding: '6px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.72rem' }}>
+                  <span style={{ fontWeight: '800', color: '#5D3B32' }}>Bộ phận phụ trách:</span>
+                  <select
+                    value={selectedChecklistDept}
+                    onChange={(e) => { setSelectedChecklistDept(e.target.value); setChecklistPage(1); }}
+                    style={{
+                      padding: '3px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid #EADCC9',
+                      backgroundColor: '#FFFFFF',
+                      color: '#5D3B32',
+                      fontWeight: '700',
+                      fontSize: '0.72rem',
+                      outline: 'none',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {qlclDepartmentsList.map(dept => (
+                      <option key={dept.code} value={dept.code}>{dept.name}</option>
+                    ))}
+                  </select>
+                  <RenderPageSizeSelect pageSize={checklistPageSize} setPageSize={setChecklistPageSize} setCurrentPage={setChecklistPage} />
                 </div>
               )}
 
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#5D3B32', color: '#FFFFFF', textAlign: 'left' }}>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '40px' }}>STT</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '100px' }}>Mã công việc</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Tên công việc</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '120px' }}>Tần suất thực hiện</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '120px' }}>Trạng thái hôm nay</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '120px' }}>Lần thực hiện cuối</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '110px' }}>Kết quả</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '80px' }}>Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filterAndSortData(allChecklists, checklistSearch).map((item, idx) => (
-                    <tr
-                      key={item.id || idx}
-                      style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}
-                    >
-                      <td style={{ padding: '5px 10px', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
-                      <td style={{ padding: '5px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.task_code || item.code || `CL-00${idx + 1}`}</td>
-                      <td style={{ padding: '5px 10px', fontWeight: '700', color: '#1E293B' }}>{item.content}</td>
-                      <td style={{ padding: '5px 10px', color: '#475569' }}>{item.frequency || 'Hàng ngày'}</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'center' }}>
-                        <span style={{
-                          padding: '2px 8px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: '800',
-                          backgroundColor: (item.status_today === 'Đã hoàn thành' || item.status === 'Đã hoàn thành') ? '#DCFCE7' : item.status_today === 'Đang thực hiện' ? '#E0F2FE' : '#FEF3C7',
-                          color: (item.status_today === 'Đã hoàn thành' || item.status === 'Đã hoàn thành') ? '#15803D' : item.status_today === 'Đang thực hiện' ? '#0369A1' : '#B45309'
-                        }}>
-                          {item.status_today || item.status || 'Chưa làm'}
-                        </span>
-                      </td>
-                      <td style={{ padding: '5px 10px', textAlign: 'center', color: '#64748B' }}>{item.last_performed || item.last_run || 'Hôm nay'}</td>
-                      <td style={{ padding: '5px 10px', color: '#16A34A', fontWeight: '700' }}>{item.result || 'Đạt yêu cầu'}</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'center' }}>
-                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
-                          <button
-                            onClick={() => handleEditDashboardChecklist(item)}
-                            style={{ border: 'none', background: '#E0F2FE', color: '#0369A1', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
-                            title="Sửa"
-                          >
-                            <Edit2 size={12} />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteDashboardChecklist(item)}
-                            style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
-                            title="Xóa"
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
-                      </td>
+              <div className="admin-table-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+                  <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
+                    <tr style={{ backgroundColor: '#FAF6F0', color: '#5D3B32', borderBottom: '1px solid #EADCC9', textAlign: 'left' }}>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '50px', textAlign: 'center' }}>STT</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '100px' }}>Mã CV</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '110px' }}>Bộ phận</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Nội dung Checklist công việc</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '140px' }}>Tần suất thực hiện</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '110px' }}>Thao tác</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      const filtered = filterAndSortData(allChecklists, checklistSearch)
+                        .filter(item => selectedChecklistDept === 'ALL' || item.department_code === selectedChecklistDept);
+                      const paged = filtered.slice((checklistPage - 1) * checklistPageSize, checklistPage * checklistPageSize);
+                      return paged.map((item, idx) => {
+                        const globalIdx = (checklistPage - 1) * checklistPageSize + idx;
+                        const badge = getDeptBadgeStyle(item.department_code);
+                        return (
+                          <tr
+                            key={item.id || idx}
+                            style={{ borderBottom: '1px solid #EADCC9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}
+                          >
+                            <td style={{ padding: '8px 10px', fontWeight: '700', color: '#64748B', textAlign: 'center' }}>{globalIdx + 1}</td>
+                            <td style={{ padding: '8px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.task_code || item.code || `CL-00${globalIdx + 1}`}</td>
+                            <td style={{ padding: '8px 10px' }}>
+                              <span style={{
+                                padding: '2px 8px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: '700',
+                                backgroundColor: badge.bg, color: badge.color, border: `1px solid ${badge.border}`
+                              }}>
+                                {badge.label}
+                              </span>
+                            </td>
+                            <td style={{ padding: '8px 10px', fontWeight: '600', color: '#1E293B', fontSize: '0.82rem' }}>{item.content}</td>
+                            <td style={{ padding: '8px 10px', color: '#475569', fontWeight: '600' }}>{item.frequency || 'Hàng ngày'}</td>
+                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                              <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                                <button
+                                  onClick={() => handleEditDashboardChecklist(item)}
+                                  style={{ border: '1px solid #EADCC9', background: '#FFFFFF', color: '#5D3B32', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontWeight: '600', fontSize: '0.7rem' }}
+                                  title="Chỉnh sửa"
+                                >
+                                  <Edit2 size={12} /> Sửa
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteDashboardChecklist(item)}
+                                  style={{ border: '1px solid #FCA5A5', background: '#FEF2F2', color: '#DC2626', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontWeight: '600', fontSize: '0.7rem' }}
+                                  title="Xóa công việc"
+                                >
+                                  <Trash2 size={12} /> Xóa
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+
+              {renderPaginationControl(checklistPage, setChecklistPage, checklistPageSize, filterAndSortData(allChecklists, checklistSearch).filter(item => selectedChecklistDept === 'ALL' || item.department_code === selectedChecklistDept).length, 'checklists')}
             </div>
 
           </div>
@@ -1885,10 +2143,10 @@ const QualityKPIDashboardView = () => {
         {/* TAB 4: DANH SÁCH VI PHẠM                                                  */}
         {/* ========================================================================= */}
         {activeTab === 'violations_list' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0, overflow: 'hidden' }}>
             
             {/* TOP 2 CARDS matching Mockup Screen 4 */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: '10px' }}>
+            <div style={{ flexShrink: 0, display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: '10px' }}>
               
               {/* Card 1: Số vụ vi phạm trong tháng */}
               <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
@@ -1930,8 +2188,8 @@ const QualityKPIDashboardView = () => {
             </div>
 
             {/* TABLE AREA WITH SEARCH & FILTER */}
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
-              <div style={{ padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="mgmt-table card admin-table-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, backgroundColor: '#FFFFFF', borderRadius: '10px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
+              <div style={{ flexShrink: 0, padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <TableControlToolbar
                   searchValue={violationSearch}
                   onSearchChange={(e) => setViolationSearch(e.target.value)}
@@ -1951,8 +2209,8 @@ const QualityKPIDashboardView = () => {
               </div>
 
               {filterOpen && (
-                <div style={{ padding: '6px 14px', backgroundColor: '#FFFBEB', borderBottom: '1px solid #FCD34D', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.72rem' }}>
-                  <span style={{ fontWeight: '800', color: '#92400E' }}>Bộ lọc trạng thái:</span>
+                <div style={{ flexShrink: 0, padding: '6px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.72rem' }}>
+                  <span style={{ fontWeight: '800', color: '#5D3B32' }}>Bộ lọc trạng thái:</span>
                   {['Tất cả', 'Đã duyệt / Đạt', 'Chờ xử lý / Cần làm'].map(opt => (
                     <button
                       key={opt}
@@ -1960,63 +2218,75 @@ const QualityKPIDashboardView = () => {
                       style={{
                         padding: '2px 10px',
                         borderRadius: '4px',
-                        border: '1px solid #F59E0B',
-                        backgroundColor: filterStatus === opt ? '#F59E0B' : '#FFFFFF',
-                        color: filterStatus === opt ? '#FFFFFF' : '#92400E',
-                        fontWeight: '700',
+                        border: '1px solid ' + (filterStatus === opt ? '#5D3B32' : '#EADCC9'),
+                        backgroundColor: filterStatus === opt ? '#5D3B32' : '#FFFFFF',
+                        color: filterStatus === opt ? '#FFFFFF' : '#5D3B32',
+                        fontWeight: filterStatus === opt ? '800' : '600',
                         cursor: 'pointer'
                       }}
                     >
                       {opt}
                     </button>
                   ))}
+                  <RenderPageSizeSelect pageSize={violationPageSize} setPageSize={setViolationPageSize} setCurrentPage={setViolationPage} />
                 </div>
               )}
 
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#5D3B32', color: '#FFFFFF', textAlign: 'left' }}>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '40px' }}>STT</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Mã NV / Họ tên</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Hành vi vi phạm</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '110px' }}>Mức độ vi phạm</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '80px' }}>Điểm trừ</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '100px' }}>Ngày vi phạm</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Người ghi nhận</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '80px' }}>Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filterAndSortData(hasFetchedDb ? violations : (violations.length > 0 ? violations : defaultViolations), violationSearch).map((item, idx) => (
-                    <tr key={item.id || idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}>
-                      <td style={{ padding: '5px 10px', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
-                      <td style={{ padding: '5px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.code} • {item.emp}</td>
-                      <td style={{ padding: '5px 10px', color: '#DC2626', fontWeight: '600' }}>{item.rule}</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'center' }}>
-                        <span style={{
-                          padding: '2px 8px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: '800',
-                          backgroundColor: Math.abs(item.score) >= 15 ? '#FEE2E2' : '#FEF3C7',
-                          color: Math.abs(item.score) >= 15 ? '#DC2626' : '#B45309'
-                        }}>
-                          {Math.abs(item.score) >= 15 ? 'Nặng' : 'Vừa'}
-                        </span>
-                      </td>
-                      <td style={{ padding: '5px 10px', textAlign: 'center', fontWeight: '900', color: '#DC2626' }}>{item.score} điểm</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'center', color: '#64748B', whiteSpace: 'nowrap', fontWeight: '600' }}>{formatCompactDate(item.date)}</td>
-                      <td style={{ padding: '5px 10px', color: '#475569' }}>{item.reporter}</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'center' }}>
-                        <button
-                          onClick={() => handleOpenViolationModal(item)}
-                          style={{ border: 'none', background: '#EFF6FF', color: '#2563EB', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
-                          title="Xem chi tiết / Chỉnh sửa"
-                        >
-                          <Eye size={12} />
-                        </button>
-                      </td>
+              <div className="admin-table-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+                  <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
+                    <tr style={{ backgroundColor: '#FAF6F0', color: '#5D3B32', borderBottom: '1px solid #EADCC9', textAlign: 'left' }}>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '40px' }}>STT</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Mã NV / Họ tên</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Hành vi vi phạm</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '110px' }}>Mức độ vi phạm</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '80px' }}>Điểm trừ</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '100px' }}>Ngày vi phạm</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Người ghi nhận</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '80px' }}>Thao tác</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      const allData = filterAndSortData(hasFetchedDb ? violations : (violations.length > 0 ? violations : defaultViolations), violationSearch);
+                      const pagedData = allData.slice((violationPage - 1) * violationPageSize, violationPage * violationPageSize);
+                      return pagedData.map((item, idx) => {
+                        const globalIdx = (violationPage - 1) * violationPageSize + idx;
+                        return (
+                          <tr key={item.id || idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}>
+                            <td style={{ padding: '5px 10px', fontWeight: '700', color: '#64748B' }}>{globalIdx + 1}</td>
+                            <td style={{ padding: '5px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.code} • {item.emp}</td>
+                            <td style={{ padding: '5px 10px', color: '#DC2626', fontWeight: '600' }}>{item.rule}</td>
+                            <td style={{ padding: '5px 10px', textAlign: 'center' }}>
+                              <span style={{
+                                padding: '2px 8px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: '800',
+                                backgroundColor: Math.abs(item.score) >= 15 ? '#FEE2E2' : '#FEF3C7',
+                                color: Math.abs(item.score) >= 15 ? '#DC2626' : '#B45309'
+                              }}>
+                                {Math.abs(item.score) >= 15 ? 'Nặng' : 'Vừa'}
+                              </span>
+                            </td>
+                            <td style={{ padding: '5px 10px', textAlign: 'center', fontWeight: '900', color: '#DC2626' }}>{item.score} điểm</td>
+                            <td style={{ padding: '5px 10px', textAlign: 'center', color: '#64748B', whiteSpace: 'nowrap', fontWeight: '600' }}>{formatCompactDate(item.date)}</td>
+                            <td style={{ padding: '5px 10px', color: '#475569' }}>{item.reporter}</td>
+                            <td style={{ padding: '5px 10px', textAlign: 'center' }}>
+                              <button
+                                onClick={() => handleOpenViolationModal(item)}
+                                style={{ border: 'none', background: '#EFF6FF', color: '#2563EB', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                                title="Xem chi tiết / Chỉnh sửa"
+                              >
+                                <Eye size={12} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+
+              {renderPaginationControl(violationPage, setViolationPage, violationPageSize, filterAndSortData(hasFetchedDb ? violations : (violations.length > 0 ? violations : defaultViolations), violationSearch).length, 'vi phạm')}
             </div>
 
           </div>
@@ -2026,10 +2296,10 @@ const QualityKPIDashboardView = () => {
         {/* TAB 5: KẾ HOẠCH ĐÀO TẠO                                                  */}
         {/* ========================================================================= */}
         {activeTab === 'training_plan' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0, overflow: 'hidden' }}>
             
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
-              <div style={{ padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="mgmt-table card admin-table-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, backgroundColor: '#FFFFFF', borderRadius: '10px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
+              <div style={{ flexShrink: 0, padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <TableControlToolbar
                   searchValue={trainingSearch}
                   onSearchChange={(e) => setTrainingSearch(e.target.value)}
@@ -2049,8 +2319,8 @@ const QualityKPIDashboardView = () => {
               </div>
 
               {filterOpen && (
-                <div style={{ padding: '6px 14px', backgroundColor: '#FFFBEB', borderBottom: '1px solid #FCD34D', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.72rem' }}>
-                  <span style={{ fontWeight: '800', color: '#92400E' }}>Bộ lọc trạng thái:</span>
+                <div style={{ flexShrink: 0, padding: '6px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.72rem' }}>
+                  <span style={{ fontWeight: '800', color: '#5D3B32' }}>Bộ lọc trạng thái:</span>
                   {['Tất cả', 'Đã duyệt / Đạt', 'Chờ xử lý / Cần làm'].map(opt => (
                     <button
                       key={opt}
@@ -2058,100 +2328,112 @@ const QualityKPIDashboardView = () => {
                       style={{
                         padding: '2px 10px',
                         borderRadius: '4px',
-                        border: '1px solid #F59E0B',
-                        backgroundColor: filterStatus === opt ? '#F59E0B' : '#FFFFFF',
-                        color: filterStatus === opt ? '#FFFFFF' : '#92400E',
-                        fontWeight: '700',
+                        border: '1px solid ' + (filterStatus === opt ? '#5D3B32' : '#EADCC9'),
+                        backgroundColor: filterStatus === opt ? '#5D3B32' : '#FFFFFF',
+                        color: filterStatus === opt ? '#FFFFFF' : '#5D3B32',
+                        fontWeight: filterStatus === opt ? '800' : '600',
                         cursor: 'pointer'
                       }}
                     >
                       {opt}
                     </button>
                   ))}
+                  <RenderPageSizeSelect pageSize={trainingPageSize} setPageSize={setTrainingPageSize} setCurrentPage={setTrainingPage} />
                 </div>
               )}
 
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#5D3B32', color: '#FFFFFF', textAlign: 'left' }}>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '40px' }}>STT</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Mã Khóa</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Tên Chương Trình Đào Tạo</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Đối Tượng Tham Gia</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center' }}>Thời Gian</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Giảng Viên</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Tài Liệu Đính Kèm (File)</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center' }}>Trạng Thái</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '90px' }}>Thao Tác</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filterAndSortData(hasFetchedDb ? trainingPlans : (trainingPlans.length > 0 ? trainingPlans : defaultTrainingPlans), trainingSearch).map((item, idx) => (
-                    <tr
-                      key={item.id || idx}
-                      onClick={() => handleOpenTrainingDetail(item)}
-                      style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0', cursor: 'pointer' }}
-                    >
-                      <td style={{ padding: '5px 10px', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
-                      <td style={{ padding: '5px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.code}</td>
-                      <td style={{ padding: '5px 10px', fontWeight: '700', color: '#1E293B' }}>{item.name}</td>
-                      <td style={{ padding: '5px 10px', color: '#475569' }}>{item.target}</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'center', color: '#64748B' }}>{item.time}</td>
-                      <td style={{ padding: '5px 10px', color: '#334155' }}>{item.teacher}</td>
-                      <td style={{ padding: '5px 10px' }}>
-                        <div
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (item.fileUrl) {
-                              window.open(item.fileUrl, '_blank');
-                            } else {
-                              handleOpenTrainingDetail(item);
-                            }
-                          }}
-                          style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#2563EB', fontWeight: '700', cursor: 'pointer' }}
-                          title={item.fileUrl ? 'Nhấn để mở file trên trang riêng' : 'Nhấn để xem chi tiết'}
-                        >
-                          <ExternalLink size={12} /> {item.fileName}
-                        </div>
-                      </td>
-                      <td style={{ padding: '5px 10px', textAlign: 'center' }}>
-                        <span style={{
-                          padding: '2px 8px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: '800',
-                          backgroundColor: item.status === 'Đã hoàn thành' ? '#DCFCE7' : '#FEF3C7',
-                          color: item.status === 'Đã hoàn thành' ? '#15803D' : '#B45309'
-                        }}>
-                          {item.status}
-                        </span>
-                      </td>
-                      <td style={{ padding: '5px 10px', textAlign: 'center' }}>
-                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleOpenTrainingDetail(item); }}
-                            style={{ border: 'none', background: '#EFF6FF', color: '#2563EB', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
-                            title="Xem chi tiết"
-                          >
-                            <Eye size={12} />
-                          </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleEditTrainingPlan(item); }}
-                            style={{ border: 'none', background: '#FEF3C7', color: '#D97706', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
-                            title="Chỉnh sửa"
-                          >
-                            <Edit2 size={12} />
-                          </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleOpenDeleteTrainingConfirm(item); }}
-                            style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
-                            title="Xóa khóa học"
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
-                      </td>
+              <div className="admin-table-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+                  <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
+                    <tr style={{ backgroundColor: '#FAF6F0', color: '#5D3B32', borderBottom: '1px solid #EADCC9', textAlign: 'left' }}>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '40px' }}>STT</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Mã Khóa</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Tên Chương Trình Đào Tạo</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Đối Tượng Tham Gia</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center' }}>Thời Gian</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Giảng Viên</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Tài Liệu Đính Kèm (File)</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center' }}>Trạng Thái</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '90px' }}>Thao Tác</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      const allData = filterAndSortData(hasFetchedDb ? trainingPlans : (trainingPlans.length > 0 ? trainingPlans : defaultTrainingPlans), trainingSearch);
+                      const pagedData = allData.slice((trainingPage - 1) * trainingPageSize, trainingPage * trainingPageSize);
+                      return pagedData.map((item, idx) => {
+                        const globalIdx = (trainingPage - 1) * trainingPageSize + idx;
+                        return (
+                          <tr
+                            key={item.id || idx}
+                            onClick={() => handleOpenTrainingDetail(item)}
+                            style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0', cursor: 'pointer' }}
+                          >
+                            <td style={{ padding: '5px 10px', fontWeight: '700', color: '#64748B' }}>{globalIdx + 1}</td>
+                            <td style={{ padding: '5px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.code}</td>
+                            <td style={{ padding: '5px 10px', fontWeight: '700', color: '#1E293B' }}>{item.name}</td>
+                            <td style={{ padding: '5px 10px', color: '#475569' }}>{item.target}</td>
+                            <td style={{ padding: '5px 10px', textAlign: 'center', color: '#64748B' }}>{item.time}</td>
+                            <td style={{ padding: '5px 10px', color: '#334155' }}>{item.teacher}</td>
+                            <td style={{ padding: '5px 10px' }}>
+                              <div
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (item.fileUrl) {
+                                    window.open(item.fileUrl, '_blank');
+                                  } else {
+                                    handleOpenTrainingDetail(item);
+                                  }
+                                }}
+                                style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#2563EB', fontWeight: '700', cursor: 'pointer' }}
+                                title={item.fileUrl ? 'Nhấn để mở file trên trang riêng' : 'Nhấn để xem chi tiết'}
+                              >
+                                <ExternalLink size={12} /> {item.fileName}
+                              </div>
+                            </td>
+                            <td style={{ padding: '5px 10px', textAlign: 'center' }}>
+                              <span style={{
+                                padding: '2px 8px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: '800',
+                                backgroundColor: item.status === 'Đã hoàn thành' ? '#DCFCE7' : '#FEF3C7',
+                                color: item.status === 'Đã hoàn thành' ? '#15803D' : '#B45309'
+                              }}>
+                                {item.status}
+                              </span>
+                            </td>
+                            <td style={{ padding: '5px 10px', textAlign: 'center' }}>
+                              <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleOpenTrainingDetail(item); }}
+                                  style={{ border: 'none', background: '#EFF6FF', color: '#2563EB', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                                  title="Xem chi tiết"
+                                >
+                                  <Eye size={12} />
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleEditTrainingPlan(item); }}
+                                  style={{ border: 'none', background: '#FEF3C7', color: '#D97706', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                                  title="Chỉnh sửa"
+                                >
+                                  <Edit2 size={12} />
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleOpenDeleteTrainingConfirm(item); }}
+                                  style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                                  title="Xóa khóa học"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+
+              {renderPaginationControl(trainingPage, setTrainingPage, trainingPageSize, filterAndSortData(hasFetchedDb ? trainingPlans : (trainingPlans.length > 0 ? trainingPlans : defaultTrainingPlans), trainingSearch).length, 'khóa học')}
             </div>
 
           </div>
@@ -2161,10 +2443,10 @@ const QualityKPIDashboardView = () => {
         {/* TAB 6: BÁO CÁO VÀ BBCH                                                   */}
         {/* ========================================================================= */}
         {activeTab === 'reports_bbch' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0, overflow: 'hidden' }}>
             
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
-              <div style={{ padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="mgmt-table card admin-table-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, backgroundColor: '#FFFFFF', borderRadius: '10px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
+              <div style={{ flexShrink: 0, padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <TableControlToolbar
                   searchValue={reportSearch}
                   onSearchChange={(e) => setReportSearch(e.target.value)}
@@ -2181,8 +2463,8 @@ const QualityKPIDashboardView = () => {
               </div>
 
               {filterOpen && (
-                <div style={{ padding: '6px 14px', backgroundColor: '#FFFBEB', borderBottom: '1px solid #FCD34D', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.72rem' }}>
-                  <span style={{ fontWeight: '800', color: '#92400E' }}>Bộ lọc trạng thái:</span>
+                <div style={{ flexShrink: 0, padding: '6px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.72rem' }}>
+                  <span style={{ fontWeight: '800', color: '#5D3B32' }}>Bộ lọc trạng thái:</span>
                   {['Tất cả', 'Đã duyệt / Đạt', 'Chờ xử lý / Cần làm'].map(opt => (
                     <button
                       key={opt}
@@ -2190,57 +2472,69 @@ const QualityKPIDashboardView = () => {
                       style={{
                         padding: '2px 10px',
                         borderRadius: '4px',
-                        border: '1px solid #F59E0B',
-                        backgroundColor: filterStatus === opt ? '#F59E0B' : '#FFFFFF',
-                        color: filterStatus === opt ? '#FFFFFF' : '#92400E',
-                        fontWeight: '700',
+                        border: '1px solid ' + (filterStatus === opt ? '#5D3B32' : '#EADCC9'),
+                        backgroundColor: filterStatus === opt ? '#5D3B32' : '#FFFFFF',
+                        color: filterStatus === opt ? '#FFFFFF' : '#5D3B32',
+                        fontWeight: filterStatus === opt ? '800' : '600',
                         cursor: 'pointer'
                       }}
                     >
                       {opt}
                     </button>
                   ))}
+                  <RenderPageSizeSelect pageSize={reportPageSize} setPageSize={setReportPageSize} setCurrentPage={setReportPage} />
                 </div>
               )}
 
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#5D3B32', color: '#FFFFFF', textAlign: 'left' }}>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '40px' }}>STT</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Mã Báo Cáo</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Nhân Viên</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Bộ Phận</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Nhận Xét Đánh Giá Quản Lý</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center' }}>Điểm Đánh Giá</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Mã BBCH Khắc Phục</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center' }}>Ngày Lập</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center' }}>Trạng Thái</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filterAndSortData(hasFetchedDb ? staffEvaluations : (staffEvaluations.length > 0 ? staffEvaluations : defaultStaffEvaluations), reportSearch).map((item, idx) => (
-                    <tr key={item.id || idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}>
-                      <td style={{ padding: '5px 10px', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
-                      <td style={{ padding: '5px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.code || `BC_${String(idx + 1).padStart(2, '0')}`}</td>
-                      <td style={{ padding: '5px 10px', fontWeight: '700', color: '#1E293B' }}>{item.emp || item.name}</td>
-                      <td style={{ padding: '5px 10px', color: '#475569' }}>{item.dept || 'Phòng QA/QC'}</td>
-                      <td style={{ padding: '5px 10px', color: '#334155' }}>{item.manager_note || item.note || 'Hoàn thành nhiệm vụ được giao'}</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'center', fontWeight: '900', color: '#15803D' }}>{item.eval_score || item.score || 92} điểm</td>
-                      <td style={{ padding: '5px 10px', fontWeight: '700', color: '#0284C7' }}>{item.bbch_code || `BBCH-2026-${String(idx + 1).padStart(2, '0')}`}</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'center', color: '#64748B' }}>{item.date || '01/03/2026'}</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'center' }}>
-                        <span style={{
-                          padding: '2px 8px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: '800',
-                          backgroundColor: (item.status === 'Đã phê duyệt' || item.status === 'Hoàn thành') ? '#DCFCE7' : '#FEF3C7',
-                          color: (item.status === 'Đã phê duyệt' || item.status === 'Hoàn thành') ? '#15803D' : '#B45309'
-                        }}>
-                          {item.status || 'Đã phê duyệt'}
-                        </span>
-                      </td>
+              <div className="admin-table-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+                  <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
+                    <tr style={{ backgroundColor: '#FAF6F0', color: '#5D3B32', borderBottom: '1px solid #EADCC9', textAlign: 'left' }}>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '40px' }}>STT</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Mã Báo Cáo</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Nhân Viên</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Bộ Phận</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Nhận Xét Đánh Giá Quản Lý</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center' }}>Điểm Đánh Giá</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Mã BBCH Khắc Phục</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center' }}>Ngày Lập</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center' }}>Trạng Thái</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      const allData = filterAndSortData(hasFetchedDb ? staffEvaluations : (staffEvaluations.length > 0 ? staffEvaluations : defaultStaffEvaluations), reportSearch);
+                      const pagedData = allData.slice((reportPage - 1) * reportPageSize, reportPage * reportPageSize);
+                      return pagedData.map((item, idx) => {
+                        const globalIdx = (reportPage - 1) * reportPageSize + idx;
+                        return (
+                          <tr key={item.id || idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}>
+                            <td style={{ padding: '5px 10px', fontWeight: '700', color: '#64748B' }}>{globalIdx + 1}</td>
+                            <td style={{ padding: '5px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.code || `BC_${String(globalIdx + 1).padStart(2, '0')}`}</td>
+                            <td style={{ padding: '5px 10px', fontWeight: '700', color: '#1E293B' }}>{item.emp || item.name}</td>
+                            <td style={{ padding: '5px 10px', color: '#475569' }}>{item.dept || 'Phòng QA/QC'}</td>
+                            <td style={{ padding: '5px 10px', color: '#334155' }}>{item.manager_note || item.note || 'Hoàn thành nhiệm vụ được giao'}</td>
+                            <td style={{ padding: '5px 10px', textAlign: 'center', fontWeight: '900', color: '#15803D' }}>{item.eval_score || item.score || 92} điểm</td>
+                            <td style={{ padding: '5px 10px', fontWeight: '700', color: '#0284C7' }}>{item.bbch_code || `BBCH-2026-${String(globalIdx + 1).padStart(2, '0')}`}</td>
+                            <td style={{ padding: '5px 10px', textAlign: 'center', color: '#64748B' }}>{item.date || '01/03/2026'}</td>
+                            <td style={{ padding: '5px 10px', textAlign: 'center' }}>
+                              <span style={{
+                                padding: '2px 8px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: '800',
+                                backgroundColor: (item.status === 'Đã phê duyệt' || item.status === 'Hoàn thành') ? '#DCFCE7' : '#FEF3C7',
+                                color: (item.status === 'Đã phê duyệt' || item.status === 'Hoàn thành') ? '#15803D' : '#B45309'
+                              }}>
+                                {item.status || 'Đã phê duyệt'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+
+              {renderPaginationControl(reportPage, setReportPage, reportPageSize, filterAndSortData(hasFetchedDb ? staffEvaluations : (staffEvaluations.length > 0 ? staffEvaluations : defaultStaffEvaluations), reportSearch).length, 'báo cáo')}
             </div>
 
           </div>
@@ -2250,10 +2544,10 @@ const QualityKPIDashboardView = () => {
         {/* TAB 7: THIẾT LẬP CẢNH BÁO                                                 */}
         {/* ========================================================================= */}
         {activeTab === 'alerts_setup' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0, overflow: 'hidden' }}>
             
-            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
-              <div style={{ padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="mgmt-table card admin-table-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, backgroundColor: '#FFFFFF', borderRadius: '10px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
+              <div style={{ flexShrink: 0, padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <TableControlToolbar
                   searchValue={alertSearch}
                   onSearchChange={(e) => setAlertSearch(e.target.value)}
@@ -2273,8 +2567,8 @@ const QualityKPIDashboardView = () => {
               </div>
 
               {filterOpen && (
-                <div style={{ padding: '6px 14px', backgroundColor: '#FFFBEB', borderBottom: '1px solid #FCD34D', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.72rem' }}>
-                  <span style={{ fontWeight: '800', color: '#92400E' }}>Bộ lọc trạng thái:</span>
+                <div style={{ flexShrink: 0, padding: '6px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.72rem' }}>
+                  <span style={{ fontWeight: '800', color: '#5D3B32' }}>Bộ lọc trạng thái:</span>
                   {['Tất cả', 'Đã duyệt / Đạt', 'Chờ xử lý / Cần làm'].map(opt => (
                     <button
                       key={opt}
@@ -2282,68 +2576,80 @@ const QualityKPIDashboardView = () => {
                       style={{
                         padding: '2px 10px',
                         borderRadius: '4px',
-                        border: '1px solid #F59E0B',
-                        backgroundColor: filterStatus === opt ? '#F59E0B' : '#FFFFFF',
-                        color: filterStatus === opt ? '#FFFFFF' : '#92400E',
-                        fontWeight: '700',
+                        border: '1px solid ' + (filterStatus === opt ? '#5D3B32' : '#EADCC9'),
+                        backgroundColor: filterStatus === opt ? '#5D3B32' : '#FFFFFF',
+                        color: filterStatus === opt ? '#FFFFFF' : '#5D3B32',
+                        fontWeight: filterStatus === opt ? '800' : '600',
                         cursor: 'pointer'
                       }}
                     >
                       {opt}
                     </button>
                   ))}
+                  <RenderPageSizeSelect pageSize={alertPageSize} setPageSize={setAlertPageSize} setCurrentPage={setAlertPage} />
                 </div>
               )}
 
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#5D3B32', color: '#FFFFFF', textAlign: 'left' }}>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', width: '40px' }}>STT</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Mã Cảnh Báo</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Tiêu Đề Thông Báo</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Nội Dung Phát Đến Banner Mobile App</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700' }}>Đối Tượng Nhận</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center' }}>Thời Gian Ban Hành</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center' }}>Thời Gian Kết Thúc</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center' }}>Tổng Thời Gian</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center' }}>Trạng Thái</th>
-                    <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'center', width: '80px' }}>Thao Tác</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filterAndSortData(alertsList.length > 0 ? alertsList : defaultAlertsList, alertSearch).map((item, idx) => (
-                    <tr key={item.id || idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}>
-                      <td style={{ padding: '5px 10px', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
-                      <td style={{ padding: '5px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.code || `CB_${String(idx + 1).padStart(2, '0')}`}</td>
-                      <td style={{ padding: '5px 10px', fontWeight: '700', color: '#1E293B' }}>{item.title || item.name}</td>
-                      <td style={{ padding: '5px 10px', color: '#0F172A', fontWeight: '600', maxWidth: '320px' }}>{item.content}</td>
-                      <td style={{ padding: '5px 10px', color: '#475569' }}>{item.receiver || 'Tất cả nhân sự'}</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'center', color: '#5D3B32', fontWeight: '700' }}>{item.issuedAt || item.date || '03/09/2026 10:00'}</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'center', color: '#DC2626', fontWeight: '700' }}>{item.expiresAt || '10/09/2026 17:00'}</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'center', color: '#15803D', fontWeight: '800' }}>{calculateDuration(item.issuedAt, item.expiresAt) || '7 ngày'}</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'center', color: '#16A34A', fontWeight: '800' }}>{item.status || 'Đã phát'}</td>
-                      <td style={{ padding: '5px 10px', textAlign: 'center' }}>
-                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
-                          <button
-                            onClick={() => handleEditAlert(item)}
-                            style={{ border: 'none', background: '#FEF3C7', color: '#D97706', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
-                            title="Chỉnh sửa"
-                          >
-                            <Edit2 size={12} />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteAlert(item)}
-                            style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
-                            title="Xóa thông báo"
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
-                      </td>
+              <div className="admin-table-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+                  <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
+                    <tr style={{ backgroundColor: '#FAF6F0', color: '#5D3B32', borderBottom: '1px solid #EADCC9', textAlign: 'left' }}>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '40px' }}>STT</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Mã Cảnh Báo</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Tiêu Đề Thông Báo</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Nội Dung Phát Đến Banner Mobile App</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Đối Tượng Nhận</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center' }}>Thời Gian Ban Hành</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center' }}>Thời Gian Kết Thúc</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center' }}>Tổng Thời Gian</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center' }}>Trạng Thái</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '80px' }}>Thao Tác</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      const allData = filterAndSortData(alertsList.length > 0 ? alertsList : defaultAlertsList, alertSearch);
+                      const pagedData = allData.slice((alertPage - 1) * alertPageSize, alertPage * alertPageSize);
+                      return pagedData.map((item, idx) => {
+                        const globalIdx = (alertPage - 1) * alertPageSize + idx;
+                        return (
+                          <tr key={item.id || idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}>
+                            <td style={{ padding: '5px 10px', fontWeight: '700', color: '#64748B' }}>{globalIdx + 1}</td>
+                            <td style={{ padding: '5px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.code || `CB_${String(globalIdx + 1).padStart(2, '0')}`}</td>
+                            <td style={{ padding: '5px 10px', fontWeight: '700', color: '#1E293B' }}>{item.title || item.name}</td>
+                            <td style={{ padding: '5px 10px', color: '#0F172A', fontWeight: '600', maxWidth: '320px' }}>{item.content}</td>
+                            <td style={{ padding: '5px 10px', color: '#475569' }}>{item.receiver || 'Tất cả nhân sự'}</td>
+                            <td style={{ padding: '5px 10px', textAlign: 'center', color: '#5D3B32', fontWeight: '700' }}>{item.issuedAt || item.date || '03/09/2026 10:00'}</td>
+                            <td style={{ padding: '5px 10px', textAlign: 'center', color: '#DC2626', fontWeight: '700' }}>{item.expiresAt || '10/09/2026 17:00'}</td>
+                            <td style={{ padding: '5px 10px', textAlign: 'center', color: '#15803D', fontWeight: '800' }}>{calculateDuration(item.issuedAt, item.expiresAt) || '7 ngày'}</td>
+                            <td style={{ padding: '5px 10px', textAlign: 'center', color: '#16A34A', fontWeight: '800' }}>{item.status || 'Đã phát'}</td>
+                            <td style={{ padding: '5px 10px', textAlign: 'center' }}>
+                              <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                                <button
+                                  onClick={() => handleEditAlert(item)}
+                                  style={{ border: 'none', background: '#FEF3C7', color: '#D97706', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                                  title="Chỉnh sửa"
+                                >
+                                  <Edit2 size={12} />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteAlert(item)}
+                                  style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                                  title="Xóa thông báo"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+
+              {renderPaginationControl(alertPage, setAlertPage, alertPageSize, filterAndSortData(alertsList.length > 0 ? alertsList : defaultAlertsList, alertSearch).length, 'cảnh báo')}
             </div>
 
           </div>
@@ -2468,7 +2774,22 @@ const QualityKPIDashboardView = () => {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#475569', marginBottom: '4px' }}>
-                    Cách theo dõi
+                    Bộ phận / Vị trí phụ trách
+                  </label>
+                  <select
+                    value={checklistFormData.department_code || 'IQC'}
+                    onChange={(e) => setChecklistFormData(prev => ({ ...prev, department_code: e.target.value, employee_id: `NV_${e.target.value}_001` }))}
+                    style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
+                  >
+                    {qlclDepartmentsList.filter(d => d.code !== 'ALL').map(d => (
+                      <option key={d.code} value={d.code}>{d.name} ({d.code})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#475569', marginBottom: '4px' }}>
+                    Cách theo dõi (Tần suất)
                   </label>
                   <select
                     value={checklistFormData.frequency}
@@ -2479,38 +2800,12 @@ const QualityKPIDashboardView = () => {
                     <option value="Theo ca">Theo ca</option>
                     <option value="Hàng tuần">Hàng tuần</option>
                     <option value="Hàng tháng">Hàng tháng</option>
+                    <option value="Khi phát sinh">Khi phát sinh</option>
                   </select>
                 </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#475569', marginBottom: '4px' }}>
-                    Mã nhân sự phụ trách
-                  </label>
-                  <input
-                    type="text"
-                    value={checklistFormData.employee_id}
-                    onChange={(e) => setChecklistFormData(prev => ({ ...prev, employee_id: e.target.value }))}
-                    style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
-                  />
-                </div>
               </div>
 
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#475569', marginBottom: '4px' }}>
-                  Trạng thái
-                </label>
-                <select
-                  value={checklistFormData.status_today}
-                  onChange={(e) => setChecklistFormData(prev => ({ ...prev, status_today: e.target.value }))}
-                  style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
-                >
-                  <option value="Hoàn thành">Hoàn thành</option>
-                  <option value="Đang thực hiện">Đang thực hiện</option>
-                  <option value="Chưa làm">Chưa làm</option>
-                </select>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
                 <button
                   type="button"
                   onClick={() => setIsChecklistModalOpen(false)}
