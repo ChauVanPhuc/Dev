@@ -217,10 +217,24 @@ const ISOFormEditorView = () => {
   const generateNextCode = async () => {
     try {
       const data = await api.get('/iso-documents/');
-      const count = (data || []).length + 1;
-      return `M${String(count).padStart(2, '0')}`;
+      let maxNum = 0;
+      if (Array.isArray(data)) {
+        data.forEach(item => {
+          if (item && item.code) {
+            const match = item.code.match(/G7\.TL\.(\d+)/i) || item.code.match(/M(\d+)/i) || item.code.match(/(\d+)$/);
+            if (match) {
+              const num = parseInt(match[1], 10);
+              if (!isNaN(num) && num > maxNum) {
+                maxNum = num;
+              }
+            }
+          }
+        });
+      }
+      const nextNum = maxNum + 1;
+      return `G7.TL.${String(nextNum).padStart(3, '0')}`;
     } catch (e) {
-      return 'M01';
+      return 'G7.TL.001';
     }
   };
 
@@ -550,7 +564,7 @@ const ISOFormEditorView = () => {
                   type="text"
                   value={formData.code}
                   readOnly
-                  placeholder="M01"
+                  placeholder="G7.TL.001"
                   style={{ width: '100%', height: '36px', padding: '8px 12px', border: '1px solid #E5E7EB', borderRadius: '6px', fontSize: '0.82rem', outline: 'none', fontWeight: '600', backgroundColor: '#F3F4F6', color: '#4B5563', cursor: 'not-allowed' }}
                 />
               </div>
