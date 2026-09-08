@@ -71,7 +71,7 @@ const CL09C_ParameterView = () => {
 
   const safeProductOptions = Array.isArray(productOptions) ? productOptions.filter((o) => Boolean(o && o.value)) : []
   const safeErrors = Array.isArray(errors) ? errors : []
-  const safeSelectedDefectIds = safeErrors.map((e) => e?.defectId || e?.defect_id || e?.code || e?.id).filter(Boolean)
+  const safeSelectedDefectIds = safeErrors.map((e) => e?.defectId || e?.defect_id || (e?.code ? e?.code : null)).filter(Boolean)
 
   return (
     <InspectionFormShell

@@ -58,7 +58,7 @@ const CL09F_DailyInspectionView = () => {
   // Lấy các ID lỗi đã được chọn ở các dòng
   const selectedDefectIds = useMemo(() => {
     if (!Array.isArray(errors)) return []
-    return errors.map((e) => e.defectId || e.defect_id || e.id).filter(Boolean)
+    return errors.map((e) => e.defectId || e.defect_id || (e.code ? e.code : null)).filter(Boolean)
   }, [errors])
 
   return (

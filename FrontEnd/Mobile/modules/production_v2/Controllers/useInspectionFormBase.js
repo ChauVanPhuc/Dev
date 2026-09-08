@@ -173,7 +173,16 @@ const isStageMatching = (selectedStage, targetStage) => {
   })
 }
 
-const DEFAULT_FALLBACK_DEFECTS = []
+const DEFAULT_FALLBACK_DEFECTS = [
+  { id: 101, code: 'L01', name: 'Trầy xước / Bẩn bề mặt', category: 'Ngoại quan' },
+  { id: 102, code: 'L02', name: 'Cong vênh / Nứt nẻ', category: 'Kích thước' },
+  { id: 103, code: 'L03', name: 'Bong tróc sơn / Khuyết mài', category: 'Sơn' },
+  { id: 104, code: 'L04', name: 'Hở mối ghép / Lỗi kết cấu', category: 'Kết cấu' },
+  { id: 105, code: 'L05', name: 'Sai màu sắc / Ố màu', category: 'Ngoại quan' },
+  { id: 106, code: 'L06', name: 'Sứt góc / Mẻ cạnh', category: 'Gia công' },
+  { id: 107, code: 'L07', name: 'Lỗi bao bì / Thiếu nhãn', category: 'Đóng gói' },
+  { id: 108, code: 'L08', name: 'Thiếu linh kiện / Phụ kiện', category: 'Lắp ráp' },
+]
 
 export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) => {
   const { id } = useParams()

@@ -2106,7 +2106,7 @@ def get_defect_types(
 
     if target_dept and target_dept.strip():
         target_clean = target_dept.strip().lower()
-        if target_clean not in ['tat ca', 'tất cả', 'all', 'admin', 'quan ly', 'quản lý']:
+        if target_clean not in ['tat ca', 'tất cả', 'all', 'admin', 'quan ly', 'quản lý', 'phòng qc', 'phong qc', 'qc', 'qa', 'qlcl', 'quản lý chất lượng']:
             query = query.filter(
                 or_(
                     DefectType.stage.is_(None),

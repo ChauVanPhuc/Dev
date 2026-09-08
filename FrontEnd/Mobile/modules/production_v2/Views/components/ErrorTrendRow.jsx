@@ -74,6 +74,10 @@ const ErrorTrendRow = ({
       return !isUsedElsewhere
     })
 
+    if (filtered.length === 0) {
+      filtered = defectOptions
+    }
+
     // 2. Sắp xếp:
     // Rank 2: Lỗi CTQ (isCTQ) -> Lên VỊ TRÍ CAO NHẤT (trên cùng của danh sách)
     // Rank 1: Lỗi QA Track (needs_tracking / qc_tracking / is_tracked_by_me / isQA)
