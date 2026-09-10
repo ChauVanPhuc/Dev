@@ -49,7 +49,13 @@ const SidebarManagement = lazy(() => import('@modules/System/Views/Screen/Sideba
 const SystemConfig = lazy(() => import('@modules/System/Views/SystemConfig/SystemConfigView'));
 const ScreenBugManagement = lazy(() => import('@modules/System/Views/Screen/ScreenBugManagementView'));
 const ProjectProgress = lazy(() => import('@modules/System/Views/Project/ProjectProgressView'));
-const DefectManagement = lazy(() => import('@modules/Inspection/Views/Defect/DefectManagementView'));
+const DefectManagement = lazy(() => import('@modules/Inspection/Views_v2/Defect/DefectManagementView'));
+
+// Import các View Inspection v2 (Preview xem thử)
+const DefectDashboard_v2 = lazy(() => import('@modules/Inspection/Views_v2/DefectDashboard/DefectDashboardView'));
+const QualityOverviewDashboard_v2 = lazy(() => import('@modules/Inspection/Views_v2/QualityOverview/QualityOverviewDashboard'));
+const InspectionReports_v2 = lazy(() => import('@modules/Inspection/Views_v2/Report/InspectionReportsView'));
+
 // 1. HDKT (Hướng dẫn kiểm tra)
 const HDKTManagement = lazy(() => import('@modules/InspectionGuide/Views/InspectionGuideManagementView'));
 const HDKTForm = lazy(() => import('@modules/InspectionGuide/Views/InspectionGuideFormView'));
@@ -81,10 +87,10 @@ const MachineTraining = lazy(() => import('@modules/Equipment/Views/Machine/Mach
 const MachineDetail = lazy(() => import('@modules/Equipment/Views/Machine/MachineDetailView'));
 
 // Import Claim module (Tải động)
-const ClaimPortalLayout = lazy(() => import('../../modules/Claim/views/Portal/PortalLayout'));
-const ClaimList = lazy(() => import('../../modules/Claim/views/Claim/ClaimListView'));
-const PriceList = lazy(() => import('../../modules/Claim/views/Price/PriceListView'));
-const ShipmentList = lazy(() => import('../../modules/Claim/views/Shipment/ShipmentListView'));
+const ClaimPortalLayout = lazy(() => import('@modules/Claim/views/Claim/ClaimLayout'));
+const ClaimList = lazy(() => import('@modules/Claim/views/Claim/ClaimListView'));
+const PriceList = lazy(() => import('@modules/Claim/views/Price/PriceListView'));
+const ShipmentList = lazy(() => import('@modules/Claim/views/Claim/ClaimListView'));
 
 // Import Manufacture module (Tải động)
 const ManufactureDashboard = lazy(() => import('@modules/Dashboard/Views/Manufacture/ManufactureDashboardView'));
@@ -660,6 +666,12 @@ function App() {
                 <Route path="ctq-guides/edit/:id" element={<ProtectedRoute permissionKey="inspection-guides"><CTQDetail /></ProtectedRoute>} />
 
                 <Route path="defects" element={<ProtectedRoute permissionKey="defects"><DefectManagement /></ProtectedRoute>} />
+                {/* Redirect defects-v2 sang defects v2 */}
+                <Route path="defects-v2" element={<Navigate to="/admin/defects?tab=list" replace />} />
+                <Route path="defect-dashboard-v2" element={<ProtectedRoute permissionKey="defects"><DefectDashboard_v2 /></ProtectedRoute>} />
+                <Route path="quality-overview-v2" element={<ProtectedRoute permissionKey="quality-records"><QualityOverviewDashboard_v2 /></ProtectedRoute>} />
+                <Route path="reports-v2" element={<ProtectedRoute permissionKey="reports"><InspectionReports_v2 /></ProtectedRoute>} />
+
                 <Route path="reports" element={<ProtectedRoute permissionKey="reports"><InspectionReports /></ProtectedRoute>} />
                 <Route path="reports/detail/:type/:id" element={<ProtectedRoute permissionKey="reports"><InspectionDetail /></ProtectedRoute>} />
                 <Route path="quality" element={<ProtectedRoute permissionKey="quality-records"><QualityOverview /></ProtectedRoute>} />

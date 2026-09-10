@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 import os
 import uuid
 from config.database import get_db
-from config.settings import settings
+from config.settings import settings, get_upload_dir
 from jose import jwt
 from modules.auth.models.accounts import Account as AccountModel
 from modules.system.models.system_screen import SystemScreen as SystemScreenModel
@@ -527,10 +527,7 @@ async def upload_component_sample(file: UploadFile = File(...)):
         # Vẫn cho phép nếu đuôi file hợp lệ nhưng content-type không khớp
         pass
 
-    upload_dir = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "..", "..", "static", "uploads", "component_samples")
-    )
-    os.makedirs(upload_dir, exist_ok=True)
+    upload_dir = get_upload_dir("component_samples")
 
     new_filename = f"{uuid.uuid4()}{file_ext}"
     file_path = os.path.join(upload_dir, new_filename)

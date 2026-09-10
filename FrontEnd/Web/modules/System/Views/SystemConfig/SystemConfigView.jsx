@@ -77,6 +77,7 @@ export default function SystemConfigView() {
   // --- CATEGORY (Dòng hàng) FORM STATES ---
   const [catName, setCatName] = useState('');
   const [catDesc, setCatDesc] = useState('');
+  const [catMainCategory, setCatMainCategory] = useState('');
 
   // --- DEFECT CATEGORY (Phân nhóm lỗi QC) FORM STATES ---
   const [defectCatCode, setDefectCatCode] = useState('');
@@ -289,6 +290,7 @@ export default function SystemConfigView() {
           setSubTableData([
             { field: 'Mã định danh ID', value: row.id },
             { field: 'Tên Dòng hàng', value: row.name },
+            { field: 'Dòng hàng chính', value: row.main_category || '---' },
             { field: 'Mô tả / Diễn giải', value: row.description || '---' },
             { field: 'Số sản phẩm liên kết', value: row.product_count ?? (row.products?.length || 0) },
             { field: 'Trạng thái', value: row.status === 1 ? 'Hiệu lực' : 'Hết hiệu lực' },
@@ -544,6 +546,7 @@ export default function SystemConfigView() {
     } else if (activeTab === 'category') {
       setCatName('');
       setCatDesc('');
+      setCatMainCategory('');
     } else if (activeTab === 'defect_category') {
       setDefectCatCode('');
       setDefectCatName('');
@@ -616,6 +619,7 @@ export default function SystemConfigView() {
     } else if (activeTab === 'category') {
       setCatName(item.name || '');
       setCatDesc(item.description || '');
+      setCatMainCategory(item.main_category || '');
     } else if (activeTab === 'defect_category') {
       setDefectCatCode(item.code || '');
       setDefectCatName(item.name || '');
@@ -736,6 +740,7 @@ export default function SystemConfigView() {
         const payload = {
           name: catName.trim(),
           description: catDesc.trim() || null,
+          main_category: catMainCategory || null,
           status: 1
         };
         if (selectedItem) {
@@ -1567,6 +1572,7 @@ export default function SystemConfigView() {
                       {activeTab === 'category' && (
                         <>
                           <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Tên Dòng hàng</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Dòng hàng chính</th>
                           <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Mô tả / Diễn giải</th>
                           <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800, textAlign: 'center' }}>Số SP mẫu</th>
                           <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Trạng thái</th>
@@ -1698,6 +1704,22 @@ export default function SystemConfigView() {
                                   <Tag size={15} style={{ color: '#7B5233' }} />
                                   <span>{item.name}</span>
                                 </div>
+                              </td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1F2937', fontWeight: 600 }}>
+                                {item.main_category ? (
+                                  <span style={{
+                                    backgroundColor: item.main_category === 'Vanity' ? '#EDE9FE' : item.main_category === 'Furniture' ? '#FEF3C7' : '#E2E8F0',
+                                    color: item.main_category === 'Vanity' ? '#6D28D9' : item.main_category === 'Furniture' ? '#D97706' : '#475569',
+                                    padding: '2px 8px',
+                                    borderRadius: '6px',
+                                    fontWeight: 'bold',
+                                    fontSize: '0.75rem'
+                                  }}>
+                                    {item.main_category}
+                                  </span>
+                                ) : (
+                                  <span style={{ color: '#9CA3AF', fontStyle: 'italic', fontSize: '0.75rem' }}>---</span>
+                                )}
                               </td>
                               <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#6B7280' }}>{item.description || '---'}</td>
                               <td style={{ padding: '12px 16px', fontSize: '0.85rem', textAlign: 'center' }}>
@@ -2690,6 +2712,19 @@ export default function SystemConfigView() {
                         style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none' }}
                         required
                       />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>DÒNG HÀNG CHÍNH</label>
+                      <select
+                        value={catMainCategory}
+                        onChange={(e) => setCatMainCategory(e.target.value)}
+                        style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none', backgroundColor: '#FFFFFF' }}
+                      >
+                        <option value="">-- Chọn Dòng hàng chính --</option>
+                        <option value="Vanity">Vanity</option>
+                        <option value="Furniture">Furniture</option>
+                        <option value="Khác">Khác</option>
+                      </select>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                       <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>MÔ TẢ / DIỄN GIẢI</label>

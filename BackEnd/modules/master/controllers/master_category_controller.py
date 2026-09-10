@@ -11,7 +11,7 @@ def get_all_categories(db: Session):
     rows = (
         db.query(MasterCategory, func.count(MasterProduct.id).label("product_count"))
         .outerjoin(MasterProduct, MasterProduct.category_id == MasterCategory.id)
-        .group_by(MasterCategory.id, MasterCategory.name, MasterCategory.description, MasterCategory.status, MasterCategory.created_at)
+        .group_by(MasterCategory.id, MasterCategory.name, MasterCategory.description, MasterCategory.main_category, MasterCategory.status, MasterCategory.created_at)
         .order_by(MasterCategory.name)
         .all()
     )
@@ -20,6 +20,7 @@ def get_all_categories(db: Session):
             "id": cat.id,
             "name": cat.name,
             "description": cat.description,
+            "main_category": cat.main_category,
             "status": cat.status,
             "created_at": cat.created_at,
             "product_count": product_count or 0
@@ -32,7 +33,7 @@ def create_category(db: Session, data: MasterCategoryCreate):
     existing = db.query(MasterCategory).filter(MasterCategory.name == data.name).first()
     if existing:
         raise HTTPException(status_code=400, detail=f"Danh mục '{data.name}' đã tồn tại!")
-    new_cat = MasterCategory(name=data.name, description=data.description, status=data.status)
+    new_cat = MasterCategory(name=data.name, description=data.description, main_category=data.main_category, status=data.status)
     db.add(new_cat)
     db.commit()
     db.refresh(new_cat)

@@ -833,6 +833,7 @@ def get_order_bom(
                     parts_map[name]["specs_map"][spec] += qty
 
         def extract_spec_from_name_and_content(name: str, item_code: str = "", content: str = "", master_prod: Any = None) -> str:
+            import re
             content_str = (content or "").strip()
             if content_str and content_str != item_code and content_str.lower() not in ["tiêu chuẩn", "quy cách tiêu chuẩn", "quy cách thành phẩm"]:
                 return content_str
@@ -989,13 +990,17 @@ def get_order_bom(
                     unit_clean = unit.lower().strip()
                     is_m3 = "m3" in unit_clean or "mét khối" in unit_clean or "met khoi" in unit_clean
                     if is_m3:
-                        qty = float(item.converted_quantity) if (item.converted_quantity and float(item.converted_quantity) > 0) else float(item.quantity or 1)
+                        if item.converted_quantity and float(item.converted_quantity) > 0:
+                            qty = float(item.converted_quantity)
+                            unit = "cái"
+                        else:
+                            qty = float(item.quantity or 1)
                     else:
                         qty = float(item.quantity) if (item.quantity and float(item.quantity) > 0) else float(item.converted_quantity or 1)
 
                     spec = extract_spec_from_name_and_content(name, item.item_code or "", item.content or "")
                     if name not in parts_map:
-                        parts_map[name] = {"part_name": name, "total_qty": 0, "unit": unit, "specs_map": {}}
+                        parts_map[name] = {"part_name": name, "total_qty": 0, "unit": unit, "is_converted": is_m3, "specs_map": {}}
                     parts_map[name]["total_qty"] += qty
                     parts_map[name]["specs_map"][spec] = parts_map[name]["specs_map"].get(spec, 0) + qty
 
@@ -1005,6 +1010,7 @@ def get_order_bom(
                 "part_name": data["part_name"],
                 "total_qty": data["total_qty"],
                 "unit": data.get("unit", ""),
+                "is_converted": data.get("is_converted", False),
                 "specs": [{"specification": k, "qty": v} for k, v in data["specs_map"].items()]
             }
             for _, data in parts_map.items()

@@ -8,6 +8,7 @@ class MasterCategoryBase(BaseModel):
     """
     name: str                   # Tên danh mục (ví dụ: Tủ bếp, Giường, Bàn)
     description: Optional[str] = None # Mô tả chi tiết danh mục
+    main_category: Optional[str] = None # Dòng hàng chính (Vanity hoặc Furniture)
     status: int = 1             # Trạng thái (1: Hiệu lực, 0: Hết hiệu lực)
 
 class MasterCategoryCreate(MasterCategoryBase):
@@ -22,6 +23,7 @@ class MasterCategoryUpdate(BaseModel):
     """
     name: Optional[str] = None
     description: Optional[str] = None
+    main_category: Optional[str] = None
     status: Optional[int] = None
 
 class MasterCategory(MasterCategoryBase):

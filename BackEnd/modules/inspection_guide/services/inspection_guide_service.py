@@ -16,7 +16,9 @@ from modules.inspection_guide.models.inspection_guide import (
     InspectionGuideAssignment,
 )
 
-UPLOAD_DIR = os.path.join("static", "uploads", "inspection_guides")
+from config.settings import get_upload_dir
+
+UPLOAD_DIR = get_upload_dir("inspection_guides")
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
 MAX_IMAGES_PER_STEP = 10
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB

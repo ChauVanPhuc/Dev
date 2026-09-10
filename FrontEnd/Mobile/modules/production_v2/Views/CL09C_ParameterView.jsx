@@ -268,7 +268,10 @@ const CL09C_ParameterView = () => {
                 key={row?.id || idx}
                 row={row}
                 defectOptions={defectOptions || []}
-                selectedDefectIds={safeSelectedDefectIds}
+                selectedDefectIds={safeErrors
+                  .filter((_, i) => i !== idx)
+                  .flatMap((e) => [e?.defectId, e?.defect_id, e?.code, e?.name])
+                  .filter(Boolean)}
                 onChange={(r) => updateError(idx, r)}
                 onRemove={safeErrors.length > 1 ? () => removeErrorRow(idx) : null}
                 disabled={readOnly}

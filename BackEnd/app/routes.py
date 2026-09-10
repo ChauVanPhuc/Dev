@@ -14,7 +14,7 @@ from modules.auth.routes import account_router, role_router, permission_router, 
 from modules.notification.routes import notification_router
 
 from modules.inspection.routes.qc_routes import router as qc_router
-from modules.inspection.routes.inspection_routes import router as inspection_router
+from modules.inspection.routes.inspection_routes import router as inspection_router, get_quality_overview
 
 from modules.equipment.routes import equipment_router, machinery_router
 
@@ -27,6 +27,7 @@ from modules.production.routes import production_v2_router
 from modules.system.routes import system_router, screen_router, screen_bug_router, system_sidebar_router, data_package_router
 
 from modules.claim.routes.claim_routes import router as claim_router
+from modules.price.routes.price_routes import router as price_router
 
 from modules.purchasing.routes import purchase_requisition_router, purchase_order_item_router
 from modules.inspection.routes.iso_router import router as iso_router
@@ -82,6 +83,7 @@ api_router.include_router(system_router.router, prefix="/system", tags=["system"
 api_router.include_router(data_package_router.router, prefix="/system/data-packages", tags=["data-packages"])
 
 api_router.include_router(inspection_router, prefix="/inspections", tags=["inspections"])
+api_router.get("/inspect_quality-overview", tags=["inspections"])(get_quality_overview)
 
 api_router.include_router(equipment_router.router, prefix="/equipments", tags=["equipments"])
 api_router.include_router(machinery_router.router, prefix="/machines", tags=["machines"])
@@ -93,6 +95,7 @@ api_router.include_router(kpi_router.router, prefix="/kpis", tags=["kpis"])
 api_router.include_router(award_discipline_router.router, prefix="/awards-discipline", tags=["awards-discipline"])
 
 api_router.include_router(staff_evaluation_router.router, prefix="/staff-evaluations", tags=["staff-evaluations"])
+api_router.include_router(staff_evaluation_router.router, prefix="/staff-evaluation", tags=["staff-evaluations"])
 api_router.include_router(quality_employee_router.router, prefix="/quality-employees", tags=["quality-employees"])
 api_router.include_router(quality_employee_attendance_router.router, prefix="/quality-employees/attendance", tags=["quality-employee-attendance"])
 api_router.include_router(kpi_management_router.router, prefix="/kpi-management", tags=["kpi-management"])
@@ -107,6 +110,7 @@ api_router.include_router(capa_router.router, prefix="/capas", tags=["capas"])
 api_router.include_router(quick_report_router.router, prefix="/quick-reports", tags=["quick-reports"])
 
 api_router.include_router(claim_router, prefix="/claims", tags=["claim"])
+api_router.include_router(price_router, prefix="/claims", tags=["cabinet-prices"])
 
 api_router.include_router(purchase_requisition_router.router, prefix="/purchase-requisitions", tags=["purchase-requisitions"])
 

@@ -1,47 +1,111 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { Search, Filter, Plus, Trash2, Layers, CheckCircle, Clock, Palette, FileUp } from 'lucide-react';
+import { Search, Filter, Plus } from 'lucide-react';
 import { claimService } from '../../services/claim.service';
 import * as XLSX from 'xlsx';
 import { API_ROOT } from '@webShared/Services/api.service';
-import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import '../../styles/claim.css';
-import '@styles/components.css';
 
 // Import shared components
-import { Table } from '../../components/Table';
-import { Pagination } from '../../components/Pagination';
+import Table from '../../components/Table';
+import Pagination from '../../components/Pagination';
 import { FilterModal, FormModal, AlertModal } from '../../components/Modal';
-import { DeleteConfirmationModal } from '../../components/DeleteConfirmationModal';
-import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
-import {
-  MOCK_CABINET_PRICES,
-  getColorName,
-  renderCabinetThumbnail
-} from './priceListUtils';
+import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
 
-const PriceListView = () => {
-  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, showModal: contextShowModal } = useOutletContext() || {};
-  const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/prices');
-  const [localNotification, setLocalNotification] = useState(null);
+const MOCK_CABINET_PRICES = [
+  { id: 1, cabinet_code: 'A042S-L-BC-WOA', cabinet_name: 'Tủ gỗ Atlas màu sồi tự nhiên', material: 'Gỗ sồi (Oak)', dimensions: '600x800x400', base_price: 100.00, sale_price: 142.49, status: 'Active', last_updated: '2026-06-01T08:00:00Z' },
+  { id: 2, cabinet_code: 'A037S-R-BC-WHT', cabinet_name: 'Tủ gỗ Atlas màu trắng bên phải', material: 'Gỗ sồi (Oak)', dimensions: '600x800x400', base_price: 110.00, sale_price: 142.49, status: 'Active', last_updated: '2026-06-02T10:30:00Z' },
+  { id: 3, cabinet_code: 'T066D-BC-WOA', cabinet_name: 'Tủ gỗ Table màu sồi tự nhiên', material: 'Gỗ sồi (Oak)', dimensions: '1200x2000x600', base_price: 150.00, sale_price: 195.00, status: 'Active', last_updated: '2026-05-15T14:20:00Z' },
+  { id: 4, cabinet_code: 'T036S-R-BC-GRY', cabinet_name: 'Tủ gỗ Table màu xám bên phải', material: 'Gỗ sồi (Oak)', dimensions: '1200x2000x600', base_price: 130.00, sale_price: 175.50, status: 'Active', last_updated: '2026-06-03T16:45:00Z' },
+  { id: 5, cabinet_code: 'T036S-L-BC-MNB', cabinet_name: 'Tủ gỗ Table màu xanh navy bên trái', material: 'Gỗ sồi (Oak)', dimensions: '1200x2000x600', base_price: 135.00, sale_price: 175.50, status: 'Active', last_updated: '2026-06-05T11:15:00Z' },
+  { id: 6, cabinet_code: 'A049S-BC-WHT', cabinet_name: 'Tủ gỗ Atlas màu trắng', material: 'Gỗ sồi (Oak)', dimensions: '600x800x400', base_price: 90.00, sale_price: 125.00, status: 'Active', last_updated: '2026-04-20T09:00:00Z' },
+  { id: 7, cabinet_code: 'T072D-BC-WOA', cabinet_name: 'Tủ gỗ Table lớn sồi tự nhiên', material: 'Gỗ sồi (Oak)', dimensions: '1200x2000x600', base_price: 180.00, sale_price: 240.00, status: 'Inactive', last_updated: '2026-06-06T15:30:00Z' }
+];
 
-  useEffect(() => {
-    if (typeof setCustomTitle === 'function') setCustomTitle(title);
-    if (typeof setCustomSubtitle === 'function') setCustomSubtitle(subtitle || '');
-    if (typeof setCustomScreenCode === 'function') setCustomScreenCode(screenCode || '');
-  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
+const getColorName = (code) => {
+  if (!code) return '';
+  return code.slice(-3).toUpperCase();
+};
 
-  const loggedInUser = JSON.parse(localStorage.getItem('smartflow_user') || '{}');
-  const loggedInUserIsAdmin = loggedInUser.role_name === 'IT' || loggedInUser.role_name === 'BGD' || loggedInUser.username === 'admin';
+const renderCabinetThumbnail = (cabinetCode) => {
+  if (!cabinetCode) return null;
+  const last3 = cabinetCode.slice(-3).toUpperCase();
+  let bgColor = '#D7CCC8';
+  let iconColor = '#5D4037';
+  let label = 'Cabinet';
 
-  let activePermissions = {};
-  try {
-    activePermissions = JSON.parse(localStorage.getItem('smartflow_active_permissions') || '{}');
-  } catch (e) {
-    console.error('Failed to parse screen permissions in PriceListView:', e);
+  if (last3 === 'WHT') {
+    bgColor = '#F5F5F5';
+    iconColor = '#9E9E9E';
+    label = 'Trắng';
+  } else if (last3 === 'WOA') {
+    bgColor = '#E0C39E';
+    iconColor = '#795548';
+    label = 'Sồi';
+  } else if (last3 === 'GRY') {
+    bgColor = '#ECEFF1';
+    iconColor = '#607D8B';
+    label = 'Xám';
+  } else if (last3 === 'MNB') {
+    bgColor = '#1A237E';
+    iconColor = '#C5CAE9';
+    label = 'Xanh Navy';
+  } else if (last3 === 'BLK') {
+    bgColor = '#212121';
+    iconColor = '#B0BEC5';
+    label = 'Đen';
+  } else if (last3 === 'VGN') {
+    bgColor = '#E8F5E9';
+    iconColor = '#2E7D32';
+    label = 'Xanh Lá';
+  } else if (last3 === 'BRO') {
+    bgColor = '#D7CCC8';
+    iconColor = '#5D4037';
+    label = 'Nâu';
+  } else if (last3 === 'SAN') {
+    bgColor = '#FFF9C4';
+    iconColor = '#F57F17';
+    label = 'Cát';
+  } else if (last3 === 'ESP') {
+    bgColor = '#3E2723';
+    iconColor = '#D7CCC8';
+    label = 'Espresso';
   }
 
-  const hasWritePermission = loggedInUserIsAdmin || activePermissions['prices'] !== 'read';
+  return (
+    <div
+      style={{
+        width: '40px',
+        height: '40px',
+        borderRadius: '6px',
+        backgroundColor: bgColor,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        border: '1.5px solid #E2E8F0',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+        position: 'relative',
+        overflow: 'hidden'
+      }}
+      title={`Màu sắc: ${label}`}
+    >
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect width="18" height="18" x="3" y="3" rx="2" />
+        <path d="M3 12h18" />
+        <circle cx="9" cy="7.5" r="1" fill={iconColor} />
+        <circle cx="15" cy="7.5" r="1" fill={iconColor} />
+        <circle cx="9" cy="16.5" r="1" fill={iconColor} />
+        <circle cx="15" cy="16.5" r="1" fill={iconColor} />
+      </svg>
+    </div>
+  );
+};
+
+const PriceListView = () => {
+  const { setCustomTitle, setCustomSubtitle, showModal: contextShowModal } = useOutletContext() || {};
+  const [localNotification, setLocalNotification] = useState(null);
+
+  const hasWritePermission = true;
 
   const showModal = (title, message, type = 'info') => {
     setLocalNotification({ title, message, type });
@@ -275,39 +339,17 @@ const PriceListView = () => {
     });
   };
 
-  const [itemsPerPage, setItemsPerPage] = useState(15);
-
-  const statCards = React.useMemo(() => {
-    const totalCount = allPrices.length;
-    const activeCount = allPrices.filter(p => p.status === 'Active').length;
-    const inactiveCount = allPrices.filter(p => p.status === 'Inactive' || p.status === 'Pending').length;
-    const colorsCount = uniqueColors.length;
-
-    return [
-      { label: 'TỔNG SẢN PHẨM', value: totalCount, iconBg: '#FAF6F0', iconColor: '#7B5233', Icon: Layers },
-      { label: 'ĐANG ÁP DỤNG', value: activeCount, iconBg: '#ECFDF5', iconColor: '#10B981', Icon: CheckCircle },
-      { label: 'TẠM DỪNG', value: inactiveCount, iconBg: '#FFFBEB', iconColor: '#F59E0B', Icon: Clock },
-      { label: 'MÀU SẮC / DÒNG', value: `${colorsCount} màu / ${uniqueLines.length} dòng`, iconBg: '#EFF6FF', iconColor: '#3B82F6', Icon: Palette },
-    ];
-  }, [allPrices, uniqueColors, uniqueLines]);
+  const rowsPerPage = 13;
 
   // Reset page when data, search, or filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [prices, search, sortOption, filterLine, filterCode, filterColor, filterStatus, filterMinPrice, filterMaxPrice, itemsPerPage]);
+  }, [prices, search, sortOption, filterLine, filterCode, filterColor, filterStatus, filterMinPrice, filterMaxPrice]);
 
   // Reactive filtering logic
   useEffect(() => {
     let filtered = [...allPrices];
 
-    if (search) {
-      const searchLower = search.toLowerCase();
-      filtered = filtered.filter(item => 
-        (item.cabinet_code && item.cabinet_code.toLowerCase().includes(searchLower)) ||
-        (item.cabinet_name && item.cabinet_name.toLowerCase().includes(searchLower)) ||
-        (item.material && item.material.toLowerCase().includes(searchLower))
-      );
-    }
     if (filterLine) {
       filtered = filtered.filter(item => {
         const line = item.series || (item.cabinet_code ? item.cabinet_code.charAt(0).toUpperCase() : '');
@@ -337,15 +379,15 @@ const PriceListView = () => {
     }
 
     setPrices(filtered);
-  }, [allPrices, search, filterLine, filterCode, filterColor, filterStatus, filterMinPrice, filterMaxPrice]);
+  }, [allPrices, filterLine, filterCode, filterColor, filterStatus, filterMinPrice, filterMaxPrice]);
 
   // Pagination computed values
   const sortedPrices = getSortedPrices(prices);
   const totalFilteredItems = sortedPrices.length;
-  const totalPages = Math.max(1, Math.ceil(totalFilteredItems / itemsPerPage));
+  const totalPages = Math.max(1, Math.ceil(totalFilteredItems / rowsPerPage));
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = (safeCurrentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
+  const startIndex = (safeCurrentPage - 1) * rowsPerPage;
+  const endIndex = startIndex + rowsPerPage;
   const paginatedPrices = sortedPrices.slice(startIndex, endIndex);
 
   // Dropdown click outside hook for Import dropdown
@@ -770,7 +812,10 @@ const PriceListView = () => {
     setEditingCabinet(null);
   };
 
-  
+  useEffect(() => {
+    setCustomTitle('Bảng giá tủ gỗ');
+    setCustomSubtitle('Quản lý giá tủ · Thiết lập đơn giá sản xuất & xuất khẩu');
+  }, []);
 
   useEffect(() => {
     fetchPrices();
@@ -969,184 +1014,399 @@ const PriceListView = () => {
     ...(hasWritePermission ? [{ label: 'Thao tác', style: { textAlign: 'center' } }] : [])
   ];
 
+
   return (
-    <div className="manufacture-plan-container mgmt-container">
-      {/* Toast Notification */}
-      {localNotification && (
-        <div className={`toast-notification ${localNotification.type}`}>
-          <div className="toast-content">
-            <span className="toast-icon">{localNotification.type === 'error' ? '❌' : '✅'}</span>
-            <span className="toast-text">{localNotification.message}</span>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', height: '100%', minHeight: 0 }}>
+      {/* FILTER & ACTIONS BAR */}
+      <div className="mgmt-toolbar card" style={{
+        marginBottom: '12px',
+        flexShrink: 0,
+        padding: '8px 16px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        borderRadius: '10px',
+        backgroundColor: '#FFFFFF',
+        border: '1px solid #EADCC9',
+        height: '52px',
+        boxSizing: 'border-box'
+      }}>
+        <div className="toolbar-left" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div className="search-wrapper" style={{ margin: 0, height: '36px', width: '320px' }}>
+            <Search size={18} className="search-icon" />
+            <input
+              type="text"
+              placeholder="Search nhanh tên sản phẩm..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+
+          <button
+            type="button"
+            className={`icon-btn-minimal ${isFilterBarOpen ? 'active' : ''}`}
+            onClick={() => setIsFilterBarOpen(!isFilterBarOpen)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              height: '36px',
+              border: '1px solid #EADCC9',
+              backgroundColor: isFilterBarOpen ? '#7B5233' : '#FAF6F0',
+              color: isFilterBarOpen ? '#FFFFFF' : '#7B5233',
+              fontWeight: 'bold',
+              borderRadius: '8px',
+              padding: '0 16px',
+              cursor: 'pointer',
+              fontSize: '0.8rem'
+            }}
+          >
+            <Filter size={14} />
+            Bộ lọc
+            {Object.keys(appliedFilters).length > 0 && (
+              <span style={{
+                backgroundColor: isFilterBarOpen ? '#FFFFFF' : '#7B5233',
+                color: isFilterBarOpen ? '#7B5233' : '#FFFFFF',
+                borderRadius: '50%',
+                width: '18px',
+                height: '18px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '0.7rem',
+                fontWeight: 'bold',
+                marginLeft: '4px'
+              }}>
+                {Object.keys(appliedFilters).length}
+              </span>
+            )}
+          </button>
+
+          {/* SORT DROPDOWN */}
+          <div style={{ position: 'relative', display: 'inline-block' }}>
+            <select
+              value={sortOption}
+              onChange={(e) => setSortOption(e.target.value)}
+              className="select-minimal"
+              style={{
+                height: '36px',
+                borderColor: '#EADCC9',
+                color: '#7B5233',
+                fontWeight: 'bold',
+                borderRadius: '8px',
+                padding: '0 12px 0 28px',
+                cursor: 'pointer',
+                backgroundColor: '#FAF6F0',
+                outline: 'none',
+                fontSize: '0.8rem'
+              }}
+            >
+              <option value="">Sắp xếp</option>
+              <option value="name-asc">Tên: A-Z</option>
+              <option value="name-desc">Tên: Z-A</option>
+              <option value="time-asc">Thời gian: Sớm nhất</option>
+              <option value="time-desc">Thời gian: Trễ nhất</option>
+            </select>
+            <svg
+              style={{ position: 'absolute', left: '8px', top: '11px', pointerEvents: 'none', color: '#7B5233' }}
+              width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+            >
+              <path d="M15 18H3M21 14H3M17 10H3M21 6H3"></path>
+            </svg>
           </div>
         </div>
-      )}
 
-      {/* ── Phần nội dung chính ── */}
-      <div className="mgmt-main">
-        {/* ── STICKY TOP ZONE (Fixed top container) ── */}
-        <div className="sticky-top-zone">
-          {/* KPI Stat Cards */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-            gap: '10px',
-            marginBottom: '8px',
-            width: '100%'
-          }}>
-            {statCards.map((stat, idx) => (
-              <div key={idx} className="kpi-card" style={{
-                background: '#fff', border: '1px solid #E2E8F0',
-                padding: '8px 12px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '8px',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.01)'
-              }}>
-                <div style={{
-                  width: '32px', height: '32px', borderRadius: '8px',
-                  backgroundColor: stat.iconBg,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: stat.iconColor, flexShrink: 0
-                }}>
-                  <stat.Icon size={18} />
+        <div className="toolbar-right" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {hasWritePermission && (
+            <button
+              className="btn btn-primary"
+              onClick={handleOpenAddModal}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                height: '36px',
+                padding: '0 20px',
+                borderRadius: '8px',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                backgroundColor: '#7B5233',
+                color: '#fff'
+              }}
+            >
+              <Plus size={16} />
+              Thêm mới
+            </button>
+          )}
+
+          {hasWritePermission && (
+            <div className="import-dropdown-container" style={{ position: 'relative' }}>
+              <button
+                className="btn btn-outline"
+                onClick={() => setIsImportDropdownOpen(!isImportDropdownOpen)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  height: '36px',
+                  borderColor: '#EADCC9',
+                  color: '#7B5233',
+                  fontWeight: 'bold',
+                  borderRadius: '8px',
+                  padding: '0 16px',
+                  cursor: 'pointer',
+                  backgroundColor: '#fff'
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="7 10 12 15 17 10"></polyline>
+                  <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                Import
+                <svg style={{ marginLeft: '6px', transform: isImportDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </button>
+              {isImportDropdownOpen && (
+                <div className="import-dropdown-menu" style={{ minWidth: '160px', position: 'absolute', top: '100%', right: 0, zIndex: 1000 }}>
+                  <button className="import-dropdown-item" onClick={() => { setIsImportDropdownOpen(false); excelInputRef.current.click(); }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                      <polyline points="14 2 14 8 20 8"></polyline>
+                      <line x1="16" y1="13" x2="8" y2="13"></line>
+                      <line x1="16" y1="17" x2="8" y2="17"></line>
+                    </svg>
+                    File Excel (.xlsx)
+                  </button>
+                  <button className="import-dropdown-item" onClick={() => { setIsImportDropdownOpen(false); excelInputRef.current.click(); }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                    File CSV (.csv)
+                  </button>
                 </div>
-                <div>
-                  <div style={{ fontSize: '0.65rem', color: '#64748B', fontWeight: '700', letterSpacing: '0.05em' }}>{stat.label}</div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0F172A', lineHeight: '1.2' }}>{stat.value}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Standard PageToolbar */}
-          <PageToolbar
-            searchValue={search}
-            onSearchChange={(val) => { setSearch(val); setCurrentPage(1); }}
-            searchPlaceholder="Tìm kiếm nhanh tên sản phẩm, mã hàng..."
-            showSort={true}
-            sortOptions={[
-              { value: 'name-asc', label: 'Tên: A → Z' },
-              { value: 'name-desc', label: 'Tên: Z → A' },
-              { value: 'time-desc', label: 'Mới cập nhật nhất' },
-              { value: 'time-asc', label: 'Cũ nhất' }
-            ]}
-            sortValue={sortOption}
-            onSortChange={(val) => setSortOption(val)}
-            showFilter={true}
-            isFilterOpen={isFilterBarOpen}
-            onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
-            activeFiltersCount={Object.keys(appliedFilters).length}
-            importActions={[
-              {
-                label: 'Nhập từ Excel (.xlsx)',
-                icon: <FileUp size={14} />,
-                onClick: () => (excelInputRef.current || document.getElementById('price-excel-upload'))?.click()
-              }
-            ]}
-            onExport={handleExportExcel}
-            onCreate={handleOpenAddModal}
-            createLabel="Thêm mới"
-            hasWritePermission={hasWritePermission}
-            extraActions={
-              selectedPriceIds.length > 0 ? [
-                {
-                  label: 'Xóa các mục đã chọn',
-                  icon: <Trash2 size={14} />,
-                  color: '#EF4444',
-                  badge: selectedPriceIds.length,
-                  badgeColor: '#EF4444',
-                  onClick: handleDeleteSelected,
-                  requireWrite: true
-                }
-              ] : []
-            }
-          />
-
-          <input
-            id="price-excel-upload"
-            type="file"
-            ref={excelInputRef}
-            style={{ display: 'none' }}
-            accept=".xlsx,.xls,.csv"
-            onChange={handleImportFile}
-          />
-
-          {/* INLINE EXPANDABLE FILTER BAR */}
-          {isFilterBarOpen && (
-            <div className="filter-inline-bar">
-              {/* Dòng hàng */}
-              <div className="filter-field-group">
-                <label className="filter-field-label">Dòng hàng</label>
-                <select value={filterLine} onChange={(e) => { setFilterLine(e.target.value); setCurrentPage(1); }}>
-                  <option value="">Tất cả dòng hàng</option>
-                  {uniqueLines.map(line => (
-                    <option key={line} value={line}>{line}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Màu sắc */}
-              <div className="filter-field-group">
-                <label className="filter-field-label">Màu sắc</label>
-                <select value={filterColor} onChange={(e) => { setFilterColor(e.target.value); setCurrentPage(1); }}>
-                  <option value="">Tất cả màu sắc</option>
-                  {uniqueColors.map(color => (
-                    <option key={color} value={color}>{color}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Trạng thái */}
-              <div className="filter-field-group">
-                <label className="filter-field-label">Trạng thái áp dụng</label>
-                <select value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); setCurrentPage(1); }}>
-                  <option value="">Tất cả trạng thái</option>
-                  <option value="Active">Đang áp dụng</option>
-                  <option value="Inactive">Dừng áp dụng</option>
-                </select>
-              </div>
-
-              {/* Khoảng giá min */}
-              <div className="filter-field-group">
-                <label className="filter-field-label">Giá từ ($)</label>
-                <input
-                  type="number"
-                  placeholder="VD: 50"
-                  value={filterMinPrice}
-                  onChange={(e) => { setFilterMinPrice(e.target.value); setCurrentPage(1); }}
-                  style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
-                />
-              </div>
-
-              {/* Khoảng giá max */}
-              <div className="filter-field-group">
-                <label className="filter-field-label">Giá đến ($)</label>
-                <input
-                  type="number"
-                  placeholder="VD: 200"
-                  value={filterMaxPrice}
-                  onChange={(e) => { setFilterMaxPrice(e.target.value); setCurrentPage(1); }}
-                  style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
-                />
-              </div>
-
-              {/* Hiển thị số dòng */}
-              <div className="filter-field-group">
-                <label className="filter-field-label">Hiển thị số dòng</label>
-                <select value={itemsPerPage} onChange={(e) => { setItemsPerPage(parseInt(e.target.value)); setCurrentPage(1); }}>
-                  <option value={15}>15 dòng</option>
-                  <option value={30}>30 dòng</option>
-                  <option value={50}>50 dòng</option>
-                  <option value={100}>100 dòng</option>
-                </select>
-              </div>
+              )}
             </div>
           )}
 
-          {/* Applied Filter Chips */}
+          {hasWritePermission && (
+            <input
+              type="file"
+              ref={excelInputRef}
+              style={{ display: 'none' }}
+              accept=".xlsx,.xls,.csv"
+              onChange={handleImportFile}
+            />
+          )}
+
+          <button
+            className="btn btn-outline"
+            onClick={handleExportExcel}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              height: '36px',
+              padding: '0 16px',
+              borderRadius: '8px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              border: '1px solid #EADCC9',
+              backgroundColor: '#fff',
+              color: '#7B5233'
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            Export
+          </button>
+
+          {hasWritePermission && (
+            <button
+              className="btn btn-outline"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                height: '36px',
+                borderColor: selectedPriceIds.length === 0 ? '#CBD5E1' : '#A0301B',
+                color: selectedPriceIds.length === 0 ? '#94A3B8' : '#A0301B',
+                cursor: selectedPriceIds.length === 0 ? 'not-allowed' : 'pointer',
+                fontWeight: 'bold',
+                borderRadius: '8px',
+                padding: '0 16px',
+                backgroundColor: '#fff'
+              }}
+              disabled={selectedPriceIds.length === 0}
+              onClick={handleDeleteSelected}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+              Xóa đã chọn
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* INLINE EXPANDABLE FILTER BAR */}
+      {isFilterBarOpen && (
+        <div className="filter-inline-bar">
+          {/* CATEGORY 1: SẢN PHẨM & MÀU SẮC */}
+          <div className="filter-dropdown-wrapper">
+            <button
+              type="button"
+              className={`btn-filter-dropdown ${activeDropdown === 'product' ? 'active' : ''}`}
+              onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === 'product' ? null : 'product'); }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+              </svg>
+              <span>Sản phẩm & Màu sắc</span>
+              {['line', 'code', 'color'].filter(k => appliedFilters[k]).length > 0 && (
+                <span className="filter-active-badge">
+                  {['line', 'code', 'color'].filter(k => appliedFilters[k]).length}
+                </span>
+              )}
+              <span className="dropdown-arrow">▾</span>
+            </button>
+            {activeDropdown === 'product' && (
+              <div className="filter-dropdown-card grid-2col" style={{ width: '360px' }} onClick={(e) => e.stopPropagation()}>
+                <div className="filter-field-group">
+                  <label className="filter-field-label">Dòng hàng</label>
+                  <select value={filterLine} onChange={(e) => setFilterLine(e.target.value)}>
+                    <option value="">Tất cả</option>
+                    {uniqueLines.map(line => (
+                      <option key={line} value={line}>{line}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="filter-field-group">
+                  <label className="filter-field-label">Màu sắc</label>
+                  <select value={filterColor} onChange={(e) => setFilterColor(e.target.value)}>
+                    <option value="">Tất cả</option>
+                    {uniqueColors.map(color => (
+                      <option key={color} value={color}>{color}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="filter-field-group" style={{ gridColumn: 'span 2', position: 'relative' }}>
+                  <label className="filter-field-label">Mã hàng</label>
+                  <input
+                    type="text"
+                    placeholder="Ví dụ: A042S..."
+                    value={filterCode}
+                    onChange={(e) => setFilterCode(e.target.value)}
+                    className="filter-dropdown-input"
+                    onFocus={() => setShowFilterCodeSuggestions(true)}
+                    onBlur={() => setTimeout(() => setShowFilterCodeSuggestions(false), 200)}
+                  />
+                  {showFilterCodeSuggestions && (
+                    <div className="custom-autocomplete-suggestions">
+                      {uniqueItemCodes
+                        .filter(opt => !filterCode || opt.toLowerCase().includes(filterCode.toLowerCase()))
+                        .map((opt, idx) => (
+                          <div
+                            key={idx}
+                            className="custom-autocomplete-option"
+                            onMouseDown={() => {
+                              setFilterCode(opt);
+                              setShowFilterCodeSuggestions(false);
+                            }}
+                          >
+                            {opt}
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* CATEGORY 2: TRẠNG THÁI & GIÁ CẢ */}
+          <div className="filter-dropdown-wrapper">
+            <button
+              type="button"
+              className={`btn-filter-dropdown ${activeDropdown === 'price' ? 'active' : ''}`}
+              onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === 'price' ? null : 'price'); }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="12" y1="1" x2="12" y2="23"></line>
+                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+              </svg>
+              <span>Trạng thái & Giá cả</span>
+              {['status', 'minPrice', 'maxPrice'].filter(k => appliedFilters[k]).length > 0 && (
+                <span className="filter-active-badge">
+                  {['status', 'minPrice', 'maxPrice'].filter(k => appliedFilters[k]).length}
+                </span>
+              )}
+              <span className="dropdown-arrow">▾</span>
+            </button>
+            {activeDropdown === 'price' && (
+              <div className="filter-dropdown-card" style={{ width: '320px' }} onClick={(e) => e.stopPropagation()}>
+                <div className="filter-field-group">
+                  <label className="filter-field-label">Trạng thái áp dụng</label>
+                  <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+                    <option value="">Tất cả</option>
+                    <option value="Active">Đang áp dụng</option>
+                    <option value="Inactive">Dừng áp dụng</option>
+                  </select>
+                </div>
+                <div className="filter-field-group">
+                  <label className="filter-field-label">Khoảng giá bán ($)</label>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <input
+                      type="number"
+                      placeholder="Từ"
+                      value={filterMinPrice}
+                      onChange={(e) => setFilterMinPrice(e.target.value)}
+                      className="filter-dropdown-input"
+                      style={{ flex: 1 }}
+                    />
+                    <span style={{ color: '#8D6E63', fontWeight: 'bold' }}>-</span>
+                    <input
+                      type="number"
+                      placeholder="Đến"
+                      value={filterMaxPrice}
+                      onChange={(e) => setFilterMaxPrice(e.target.value)}
+                      className="filter-dropdown-input"
+                      style={{ flex: 1 }}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Active applied filter chips container with a border wrapper */}
           {Object.keys(appliedFilters).length > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', padding: '4px 8px', marginBottom: '4px' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#8D6E63' }}>Đã lọc:</span>
+            <div
+              className="filter-chips-wrapper"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                border: '1px dashed #D5C7B7',
+                borderRadius: '6px',
+                padding: '2px 8px',
+                backgroundColor: '#FFFFFF',
+                minHeight: '28px',
+                boxSizing: 'border-box',
+                flexWrap: 'wrap'
+              }}
+            >
+              <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#8D6E63', display: 'flex', alignItems: 'center' }}>Đã chọn:</span>
               {Object.entries(appliedFilters).map(([key, value]) => {
                 if (!value) return null;
                 let displayLabel = '';
+
                 if (key === 'line') displayLabel = `Dòng: ${value}`;
                 else if (key === 'code') displayLabel = `Mã: ${value}`;
                 else if (key === 'color') displayLabel = `Màu: ${value}`;
@@ -1156,205 +1416,176 @@ const PriceListView = () => {
                 else return null;
 
                 return (
-                  <div key={key} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', backgroundColor: '#FAF6F0', color: '#7B5233', fontSize: '0.78rem', fontWeight: '700', padding: '2px 8px', borderRadius: '4px', border: '1px solid #EADCC9' }}>
+                  <div
+                    key={key}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      backgroundColor: '#FAF6F0',
+                      color: '#7B5233',
+                      fontSize: '0.78rem',
+                      fontWeight: '700',
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      border: '1px solid #EADCC9',
+                      height: '24px',
+                      boxSizing: 'border-box'
+                    }}
+                  >
                     <span>{displayLabel}</span>
-                    <button type="button" onClick={() => removeFilterKey(key)} style={{ background: 'none', border: 'none', color: '#A0301B', cursor: 'pointer', fontWeight: 'bold', marginLeft: '2px' }}>&times;</button>
+                    <button
+                      type="button"
+                      onClick={() => removeFilterKey(key)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#A0301B',
+                        cursor: 'pointer',
+                        fontSize: '1rem',
+                        lineHeight: 1,
+                        padding: 0,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        fontWeight: '900',
+                        marginLeft: '2px'
+                      }}
+                    >
+                      &times;
+                    </button>
                   </div>
                 );
               })}
-              <button type="button" onClick={clearAllFilters} style={{ background: 'none', border: 'none', color: '#A0301B', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold', textDecoration: 'underline', marginLeft: 'auto' }}>Xóa tất cả bộ lọc</button>
             </div>
           )}
-        </div>
 
-        {/* ── Bảng dữ liệu chuẩn /admin/users ── */}
-        <div className="admin-list-layout">
-          <div className="mgmt-table card admin-table-card">
-            {loading ? (
-              <div className="loading-state" style={{ padding: '3rem', textAlign: 'center', color: '#94A3B8' }}>Đang tải dữ liệu...</div>
-            ) : prices.length === 0 ? (
-              <div className="loading-state" style={{ padding: '4rem', textAlign: 'center', color: '#94A3B8' }}>Không tìm thấy đơn giá sản phẩm nào.</div>
-            ) : (
-              <>
-                <div className="table-responsive desktop-only admin-table-scroll">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        {hasWritePermission && (
-                          <th style={{ width: '40px', textAlign: 'center' }}>
-                            <input
-                              type="checkbox"
-                              className="checkbox-custom"
-                              checked={paginatedPrices.length > 0 && paginatedPrices.every(p => selectedPriceIds.includes(p.id))}
-                              onChange={handleToggleSelectAll}
-                            />
-                          </th>
-                        )}
-                        <th style={{ width: '60px' }}>STT</th>
-                        <th>Tên sản phẩm</th>
-                        <th>Tên sản phẩm (new)</th>
-                        <th>Dòng hàng</th>
-                        <th>Dòng hàng (new)</th>
-                        <th>Mã hàng</th>
-                        <th>Màu sắc</th>
-                        <th>Đơn giá bán ($)</th>
-                        <th style={{ textAlign: 'center' }}>Trạng thái</th>
-                        {hasWritePermission && <th style={{ textAlign: 'center' }}>Thao tác</th>}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {paginatedPrices.map((item, idx) => {
-                        const cleanCode = item.cabinet_code ? item.cabinet_code.split(/[\r\n\s]+/)[0].trim() : '';
-                        const productLine = cleanCode ? cleanCode.charAt(0).toUpperCase() : '';
-                        const itemCode = cleanCode ? cleanCode.split('-')[0].toUpperCase() : '';
-                        const colorCode = cleanCode && cleanCode.length >= 3 ? cleanCode.slice(-3).toUpperCase() : '';
-
-                        return (
-                          <tr
-                            key={item.id}
-                            className="animate-card-entrance"
-                            style={{
-                              position: 'relative',
-                              zIndex: actionMenuId === item.id ? 30 : 1
-                            }}
-                          >
-                            {hasWritePermission && (
-                              <td className="checkbox-col" style={{ textAlign: 'center' }}>
-                                <input
-                                  type="checkbox"
-                                  className="checkbox-custom"
-                                  checked={selectedPriceIds.includes(item.id)}
-                                  onChange={() => handleToggleSelectRow(item.id)}
-                                />
-                              </td>
-                            )}
-                            <td style={{ fontWeight: '600', color: 'var(--text-gray)' }}>{startIndex + idx + 1}</td>
-                            <td className="text-left" style={{ fontWeight: '600', color: '#2D1A12' }}>{item.cabinet_code}</td>
-                            <td className="text-left" style={{ fontWeight: '500', color: '#7B5233' }}>{item.cabinet_name}</td>
-                            <td className="text-left" style={{ fontWeight: '500', color: '#5D4037' }}>{item.series || productLine}</td>
-                            <td className="text-left" style={{ fontWeight: '500', color: '#5D4037' }}>{item.new_series || ''}</td>
-                            <td className="code-ref text-left" style={{ fontWeight: '500' }}>{item.material || itemCode}</td>
-                            <td className="text-left" style={{ fontWeight: '500', color: '#5D4037' }}>{item.dimensions || colorCode}</td>
-                            <td className="value-penalty text-left" style={{ fontWeight: '700', color: '#2D1A12' }}>{formatPrice(item.sale_price)}</td>
-                            <td style={{ textAlign: 'center' }}>
-                              <span className={`status-badge badge-${item.status === 'Active' ? 'new' : 'pending'}`}>
-                                {item.status === 'Active' ? 'Đang áp dụng' : 'Dừng áp dụng'}
-                              </span>
-                            </td>
-                            {hasWritePermission && (
-                              <td style={{ position: 'relative', textAlign: 'center', zIndex: actionMenuId === item.id ? 40 : 1 }}>
-                                <button
-                                  className="action-btn"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setActionMenuId(actionMenuId === item.id ? null : item.id);
-                                  }}
-                                ><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
-                                {actionMenuId === item.id && (
-                                  <div className="action-menu" style={{ right: '50%', transform: 'translateX(50%)', top: '80%' }}>
-                                    <button
-                                      className="action-menu-item"
-                                      onClick={() => {
-                                        setActionMenuId(null);
-                                        handleOpenEditModal(item);
-                                      }}
-                                    >
-                                      Chỉnh sửa
-                                    </button>
-                                    <button
-                                      className="action-menu-item danger"
-                                      onClick={() => {
-                                        setActionMenuId(null);
-                                        handleDeletePrice(item.id);
-                                      }}
-                                    >
-                                      Xóa đơn giá
-                                    </button>
-                                  </div>
-                                )}
-                              </td>
-                            )}
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Phân trang Desktop - Đồng bộ chuẩn với /admin/users */}
-                <div className="admin-pagination-desktop desktop-only">
-                  <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
-                    Hiển thị <b>{totalFilteredItems > 0 ? startIndex + 1 : 0}–{Math.min(endIndex, totalFilteredItems)}</b> trên <b>{totalFilteredItems}</b> sản phẩm
-                  </div>
-
-                  {totalPages > 1 && (
-                    <div style={{ display: 'flex', gap: '5px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
-                      <button
-                        disabled={safeCurrentPage === 1}
-                        onClick={() => setCurrentPage(safeCurrentPage - 1)}
-                        className="page-btn"
-                        style={{ padding: '8px 12px' }}
-                      >
-                        &lt; Trước
-                      </button>
-                      {(() => {
-                        const pages = [];
-                        const delta = 2;
-                        for (let i = 1; i <= totalPages; i++) {
-                          if (i === 1 || i === totalPages || (i >= safeCurrentPage - delta && i <= safeCurrentPage + delta)) {
-                            pages.push(i);
-                          } else if (pages[pages.length - 1] !== '...') {
-                            pages.push('...');
-                          }
-                        }
-                        return pages.map((p, idx) => {
-                          if (p === '...') {
-                            return (
-                              <span key={`ell-${idx}`} style={{ padding: '0 8px', color: '#7B5233', fontWeight: '700' }}>
-                                ...
-                              </span>
-                            );
-                          }
-                          return (
-                            <button
-                              key={p}
-                              className={`page-btn ${safeCurrentPage === p ? 'active' : ''}`}
-                              onClick={() => setCurrentPage(p)}
-                            >
-                              {p}
-                            </button>
-                          );
-                        });
-                      })()}
-                      <button
-                        disabled={safeCurrentPage >= totalPages}
-                        onClick={() => setCurrentPage(safeCurrentPage + 1)}
-                        className="page-btn"
-                        style={{ padding: '8px 12px' }}
-                      >
-                        Sau &gt;
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Phân trang Mobile Sticky */}
-        {totalPages > 1 && (
-          <div className="pagination-mobile-sticky mobile-only">
-            <button className="page-btn" onClick={() => setCurrentPage(Math.max(safeCurrentPage - 1, 1))} disabled={safeCurrentPage === 1}>
-              &lt;
+          {/* Reset filter button if any filter is active */}
+          {Object.keys(appliedFilters).length > 0 && (
+            <button
+              type="button"
+              onClick={clearAllFilters}
+              style={{
+                marginLeft: 'auto',
+                background: 'none',
+                border: 'none',
+                color: '#A0301B',
+                cursor: 'pointer',
+                fontSize: '0.82rem',
+                fontWeight: 'bold',
+                textDecoration: 'underline',
+                padding: '0 12px',
+                height: '34px',
+                display: 'inline-flex',
+                alignItems: 'center'
+              }}
+            >
+              Xóa bộ lọc
             </button>
-            <span style={{ fontWeight: '700', fontSize: '0.9rem', color: '#7B5233' }}>Trang {safeCurrentPage} / {totalPages || 1}</span>
-            <button className="page-btn" onClick={() => setCurrentPage(Math.min(safeCurrentPage + 1, totalPages))} disabled={safeCurrentPage === totalPages || totalPages <= 1}>
-              &gt;
-            </button>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
+
+      {/* TABLE VIEW */}
+      <div 
+        className="admin-table-card" 
+        style={{ 
+          backgroundColor: '#FFF', 
+          borderRadius: '12px', 
+          boxShadow: '0 4px 12px rgba(123, 82, 51, 0.08)', 
+          border: '1px solid #EADCC9',
+          flex: 1, 
+          display: 'flex', 
+          flexDirection: 'column', 
+          overflow: 'hidden', 
+          minHeight: 0,
+          width: '100%',
+          margin: 0
+        }}
+      >
+        <Table
+          loading={loading}
+          isEmpty={prices.length === 0}
+          emptyMessage="Không tìm thấy đơn giá sản phẩm tủ gỗ nào."
+          headers={tableHeaders}
+        >
+          {paginatedPrices.map((item, idx) => {
+            const cleanCode = item.cabinet_code ? item.cabinet_code.split(/[\r\n\s]+/)[0].trim() : '';
+            const productLine = cleanCode ? cleanCode.charAt(0).toUpperCase() : '';
+            const itemCode = cleanCode ? cleanCode.split('-')[0].toUpperCase() : '';
+            const colorCode = cleanCode && cleanCode.length >= 3 ? cleanCode.slice(-3).toUpperCase() : '';
+
+            return (
+              <tr
+                key={item.id}
+                style={{
+                  position: 'relative',
+                  zIndex: actionMenuId === item.id ? 30 : 1
+                }}
+              >
+                {hasWritePermission && (
+                  <td className="checkbox-col" style={{ padding: '10px 14px', textAlign: 'center' }}>
+                    <input
+                      type="checkbox"
+                      className="checkbox-custom"
+                      checked={selectedPriceIds.includes(item.id)}
+                      onChange={() => handleToggleSelectRow(item.id)}
+                    />
+                  </td>
+                )}
+                <td style={{ padding: '10px 14px', fontWeight: '600', color: 'var(--text-gray)', textAlign: 'center' }}>{startIndex + idx + 1}</td>
+                <td className="text-left" style={{ padding: '10px 14px', fontWeight: '500', color: '#2D1A12' }}>{item.cabinet_code}</td>
+                <td className="text-left" style={{ padding: '10px 14px', fontWeight: '500', color: '#7B5233' }}>{item.cabinet_name}</td>
+                <td className="text-left" style={{ padding: '10px 14px', fontWeight: '500', color: '#5D4037' }}>{item.series || productLine}</td>
+                <td className="text-left" style={{ padding: '10px 14px', fontWeight: '500', color: '#5D4037' }}>{item.new_series || ''}</td>
+                <td className="code-ref text-left" style={{ padding: '10px 14px', fontWeight: '500' }}>{item.material || itemCode}</td>
+                <td className="text-left" style={{ padding: '10px 14px', fontWeight: '500', color: '#5D4037' }}>{item.dimensions || colorCode}</td>
+                <td className="value-penalty text-left" style={{ padding: '10px 14px', fontWeight: 'bold', color: '#2D1A12' }}>{formatPrice(item.sale_price)}</td>
+                <td style={{ padding: '10px 14px' }}>
+                  <span className={`status-badge badge-${item.status === 'Active' ? 'new' : 'pending'}`}>
+                    {item.status === 'Active' ? 'Áp dụng' : 'Dừng áp dụng'}
+                  </span>
+                </td>
+                {hasWritePermission && (
+                  <td style={{ padding: '10px 14px', position: 'relative', textAlign: 'center', zIndex: actionMenuId === item.id ? 40 : 1 }}>
+                    <button
+                      className="action-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActionMenuId(actionMenuId === item.id ? null : item.id);
+                      }}
+                    ><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" /></svg></button>
+                    {actionMenuId === item.id && (
+                      <div className="action-menu" style={{ right: '50%', transform: 'translateX(50%)', top: '80%' }}>
+                        <button
+                          className="action-menu-item"
+                          onClick={() => {
+                            setActionMenuId(null);
+                            handleOpenEditModal(item);
+                          }}
+                        >
+                          Chỉnh sửa
+                        </button>
+                      </div>
+                    )}
+                  </td>
+                )}
+              </tr>
+            );
+          })}
+        </Table>
+
+          {/* PAGINATION FOOTER */}
+          {prices.length > 0 && !loading && (
+            <Pagination
+              currentPage={safeCurrentPage}
+              totalPages={totalPages}
+              startIndex={startIndex}
+              endIndex={endIndex}
+              totalItems={totalFilteredItems}
+              onPageChange={setCurrentPage}
+            />
+          )}
+        </div>
 
       {/* ADD NEW CABINET PRICE MODAL */}
       <FormModal
@@ -1551,10 +1782,10 @@ const PriceListView = () => {
                     const cardStyle = num === 1
                       ? { flex: 1, height: '100%', position: 'relative', borderRadius: '4px', overflow: 'hidden', border: '1px solid #E5E7EB', backgroundColor: '#F2F0F0' }
                       : num === 2
-                      ? { flex: 1, height: 'calc(50% - 6px)', position: 'relative', borderRadius: '4px', overflow: 'hidden', border: '1px solid #E5E7EB', backgroundColor: '#F2F0F0' }
-                      : num === 3
-                      ? { flex: 1, height: 'calc(33.33% - 8px)', position: 'relative', borderRadius: '4px', overflow: 'hidden', border: '1px solid #E5E7EB', backgroundColor: '#F2F0F0' }
-                      : { height: '180px', flexShrink: 0, position: 'relative', borderRadius: '4px', overflow: 'hidden', border: '1px solid #E5E7EB', backgroundColor: '#F2F0F0' };
+                        ? { flex: 1, height: 'calc(50% - 6px)', position: 'relative', borderRadius: '4px', overflow: 'hidden', border: '1px solid #E5E7EB', backgroundColor: '#F2F0F0' }
+                        : num === 3
+                          ? { flex: 1, height: 'calc(33.33% - 8px)', position: 'relative', borderRadius: '4px', overflow: 'hidden', border: '1px solid #E5E7EB', backgroundColor: '#F2F0F0' }
+                          : { height: '180px', flexShrink: 0, position: 'relative', borderRadius: '4px', overflow: 'hidden', border: '1px solid #E5E7EB', backgroundColor: '#F2F0F0' };
 
                     return (
                       <div key={index} className="add-claim-image-card-wrapper" style={cardStyle}>

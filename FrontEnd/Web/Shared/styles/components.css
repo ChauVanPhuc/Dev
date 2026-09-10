@@ -1006,18 +1006,20 @@ tr:has(.action-menu),
 .form-control, .form-group input, .form-group select, .form-group textarea {
   width: 100%;
   padding: 10px 14px;
-  border: 1px solid #E5E7EB;
+  border: 1.5px solid #D9B99B;
   border-radius: 8px;
   font-size: 0.9rem;
   outline: none;
   background-color: #FAF8F6;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-sizing: border-box;
 }
 
 .form-control:focus, .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
-  border-color: #7B5233;
-  background-color: #FFFFFF;
-  box-shadow: 0 0 0 3px rgba(123, 82, 51, 0.15);
+  border-color: #7B5233 !important;
+  background-color: #FFFFFF !important;
+  box-shadow: 0 0 0 3.5px rgba(123, 82, 51, 0.18) !important;
+  outline: none !important;
 }
 
 .form-control.disabled-input {

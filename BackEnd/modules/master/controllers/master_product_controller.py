@@ -20,6 +20,7 @@ from modules.production.models.product import Product
 from modules.production.models.bom_detail import BOMDetail
 from modules.master.schemas.master_product import MasterProductCreate, MasterProductUpdate
 from shared.utils.string_cleaner import clean_and_standardize_name, clean_and_standardize_sku
+from config.settings import get_upload_dir
 
 def clean_stage_name(val):
     if not val or pd.isna(val) or str(val).lower() == 'nan':
@@ -62,8 +63,7 @@ def save_base64_image_if_needed(image_url: Optional[str], subfolder: str = "prod
             elif "gif" in header.lower():
                 ext = ".gif"
             
-            upload_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "static", "uploads", subfolder))
-            os.makedirs(upload_dir, exist_ok=True)
+            upload_dir = get_upload_dir(subfolder)
             new_filename = f"{subfolder[:4]}_{uuid.uuid4()}{ext}"
             file_path = os.path.join(upload_dir, new_filename)
             with open(file_path, "wb") as f:

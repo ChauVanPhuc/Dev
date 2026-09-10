@@ -62,6 +62,29 @@ const getM3PieceConversion = (item) => {
   return null;
 };
 
+const highlightMatch = (text, term) => {
+  if (!text || !term || !term.trim()) return text;
+  const strText = String(text);
+  const lowerText = strText.toLowerCase();
+  const lowerTerm = term.toLowerCase().trim();
+  const index = lowerText.indexOf(lowerTerm);
+  if (index === -1) return strText;
+  
+  const before = strText.substring(0, index);
+  const match = strText.substring(index, index + lowerTerm.length);
+  const after = strText.substring(index + lowerTerm.length);
+  
+  return (
+    <>
+      {before}
+      <mark style={{ backgroundColor: '#FEF08A', color: '#854D0E', padding: '1px 4px', borderRadius: '3px', fontWeight: 'bold' }}>
+        {match}
+      </mark>
+      {after}
+    </>
+  );
+};
+
 const PurchaseRequisitionListView = () => {
   const navigate = useNavigate();
   const outletContext = useOutletContext() || {};
@@ -167,7 +190,8 @@ const PurchaseRequisitionListView = () => {
         (item.note && String(item.note).toLowerCase().includes(term)) ||
         (Array.isArray(item.items) && item.items.some(it => 
           (it.item_code && String(it.item_code).toLowerCase().includes(term)) ||
-          (it.item_name && String(it.item_name).toLowerCase().includes(term))
+          (it.item_name && String(it.item_name).toLowerCase().includes(term)) ||
+          (it.order_code && String(it.order_code).toLowerCase().includes(term))
         ))
       );
     }
@@ -197,6 +221,15 @@ const PurchaseRequisitionListView = () => {
 
     return filtered;
   }, [rawItems, searchTerm, sortValue, filterOrderType, filterStatus, filterPartner, filterPriority]);
+
+  // Tự động mở rộng chi tiết các đơn hàng khi tìm kiếm từ khóa
+  useEffect(() => {
+    if (searchTerm && searchTerm.trim()) {
+      const autoExpanded = {};
+      displayItems.forEach(r => { autoExpanded[r.id] = true; });
+      setExpandedRows(autoExpanded);
+    }
+  }, [searchTerm, displayItems]);
 
   // ── LOGIC CHUẨN: TÍNH THỐNG KÊ TOÀN BỘ CƠ SỞ DỮ LIỆU (GLOBAL STATS OVERALL DB) ──
   const computedKPI = useMemo(() => {
@@ -1017,53 +1050,65 @@ const PurchaseRequisitionListView = () => {
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {row.items.map((it, itIdx) => (
-                                      <tr key={it.id || itIdx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: itIdx % 2 === 0 ? '#FFFFFF' : '#FDFDFD' }}>
-                                        <td style={{ padding: '6px 10px', textAlign: 'center', color: '#94A3B8', fontWeight: '600' }}>{itIdx + 1}</td>
-                                        <td style={{ padding: '6px 10px', fontWeight: '700', color: '#2D1A12' }}>{it.item_code || '---'}</td>
-                                        <td style={{ padding: '6px 10px', color: '#334155' }}>{it.item_name || it.item_code || '---'}</td>
-                                        <td style={{ padding: '6px 10px', color: '#64748B' }}>{it.order_code || row.po_code || '---'}</td>
-                                        <td style={{ padding: '6px 10px', textAlign: 'center', color: '#64748B' }}>{it.unit || 'Bộ'}</td>
-                                        <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '700', color: '#2D1A12' }}>
-                                          <div>{typeof it.quantity === 'number' ? it.quantity.toLocaleString() : (it.quantity || 0)}</div>
-                                          {(() => {
-                                            const conv = getM3PieceConversion(it);
-                                            if (conv) {
-                                              return (
-                                                <div style={{ fontSize: '0.72rem', color: '#059669', fontWeight: '700', marginTop: '1px' }}>
-                                                  (= {conv.pieces.toLocaleString()} {conv.unitLabel})
-                                                </div>
-                                              );
+                                    {row.items.map((it, itIdx) => {
+                                      const termLower = (searchTerm || '').toLowerCase().trim();
+                                      const isItemMatched = termLower && (
+                                        (it.item_code && String(it.item_code).toLowerCase().includes(termLower)) ||
+                                        (it.item_name && String(it.item_name).toLowerCase().includes(termLower)) ||
+                                        (it.order_code && String(it.order_code).toLowerCase().includes(termLower))
+                                      );
+                                      return (
+                                        <tr key={it.id || itIdx} style={{
+                                          borderBottom: '1px solid #F1F5F9',
+                                          backgroundColor: isItemMatched ? '#FEFCE8' : (itIdx % 2 === 0 ? '#FFFFFF' : '#FDFDFD'),
+                                          transition: 'background-color 0.15s ease'
+                                        }}>
+                                          <td style={{ padding: '6px 10px', textAlign: 'center', color: '#94A3B8', fontWeight: '600' }}>{itIdx + 1}</td>
+                                          <td style={{ padding: '6px 10px', fontWeight: '700', color: '#2D1A12' }}>{highlightMatch(it.item_code || '---', searchTerm)}</td>
+                                          <td style={{ padding: '6px 10px', color: '#334155' }}>{highlightMatch(it.item_name || it.item_code || '---', searchTerm)}</td>
+                                          <td style={{ padding: '6px 10px', color: '#64748B' }}>{highlightMatch(it.order_code || row.po_code || '---', searchTerm)}</td>
+                                          <td style={{ padding: '6px 10px', textAlign: 'center', color: '#64748B' }}>{it.unit || 'Bộ'}</td>
+                                          <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '700', color: '#2D1A12' }}>
+                                            <div>{typeof it.quantity === 'number' ? it.quantity.toLocaleString() : (it.quantity || 0)}</div>
+                                            {(() => {
+                                              const conv = getM3PieceConversion(it);
+                                              if (conv) {
+                                                return (
+                                                  <div style={{ fontSize: '0.72rem', color: '#059669', fontWeight: '700', marginTop: '1px' }}>
+                                                    (≈ {conv.pieces.toLocaleString()} {conv.unitLabel})
+                                                  </div>
+                                                );
+                                              }
+                                              return null;
+                                            })()}
+                                          </td>
+                                          <td style={{ padding: '6px 10px', textAlign: 'right', color: '#475569' }}>
+                                            {it.currency === 'USD' || it.subtotal_foreign ? `$${(Number(it.unit_price) || 0).toLocaleString()}` : `${(Number(it.unit_price) || 0).toLocaleString()}đ`}
+                                          </td>
+                                          <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '700', color: '#7B5233' }}>
+                                            {it.currency === 'USD' || it.subtotal_foreign 
+                                              ? `$${(Number(it.subtotal_foreign) || (Number(it.quantity || 0) * Number(it.unit_price || 0)) || 0).toLocaleString()}`
+                                              : `${(Number(it.subtotal_vnd) || (Number(it.quantity || 0) * Number(it.unit_price || 0)) || 0).toLocaleString()}đ`
                                             }
-                                            return null;
-                                          })()}
-                                        </td>
-                                        <td style={{ padding: '6px 10px', textAlign: 'right', color: '#475569' }}>
-                                          {it.currency === 'USD' || it.subtotal_foreign ? `$${(Number(it.unit_price) || 0).toLocaleString()}` : `${(Number(it.unit_price) || 0).toLocaleString()}đ`}
-                                        </td>
-                                        <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '700', color: '#7B5233' }}>
-                                          {it.currency === 'USD' || it.subtotal_foreign 
-                                            ? `$${(Number(it.subtotal_foreign) || (Number(it.quantity || 0) * Number(it.unit_price || 0)) || 0).toLocaleString()}`
-                                            : `${(Number(it.subtotal_vnd) || (Number(it.quantity || 0) * Number(it.unit_price || 0)) || 0).toLocaleString()}đ`
-                                          }
-                                        </td>
-                                        <td style={{ padding: '6px 10px', textAlign: 'center', color: '#64748B' }}>
-                                          {formatDateDisplay(it.requested_delivery_date || row.delivery_date)}
-                                        </td>
-                                        <td style={{ padding: '6px 10px', textAlign: 'center' }}>
-                                          <span style={{
-                                            fontSize: '0.7rem',
-                                            fontWeight: '700',
-                                            padding: '2px 6px',
-                                            borderRadius: '4px',
-                                            backgroundColor: (it.status === 'Đã duyệt' || it.status === 'Đã hoàn thành') ? '#ECFDF5' : '#FFFBEB',
-                                            color: (it.status === 'Đã duyệt' || it.status === 'Đã hoàn thành') ? '#16A34A' : '#D97706'
-                                          }}>
-                                            {it.status || 'Chưa duyệt'}
-                                          </span>
-                                        </td>
-                                      </tr>
-                                    ))}
+                                          </td>
+                                          <td style={{ padding: '6px 10px', textAlign: 'center', color: '#64748B' }}>
+                                            {formatDateDisplay(it.requested_delivery_date || row.delivery_date)}
+                                          </td>
+                                          <td style={{ padding: '6px 10px', textAlign: 'center' }}>
+                                            <span style={{
+                                              fontSize: '0.7rem',
+                                              fontWeight: '700',
+                                              padding: '2px 6px',
+                                              borderRadius: '4px',
+                                              backgroundColor: (it.status === 'Đã duyệt' || it.status === 'Đã hoàn thành') ? '#ECFDF5' : '#FFFBEB',
+                                              color: (it.status === 'Đã duyệt' || it.status === 'Đã hoàn thành') ? '#16A34A' : '#D97706'
+                                            }}>
+                                              {it.status || 'Chưa duyệt'}
+                                            </span>
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
                                   </tbody>
                                 </table>
                               )}

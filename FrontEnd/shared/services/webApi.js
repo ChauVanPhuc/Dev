@@ -16,6 +16,7 @@ const getBaseURL = () => {
     // Nếu chạy chế độ Production gộp vào 1 domain
     if (hostname === 'smartflowg7.cloud') return window.location.origin
     // Nếu chạy chế độ Dev tách biệt subdomain
+    if (hostname.startsWith('dev_')) return 'https://dev_api.smartflowg7.cloud'
     return 'https://api.smartflowg7.cloud'
   }
   return `http://${hostname}:8000`

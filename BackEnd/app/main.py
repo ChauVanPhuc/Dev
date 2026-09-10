@@ -197,6 +197,22 @@ except Exception:
     # Ignore if constraint already exists
     pass
 
+# [MIGRATION] Add main_category column to master_categories table & seed default values
+try:
+    with engine.begin() as conn:
+        try:
+            conn.execute(text("ALTER TABLE master_categories ADD main_category NVARCHAR(50) NULL"))
+        except Exception:
+            pass
+        vanity_names = ['ADV', 'ADVANCE', 'BEZ', 'EYC', 'FOL', 'TPH']
+        furniture_names = ['APT', 'ATL', 'ATLAS', 'COV', 'HOR', 'MBC', 'TIN']
+        for _vname in vanity_names:
+            conn.execute(text("UPDATE master_categories SET main_category = 'Vanity' WHERE name = :n AND (main_category IS NULL OR main_category = '')"), {"n": _vname})
+        for _fname in furniture_names:
+            conn.execute(text("UPDATE master_categories SET main_category = 'Furniture' WHERE name = :n AND (main_category IS NULL OR main_category = '')"), {"n": _fname})
+except Exception as cat_mig_err:
+    print(f"[MIGRATION] Alter master_categories warning: {cat_mig_err}")
+
 # [MIGRATION] Seed master_categories & categories and link master_products + production_routings by SKU prefix
 try:
     with engine.begin() as conn:
@@ -679,16 +695,16 @@ app.include_router(account_router.router, prefix="/accounts", tags=["test_accoun
 
 
 # [STATIC FILES] Mount thư mục static chứa uploads (screen_bugs, component_samples, products, v.v.)
-STATIC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "static"))
-os.makedirs(STATIC_DIR, exist_ok=True)
-os.makedirs(os.path.join(STATIC_DIR, "uploads", "screen_bugs"), exist_ok=True)
-os.makedirs(os.path.join(STATIC_DIR, "uploads", "component_samples"), exist_ok=True)
-os.makedirs(os.path.join(STATIC_DIR, "uploads", "products"), exist_ok=True)
+from config.settings import STATIC_DIR, UPLOADS_DIR, get_upload_dir
+
+# Tạo sẵn các thư mục con upload phổ biến
+get_upload_dir("screen_bugs")
+get_upload_dir("component_samples")
+get_upload_dir("products")
+get_upload_dir("violations")
+get_upload_dir("inspections")
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-
-UPLOADS_DIR = os.path.join(STATIC_DIR, "uploads")
-os.makedirs(UPLOADS_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 
 

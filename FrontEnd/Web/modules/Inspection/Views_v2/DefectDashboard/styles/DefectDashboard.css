@@ -1,0 +1,345 @@
+/* ==========================================================================
+   ERP G7 - Defect Analytics Dashboard Styles (Pixel-Perfect Reference Match)
+   ========================================================================== */
+
+:root {
+  --erp-bg: #FAF6F0;
+  --erp-card-bg: #FFFFFF;
+  --erp-border: #EADCC9;
+  --erp-border-light: #F0E6D8;
+  --erp-primary: #4B301E;
+  --erp-primary-accent: #7B5233;
+  --erp-secondary: #A67C52;
+  --erp-beige-light: #F7F2EB;
+  --erp-tan: #D9B99B;
+  --erp-red: #DC2626;
+  --erp-red-bg: #FEE2E2;
+  --erp-text-main: #1E293B;
+  --erp-text-muted: #64748B;
+  --erp-text-brown: #2D1A12;
+}
+
+/* Triệt tiêu hoàn toàn viền đen / outline khi click vào biểu đồ Recharts */
+*:focus,
+svg:focus,
+path:focus,
+rect:focus,
+.recharts-wrapper,
+.recharts-wrapper:focus,
+.recharts-surface,
+.recharts-surface:focus,
+.recharts-bar-rectangle,
+.recharts-bar-rectangle:focus,
+.recharts-layer:focus {
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Khung chứa tổng thể Dashboard: Tự động chiếm 100% chiều cao màn hình tới sát đáy */
+.erp-defect-dashboard {
+  display: flex !important;
+  flex-direction: column !important;
+  height: calc(100vh - 116px) !important;
+  max-height: calc(100vh - 116px) !important;
+  min-height: calc(100vh - 116px) !important;
+  width: 100% !important;
+  overflow: hidden !important;
+  gap: 8px !important;
+  box-sizing: border-box !important;
+  background-color: transparent !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+/* ── 1. KPI CARDS ROW (1 Hàng 5 KPI đồng nhất, góc bo 8px, viền mảnh #EADCC9) ── */
+.erp-kpi-grid {
+  display: grid !important;
+  grid-template-columns: repeat(5, 1fr) !important;
+  gap: 8px !important;
+  flex-shrink: 0 !important;
+  height: 66px !important;
+  min-height: 66px !important;
+  max-height: 66px !important;
+  box-sizing: border-box !important;
+}
+
+.erp-kpi-card {
+  background-color: #FFFFFF !important;
+  border: 1px solid var(--erp-border) !important;
+  border-radius: 8px !important;
+  padding: 5px 10px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  box-shadow: 0 1px 2px rgba(123, 82, 51, 0.04) !important;
+  box-sizing: border-box !important;
+  height: 100% !important;
+  overflow: hidden !important;
+}
+
+.erp-kpi-icon {
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 6px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+}
+
+.erp-kpi-icon.primary {
+  background-color: #F7F2EB !important;
+  color: #7B5233 !important;
+}
+
+.erp-kpi-icon.alert {
+  background-color: #FEE2E2 !important;
+  color: #DC2626 !important;
+}
+
+.erp-kpi-content {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  min-width: 0 !important;
+  flex: 1 !important;
+}
+
+.erp-kpi-label {
+  font-size: 0.74rem !important;
+  color: #1E293B !important;
+  font-weight: 750 !important;
+  line-height: 1.2 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  margin-bottom: 2px !important;
+}
+
+.erp-kpi-value {
+  font-size: 1.25rem !important;
+  font-weight: 800 !important;
+  line-height: 1.1 !important;
+  color: #1E293B !important;
+  white-space: nowrap !important;
+  letter-spacing: -0.02em !important;
+}
+
+.erp-kpi-value.alert {
+  color: #DC2626 !important;
+}
+
+/* ── 2. TOOLBAR FILTER (Chuẩn ERP G7, ẩn hiện bộ lọc thông minh) ── */
+.erp-dashboard-toolbar {
+  background-color: #FFFFFF !important;
+  border: 1px solid var(--erp-border) !important;
+  border-radius: 8px !important;
+  padding: 5px 10px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 5px !important;
+  flex-shrink: 0 !important;
+  box-shadow: 0 1px 2px rgba(123, 82, 51, 0.04) !important;
+  box-sizing: border-box !important;
+  transition: all 0.2s ease-in-out !important;
+  position: relative !important;
+  z-index: 500 !important;
+  overflow: visible !important;
+}
+
+.erp-toolbar-row1 {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  gap: 8px !important;
+  height: 28px !important;
+}
+
+.erp-toolbar-row2 {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  gap: 8px !important;
+  flex-wrap: nowrap !important;
+  height: auto !important;
+  padding-top: 4px !important;
+  border-top: 1px dashed #F1F5F9 !important;
+  position: relative !important;
+  z-index: 500 !important;
+  overflow: visible !important;
+}
+
+.erp-search-wrapper {
+  position: relative !important;
+  width: 250px !important;
+  height: 26px !important;
+}
+
+.erp-search-input {
+  width: 100% !important;
+  height: 26px !important;
+  padding: 0 24px 0 28px !important;
+  font-size: 0.74rem !important;
+  border: 1px solid #E2E8F0 !important;
+  border-radius: 20px !important;
+  outline: none !important;
+  background-color: #FAF8F5 !important;
+  box-sizing: border-box !important;
+  color: #1E293B !important;
+  transition: all 0.15s ease !important;
+}
+
+.erp-search-input:focus {
+  border-color: #7B5233 !important;
+  background-color: #FFFFFF !important;
+  box-shadow: 0 0 0 2px rgba(123, 82, 51, 0.1) !important;
+}
+
+.erp-btn-icon {
+  width: 26px !important;
+  height: 26px !important;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border: 1px solid #E2E8F0 !important;
+  border-radius: 6px !important;
+  background-color: #FFFFFF !important;
+  color: #64748B !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+}
+
+.erp-btn-icon:hover {
+  background-color: #F7F2EB !important;
+  color: #4B301E !important;
+  border-color: #D9B99B !important;
+}
+
+.erp-btn-icon.active {
+  background-color: #7B5233 !important;
+  color: #FFFFFF !important;
+  border-color: #7B5233 !important;
+}
+
+.erp-btn-export {
+  height: 26px !important;
+  padding: 0 12px !important;
+  border: 1px solid #4B301E !important;
+  border-radius: 6px !important;
+  background-color: #4B301E !important;
+  color: #FFFFFF !important;
+  font-size: 0.74rem !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  white-space: nowrap !important;
+  transition: all 0.15s ease !important;
+}
+
+.erp-btn-export:hover {
+  background-color: #382315 !important;
+}
+
+.erp-filter-chips {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  flex-wrap: nowrap !important;
+  overflow-x: auto !important;
+}
+
+.erp-chip {
+  display: flex !important;
+  align-items: center !important;
+  background-color: #FFFFFF !important;
+  border: 1px solid #E2E8F0 !important;
+  border-radius: 6px !important;
+  padding: 2px 8px !important;
+  font-size: 0.72rem !important;
+  color: #334155 !important;
+  font-weight: 600 !important;
+  white-space: nowrap !important;
+  height: 24px !important;
+  box-sizing: border-box !important;
+}
+
+.erp-chip select {
+  border: none !important;
+  background: transparent !important;
+  font-size: 0.72rem !important;
+  font-weight: 700 !important;
+  color: #1E293B !important;
+  outline: none !important;
+  cursor: pointer !important;
+  padding: 0 2px !important;
+}
+
+.erp-chip.active {
+  background-color: #FEF3C7 !important;
+  border-color: #F59E0B !important;
+}
+
+/* ── 3. KHU VỰC 4 BIỂU ĐỒ (Chiếm toàn bộ chiều cao còn lại tới sát đáy màn hình) ── */
+.erp-charts-grid {
+  display: grid !important;
+  grid-template-columns: 1.42fr 1fr !important;
+  grid-template-rows: 1fr 1fr !important;
+  gap: 8px !important;
+  flex: 1 !important;
+  min-height: 0 !important;
+  height: calc(100% - 100px) !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+}
+
+.erp-chart-card {
+  background-color: #FFFFFF !important;
+  border: 1px solid var(--erp-border) !important;
+  border-radius: 8px !important;
+  padding: 10px 14px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  box-shadow: 0 1px 2px rgba(123, 82, 51, 0.03) !important;
+  overflow: hidden !important;
+}
+
+.erp-chart-header {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  margin-bottom: 4px !important;
+  flex-shrink: 0 !important;
+  height: 22px !important;
+}
+
+.erp-chart-title {
+  font-size: 0.82rem !important;
+  font-weight: 800 !important;
+  color: #4B301E !important;
+  line-height: 1.2 !important;
+  letter-spacing: -0.01em !important;
+}
+
+.erp-chart-subtitle {
+  font-size: 0.68rem !important;
+  color: #64748B !important;
+  font-weight: 500 !important;
+}
+
+.erp-chart-body {
+  flex: 1 !important;
+  min-height: 0 !important;
+  height: calc(100% - 26px) !important;
+  width: 100% !important;
+  position: relative !important;
+  overflow: hidden !important;
+}

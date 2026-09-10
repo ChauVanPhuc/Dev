@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from config.database import get_db
+from config.settings import get_upload_dir
 from modules.kpi.models.award_discipline import AwardDiscipline
 from modules.kpi.schemas.award_discipline import AwardDisciplineCreate, AwardDisciplineUpdate, AwardDisciplineStatusUpdate
 from typing import List, Optional
@@ -312,10 +313,8 @@ def delete_award_discipline(id: int, db: Session = Depends(get_db)):
 async def upload_violation_image(file: UploadFile = File(...)):
     """
     [POST] Upload ảnh bằng chứng vi phạm.
-    Lưu vào BackEnd/static/uploads/violations/
     """
-    upload_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "static", "uploads", "violations"))
-    os.makedirs(upload_dir, exist_ok=True)
+    upload_dir = get_upload_dir("violations")
 
     ext = os.path.splitext(file.filename)[1] or ".jpg"
     filename = f"{uuid.uuid4().hex}{ext}"

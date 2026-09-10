@@ -60,6 +60,8 @@ BackEnd/test_db.db
 BackEnd/database/backups/
 BackEnd/static/uploads/
 BackEnd/modules/claim_imports/
+/static/
+BackEnd/uploads/
 
 # Sample Data & Excel Imports
 data/

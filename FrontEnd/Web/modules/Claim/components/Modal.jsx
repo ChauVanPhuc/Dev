@@ -111,28 +111,32 @@ export const FormModal = ({
           </div>
 
           {/* Modal Footer */}
-          <div className="add-claim-actions-row" style={actionsStyle}>
-            {leftFooterActions && (
-              <div style={{ marginRight: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
-                {leftFooterActions}
-              </div>
-            )}
-            <button 
-              type="button"
-              onClick={onClose}
-              className="add-claim-btn-cancel"
-            >
-              {cancelLabel}
-            </button>
-            {confirmLabel && (
-              <button 
-                type="submit"
-                className="add-claim-btn-save"
-              >
-                {confirmLabel}
-              </button>
-            )}
-          </div>
+          {(leftFooterActions || cancelLabel || confirmLabel) && (
+            <div className="add-claim-actions-row" style={actionsStyle}>
+              {leftFooterActions && (
+                <div style={{ marginRight: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  {leftFooterActions}
+                </div>
+              )}
+              {cancelLabel && (
+                <button 
+                  type="button"
+                  onClick={onClose}
+                  className="add-claim-btn-cancel"
+                >
+                  {cancelLabel}
+                </button>
+              )}
+              {confirmLabel && (
+                <button 
+                  type="submit"
+                  className="add-claim-btn-save"
+                >
+                  {confirmLabel}
+                </button>
+              )}
+            </div>
+          )}
         </form>
         {rightSideAction}
       </div>

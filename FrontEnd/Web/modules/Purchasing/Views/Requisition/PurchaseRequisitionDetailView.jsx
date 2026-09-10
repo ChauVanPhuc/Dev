@@ -745,7 +745,7 @@ const PurchaseRequisitionDetailView = () => {
                             if (conv) {
                               return (
                                 <div style={{ fontSize: '0.72rem', color: '#059669', fontWeight: '700', marginTop: '1px' }}>
-                                  (= {conv.pieces.toLocaleString()} {conv.unitLabel})
+                                  (≈ {conv.pieces.toLocaleString()} {conv.unitLabel})
                                 </div>
                               );
                             }

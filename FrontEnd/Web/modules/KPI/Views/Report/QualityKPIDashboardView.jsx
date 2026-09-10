@@ -39,6 +39,7 @@ import KPISendAlertModal from '../components/KPISendAlertModal';
 import KPITrainingDetailModal from '../components/KPITrainingDetailModal';
 import KPIViolationFormModal from '../components/KPIViolationFormModal';
 import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
+import QualityOverviewDashboard from '@modules/Inspection/Views_v2/QualityOverview/QualityOverviewDashboard';
 
 // Map technical calculation method codes into human-readable Vietnamese descriptions
 const CALC_METHOD_MAP = {
@@ -1483,7 +1484,7 @@ const QualityKPIDashboardView = () => {
       }}>
         <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', flex: 1, alignItems: 'center' }}>
           {[
-            { id: 'quality_targets', label: 'Mục tiêu chất lượng' },
+            { id: 'quality_targets', label: 'Tổng quan' },
             { id: 'work_indicators', label: 'Chỉ số công việc' },
             { id: 'checklist_work', label: 'Checklist công việc' },
             { id: 'violations_list', label: 'Danh sách vi phạm' },
@@ -1533,227 +1534,11 @@ const QualityKPIDashboardView = () => {
       <div className="admin-list-layout" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
 
         {/* ========================================================================= */}
-        {/* TAB 1: MỤC TIÊU CHẤT LƯỢNG                                                 */}
+        {/* TAB 1: TỔNG QUAN CHẤT LƯỢNG                                                */}
         {/* ========================================================================= */}
         {activeTab === 'quality_targets' && (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0, overflow: 'hidden' }}>
-            
-            {/* TOP 2 CARDS matching Mockup Screen 1 */}
-            <div style={{ flexShrink: 0, display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '10px' }}>
-              
-              {/* CARD 1: Tỉ lệ đạt lỗi định kỳ (Monthly defect rate chart) */}
-              <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9' }}>
-                <div style={{ fontSize: '0.75rem', fontWeight: '800', color: '#5D3B32', marginBottom: '8px' }}>
-                  Tỉ lệ đạt lỗi định kỳ
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', height: '85px', paddingBottom: '6px', borderBottom: '1px solid #F1F5F9' }}>
-                  {[
-                    { label: 'T1', height: '40%' },
-                    { label: 'T2', height: '65%' },
-                    { label: 'T3', height: '50%' },
-                    { label: 'T4', height: '80%' },
-                    { label: 'T5', height: '70%' },
-                    { label: 'T6', height: '95%', isPeak: true },
-                    { label: 'T7', height: '60%' },
-                    { label: 'T8', height: '45%' },
-                    { label: 'T9', height: '75%' },
-                    { label: 'T10', height: '55%' },
-                    { label: 'T11', height: '85%' },
-                    { label: 'T12', height: '40%' }
-                  ].map((m, idx) => (
-                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', flex: 1 }}>
-                      <div style={{
-                        width: '14px', height: m.height,
-                        backgroundColor: m.isPeak ? '#7B5233' : '#5D3B32',
-                        borderRadius: '3px 3px 0 0', opacity: m.isPeak ? 1 : 0.85
-                      }}></div>
-                      <span style={{ fontSize: '0.65rem', fontWeight: '700', color: '#64748B' }}>{m.label}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* CARD 2: Điểm KPI Trung bình & 3 Progress status bars */}
-              <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9', display: 'flex', gap: '14px', alignItems: 'center' }}>
-                
-                {/* Left side: Big score */}
-                <div style={{ flex: '1', borderRight: '1px solid #F1F5F9', paddingRight: '12px' }}>
-                  <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#64748B' }}>
-                    Điểm KPI Trung bình
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '3px', marginTop: '6px' }}>
-                    <span style={{ fontSize: '2.0rem', fontWeight: '900', color: '#5D3B32', lineHeight: 1 }}>25</span>
-                    <span style={{ fontSize: '1.0rem', fontWeight: '700', color: '#94A3B8' }}>/ 100</span>
-                  </div>
-                  <div style={{ width: '100%', height: '6px', backgroundColor: '#F1F5F9', borderRadius: '3px', marginTop: '8px', overflow: 'hidden' }}>
-                    <div style={{ width: '25%', height: '100%', backgroundColor: '#D97706', borderRadius: '3px' }}></div>
-                  </div>
-                </div>
-
-                {/* Right side: 3 bars */}
-                <div style={{ flex: '1.2', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', fontWeight: '800', color: '#5D3B32', marginBottom: '2px' }}>
-                      <span>Đạt chỉ tiêu</span>
-                      <span>100/100</span>
-                    </div>
-                    <div style={{ width: '100%', height: '16px', backgroundColor: '#7B5233', borderRadius: '4px', color: '#FFFFFF', fontSize: '0.68rem', fontWeight: '800', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: '6px' }}>
-                      100/100
-                    </div>
-                  </div>
-
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', fontWeight: '800', color: '#5D3B32', marginBottom: '2px' }}>
-                      <span>Cần cải thiện</span>
-                      <span>50/100</span>
-                    </div>
-                    <div style={{ width: '100%', height: '16px', backgroundColor: '#7B5233', borderRadius: '4px', color: '#FFFFFF', fontSize: '0.68rem', fontWeight: '800', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: '6px' }}>
-                      50/100
-                    </div>
-                  </div>
-
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', fontWeight: '800', color: '#5D3B32', marginBottom: '2px' }}>
-                      <span>Lỗi nghiêm trọng</span>
-                      <span>50/100</span>
-                    </div>
-                    <div style={{ width: '100%', height: '16px', backgroundColor: '#7B5233', borderRadius: '4px', color: '#FFFFFF', fontSize: '0.68rem', fontWeight: '800', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: '6px' }}>
-                      50/100
-                    </div>
-                  </div>
-
-                </div>
-
-              </div>
-
-            </div>
-
-            {/* TABLE: Danh sách Mục tiêu chất lượng */}
-            <div className="mgmt-table card admin-table-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, backgroundColor: '#FFFFFF', borderRadius: '10px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
-              <div style={{ flexShrink: 0, padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <TableControlToolbar
-                  searchValue={targetSearch}
-                  onSearchChange={(e) => setTargetSearch(e.target.value)}
-                  placeholder="Tìm kiếm mục tiêu..."
-                  onSort={() => setSortAsc(prev => !prev)}
-                  onFilter={() => setFilterOpen(prev => !prev)}
-                  onExport={() => handleExportExcel(filterAndSortData(kpiTargets, targetSearch), 'Muc_Tieu_Chat_Luong')}
-                  sortAsc={sortAsc}
-                  isFilterActive={filterOpen}
-                />
-                <button
-                  onClick={() => { setEditingTarget(null); setIsTargetModalOpen(true); }}
-                  style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 12px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '800', fontSize: '0.75rem', cursor: 'pointer' }}
-                >
-                  <Plus size={13} /> Thêm Mục tiêu mới
-                </button>
-              </div>
-
-              {filterOpen && (
-                <div style={{ flexShrink: 0, padding: '6px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.72rem' }}>
-                  <span style={{ fontWeight: '800', color: '#5D3B32' }}>Bộ lọc trạng thái:</span>
-                  {['Tất cả', 'Đã duyệt / Đạt', 'Chờ xử lý / Cần làm'].map(opt => (
-                    <button
-                      key={opt}
-                      onClick={() => setFilterStatus(opt)}
-                      style={{
-                        padding: '2px 10px',
-                        borderRadius: '4px',
-                        border: '1px solid ' + (filterStatus === opt ? '#5D3B32' : '#EADCC9'),
-                        backgroundColor: filterStatus === opt ? '#5D3B32' : '#FFFFFF',
-                        color: filterStatus === opt ? '#FFFFFF' : '#5D3B32',
-                        fontWeight: filterStatus === opt ? '800' : '600',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {opt}
-                    </button>
-                  ))}
-                  <RenderPageSizeSelect pageSize={targetPageSize} setPageSize={setTargetPageSize} setCurrentPage={setTargetPage} />
-                </div>
-              )}
-
-              <div className="admin-table-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
-                  <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
-                    <tr style={{ backgroundColor: '#FAF6F0', color: '#5D3B32', borderBottom: '1px solid #EADCC9', textAlign: 'left' }}>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '40px' }}>STT</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '100px' }}>Mã công việc</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Tên công việc / Mục tiêu</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '100px' }}>Mức độ ưu tiên</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '70px' }}>Tỷ trọng</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '90px' }}>Tần suất</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '100px' }}>Tiêu chuẩn</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '100px' }}>Hạn hoàn thành</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '90px' }}>Tiến độ</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '80px' }}>Thao tác</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(() => {
-                      const allData = filterAndSortData(kpiTargets, targetSearch);
-                      const pagedData = allData.slice((targetPage - 1) * targetPageSize, targetPage * targetPageSize);
-                      return pagedData.map((item, idx) => {
-                        const globalIdx = (targetPage - 1) * targetPageSize + idx;
-                        return (
-                          <tr
-                            key={item.id || idx}
-                            style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}
-                          >
-                            <td style={{ padding: '5px 10px', fontWeight: '700', color: '#64748B' }}>{globalIdx + 1}</td>
-                            <td style={{ padding: '5px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.code || `MT-${String(globalIdx + 1).padStart(2, '0')}`}</td>
-                            <td style={{ padding: '5px 10px', fontWeight: '700', color: '#1E293B' }}>{item.name}</td>
-                            <td style={{ padding: '5px 10px', textAlign: 'center' }}>
-                              <span style={{
-                                padding: '2px 8px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: '800',
-                                backgroundColor: idx % 3 === 0 ? '#FEE2E2' : idx % 3 === 1 ? '#FEF3C7' : '#DCFCE7',
-                                color: idx % 3 === 0 ? '#DC2626' : idx % 3 === 1 ? '#B45309' : '#15803D'
-                              }}>
-                                {idx % 3 === 0 ? 'Cao' : idx % 3 === 1 ? 'Trung bình' : 'Thấp'}
-                              </span>
-                            </td>
-                            <td style={{ padding: '5px 10px', textAlign: 'center', fontWeight: '800', color: '#5D3B32' }}>{item.weight || '20%'}</td>
-                            <td style={{ padding: '5px 10px', color: '#475569' }}>{item.unit || 'Hàng tháng'}</td>
-                            <td style={{ padding: '5px 10px', color: '#15803D', fontWeight: '700' }}>{item.target || '100%'}</td>
-                            <td style={{ padding: '5px 10px', textAlign: 'center', color: '#64748B' }}>31/12/2026</td>
-                            <td style={{ padding: '5px 10px', textAlign: 'center' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <div style={{ flex: 1, height: '5px', backgroundColor: '#E2E8F0', borderRadius: '2px', overflow: 'hidden' }}>
-                                  <div style={{ width: `${80 - (idx % 5) * 10}%`, height: '100%', backgroundColor: '#5D3B32' }}></div>
-                                </div>
-                                <span style={{ fontSize: '0.68rem', fontWeight: '800', color: '#5D3B32' }}>{80 - (idx % 5) * 10}%</span>
-                              </div>
-                            </td>
-                            <td style={{ padding: '5px 10px', textAlign: 'center' }}>
-                              <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
-                                <button
-                                  onClick={() => { setEditingTarget(item); setIsTargetModalOpen(true); }}
-                                  style={{ border: 'none', background: '#E0F2FE', color: '#0369A1', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
-                                  title="Sửa"
-                                >
-                                  <Edit2 size={12} />
-                                </button>
-                                <button
-                                  onClick={() => handleOpenDeleteConfirm(item)}
-                                  style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
-                                  title="Xóa"
-                                >
-                                  <Trash2 size={12} />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      });
-                    })()}
-                  </tbody>
-                </table>
-              </div>
-
-              {renderPaginationControl(targetPage, setTargetPage, targetPageSize, filterAndSortData(kpiTargets, targetSearch).length, 'mục tiêu')}
-            </div>
-
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflowY: 'auto' }}>
+            <QualityOverviewDashboard />
           </div>
         )}
 

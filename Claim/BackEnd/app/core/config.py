@@ -1,0 +1,43 @@
+import os
+from dotenv import load_dotenv
+
+# Load variables from .env located at BackEnd/.env
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"))
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import Optional
+
+class Settings(BaseSettings):
+    """
+    Cấu hình ứng dụng sử dụng Pydantic Settings.
+    Các giá trị được lấy từ file .env.
+    """
+    # Database
+    DB_SERVER: str
+    DB_NAME: str
+    DB_USER: Optional[str] = None
+    DB_PASSWORD: Optional[str] = None
+    
+    # Security
+    SECRET_KEY: str
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 4320  # 3 days
+
+    @property
+    def SQLALCHEMY_DATABASE_URL(self) -> str:
+        """
+        Tạo chuỗi kết nối SQLAlchemy từ các biến môi trường.
+        Hỗ trợ cả Windows Authentication và SQL Server Authentication.
+        """
+        if not self.DB_USER or not self.DB_PASSWORD:
+            # Sử dụng Windows Authentication (Trusted Connection)
+            return f"mssql+pyodbc://@{self.DB_SERVER}/{self.DB_NAME}?driver=ODBC+Driver+17+for+SQL+Server&trusted_connection=yes&TrustServerCertificate=yes&login_timeout=30"
+        
+        # Sử dụng SQL Server Authentication với tài khoản sa / user
+        import urllib.parse
+        encoded_password = urllib.parse.quote_plus(self.DB_PASSWORD)
+        return f"mssql+pyodbc://{self.DB_USER}:{encoded_password}@{self.DB_SERVER}/{self.DB_NAME}?driver=ODBC+Driver+17+for+SQL+Server&TrustServerCertificate=yes&login_timeout=30"
+
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+settings = Settings()

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from config.database import get_db
+from config.settings import get_upload_dir
 from modules.master.schemas.master_product import MasterProduct, MasterProductCreate, MasterProductUpdate, MasterProductListItem, MasterProductListResponse
 from modules.production.schemas.product import Product as ProductSchema
 from modules.master.controllers import master_product_controller
@@ -15,10 +16,8 @@ router = APIRouter()
 async def upload_master_product_image(file: UploadFile = File(...)):
     """
     [POST] Tải lên hình ảnh sản phẩm mẫu.
-    Lưu vào BackEnd/static/uploads/products/
     """
-    upload_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "static", "uploads", "products"))
-    os.makedirs(upload_dir, exist_ok=True)
+    upload_dir = get_upload_dir("products")
     
     file_ext = os.path.splitext(file.filename)[1] if file.filename else ".png"
     if not file_ext:

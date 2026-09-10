@@ -12,6 +12,7 @@ from modules.production.controllers.production_controller import (
 )
 from modules.production.schemas.product_plan import ProductPlan, ProductPlanDetailOut
 from typing import List
+from config.settings import get_upload_dir
 
 router = APIRouter()
 
@@ -21,11 +22,8 @@ async def import_production_plan(file: UploadFile = File(...), db: Session = Dep
     Import Kế Hoạch Sản Xuất từ file Excel.
     Tự động parse Đơn hàng, Sản phẩm và Clone cây BOM từ Master Data.
     """
-    upload_dir = "static/uploads"
-    if not os.path.exists(upload_dir):
-        os.makedirs(upload_dir)
-        
-    file_path = f"{upload_dir}/{file.filename}"
+    upload_dir = get_upload_dir()
+    file_path = os.path.join(upload_dir, file.filename)
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
         

@@ -28,6 +28,7 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
     setSpec,
     specOptions,
     requiredQty,
+    displayRequiredQty,
     sampleQty,
     setSampleQty,
     errorQty,
@@ -123,7 +124,7 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
       <div className="pv2-field-row pv2-field-row--3col">
         <div className="pv2-field">
           <label>SL Cần Kiểm</label>
-          <input type="text" className="pv2-input pv2-input--disabled" readOnly disabled value={requiredQty} placeholder="" />
+          <input type="text" className="pv2-input pv2-input--disabled" readOnly disabled value={displayRequiredQty || requiredQty || ''} placeholder="" />
         </div>
         <div className="pv2-field">
           <label>SL mẫu <span className="pv2-req">*</span></label>
@@ -173,7 +174,10 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
             key={row.id}
             row={row}
             defectOptions={defectOptions}
-            selectedDefectIds={errors.map((e) => e.defectId || e.code).filter(Boolean)}
+            selectedDefectIds={errors
+              .filter((_, i) => i !== idx)
+              .flatMap((e) => [e.defectId, e.code, e.name])
+              .filter(Boolean)}
             onChange={(r) => updateError(idx, r)}
             onRemove={errors.length > 1 ? () => removeErrorRow(idx) : null}
             disabled={readOnly}

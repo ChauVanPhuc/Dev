@@ -9,11 +9,12 @@ from config.database import get_db
 from modules.inspection.models.iso_models import ISODocument, ISORevisionLog, ISOSection, ISOProcessStep, ISOProcess, ISOProcessSection, ISOProcessStepInstance
 from modules.inspection.services.iso_parser import parse_iso_docx
 
+from config.settings import get_upload_dir
+
 router = APIRouter()
 
-# Đảm bảo thư mục lưu trữ file upload tồn tại
-UPLOAD_DIR = os.path.join("static", "uploads", "iso_documents")
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+# Đảm bảo thư mục lưu trữ file upload tồn tại chuẩn
+UPLOAD_DIR = get_upload_dir("iso_documents")
 
 @router.post("/upload-attachment")
 async def upload_attachment(

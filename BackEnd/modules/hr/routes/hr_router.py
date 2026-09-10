@@ -10,6 +10,7 @@ import openpyxl
 from datetime import datetime
 
 from config.database import get_db
+from config.settings import get_upload_dir
 from modules.hr.schemas import hr_schemas
 from modules.hr.controllers import hr_controller
 from modules.hr.models.hr_models import (
@@ -29,8 +30,7 @@ async def upload_employee_avatar(file: UploadFile = File(...)):
     Tải lên ảnh đại diện nhân viên.
     Lưu vào BackEnd/static/uploads/hr_avatars/
     """
-    upload_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "static", "uploads", "hr_avatars"))
-    os.makedirs(upload_dir, exist_ok=True)
+    upload_dir = get_upload_dir("hr_avatars")
     
     file_ext = os.path.splitext(file.filename)[1]
     if not file_ext:

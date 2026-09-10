@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile
 from fastapi.responses import StreamingResponse, FileResponse
 from sqlalchemy.orm import Session
 from config.database import get_db
+from config.settings import STATIC_DIR, get_upload_dir
 from modules.equipment.models.machinery import Machine, MachineMaintenance, MachineDocument
 from typing import List, Optional
 from pydantic import BaseModel
@@ -363,8 +364,7 @@ async def upload_machine_document(
     if not machine:
         raise HTTPException(status_code=404, detail="Không tìm thấy máy")
         
-    upload_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "static", "uploads", "machinery"))
-    os.makedirs(upload_dir, exist_ok=True)
+    upload_dir = get_upload_dir("machinery")
     
     unique_filename = f"{uuid.uuid4().hex}_{file.filename}"
     file_path = os.path.join(upload_dir, unique_filename)
@@ -407,7 +407,7 @@ def delete_machine_document(document_id: int, db: Session = Depends(get_db)):
     try:
         # Đường dẫn tuyệt đối
         relative_path = doc.file_path.replace("/static/", "")
-        absolute_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "static", relative_path))
+        absolute_path = os.path.abspath(os.path.join(STATIC_DIR, relative_path))
         if os.path.exists(absolute_path):
             os.remove(absolute_path)
     except Exception as e:

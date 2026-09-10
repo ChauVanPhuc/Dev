@@ -16,7 +16,7 @@ from modules.delivery.schemas.deliveries import Delivery as DeliverySchema
 from modules.delivery.models.deliveries import Delivery as DeliveryModel
 from modules.notification.models.notifications import Notification as NotificationModel
 from modules.auth.models.accounts import Account as AccountModel
-from config.settings import settings
+from config.settings import settings, get_upload_dir
 from shared.utils.string_cleaner import clean_and_standardize_name
 
 router = APIRouter()
@@ -44,9 +44,7 @@ class DeliveryDashboardResponse(BaseModel):
 
 
 # Thư mục lưu trữ ảnh bàn giao sản phẩm/chi tiết
-UPLOAD_DIR = "static/uploads/deliveries"
-if not os.path.exists(UPLOAD_DIR):
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
+UPLOAD_DIR = get_upload_dir("deliveries")
 
 def allocate_delivery_fifo(db: Session, delivery_id: int, plan_id: int, part_name: str, quantity: int, specification: Optional[str] = None, exclude_delivery_id: Optional[int] = None, allowed_order_ids: Optional[List[int]] = None):
     """
@@ -1613,8 +1611,7 @@ async def upload_delivery_image(
     if not upload_file:
         raise HTTPException(status_code=400, detail="Không tìm thấy tệp ảnh tải lên.")
 
-    upload_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "static", "uploads", "deliveries"))
-    os.makedirs(upload_dir, exist_ok=True)
+    upload_dir = get_upload_dir("deliveries")
 
     file_ext = os.path.splitext(upload_file.filename or "")[1]
     if not file_ext:

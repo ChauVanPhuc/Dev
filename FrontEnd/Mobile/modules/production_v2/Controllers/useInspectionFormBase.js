@@ -81,25 +81,44 @@ const getEffectiveSpec = (specRaw, partName) => {
   return cSpec || 'Tiêu chuẩn'
 }
 
-const convertQuantityToPiecesIfNeeded = (partNameOrSpec, rawQty, unit = '') => {
-  if (rawQty === undefined || rawQty === null || rawQty === '') return rawQty
+const getQuantityConversionDetails = (partNameOrSpec, rawQty, unit = '', isConvertedHint = false) => {
+  if (rawQty === undefined || rawQty === null || rawQty === '') return { qty: rawQty, isConverted: false }
   const qty = Number(rawQty)
-  if (isNaN(qty) || qty <= 0) return rawQty
+  if (isNaN(qty) || qty <= 0) return { qty: rawQty, isConverted: false }
 
-  const unitStr = String(unit).toLowerCase()
+  if (isConvertedHint) {
+    return { qty: Math.round(qty), isConverted: true }
+  }
+
+  const unitStr = String(unit).toLowerCase().trim()
   const isM3Unit = unitStr.includes('m3') || unitStr.includes('m³') || unitStr.includes('mét khối') || unitStr.includes('met khoi')
-
-  if (!isM3Unit) return qty
 
   const dims = parseDimensionsFromText(partNameOrSpec)
   if (dims) {
     const vSingle = (dims.t * dims.w * dims.l) / 1000000000
     if (vSingle > 0) {
-      const pieces = Math.round(qty / vSingle)
-      if (pieces > 0) return pieces
+      const piecesIfQtyIsM3 = Math.round(qty / vSingle)
+      const volumeIfQtyIsPieces = qty * vSingle
+
+      if (isM3Unit) {
+        return { qty: piecesIfQtyIsM3 > 0 ? piecesIfQtyIsM3 : Math.round(qty), isConverted: true }
+      }
+
+      if (volumeIfQtyIsPieces >= 0.01 && volumeIfQtyIsPieces <= 500) {
+        return { qty: Math.round(qty), isConverted: true }
+      }
     }
   }
-  return qty
+
+  if (isM3Unit) {
+    return { qty: Math.round(qty), isConverted: true }
+  }
+
+  return { qty: qty, isConverted: false }
+}
+
+const convertQuantityToPiecesIfNeeded = (partNameOrSpec, rawQty, unit = '') => {
+  return getQuantityConversionDetails(partNameOrSpec, rawQty, unit).qty
 }
 
 const parseCTQStage = (description) => {
@@ -229,6 +248,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
   const [specOptions, setSpecOptions] = useState([{ value: '', label: 'Vui lòng chọn công đoạn trước' }])
   const [bomData, setBomData] = useState([])
   const [requiredQty, setRequiredQty] = useState('')
+  const [isQtyConverted, setIsQtyConverted] = useState(false)
   const [samplingRule, setSamplingRule] = useState(null)
 
   const [guideVisible, setGuideVisible] = useState(false)
@@ -261,9 +281,18 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
   const fileRef = useRef()
 
   useEffect(() => {
-    inspectionService.getDefectTypes(user?.id)
-      .then((data) => setDefectCatalog(data || []))
-      .catch((err) => console.warn('Lỗi tải danh mục lỗi:', err))
+    const fetchDefects = async () => {
+      try {
+        let data = await inspectionService.getDefectTypes(user?.id)
+        if (!Array.isArray(data) || data.length === 0) {
+          data = await inspectionService.getDefectTypes(null)
+        }
+        setDefectCatalog(Array.isArray(data) ? data : [])
+      } catch (err) {
+        console.warn('Lỗi tải danh mục lỗi:', err)
+      }
+    }
+    fetchDefects()
 
     inspectionService.getCTQGuides()
       .then((data) => setCtqGuides(data || []))
@@ -335,8 +364,9 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
           })
         }
         if (origin.requiredQty) {
-          const cQty = convertQuantityToPiecesIfNeeded(origin.product || origin.spec, origin.requiredQty)
-          setRequiredQty(String(cQty))
+          const details = getQuantityConversionDetails(origin.product || origin.spec, origin.requiredQty, origin.unit)
+          setRequiredQty(String(details.qty))
+          setIsQtyConverted(details.isConverted)
         }
         if (origin.sampleQty) {
           setSampleQty(String(origin.sampleQty))
@@ -450,27 +480,25 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
       if (dName) seenNames.add(dName)
     })
 
-    // Bổ sung danh mục lỗi chuẩn nếu danh sách chưa đầy đủ
-    DEFAULT_FALLBACK_DEFECTS.forEach((d) => {
-      const dCode = d.code.toLowerCase().trim()
-      const dName = d.name.toLowerCase().trim()
-
-      if (seenCodes.has(dCode) || seenNames.has(dName)) return
-
-      list.push({
-        id: d.id,
-        code: d.code,
-        name: d.name,
-        label: `[${d.code}] ${d.name}`,
-        category: d.category,
-        needs_tracking: d.needs_tracking,
-        isQA: Boolean(d.needs_tracking || d.isCTQ),
-        isCTQ: Boolean(d.isCTQ),
-        source: 'default_fallback',
+    // Nếu danh sách lọc theo công đoạn rỗng nhưng trong CSDL có lỗi, nạp toàn bộ danh mục CSDL làm fallback an toàn
+    if (list.length === 0 && catList.length > 0) {
+      catList.forEach((d) => {
+        list.push({
+          id: d.id,
+          code: d.code,
+          name: d.name,
+          label: d.code ? `[${d.code}] ${d.name}` : d.name,
+          category: d.category,
+          stage: d.stage,
+          description: d.description,
+          needs_tracking: d.needs_tracking,
+          qc_tracking: d.qc_tracking,
+          is_tracked_by_me: d.is_tracked_by_me,
+          isQA: Boolean(d.needs_tracking || d.qc_tracking || d.is_tracked_by_me),
+          source: 'catalog_fallback',
+        })
       })
-      seenCodes.add(dCode)
-      seenNames.add(dName)
-    })
+    }
 
     return list
   }, [defectCatalog, ctqGuides, currentSelectedStage])
@@ -503,13 +531,24 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
     )
     if (trackedOpts.length === 0) return
 
+    // Loại bỏ các lựa chọn trùng mã (code) hoặc trùng tên (name)
+    const uniqueTrackedOpts = []
+    const seenTrackKeys = new Set()
+    trackedOpts.forEach((opt) => {
+      const key = (opt.code || opt.name || String(opt.id)).toLowerCase().trim()
+      if (!seenTrackKeys.has(key)) {
+        seenTrackKeys.add(key)
+        uniqueTrackedOpts.push(opt)
+      }
+    })
+
     setErrors((prevErrors) => {
       // Giữ lại các dòng người dùng đã nhập số lượng > 0 hoặc dòng tự gõ lỗi thủ công
       const userEditedRows = prevErrors.filter(
         (e) => Number(e.qty) > 0 || (!e.defectId && e.name && e.name.trim() !== '')
       )
 
-      const autoRows = trackedOpts.map((opt, idx) => ({
+      const autoRows = uniqueTrackedOpts.map((opt, idx) => ({
         id: `auto_tracked_${opt.id}_${idx}`,
         defectId: opt.id || opt.value,
         code: opt.code || '',
@@ -520,10 +559,19 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
       }))
 
       if (userEditedRows.length > 0) {
-        const autoDefectIds = new Set(autoRows.map((a) => String(a.defectId)))
-        const extraUserRows = userEditedRows.filter(
-          (u) => !u.defectId || !autoDefectIds.has(String(u.defectId))
+        const autoDefectKeys = new Set(
+          autoRows.flatMap((a) => [String(a.defectId), a.code?.toLowerCase(), a.name?.toLowerCase()].filter(Boolean))
         )
+        const extraUserRows = userEditedRows.filter((u) => {
+          const uId = String(u.defectId || '')
+          const uCode = (u.code || '').toLowerCase()
+          const uName = (u.name || '').toLowerCase()
+          return (
+            (!uId || !autoDefectKeys.has(uId)) &&
+            (!uCode || !autoDefectKeys.has(uCode)) &&
+            (!uName || !autoDefectKeys.has(uName))
+          )
+        })
         return [...autoRows, ...extraUserRows]
       }
 
@@ -818,11 +866,13 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
             
             let allSpecs = []
             let totalQtySum = 0
+            let isAnyConverted = false
             matchedParts.forEach(part => {
               if (Array.isArray(part.specs)) allSpecs.push(...part.specs)
               if (part.total_qty) {
-                const cQty = convertQuantityToPiecesIfNeeded(part.part_name || combinedName, part.total_qty, part.unit)
-                totalQtySum += Number(cQty)
+                const details = getQuantityConversionDetails(part.part_name || combinedName, part.total_qty, part.unit, part.is_converted)
+                totalQtySum += Number(details.qty)
+                if (details.isConverted) isAnyConverted = true
               }
             })
             
@@ -835,6 +885,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
             
             if (totalQtySum > 0) {
               setRequiredQty(String(totalQtySum))
+              setIsQtyConverted(isAnyConverted)
             }
           } else {
             const matchedPart = bomList[0]
@@ -858,10 +909,12 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
             setSelectedSpecs([sVal])
 
             if (matchedPart.total_qty) {
-              const cQty = convertQuantityToPiecesIfNeeded(matchedPart.part_name, matchedPart.total_qty, matchedPart.unit)
-              setRequiredQty(String(cQty))
+              const details = getQuantityConversionDetails(matchedPart.part_name, matchedPart.total_qty, matchedPart.unit, matchedPart.is_converted)
+              setRequiredQty(String(details.qty))
+              setIsQtyConverted(details.isConverted)
             } else {
               setRequiredQty('')
+              setIsQtyConverted(false)
             }
           }
         } else if (isNew) {
@@ -1313,7 +1366,11 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
     result: mode === INSPECT_MODES.QA ? qaResult : (result || ticket?.conclusion || ticket?.result || 'pass'),
     product: mode === INSPECT_MODES.PARAMETER ? (paramProduct || '—') : (product || ticket?.product_name || ticket?.detail_name || ticket?.product || '—'),
     spec: compactSpec(spec || ticket?.specification || ticket?.spec) || '—',
-    needQty: convertQuantityToPiecesIfNeeded(product || spec || ticket?.product_name || ticket?.detail_name, requiredQty || ticket?.quantity_plan || ticket?.required_qty || sampleQty) || '—',
+    needQty: (() => {
+      const details = getQuantityConversionDetails(product || spec || ticket?.product_name || ticket?.detail_name, requiredQty || ticket?.quantity_plan || ticket?.required_qty || sampleQty)
+      const val = details.qty || '—'
+      return (details.isConverted || isQtyConverted) && val !== '—' ? `≈ ${val}` : val
+    })(),
     sampleQty: (mode === INSPECT_MODES.PARAMETER ? paramSample : (sampleQty || ticket?.sample_qty || ticket?.sampleQty)) || '—',
     errorQty: (mode === INSPECT_MODES.PARAMETER ? paramFail : (errorQty || ticket?.error_qty || ticket?.errorQty)) || '0',
   }
@@ -1557,6 +1614,8 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
     specOptions,
     bomData,
     requiredQty,
+    isQtyConverted,
+    displayRequiredQty: (isQtyConverted || getQuantityConversionDetails(product || spec, requiredQty).isConverted) && requiredQty ? `≈ ${requiredQty}` : (requiredQty || ''),
     samplingRule,
     guideVisible,
     setGuideVisible,

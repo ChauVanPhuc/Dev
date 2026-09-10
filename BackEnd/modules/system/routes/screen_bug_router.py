@@ -15,7 +15,7 @@ from modules.system.schemas.screen_bug import (
 )
 from shared.utils.timezone import get_vietnam_time
 from jose import jwt
-from config.settings import settings
+from config.settings import settings, get_upload_dir
 from modules.auth.models.accounts import Account as AccountModel
 
 def get_current_user(request: Request, db: Session = Depends(get_db)) -> AccountModel:
@@ -90,9 +90,7 @@ async def upload_bug_image(file: UploadFile = File(...)):
     Tải lên hình ảnh bug màn hình (chấp nhận ảnh clipboard dán hoặc file upload).
     Lưu vào BackEnd/static/uploads/screen_bugs/
     """
-    # Đường dẫn thư mục static/uploads/screen_bugs/
-    upload_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "static", "uploads", "screen_bugs"))
-    os.makedirs(upload_dir, exist_ok=True)
+    upload_dir = get_upload_dir("screen_bugs")
     
     # Tạo tên file duy nhất tránh trùng lặp
     file_ext = os.path.splitext(file.filename)[1]

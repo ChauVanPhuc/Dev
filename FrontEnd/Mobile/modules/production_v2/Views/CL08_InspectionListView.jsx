@@ -143,7 +143,7 @@ const CL08_InspectionListView = () => {
             </button>
             <div className="pv2-page-status-text">
               {total > 0 ? (
-                <>Show <strong>{(page - 1) * pageSize + 1}</strong> to <span className="pv2-page-num-box">{Math.min(page * pageSize, total)}</span> of <strong>{total}</strong> results</>
+                <>Hiển thị <strong>{(page - 1) * pageSize + 1}</strong> - <span className="pv2-page-num-box">{Math.min(page * pageSize, total)}</span> trong <strong>{total}</strong> kết quả</>
               ) : (
                 'Không có kết quả'
               )}

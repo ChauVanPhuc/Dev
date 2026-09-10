@@ -11,12 +11,12 @@ from modules.delivery.models.delivery_qc import DeliveryQC
 from modules.delivery.models.delivery_images import DeliveryImage
 from modules.delivery.models.deliveries import Delivery
 
+from config.settings import get_upload_dir
+
 router = APIRouter()
 
 # Thư mục lưu trữ ảnh QC riêng biệt
-UPLOAD_DIR = "static/uploads/qc_test"
-if not os.path.exists(UPLOAD_DIR):
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
+UPLOAD_DIR = get_upload_dir("qc_test")
 
 @router.post("/{delivery_id}")
 async def save_qc_results(

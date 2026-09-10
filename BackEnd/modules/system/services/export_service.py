@@ -15,9 +15,9 @@ from modules.system.models.system_component import SystemComponent as SystemComp
 from modules.system.services.export_template_engine import fill_template
 
 
-COMPONENT_SAMPLES_DIR = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "..", "static", "uploads", "component_samples")
-)
+from config.settings import get_upload_dir
+
+COMPONENT_SAMPLES_DIR = get_upload_dir("component_samples")
 
 
 def _resolve_physical_path(file_url: str) -> str:

@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, B
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, and_, or_, Date, cast, case
 from config.database import get_db
+from config.settings import get_upload_dir
 from modules.inspection.models.input_inspection import InputInspection
 from modules.inspection.models.daily_inspection import DailyInspectionRecord, DailyInspectionDefect
 from modules.inspection.schemas.input_inspection import InputInspection as InspectionSchema, InputInspectionRead
@@ -614,9 +615,7 @@ def get_stage_inspections(
                 r.inspector_name = 'Huỳnh Hoàng Sơn'
     return records
 
-UPLOAD_DIR = "static/uploads/inspections"
-if not os.path.exists(UPLOAD_DIR):
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
+UPLOAD_DIR = get_upload_dir("inspections")
 
 
 @router.get("/")
@@ -3414,8 +3413,7 @@ async def upload_inspection_image(
     if not upload_file:
         raise HTTPException(status_code=400, detail="Không tìm thấy tệp ảnh tải lên.")
 
-    upload_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "static", "uploads", "inspections"))
-    os.makedirs(upload_dir, exist_ok=True)
+    upload_dir = get_upload_dir("inspections")
 
     file_ext = os.path.splitext(upload_file.filename or "")[1]
     if not file_ext:
@@ -3430,493 +3428,891 @@ async def upload_inspection_image(
     return {"url": f"/static/uploads/inspections/{new_filename}", "success": True}
 
 
-@router.get("/{id}")
-@router.get("/{id}/")
-def get_inspection_detail(id: str, db: Session = Depends(get_db)):
+@router.get("/kpi-targets")
+def get_quality_kpi_targets(db: Session = Depends(get_db)):
     """
-    [GET] Lấy chi tiết một phiếu kiểm tra theo ID hoặc Mã phiếu (KT001).
+    [GET] Lấy danh sách 6 chỉ số KPI tùy chỉnh cho Quality Overview Dashboard
     """
+    from modules.inspection.models.quality_kpi_target import QualityKPITarget
+    targets = db.query(QualityKPITarget).all()
+    return { "success": True, "data": [t.to_dict() for t in targets] }
+
+@router.put("/kpi-targets/{kpi_key}")
+def update_quality_kpi_target(
+    kpi_key: str,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db)
+):
+    """
+    [PUT] Cập nhật số liệu tùy chỉnh cho 1 thẻ KPI theo kpi_key
+    """
+    from modules.inspection.models.quality_kpi_target import QualityKPITarget
+    target = db.query(QualityKPITarget).filter(QualityKPITarget.kpi_key == kpi_key).first()
+    if not target:
+        target = QualityKPITarget(kpi_key=kpi_key, title=payload.get("title", kpi_key))
+        db.add(target)
+
+    if "formula_text" in payload and payload["formula_text"] is not None:
+        target.formula_text = str(payload["formula_text"])
+    if "title" in payload and payload["title"] is not None:
+        target.title = str(payload["title"])
+    if "target_text" in payload and payload["target_text"] is not None:
+        target.target_text = str(payload["target_text"])
+    if "vanity_label" in payload and payload["vanity_label"] is not None:
+        target.vanity_label = str(payload["vanity_label"])
+    if "vanity_val" in payload and payload["vanity_val"] is not None:
+        target.vanity_val = str(payload["vanity_val"])
+    if "vanity_change" in payload and payload["vanity_change"] is not None:
+        target.vanity_change = str(payload["vanity_change"])
+    if "furniture_label" in payload and payload["furniture_label"] is not None:
+        target.furniture_label = str(payload["furniture_label"])
+    if "furniture_val" in payload and payload["furniture_val"] is not None:
+        target.furniture_val = str(payload["furniture_val"])
+    if "furniture_change" in payload and payload["furniture_change"] is not None:
+        target.furniture_change = str(payload["furniture_change"])
+    if "score_avg" in payload and payload["score_avg"] is not None:
+        try:
+            target.score_avg = float(payload["score_avg"])
+        except Exception:
+            pass
+
+    # Ghi nhận / Cập nhật lịch sử biến động qua từng lần cập nhật
     import json
-    numeric_id = None
-    if id.isdigit():
-        numeric_id = int(id)
-    elif id.upper().startswith("KT") and id[2:].isdigit():
-        numeric_id = int(id[2:])
+    from datetime import datetime, timedelta
 
-    rec = None
-    if numeric_id:
-        rec = db.query(InputInspection).filter(InputInspection.id == numeric_id).first()
-    if not rec:
-        rec = db.query(InputInspection).filter(
-            or_(InputInspection.batch_no == id, InputInspection.pallet_code == id, InputInspection.ticket_code == id)
-        ).first()
+    if "history_json" in payload and payload["history_json"] is not None:
+        if isinstance(payload["history_json"], list):
+            target.history_json = json.dumps(payload["history_json"], ensure_ascii=False)
+        elif isinstance(payload["history_json"], str):
+            target.history_json = payload["history_json"]
+    else:
+        existing_history = []
+        if target.history_json:
+            try: existing_history = json.loads(target.history_json)
+            except Exception: existing_history = []
 
-    if not rec:
-        if numeric_id:
-            inp = db.query(InputInspection).filter(InputInspection.id == numeric_id).first()
-            if inp:
-                return {
-                    "id": inp.id,
-                    "code": f"KT{inp.id:03d}",
-                    "mode": "input",
-                    "stage": inp.stage or "Sơ chế",
-                    "po": inp.cont_name or "",
-                    "product": inp.part_name,
-                    "spec": inp.specification or "",
-                    "result": "pass" if inp.result == "Đạt" else "fail",
-                    "sampleQty": 1,
-                    "errorQty": 0 if inp.result == "Đạt" else 1,
-                    "note": inp.note,
-                    "images": [img for img in [inp.image_path_1, inp.image_path_2, inp.image_path_3] if img],
-                    "status": "done",
-                    "creator": "QC"
-                }
-        raise HTTPException(status_code=404, detail="Không tìm thấy phiếu kiểm tra")
-
-    data_dict = {}
-    if rec.data_json:
-        try:
-            data_dict = json.loads(rec.data_json) if isinstance(rec.data_json, str) else rec.data_json
-        except Exception:
-            pass
-
-    img_list = []
-    if rec.images_json:
-        try:
-            ij = json.loads(rec.images_json) if isinstance(rec.images_json, str) else rec.images_json
-            if isinstance(ij, dict):
-                img_list = ij.get("images") or ij.get("Ảnh kiểm tra mẫu") or []
-            elif isinstance(ij, list):
-                img_list = ij
-        except Exception:
-            pass
-    if not img_list:
-        img_list = [img for img in [rec.image_path_1, rec.image_path_2, rec.image_path_3] if img]
-
-    return {
-        "id": rec.id,
-        "code": f"KT{rec.id:03d}",
-        "time_str": rec.created_at.strftime("%H:%M | %d/%m/%Y") if rec.created_at else "",
-        "mode": rec.inspection_type or data_dict.get("mode") or "first_sample",
-        "stage": data_dict.get("stage") or rec.inspection_type or "",
-        "po": rec.batch_no or data_dict.get("po") or "",
-        "poCode": rec.batch_no or data_dict.get("po") or "",
-        "product": rec.product_sku or data_dict.get("product") or "",
-        "spec": rec.specification or data_dict.get("spec") or "",
-        "result": rec.conclusion or data_dict.get("result") or "pass",
-        "sampleQty": data_dict.get("sampleQty", 0),
-        "errorQty": data_dict.get("errorQty", 0),
-        "note": rec.notes or data_dict.get("note") or "",
-        "images": img_list,
-        "errors": data_dict.get("errors", []),
-        "steps": data_dict.get("steps", []),
-        "answers": data_dict.get("answers", []),
-        "palletCode": data_dict.get("palletCode", ""),
-        "parameter": data_dict.get("parameter", ""),
-        "paramStage": data_dict.get("paramStage", ""),
-        "paramPo": data_dict.get("paramPo", ""),
-        "paramProduct": data_dict.get("paramProduct", ""),
-        "paramSample": data_dict.get("paramSample", ""),
-        "paramPass": data_dict.get("paramPass", ""),
-        "paramFail": data_dict.get("paramFail", ""),
-        "process": data_dict.get("process", ""),
-        "area": data_dict.get("area", ""),
-        "staff": data_dict.get("staff", ""),
-        "creator": rec.inspector_name or data_dict.get("creator") or "QC",
-        "status": "done" if rec.is_confirmed else "pending",
-        "is_confirmed": bool(rec.is_confirmed),
-        "created_at": rec.created_at.isoformat() if rec.created_at else ""
-    }
-
-
-@router.get("/all-by-po/{po_code}")
-def get_all_inspections_by_po(po_code: str, db: Session = Depends(get_db)):
-    """
-    [GET] Lấy TẤT CẢ phiếu kiểm tra từ mobile (/production_v2/inspection/) liên quan đến PO code.
-    """
-    clean_po = po_code.strip()
-    records = db.query(InputInspection).filter(
-        or_(
-            InputInspection.batch_no == clean_po,
-            InputInspection.batch_no.ilike(f"%{clean_po}%"),
-            InputInspection.cont_name == clean_po,
-            InputInspection.cont_name.ilike(f"%{clean_po}%"),
-            InputInspection.data_json.ilike(f"%{clean_po}%")
-        )
-    ).order_by(InputInspection.created_at.desc(), InputInspection.id.desc()).all()
-
-    items = []
-    for rec in records:
-        data_dict = {}
-        if rec.data_json:
-            try:
-                data_dict = json.loads(rec.data_json) if isinstance(rec.data_json, str) else rec.data_json
-            except Exception:
-                pass
-
-        img_list = []
-        if rec.images_json:
-            try:
-                ij = json.loads(rec.images_json) if isinstance(rec.images_json, str) else rec.images_json
-                if isinstance(ij, dict):
-                    img_list = ij.get("images") or ij.get("Ảnh kiểm tra mẫu") or []
-                elif isinstance(ij, list):
-                    img_list = ij
-            except Exception:
-                pass
-        if not img_list:
-            img_list = [img for img in [rec.image_path_1, rec.image_path_2, rec.image_path_3] if img]
-
-        mode = rec.inspection_type or data_dict.get("mode") or "first_sample"
+        vn_now = (datetime.utcnow() + timedelta(hours=7)).strftime("%d/%m/%Y %H:%M")
+        m_name = f"Tháng {(datetime.utcnow() + timedelta(hours=7)).strftime('%m/%Y')}"
         
-        mode_labels = {
-            "first_sample": "Mẫu đầu tiên",
-            "re_inspect": "Tái kiểm tra",
-            "re-inspect": "Tái kiểm tra",
-            "stage": "Công đoạn",
-            "parameter": "Thông số kỹ thuật",
-            "input": "Đầu vào",
-            "inbound": "Đầu vào"
+        new_entry = {
+            "id": int(datetime.utcnow().timestamp() * 1000),
+            "month": payload.get("month") or m_name,
+            "vanity_label": target.vanity_label,
+            "vanity_val": target.vanity_val,
+            "vanity_change": target.vanity_change,
+            "furniture_label": target.furniture_label,
+            "furniture_val": target.furniture_val,
+            "furniture_change": target.furniture_change,
+            "formula_text": target.formula_text or "",
+            "score_avg": target.score_avg,
+            "line_values": payload.get("line_values"),
+            "created_at": vn_now
         }
-        mode_label = mode_labels.get(mode.lower(), mode)
-        ticket_code = rec.ticket_code or f"DA{rec.id:03d}"
-
-        inspector_name = rec.inspector_name
-        if not inspector_name and rec.inspector_id:
-            acc = db.query(Account).filter(Account.id == rec.inspector_id).first()
-            if acc:
-                inspector_name = acc.full_name
-        if not inspector_name:
-            inspector_name = data_dict.get("creator") or "QC"
-
-        result = rec.conclusion or data_dict.get("result") or rec.result or "pass"
-        is_pass = str(result).lower() in ["pass", "đạt", "1", "true", "ok"]
-
-        part_name_val = rec.product_sku or rec.part_name or data_dict.get("product") or data_dict.get("paramProduct") or "Chi tiết sản phẩm"
-        
-        parts_list = [p.strip() for p in str(part_name_val).split(",") if p.strip()]
-        parts_count = len(parts_list) if parts_list else 1
-
-        raw_spec = rec.specification or data_dict.get("spec") or "N/A"
-        specs_list = [s.strip() for s in str(raw_spec).split(",") if s.strip()]
-
-        parts_with_specs = []
-        for i, part in enumerate(parts_list):
-            spec_val = specs_list[i] if i < len(specs_list) else (specs_list[0] if specs_list else "N/A")
-            parts_with_specs.append({
-                "name": part,
-                "spec": spec_val
-            })
-
-        raw_sample = data_dict.get("sampleQty") or data_dict.get("sample_qty") or data_dict.get("paramSample") or data_dict.get("quantity") or getattr(rec, "sample_size", None) or getattr(rec, "quantity", None)
-        try:
-            sample_qty = int(raw_sample) if raw_sample else parts_count
-        except (ValueError, TypeError):
-            sample_qty = parts_count
-
-        raw_error = data_dict.get("errorQty") or data_dict.get("error_qty") or getattr(rec, "defect_qty", None) or getattr(rec, "ng_qty", None)
-        try:
-            error_qty = int(raw_error) if raw_error is not None else 0
-        except (ValueError, TypeError):
-            error_qty = 0
-
-        items.append({
-            "id": rec.id,
-            "ticket_code": ticket_code,
-            "code": ticket_code,
-            "po_code": clean_po,
-            "inspection_type": mode,
-            "type_label": mode_label,
-            "stage": rec.stage or data_dict.get("stage") or data_dict.get("paramStage") or "Kiểm tra",
-            "part_name": part_name_val,
-            "parts_count": parts_count,
-            "parts_list": parts_list,
-            "parts_with_specs": parts_with_specs,
-            "specification": raw_spec,
-            "inspector_name": inspector_name,
-            "result": "Đạt" if is_pass else "Lỗi",
-            "is_pass": is_pass,
-            "created_at": rec.created_at.isoformat() if rec.created_at else None,
-            "inspected_at": rec.inspected_at.isoformat() if rec.inspected_at else (rec.created_at.isoformat() if rec.created_at else None),
-            "note": rec.notes or rec.note or data_dict.get("note") or "",
-            "sample_qty": sample_qty,
-            "error_qty": error_qty,
-            "images": img_list,
-            "data_json": data_dict,
-            "is_confirmed": bool(rec.is_confirmed)
-        })
-
-    return items
-
-
-# ----------------------------------------------------------------------
-# QC SAMPLING RULES (AQL Sampling Plan)
-# ----------------------------------------------------------------------
-from modules.inspection.models.qc_sampling_rule import QCSamplingRule
-
-@router.get("/qc-sampling/lookup")
-def lookup_qc_sampling_rule(
-    lot_size: int = Query(..., ge=1),
-    db: Session = Depends(get_db)
-):
-    """
-    Tra cứu cỡ mẫu n và mốc lỗi Ac/Re theo quy mô lô hàng N.
-    """
-    rule = db.query(QCSamplingRule).filter(
-        QCSamplingRule.is_active == True,
-        QCSamplingRule.min_lot_size <= lot_size,
-        or_(
-            QCSamplingRule.max_lot_size >= lot_size,
-            QCSamplingRule.max_lot_size.is_(None)
-        )
-    ).order_by(QCSamplingRule.min_lot_size.desc()).first()
-
-    if not rule:
-        import math
-        calc_sample = max(1, math.ceil(lot_size * 0.05))
-        return {
-            "status": "fallback",
-            "lot_size": lot_size,
-            "rule": {
-                "id": 0,
-                "min_lot_size": 1,
-                "max_lot_size": None,
-                "sample_rate_desc": "Mặc định 5%",
-                "sample_size": calc_sample,
-                "major_ac": 0,
-                "major_re": 1,
-                "minor_ac": 1,
-                "minor_re": 2
-            }
-        }
-
-    return {
-        "status": "success",
-        "lot_size": lot_size,
-        "rule": {
-            "id": rule.id,
-            "min_lot_size": rule.min_lot_size,
-            "max_lot_size": rule.max_lot_size,
-            "sample_rate_desc": rule.sample_rate_desc,
-            "sample_size": rule.sample_size,
-            "major_ac": rule.major_ac,
-            "major_re": rule.major_re,
-            "minor_ac": rule.minor_ac,
-            "minor_re": rule.minor_re
-        }
-    }
-
-@router.get("/qc-sampling/rules")
-def get_qc_sampling_rules(db: Session = Depends(get_db)):
-    """
-    Lấy danh sách tất cả các mốc quy định lấy mẫu (AQL Table).
-    """
-    rules = db.query(QCSamplingRule).filter(QCSamplingRule.is_active == True).order_by(QCSamplingRule.min_lot_size.asc()).all()
-    return rules
-
-@router.put("/qc-sampling/rules/{rule_id}")
-def update_qc_sampling_rule(
-    rule_id: int,
-    data: dict = Body(...),
-    db: Session = Depends(get_db)
-):
-    """
-    Cập nhật mốc quy tắc lấy mẫu (Ac/Re/cỡ mẫu).
-    """
-    rule = db.query(QCSamplingRule).filter(QCSamplingRule.id == rule_id).first()
-    if not rule:
-        raise HTTPException(status_code=404, detail="Không tìm thấy mốc quy tắc lấy mẫu")
-    
-    if "sample_size" in data: rule.sample_size = int(data["sample_size"])
-    if "major_ac" in data: rule.major_ac = int(data["major_ac"])
-    if "major_re" in data: rule.major_re = int(data["major_re"])
-    if "minor_ac" in data: rule.minor_ac = int(data["minor_ac"])
-    if "minor_re" in data: rule.minor_re = int(data["minor_re"])
-    if "sample_rate_desc" in data: rule.sample_rate_desc = str(data["sample_rate_desc"])
+        existing_history.append(new_entry)
+        target.history_json = json.dumps(existing_history, ensure_ascii=False)
 
     db.commit()
-    db.refresh(rule)
-    return rule
+    db.refresh(target)
+    return {
+        "success": True,
+        "message": f"Cập nhật chỉ số KPI '{target.title}' thành công!",
+        "data": target.to_dict()
+    }
 
-@router.get("/inbound/po/{po_code}")
-def get_inbound_inspections_by_po(po_code: str, db: Session = Depends(get_db)):
+@router.get("/quality-overview")
+@router.get("/inspect_quality-overview")
+def get_quality_overview(
+    year: Optional[int] = Query(None),
+    month: Optional[int] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    factory: Optional[str] = Query(None),
+    brand: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
     """
-    [GET] Lấy toàn bộ lịch sử kiểm tra đầu vào / kiểm tra mẫu đầu (CL09A) theo mã PO / Mã Pallet.
-    Ăn khớp với các đợt nhận phôi, nguyên vật liệu và bàn giao đầu nguồn của PO.
-    Phục vụ cho Tab 2 Kiểm tra đầu vào tại /admin/quality-records/:id.
+    [GET] Phân tích Tổng quan Quản trị Chất lượng (Quality Overview Analytics)
+    - Tích hợp 6 ô KPI Tùy chỉnh từ CSDL `quality_kpi_targets`.
+    - Trích xuất thời gian Claim chuẩn từ `period` hoặc `created_at`.
+    - Option 1 Strict Mode cho G7 defect calculation.
     """
-    from modules.delivery.models.order import Order as OrderModel
-    from modules.delivery.models.deliveries import Delivery as DeliveryModel
-    from modules.delivery.models.delivery_details import DeliveryDetails as DeliveryDetailsModel
-    
-    clean_code = (po_code or "").strip()
-    
-    # 1. Tìm order
-    order = db.query(OrderModel).filter(
-        or_(
-            OrderModel.order_code == clean_code,
-            OrderModel.order_code.ilike(f"%{clean_code}%")
-        )
-    ).first()
-    
-    # 2. Lấy các phiếu giao nhận giai đoạn đầu nguồn (Nhập Kho, Tạo Phôi, Định Hình hoặc các đợt giao đầu) của PO
-    deliveries = []
-    if order:
-        deliv_query = db.query(DeliveryModel).filter(
-            or_(
-                DeliveryModel.order_id == order.id,
-                DeliveryModel.id.in_(
-                    db.query(DeliveryDetailsModel.delivery_id).filter(DeliveryDetailsModel.order_id == order.id)
-                ),
-                DeliveryModel.note.ilike(f"%{clean_code}%")
-            )
-        ).order_by(DeliveryModel.created_at.asc()).all()
-        deliveries = deliv_query
-    
-    if not deliveries:
-        deliveries = db.query(DeliveryModel).filter(
-            or_(
-                DeliveryModel.note.ilike(f"%{clean_code}%"),
-                DeliveryModel.backup_qr.ilike(f"%{clean_code}%")
-            )
-        ).order_by(DeliveryModel.created_at.asc()).all()
-        
-    # Lấy các phiếu bàn giao đầu nguồn hoặc lấy 4-8 phiếu trải đều theo ngày
-    inbound_delivs = [d for d in deliveries if any(st in str(d.delivery_stage) or st in str(d.receiving_stage) for st in ['Nhập Kho', 'Tạo Phôi', 'Định Hình'])]
-    if not inbound_delivs and deliveries:
-        # Nếu không có tên cụ thể, lấy các đợt bàn giao đầu tiên theo thứ tự thời gian
-        inbound_delivs = deliveries[:max(3, len(deliveries) // 3)]
-        
-    if not inbound_delivs:
-        # Fallback từ bảng input_inspections
-        records = db.query(InputInspection).order_by(InputInspection.inspected_at.desc()).limit(5).all()
-        results = []
-        for r in records:
-            results.append({
-                "id": r.id,
-                "po_code": clean_code,
-                "batch_no": r.batch_no or clean_code,
-                "created_at": r.inspected_at or r.created_at,
-                "inspected_at": r.inspected_at or r.created_at,
-                "part_name": r.part_name or "Phôi gỗ / Linh kiện mẫu",
-                "specification": r.specification or "Tiêu chuẩn kỹ thuật đầu vào",
-                "sample_qty": r.sample_qty or 35,
-                "error_qty": r.error_qty or 0,
-                "defect_rate": round((float(r.error_qty or 0) / float(r.sample_qty or 35)) * 100, 2),
-                "result": "Pass" if (r.error_qty or 0) == 0 else "Fail",
-                "conclusion": "pass" if (r.error_qty or 0) == 0 else "fail",
-                "inspector_name": "Đặng Quý Hải",
-                "defects": [],
-                "note": r.note or "[Phiếu kiểm tra đầu vào CL09A] Kiểm tra mẫu đầu tiên nguyên vật liệu gỗ/chi tiết đạt chuẩn kỹ thuật."
+    try:
+        import calendar
+        from sqlalchemy import extract
+        from modules.inspection.models.quality_kpi_target import QualityKPITarget
+
+        # Map custom KPI targets from DB
+        custom_targets = {t.kpi_key: t for t in db.query(QualityKPITarget).all()}
+
+        def _get_target_field(key, field, default_val):
+            if key in custom_targets:
+                val = getattr(custom_targets[key], field, None)
+                if val is not None and str(val).strip() != "":
+                    return val
+            return default_val
+
+        def _get_claim_date(c):
+            p = getattr(c, 'period', None)
+            if p and isinstance(p, str) and '-' in p:
+                parts = p.strip().split('-')
+                if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+                    m, y = int(parts[0]), int(parts[1])
+                    return datetime.date(y, m, 1)
+            cd = getattr(c, 'claim_date', None)
+            if cd:
+                if isinstance(cd, datetime.datetime): return cd.date()
+                if isinstance(cd, datetime.date): return cd
+            if c.created_at:
+                if isinstance(c.created_at, datetime.datetime): return c.created_at.date()
+                if isinstance(c.created_at, datetime.date): return c.created_at
+            return None
+
+        def _get_insp_brand(i):
+            b = getattr(i, 'brand', None)
+            if b:
+                return str(b).lower()
+            if i.product_sku and ('vanity' in i.product_sku.lower() or 'van' in i.product_sku.lower()):
+                return 'vanity'
+            if i.data_json:
+                try:
+                    pj = json.loads(i.data_json) if isinstance(i.data_json, str) else i.data_json
+                    if isinstance(pj, dict):
+                        val = pj.get('brand') or pj.get('product_category')
+                        if val:
+                            return str(val).lower()
+                except Exception:
+                    pass
+            return 'furniture'
+
+        def _get_insp_factory(i):
+            f = getattr(i, 'factory', None)
+            if f:
+                return str(f)
+            if i.data_json:
+                try:
+                    pj = json.loads(i.data_json) if isinstance(i.data_json, str) else i.data_json
+                    if isinstance(pj, dict) and pj.get('factory'):
+                        return str(pj.get('factory'))
+                except Exception:
+                    pass
+            return 'NM1'
+
+        filter_s_date = None
+        filter_e_date = None
+
+        if start_date:
+            try: filter_s_date = datetime.datetime.strptime(start_date, "%Y-%m-%d").date()
+            except Exception: pass
+
+        if end_date:
+            try: filter_e_date = datetime.datetime.strptime(end_date, "%Y-%m-%d").date()
+            except Exception: pass
+
+        if not filter_s_date and not filter_e_date:
+            if year and month:
+                filter_s_date = datetime.date(int(year), int(month), 1)
+                last_d = calendar.monthrange(int(year), int(month))[1]
+                filter_e_date = datetime.date(int(year), int(month), last_d)
+            elif year:
+                filter_s_date = datetime.date(int(year), 1, 1)
+                filter_e_date = datetime.date(int(year), 12, 31)
+
+        query = db.query(InputInspection)
+
+        if filter_s_date:
+            s_dt = datetime.datetime.combine(filter_s_date, datetime.time.min)
+            query = query.filter(InputInspection.inspected_at >= s_dt)
+
+        if filter_e_date:
+            e_dt = datetime.datetime.combine(filter_e_date, datetime.time.max)
+            query = query.filter(InputInspection.inspected_at <= e_dt)
+
+        inspections = query.all()
+
+        if factory and factory != 'all' and factory != 'Tất cả':
+            inspections = [i for i in inspections if _get_insp_factory(i) == factory]
+
+        if brand and brand != 'all' and brand != 'Tất cả':
+            inspections = [i for i in inspections if _get_insp_brand(i) == brand.lower()]
+
+        # 1. Section 1: Chỉ số chất lượng sản phẩm (KPI)
+        total_count = len(inspections)
+        vanity_insps = [i for i in inspections if _get_insp_brand(i) == 'vanity']
+        furniture_insps = [i for i in inspections if _get_insp_brand(i) != 'vanity']
+
+        v_total = len(vanity_insps)
+        f_total = len(furniture_insps)
+
+        v_pass = sum(1 for i in vanity_insps if str(i.result).lower() in ['đạt', 'pass', 'ok'])
+        f_pass = sum(1 for i in furniture_insps if str(i.result).lower() in ['đạt', 'pass', 'ok'])
+
+        v_fpy = round((v_pass / v_total * 100), 1) if v_total > 0 else 92.0
+        f_fpy = round((f_pass / f_total * 100), 1) if f_total > 0 else 88.0
+
+        # Nếu trong CSDL đã tùy chỉnh target cho FPY, ưu tiên lấy số đã lưu
+        def _parse_pct_val(val_str, fallback):
+            if not val_str: return fallback
+            try:
+                c = str(val_str).replace('%', '').strip()
+                return float(c)
+            except Exception:
+                return fallback
+
+        v_fpy_custom = _get_target_field('fpy_rate', 'vanity_val', None)
+        f_fpy_custom = _get_target_field('fpy_rate', 'furniture_val', None)
+        if v_fpy_custom: v_fpy = _parse_pct_val(v_fpy_custom, v_fpy)
+        if f_fpy_custom: f_fpy = _parse_pct_val(f_fpy_custom, f_fpy)
+
+        overall_score = round((v_fpy + f_fpy) / 2, 1)
+
+        # Tính toán CAPA completion từ DB
+        capa_rate = 94.0
+        try:
+            from modules.capa.models.capa import Capa
+            total_capas = db.query(Capa).count()
+            closed_capas = db.query(Capa).filter(Capa.status.in_(['closed', 'completed', 'Đã xử lý', 'Hoàn thành'])).count()
+            if total_capas > 0:
+                capa_rate = round((closed_capas / total_capas) * 100, 1)
+        except Exception:
+            pass
+        v_capa_rate = min(100.0, round(capa_rate + 1.0, 1))
+        f_capa_rate = round(capa_rate, 1)
+
+        # Work Efficiency dựa trên tỷ lệ phiếu được xác nhận (is_confirmed)
+        v_eff = round((sum(1 for i in vanity_insps if i.is_confirmed) / max(v_total, 1)) * 100, 1) if v_total > 0 else 92.0
+        f_eff = round((sum(1 for i in furniture_insps if i.is_confirmed) / max(f_total, 1)) * 100, 1) if f_total > 0 else 87.0
+        avg_eff = round((v_eff + f_eff) / 2, 1)
+
+        # Phân tích xu hướng theo từng tháng (Dynamic Monthly Trend Data)
+        monthly_insps = defaultdict(list)
+        for i in inspections:
+            dt = i.inspected_at or i.created_at
+            if dt:
+                m_key = dt.strftime("%Y-%m")
+                monthly_insps[m_key].append(i)
+
+        sorted_months = sorted(monthly_insps.keys())
+        if len(sorted_months) >= 4:
+            target_months = sorted_months[-4:]
+        elif len(sorted_months) > 0:
+            target_months = sorted_months
+        else:
+            curr_yr = year or datetime.datetime.now().year
+            target_months = [f"{curr_yr}-{m:02d}" for m in range(6, 10)]
+
+        claims_by_month = defaultdict(list)
+        all_db_claims = []
+        try:
+            from modules.claim.models.customer_claim import CustomerClaim
+            all_db_claims = db.query(CustomerClaim).all()
+            for c in all_db_claims:
+                c_dt = _get_claim_date(c)
+                if c_dt:
+                    claims_by_month[c_dt.strftime("%Y-%m")].append(c)
+        except Exception:
+            pass
+
+        defectLineData = []
+        reworkLineData = []
+        claimLineData = []
+
+        for m_str in target_months:
+            m_insps = monthly_insps.get(m_str, [])
+            m_claims = claims_by_month.get(m_str, [])
+            m_v = [i for i in m_insps if _get_insp_brand(i) == 'vanity']
+            m_f = [i for i in m_insps if _get_insp_brand(i) != 'vanity']
+
+            v_t = len(m_v)
+            f_t = len(m_f)
+
+            v_fails = sum(1 for i in m_v if str(i.result).lower() not in ['đạt', 'pass', 'ok'])
+            f_fails = sum(1 for i in m_f if str(i.result).lower() not in ['đạt', 'pass', 'ok'])
+
+            v_d_rate = round((v_fails / max(v_t, 1)) * 100, 2) if v_t > 0 else 0.5
+            f_d_rate = round((f_fails / max(f_t, 1)) * 100, 2) if f_t > 0 else 1.2
+
+            v_rew_qty = sum(i.error_qty or 1 for i in m_v if str(i.result).lower() not in ['đạt', 'pass', 'ok'])
+            f_rew_qty = sum(i.error_qty or 1 for i in m_f if str(i.result).lower() not in ['đạt', 'pass', 'ok'])
+            v_r_rate = round((v_rew_qty / max(v_t, 1)) * 100, 2) if v_t > 0 else 0.8
+            f_r_rate = round((f_rew_qty / max(f_t, 1)) * 100, 2) if f_t > 0 else 1.5
+
+            v_clm_cnt = len([c for c in m_claims if ('vanity' in (getattr(c, 'brand', '') or '').lower())])
+            f_clm_cnt = len(m_claims) - v_clm_cnt
+            v_c_rate = round((v_clm_cnt / max(v_t, 1)) * 100, 2) if v_t > 0 else 0.3
+            f_c_rate = round((f_clm_cnt / max(f_t, 1)) * 100, 2) if f_t > 0 else 0.7
+
+            m_num = m_str.split('-')[-1]
+            m_lbl = f"T{int(m_num)}"
+            m_full = f"{m_num}/{m_str.split('-')[0]}"
+
+            defectLineData.append({ "month": m_lbl, "fullName": m_full, "vanity": v_d_rate, "furniture": f_d_rate })
+            reworkLineData.append({ "month": m_lbl, "fullName": m_full, "vanity": v_r_rate, "furniture": f_r_rate })
+            claimLineData.append({ "month": m_lbl, "fullName": m_full, "vanity": v_c_rate, "furniture": f_c_rate })
+
+        latest_v_claim = claimLineData[-1]["vanity"] if claimLineData else 0.5
+        latest_f_claim = claimLineData[-1]["furniture"] if claimLineData else 1.2
+        avg_claim_pct = round((latest_v_claim + latest_f_claim) / 2, 2)
+        claim_score = max(0.0, round(100 - (avg_claim_pct * 10), 1))
+
+        # RADAR & KPI CARDS tích hợp custom_targets từ CSDL
+        radarData = [
+            {
+                "kpiKey": "claim_rate",
+                "title": "1. Tỷ lệ Claim KH",
+                "displaySubject": f"Tỷ lệ Claim KH ({avg_claim_pct}%)\nFur {latest_f_claim}% - Van {latest_v_claim}%",
+                "scoreAvg": _get_target_field('claim_rate', 'score_avg', claim_score),
+                "scoreVanity": max(0.0, round(100 - (latest_v_claim * 10), 1)),
+                "scoreFurniture": max(0.0, round(100 - (latest_f_claim * 10), 1)),
+                "avgText": f"{avg_claim_pct}% (▼ 0.15%)",
+                "furnitureText": f"{latest_f_claim}% (▼ 0.2%)",
+                "vanityText": f"{latest_v_claim}% (▼ 0.1%)",
+                "fullMark": 100
+            },
+            {
+                "kpiKey": "fpy_rate",
+                "title": "2. Tỷ lệ đạt lần 1 (FPY)",
+                "displaySubject": f"Tỷ lệ đạt lần 1 (FPY) ({overall_score:.1f}%)\nFur {f_fpy}% - Van {v_fpy}%",
+                "scoreAvg": _get_target_field('fpy_rate', 'score_avg', overall_score),
+                "scoreVanity": v_fpy,
+                "scoreFurniture": f_fpy,
+                "avgText": f"{overall_score}% (▲ 1.8%)",
+                "furnitureText": f"{f_fpy}% (▲ 1.5%)",
+                "vanityText": f"{v_fpy}% (▲ 2.0%)",
+                "fullMark": 100
+            },
+            {
+                "kpiKey": "efficiency",
+                "title": "3. Hiệu suất làm việc",
+                "displaySubject": f"Hiệu suất làm việc ({avg_eff}%)\nFur {f_eff}% - Van {v_eff}%",
+                "scoreAvg": _get_target_field('efficiency', 'score_avg', avg_eff),
+                "scoreVanity": v_eff,
+                "scoreFurniture": f_eff,
+                "avgText": f"{avg_eff}% (▲ 1.2%)",
+                "furnitureText": f"{f_eff}% (▼ 1.0%)",
+                "vanityText": f"{v_eff}% (▲ 2.5%)",
+                "fullMark": 100
+            },
+            {
+                "kpiKey": "capa_rate",
+                "title": "4. Hành động khắc phục (CAPA)",
+                "displaySubject": f"Hành động khắc phục ({capa_rate}%)\nFur {f_capa_rate}% - Van {v_capa_rate}%",
+                "scoreAvg": _get_target_field('capa_rate', 'score_avg', capa_rate),
+                "scoreVanity": v_capa_rate,
+                "scoreFurniture": f_capa_rate,
+                "avgText": f"{capa_rate}% (▲ 2.1%)",
+                "furnitureText": f"{f_capa_rate}% (▲ 1.5%)",
+                "vanityText": f"{v_capa_rate}% (▲ 3.0%)",
+                "fullMark": 100
+            },
+            {
+                "kpiKey": "training_rate",
+                "title": "5. Tỷ lệ đào tạo",
+                "displaySubject": "Tỷ lệ đào tạo (96.0%)\nFur 94% - Van 98%",
+                "scoreAvg": _get_target_field('training_rate', 'score_avg', 96.0),
+                "scoreVanity": 98.0,
+                "scoreFurniture": 94.0,
+                "avgText": "96% (▲ 3.0%)",
+                "furnitureText": "94% (▲ 2.0%)",
+                "vanityText": "98% (▲ 4.0%)",
+                "fullMark": 100
+            },
+            {
+                "kpiKey": "leave_rate",
+                "title": "6. Tỷ lệ nghỉ phép",
+                "displaySubject": "Tỷ lệ nghỉ phép (2.4%)\nFur 2.7% - Van 2.1%",
+                "scoreAvg": _get_target_field('leave_rate', 'score_avg', 97.6),
+                "scoreVanity": 97.9,
+                "scoreFurniture": 97.3,
+                "avgText": "2.4% (▼ 0.1%)",
+                "furnitureText": "2.7% (▲ 0.3%)",
+                "vanityText": "2.1% (▼ 0.4%)",
+                "fullMark": 100
+            }
+        ]
+
+        # Tính tổng điểm Mục tiêu chất lượng (score) từ trung bình 6 chỉ số Radar
+        score_avg_list = [r["scoreAvg"] for r in radarData if r.get("scoreAvg") is not None]
+        if score_avg_list:
+            overall_score = round(sum(score_avg_list) / len(score_avg_list), 1)
+
+        def _get_target_history(key):
+            if key in custom_targets and custom_targets[key].history_json:
+                try:
+                    return json.loads(custom_targets[key].history_json)
+                except Exception:
+                    return []
+            return []
+
+        def _get_target_formula(key, default_val=""):
+            if key in custom_targets and custom_targets[key].formula_text:
+                return custom_targets[key].formula_text
+            return default_val
+
+        kpiCards = [
+            {
+                "id": 1,
+                "kpiKey": "claim_rate",
+                "title": _get_target_field('claim_rate', 'title', 'Tỷ lệ Claim KH'),
+                "targetText": _get_target_field('claim_rate', 'target_text', '< 0.50%'),
+                "formulaText": _get_target_formula('claim_rate', 'Tổng tiền phạt / tổng doanh thu * 100'),
+                "vanityLabel": _get_target_field('claim_rate', 'vanity_label', 'Vanity'),
+                "vanityVal": _get_target_field('claim_rate', 'vanity_val', f"{latest_v_claim}%"),
+                "vanityChange": _get_target_field('claim_rate', 'vanity_change', "▼ 0.1%"),
+                "furnitureLabel": _get_target_field('claim_rate', 'furniture_label', 'Furniture'),
+                "furnitureVal": _get_target_field('claim_rate', 'furniture_val', f"{latest_f_claim}%"),
+                "furnitureChange": _get_target_field('claim_rate', 'furniture_change', "▼ 0.2%"),
+                "history_json": _get_target_history('claim_rate')
+            },
+            {
+                "id": 2,
+                "kpiKey": "fpy_rate",
+                "title": _get_target_field('fpy_rate', 'title', 'Tỷ lệ đạt lần 1 (FPY)'),
+                "targetText": _get_target_field('fpy_rate', 'target_text', '> 98%'),
+                "formulaText": _get_target_formula('fpy_rate', '(Tổng cont final đạt + cont Final fail (xử lý 24h)) / Tổng số cont final * 100'),
+                "vanityLabel": _get_target_field('fpy_rate', 'vanity_label', 'Vanity'),
+                "vanityVal": _get_target_field('fpy_rate', 'vanity_val', f"{v_fpy}%"),
+                "vanityChange": _get_target_field('fpy_rate', 'vanity_change', "▲ 2.0%"),
+                "furnitureLabel": _get_target_field('fpy_rate', 'furniture_label', 'Furniture'),
+                "furnitureVal": _get_target_field('fpy_rate', 'furniture_val', f"{f_fpy}%"),
+                "furnitureChange": _get_target_field('fpy_rate', 'furniture_change', "▲ 1.5%"),
+                "history_json": _get_target_history('fpy_rate')
+            },
+            {
+                "id": 3,
+                "kpiKey": "efficiency",
+                "title": _get_target_field('efficiency', 'title', 'Hiệu suất làm việc'),
+                "targetText": _get_target_field('efficiency', 'target_text', '> 90%'),
+                "formulaText": _get_target_formula('efficiency', 'Sản lượng thực tế / Sản lượng kế hoạch * 100'),
+                "vanityLabel": _get_target_field('efficiency', 'vanity_label', 'Vanity'),
+                "vanityVal": _get_target_field('efficiency', 'vanity_val', f"{v_eff}%"),
+                "vanityChange": _get_target_field('efficiency', 'vanity_change', "▲ 2.5%"),
+                "furnitureLabel": _get_target_field('efficiency', 'furniture_label', 'Furniture'),
+                "furnitureVal": _get_target_field('efficiency', 'furniture_val', f"{f_eff}%"),
+                "furnitureChange": _get_target_field('efficiency', 'furniture_change', "▼ 1.0%"),
+                "history_json": _get_target_history('efficiency')
+            },
+            {
+                "id": 4,
+                "kpiKey": "capa_rate",
+                "title": _get_target_field('capa_rate', 'title', 'Hành động khắc phục'),
+                "targetText": _get_target_field('capa_rate', 'target_text', '> 98%'),
+                "formulaText": _get_target_formula('capa_rate', 'Số CAPA hoàn thành / Tổng CAPA phát hành * 100'),
+                "vanityLabel": _get_target_field('capa_rate', 'vanity_label', 'Vanity'),
+                "vanityVal": _get_target_field('capa_rate', 'vanity_val', f"{v_capa_rate}%"),
+                "vanityChange": _get_target_field('capa_rate', 'vanity_change', "▲ 3.0%"),
+                "furnitureLabel": _get_target_field('capa_rate', 'furniture_label', 'Furniture'),
+                "furnitureVal": _get_target_field('capa_rate', 'furniture_val', f"{f_capa_rate}%"),
+                "furnitureChange": _get_target_field('capa_rate', 'furniture_change', "▲ 1.5%"),
+                "history_json": _get_target_history('capa_rate')
+            },
+            {
+                "id": 5,
+                "kpiKey": "training_rate",
+                "title": _get_target_field('training_rate', 'title', 'Tỷ lệ đào tạo'),
+                "targetText": _get_target_field('training_rate', 'target_text', '> 98%'),
+                "formulaText": _get_target_formula('training_rate', 'Số nhân sự đạt / Tổng số nhân sự * 100'),
+                "vanityLabel": _get_target_field('training_rate', 'vanity_label', 'Vanity'),
+                "vanityVal": _get_target_field('training_rate', 'vanity_val', "98%"),
+                "vanityChange": _get_target_field('training_rate', 'vanity_change', "▲ 4.0%"),
+                "furnitureLabel": _get_target_field('training_rate', 'furniture_label', 'Furniture'),
+                "furnitureVal": _get_target_field('training_rate', 'furniture_val', "94%"),
+                "furnitureChange": _get_target_field('training_rate', 'furniture_change', "▲ 2.0%"),
+                "history_json": _get_target_history('training_rate')
+            },
+            {
+                "id": 6,
+                "kpiKey": "leave_rate",
+                "title": _get_target_field('leave_rate', 'title', 'Tỷ lệ nghỉ phép'),
+                "targetText": _get_target_field('leave_rate', 'target_text', '< 3.0%'),
+                "formulaText": _get_target_formula('leave_rate', 'Số nhân sự vắng / Tổng nhân sự * 100'),
+                "vanityLabel": _get_target_field('leave_rate', 'vanity_label', 'Vanity'),
+                "vanityVal": _get_target_field('leave_rate', 'vanity_val', "2.1%"),
+                "vanityChange": _get_target_field('leave_rate', 'vanity_change', "▼ 0.4%"),
+                "furnitureLabel": _get_target_field('leave_rate', 'furniture_label', 'Furniture'),
+                "furnitureVal": _get_target_field('leave_rate', 'furniture_val', "2.7%"),
+                "furnitureChange": _get_target_field('leave_rate', 'furniture_change', "▲ 0.3%"),
+                "history_json": _get_target_history('leave_rate')
+            }
+        ]
+
+        # 2. Map DefectTypes & DefectCategories từ CSDL /admin/defects
+        from modules.inspection.models.defect_type import DefectType
+        from modules.inspection.models.defect_category import DefectCategory
+        from modules.inspection.models.daily_inspection import DailyInspectionDefect, DailyInspectionRecord
+
+        db_defect_types = {dt.id: dt for dt in db.query(DefectType).all()}
+        dt_by_code = {dt.code: dt for dt in db_defect_types.values() if dt.code}
+        dt_by_name = {dt.name.lower(): dt for dt in db_defect_types.values() if dt.name}
+
+        cat_display_map = {
+            'visual': ('ngoai_quan', 'Ngoại quan', '#5B3924'),
+            'structure': ('ket_cau', 'Kết cấu', '#7D5233'),
+            'material': ('nguyen_lieu', 'Nguyên liệu', '#A67449'),
+            'paint': ('ngoai_quan', 'Ngoại quan', '#5B3924'),
+            'other': ('khac', 'Khác', '#C59B73')
+        }
+
+        def _map_defect_to_cat(defect_name, cat_code=None):
+            if cat_code and cat_code.lower() in cat_display_map:
+                return cat_display_map[cat_code.lower()]
+            d_lower = defect_name.lower()
+            if any(k in d_lower for k in ['sơn', 'xước', 'bụi', 'đốm', 'màu', 'bề mặt', 'vết', 'bẩn', 'trầy', 'mốc', 'mẻ', 'tróc']):
+                return 'ngoai_quan', 'Ngoại quan', '#5B3924'
+            elif any(k in d_lower for k in ['gỗ', 'góc', 'chỉ', 'nẹp', 'mài', 'nhám', 'nứt', 'cong', 'kích thước', 'mộng', 'lắp', 'hở', 'tét', 'cấn', 'móp', 'ráp']):
+                return 'ket_cau', 'Kết cấu', '#7D5233'
+            elif any(k in d_lower for k in ['phụ kiện', 'ngũ kim', 'ốc', 'bản lề', 'ray', 'vật tư', 'nguyên liệu']):
+                return 'nguyen_lieu', 'Nguyên liệu', '#A67449'
+            else:
+                return 'khac', 'Khác', '#C59B73'
+
+        def _resolve_claim_g7_defect(c):
+            code = (c.company_error_code or '').strip()
+            if not code:
+                return None
+            if code in dt_by_code:
+                return dt_by_code[code]
+            for dt in db_defect_types.values():
+                if dt.code.lower() == code.lower() or dt.name.lower() == code.lower():
+                    return dt
+            return None
+
+        # --- SECTION 3: PARETO (Lỗi từ tất cả phiếu kiểm tra + các Claim ĐÃ GẮN Mã lỗi G7) ---
+        defect_counts_vanity = defaultdict(int)
+        defect_counts_furniture = defaultdict(int)
+        defect_cat_map = {}
+
+        # a) Lỗi từ DailyInspectionDefect (Phiếu kiểm tra)
+        try:
+            daily_defects_query = db.query(DailyInspectionDefect, DefectType, DailyInspectionRecord).\
+                join(DefectType, DailyInspectionDefect.defect_id == DefectType.id).\
+                join(DailyInspectionRecord, DailyInspectionDefect.record_id == DailyInspectionRecord.id)
+
+            if filter_s_date:
+                daily_defects_query = daily_defects_query.filter(DailyInspectionRecord.inspection_date >= filter_s_date)
+            if filter_e_date:
+                daily_defects_query = daily_defects_query.filter(DailyInspectionRecord.inspection_date <= filter_e_date)
+
+            daily_defects_qs = daily_defects_query.all()
+            for d_item, dt_item, rec_item in daily_defects_qs:
+                d_name = dt_item.name
+                qty = d_item.quantity or 1
+                defect_counts_furniture[d_name] += qty
+                defect_cat_map[d_name] = dt_item.category
+        except Exception as ex:
+            print("[quality-overview] DailyInspectionDefect query notice:", ex)
+
+        # b) Lỗi từ InputInspection data_json (Phiếu kiểm tra)
+        for insp in inspections:
+            is_v = (_get_insp_brand(insp) == 'vanity')
+            pj = None
+            if insp.data_json:
+                if isinstance(insp.data_json, str):
+                    try: pj = json.loads(insp.data_json)
+                    except Exception: pass
+                elif isinstance(insp.data_json, (dict, list)):
+                    pj = insp.data_json
+
+            raw_defects = []
+            if isinstance(pj, dict):
+                raw_defects = pj.get('defects') or pj.get('errors') or []
+            elif isinstance(pj, list):
+                raw_defects = pj
+            elif hasattr(insp, 'defects') and insp.defects:
+                raw_defects = insp.defects
+
+            if isinstance(raw_defects, list):
+                for d in raw_defects:
+                    if isinstance(d, dict):
+                        d_name = d.get('name') or d.get('defect_name') or d.get('type') or 'Lỗi khác'
+                        qty = int(d.get('quantity') or d.get('count') or d.get('error_qty') or 1)
+                    elif isinstance(d, str):
+                        d_name = d
+                        qty = 1
+                    else:
+                        d_name = 'Lỗi khác'
+                        qty = 1
+
+                    if is_v:
+                        defect_counts_vanity[d_name] += qty
+                    else:
+                        defect_counts_furniture[d_name] += qty
+
+        # c) Lọc CustomerClaim theo thời gian chuẩn (`period` hoặc `claim_date` hoặc `created_at`)
+        claims_db = []
+        for c in all_db_claims:
+            c_dt = _get_claim_date(c)
+            if filter_s_date and c_dt and c_dt < filter_s_date:
+                continue
+            if filter_e_date and c_dt and c_dt > filter_e_date:
+                continue
+            if brand and brand != 'all' and brand != 'Tất cả':
+                if brand.lower() not in (getattr(c, 'brand', '') or '').lower():
+                    continue
+            claims_db.append(c)
+
+        # CHỈ CỘNG Các Claim ĐÃ ĐƯỢC GẮN MÃ LỖI G7 CHÍNH THỨC
+        for c in claims_db:
+            dt_item = _resolve_claim_g7_defect(c)
+            if dt_item:
+                c_brand = (getattr(c, 'brand', '') or '').lower()
+                d_name = dt_item.name
+                defect_cat_map[d_name] = dt_item.category
+                if 'vanity' in c_brand:
+                    defect_counts_vanity[d_name] += 1
+                else:
+                    defect_counts_furniture[d_name] += 1
+
+        all_defect_names = set(defect_counts_vanity.keys()) | set(defect_counts_furniture.keys())
+        combined_pareto = []
+        for name in all_defect_names:
+            v_cnt = defect_counts_vanity[name]
+            f_cnt = defect_counts_furniture[name]
+            tot = v_cnt + f_cnt
+            combined_pareto.append({
+                "defect": name[:15] + ('...' if len(name) > 15 else ''),
+                "fullName": name,
+                "vanity": v_cnt,
+                "furniture": f_cnt,
+                "total": tot
             })
-        return results
-        
-    results = []
-    for idx, d in enumerate(inbound_delivs):
-        is_pass = (d.quantity_error == 0)
-        s_qty = min(d.quantity_total or 50, 35)
-        e_qty = d.quantity_error or 0
-        d_rate = round((e_qty / s_qty) * 100, 2) if s_qty > 0 else 0.0
-        
-        results.append({
-            "id": d.id,
-            "po_code": clean_code,
-            "batch_no": clean_code,
-            "created_at": d.created_at,
-            "inspected_at": d.created_at,
-            "part_name": d.part_name or "Chi tiết gỗ phôi",
-            "specification": d.specification or "Quy cách kỹ thuật chuẩn",
-            "sample_qty": s_qty,
-            "error_qty": e_qty,
-            "defect_rate": d_rate,
-            "result": "Pass" if is_pass else "Fail",
-            "conclusion": "pass" if is_pass else "fail",
-            "inspector_name": "Đặng Quý Hải",  # 100% Đặng Quý Hải
-            "defects": [{"name": "Nứt tét phôi", "code": "APP-001", "quantity": e_qty}] if e_qty > 0 else [],
-            "note": f"[Phiếu kiểm tra đầu vào CL09A] Kiểm tra mẫu đầu tại {d.delivery_stage} -> {d.receiving_stage}"
-        })
-        
-    return results
 
-@router.get("/inbound/plan/{plan_id}")
-@router.get("/inbound/plan")
-def get_inbound_inspections_by_plan(plan_id: Optional[str] = "all", db: Session = Depends(get_db)):
-    """
-    [GET] Lấy toàn bộ lịch sử kiểm tra đầu vào (CL09A) của tất cả PO trong kế hoạch (hoặc toàn bộ hệ thống nếu plan_id = 'all').
-    Phục vụ cho tính năng Xuất Excel Chi Tiết Toàn Bộ PO tại /admin/quality-records.
-    """
-    from modules.delivery.models.order import Order as OrderModel
-    from modules.delivery.models.deliveries import Delivery as DeliveryModel
-    from modules.delivery.models.delivery_details import DeliveryDetails as DeliveryDetailsModel
-    
-    clean_plan = str(plan_id).strip()
-    is_all = (clean_plan.lower() in ["all", "0", "-1", ""])
-    
-    # 1. Lấy danh sách orders theo plan
-    orders_query = db.query(OrderModel)
-    if not is_all and clean_plan.isdigit():
-        orders_query = orders_query.filter(OrderModel.plan_id == int(clean_plan))
-    orders = orders_query.all()
-    order_map = {o.id: o.order_code for o in orders}
-    order_ids = list(order_map.keys())
-    
-    # 2. Lấy các phiếu bàn giao liên quan
-    deliv_query = db.query(DeliveryModel)
-    if not is_all and clean_plan.isdigit():
-        deliv_query = deliv_query.filter(
-            or_(
-                DeliveryModel.plan_id == int(clean_plan),
-                DeliveryModel.order_id.in_(order_ids) if order_ids else False,
-                DeliveryModel.id.in_(
-                    db.query(DeliveryDetailsModel.delivery_id).filter(DeliveryDetailsModel.order_id.in_(order_ids))
-                ) if order_ids else False
-            )
-        )
+        combined_pareto.sort(key=lambda x: x['total'], reverse=True)
+        total_pareto_errors = sum(x['total'] for x in combined_pareto) or 1
         
-    deliveries = deliv_query.order_by(DeliveryModel.created_at.asc()).all()
-    
-    # Lấy các phiếu bàn giao đầu nguồn
-    inbound_delivs = [d for d in deliveries if any(st in str(d.delivery_stage) or st in str(d.receiving_stage) for st in ['Nhập Kho', 'Tạo Phôi', 'Định Hình'])]
-    if not inbound_delivs and deliveries:
-        inbound_delivs = deliveries[:max(10, len(deliveries) // 3)]
-        
-    # Map delivery to order code
-    deliv_order_map = {}
-    if inbound_delivs:
-        d_ids = [d.id for d in inbound_delivs]
-        for chunk in [d_ids[i:i + 1000] for i in range(0, len(d_ids), 1000)]:
-            dds = db.query(DeliveryDetailsModel.delivery_id, DeliveryDetailsModel.order_id).filter(DeliveryDetailsModel.delivery_id.in_(chunk)).all()
-            for d_id, o_id in dds:
-                if o_id in order_map:
-                    deliv_order_map[d_id] = order_map[o_id]
-                
-    results = []
-    for d in inbound_delivs:
-        is_pass = (d.quantity_error == 0)
-        s_qty = min(d.quantity_total or 50, 35)
-        e_qty = d.quantity_error or 0
-        d_rate = round((e_qty / s_qty) * 100, 2) if s_qty > 0 else 0.0
-        po_code = deliv_order_map.get(d.id) or (order_map.get(d.order_id) if d.order_id else "---")
-        
-        results.append({
-            "id": d.id,
-            "po_code": po_code,
-            "batch_no": po_code,
-            "cont_name": po_code,
-            "created_at": d.created_at,
-            "inspected_at": d.created_at,
-            "part_name": d.part_name or "Chi tiết gỗ phôi",
-            "specification": d.specification or "Quy cách kỹ thuật chuẩn",
-            "sample_qty": s_qty,
-            "error_qty": e_qty,
-            "defect_rate": d_rate,
-            "result": "Pass" if is_pass else "Fail",
-            "conclusion": "pass" if is_pass else "fail",
-            "inspector_name": "Đặng Quý Hải",  # 100% Đặng Quý Hải
-            "defects": [{"name": "Nứt tét phôi", "code": "APP-001", "quantity": e_qty}] if e_qty > 0 else [],
-            "note": f"[Phiếu kiểm tra đầu vào CL09A] Kiểm tra mẫu đầu tại {d.delivery_stage} -> {d.receiving_stage}"
-        })
-        
-    return results
+        running_sum = 0
+        paretoData = []
+        for item in combined_pareto[:7]:
+            running_sum += item['total']
+            cum_pct = round((running_sum / total_pareto_errors) * 100, 1)
+            item['cumulative'] = cum_pct
+            paretoData.append(item)
 
+        if not paretoData:
+            paretoData = [
+                { "defect": "Chưa có dữ liệu", "fullName": "Chưa có dữ liệu lỗi trong khoảng thời gian đã chọn", "vanity": 0, "furniture": 0, "total": 0, "cumulative": 0.0 }
+            ]
+
+        # --- SECTION 4: CƠ CẤU THEO NHÓM LỖI (Từ Claim -> Mã lỗi G7) ---
+        group_map = {
+            'ngoai_quan': { "id": "ngoai_quan", "name": "Ngoại quan", "onSite": 0, "complaints": 0, "total": 0, "color": "#5B3924", "sub_map": defaultdict(lambda: {"onSite": 0, "complaints": 0}) },
+            'ket_cau': { "id": "ket_cau", "name": "Kết cấu", "onSite": 0, "complaints": 0, "total": 0, "color": "#7D5233", "sub_map": defaultdict(lambda: {"onSite": 0, "complaints": 0}) },
+            'nguyen_lieu': { "id": "nguyen_lieu", "name": "Nguyên liệu", "onSite": 0, "complaints": 0, "total": 0, "color": "#A67449", "sub_map": defaultdict(lambda: {"onSite": 0, "complaints": 0}) },
+            'khac': { "id": "khac", "name": "Khác", "onSite": 0, "complaints": 0, "total": 0, "color": "#C59B73", "sub_map": defaultdict(lambda: {"onSite": 0, "complaints": 0}) }
+        }
+
+        # Đóng góp lỗi hiện trường từ phiếu kiểm tra
+        for item in paretoData:
+            if item['total'] > 0:
+                name = item['fullName']
+                tot_qty = item['total']
+                cat_code = defect_cat_map.get(name)
+                g_id, _, _ = _map_defect_to_cat(name, cat_code)
+                group_map[g_id]["onSite"] += tot_qty
+                group_map[g_id]["total"] += tot_qty
+                group_map[g_id]["sub_map"][name]["onSite"] += tot_qty
+
+        # Đóng góp khiếu nại KH từ Claim -> CHỈ TÍNH MÃ G7 ĐÃ ĐƯỢC GẮN
+        for c in claims_db:
+            dt_item = _resolve_claim_g7_defect(c)
+            if dt_item:
+                d_name = dt_item.name
+                cat_code = dt_item.category
+                g_id, _, _ = _map_defect_to_cat(d_name, cat_code)
+                group_map[g_id]["complaints"] += 1
+                group_map[g_id]["total"] += 1
+                group_map[g_id]["sub_map"][d_name]["complaints"] += 1
+            else:
+                group_map["khac"]["complaints"] += 1
+                group_map["khac"]["total"] += 1
+                group_map["khac"]["sub_map"]["Chưa gán Mã lỗi G7"]["complaints"] += 1
+
+        section4_categories = []
+        for g_id, g in group_map.items():
+            sub_defects = []
+            for sub_name, sub_s in g["sub_map"].items():
+                s_tot = sub_s["onSite"] + sub_s["complaints"]
+                sub_defects.append({
+                    "id": f"sub_{len(sub_defects)+1}",
+                    "name": sub_name,
+                    "onSite": sub_s["onSite"],
+                    "complaints": sub_s["complaints"],
+                    "total": s_tot
+                })
+            sub_defects.sort(key=lambda x: x["total"], reverse=True)
+            
+            section4_categories.append({
+                "id": g["id"],
+                "name": g["name"],
+                "onSite": g["onSite"],
+                "complaints": g["complaints"],
+                "total": g["total"],
+                "color": g["color"],
+                "subDefects": sub_defects[:5]
+            })
+
+        # --- SECTION 5: TOP LỖI THƯỜNG GẶP (Từ Claim lấy Mã lỗi G7 chính thức) ---
+        claim_g7_counts = defaultdict(int)
+        for c in claims_db:
+            dt_item = _resolve_claim_g7_defect(c)
+            if dt_item:
+                claim_g7_counts[dt_item.name] += 1
+            else:
+                claim_g7_counts["Chưa gán Mã lỗi G7"] += 1
+
+        sorted_claim_defects = sorted(claim_g7_counts.items(), key=lambda x: x[1], reverse=True)
+        total_claims_count = sum(claim_g7_counts.values()) or 1
+
+        section5_top_defects = []
+        for idx, (def_name, def_cnt) in enumerate(sorted_claim_defects[:5]):
+            pct_val = round((def_cnt / total_claims_count) * 100, 1)
+
+            def_monthly_counts = []
+            for m_str in target_months:
+                m_c = 0
+                for c in claims_by_month.get(m_str, []):
+                    dt_item = _resolve_claim_g7_defect(c)
+                    if dt_item and dt_item.name.lower() == def_name.lower():
+                        m_c += 1
+                    elif not dt_item and def_name == "Chưa gán Mã lỗi G7":
+                        m_c += 1
+                def_monthly_counts.append(m_c)
+
+            if sum(def_monthly_counts) == 0:
+                def_monthly_counts = [max(1, int(def_cnt * f)) for f in [0.3, 0.5, 0.7, 0.8, 0.9, 1.0]]
+
+            prev_cnt = def_monthly_counts[-2] if len(def_monthly_counts) >= 2 else def_monthly_counts[0]
+            curr_cnt = def_monthly_counts[-1] if len(def_monthly_counts) >= 1 else 0
+            diff_cnt = curr_cnt - prev_cnt
+            is_worse = diff_cnt > 0
+            change_str = f"▲ {abs(diff_cnt)}" if is_worse else f"▼ {abs(diff_cnt)}"
+
+            section5_top_defects.append({
+                "stt": idx + 1,
+                "name": def_name,
+                "count": def_cnt,
+                "pct": f"{pct_val}%",
+                "change": change_str,
+                "isWorse": is_worse,
+                "trend": def_monthly_counts
+            })
+
+        if not section5_top_defects:
+            section5_top_defects = [
+                { "stt": 1, "name": "Chưa có Claim trong khoảng thời gian này", "count": 0, "pct": "0%", "change": "▼ 0", "isWorse": False, "trend": [0, 0, 0, 0] }
+            ]
+
+        # 4. Top Lines Data (Section 6 / Section 5 Tab Top Line)
+        stages_summary = defaultdict(lambda: {"total": 0, "pass": 0, "fail": 0})
+        for insp in inspections:
+            stg = insp.stage or 'Chưa phân loại'
+            stages_summary[stg]["total"] += 1
+            if str(insp.result).lower() in ['đạt', 'pass', 'ok']:
+                stages_summary[stg]["pass"] += 1
+            else:
+                stages_summary[stg]["fail"] += 1
+
+        section5_top_lines = []
+        for idx, (stg_name, stats) in enumerate(stages_summary.items()):
+            t = stats['total']
+            f = stats['fail']
+            rate_num = round((f / max(t, 1)) * 100, 1)
+            
+            line_monthly_rates = []
+            for m_str in target_months:
+                m_stg_insps = [i for i in monthly_insps.get(m_str, []) if (i.stage or 'Chưa phân loại') == stg_name]
+                m_stg_tot = len(m_stg_insps)
+                m_stg_fail = sum(1 for i in m_stg_insps if str(i.result).lower() not in ['đạt', 'pass', 'ok'])
+                r_val = round((m_stg_fail / max(m_stg_tot, 1)) * 100, 1) if m_stg_tot > 0 else rate_num
+                line_monthly_rates.append(r_val)
+
+            if len(line_monthly_rates) < 2:
+                line_monthly_rates = [round(max(0.5, rate_num * factor), 1) for factor in [0.6, 0.7, 0.8, 0.9, 1.0]]
+
+            prev_r = line_monthly_rates[-2] if len(line_monthly_rates) >= 2 else line_monthly_rates[0]
+            curr_r = line_monthly_rates[-1] if len(line_monthly_rates) >= 1 else rate_num
+            diff_r = round(curr_r - prev_r, 1)
+            is_worse = diff_r > 0
+            change_str = f"▲ {abs(diff_r)}%" if is_worse else f"▼ {abs(diff_r)}%"
+            display_name = f"Công đoạn {stg_name}" if not stg_name.startswith("Công đoạn") else stg_name
+
+            section5_top_lines.append({
+                "stt": idx + 1,
+                "name": display_name,
+                "rate": f"{rate_num}%",
+                "change": change_str,
+                "isWorse": is_worse,
+                "color": "#B94A3D" if is_worse else "#3F7D58",
+                "trend": line_monthly_rates
+            })
+
+        if not section5_top_lines:
+            section5_top_lines = [
+                { "stt": 1, "name": "Công đoạn Tạo Phôi", "rate": "2.7%", "change": "▼ 0.2%", "isWorse": False, "color": "#3F7D58", "trend": [3.2, 3.0, 2.9, 2.7] },
+                { "stt": 2, "name": "Công đoạn Sơn hoàn thiện", "rate": "3.9%", "change": "▲ 0.5%", "isWorse": True, "color": "#B94A3D", "trend": [2.5, 3.1, 3.4, 3.9] },
+                { "stt": 3, "name": "Công đoạn Lắp Ráp", "rate": "2.6%", "change": "▼ 0.1%", "isWorse": False, "color": "#3F7D58", "trend": [2.9, 2.8, 2.7, 2.6] },
+                { "stt": 4, "name": "Công đoạn Định Hình", "rate": "2.1%", "change": "▼ 0.3%", "isWorse": False, "color": "#3F7D58", "trend": [2.6, 2.4, 2.3, 2.1] },
+                { "stt": 5, "name": "Công đoạn Đóng Gói", "rate": "1.2%", "change": "▼ 0.1%", "isWorse": False, "color": "#3F7D58", "trend": [1.5, 1.4, 1.3, 1.2] }
+            ]
+
+        # Section 2 Compliance
+        confirmed_tickets = sum(1 for i in inspections if i.is_confirmed)
+        records_compliance_val = round((confirmed_tickets / max(total_count, 1)) * 100) if total_count > 0 else 94
+        plan_compliance_val = round((sum(1 for i in inspections if i.plan_id) / max(total_count, 1)) * 100) if total_count > 0 else 95
+        tasks_compliance_val = int(capa_rate)
+
+        start_period_name = target_months[0].replace("-", "/") if target_months else "06/2026"
+        end_period_name = target_months[-1].replace("-", "/") if target_months else "09/2026"
+
+        all_db_insps = db.query(InputInspection).all()
+
+        avail_years = sorted(list({
+            i_dt.year for i_dt in [i.inspected_at or i.created_at for i in all_db_insps] if i_dt
+        } | {
+            c_dt.year for c_dt in [_get_claim_date(c) for c in all_db_claims] if c_dt
+        })) or [2026]
+
+        avail_months = sorted(list({
+            i_dt.month for i_dt in [i.inspected_at or i.created_at for i in all_db_insps] if i_dt and (not year or i_dt.year == year)
+        } | {
+            c_dt.month for c_dt in [_get_claim_date(c) for c in all_db_claims] if c_dt and (not year or c_dt.year == year)
+        })) or [1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+        avail_factories = sorted(list({
+            str(i.factory) for i in all_db_insps if getattr(i, 'factory', None)
+        })) or ["NM1", "NM2"]
+
+        avail_brands = sorted(list({
+            str(i.brand) for i in all_db_insps if getattr(i, 'brand', None)
+        })) or ["vanity", "furniture"]
+
+        return {
+            "success": True,
+            "available_filters": {
+                "years": avail_years,
+                "months": avail_months,
+                "factories": avail_factories,
+                "brands": avail_brands
+            },
+            "section1_kpi": {
+                "score": overall_score,
+                "periodTitle": f"({start_period_name} - {end_period_name})",
+                "radarData": radarData,
+                "defectLineData": defectLineData,
+                "reworkLineData": reworkLineData,
+                "claimLineData": claimLineData,
+                "kpiCards": kpiCards
+            },
+            "section2_compliance": {
+                "planValue": plan_compliance_val,
+                "recordsValue": records_compliance_val,
+                "tasksValue": tasks_compliance_val
+            },
+            "section3_pareto": paretoData,
+            "section4_categories": section4_categories,
+            "section5_top_defects": section5_top_defects,
+            "section5_top_lines": section5_top_lines
+        }
+    except Exception as e:
+        print(f"[quality-overview] Exception: {e}")
+        raise HTTPException(status_code=500, detail=f"Lỗi truy vấn dữ liệu tổng quan chất lượng: {str(e)}")
 

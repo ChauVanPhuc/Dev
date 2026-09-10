@@ -3,6 +3,7 @@ import os
 import shutil
 from sqlalchemy.orm import Session
 from config.database import get_db
+from config.settings import get_upload_dir
 from modules.kpi.models.kpi_management import KPIChecklist, KPIEmployeeItem, KPIViolation, KPIFeedback, KPIPointRule, KPIChecklistPool, KPIItemPool, KPITrainingPlan, KPIMonthlyScore, KPIAuditLog
 from modules.auth.models.accounts import Account
 from modules.auth.models.employees import Employee
@@ -289,8 +290,7 @@ def delete_checklist(id: int, db: Session = Depends(get_db)):
 
 @router.post("/upload-file", response_model=dict)
 async def upload_kpi_file(file: UploadFile = File(...)):
-    static_uploads = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "static", "uploads"))
-    os.makedirs(static_uploads, exist_ok=True)
+    static_uploads = get_upload_dir()
     
     filename = file.filename
     file_location = os.path.join(static_uploads, filename)

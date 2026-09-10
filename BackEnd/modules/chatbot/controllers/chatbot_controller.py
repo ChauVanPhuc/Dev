@@ -33,11 +33,10 @@ def set_service_cooldown(service_name: str, seconds: int = 60):
     logger.warning(f"[Circuit Breaker] Thiet lap thoi gian hoi cho {service_name} trong {seconds} giay do loi/rate limit/timeout.")
 
 
-# Paths for claim imports - use from claim module
-BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-CLAIM_IMPORTS_DIR = os.path.join(BACKEND_DIR, "static", "uploads", "claim_imports")
+from config.settings import BACKEND_DIR, STATIC_DIR, get_upload_dir
+
+CLAIM_IMPORTS_DIR = get_upload_dir("claim_imports")
 JSON_DIR = os.path.join(CLAIM_IMPORTS_DIR, "json")
-STATIC_DIR = os.path.join(BACKEND_DIR, "static")
 
 def load_claims_from_db(db) -> list:
     """
@@ -534,8 +533,7 @@ def handle_claim_chat(message: str, context: dict = None, db = None, history: li
         image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=768&nologo=true"
         
         # Lưu ảnh về server local để lưu trữ ổn định
-        static_gen_dir = os.path.join(STATIC_DIR, "uploads", "generated_images")
-        os.makedirs(static_gen_dir, exist_ok=True)
+        static_gen_dir = get_upload_dir("generated_images")
         filename = f"gen_{uuid.uuid4().hex[:8]}.jpg"
         filepath = os.path.join(static_gen_dir, filename)
         local_url = f"/static/uploads/generated_images/{filename}"

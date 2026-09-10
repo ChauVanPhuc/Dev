@@ -54,29 +54,24 @@ const ErrorTrendRow = ({
     if (!defectOptions || defectOptions.length === 0) return []
 
     // 1. Lọc các lỗi đã chọn ở dòng khác
-    const filtered = defectOptions.filter((opt) => {
+    let filtered = defectOptions.filter((opt) => {
       if (!selectedDefectIds || selectedDefectIds.length === 0) return true
 
       const optValStr = String(opt.value || opt.id)
-      const optCodeStr = opt.code ? String(opt.code) : ''
+      const optCodeStr = opt.code ? String(opt.code).toLowerCase().trim() : ''
+      const optNameStr = opt.name ? String(opt.name).toLowerCase().trim() : ''
 
-      const isCurrentRowDefect =
-        (row.defectId && String(row.defectId) === optValStr) ||
-        (row.code && String(row.code) === optCodeStr) ||
-        (row.name && String(row.name) === String(opt.name))
-
-      if (isCurrentRowDefect) return true
-
-      const isUsedElsewhere = selectedDefectIds.some(
-        (usedId) => String(usedId) === optValStr || (optCodeStr && String(usedId) === optCodeStr)
-      )
+      const isUsedElsewhere = selectedDefectIds.some((used) => {
+        const uStr = String(used).toLowerCase().trim()
+        return (
+          uStr === optValStr ||
+          (optCodeStr && uStr === optCodeStr) ||
+          (optNameStr && uStr === optNameStr)
+        )
+      })
 
       return !isUsedElsewhere
     })
-
-    if (filtered.length === 0) {
-      filtered = defectOptions
-    }
 
     // 2. Sắp xếp:
     // Rank 2: Lỗi CTQ (isCTQ) -> Lên VỊ TRÍ CAO NHẤT (trên cùng của danh sách)

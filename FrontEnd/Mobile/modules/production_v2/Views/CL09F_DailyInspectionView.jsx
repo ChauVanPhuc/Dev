@@ -279,7 +279,10 @@ const CL09F_DailyInspectionView = () => {
                     onRemove={() => removeErrorRow(idx)}
                     disabled={readOnly}
                     defectOptions={defectOptions || []}
-                    selectedDefectIds={selectedDefectIds}
+                    selectedDefectIds={errors
+                      .filter((_, i) => i !== idx)
+                      .flatMap((e) => [e?.defectId, e?.defect_id, e?.code, e?.name])
+                      .filter(Boolean)}
                   />
                 ))}
               </div>

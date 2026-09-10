@@ -42,3 +42,23 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
+# ==============================================================================
+# QUẢN LÝ ĐƯỜNG DẪN STATIC & UPLOAD CHUẨN (SINGLE SOURCE OF TRUTH)
+# ==============================================================================
+BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+STATIC_DIR = os.path.join(BACKEND_DIR, "static")
+UPLOADS_DIR = os.path.join(STATIC_DIR, "uploads")
+
+# Đảm bảo thư mục static và uploads luôn sẵn sàng
+os.makedirs(STATIC_DIR, exist_ok=True)
+os.makedirs(UPLOADS_DIR, exist_ok=True)
+
+def get_upload_dir(subfolder: str = "") -> str:
+    """
+    Trả về đường dẫn tuyệt đối chuẩn tới thư mục upload trong BackEnd/static/uploads/<subfolder>.
+    Luôn đảm bảo thư mục đích tồn tại, loại bỏ hoàn toàn nguy cơ phân tán đường dẫn.
+    """
+    path = os.path.join(UPLOADS_DIR, subfolder) if subfolder else UPLOADS_DIR
+    os.makedirs(path, exist_ok=True)
+    return path
+

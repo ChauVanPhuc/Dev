@@ -28,13 +28,16 @@ def get_all(db: Session, skip: int = 0, limit: int = 50,
         query = query.filter(PurchaseRequisition.note.ilike(f"%{month}%"))
     if search:
         term = f"%{search}%"
-        query = query.filter(or_(
+        query = query.outerjoin(PurchaseRequisition.items).filter(or_(
             PurchaseRequisition.po_code.ilike(term),
             PurchaseRequisition.supplier_name.ilike(term),
             PurchaseRequisition.creator.ilike(term),
             PurchaseRequisition.supplier_code.ilike(term),
             PurchaseRequisition.note.ilike(term),
-        ))
+            PurchaseOrderItem.item_code.ilike(term),
+            PurchaseOrderItem.item_name.ilike(term),
+            PurchaseOrderItem.order_code.ilike(term),
+        )).distinct()
 
     total = query.count()
     items = query.order_by(PurchaseRequisition.order_date.desc(), PurchaseRequisition.id.desc())\
@@ -323,13 +326,16 @@ def get_shipping_monitoring(
         query = query.filter(PurchaseRequisition.note.ilike(f"%{month}%"))
     if search:
         term = f"%{search}%"
-        query = query.filter(or_(
+        query = query.outerjoin(PurchaseRequisition.items).filter(or_(
             PurchaseRequisition.po_code.ilike(term),
             PurchaseRequisition.supplier_name.ilike(term),
             PurchaseRequisition.creator.ilike(term),
             PurchaseRequisition.supplier_code.ilike(term),
             PurchaseRequisition.note.ilike(term),
-        ))
+            PurchaseOrderItem.item_code.ilike(term),
+            PurchaseOrderItem.item_name.ilike(term),
+            PurchaseOrderItem.order_code.ilike(term),
+        )).distinct()
     total = query.count()
     items = query.order_by(PurchaseRequisition.order_date.desc(), PurchaseRequisition.id.desc()).offset(skip).limit(limit).all()
 

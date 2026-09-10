@@ -40,10 +40,9 @@ class ReturnConfirmRequest(BaseModel):
     sx_confirmation_note: Optional[str] = None
     status: str = "Đã SX Xác Nhận"
 
+from config.settings import get_upload_dir
 
-UPLOAD_DIR = "static/uploads/returns"
-if not os.path.exists(UPLOAD_DIR):
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
+UPLOAD_DIR = get_upload_dir("returns")
 
 @router.post("/")
 async def create_return_slip(

@@ -392,7 +392,7 @@ const CL06_TransferListView = () => {
             </button>
             <div className="pv2-page-status-text">
               {total > 0 ? (
-                <>Show <strong>{(page - 1) * pageSize + 1}</strong> to <span className="pv2-page-num-box">{Math.min(page * pageSize, total)}</span> of <strong>{total}</strong> results</>
+                <>Hiển thị <strong>{(page - 1) * pageSize + 1}</strong> - <span className="pv2-page-num-box">{Math.min(page * pageSize, total)}</span> trong <strong>{total}</strong> kết quả</>
               ) : (
                 'Không có kết quả'
               )}
@@ -1087,7 +1087,10 @@ const CL06_TransferListView = () => {
                     key={row.id || idx}
                     row={row}
                     defectOptions={defectOptions}
-                    selectedDefectIds={rejectErrors.map((e) => e.defectId || e.code).filter(Boolean)}
+                    selectedDefectIds={rejectErrors
+                      .filter((_, i) => i !== idx)
+                      .flatMap((e) => [e?.defectId, e?.code, e?.name])
+                      .filter(Boolean)}
                     onChange={(r) => updateRejectError(idx, r)}
                     onRemove={rejectErrors.length > 1 ? () => removeRejectErrorRow(idx) : null}
                   />

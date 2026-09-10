@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "target": "ESNext",
+    "jsx": "react-jsx",
+    "baseUrl": "./",
+    "paths": {
+      "@/*": ["src/*"],
+      "@shared/*": ["src/shared/*"],
+      "@styles/*": ["src/shared/styles/*"],
+      "@assets/*": ["src/shared/assets/*"],
+      "@modules/*": ["src/modules/*"]
+    }
+  },
+  "include": [
+    "src"
+  ]
+}

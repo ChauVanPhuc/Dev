@@ -15,6 +15,7 @@ class MasterCategory(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(NVARCHAR(100), nullable=False, unique=True) # Tên danh mục mẫu
     description = Column(NVARCHAR(255)) # Mô tả danh mục
+    main_category = Column(NVARCHAR(50)) # Dòng hàng chính (Vanity hoặc Furniture)
     status = Column(Integer, default=1)   # Trạng thái (1: Active, 0: Inactive)
     created_at = Column(DateTime, default=get_vietnam_time) # Ngày tạo
 
