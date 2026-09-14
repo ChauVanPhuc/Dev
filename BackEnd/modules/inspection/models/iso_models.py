@@ -109,6 +109,7 @@ class ISOProcess(Base):
     symbol = Column(NVARCHAR(100), nullable=True)                        # Ký hiệu tài liệu thực tế
     role = Column(NVARCHAR(100), nullable=True)                          # Vai trò của người phê duyệt
     diagram_data = Column(NVARCHAR(None), nullable=True)                 # JSON sơ đồ lưu đồ tùy chỉnh riêng cho quy trình này
+    inspection_guide_id = Column(Integer, ForeignKey("inspection_guides.id", ondelete="SET NULL"), nullable=True, unique=True)
     created_at = Column(NVARCHAR(50))
     updated_at = Column(NVARCHAR(50))
 
@@ -117,6 +118,7 @@ class ISOProcess(Base):
     sections = relationship("ISOProcessSection", back_populates="process", cascade="all, delete-orphan")
     steps = relationship("ISOProcessStepInstance", back_populates="process", cascade="all, delete-orphan")
     revision_logs = relationship("ISORevisionLog", back_populates="process", cascade="all, delete-orphan")
+    inspection_guide = relationship("InspectionGuide", foreign_keys=[inspection_guide_id], uselist=False, lazy="selectin", post_update=True)
 
 
 class ISOProcessSection(Base):
@@ -150,4 +152,8 @@ class ISOProcessStepInstance(Base):
     flow_node_id = Column(NVARCHAR(50), nullable=True)
 
     process = relationship("ISOProcess", back_populates="steps")
+
+
+# Import to resolve relationship mapper
+from modules.inspection_guide.models.inspection_guide import InspectionGuide
 

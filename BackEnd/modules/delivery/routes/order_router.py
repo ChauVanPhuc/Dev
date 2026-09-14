@@ -349,5 +349,7 @@ def delete_order(order_id: int, db: Session = Depends(get_db)):
     success = order_controller.delete_order(db=db, order_id=order_id)
     if not success:
         raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng để xóa")
+    clear_plans_cache()
     return {"message": "Xóa đơn hàng thành công"}
+
 

@@ -48,8 +48,8 @@ const InspectionStepsTable = ({ steps = [], onStepChange, sampleQty, disabled = 
         <div className="pv2-sop-empty-box" style={{ backgroundColor: '#FAF6F0', borderColor: '#EADCC9' }}>
           <Info size={20} className="pv2-sop-empty-icon" style={{ color: '#7B5233' }} />
           <div className="pv2-sop-empty-text">
-            <strong style={{ color: '#7B5233' }}>💡 Vui lòng chọn Quy trình</strong>
-            <span style={{ color: '#64748b' }}>Vui lòng chọn 1 quy trình ở mục "Chọn quy trình" phía trên để hiển thị danh sách các bước SOP.</span>
+            <strong style={{ color: '#7B5233' }}>💡 Vui lòng chọn Quy trình ISO</strong>
+            <span style={{ color: '#64748b' }}>Vui lòng chọn 1 quy trình ở mục "Chọn quy trình ISO" phía trên để hiển thị danh sách các bước kiểm tra.</span>
           </div>
         </div>
       )
@@ -60,8 +60,20 @@ const InspectionStepsTable = ({ steps = [], onStepChange, sampleQty, disabled = 
         <div className="pv2-sop-empty-box">
           <Info size={20} className="pv2-sop-empty-icon" />
           <div className="pv2-sop-empty-text">
-            <strong>Quy trình chưa có bước SOP</strong>
-            <span>Quy trình đã chọn hiện chưa được khai báo chi tiết các bước hướng dẫn trên hệ thống.</span>
+            <strong>Quy trình ISO chưa có các bước thực hiện</strong>
+            <span>Quy trình đã chọn hiện chưa được khai báo chi tiết các bước trên hệ thống ISO.</span>
+          </div>
+        </div>
+      )
+    }
+
+    if (mode === 'parameter') {
+      return (
+        <div className="pv2-sop-empty-box">
+          <Info size={20} className="pv2-sop-empty-icon" />
+          <div className="pv2-sop-empty-text">
+            <strong>Thông số chưa có hướng dẫn SOP</strong>
+            <span>Thông số kiểm tra đã chọn hiện chưa được gán tài liệu Hướng dẫn kiểm tra trên hệ thống.</span>
           </div>
         </div>
       )
@@ -130,6 +142,20 @@ const InspectionStepsTable = ({ steps = [], onStepChange, sampleQty, disabled = 
                   >
                     <div className="pv2-sop-short-title">
                       {stepTitle}
+                      {(step.role || step.assignee_role) && (
+                        <span style={{
+                          display: 'inline-block',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          padding: '1px 6px',
+                          borderRadius: '4px',
+                          backgroundColor: '#FEF3C7',
+                          color: '#92400E',
+                          marginLeft: '6px'
+                        }}>
+                          {step.role || step.assignee_role}
+                        </span>
+                      )}
                     </div>
                     <span className="pv2-sop-view-detail-hint">
                       Chi tiết <ChevronRight size={12} />
@@ -234,6 +260,19 @@ const InspectionStepsTable = ({ steps = [], onStepChange, sampleQty, disabled = 
                   </div>
                   <div className="pv2-sop-modal-sec-box">
                     <FormattedTextView text={selectedStepModal.content || selectedStepModal.description} />
+                  </div>
+                </div>
+              )}
+
+              {/* Phần 1b: Tiêu chuẩn đánh giá */}
+              {selectedStepModal.standard && selectedStepModal.standard !== selectedStepModal.content && (
+                <div className="pv2-sop-modal-sec">
+                  <div className="pv2-sop-modal-sec-title">
+                    <CheckCircle2 size={14} color="#16a34a" />
+                    <span>Tiêu chuẩn đánh giá</span>
+                  </div>
+                  <div className="pv2-sop-modal-sec-box" style={{ borderLeft: '3px solid #16a34a', backgroundColor: '#f0fdf4' }}>
+                    <FormattedTextView text={selectedStepModal.standard} />
                   </div>
                 </div>
               )}

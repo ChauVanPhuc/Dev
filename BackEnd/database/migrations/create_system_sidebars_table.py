@@ -74,6 +74,7 @@ def upgrade():
                     {"title": "Đóng gói dữ liệu", "route_path": "/admin/data", "icon": "Package", "sort_order": 6, "permission_key": None},
                     {"title": "Quản lý tài khoản", "route_path": "/admin/users", "icon": "Users", "sort_order": 7, "permission_key": "users"},
                     {"title": "Cấu hình Sidebar", "route_path": "/admin/sidebar", "icon": "Sliders", "sort_order": 8, "permission_key": "screens"},
+                    {"title": "Quản lý mã QR tạm", "route_path": "/admin/backup-qrs", "icon": "QrCode", "sort_order": 9, "permission_key": "backup-qrs"},
                 ]
             },
             {
@@ -102,7 +103,6 @@ def upgrade():
                     {"title": "Quy trình sản xuất", "route_path": "/admin/production-routing", "icon": "GitMerge", "sort_order": 5, "permission_key": None},
                     {"title": "Kế hoạch bàn giao", "route_path": "/admin/delivery-tracking", "icon": "Truck", "sort_order": 6, "permission_key": None},
                     {"title": "Phiếu ngoại lệ", "route_path": "/admin/exception-deliveries", "icon": "AlertTriangle", "sort_order": 7, "permission_key": None},
-                    {"title": "Quản lý mã QR", "route_path": "/admin/backup-qrs", "icon": "QrCode", "sort_order": 8, "permission_key": None},
                 ]
             },
             {
@@ -181,7 +181,7 @@ def upgrade():
             },
             {"title": "Báo cáo CAPA", "route_path": "/capa-list", "icon": "Bell", "sort_order": 5, "permission_key": None},
             {"title": "Tạo CTQ, SOS", "route_path": "/ctq-sos", "icon": "Smile", "sort_order": 6, "permission_key": None},
-            {"title": "Báo cáo vi phạm", "route_path": "/awards", "icon": "Grid", "sort_order": 7, "permission_key": None},
+            {"title": "Báo cáo vi phạm", "route_path": "/awards", "icon": "AlertTriangle", "sort_order": 7, "permission_key": None},
             {"title": "Cảnh báo lỗi", "route_path": "/warnings", "icon": "Coins", "sort_order": 8, "permission_key": None},
             {"title": "Góp ý", "route_path": "/feedback", "icon": "Cookie", "sort_order": 9, "permission_key": None},
         ]

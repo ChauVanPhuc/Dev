@@ -217,8 +217,8 @@
   display: block;
   flex: 1 1 0%;
   min-height: 0;
-  height: 100%;
-  padding: 14px 10px 90px;
+  height: auto;
+  padding: 14px 10px 20px;
   background: #fbf6ee;
   overflow-y: auto;
   overflow-x: hidden;
@@ -1815,14 +1815,33 @@
   box-sizing: border-box !important;
 }
 
+/* ── Fixed Bottom Actions Bar (Neo cố định cuối màn hình) ────── */
+.pv2-fixed-bottom-actions {
+  flex-shrink: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  background: #ffffff !important;
+  border-top: 1.5px solid #e8ded4 !important;
+  border-top-left-radius: 16px !important;
+  border-top-right-radius: 16px !important;
+  padding: 12px 16px calc(14px + env(safe-area-inset-bottom, 0px)) 16px !important;
+  box-shadow: 0 -6px 20px rgba(74, 36, 14, 0.08) !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  flex-direction: row !important;
+  gap: 12px !important;
+  align-items: center !important;
+  z-index: 50 !important;
+}
+
 .pv2-btn-cancel {
   flex: 1 !important;
-  height: 44px !important;
-  line-height: 42px !important;
+  height: 46px !important;
+  line-height: 44px !important;
   background: #ffffff !important;
-  color: #4a240e !important;
-  border: 1.5px solid #4a240e !important;
-  border-radius: 8px !important;
+  color: #633617 !important;
+  border: 1.5px solid #d4c5b5 !important;
+  border-radius: 10px !important;
   font-size: 15px !important;
   font-weight: 700 !important;
   cursor: pointer !important;
@@ -1831,21 +1850,32 @@
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
-  transition: all 0.15s ease !important;
+  gap: 8px !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
 }
 
 .pv2-btn-cancel:hover {
-  background: #f5efe8 !important;
+  background: #fdfaf6 !important;
+  border-color: #b8a28e !important;
+  color: #4a240e !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06) !important;
+}
+
+.pv2-btn-cancel:active {
+  transform: translateY(0) !important;
+  background: #f5ede4 !important;
 }
 
 .pv2-btn-submit {
   flex: 1 !important;
-  height: 44px !important;
-  line-height: 44px !important;
-  background: #4a240e !important;
+  height: 46px !important;
+  line-height: 46px !important;
+  background: linear-gradient(135deg, #57290f 0%, #3a1908 100%) !important;
   color: #ffffff !important;
   border: none !important;
-  border-radius: 8px !important;
+  border-radius: 10px !important;
   font-size: 15px !important;
   font-weight: 700 !important;
   cursor: pointer !important;
@@ -1854,11 +1884,28 @@
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
-  transition: all 0.15s ease !important;
+  gap: 8px !important;
+  box-shadow: 0 4px 14px rgba(74, 36, 14, 0.28) !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
 .pv2-btn-submit:hover {
-  background: #361a0a !important;
+  background: linear-gradient(135deg, #46200a 0%, #291004 100%) !important;
+  box-shadow: 0 6px 18px rgba(74, 36, 14, 0.35) !important;
+  transform: translateY(-1px) !important;
+}
+
+.pv2-btn-submit:active {
+  transform: translateY(0) !important;
+  box-shadow: 0 2px 6px rgba(74, 36, 14, 0.2) !important;
+}
+
+.pv2-btn-submit:disabled,
+.pv2-btn-cancel:disabled {
+  opacity: 0.55 !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+  box-shadow: none !important;
 }
 
 /* ── Mode selector cards (CL09 hub) ─────────────────────── */
@@ -2253,4 +2300,19 @@
 
 .pv2-empty-action-btn:hover {
   background: #361a0a;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.pv2-fade-in {
+  animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }

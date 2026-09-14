@@ -90,9 +90,12 @@ export const useInspectionDetail = (id) => {
     })
   }, [id])
 
-  const loadGuide = async (mode, productId = null, stageId = null, guideId = null) => {
+  const [currentGuide, setCurrentGuide] = useState(null)
+
+  const loadGuide = async (mode, productId = null, stageId = null, guideId = null, parameter = null) => {
     try {
-      const guideData = await inspectionService.getGuide(mode, productId, stageId, guideId)
+      const guideData = await inspectionService.getGuide(mode, productId, stageId, guideId, parameter)
+      setCurrentGuide(guideData || null)
       if (guideData && Array.isArray(guideData.steps)) {
         const formattedSteps = guideData.steps.map((st) => ({
           id: st.id,
@@ -100,8 +103,11 @@ export const useInspectionDetail = (id) => {
           step: st.step_no,
           title: st.title || `Bước ${st.step_no}`,
           description: st.title || `Bước ${st.step_no}`,
-          standard: st.content || '',
-          content: st.content || '',
+          standard: st.standard || st.content || '',
+          content: st.content || st.note || st.standard || '',
+          note: st.note || st.content || '',
+          role: st.role || st.assignee_role || '',
+          assignee_role: st.assignee_role || st.role || '',
           sub_steps: Array.isArray(st.sub_steps) ? st.sub_steps : [],
           images: Array.isArray(st.images) ? st.images : [],
           qty: 1,
@@ -117,24 +123,29 @@ export const useInspectionDetail = (id) => {
       }
     } catch (e) {
       console.warn('Lỗi khi tải hướng dẫn:', e)
+      setCurrentGuide(null)
       setSteps([])
       return { guide: null, steps: [] }
     }
   }
 
   const addImage = async (file) => {
+    if (!file) return
+    const tempUrl = (file instanceof File || file instanceof Blob) ? URL.createObjectURL(file) : null
+    if (tempUrl) {
+      setImages((prev) => [...prev, tempUrl])
+    }
     try {
       const result = await inspectionService.uploadImage(file)
-      const url = result?.url || (file instanceof File || file instanceof Blob ? URL.createObjectURL(file) : null)
-      if (url) {
-        setImages((prev) => [...prev, url])
+      const serverUrl = result?.url || result?.path
+      if (serverUrl && tempUrl) {
+        setImages((prev) => prev.map((img) => (img === tempUrl ? serverUrl : img)))
       }
       return result
     } catch (err) {
-      console.warn('Lỗi khi tải ảnh:', err)
-      if (file instanceof File || file instanceof Blob) {
-        const localUrl = URL.createObjectURL(file)
-        setImages((prev) => [...prev, localUrl])
+      console.warn('Lỗi khi tải ảnh lên server:', err)
+      if (tempUrl) {
+        setImages((prev) => prev.filter((img) => img !== tempUrl))
       }
     }
   }
@@ -145,5 +156,5 @@ export const useInspectionDetail = (id) => {
     return await inspectionService.getLastResult(mode, productId, poCode)
   }
 
-  return { ticket, loading, error, steps, setSteps, images, setImages, addImage, removeImage, loadGuide, getLastResult }
+  return { ticket, loading, error, steps, setSteps, images, setImages, addImage, removeImage, loadGuide, getLastResult, currentGuide }
 }

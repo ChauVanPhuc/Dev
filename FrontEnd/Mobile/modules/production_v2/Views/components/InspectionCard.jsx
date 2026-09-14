@@ -78,6 +78,32 @@ const InspectionCard = ({ ticket, onClick }) => {
           }}>
             {isPass ? 'Đạt' : 'Không đạt'}
           </span>
+          {!isPass && (ticket.action === 'chap-nhan' || ticket.action === 'luu-kho') && (
+            <span style={{
+              fontSize: 11,
+              fontWeight: 700,
+              padding: '2px 6px',
+              borderRadius: 4,
+              backgroundColor: '#ecfdf5',
+              color: '#047857',
+              border: '1px solid #a7f3d0'
+            }}>
+              Tự xử lý
+            </span>
+          )}
+          {!isPass && ticket.action === 'cach-ly' && (
+            <span style={{
+              fontSize: 11,
+              fontWeight: 700,
+              padding: '2px 6px',
+              borderRadius: 4,
+              backgroundColor: '#fffbeb',
+              color: '#b45309',
+              border: '1px solid #fde68a'
+            }}>
+              Cách ly
+            </span>
+          )}
           {(Number(ticket.sampleQty) > 0 || Number(ticket.errorQty) > 0) && (
             <span style={{ fontSize: 12, color: '#64748b' }}>
               Mẫu: <strong>{ticket.sampleQty || 0}</strong> | Lỗi: <strong style={{ color: Number(ticket.errorQty) > 0 ? '#dc2626' : 'inherit' }}>{ticket.errorQty || 0}</strong>

@@ -355,7 +355,8 @@ export const SCREEN_GROUPS = [
       { key: 'feedback', name: 'Quản lý góp ý', desc: 'Tiếp nhận ý kiến và phản hồi từ người sử dụng.' },
       { key: 'data', name: 'Backup data', desc: 'Sao lưu và đồng bộ cơ sở dữ liệu hệ thống.' },
       { key: 'bugs', name: 'Quản lý Bug', desc: 'Quản lý danh sách lỗi chức năng do người dùng báo cáo.' },
-      { key: 'monitor', name: 'Giám sát hệ thống', desc: 'Theo dõi trực tiếp hiệu năng máy chủ và CSDL.' }
+      { key: 'monitor', name: 'Giám sát hệ thống', desc: 'Theo dõi trực tiếp hiệu năng máy chủ và CSDL.' },
+      { key: 'backup-qrs', name: 'Quản lý mã QR tạm', desc: 'Quản lý mã QR dự phòng/tạm thời dán trên sản phẩm, giải phóng QR kẹt.' }
     ]
   },
   {
@@ -371,8 +372,7 @@ export const SCREEN_GROUPS = [
       { key: 'plan', name: 'Kế hoạch sản xuất', desc: 'Lên kế hoạch sản xuất gỗ, quản lý tiến độ tổ và công đoạn.' },
       { key: 'delivery-tracking', name: 'Kế hoạch bàn giao', desc: 'Theo dõi lịch trình và khối lượng sản phẩm bàn giao.' },
       { key: 'exception-deliveries', name: 'Phiếu ngoại lệ', desc: 'Xử lý các trường hợp bàn giao ngoài quy trình chuẩn.' },
-      { key: 'home', name: 'Trang chủ sản xuất', desc: 'Xem tổng quan báo cáo nhanh sản lượng xưởng.' },
-      { key: 'backup-qrs', name: 'Quản lý mã QR', desc: 'Quản lý mã QR dự phòng dán trên sản phẩm.' }
+      { key: 'home', name: 'Trang chủ sản xuất', desc: 'Xem tổng quan báo cáo nhanh sản lượng xưởng.' }
     ]
   },
   {

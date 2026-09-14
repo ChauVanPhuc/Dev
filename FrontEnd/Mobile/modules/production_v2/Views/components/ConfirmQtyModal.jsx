@@ -113,7 +113,7 @@ const ConfirmQtyModal = ({ open, items, onConfirm, onClose }) => {
                             color: isEmpty ? '#dc2626' : isFull ? '#16a34a' : '#ea580c',
                             whiteSpace: 'nowrap'
                           }}>
-                            {item.qty || 0}/{item.total || 0}
+                            {item.qty || 0}{Number(item.total) > 0 ? `/${item.total}` : ''}
                           </span>
                         )}
                       </td>

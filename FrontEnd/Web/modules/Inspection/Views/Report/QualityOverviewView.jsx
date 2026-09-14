@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
-import { Search, Filter, Edit, FileText, ChevronLeft, ChevronRight, CheckCircle2, X, Eye } from 'lucide-react';
+import { Search, Filter, Edit, FileText, ChevronLeft, ChevronRight, CheckCircle2, X, Eye, RotateCcw, XCircle, Layers, Package, CheckCheck } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
+import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
+import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import '@styles/components.css';
 
 const QualityOverviewView = () => {
@@ -24,9 +26,16 @@ const QualityOverviewView = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOption, setSortOption] = useState('date_desc');
   
+  const { toast } = useToast();
+  
   // Modal Chi tiết / Xác nhận
   const [selectedTask, setSelectedTask] = useState(null);
   const [confirming, setConfirming] = useState(false);
+  const [cancelingId, setCancelingId] = useState(null);
+  const [cancelConfirmModal, setCancelConfirmModal] = useState({
+    isOpen: false,
+    task: null
+  });
   const [confirmSuccessMsg, setConfirmSuccessMsg] = useState('');
 
   // Phân trang
@@ -66,6 +75,8 @@ const QualityOverviewView = () => {
           (task.ticket_code && task.ticket_code.toLowerCase().includes(q)) ||
           (task.task_name && task.task_name.toLowerCase().includes(q)) ||
           (task.category && task.category.toLowerCase().includes(q)) ||
+          (task.stage && task.stage.toLowerCase().includes(q)) ||
+          (task.inspection_type && task.inspection_type.toLowerCase().includes(q)) ||
           (task.part_name && task.part_name.toLowerCase().includes(q)) ||
           (task.batch_no && task.batch_no.toLowerCase().includes(q)) ||
           (task.notes && task.notes.toLowerCase().includes(q))
@@ -95,6 +106,77 @@ const QualityOverviewView = () => {
 
   const totalPages = Math.ceil(filteredTasks.length / limit) || 1;
 
+  // Tự động phân rã danh sách chi tiết / phôi kiểm tra thành List Table
+  const partsList = useMemo(() => {
+    if (!selectedTask) return [];
+
+    // 1. Nếu có mảng details/items từ API hoặc data_json
+    let rawItems = [];
+    if (Array.isArray(selectedTask.details) && selectedTask.details.length > 0) {
+      rawItems = selectedTask.details;
+    } else {
+      let parsedJson = null;
+      if (selectedTask.data_json) {
+        try {
+          parsedJson = typeof selectedTask.data_json === 'string' ? JSON.parse(selectedTask.data_json) : selectedTask.data_json;
+        } catch (e) {}
+      }
+      if (parsedJson?.partsDetails && Array.isArray(parsedJson.partsDetails) && parsedJson.partsDetails.length > 0) {
+        rawItems = parsedJson.partsDetails;
+      } else if (parsedJson?.parts_details && Array.isArray(parsedJson.parts_details) && parsedJson.parts_details.length > 0) {
+        rawItems = parsedJson.parts_details;
+      } else if (parsedJson?.items && Array.isArray(parsedJson.items) && parsedJson.items.length > 0) {
+        rawItems = parsedJson.items;
+      }
+    }
+
+    if (rawItems.length > 0) {
+      return rawItems.map((it, idx) => ({
+        stt: String(idx + 1).padStart(2, '0'),
+        name: it.part_name || it.name || it.product || 'Chi tiết',
+        spec: it.specification || it.spec || selectedTask.specification || 'Tiêu chuẩn'
+      }));
+    }
+
+    // 2. Phân rã từ chuỗi part_name (hỗ trợ phân tách bởi dấu phẩy, chấm phẩy hoặc xuống dòng)
+    const rawPartName = (selectedTask.part_name || selectedTask.product_sku || '').trim();
+    if (!rawPartName || rawPartName === 'N/A') {
+      return [{
+        stt: '01',
+        name: selectedTask.task_name || 'Chi tiết kiểm tra',
+        spec: selectedTask.specification || 'Tiêu chuẩn'
+      }];
+    }
+
+    // Tách các chi tiết nếu có dấu phẩy hoặc xuống dòng
+    const names = rawPartName
+      .split(/[\n\r;]|,\s*(?=[A-ZÀ-Ỹa-z0-9])/)
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    const rawSpec = (selectedTask.specification || '').trim();
+    const specs = rawSpec.includes(',') 
+      ? rawSpec.split(',').map(s => s.trim()).filter(Boolean) 
+      : [];
+
+    if (names.length === 0) {
+      return [{
+        stt: '01',
+        name: rawPartName,
+        spec: rawSpec || 'Tiêu chuẩn'
+      }];
+    }
+
+    return names.map((pName, idx) => {
+      const pSpec = specs[idx] || (specs.length === 1 ? specs[0] : (rawSpec || 'Tiêu chuẩn'));
+      return {
+        stt: String(idx + 1).padStart(2, '0'),
+        name: pName,
+        spec: pSpec
+      };
+    });
+  }, [selectedTask]);
+
   // Xử lý xác nhận phiếu
   const handleConfirmTask = async (task) => {
     if (!task) return;
@@ -110,9 +192,251 @@ const QualityOverviewView = () => {
       }, 1000);
     } catch (error) {
       console.error('Error confirming inspection:', error);
-      alert('Lỗi khi xác nhận phiếu kiểm tra: ' + (error.response?.data?.detail || error.message));
+      toast('error', 'Lỗi khi xác nhận phiếu kiểm tra: ' + (error.response?.data?.detail || error.message));
     } finally {
       setConfirming(false);
+    }
+  };
+
+  // Mở popup xác nhận hủy trả hàng chuẩn giao diện dự án
+  const handleCancelReturn = (task) => {
+    if (!task) return;
+    setCancelConfirmModal({
+      isOpen: true,
+      task: task
+    });
+  };
+
+  // Xác nhận thực hiện hủy trả hàng
+  const handleConfirmCancelReturn = async () => {
+    const task = cancelConfirmModal.task;
+    if (!task) return;
+
+    setCancelingId(task.id);
+    try {
+      await api.post(`/inspections/cancel-return/${task.id}`);
+      toast('success', `Đã hủy trả hàng thành công cho phiếu #${task.ticket_code || task.id}!`);
+      // Cập nhật selectedTask nếu đang mở
+      setSelectedTask(prev => {
+        if (prev && prev.id === task.id) {
+          return {
+            ...prev,
+            action: 'chap-nhan',
+            notes: prev.notes ? `${prev.notes} - [Đã hủy trả hàng]` : '[Đã hủy trả hàng]'
+          };
+        }
+        return prev;
+      });
+      setCancelConfirmModal({ isOpen: false, task: null });
+      fetchPendingTasks();
+    } catch (error) {
+      console.error('Error canceling return:', error);
+      toast('error', 'Lỗi khi hủy trả hàng: ' + (error.response?.data?.detail || error.message));
+    } finally {
+      setCancelingId(null);
+    }
+  };
+
+  // ─── CHỨC NĂNG XÁC NHẬN NHANH HỒ SƠ ĐẠT & KHÔNG TRẢ HÀNG ───
+  // Điều kiện: Phiếu có kết quả ĐẠT và hành động xử lý khác 'Trả hàng'
+  const isEligibleForQuickConfirm = (task) => {
+    if (!task) return false;
+    const isPass = task.result === 'Đạt' || task.result === 'pass';
+    const isNotReturn = task.action !== 'tra-ve';
+    return isPass && isNotReturn;
+  };
+
+  // Danh sách các phiếu đủ điều kiện xác nhận nhanh trong toàn bộ danh sách chờ
+  const eligibleQuickPassTasks = useMemo(() => {
+    return pendingTasks.filter(isEligibleForQuickConfirm);
+  }, [pendingTasks]);
+
+  // Modal xác nhận nhanh đơn lẻ từng dòng
+  const [quickConfirmModal, setQuickConfirmModal] = useState({
+    isOpen: false,
+    task: null
+  });
+  const [quickConfirming, setQuickConfirming] = useState(false);
+
+  // Modal Popup List xác nhận nhanh hàng loạt
+  const [isBatchQuickModalOpen, setIsBatchQuickModalOpen] = useState(false);
+  const [selectedBatchIds, setSelectedBatchIds] = useState(new Set());
+  const [batchSearchQuery, setBatchSearchQuery] = useState('');
+  const [batchFilterType, setBatchFilterType] = useState('all');
+  const [batchFilterAction, setBatchFilterAction] = useState('all');
+  const [batchConfirming, setBatchConfirming] = useState(false);
+
+  // Mở modal xác nhận nhanh 1 phiếu
+  const handleOpenQuickConfirmSingle = (task) => {
+    if (!task) return;
+    setQuickConfirmModal({
+      isOpen: true,
+      task: task
+    });
+  };
+
+  // Mở Popup List xác nhận nhanh toàn bộ phiếu ĐẠT (tự động tick chọn tất cả phiếu ĐẠT)
+  const handleOpenBatchQuickModal = () => {
+    if (eligibleQuickPassTasks.length === 0) {
+      toast('info', 'Hiện tại không có phiếu ĐẠT nào cần xác nhận nhanh.');
+      return;
+    }
+    setSelectedBatchIds(new Set(eligibleQuickPassTasks.map(t => t.id)));
+    setBatchSearchQuery('');
+    setBatchFilterType('all');
+    setBatchFilterAction('all');
+    setIsBatchQuickModalOpen(true);
+  };
+
+  // Chọn/bỏ chọn 1 phiếu trong danh sách Popup List
+  const handleToggleBatchItem = (id) => {
+    setSelectedBatchIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  // Danh sách các loại kiểm tra duy nhất có trong các phiếu ĐẠT
+  const availableBatchInspectionTypes = useMemo(() => {
+    const map = {};
+    eligibleQuickPassTasks.forEach(t => {
+      const info = getCategoryBadgeInfo(t.category, t.stage, t.inspection_type);
+      const lbl = info.label;
+      map[lbl] = (map[lbl] || 0) + 1;
+    });
+    return Object.entries(map).map(([label, count]) => ({ label, count }));
+  }, [eligibleQuickPassTasks]);
+
+  // Danh sách các hành động duy nhất có trong các phiếu ĐẠT
+  const availableBatchActions = useMemo(() => {
+    const map = {};
+    eligibleQuickPassTasks.forEach(t => {
+      const act = t.action || 'chap-nhan';
+      map[act] = (map[act] || 0) + 1;
+    });
+    const actionLabels = {
+      'chap-nhan': 'Chấp nhận',
+      'cach-ly': 'Cách ly',
+      'tra-ve': 'Trả hàng'
+    };
+    return Object.entries(map).map(([actionKey, count]) => ({
+      key: actionKey,
+      label: actionLabels[actionKey] || actionKey,
+      count
+    }));
+  }, [eligibleQuickPassTasks]);
+
+  // Lọc tìm kiếm & bộ lọc bên trong Popup List
+  const filteredBatchTasks = useMemo(() => {
+    let result = eligibleQuickPassTasks;
+
+    // 1. Lọc từ khóa
+    if (batchSearchQuery.trim()) {
+      const q = batchSearchQuery.toLowerCase().trim();
+      result = result.filter(t => 
+        (t.ticket_code && t.ticket_code.toLowerCase().includes(q)) ||
+        (t.task_name && t.task_name.toLowerCase().includes(q)) ||
+        (t.part_name && t.part_name.toLowerCase().includes(q)) ||
+        (t.category && t.category.toLowerCase().includes(q)) ||
+        (t.batch_no && t.batch_no.toLowerCase().includes(q))
+      );
+    }
+
+    // 2. Lọc loại kiểm tra
+    if (batchFilterType !== 'all') {
+      result = result.filter(t => {
+        const info = getCategoryBadgeInfo(t.category, t.stage, t.inspection_type);
+        return info.label === batchFilterType;
+      });
+    }
+
+    // 3. Lọc hành động
+    if (batchFilterAction !== 'all') {
+      result = result.filter(t => (t.action || 'chap-nhan') === batchFilterAction);
+    }
+
+    return result;
+  }, [eligibleQuickPassTasks, batchSearchQuery, batchFilterType, batchFilterAction]);
+
+  // Trạng thái bộ lọc có đang hoạt động hay không
+  const isBatchFilterActive = Boolean(batchSearchQuery.trim() || batchFilterType !== 'all' || batchFilterAction !== 'all');
+
+  // Đặt lại toàn bộ bộ lọc trong popup
+  const handleResetBatchFilters = () => {
+    setBatchSearchQuery('');
+    setBatchFilterType('all');
+    setBatchFilterAction('all');
+  };
+
+  // Khi bộ lọc thay đổi, tự động đồng bộ danh sách đã chọn CHỈ gồm các phiếu đang hiển thị sau lọc
+  useEffect(() => {
+    if (!isBatchQuickModalOpen) return;
+    setSelectedBatchIds(new Set(filteredBatchTasks.map(t => t.id)));
+  }, [batchSearchQuery, batchFilterType, batchFilterAction, isBatchQuickModalOpen]);
+
+  // Trạng thái chọn của danh sách đang hiển thị
+  const isAllFilteredSelected = filteredBatchTasks.length > 0 && filteredBatchTasks.every(t => selectedBatchIds.has(t.id));
+  const someFilteredSelected = filteredBatchTasks.some(t => selectedBatchIds.has(t.id));
+
+  // Chọn tất cả hoặc bỏ chọn tất cả các phiếu đang hiển thị theo bộ lọc
+  const handleToggleFilteredBatch = () => {
+    if (filteredBatchTasks.length === 0) return;
+    if (isAllFilteredSelected) {
+      // Đang chọn đủ các phiếu đang lọc -> Bỏ chọn tất cả
+      setSelectedBatchIds(new Set());
+    } else {
+      // Tích chọn tất cả: CHỈ những cái đang lọc thôi!
+      setSelectedBatchIds(new Set(filteredBatchTasks.map(t => t.id)));
+    }
+  };
+
+  // Thực thi xác nhận nhanh 1 phiếu
+  const handleExecuteQuickConfirmSingle = async () => {
+    const t = quickConfirmModal.task;
+    if (!t) return;
+    setQuickConfirming(true);
+    try {
+      const taskType = t.type || 'input';
+      await api.post(`/inspections/confirm/${taskType}/${t.id}`, {});
+      toast('success', `Đã duyệt nhanh thành công hồ sơ #${t.ticket_code || t.id}!`);
+      setQuickConfirmModal({ isOpen: false, task: null });
+      fetchPendingTasks();
+    } catch (error) {
+      console.error('Error in single quick confirm:', error);
+      toast('error', 'Lỗi khi xác nhận nhanh: ' + (error.response?.data?.detail || error.message));
+    } finally {
+      setQuickConfirming(false);
+    }
+  };
+
+  // Thực thi xác nhận các phiếu đã chọn từ Popup List hàng loạt
+  const handleExecuteBatchConfirm = async () => {
+    // CHỈ lấy các ID vừa được tick chọn vừa nằm trong danh sách đang lọc (nếu có bộ lọc)
+    const validFilteredIds = Array.from(selectedBatchIds).filter(id => 
+      !isBatchFilterActive || filteredBatchTasks.some(t => t.id === id)
+    );
+
+    if (validFilteredIds.length === 0) {
+      toast('warning', 'Vui lòng chọn ít nhất 1 phiếu kiểm tra để xác nhận.');
+      return;
+    }
+
+    setBatchConfirming(true);
+    try {
+      const res = await api.post('/inspections/confirm-batch', { ids: validFilteredIds });
+      toast('success', res.data?.message || `Đã xác nhận nhanh thành công ${validFilteredIds.length} phiếu ĐẠT!`);
+      setIsBatchQuickModalOpen(false);
+      fetchPendingTasks();
+    } catch (error) {
+      console.error('Error batch confirming inspections:', error);
+      toast('error', 'Lỗi khi xác nhận nhanh hàng loạt: ' + (error.response?.data?.detail || error.message));
+    } finally {
+      setBatchConfirming(false);
     }
   };
 
@@ -128,6 +452,340 @@ const QualityOverviewView = () => {
     } catch {
       return dateStr;
     }
+  };
+
+  // Cấu hình hiển thị nhãn và màu sắc cho cột Loại kiểm tra tường minh, trực quan
+  function getCategoryBadgeInfo(category, stage, inspectionType) {
+    const typeKey = (inspectionType || category || '').toLowerCase().trim();
+    const stageName = (stage || '').trim();
+
+    // 1. Kiểm tra mẫu đầu (First Sample / FAI)
+    if (
+      typeKey.includes('first_sample') ||
+      typeKey.includes('mẫu đầu') ||
+      typeKey.includes('mau-dau') ||
+      typeKey.includes('mẫu-đầu')
+    ) {
+      let sub = stageName;
+      if (sub.toLowerCase() === 'nhập kho/đầu vào' || sub.toLowerCase() === 'nhập kho') {
+        sub = 'Đầu vào NVL';
+      }
+      return {
+        label: 'Kiểm tra mẫu đầu',
+        subText: sub || null,
+        bg: '#EFF6FF',
+        border: '#BFDBFE',
+        text: '#1D4ED8',
+        dotColor: '#3B82F6',
+      };
+    }
+
+    // 2. Nhập kho / Đầu vào (Inbound)
+    if (
+      typeKey.includes('nhap-kho') ||
+      typeKey.includes('nhập kho') ||
+      typeKey.includes('dau-vao') ||
+      typeKey.includes('đầu vào') ||
+      typeKey.includes('input')
+    ) {
+      let sub = stageName;
+      if (sub.toLowerCase() === 'nhap-kho' || sub.toLowerCase() === 'nhập kho') {
+        sub = null;
+      }
+      return {
+        label: 'Kiểm tra nhập kho',
+        subText: sub || null,
+        bg: '#ECFDF5',
+        border: '#A7F3D0',
+        text: '#047857',
+        dotColor: '#10B981',
+      };
+    }
+
+    // 3. Tái kiểm tra (Re-inspection)
+    if (
+      typeKey.includes('re_inspect') ||
+      typeKey.includes('tai-kiem') ||
+      typeKey.includes('tái kiểm') ||
+      typeKey.includes('reinspect')
+    ) {
+      return {
+        label: 'Tái kiểm tra',
+        subText: stageName || null,
+        bg: '#FFFBEB',
+        border: '#FDE68A',
+        text: '#B45309',
+        dotColor: '#F59E0B',
+      };
+    }
+
+    // 4. Kiểm tra quy trình (Process)
+    if (typeKey.includes('quy-trinh') || typeKey.includes('quy trình') || typeKey.includes('process')) {
+      return {
+        label: 'Kiểm tra quy trình',
+        subText: stageName || null,
+        bg: '#F0F9FF',
+        border: '#BAE6FD',
+        text: '#0369A1',
+        dotColor: '#0284C7',
+      };
+    }
+
+    // 5. Đo thông số: Độ ẩm / Kích thước / Ngoại quan
+    if (typeKey.includes('do-am') || typeKey.includes('độ ẩm')) {
+      return {
+        label: 'Đo độ ẩm',
+        subText: stageName || null,
+        bg: '#FDF4FF',
+        border: '#F5D0FE',
+        text: '#A21CAF',
+        dotColor: '#D946EF',
+      };
+    }
+    if (typeKey.includes('kich-thuoc') || typeKey.includes('kích thước')) {
+      return {
+        label: 'Đo kích thước',
+        subText: stageName || null,
+        bg: '#FEF2F2',
+        border: '#FECACA',
+        text: '#B91C1C',
+        dotColor: '#EF4444',
+      };
+    }
+    if (typeKey.includes('ngoai-quan') || typeKey.includes('ngoại quan')) {
+      return {
+        label: 'Kiểm tra ngoại quan',
+        subText: stageName || null,
+        bg: '#F0FDF4',
+        border: '#BBF7D0',
+        text: '#15803D',
+        dotColor: '#22C55E',
+      };
+    }
+
+    // 6. Công đoạn sản xuất hoặc mặc định
+    return {
+      label: category && category !== 'Kiểm tra phiếu' ? category : (stageName ? `CĐ: ${stageName}` : 'Kiểm tra công đoạn'),
+      subText: stageName && stageName !== category ? stageName : null,
+      bg: '#FAF5FF',
+      border: '#E9D5FF',
+      text: '#7E22CE',
+      dotColor: '#A855F7',
+    };
+  };
+
+  const renderCategoryBadge = (task) => {
+    if (!task) return null;
+    const info = getCategoryBadgeInfo(task.category, task.stage, task.inspection_type);
+
+    return (
+      <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', gap: '3px' }}>
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '3px 10px',
+            borderRadius: '6px',
+            fontSize: '0.8rem',
+            fontWeight: '600',
+            backgroundColor: info.bg,
+            border: `1px solid ${info.border}`,
+            color: info.text,
+            lineHeight: 1.3,
+            whiteSpace: 'nowrap'
+          }}
+        >
+          <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: info.dotColor, flexShrink: 0 }}></span>
+          <span>{info.label}</span>
+        </span>
+        {info.subText && (
+          <span 
+            style={{ 
+              fontSize: '0.72rem', 
+              color: '#6B7280', 
+              paddingLeft: '4px', 
+              display: 'inline-flex', 
+              alignItems: 'center', 
+              gap: '3px',
+              fontWeight: 500
+            }}
+            title={`Công đoạn: ${info.subText}`}
+          >
+            <span style={{ color: '#9CA3AF' }}>↳</span>
+            <span>{info.subText}</span>
+          </span>
+        )}
+      </div>
+    );
+  };
+
+  const renderActionBadge = (task) => {
+    if (!task) return null;
+    const action = task.action || 'chap-nhan';
+    const isPass = task.result === 'Đạt' || task.result === 'pass';
+
+    if (action === 'tra-ve') {
+      return (
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '3px 10px',
+            borderRadius: '6px',
+            fontSize: '0.8rem',
+            fontWeight: '700',
+            backgroundColor: '#FEF2F2',
+            border: '1px solid #FECACA',
+            color: '#DC2626',
+            lineHeight: 1.3,
+            whiteSpace: 'nowrap'
+          }}
+        >
+          <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#EF4444', flexShrink: 0 }}></span>
+          <span>Trả hàng</span>
+        </span>
+      );
+    }
+
+    if (action === 'cach-ly') {
+      return (
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '3px 10px',
+            borderRadius: '6px',
+            fontSize: '0.8rem',
+            fontWeight: '700',
+            backgroundColor: '#FFFBEB',
+            border: '1px solid #FDE68A',
+            color: '#D97706',
+            lineHeight: 1.3,
+            whiteSpace: 'nowrap'
+          }}
+        >
+          <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#F59E0B', flexShrink: 0 }}></span>
+          <span>Cách ly</span>
+        </span>
+      );
+    }
+
+    // action === 'chap-nhan'
+    if (!isPass) {
+      return (
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '3px 10px',
+            borderRadius: '6px',
+            fontSize: '0.8rem',
+            fontWeight: '700',
+            backgroundColor: '#EFF6FF',
+            border: '1px solid #BFDBFE',
+            color: '#1D4ED8',
+            lineHeight: 1.3,
+            whiteSpace: 'nowrap'
+          }}
+        >
+          <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#3B82F6', flexShrink: 0 }}></span>
+          <span>Chấp nhận / Tự xử lý</span>
+        </span>
+      );
+    }
+
+    return (
+      <span
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '6px',
+          padding: '3px 10px',
+          borderRadius: '6px',
+          fontSize: '0.8rem',
+          fontWeight: '700',
+          backgroundColor: '#ECFDF5',
+          border: '1px solid #A7F3D0',
+          color: '#059669',
+          lineHeight: 1.3,
+          whiteSpace: 'nowrap'
+        }}
+      >
+        <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10B981', flexShrink: 0 }}></span>
+        <span>Chấp nhận</span>
+      </span>
+    );
+  };
+
+  // Tối ưu hiển thị Chi tiết / Phôi kiểm tra gọn gàng, loại bỏ trùng lặp và phân tách các chi tiết rõ ràng
+  const renderCleanBatchTaskName = (t) => {
+    const rawTaskName = (t.task_name || '').trim();
+    const rawPartName = (t.part_name || '').trim();
+
+    // Kiểm tra xem task_name có phải là dạng mặc định "Xác nhận hồ sơ kiểm tra #..." không
+    const isBoilerplate = rawTaskName.toLowerCase().startsWith('xác nhận hồ sơ');
+
+    // Xác định danh sách các chi tiết thực tế
+    let parts = [];
+    if (rawPartName && rawPartName !== 'N/A') {
+      // Phân tách chi tiết nếu có dấu phẩy hoặc xuống dòng
+      parts = rawPartName
+        .split(/[\n\r;]|,\s*(?=[A-ZÀ-Ỹa-z0-9])/)
+        .map(s => s.trim())
+        .filter(Boolean);
+    } else if (isBoilerplate) {
+      // Nếu part_name rỗng nhưng task_name có dạng "Xác nhận hồ sơ kiểm tra #DA123 (Tên chi tiết)"
+      const match = rawTaskName.match(/\((.*?)\)/);
+      if (match && match[1]) {
+        parts = match[1]
+          .split(/[\n\r;]|,\s*(?=[A-ZÀ-Ỹa-z0-9])/)
+          .map(s => s.trim())
+          .filter(Boolean);
+      }
+    }
+
+    // Nếu không tách được gì, dùng rawTaskName hoặc rawPartName sạch
+    if (parts.length === 0) {
+      const fallbackText = isBoilerplate 
+        ? rawTaskName.replace(/^xác nhận hồ sơ kiểm tra\s*#?[a-zA-Z0-9_\-]*\s*/i, '').replace(/^\(|\)$/g, '').trim() || rawTaskName
+        : rawTaskName;
+      return (
+        <div style={{ fontWeight: 600, color: '#2D1A12', fontSize: '0.83rem', lineHeight: 1.35 }}>
+          {fallbackText || 'Chi tiết kiểm tra'}
+        </div>
+      );
+    }
+
+    // Nếu là tên việc có ý nghĩa riêng biệt (không phải boilerplate Xác nhận hồ sơ...)
+    const customTaskTitle = (!isBoilerplate && rawTaskName && rawTaskName !== rawPartName) ? rawTaskName : null;
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+        {customTaskTitle && (
+          <div style={{ fontWeight: 700, color: '#7B5233', fontSize: '0.83rem', marginBottom: '2px' }}>
+            {customTaskTitle}
+          </div>
+        )}
+        {parts.length === 1 ? (
+          <div style={{ fontWeight: 600, color: '#2D1A12', fontSize: '0.83rem', lineHeight: 1.35 }}>
+            {parts[0]}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            {parts.map((item, pIdx) => (
+              <div key={pIdx} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', lineHeight: 1.35 }}>
+                <span style={{ color: '#059669', fontSize: '0.75rem', marginTop: '1px', flexShrink: 0 }}>•</span>
+                <span style={{ fontWeight: 600, color: '#2D1A12', fontSize: '0.82rem' }}>{item}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -191,10 +849,11 @@ const QualityOverviewView = () => {
         .modal-content {
           background: #ffffff;
           border-radius: 16px;
-          width: 90%;
-          max-width: 600px;
-          padding: 24px;
-          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+          width: 92%;
+          max-width: 720px;
+          padding: 0;
+          overflow: hidden;
+          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
           position: relative;
         }
       ` }} />
@@ -221,7 +880,13 @@ const QualityOverviewView = () => {
           isFilterOpen={false}
           onFilterToggle={() => {}}
           extraActions={[
-            { label: 'Hành động khác', onClick: () => {} }
+            {
+              icon: <CheckCircle2 size={16} color="#059669" />,
+              label: 'Xác nhận nhanh phiếu ĐẠT',
+              badge: eligibleQuickPassTasks.length,
+              badgeColor: '#10B981',
+              onClick: handleOpenBatchQuickModal
+            }
           ]}
           importActions={[
             { label: 'Nhập excel', onClick: () => {} }
@@ -258,13 +923,14 @@ const QualityOverviewView = () => {
                     <tr>
                       <th style={{ width: '60px', textAlign: 'center' }}>STT</th>
                       <th style={{ minWidth: '220px' }}>TÊN VIỆC</th>
-                      <th style={{ width: '150px' }}>LOẠI</th>
-                      <th style={{ width: '120px', textAlign: 'center' }}>MỨC ĐỘ ƯU TIÊN</th>
-                      <th style={{ width: '120px', textAlign: 'center' }}>TRẠNG THÁI</th>
-                      <th style={{ width: '140px', textAlign: 'center' }}>NGÀY GHI NHẬN</th>
-                      <th style={{ width: '140px', textAlign: 'center' }}>NGÀY HOÀN THÀNH</th>
+                      <th style={{ width: '180px' }}>LOẠI KIỂM TRA</th>
+                      <th style={{ width: '110px', textAlign: 'center' }}>MỨC ĐỘ ƯU TIÊN</th>
+                      <th style={{ width: '110px', textAlign: 'center' }}>TRẠNG THÁI</th>
+                      <th style={{ width: '160px', textAlign: 'center' }}>HÀNH ĐỘNG XỬ LÝ</th>
+                      <th style={{ width: '130px', textAlign: 'center' }}>NGÀY GHI NHẬN</th>
+                      <th style={{ width: '130px', textAlign: 'center' }}>NGÀY HOÀN THÀNH</th>
                       <th>GHI CHÚ</th>
-                      <th style={{ width: '90px', textAlign: 'center' }}>THAO TÁC</th>
+                      <th style={{ width: '160px', textAlign: 'center' }}>THAO TÁC</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -278,10 +944,13 @@ const QualityOverviewView = () => {
                         >
                           <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#8D6E63' }}>{sttDisplay}</td>
                           <td style={{ fontWeight: '700', color: '#2D1A12' }}>{task.task_name}</td>
-                          <td style={{ fontWeight: '500', color: '#7B5233' }}>{task.category}</td>
+                          <td style={{ verticalAlign: 'middle' }}>{renderCategoryBadge(task)}</td>
                           <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#8D6E63' }}>{task.priority || 3}</td>
                           <td style={{ textAlign: 'center' }}>
                             <span className="badge-chualam">Chưa Làm</span>
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            {renderActionBadge(task)}
                           </td>
                           <td style={{ textAlign: 'center', fontWeight: '600' }}>
                             {formatDate(task.recorded_date)}
@@ -291,7 +960,71 @@ const QualityOverviewView = () => {
                           </td>
                           <td style={{ color: '#6B7280', fontSize: '0.85rem' }}>{task.notes}</td>
                           <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                            <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px' }}>
+                              {isEligibleForQuickConfirm(task) && (
+                                <button
+                                  type="button"
+                                  className="btn-quick-confirm-table"
+                                  title="Xác nhận nhanh hồ sơ ĐẠT"
+                                  onClick={() => handleOpenQuickConfirmSingle(task)}
+                                  disabled={quickConfirming}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    padding: '3px 8px',
+                                    backgroundColor: '#ECFDF5',
+                                    color: '#059669',
+                                    border: '1px solid #A7F3D0',
+                                    borderRadius: '6px',
+                                    fontSize: '0.75rem',
+                                    fontWeight: '700',
+                                    cursor: quickConfirming ? 'not-allowed' : 'pointer',
+                                    transition: 'all 0.15s ease',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.backgroundColor = '#059669';
+                                    e.currentTarget.style.color = '#FFFFFF';
+                                    e.currentTarget.style.borderColor = '#059669';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.backgroundColor = '#ECFDF5';
+                                    e.currentTarget.style.color = '#059669';
+                                    e.currentTarget.style.borderColor = '#A7F3D0';
+                                  }}
+                                >
+                                  <CheckCircle2 size={13} />
+                                  <span>Duyệt nhanh</span>
+                                </button>
+                              )}
+                              {task.action === 'tra-ve' && (
+                                <button
+                                  type="button"
+                                  className="btn-cancel-return-table"
+                                  title="Hủy trả hàng"
+                                  onClick={() => handleCancelReturn(task)}
+                                  disabled={cancelingId === task.id}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    padding: '3px 8px',
+                                    backgroundColor: '#FFFBEB',
+                                    color: '#D97706',
+                                    border: '1px solid #FCD34D',
+                                    borderRadius: '6px',
+                                    fontSize: '0.75rem',
+                                    fontWeight: '700',
+                                    cursor: cancelingId === task.id ? 'not-allowed' : 'pointer',
+                                    transition: 'all 0.2s',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                >
+                                  <RotateCcw size={12} className={cancelingId === task.id ? 'animate-spin' : ''} />
+                                  <span>{cancelingId === task.id ? 'Đang hủy...' : 'Hủy trả'}</span>
+                                </button>
+                              )}
                               <Edit 
                                 size={16} 
                                 className="edit-action-btn"
@@ -347,73 +1080,390 @@ const QualityOverviewView = () => {
       {selectedTask && (
         <div className="modal-overlay" onClick={() => setSelectedTask(null)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #E5E7EB', paddingBottom: '12px' }}>
-              <h3 style={{ margin: 0, color: '#7B5233', fontSize: '1.2rem', fontWeight: 700 }}>
-                Chi tiết phiếu kiểm tra
-              </h3>
-              <button 
-                onClick={() => setSelectedTask(null)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280' }}
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {confirmSuccessMsg ? (
-              <div style={{ padding: '24px', textAlign: 'center', color: '#059669', fontWeight: 600 }}>
-                <CheckCircle2 size={48} style={{ margin: '0 auto 12px display' }} />
-                <div>{confirmSuccessMsg}</div>
+            {/* MODAL HEADER */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '16px 22px',
+              backgroundColor: '#FAF6F0',
+              borderBottom: '1.5px solid #EADCC9'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '10px',
+                  backgroundColor: '#7B5233',
+                  color: '#FFFFFF',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 2px 5px rgba(123, 82, 51, 0.25)',
+                  flexShrink: 0
+                }}>
+                  <FileText size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, color: '#7B5233', fontSize: '1.18rem', fontWeight: 800, letterSpacing: '-0.2px' }}>
+                    Chi tiết phiếu kiểm tra
+                  </h3>
+                  <div style={{ fontSize: '0.8rem', color: '#8D6E63', fontWeight: 600, marginTop: '2px' }}>
+                    Mã phiếu: <strong style={{ color: '#2D1A12' }}>#{selectedTask.ticket_code || selectedTask.id}</strong>
+                  </div>
+                </div>
               </div>
-            ) : (
-              <div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px', fontSize: '0.9rem' }}>
-                  <div><strong>Mã phiếu:</strong> {selectedTask.ticket_code || selectedTask.id}</div>
-                  <div><strong>Loại kiểm tra:</strong> {selectedTask.category}</div>
-                  <div><strong>Tên chi tiết / phôi:</strong> {selectedTask.part_name || 'N/A'}</div>
-                  <div><strong>Mã Lô / PO:</strong> {selectedTask.batch_no || 'N/A'}</div>
-                  <div><strong>Ngày ghi nhận:</strong> {formatDate(selectedTask.recorded_date)}</div>
-                  <div><strong>Người kiểm tra:</strong> {selectedTask.inspector_name || 'QC'}</div>
-                  <div><strong>Kết quả:</strong> <span style={{ color: selectedTask.result === 'Đạt' || selectedTask.result === 'pass' ? '#059669' : '#DC2626', fontWeight: 'bold' }}>{selectedTask.result || 'Đạt'}</span></div>
-                  <div><strong>Trạng thái:</strong> <span className="badge-chualam">Chưa Làm</span></div>
+
+              {/* LABEL KẾT QUẢ GẦN DẤU X & NÚT ĐÓNG */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '0.78rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                    Kết quả:
+                  </span>
+                  {(selectedTask.result === 'Đạt' || selectedTask.result === 'pass') ? (
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      backgroundColor: '#ECFDF5',
+                      color: '#059669',
+                      border: '1.5px solid #A7F3D0',
+                      padding: '4px 12px',
+                      borderRadius: '20px',
+                      fontWeight: 800,
+                      fontSize: '0.84rem',
+                      boxShadow: '0 1px 3px rgba(16, 185, 129, 0.15)'
+                    }}>
+                      <CheckCircle2 size={15} />
+                      Đạt
+                    </span>
+                  ) : (
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      backgroundColor: '#FEF2F2',
+                      color: '#DC2626',
+                      border: '1.5px solid #FECACA',
+                      padding: '4px 12px',
+                      borderRadius: '20px',
+                      fontWeight: 800,
+                      fontSize: '0.84rem',
+                      boxShadow: '0 1px 3px rgba(239, 68, 68, 0.15)'
+                    }}>
+                      <XCircle size={15} />
+                      Không đạt
+                    </span>
+                  )}
                 </div>
 
-                <div style={{ marginBottom: '16px', fontSize: '0.9rem' }}>
-                  <strong>Ghi chú:</strong>
-                  <div style={{ background: '#F9FAFB', padding: '10px', borderRadius: '8px', border: '1px solid #E5E7EB', marginTop: '4px', color: '#4B5563' }}>
+                <button 
+                  onClick={() => setSelectedTask(null)}
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
+                    border: '1.5px solid #EADCC9',
+                    backgroundColor: '#FFFFFF',
+                    color: '#8D6E63',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#FEE2E2';
+                    e.currentTarget.style.color = '#DC2626';
+                    e.currentTarget.style.borderColor = '#FCA5A5';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '#FFFFFF';
+                    e.currentTarget.style.color = '#8D6E63';
+                    e.currentTarget.style.borderColor = '#EADCC9';
+                  }}
+                  title="Đóng (Esc)"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* MODAL BODY */}
+            {confirmSuccessMsg ? (
+              <div style={{ padding: '36px 24px', textAlign: 'center', color: '#059669', fontWeight: 600 }}>
+                <CheckCircle2 size={54} style={{ margin: '0 auto 12px auto', display: 'block', color: '#10B981' }} />
+                <div style={{ fontSize: '1.1rem', fontWeight: 700 }}>{confirmSuccessMsg}</div>
+              </div>
+            ) : (
+              <div style={{ padding: '20px 22px', maxHeight: 'calc(85vh - 140px)', overflowY: 'auto' }}>
+                {/* CARD THÔNG TIN TỔNG QUAN (2 DÒNG x 3 CỘT) */}
+                <div style={{
+                  backgroundColor: '#FCFBF9',
+                  border: '1.5px solid #EADCC9',
+                  borderRadius: '12px',
+                  padding: '14px 16px',
+                  marginBottom: '16px',
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(3, 1fr)',
+                  gap: '12px 16px',
+                  fontSize: '0.88rem'
+                }}>
+                  <div>
+                    <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                      MÃ LÔ / PO
+                    </span>
+                    <strong style={{ color: '#7B5233', fontSize: '0.92rem' }}>
+                      {selectedTask.batch_no || 'N/A'}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                      LOẠI KIỂM TRA
+                    </span>
+                    <div>{renderCategoryBadge(selectedTask)}</div>
+                  </div>
+
+                  <div>
+                    <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                      NGƯỜI KIỂM TRA QC
+                    </span>
+                    <strong style={{ color: '#2D1A12' }}>
+                      {selectedTask.inspector_name || 'QC'}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                      NGÀY GHI NHẬN
+                    </span>
+                    <span style={{ color: '#2D1A12', fontWeight: 600 }}>
+                      {formatDate(selectedTask.recorded_date)}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                      TRẠNG THÁI
+                    </span>
+                    <div>
+                      <span className="badge-chualam">Chưa Làm</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                      HÀNH ĐỘNG XỬ LÝ
+                    </span>
+                    <div>{renderActionBadge(selectedTask)}</div>
+                  </div>
+                </div>
+
+                {/* BẢNG DANH SÁCH CHI TIẾT / PHÔI KIỂM TRA (LIST TABLE) */}
+                <div style={{ marginBottom: '16px' }}>
+                  <div style={{
+                    fontSize: '0.82rem',
+                    color: '#7B5233',
+                    fontWeight: 800,
+                    marginBottom: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.4px'
+                  }}>
+                    <Layers size={15} color="#7B5233" />
+                    <span>Danh sách chi tiết / phôi kiểm tra ({partsList.length})</span>
+                  </div>
+
+                  <div style={{
+                    border: '1.5px solid #EADCC9',
+                    borderRadius: '10px',
+                    overflow: 'hidden',
+                    backgroundColor: '#ffffff',
+                    maxHeight: '200px',
+                    overflowY: 'auto',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+                  }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: '#FAF6F0', borderBottom: '1.5px solid #EADCC9' }}>
+                          <th style={{ padding: '8px 10px', textAlign: 'center', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem', width: '46px' }}>STT</th>
+                          <th style={{ padding: '8px 12px', textAlign: 'left', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem' }}>TÊN CHI TIẾT / PHÔI</th>
+                          <th style={{ padding: '8px 12px', textAlign: 'left', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem', width: '180px' }}>QUY CÁCH / THÔNG SỐ</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {partsList.map((p, idx) => (
+                          <tr 
+                            key={idx} 
+                            style={{ 
+                              borderBottom: idx < partsList.length - 1 ? '1px solid #F3EBE1' : 'none',
+                              transition: 'background-color 0.15s ease'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FCF9F6'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+                          >
+                            <td style={{ padding: '9px 10px', color: '#8D6E63', fontWeight: 700, textAlign: 'center', verticalAlign: 'middle' }}>
+                              {p.stt}
+                            </td>
+                            <td style={{ padding: '9px 12px', color: '#2D1A12', fontWeight: 700, verticalAlign: 'middle', lineHeight: 1.4 }}>
+                              {p.name}
+                            </td>
+                            <td style={{ padding: '9px 12px', verticalAlign: 'middle' }}>
+                              <span style={{
+                                display: 'inline-block',
+                                backgroundColor: '#FAF6F0',
+                                color: '#7B5233',
+                                padding: '3px 8px',
+                                borderRadius: '6px',
+                                border: '1px solid #EADCC9',
+                                fontSize: '0.78rem',
+                                fontWeight: 600,
+                                maxWidth: '190px',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap'
+                              }}>
+                                {p.spec}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* GHI CHÚ */}
+                <div style={{ marginBottom: '16px', fontSize: '0.88rem' }}>
+                  <div style={{ fontSize: '0.76rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px' }}>
+                    Ghi chú
+                  </div>
+                  <div style={{
+                    background: '#FAF6F0',
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid #EADCC9',
+                    color: '#4B5563',
+                    lineHeight: 1.4
+                  }}>
                     {selectedTask.notes || 'Không có ghi chú thêm.'}
                   </div>
                 </div>
 
                 {/* HÌNH ẢNH MINH CHỨNG NẾU CÓ */}
                 {(selectedTask.image_path_1 || selectedTask.image_path_2 || selectedTask.image_path_3) && (
-                  <div style={{ marginBottom: '16px' }}>
-                    <strong>Hình ảnh minh chứng:</strong>
-                    <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                  <div style={{ marginBottom: '8px' }}>
+                    <div style={{ fontSize: '0.76rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', marginBottom: '6px' }}>
+                      Hình ảnh minh chứng
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                       {[selectedTask.image_path_1, selectedTask.image_path_2, selectedTask.image_path_3].filter(Boolean).map((img, idx) => (
-                        <img 
-                          key={idx}
-                          src={img.startsWith('http') ? img : `${api.defaults.baseURL || ''}${img}`}
-                          alt="Minh chứng"
-                          style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #D1D5DB' }}
-                        />
+                        <a 
+                          key={idx} 
+                          href={img.startsWith('http') ? img : `${api.defaults.baseURL || ''}${img}`}
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                        >
+                          <img 
+                            src={img.startsWith('http') ? img : `${api.defaults.baseURL || ''}${img}`}
+                            alt="Minh chứng"
+                            style={{ width: '84px', height: '84px', objectFit: 'cover', borderRadius: '8px', border: '1.5px solid #EADCC9', cursor: 'pointer', transition: 'transform 0.15s' }}
+                            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                          />
+                        </a>
                       ))}
                     </div>
                   </div>
                 )}
+              </div>
+            )}
 
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '20px', borderTop: '1px solid #E5E7EB', paddingTop: '16px' }}>
+            {/* MODAL FOOTER */}
+            {!confirmSuccessMsg && (
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '14px 22px',
+                backgroundColor: '#FAF6F0',
+                borderTop: '1.5px solid #EADCC9'
+              }}>
+                <div>
+                  {selectedTask.action === 'tra-ve' && (
+                    <button
+                      type="button"
+                      onClick={() => handleCancelReturn(selectedTask)}
+                      disabled={confirming || cancelingId === selectedTask.id}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '8px 16px',
+                        borderRadius: '8px',
+                        backgroundColor: '#FEF3C7',
+                        border: '1.5px solid #FDE68A',
+                        color: '#B45309',
+                        fontWeight: 700,
+                        fontSize: '0.85rem',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FDE68A'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FEF3C7'}
+                      title="Hủy trả hàng và chuyển sang Chấp nhận / Tự xử lý"
+                    >
+                      <RotateCcw size={15} className={cancelingId === selectedTask.id ? 'animate-spin' : ''} />
+                      {cancelingId === selectedTask.id ? 'Đang hủy...' : 'Hủy trả hàng'}
+                    </button>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', gap: '10px' }}>
                   <button
+                    type="button"
                     onClick={() => setSelectedTask(null)}
-                    className="btn-toolbar-custom btn-secondary-custom"
                     disabled={confirming}
+                    style={{
+                      padding: '8px 18px',
+                      borderRadius: '8px',
+                      border: '1.5px solid #D1D5DB',
+                      backgroundColor: '#FFFFFF',
+                      color: '#4B5563',
+                      fontWeight: 700,
+                      fontSize: '0.88rem',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
                   >
                     Đóng
                   </button>
                   <button
+                    type="button"
                     onClick={() => handleConfirmTask(selectedTask)}
-                    className="btn-toolbar-custom"
                     disabled={confirming}
-                    style={{ backgroundColor: '#059669' }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '8px 20px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      backgroundColor: '#059669',
+                      color: '#FFFFFF',
+                      fontWeight: 700,
+                      fontSize: '0.88rem',
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 4px rgba(5, 150, 105, 0.25)',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#047857'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#059669'}
                   >
                     <CheckCircle2 size={16} />
                     {confirming ? 'Đang xác nhận...' : 'Xác nhận hồ sơ'}
@@ -421,6 +1471,457 @@ const QualityOverviewView = () => {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+      {/* POPUP XÁC NHẬN HỦY TRẢ HÀNG CHUẨN DỰ ÁN */}
+      <BeautifulConfirmModal
+        isOpen={cancelConfirmModal.isOpen}
+        onClose={() => setCancelConfirmModal({ isOpen: false, task: null })}
+        onConfirm={handleConfirmCancelReturn}
+        title="Xác nhận hủy trả hàng"
+        message={`Bạn có chắc chắn muốn hủy trả hàng cho phiếu #${cancelConfirmModal.task?.ticket_code || cancelConfirmModal.task?.id} không?\nPhiếu sẽ được chuyển sang hành động 'Chấp nhận / Tự xử lý'.`}
+        confirmText={cancelingId ? 'Đang xử lý...' : 'Đồng ý hủy trả'}
+        cancelText="Hủy bỏ"
+        type="warning"
+      />
+
+      {/* POPUP XÁC NHẬN NHANH 1 HỒ SƠ ĐẠT TỪ TỪNG DÒNG */}
+      <BeautifulConfirmModal
+        isOpen={quickConfirmModal.isOpen}
+        onClose={() => setQuickConfirmModal({ isOpen: false, task: null })}
+        onConfirm={handleExecuteQuickConfirmSingle}
+        title="Xác nhận nhanh hồ sơ kiểm tra"
+        message={`Bạn có chắc chắn muốn duyệt nhanh hồ sơ kiểm tra #${quickConfirmModal.task?.ticket_code || quickConfirmModal.task?.id} không?\n\n• Tên việc: ${quickConfirmModal.task?.task_name || 'N/A'}\n• Kết quả kiểm tra: ĐẠT\n• Phương án xử lý: Chấp nhận`}
+        confirmText={quickConfirming ? 'Đang duyệt...' : 'Xác nhận duyệt'}
+        cancelText="Hủy bỏ"
+        type="success"
+      />
+
+      {/* POPUP LIST XÁC NHẬN NHANH TOÀN BỘ PHIẾU ĐẠT TỪ MỤC KHÁC */}
+      {isBatchQuickModalOpen && (
+        <div className="modal-overlay" onClick={() => setIsBatchQuickModalOpen(false)}>
+          <div 
+            className="modal-content" 
+            onClick={(e) => e.stopPropagation()} 
+            style={{ maxWidth: '1120px', width: '96%', maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}
+          >
+            {/* HEADER */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '16px 24px',
+              backgroundColor: '#FAF6F0',
+              borderBottom: '1.5px solid #EADCC9'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '10px',
+                  backgroundColor: '#ECFDF5',
+                  border: '1.5px solid #A7F3D0',
+                  color: '#059669',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 2px 5px rgba(16, 185, 129, 0.15)',
+                  flexShrink: 0
+                }}>
+                  <CheckCheck size={22} color="#059669" />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, color: '#7B5233', fontSize: '1.18rem', fontWeight: 800, letterSpacing: '-0.2px' }}>
+                    Xác nhận nhanh hồ sơ kiểm tra ĐẠT
+                  </h3>
+                  <div style={{ fontSize: '0.8rem', color: '#8D6E63', fontWeight: 600, marginTop: '2px' }}>
+                    Danh sách các phiếu có kết quả ĐẠT và không trả hàng để duyệt đồng loạt
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  backgroundColor: '#ECFDF5',
+                  color: '#047857',
+                  border: '1px solid #A7F3D0',
+                  padding: '4px 12px',
+                  borderRadius: '16px',
+                  fontWeight: 800,
+                  fontSize: '0.82rem'
+                }}>
+                  Đã chọn: {selectedBatchIds.size} / {isBatchFilterActive ? filteredBatchTasks.length : eligibleQuickPassTasks.length} phiếu
+                </span>
+                <button 
+                  onClick={() => setIsBatchQuickModalOpen(false)}
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
+                    border: '1.5px solid #EADCC9',
+                    backgroundColor: '#FFFFFF',
+                    color: '#8D6E63',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#FEE2E2';
+                    e.currentTarget.style.color = '#DC2626';
+                    e.currentTarget.style.borderColor = '#FCA5A5';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '#FFFFFF';
+                    e.currentTarget.style.color = '#8D6E63';
+                    e.currentTarget.style.borderColor = '#EADCC9';
+                  }}
+                  title="Đóng (Esc)"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* BODY */}
+            <div style={{ padding: '16px 24px', flex: 1, overflowY: 'auto' }}>
+              {/* TOP CONTROLS: SEARCH, FILTERS & SMART SELECTION */}
+              <div style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '12px',
+                marginBottom: '14px',
+                padding: '10px 14px',
+                backgroundColor: '#FCFBF9',
+                border: '1px solid #EADCC9',
+                borderRadius: '10px'
+              }}>
+                {/* LEFT: SEARCH & DROPDOWN FILTERS */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', flex: 1 }}>
+                  {/* Search Box */}
+                  <div style={{ position: 'relative', width: '270px' }}>
+                    <Search size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#8D6E63' }} />
+                    <input
+                      type="text"
+                      placeholder="Lọc mã phiếu, tên chi tiết, PO..."
+                      value={batchSearchQuery}
+                      onChange={(e) => setBatchSearchQuery(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '7px 12px 7px 32px',
+                        borderRadius: '8px',
+                        border: batchSearchQuery.trim() ? '1.5px solid #059669' : '1px solid #EADCC9',
+                        fontSize: '0.83rem',
+                        outline: 'none',
+                        backgroundColor: '#FFFFFF',
+                        color: '#2D1A12'
+                      }}
+                    />
+                  </div>
+
+                  {/* Filter by Inspection Type */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <select
+                      value={batchFilterType}
+                      onChange={(e) => setBatchFilterType(e.target.value)}
+                      style={{
+                        padding: '7px 12px',
+                        borderRadius: '8px',
+                        border: batchFilterType !== 'all' ? '1.5px solid #059669' : '1px solid #EADCC9',
+                        backgroundColor: batchFilterType !== 'all' ? '#ECFDF5' : '#FFFFFF',
+                        color: batchFilterType !== 'all' ? '#047857' : '#7B5233',
+                        fontSize: '0.83rem',
+                        fontWeight: 600,
+                        outline: 'none',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <option value="all">Tất cả loại kiểm tra ({eligibleQuickPassTasks.length})</option>
+                      {availableBatchInspectionTypes.map(item => (
+                        <option key={item.label} value={item.label}>
+                          {item.label} ({item.count})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Filter by Action */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <select
+                      value={batchFilterAction}
+                      onChange={(e) => setBatchFilterAction(e.target.value)}
+                      style={{
+                        padding: '7px 12px',
+                        borderRadius: '8px',
+                        border: batchFilterAction !== 'all' ? '1.5px solid #059669' : '1px solid #EADCC9',
+                        backgroundColor: batchFilterAction !== 'all' ? '#ECFDF5' : '#FFFFFF',
+                        color: batchFilterAction !== 'all' ? '#047857' : '#7B5233',
+                        fontSize: '0.83rem',
+                        fontWeight: 600,
+                        outline: 'none',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <option value="all">Tất cả hành động ({eligibleQuickPassTasks.length})</option>
+                      {availableBatchActions.map(item => (
+                        <option key={item.key} value={item.key}>
+                          {item.label} ({item.count})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Reset Filters Button */}
+                  {isBatchFilterActive && (
+                    <button
+                      type="button"
+                      onClick={handleResetBatchFilters}
+                      title="Đặt lại bộ lọc về mặc định"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '6px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid #FCA5A5',
+                        backgroundColor: '#FEF2F2',
+                        color: '#DC2626',
+                        fontSize: '0.78rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <RotateCcw size={12} />
+                      <span>Đặt lại</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* RIGHT: SELECTION TOGGLE BUTTON & RESULT COUNT */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '0.8rem', color: '#8D6E63', fontWeight: 600 }}>
+                    Hiển thị: <strong style={{ color: '#7B5233' }}>{filteredBatchTasks.length}</strong> / {eligibleQuickPassTasks.length}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleToggleFilteredBatch}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      padding: '6px 14px',
+                      borderRadius: '6px',
+                      border: '1px solid #EADCC9',
+                      backgroundColor: '#FAF6F0',
+                      color: '#7B5233',
+                      fontSize: '0.8rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F2ECE4'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FAF6F0'}
+                  >
+                    {isAllFilteredSelected 
+                      ? (isBatchFilterActive ? 'Bỏ chọn các phiếu đang lọc' : 'Bỏ chọn tất cả') 
+                      : (isBatchFilterActive ? `Chọn tất cả đang lọc (${filteredBatchTasks.length})` : 'Chọn tất cả')}
+                  </button>
+                </div>
+              </div>
+
+              {/* LIST TABLE */}
+              <div style={{
+                border: '1.5px solid #EADCC9',
+                borderRadius: '10px',
+                overflow: 'hidden',
+                backgroundColor: '#ffffff',
+                maxHeight: '480px',
+                overflowY: 'auto',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+              }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#FAF6F0', borderBottom: '1.5px solid #EADCC9', position: 'sticky', top: 0, zIndex: 1 }}>
+                      <th style={{ width: '42px', padding: '10px 10px', textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          checked={isAllFilteredSelected}
+                          ref={el => {
+                            if (el) el.indeterminate = !isAllFilteredSelected && someFilteredSelected;
+                          }}
+                          onChange={handleToggleFilteredBatch}
+                          title={isAllFilteredSelected ? 'Bỏ chọn tất cả đang hiển thị' : 'Chọn tất cả đang hiển thị'}
+                          style={{ cursor: 'pointer', accentColor: '#059669', width: '16px', height: '16px' }}
+                        />
+                      </th>
+                      <th style={{ width: '48px', padding: '10px 6px', textAlign: 'center', color: '#7B5233', fontWeight: 800, fontSize: '0.78rem' }}>STT</th>
+                      <th style={{ width: '110px', padding: '10px 12px', textAlign: 'left', color: '#7B5233', fontWeight: 800, fontSize: '0.78rem' }}>MÃ PHIẾU</th>
+                      <th style={{ minWidth: '360px', padding: '10px 12px', textAlign: 'left', color: '#7B5233', fontWeight: 800, fontSize: '0.78rem' }}>CHI TIẾT / PHÔI KIỂM TRA</th>
+                      <th style={{ width: '165px', padding: '10px 12px', textAlign: 'left', color: '#7B5233', fontWeight: 800, fontSize: '0.78rem' }}>LOẠI KIỂM TRA</th>
+                      <th style={{ width: '95px', padding: '10px 10px', textAlign: 'center', color: '#7B5233', fontWeight: 800, fontSize: '0.78rem' }}>KẾT QUẢ</th>
+                      <th style={{ width: '125px', padding: '10px 10px', textAlign: 'center', color: '#7B5233', fontWeight: 800, fontSize: '0.78rem' }}>HÀNH ĐỘNG</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredBatchTasks.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} style={{ textAlign: 'center', padding: '28px', color: '#9CA3AF' }}>
+                          <div>Không tìm thấy phiếu nào phù hợp với bộ lọc hiện tại.</div>
+                          {isBatchFilterActive && (
+                            <button
+                              type="button"
+                              onClick={handleResetBatchFilters}
+                              style={{
+                                marginTop: '10px',
+                                padding: '6px 14px',
+                                borderRadius: '6px',
+                                border: '1px solid #EADCC9',
+                                backgroundColor: '#FAF6F0',
+                                color: '#7B5233',
+                                fontSize: '0.8rem',
+                                fontWeight: 700,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Xóa bộ lọc để xem tất cả
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredBatchTasks.map((t, idx) => {
+                        const isChecked = selectedBatchIds.has(t.id);
+                        return (
+                          <tr
+                            key={t.id}
+                            onClick={() => handleToggleBatchItem(t.id)}
+                            style={{
+                              backgroundColor: isChecked ? '#F0FDF4' : '#FFFFFF',
+                              borderBottom: idx < filteredBatchTasks.length - 1 ? '1px solid #F3EBE1' : 'none',
+                              cursor: 'pointer',
+                              transition: 'background-color 0.15s ease'
+                            }}
+                          >
+                            <td style={{ textAlign: 'center', padding: '10px 10px', verticalAlign: 'middle' }} onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => handleToggleBatchItem(t.id)}
+                                style={{ cursor: 'pointer', accentColor: '#059669', width: '15px', height: '15px' }}
+                              />
+                            </td>
+                            <td style={{ textAlign: 'center', padding: '10px 6px', color: '#8D6E63', fontWeight: 700, verticalAlign: 'middle' }}>
+                              {String(idx + 1).padStart(2, '0')}
+                            </td>
+                            <td style={{ padding: '10px 12px', fontWeight: 700, color: '#7B5233', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+                              #{t.ticket_code || t.id}
+                            </td>
+                            <td style={{ padding: '10px 12px', verticalAlign: 'middle' }}>
+                              {renderCleanBatchTaskName(t)}
+                            </td>
+                            <td style={{ padding: '10px 12px', verticalAlign: 'middle' }}>
+                              {renderCategoryBadge(t)}
+                            </td>
+                            <td style={{ padding: '10px 10px', textAlign: 'center', verticalAlign: 'middle' }}>
+                              <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                backgroundColor: '#ECFDF5',
+                                color: '#059669',
+                                border: '1px solid #A7F3D0',
+                                padding: '3px 10px',
+                                borderRadius: '12px',
+                                fontWeight: 800,
+                                fontSize: '0.76rem'
+                              }}>
+                                <CheckCircle2 size={12} />
+                                Đạt
+                              </span>
+                            </td>
+                            <td style={{ padding: '10px 10px', textAlign: 'center', verticalAlign: 'middle' }}>
+                              {renderActionBadge(t)}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* FOOTER */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '14px 22px',
+              backgroundColor: '#FAF6F0',
+              borderTop: '1.5px solid #EADCC9'
+            }}>
+              <div style={{ fontSize: '0.84rem', color: '#7B5233', fontWeight: 600 }}>
+                Đã chọn: <strong style={{ color: '#047857', fontSize: '0.95rem' }}>{selectedBatchIds.size}</strong> / {isBatchFilterActive ? `${filteredBatchTasks.length} phiếu đang lọc` : `${eligibleQuickPassTasks.length} phiếu`}
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsBatchQuickModalOpen(false)}
+                  disabled={batchConfirming}
+                  style={{
+                    padding: '8px 18px',
+                    borderRadius: '8px',
+                    border: '1.5px solid #D1D5DB',
+                    backgroundColor: '#FFFFFF',
+                    color: '#4B5563',
+                    fontWeight: 700,
+                    fontSize: '0.85rem',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExecuteBatchConfirm}
+                  disabled={batchConfirming || selectedBatchIds.size === 0}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 20px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    backgroundColor: selectedBatchIds.size === 0 ? '#9CA3AF' : '#059669',
+                    color: '#FFFFFF',
+                    fontWeight: 700,
+                    fontSize: '0.85rem',
+                    cursor: (batchConfirming || selectedBatchIds.size === 0) ? 'not-allowed' : 'pointer',
+                    boxShadow: selectedBatchIds.size === 0 ? 'none' : '0 2px 4px rgba(5, 150, 105, 0.25)',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (selectedBatchIds.size > 0 && !batchConfirming) e.currentTarget.style.backgroundColor = '#047857';
+                  }}
+                  onMouseLeave={(e) => {
+                    if (selectedBatchIds.size > 0 && !batchConfirming) e.currentTarget.style.backgroundColor = '#059669';
+                  }}
+                >
+                  <CheckCheck size={16} className={batchConfirming ? 'animate-spin' : ''} />
+                  <span>{batchConfirming ? 'Đang duyệt...' : `Xác nhận duyệt (${selectedBatchIds.size} phiếu)`}</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

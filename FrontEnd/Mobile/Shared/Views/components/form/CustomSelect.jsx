@@ -10,6 +10,7 @@ const CustomSelect = ({
   value,
   options = [],
   onChange,
+  onSearch,
   style,
   disabled = false,
   placeholder,
@@ -22,6 +23,14 @@ const CustomSelect = ({
   const listContainerRef = useRef(null)
   const selectedItemRef = useRef(null)
   const inputRef = useRef(null)
+  const searchTimerRef = useRef(null)
+
+  // Cleanup search timer on unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    }
+  }, [])
 
   // Lấy nhãn hiển thị của Option đang chọn
   const selectedOption = options.find((opt) => String(opt.value) === String(value))
@@ -108,6 +117,12 @@ const CustomSelect = ({
     if (!isOpen) setIsOpen(true)
     if (onChange) {
       onChange(val)
+    }
+    if (onSearch) {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+      searchTimerRef.current = setTimeout(() => {
+        onSearch(val)
+      }, 250)
     }
   }
 

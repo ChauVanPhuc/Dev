@@ -322,13 +322,51 @@ const ProductDetailView = () => {
         const isChild = currentStt.includes('.');
         const rowType = item.component_type || item.type || (isChild ? (parentName || 'Chi tiết') : 'Sản phẩm');
 
+        // Gán chuẩn xác:
+        // - output_stage (Công đoạn ra trong Excel) -> stageFrom (Công đoạn giao)
+        // - input_stage (Cộng đoạn vào trong Excel) -> stageTo (Công đoạn nhận)
+        let fromStage = item.output_stage || item.stageFrom;
+        let toStage = item.input_stage || item.stageTo;
+
+        if (!fromStage && toStage) {
+          const toLower = toStage.toLowerCase();
+          if (toLower.includes('đóng gói')) fromStage = 'Sơn';
+          else if (toLower.includes('sơn')) fromStage = 'Lắp ráp';
+          else if (toLower.includes('lắp ráp')) fromStage = 'Định hình';
+          else if (toLower.includes('định hình')) fromStage = isChild ? 'Tạo phôi' : 'Kho';
+          else if (toLower.includes('phôi')) fromStage = 'Kho';
+          else fromStage = 'Tạo phôi';
+        }
+
+        if (!toStage && fromStage) {
+          const fromLower = fromStage.toLowerCase();
+          if (fromLower.includes('phôi')) toStage = 'Định hình';
+          else if (fromLower.includes('định hình')) toStage = 'Lắp ráp';
+          else if (fromLower.includes('lắp ráp')) toStage = 'Sơn';
+          else if (fromLower.includes('sơn')) toStage = 'Đóng gói';
+          else if (fromLower.includes('đóng gói')) toStage = 'Kho';
+          else toStage = 'Lắp ráp';
+        }
+
+        if (!fromStage) fromStage = isChild ? 'Tạo phôi' : 'Định hình';
+        if (!toStage) toStage = isChild ? 'Định hình' : 'Lắp ráp';
+
+        if (fromStage === toStage) {
+          const stgLower = fromStage.toLowerCase();
+          if (stgLower.includes('định hình')) fromStage = 'Tạo phôi';
+          else if (stgLower.includes('lắp ráp')) fromStage = 'Định hình';
+          else if (stgLower.includes('sơn')) fromStage = 'Lắp ráp';
+          else if (stgLower.includes('đóng gói')) fromStage = 'Sơn';
+          else fromStage = 'Kho';
+        }
+
         result.push({
           id: item.id || `bom-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           parent_id: item.parent_id || null,
           stt: currentStt,
           type: rowType,
-          stageFrom: item.input_stage || item.stageFrom || (isChild ? 'Tạo phôi' : 'Định hình'),
-          stageTo: item.output_stage || item.stageTo || (isChild ? 'Định hình' : 'Lắp ráp'),
+          stageFrom: fromStage,
+          stageTo: toStage,
           compCode: item.component_sku || item.sku || item.compCode || `SKU.${currentStt}`,
           compName: item.name || item.compName || 'Cụm chi tiết',
           quantity: item.quantity !== undefined ? item.quantity : 1,
@@ -1238,8 +1276,8 @@ const ProductDetailView = () => {
             unit: r.unit || 'Cái',
             material: r.material || 'Gỗ / MDF',
             specification: r.spec || '',
-            input_stage: r.stageFrom,
-            output_stage: r.stageTo,
+            output_stage: r.stageFrom, // Công đoạn giao
+            input_stage: r.stageTo,    // Công đoạn nhận
             description: r.note || ''
           })),
         materials: materialRows.map((m, idx) => ({

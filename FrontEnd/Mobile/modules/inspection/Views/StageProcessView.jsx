@@ -280,7 +280,7 @@ const StageProcessView = () => {
             }}
             style={{ width: '100%', height: '44px', padding: '0 12px', borderRadius: '10px', border: '1px solid #cbd5e1', backgroundColor: '#fff', fontSize: '14px', fontWeight: '600', color: '#4b301e', outline: 'none' }}
           >
-            <option value="">-- Chọn quy trình --</option>
+            <option value="">Chọn quy trình</option>
             {processes.map(p => (
               <option key={p.id} value={p.id}>{p.code} - {p.name}</option>
             ))}
@@ -338,7 +338,7 @@ const StageProcessView = () => {
                         onChange={(e) => setSelectedStepId(e.target.value)}
                         style={{ width: '100%', height: '40px', padding: '0 12px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#fff', fontSize: '13px', color: '#4b301e', outline: 'none' }}
                       >
-                        <option value="">-- Chọn hướng dẫn --</option>
+                        <option value="">Chọn hướng dẫn</option>
                         {workInstructions.map((inst, idx) => (
                           <option key={inst.id} value={inst.id}>{inst.title || `Hướng dẫn thực hiện ${idx + 1}`} ({(inst.steps || []).length} công đoạn)</option>
                         ))}

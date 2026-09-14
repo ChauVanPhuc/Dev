@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import claimService from '../services/claim.service';
+import '../styles/claim.css';
 
 import { useClaimFilter } from '../hooks/useClaimFilter';
 import { useClaimStatistics } from '../hooks/useClaimStatistics';

@@ -189,7 +189,7 @@ const SearchableSelect = ({
                 whiteSpace: 'nowrap'
               }}
             >
-              QA Track
+              QA
             </span>
           ) : null}
 
@@ -284,17 +284,14 @@ const SearchableSelect = ({
                     if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
                   }}
                 >
-                  {/* Left: Code & Name */}
+                  {/* Left: Defect Name (bỏ mã lỗi) */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', flex: 1 }}>
-                    {opt.code ? (
-                      <strong style={{ color: '#4B301E', flexShrink: 0 }}>[{opt.code}]</strong>
-                    ) : null}
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {opt.name || opt.label}
                     </span>
                   </div>
 
-                  {/* Right: Badge CTQ / QA Track */}
+                  {/* Right: Badge CTQ / QA */}
                   {isOptionCTQ ? (
                     <span
                       style={{
@@ -326,7 +323,7 @@ const SearchableSelect = ({
                         flexShrink: 0
                       }}
                     >
-                      QA Track
+                      QA
                     </span>
                   ) : opt.badge ? (
                     <span

@@ -10,13 +10,18 @@ from modules.inspection_guide.services.inspection_guide_service import (
     create_step, update_step, delete_step, reorder_steps,
     create_sub_step, update_sub_step, delete_sub_step, reorder_sub_steps,
     upload_images, delete_image, set_assignments, get_mobile_guide,
-    generate_next_code
+    check_assignment_conflicts,
+    generate_next_code,
+    list_parameters, get_parameter, create_parameter, update_parameter, delete_parameter,
+    set_guide_parameters, seed_default_parameters
 )
 from modules.inspection_guide.schemas.inspection_guide import (
     InspectionGuideCreate, InspectionGuideUpdate, InspectionGuideOut, InspectionGuideListOut,
     InspectionGuideStepCreate, InspectionGuideStepUpdate, InspectionGuideStepOut,
     InspectionGuideSubStepCreate, InspectionGuideSubStepUpdate, InspectionGuideSubStepOut,
-    GuideAssignmentPayload, ReorderPayload
+    GuideAssignmentPayload, ReorderPayload,
+    InspectionParameterOut, InspectionParameterCreate, InspectionParameterUpdate,
+    GuideParameterPayload
 )
 
 router = APIRouter()
@@ -51,9 +56,11 @@ def mobile_guide(
     product_id: Optional[int] = None,
     category_id: Optional[int] = None,
     stage_id: Optional[int] = None,
+    parameter: Optional[str] = None,
+    parameter_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
-    guide = get_mobile_guide(db, inspection_type, product_id, category_id, stage_id)
+    guide = get_mobile_guide(db, inspection_type, product_id, category_id, stage_id, parameter, parameter_id)
     if not guide:
         raise HTTPException(status_code=404, detail="Không tìm thấy hướng dẫn cho loại phiếu này.")
     return guide
@@ -208,6 +215,26 @@ def delete_step_image(guide_id: int, step_id: int, image_id: int, db: Session = 
 
 
 # --- Assignments ---
+@router.post("/{guide_id}/check-conflicts")
+def check_guide_assignment_conflicts(guide_id: int, payload: GuideAssignmentPayload, db: Session = Depends(get_db)):
+    data = [a.model_dump() for a in payload.assignments]
+    conflicts = check_assignment_conflicts(db, guide_id, data)
+    return {
+        "has_conflict": len(conflicts) > 0,
+        "conflicts": conflicts
+    }
+
+
+@router.post("/check-conflicts")
+def check_new_assignment_conflicts(payload: GuideAssignmentPayload, db: Session = Depends(get_db)):
+    data = [a.model_dump() for a in payload.assignments]
+    conflicts = check_assignment_conflicts(db, None, data)
+    return {
+        "has_conflict": len(conflicts) > 0,
+        "conflicts": conflicts
+    }
+
+
 @router.post("/{guide_id}/assign")
 def assign_guide(guide_id: int, payload: GuideAssignmentPayload, db: Session = Depends(get_db)):
     existing = get_guide(db, guide_id)
@@ -216,3 +243,58 @@ def assign_guide(guide_id: int, payload: GuideAssignmentPayload, db: Session = D
     data = [a.model_dump() for a in payload.assignments]
     set_assignments(db, guide_id, data)
     return {"message": "Đã cập nhật gán loại phiếu."}
+
+
+# --- Guide Parameters (liên kết hướng dẫn ↔ thông số) ---
+@router.post("/{guide_id}/parameters")
+def assign_guide_parameters(guide_id: int, payload: GuideParameterPayload, db: Session = Depends(get_db)):
+    existing = get_guide(db, guide_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Không tìm thấy hướng dẫn.")
+    set_guide_parameters(db, guide_id, payload.parameter_ids)
+    return {"message": "Đã cập nhật thông số đo cho hướng dẫn."}
+
+
+# ==================== INSPECTION PARAMETERS (Master Data) ====================
+
+parameter_router = APIRouter()
+
+
+@parameter_router.get("", response_model=List[InspectionParameterOut])
+def read_parameters(include_inactive: bool = False, db: Session = Depends(get_db)):
+    # Auto-seed defaults on first access
+    seed_default_parameters(db)
+    return list_parameters(db, include_inactive)
+
+
+@parameter_router.get("/{param_id}", response_model=InspectionParameterOut)
+def read_parameter(param_id: int, db: Session = Depends(get_db)):
+    param = get_parameter(db, param_id)
+    if not param:
+        raise HTTPException(status_code=404, detail="Không tìm thấy thông số.")
+    return param
+
+
+@parameter_router.post("", response_model=InspectionParameterOut)
+def create_new_parameter(body: InspectionParameterCreate, db: Session = Depends(get_db)):
+    return create_parameter(
+        db, body.code, body.name, body.unit,
+        body.default_min, body.default_max, body.display_order or 0
+    )
+
+
+@parameter_router.put("/{param_id}", response_model=InspectionParameterOut)
+def update_existing_parameter(param_id: int, body: InspectionParameterUpdate, db: Session = Depends(get_db)):
+    param = get_parameter(db, param_id)
+    if not param:
+        raise HTTPException(status_code=404, detail="Không tìm thấy thông số.")
+    return update_parameter(db, param, **body.model_dump(exclude_unset=True))
+
+
+@parameter_router.delete("/{param_id}")
+def delete_existing_parameter(param_id: int, db: Session = Depends(get_db)):
+    param = get_parameter(db, param_id)
+    if not param:
+        raise HTTPException(status_code=404, detail="Không tìm thấy thông số.")
+    delete_parameter(db, param)
+    return {"message": "Đã xóa thông số."}

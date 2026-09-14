@@ -48,11 +48,14 @@ const SOSGuideManagementView = () => {
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/sos-guides');
 
   useEffect(() => {
-    if (screenCode && title) {
-      if (setCustomTitle) setCustomTitle(title);
-      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
-      if (setCustomScreenCode) setCustomScreenCode(screenCode);
-    }
+    if (setCustomTitle) setCustomTitle(title || 'Hướng dẫn thao tác (SOS)');
+    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'Tài liệu ban hành');
+    if (setCustomScreenCode && screenCode) setCustomScreenCode(screenCode);
+    return () => {
+      if (setCustomTitle) setCustomTitle('');
+      if (setCustomSubtitle) setCustomSubtitle('');
+      if (setCustomScreenCode) setCustomScreenCode('');
+    };
   }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   const [guides, setGuides] = useState([]);
@@ -200,88 +203,6 @@ const SOSGuideManagementView = () => {
         boxSizing: 'border-box'
       }}
     >
-      {/* Header Bar */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 12,
-        flexWrap: 'wrap',
-        gap: 12,
-        flexShrink: 0
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{
-            width: 40,
-            height: 40,
-            borderRadius: 10,
-            backgroundColor: THEME.primary,
-            color: '#FFF',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 4px 12px rgba(123, 82, 51, 0.2)'
-          }}>
-            <FileText size={20} />
-          </div>
-          <div>
-            <div style={{ fontSize: 11.5, color: '#64748B', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-              Tài liệu ban hành
-            </div>
-            <h1 style={{ margin: 0, fontSize: '1.4rem', color: '#1E293B', fontWeight: 800 }}>
-              Hướng dẫn thao tác (SOS)
-            </h1>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button
-            type="button"
-            onClick={fetchGuides}
-            disabled={loading}
-            style={{
-              padding: '8px 14px',
-              borderRadius: 8,
-              border: `1px solid ${THEME.borderLight}`,
-              backgroundColor: '#FFF',
-              color: THEME.primary,
-              fontWeight: 700,
-              fontSize: 13,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
-            }}
-          >
-            <RefreshCw size={15} className={loading ? 'spin' : ''} /> Làm mới
-          </button>
-
-          <button
-            type="button"
-            onClick={() => navigate('/admin/sos-guides/create')}
-            style={{
-              padding: '8px 16px',
-              borderRadius: 8,
-              backgroundColor: THEME.primary,
-              color: '#FFF',
-              border: 'none',
-              fontWeight: 700,
-              fontSize: 13.5,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              boxShadow: '0 4px 12px rgba(123, 82, 51, 0.25)',
-              transition: 'all 0.2s'
-            }}
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = THEME.hover}
-            onMouseLeave={e => e.currentTarget.style.backgroundColor = THEME.primary}
-          >
-            <Plus size={16} /> Tạo SOS mới
-          </button>
-        </div>
-      </div>
 
       {/* KPI Metric Cards */}
       <div style={{
@@ -491,6 +412,54 @@ const SOSGuideManagementView = () => {
             <LayoutGrid size={14} /> Lưới
           </button>
         </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button
+            type="button"
+            onClick={fetchGuides}
+            disabled={loading}
+            style={{
+              padding: '7px 12px',
+              borderRadius: 8,
+              border: `1px solid ${THEME.borderLight}`,
+              backgroundColor: '#FFF',
+              color: THEME.primary,
+              fontWeight: 700,
+              fontSize: 13,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+            }}
+          >
+            <RefreshCw size={14} className={loading ? 'spin' : ''} /> Làm mới
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate('/admin/sos-guides/create')}
+            style={{
+              padding: '7px 14px',
+              borderRadius: 8,
+              backgroundColor: THEME.primary,
+              color: '#FFF',
+              border: 'none',
+              fontWeight: 700,
+              fontSize: 13,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              boxShadow: '0 3px 8px rgba(123, 82, 51, 0.2)',
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = THEME.hover}
+            onMouseLeave={e => e.currentTarget.style.backgroundColor = THEME.primary}
+          >
+            <Plus size={15} /> Tạo SOS mới
+          </button>
+        </div>
       </div>
 
       {/* Table View */}
@@ -557,11 +526,14 @@ const SOSGuideManagementView = () => {
                         color: '#FFF',
                         border: 'none',
                         fontWeight: 700,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
                         fontSize: 13,
                         cursor: 'pointer'
                       }}
                     >
-                      + Tạo SOS mới
+                      <Plus size={14} /> Tạo SOS mới
                     </button>
                   </td>
                 </tr>

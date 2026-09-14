@@ -349,7 +349,7 @@ export const Section6TopLinesTable = () => {
     // Mẫu 4: Biên bản xử lý sự cố vi phạm chất lượng chuyền
     else if (templateType === 'violation') {
       tplHTML = `
-        <h2 style="color: #B94A3D; border-bottom: 2px solid #B94A3D; padding-bottom: 6px; font-size: 1.25rem;">BIÊN BẢN XỬ LÝ SỰ CỐ VI PHẠM KỸ THUẬT & CHẤT LƯỢNG</h2>
+        <h2 style="color: #5B3924; border-bottom: 2px solid #5B3924; padding-bottom: 6px; font-size: 1.25rem;">BIÊN BẢN XỬ LÝ SỰ CỐ VI PHẠM KỸ THUẬT & CHẤT LƯỢNG</h2>
         <p style="margin: 6px 0;"><strong>Địa điểm:</strong> Chuyền Ghép Mộng Xưởng 2 | <strong>Thời gian:</strong> ${new Date().toLocaleDateString('vi-VN')} - ${new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</p>
         
         <div style="background-color: #FEF2F2; border-left: 4px solid #EF4444; border-radius: 4px; padding: 10px 14px; margin: 12px 0; font-size: 0.88rem;">
@@ -579,7 +579,7 @@ export const Section6TopLinesTable = () => {
                     alignItems: 'center',
                     transition: 'background 0.15s ease'
                   }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = '#B94A3D'}
+                  onMouseEnter={(e) => e.currentTarget.style.background = '#70452D'}
                   onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 253, 252, 0.15)'}
                 >
                   <X size={16} />
@@ -1055,9 +1055,9 @@ export const Section6TopLinesTable = () => {
                       type="button"
                       onClick={() => execCmd('removeFormat')}
                       title="Xóa định dạng"
-                      style={{ width: '28px', height: '28px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      style={{ width: '28px', height: '28px', background: '#F5EFEA', border: '1px solid #D5C9BD', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                     >
-                      <Eraser size={14} color="#B94A3D" />
+                      <Eraser size={14} color="#70452D" />
                     </button>
                   </div>
                 </>
@@ -1441,16 +1441,16 @@ export const Section6TopLinesTable = () => {
                     onClick={() => loadTemplate('violation')}
                     style={{
                       padding: '5px 12px',
-                      background: '#FEF2F2',
-                      border: '1px solid #FECACA',
+                      background: '#F5EFEA',
+                      border: '1px solid #D5C9BD',
                       borderRadius: '4px',
                       cursor: 'pointer',
                       fontSize: '0.78rem',
                       fontWeight: '700',
-                      color: '#B94A3D'
+                      color: '#70452D'
                     }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = '#FEE2E2'}
-                    onMouseLeave={(e) => e.currentTarget.style.background = '#FEF2F2'}
+                    onMouseEnter={(e) => e.currentTarget.style.background = '#EAE3DC'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = '#F5EFEA'}
                   >
                     Biên bản xử lý sự cố chuyền
                   </button>

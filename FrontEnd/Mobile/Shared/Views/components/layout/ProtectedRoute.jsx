@@ -39,7 +39,7 @@ const mapPathToPermissionKeys = (pathname) => {
   if (path.startsWith('/production/orders') || path.startsWith('/production/order-detail')) return ['/production/orders', 'production-orders', '/plan'];
   if (path.startsWith('/production/plans')) return ['/production/plans', 'production-plans', '/plan'];
   if (path.startsWith('/production/transfers')) return ['/production/transfers', 'production-transfers', '/delivery-info'];
-  if (path.startsWith('/production_v2')) return ['/production_v2', 'mobile_production_v2', '/delivery-info', '/inspection-stage'];
+  if (path.startsWith('/production_v2') || path.startsWith('/production-v2')) return ['/production_v2', 'mobile_production_v2', '/delivery-info', '/inspection-stage'];
 
   return [path, path.replace(/^\//, '')];
 };

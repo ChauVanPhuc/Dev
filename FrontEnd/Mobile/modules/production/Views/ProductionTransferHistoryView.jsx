@@ -547,11 +547,11 @@ const ProductionTransferHistoryView = () => {
                         <div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <span style={{ fontWeight: '800', color: '#1e293b' }}>
-                              [{df.code || 'ERR'}] {df.name || 'Lỗi kiểm tra'}
+                              {df.name || 'Lỗi kiểm tra'}
                             </span>
                             {df.isQA && (
                               <span style={{ fontSize: '0.65rem', fontWeight: '800', backgroundColor: '#e0e7ff', color: '#4338ca', padding: '1px 5px', borderRadius: '4px' }}>
-                                QA Track
+                                QA
                               </span>
                             )}
                             {df.isCTQ && (

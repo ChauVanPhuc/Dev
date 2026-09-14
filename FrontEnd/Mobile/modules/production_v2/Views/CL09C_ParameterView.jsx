@@ -1,6 +1,8 @@
 import React, { useState } from 'react'
+import { Plus, ScanLine } from 'lucide-react'
 import CustomSelect from '@mobile/Shared/Views/components/form/CustomSelect'
 import FormMultiSearchSelect from '@mobile/Shared/Views/components/form/FormMultiSearchSelect'
+import QRScanner from '@mobile/Shared/Views/components/media/QRScanner'
 import { useInspectionFormBase } from '../Controllers/useInspectionFormBase'
 import InspectionFormShell from './components/InspectionFormShell'
 import InspectionStepsTable from './components/InspectionStepsTable'
@@ -21,6 +23,7 @@ const CL09C_ParameterView = () => {
     setParamPo,
     handleParamPoChange,
     poOptions,
+    handlePoSearch,
     palletCode,
     setPalletCode,
     palletOptions,
@@ -41,10 +44,13 @@ const CL09C_ParameterView = () => {
     handleStepResultChange,
     result,
     setResult,
+    action,
+    setAction,
     note,
     setNote,
     errors,
     defectOptions,
+    allDefectOptions,
     updateError,
     removeErrorRow,
     addErrorRow,
@@ -56,6 +62,18 @@ const CL09C_ParameterView = () => {
   } = formState
 
   const [targetType, setTargetType] = useState('po') // 'po' | 'pallet'
+  const [isQrScannerOpen, setIsQrScannerOpen] = useState(false)
+
+  const handleInFormPalletScan = (scanned) => {
+    setIsQrScannerOpen(false)
+    if (!scanned) return
+    const trimmed = String(scanned).trim()
+    if (handlePalletSelect) {
+      handlePalletSelect(trimmed)
+    } else {
+      setPalletCode(trimmed)
+    }
+  }
 
   const currentStage = paramStage || stage
   const hasStage = Boolean(currentStage)
@@ -79,7 +97,7 @@ const CL09C_ParameterView = () => {
       subTitle="CL09.3: Phiếu kiểm tra thông số"
       formState={formState}
     >
-      {({ renderImageUploadArea }) => (
+      {({ renderImageUploadArea, isFormFilled }) => (
         <>
           {/* Lựa chọn 1 trong 2: Theo Mã PO hoặc Theo Mã Pallet */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '12px', padding: '4px 0' }}>
@@ -136,11 +154,35 @@ const CL09C_ParameterView = () => {
                   disabled={isPoDisabled}
                   placeholder={poPlaceholder}
                   allowCustomInput={true}
+                  onSearch={handlePoSearch}
                 />
               </div>
             ) : (
               <div className="pv2-field">
-                <label>Mã Pallet <span className="pv2-req">*</span></label>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <label style={{ margin: 0 }}>Mã Pallet <span className="pv2-req">*</span></label>
+                  {!readOnly && (
+                    <button
+                      type="button"
+                      onClick={() => setIsQrScannerOpen(true)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        color: 'var(--primary-color, #78523b)',
+                        background: 'rgba(120, 82, 59, 0.08)',
+                        border: '1px solid rgba(120, 82, 59, 0.2)',
+                        borderRadius: '6px',
+                        padding: '2px 8px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <ScanLine size={13} /> Quét mã QR
+                    </button>
+                  )}
+                </div>
                 <CustomSelect
                   value={palletCode}
                   options={palletOptions || []}
@@ -216,75 +258,83 @@ const CL09C_ParameterView = () => {
             </div>
           </div>
 
-
-
-          <button type="button" className="pv2-btn-dark-pill" onClick={() => setGuideVisible((v) => !v)} style={{ marginTop: '8px' }}>
-            👁 Xem hướng dẫn kiểm tra
-          </button>
-
-          {guideVisible && (
+          {/* Hướng dẫn kiểm tra - luôn hiển thị ngay khi chọn thông số */}
+          <div className="pv2-fade-in" style={{ marginTop: 16 }}>
+            <div className="pv2-section-title">Hướng dẫn kiểm tra</div>
             <InspectionStepsTable
               steps={steps || []}
               onStepChange={handleStepResultChange}
               sampleQty={paramSample}
               disabled={readOnly}
+              mode="parameter"
             />
+          </div>
+
+          {/* Phần kết quả / ghi chú / lỗi - chỉ hiện khi đã điền đủ thông tin */}
+          {(isFormFilled || readOnly) && (
+            <div className="pv2-fade-in" style={{ marginTop: 16 }}>
+              {renderImageUploadArea && renderImageUploadArea()}
+
+              <div className="pv2-field" style={{ marginTop: '12px' }}>
+                <label>Kết quả <span className="pv2-req">*</span></label>
+                <div className="pv2-radio-group">
+                  <label className="pv2-radio-label">
+                    <input type="radio" name="res_param" checked={result === 'pass'} onChange={() => setResult('pass')} disabled={readOnly} /> Đạt
+                  </label>
+                  <label className="pv2-radio-label">
+                    <input type="radio" name="res_param" checked={result === 'fail'} onChange={() => setResult('fail')} disabled={readOnly} /> Không đạt
+                  </label>
+                </div>
+              </div>
+
+              <div className="pv2-field">
+                <label>Ghi chú</label>
+                <textarea
+                  className={`pv2-textarea ${readOnly ? 'pv2-input--disabled' : ''}`}
+                  rows={2}
+                  value={note || ''}
+                  onChange={(e) => setNote(e.target.value)}
+                  disabled={readOnly}
+                  placeholder="Nhập ghi chú kết quả đo thông số..."
+                />
+              </div>
+
+              <div className="pv2-error-section" style={{ marginTop: '12px' }}>
+                <div className="pv2-section-title">Theo dõi xu hướng lỗi</div>
+                <div className="pv2-error-table-header">
+                  <span>Tên lỗi</span>
+                  <span>SL Ghi nhận</span>
+                </div>
+                {safeErrors.map((row, idx) => (
+                  <ErrorTrendRow
+                    key={row?.id || idx}
+                    row={row}
+                    defectOptions={defectOptions || []}
+                    allDefectOptions={allDefectOptions || []}
+                    selectedDefectIds={safeErrors
+                      .filter((_, i) => i !== idx)
+                      .flatMap((e) => [e?.defectId, e?.defect_id, e?.code, e?.name])
+                      .filter(Boolean)}
+                    onChange={(r) => updateError(idx, r)}
+                    onRemove={safeErrors.length > 1 ? () => removeErrorRow(idx) : null}
+                    disabled={readOnly}
+                  />
+                ))}
+                {!readOnly && (
+                  <button type="button" className="pv2-btn-add-image-link" onClick={addErrorRow} style={{ marginTop: 6 }}>
+                    <Plus size={14} /> Ghi nhận lỗi khác
+                  </button>
+                )}
+              </div>
+            </div>
           )}
-
-          {renderImageUploadArea && renderImageUploadArea()}
-
-          <div className="pv2-field" style={{ marginTop: '12px' }}>
-            <label>Kết quả <span className="pv2-req">*</span></label>
-            <div className="pv2-radio-group">
-              <label className="pv2-radio-label">
-                <input type="radio" name="res_param" checked={result === 'pass'} onChange={() => setResult('pass')} disabled={readOnly} /> Đạt
-              </label>
-              <label className="pv2-radio-label">
-                <input type="radio" name="res_param" checked={result === 'fail'} onChange={() => setResult('fail')} disabled={readOnly} /> Không đạt
-              </label>
-            </div>
-          </div>
-
-          <div className="pv2-field">
-            <label>Ghi chú</label>
-            <textarea
-              className={`pv2-textarea ${readOnly ? 'pv2-input--disabled' : ''}`}
-              rows={2}
-              value={note || ''}
-              onChange={(e) => setNote(e.target.value)}
-              disabled={readOnly}
-              placeholder="Nhập ghi chú kết quả đo thông số..."
-            />
-          </div>
-
-          <div className="pv2-error-section" style={{ marginTop: '12px' }}>
-            <div className="pv2-section-title">Theo dõi xu hướng lỗi</div>
-            <div className="pv2-error-table-header">
-              <span>Tên lỗi</span>
-              <span>SL Ghi nhận</span>
-            </div>
-            {safeErrors.map((row, idx) => (
-              <ErrorTrendRow
-                key={row?.id || idx}
-                row={row}
-                defectOptions={defectOptions || []}
-                selectedDefectIds={safeErrors
-                  .filter((_, i) => i !== idx)
-                  .flatMap((e) => [e?.defectId, e?.defect_id, e?.code, e?.name])
-                  .filter(Boolean)}
-                onChange={(r) => updateError(idx, r)}
-                onRemove={safeErrors.length > 1 ? () => removeErrorRow(idx) : null}
-                disabled={readOnly}
-              />
-            ))}
-            {!readOnly && (
-              <button type="button" className="pv2-btn-add-image-link" onClick={addErrorRow} style={{ marginTop: 6 }}>
-                <span className="pv2-plus-icon">+</span> Ghi nhận lỗi khác
-              </button>
-            )}
-          </div>
         </>
       )}
+      <QRScanner
+        isOpen={isQrScannerOpen}
+        onClose={() => setIsQrScannerOpen(false)}
+        onResult={handleInFormPalletScan}
+      />
     </InspectionFormShell>
   )
 }

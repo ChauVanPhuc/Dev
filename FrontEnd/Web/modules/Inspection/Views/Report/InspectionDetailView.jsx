@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
-import { ChevronLeft, FileSpreadsheet, Printer, X, Image as ImageIcon, CheckCircle, CheckCircle2, User, Calendar, Info, AlertTriangle, XCircle, AlertCircle } from 'lucide-react';
+import { ChevronLeft, FileSpreadsheet, Printer, X, Image as ImageIcon, CheckCircle, CheckCircle2, User, Calendar, Info, AlertTriangle, XCircle, AlertCircle, RotateCcw } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
+import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
+import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import { getInspectionTypeLabel } from './hooks/useInspectionReports';
 import '@styles/components.css';
 
@@ -134,7 +136,10 @@ const InspectionDetailView = () => {
 
   const [item, setItem] = useState(null);
   const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
   const [confirming, setConfirming] = useState(false);
+  const [canceling, setCanceling] = useState(false);
+  const [cancelConfirmModal, setCancelConfirmModal] = useState(false);
   const [lightboxImage, setLightboxImage] = useState(null);
   const [actualType, setActualType] = useState(type);
 
@@ -190,13 +195,35 @@ const InspectionDetailView = () => {
           confirmed_at: res.confirmed_at,
           confirmed_by: res.confirmed_by
         }));
-        alert("Xác nhận kết quả phiếu kiểm tra thành công!");
+        toast('success', "Xác nhận kết quả phiếu kiểm tra thành công!");
       }
     } catch (error) {
       console.error('Error confirming inspection:', error);
-      alert("Gặp lỗi khi xác nhận phiếu: " + (error.response?.data?.detail || error.message));
+      toast('error', "Gặp lỗi khi xác nhận phiếu: " + (error.response?.data?.detail || error.message));
     } finally {
       setConfirming(false);
+    }
+  };
+
+  const handleCancelReturn = () => {
+    if (!item) return;
+    setCancelConfirmModal(true);
+  };
+
+  const handleConfirmCancelReturn = async () => {
+    if (!item) return;
+
+    setCanceling(true);
+    try {
+      await api.post(`/inspections/cancel-return/${item.id}`);
+      toast('success', `Đã hủy trả hàng thành công cho phiếu #${item.ticket_code || item.id}!`);
+      setCancelConfirmModal(false);
+      fetchDetail();
+    } catch (error) {
+      console.error('Error canceling return:', error);
+      toast('error', 'Lỗi khi hủy trả hàng: ' + (error.response?.data?.detail || error.message));
+    } finally {
+      setCanceling(false);
     }
   };
 
@@ -411,10 +438,12 @@ const InspectionDetailView = () => {
             <div class="info-item"><label>Quy cách:</label> ${item.specification || 'N/A'}</div>
             <div class="info-item"><label>Container/PO:</label> ${item.cont_name || 'N/A'}</div>
             <div class="info-item"><label>Kết luận:</label> <span style="font-weight:bold; color:${item.result === 'Đạt' ? '#16a34a':'#dc2626'}">${item.result || 'N/A'}</span></div>
+            <div class="info-item"><label>Hành động xử lý:</label> <span style="font-weight:bold; color:${itemAction === 'tra-ve' ? '#dc2626' : itemAction === 'cach-ly' ? '#d97706' : '#16a34a'}">${itemAction === 'tra-ve' ? 'Trả hàng' : itemAction === 'cach-ly' ? 'Cách ly' : (!isPass ? 'Chấp nhận / Tự xử lý' : 'Chấp nhận')}</span></div>
           ` : `
             <div class="info-item"><label>Mã PO (Lệnh SX):</label> ${item.batch_no || 'N/A'}</div>
             <div class="info-item"><label>Mã Sản Phẩm:</label> ${item.product_sku || 'N/A'}</div>
             <div class="info-item"><label>Kết Luận:</label> <span style="font-weight:bold; color:${item.conclusion === 'pass' ? '#16a34a':'#dc2626'}">${item.conclusion === 'pass' ? 'ĐẠT' : 'LỖI'}</span></div>
+            <div class="info-item"><label>Hành động xử lý:</label> <span style="font-weight:bold; color:${itemAction === 'tra-ve' ? '#dc2626' : itemAction === 'cach-ly' ? '#d97706' : '#16a34a'}">${itemAction === 'tra-ve' ? 'Trả hàng' : itemAction === 'cach-ly' ? 'Cách ly' : (!isPass ? 'Chấp nhận / Tự xử lý' : 'Chấp nhận')}</span></div>
           `}
         </div>
 
@@ -495,6 +524,66 @@ const InspectionDetailView = () => {
   const imagesList = isInput ? [item.image_path_1, item.image_path_2, item.image_path_3].filter(Boolean) : getStageImages(item);
   const defectsList = extractDefects(item);
 
+  let itemAction = item.action;
+  if (!itemAction && item.data_json) {
+    try {
+      const parsed = typeof item.data_json === 'string' ? JSON.parse(item.data_json) : item.data_json;
+      itemAction = parsed.action;
+    } catch (e) {}
+  }
+  if (!itemAction) {
+    itemAction = isPass ? 'chap-nhan' : 'tra-ve';
+  }
+  const isActionReturn = itemAction === 'tra-ve';
+
+  // Bóc tách dữ liệu chi tiết & quy cách cho trường hợp nhiều chi tiết / bán thành phẩm
+  let parsedData = {};
+  try {
+    parsedData = typeof item.data_json === 'string' ? JSON.parse(item.data_json || '{}') : (item.data_json || {});
+  } catch (e) {}
+
+  let inspectedPartsList = [];
+  if (Array.isArray(parsedData.parts_details) && parsedData.parts_details.length > 0) {
+    inspectedPartsList = parsedData.parts_details.map(p => ({
+      name: p.part_name || p.name || '',
+      spec: p.specification || p.spec || '',
+      qty: p.plan_qty || p.qty || ''
+    }));
+  } else if (Array.isArray(parsedData.parts_with_specs) && parsedData.parts_with_specs.length > 0) {
+    inspectedPartsList = parsedData.parts_with_specs.map(p => ({
+      name: p.part_name || p.name || '',
+      spec: p.specification || p.spec || '',
+      qty: p.plan_qty || p.qty || ''
+    }));
+  } else if (Array.isArray(item.parts_details) && item.parts_details.length > 0) {
+    inspectedPartsList = item.parts_details.map(p => ({
+      name: p.part_name || p.name || '',
+      spec: p.specification || p.spec || '',
+      qty: p.plan_qty || p.qty || ''
+    }));
+  } else {
+    const rawProd = (item.product_sku || item.part_name || parsedData.product || '').trim();
+    const rawSpec = (item.specification || parsedData.spec || '').trim();
+    if (rawProd) {
+      const prodItems = rawProd.split(/,\s*(?=[^,]+)/).map(s => s.trim()).filter(Boolean);
+      const specItems = rawSpec ? rawSpec.split(/,\s*(?=[^,]+)/).map(s => s.trim()).filter(Boolean) : [];
+      inspectedPartsList = prodItems.map((prodName, idx) => {
+        let assignedSpec = specItems[idx] || (specItems.length === 1 ? specItems[0] : '');
+        const dimMatch = prodName.match(/(\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?(?:\s*[*xX×]\s*\d+(?:[.,]\d+)?)?(?:\s*mm|\s*cm)?)/i);
+        let cleanName = prodName;
+        if (dimMatch) {
+          if (!assignedSpec || assignedSpec === 'Tiêu chuẩn' || assignedSpec === '—') {
+            assignedSpec = dimMatch[1].replace(/\s*/g, '');
+          }
+          cleanName = prodName.replace(dimMatch[0], '').replace(/\s*[-–—:]\s*$/, '').replace(/\s*,\s*$/, '').trim() || prodName;
+        }
+        return { name: cleanName, spec: assignedSpec, qty: '' };
+      });
+    }
+  }
+  inspectedPartsList = inspectedPartsList.filter(p => p.name || p.spec);
+  const hasMultipleParts = inspectedPartsList.length > 1;
+
   return (
     <div className="quality-records-container" style={{ fontFamily: "'Outfit', 'Inter', sans-serif" }}>
       
@@ -508,6 +597,31 @@ const InspectionDetailView = () => {
         </button>
         
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {/* NÚT HỦY TRẢ HÀNG */}
+          {isActionReturn && !item.is_confirmed && (
+            <button 
+              onClick={handleCancelReturn}
+              disabled={canceling}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                border: '1px solid #FCD34D',
+                background: '#FFFBEB',
+                color: '#D97706',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                fontWeight: 'bold',
+                cursor: canceling ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s'
+              }}
+              title="Hủy trả hàng và chuyển sang Chấp nhận / Tự xử lý"
+            >
+              <RotateCcw size={16} className={canceling ? 'animate-spin' : ''} />
+              {canceling ? 'Đang hủy...' : 'Hủy trả hàng'}
+            </button>
+          )}
+
           <button 
             onClick={handlePrintPDF}
             style={{ display: 'flex', alignItems: 'center', gap: '6px', border: '1px solid #BAE6FD', background: '#F0F9FF', color: '#0284C7', padding: '8px 16px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}
@@ -578,12 +692,31 @@ const InspectionDetailView = () => {
                 <>
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #FAF6F0', paddingBottom: '8px' }}>
                     <span style={{ color: '#8D6E63', fontWeight: '600' }}>Tên chi tiết / Linh kiện:</span>
-                    <span style={{ fontWeight: '700', color: '#2D1A12' }}>{item.part_name || 'N/A'}</span>
+                    <span style={{ fontWeight: '700', color: '#2D1A12' }}>
+                      {hasMultipleParts ? (
+                        <span style={{
+                          backgroundColor: '#F3E9DD',
+                          color: '#7B5233',
+                          padding: '2px 8px',
+                          borderRadius: '12px',
+                          fontSize: '0.8rem',
+                          fontWeight: '800',
+                          border: '1px solid #EADCC9',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {inspectedPartsList.length} chi tiết
+                        </span>
+                      ) : (
+                        item.part_name || 'N/A'
+                      )}
+                    </span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #FAF6F0', paddingBottom: '8px' }}>
-                    <span style={{ color: '#8D6E63', fontWeight: '600' }}>Quy cách:</span>
-                    <span style={{ fontWeight: '700', color: '#2D1A12' }}>{item.specification || 'N/A'}</span>
-                  </div>
+                  {!hasMultipleParts && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #FAF6F0', paddingBottom: '8px' }}>
+                      <span style={{ color: '#8D6E63', fontWeight: '600' }}>Quy cách:</span>
+                      <span style={{ fontWeight: '700', color: '#2D1A12' }}>{item.specification || 'N/A'}</span>
+                    </div>
+                  )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #FAF6F0', paddingBottom: '8px' }}>
                     <span style={{ color: '#8D6E63', fontWeight: '600' }}>Container / PO:</span>
                     <span style={{ fontWeight: '700', color: '#2D1A12' }}>{item.cont_name || 'N/A'}</span>
@@ -597,7 +730,24 @@ const InspectionDetailView = () => {
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #FAF6F0', paddingBottom: '8px' }}>
                     <span style={{ color: '#8D6E63', fontWeight: '600' }}>Mã sản phẩm / Công đoạn:</span>
-                    <span style={{ fontWeight: '700', color: '#2D1A12' }}>{item.product_sku || 'N/A'}</span>
+                    <span style={{ fontWeight: '700', color: '#2D1A12' }}>
+                      {hasMultipleParts ? (
+                        <span style={{
+                          backgroundColor: '#F3E9DD',
+                          color: '#7B5233',
+                          padding: '2px 8px',
+                          borderRadius: '12px',
+                          fontSize: '0.8rem',
+                          fontWeight: '800',
+                          border: '1px solid #EADCC9',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {inspectedPartsList.length} chi tiết
+                        </span>
+                      ) : (
+                        item.product_sku || 'N/A'
+                      )}
+                    </span>
                   </div>
                 </>
               )}
@@ -615,8 +765,114 @@ const InspectionDetailView = () => {
                   {isPass ? 'ĐẠT' : 'KHÔNG ĐẠT'}
                 </span>
               </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #FAF6F0', paddingBottom: '8px', alignItems: 'center' }}>
+                <span style={{ color: '#8D6E63', fontWeight: '600' }}>Hành động xử lý:</span>
+                <span style={{
+                  backgroundColor: itemAction === 'tra-ve' ? '#FEF2F2' : itemAction === 'cach-ly' ? '#FFFBEB' : (!isPass ? '#EFF6FF' : '#ECFDF5'),
+                  color: itemAction === 'tra-ve' ? '#DC2626' : itemAction === 'cach-ly' ? '#D97706' : (!isPass ? '#1D4ED8' : '#059669'),
+                  padding: '2px 10px',
+                  borderRadius: '12px',
+                  fontWeight: '800',
+                  fontSize: '0.8rem',
+                  border: `1px solid ${itemAction === 'tra-ve' ? '#FECACA' : itemAction === 'cach-ly' ? '#FDE68A' : (!isPass ? '#BFDBFE' : '#A7F3D0')}`
+                }}>
+                  {itemAction === 'tra-ve' ? 'Trả hàng' : itemAction === 'cach-ly' ? 'Cách ly' : (!isPass ? 'Chấp nhận / Tự xử lý' : 'Chấp nhận')}
+                </span>
+              </div>
             </div>
           </div>
+
+          {/* BẢNG CHI TIẾT & QUY CÁCH (Hiển thị khi có từ 2 chi tiết trở lên hoặc có danh sách chi tiết) */}
+          {hasMultipleParts && (
+            <div style={{
+              marginTop: '20px',
+              backgroundColor: '#FAF6F0',
+              borderRadius: '10px',
+              border: '1.5px solid #EADCC9',
+              overflow: 'hidden'
+            }}>
+              <div style={{
+                padding: '10px 14px',
+                backgroundColor: '#F3E9DD',
+                borderBottom: '1px solid #EADCC9',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.88rem', fontWeight: '800', color: '#7B5233' }}>
+                  <span>📋 Danh sách chi tiết & Quy cách kiểm tra</span>
+                  <span style={{
+                    backgroundColor: '#7B5233',
+                    color: '#ffffff',
+                    padding: '2px 8px',
+                    borderRadius: '999px',
+                    fontSize: '0.75rem',
+                    fontWeight: '700'
+                  }}>
+                    {inspectedPartsList.length} chi tiết
+                  </span>
+                </div>
+              </div>
+              <div style={{
+                maxHeight: '260px',
+                overflowY: 'auto',
+                overflowX: 'auto',
+                borderTop: '1px solid #EADCC9'
+              }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                  <thead style={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#FDFBF7' }}>
+                    <tr style={{ backgroundColor: '#FDFBF7', borderBottom: '1px solid #EADCC9', textAlign: 'left', color: '#8D6E63' }}>
+                      <th style={{ padding: '8px 12px', width: '45px', textAlign: 'center', backgroundColor: '#FDFBF7' }}>#</th>
+                      <th style={{ padding: '8px 12px', fontWeight: '700', backgroundColor: '#FDFBF7' }}>Tên chi tiết / Bán thành phẩm</th>
+                      <th style={{ padding: '8px 12px', fontWeight: '700', width: '220px', backgroundColor: '#FDFBF7' }}>Quy cách (Dày x Rộng x Dài)</th>
+                      {inspectedPartsList.some(p => p.qty) && (
+                        <th style={{ padding: '8px 12px', fontWeight: '700', width: '90px', textAlign: 'center', backgroundColor: '#FDFBF7' }}>Số lượng</th>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {inspectedPartsList.map((part, pIdx) => (
+                      <tr key={pIdx} style={{
+                        borderBottom: pIdx < inspectedPartsList.length - 1 ? '1px solid #F0E6D8' : 'none',
+                        backgroundColor: pIdx % 2 === 0 ? '#FFFFFF' : '#FAF6F0'
+                      }}>
+                        <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: '700', color: '#A89F91' }}>
+                          {pIdx + 1}
+                        </td>
+                        <td style={{ padding: '8px 12px', fontWeight: '600', color: '#2D1A12' }}>
+                          {part.name || '—'}
+                        </td>
+                        <td style={{ padding: '8px 12px' }}>
+                          {part.spec ? (
+                            <span style={{
+                              display: 'inline-block',
+                              padding: '2px 8px',
+                              backgroundColor: '#FEF3C7',
+                              color: '#92400E',
+                              borderRadius: '6px',
+                              fontWeight: '700',
+                              fontSize: '0.8rem',
+                              fontFamily: 'monospace',
+                              border: '1px solid #FDE68A'
+                            }}>
+                              {part.spec}
+                            </span>
+                          ) : (
+                            <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>Theo tiêu chuẩn</span>
+                          )}
+                        </td>
+                        {inspectedPartsList.some(p => p.qty) && (
+                          <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: '600', color: '#7B5233' }}>
+                            {part.qty || '—'}
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
           
           {/* Notes */}
           {(item.notes || item.note) && (
@@ -842,6 +1098,17 @@ const InspectionDetailView = () => {
         </div>
       )}
 
+      {/* POPUP XÁC NHẬN HỦY TRẢ HÀNG CHUẨN DỰ ÁN */}
+      <BeautifulConfirmModal
+        isOpen={cancelConfirmModal}
+        onClose={() => setCancelConfirmModal(false)}
+        onConfirm={handleConfirmCancelReturn}
+        title="Xác nhận hủy trả hàng"
+        message={`Bạn có chắc chắn muốn hủy trả hàng cho phiếu #${item?.ticket_code || item?.id} không?\nPhiếu sẽ được chuyển sang hành động 'Chấp nhận / Tự xử lý'.`}
+        confirmText={canceling ? 'Đang xử lý...' : 'Đồng ý hủy trả'}
+        cancelText="Hủy bỏ"
+        type="warning"
+      />
     </div>
   );
 };

@@ -57,10 +57,18 @@ from modules.inspection_guide.models.inspection_guide import (
     InspectionGuide, InspectionGuideStep, InspectionGuideSubStep,
     InspectionGuideStepImage, InspectionGuideAssignment
 )
+from modules.inspection_guide.models.inspection_parameter import (
+    InspectionParameter, InspectionGuideParameter
+)
+from modules.inspection_guide.models.inspection_form_type import InspectionFormType
 from modules.master.models.customer import Customer
 from modules.production.models.production_team import ProductionTeam
 from modules.production.models.production_routing import ProductionRouting, ProductionRoutingNode, ProductionRoutingComponent, ProductionRoutingProduct
 from modules.system.models.system_sidebar import SystemSidebar
+
+from modules.hr.models.assessment_models import (
+    HRAssessment, HRAssessmentQuestion, HRAssessmentSubmission, HRAssessmentAnswer
+)
 
 __all__ = [
     "Base", "Account", "Category", "Delivery", "DeliveryDetails", "DeliveryImage",
@@ -80,6 +88,10 @@ __all__ = [
     "OrgStructure", "OrgStructureKPI", "OrgStructureTask", "Employee", "SystemSidebar",
     "MasterProductDetail",
     "InspectionGuide", "InspectionGuideStep", "InspectionGuideSubStep",
-    "InspectionGuideStepImage", "InspectionGuideAssignment"
+    "InspectionGuideStepImage", "InspectionGuideAssignment",
+    "InspectionParameter", "InspectionGuideParameter",
+    "InspectionFormType",
+    "HRAssessment", "HRAssessmentQuestion", "HRAssessmentSubmission", "HRAssessmentAnswer"
 ]
+
 

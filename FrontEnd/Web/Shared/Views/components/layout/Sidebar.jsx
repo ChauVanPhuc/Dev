@@ -666,13 +666,13 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
                       <div style={{ width: '8px', height: '8px', border: '1.5px solid #A0301B', borderTopColor: 'transparent', borderRadius: '50%', animation: 'mgmtSpin 0.8s linear infinite', flexShrink: 0 }} />
                     )}
                     <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {upload.sheet ? `Sheet [${upload.sheet}]` : (upload.status === 'uploading' ? 'Đang xử lý...' : upload.status === 'completed' ? 'Hoàn thành' : 'Lỗi')}
+                      {upload.message || (upload.sheet ? `Sheet [${upload.sheet}]` : (upload.status === 'uploading' ? 'Đang xử lý...' : upload.status === 'completed' ? 'Hoàn thành' : 'Lỗi'))}
                     </span>
                   </div>
                   <span style={{ flexShrink: 0, color: '#A0301B', fontWeight: '800' }}>
-                    {upload.total_sheets && upload.sheet_index 
-                      ? `${upload.sheet_index}/${upload.total_sheets} sheet` 
-                      : `${upload.processed || 0}/${upload.total || '?'}`}
+                    {upload.processed !== undefined && upload.total
+                      ? `${upload.processed}/${upload.total}`
+                      : (upload.total_sheets && upload.sheet_index ? `${upload.sheet_index}/${upload.total_sheets} sheet` : '')}
                   </span>
                 </div>
               </div>

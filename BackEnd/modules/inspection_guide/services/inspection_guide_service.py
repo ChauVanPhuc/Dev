@@ -15,6 +15,12 @@ from modules.inspection_guide.models.inspection_guide import (
     InspectionGuideStepImage,
     InspectionGuideAssignment,
 )
+from modules.inspection_guide.models.inspection_parameter import (
+    InspectionParameter,
+    InspectionGuideParameter,
+)
+from modules.inspection_guide.models.inspection_form_type import InspectionFormType
+from modules.production.models.stages import Stage
 
 from config.settings import get_upload_dir
 
@@ -284,26 +290,128 @@ TYPE_NORMALIZE = {
 }
 
 
+def check_assignment_conflicts(db: Session, guide_id: Optional[int], assignments_data: List[dict]) -> List[dict]:
+    """
+    Kiểm tra ràng buộc: Một cặp (inspection_type, stage_id) chỉ được phép gán cho DUY NHẤT 1 HDKT.
+    - Cùng phiếu khác công đoạn: HỢP LỆ.
+    - Cùng phiếu cùng công đoạn: XUNG ĐỘT (nếu thuộc về HDKT khác).
+    """
+    conflicts = []
+    if not assignments_data:
+        return conflicts
+
+    # Lấy map tên loại phiếu và tên công đoạn
+    form_types = {}
+    try:
+        for ft in db.query(InspectionFormType).all():
+            form_types[ft.code] = ft.name
+    except Exception:
+        pass
+
+    fallback_types = {
+        'first_sample': 'Kiểm tra mẫu lần đầu',
+        're_inspect': 'Kiểm tra lại',
+        'parameter': 'Kiểm tra thông số',
+        'process': 'Kiểm tra quy trình',
+        'qa': 'Vấn đáp',
+        'daily': 'Ghi nhận lỗi hằng ngày',
+        'input_inspection': 'Nhập kho nguyên liệu (IQC)',
+        'packaging_inspection': 'Sau đóng gói (OQC)'
+    }
+
+    stage_ids = [a.get("stage_id") for a in assignments_data if a.get("stage_id")]
+    stages_map = {}
+    if stage_ids:
+        try:
+            stages = db.query(Stage).filter(Stage.id.in_(stage_ids)).all()
+            for s in stages:
+                stages_map[s.id] = s.name
+        except Exception:
+            pass
+
+    for a in assignments_data:
+        raw_type = a.get("inspection_type", "first_sample")
+        itype = TYPE_NORMALIZE.get(raw_type, raw_type)
+        stage_id = a.get("stage_id")
+        if stage_id == 0 or stage_id == "":
+            stage_id = None
+
+        query = db.query(InspectionGuideAssignment).join(
+            InspectionGuide, InspectionGuideAssignment.guide_id == InspectionGuide.id
+        ).filter(
+            InspectionGuideAssignment.is_active == True,
+            InspectionGuide.deleted_at.is_(None),
+            InspectionGuide.is_active == True,
+            InspectionGuideAssignment.inspection_type == itype
+        )
+
+        if guide_id:
+            query = query.filter(InspectionGuideAssignment.guide_id != guide_id)
+
+        if stage_id is not None:
+            query = query.filter(InspectionGuideAssignment.stage_id == stage_id)
+        else:
+            query = query.filter(InspectionGuideAssignment.stage_id.is_(None))
+
+        existing = query.first()
+        if existing:
+            other_guide = existing.guide
+            type_name = form_types.get(itype) or fallback_types.get(itype) or itype
+            stage_name = stages_map.get(stage_id) if stage_id else "Tất cả công đoạn"
+            
+            conflicts.append({
+                "inspection_type": itype,
+                "inspection_type_name": type_name,
+                "stage_id": stage_id,
+                "stage_name": stage_name,
+                "conflicting_guide_id": other_guide.id,
+                "conflicting_guide_code": other_guide.code,
+                "conflicting_guide_name": other_guide.name,
+                "message": f"Loại phiếu [{type_name}] ở công đoạn [{stage_name}] đã được gán cho tài liệu [{other_guide.code} - {other_guide.name}]. Vui lòng chọn công đoạn khác hoặc gỡ liên kết ở HDKT cũ."
+            })
+
+    return conflicts
+
+
 def set_assignments(db: Session, guide_id: int, assignments_data: List[dict]):
+    # Kiểm tra xung đột quy tắc 1 cặp (Loại phiếu, Công đoạn) chỉ có 1 HDKT
+    conflicts = check_assignment_conflicts(db, guide_id, assignments_data)
+    if conflicts:
+        raise HTTPException(
+            status_code=400,
+            detail=conflicts[0]["message"]
+        )
+
     db.query(InspectionGuideAssignment).filter(
         InspectionGuideAssignment.guide_id == guide_id
     ).delete()
     for a in assignments_data:
         raw_type = a.get("inspection_type", "first_sample")
         itype = TYPE_NORMALIZE.get(raw_type, raw_type)
+        stage_id = a.get("stage_id")
+        if stage_id == 0 or stage_id == "":
+            stage_id = None
         item = InspectionGuideAssignment(
             guide_id=guide_id,
             inspection_type=itype,
             product_id=a.get("product_id"),
             category_id=a.get("category_id"),
-            stage_id=a.get("stage_id"),
+            stage_id=stage_id,
             is_active=a.get("is_active", True)
         )
         db.add(item)
     db.commit()
 
 
-def get_mobile_guide(db: Session, inspection_type: str, product_id: Optional[int] = None, category_id: Optional[int] = None, stage_id: Optional[int] = None):
+def get_mobile_guide(
+    db: Session,
+    inspection_type: str,
+    product_id: Optional[int] = None,
+    category_id: Optional[int] = None,
+    stage_id: Optional[int] = None,
+    parameter: Optional[str] = None,
+    parameter_id: Optional[int] = None,
+):
     # Alias mapping for backwards compatibility
     type_aliases = [inspection_type]
     alias_map = {
@@ -311,6 +419,9 @@ def get_mobile_guide(db: Session, inspection_type: str, product_id: Optional[int
         'mau-dau-tien': ['first_sample', 'mau-dau-tien', 'mau_dau_tien'],
         're_inspect': ['re_inspect', 're-inspect', 'kiem_tra_lai', 'first_sample', 'mau-dau-tien', 'mau_dau_tien'],
         'parameter': ['parameter', 'thong_so', 'do-am', 'bam-dinh'],
+        'thong_so': ['parameter', 'thong_so', 'do-am', 'bam-dinh'],
+        'do-am': ['parameter', 'thong_so', 'do-am', 'bam-dinh'],
+        'bam-dinh': ['parameter', 'thong_so', 'do-am', 'bam-dinh'],
         'process': ['process', 'quy-trinh', 'quy_trinh'],
         'qa': ['qa', 'van_dap'],
         'input_inspection': ['input_inspection', 'dau-vao', 'dau_vao'],
@@ -318,6 +429,21 @@ def get_mobile_guide(db: Session, inspection_type: str, product_id: Optional[int
     }
     if inspection_type in alias_map:
         type_aliases = alias_map[inspection_type]
+
+    # Resolve target parameter ID if parameter code or name or id is passed
+    target_param_id = parameter_id
+    if target_param_id is None and parameter:
+        if isinstance(parameter, int) or (isinstance(parameter, str) and parameter.isdigit()):
+            target_param_id = int(parameter)
+        else:
+            param_obj = db.query(InspectionParameter).filter(
+                or_(
+                    InspectionParameter.code == parameter,
+                    InspectionParameter.name == parameter
+                )
+            ).first()
+            if param_obj:
+                target_param_id = param_obj.id
 
     base_query = db.query(InspectionGuide).join(InspectionGuide.assignments).filter(
         InspectionGuide.is_active == True,
@@ -354,11 +480,124 @@ def get_mobile_guide(db: Session, inspection_type: str, product_id: Optional[int
         InspectionGuideAssignment.stage_id.is_(None)
     ))
 
+    is_param_mode = (
+        inspection_type in ['parameter', 'thong_so', 'do-am', 'bam-dinh']
+        or target_param_id is not None
+        or parameter is not None
+        or parameter_id is not None
+    )
+
+    # If parameter was specified (e.g. for parameter inspection):
+    # Match guide specifically linked to this parameter
+    if target_param_id is not None:
+        param_query = base_query.join(
+            InspectionGuideParameter,
+            and_(
+                InspectionGuideParameter.guide_id == InspectionGuide.id,
+                InspectionGuideParameter.parameter_id == target_param_id,
+                InspectionGuideParameter.is_active == True
+            )
+        )
+        for f in filters:
+            candidate = param_query.filter(f).options(
+                selectinload(InspectionGuide.steps).selectinload(InspectionGuideStep.sub_steps),
+                selectinload(InspectionGuide.steps).selectinload(InspectionGuideStep.images),
+                selectinload(InspectionGuide.guide_parameters).selectinload(InspectionGuideParameter.parameter),
+            ).first()
+            if candidate:
+                return candidate
+
+        # If parameter was specified but no guide was assigned to it,
+        # DO NOT fall back to unrelated guides!
+        return None
+
+    # If in parameter inspection mode but no valid parameter was provided/found:
+    if is_param_mode:
+        return None
+
+    # Standard search across filters for other inspection types (first_sample, process, re_inspect, qa...)
     for f in filters:
         candidate = base_query.filter(f).options(
             selectinload(InspectionGuide.steps).selectinload(InspectionGuideStep.sub_steps),
             selectinload(InspectionGuide.steps).selectinload(InspectionGuideStep.images),
+            selectinload(InspectionGuide.guide_parameters).selectinload(InspectionGuideParameter.parameter),
         ).first()
         if candidate:
             return candidate
     return None
+
+
+# ==================== INSPECTION PARAMETERS CRUD ====================
+
+def list_parameters(db: Session, include_inactive: bool = False):
+    query = db.query(InspectionParameter)
+    if not include_inactive:
+        query = query.filter(InspectionParameter.is_active == True)
+    return query.order_by(InspectionParameter.display_order, InspectionParameter.id).all()
+
+
+def get_parameter(db: Session, param_id: int):
+    return db.query(InspectionParameter).filter(InspectionParameter.id == param_id).first()
+
+
+def create_parameter(db: Session, code: str, name: str, unit: str = None,
+                     default_min: float = None, default_max: float = None,
+                     display_order: int = 0):
+    existing = db.query(InspectionParameter).filter(InspectionParameter.code == code).first()
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Mã thông số '{code}' đã tồn tại.")
+    param = InspectionParameter(
+        code=code, name=name, unit=unit,
+        default_min=default_min, default_max=default_max,
+        display_order=display_order
+    )
+    db.add(param)
+    db.commit()
+    db.refresh(param)
+    return param
+
+
+def update_parameter(db: Session, param: InspectionParameter, **kwargs):
+    for key, value in kwargs.items():
+        if value is not None and hasattr(param, key):
+            setattr(param, key, value)
+    db.commit()
+    db.refresh(param)
+    return param
+
+
+def delete_parameter(db: Session, param: InspectionParameter):
+    db.delete(param)
+    db.commit()
+
+
+def set_guide_parameters(db: Session, guide_id: int, parameter_ids: List[int]):
+    """Gán danh sách thông số cho hướng dẫn kiểm tra."""
+    db.query(InspectionGuideParameter).filter(
+        InspectionGuideParameter.guide_id == guide_id
+    ).delete()
+    for pid in parameter_ids:
+        item = InspectionGuideParameter(
+            guide_id=guide_id,
+            parameter_id=pid,
+            is_active=True
+        )
+        db.add(item)
+    db.commit()
+
+
+def seed_default_parameters(db: Session):
+    """Seed 5 thông số mặc định nếu bảng trống."""
+    count = db.query(InspectionParameter).count()
+    if count > 0:
+        return
+    defaults = [
+        {"code": "do_am", "name": "Độ ẩm", "unit": "%", "default_min": 6, "default_max": 14, "display_order": 1},
+        {"code": "nhiet_do", "name": "Nhiệt độ", "unit": "°C", "default_min": 15, "default_max": 45, "display_order": 2},
+        {"code": "anh_sang", "name": "Ánh sáng", "unit": "Lux", "default_min": 300, "default_max": 1000, "display_order": 3},
+        {"code": "do_bong", "name": "Độ bóng sơn", "unit": "GU", "default_min": 0, "default_max": 100, "display_order": 4},
+        {"code": "do_day", "name": "Độ dày màng sơn", "unit": "µm", "default_min": 20, "default_max": 200, "display_order": 5},
+    ]
+    for d in defaults:
+        db.add(InspectionParameter(**d))
+    db.commit()

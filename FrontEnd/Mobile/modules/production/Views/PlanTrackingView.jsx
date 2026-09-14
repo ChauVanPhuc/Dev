@@ -785,7 +785,7 @@ const PlanTracking = ({ defaultTab = 'progress' }) => {
               <div style={{ textAlign: 'center', padding: '40px', backgroundColor: '#fff', borderRadius: '20px', border: '1px dashed #cbd5e1' }}>
                 <Calendar size={32} color="#94a3b8" style={{ marginBottom: '12px' }} />
                 <p style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: '0.9rem' }}>Chưa có kế hoạch nào được ghi nhận cho khoảng thời gian này.</p>
-                <p style={{ color: '#cbd5e1', fontSize: '0.8rem', marginTop: '4px' }}>Hãy tạo kế hoạch trong tab "+ Tạo kế hoạch"</p>
+                <p style={{ color: '#cbd5e1', fontSize: '0.8rem', marginTop: '4px' }}>Hãy tạo kế hoạch trong tab "Tạo kế hoạch"</p>
               </div>
             ) : (
               <div style={{ backgroundColor: '#fff', borderRadius: '24px', padding: '16px', border: '1px solid #e2e8f0', boxShadow: '0 4px 10px rgba(0,0,0,0.03)', overflowX: 'auto' }}>
@@ -897,14 +897,14 @@ const PlanTracking = ({ defaultTab = 'progress' }) => {
                   onClick={() => showToast('Chức năng thêm PO nâng cao đang tải...', 'warning')}
                   style={{ width: '100%', marginTop: '16px', padding: '12px', borderRadius: '14px', border: 'none', backgroundColor: '#7c5438', color: '#fff', fontWeight: '800', fontSize: '0.85rem', boxShadow: '0 4px 10px rgba(124, 82, 59, 0.15)' }}
                 >
-                  + Thêm PO
+                  Thêm PO
                 </button>
               ) : (
                 <button
                   onClick={() => showToast('Chức năng thêm chi tiết nâng cao đang tải...', 'warning')}
                   style={{ width: '100%', marginTop: '16px', padding: '12px', borderRadius: '14px', border: 'none', backgroundColor: '#7c5438', color: '#fff', fontWeight: '800', fontSize: '0.85rem', boxShadow: '0 4px 10px rgba(124, 82, 59, 0.15)' }}
                 >
-                  + Thêm chi tiết
+                  Thêm chi tiết
                 </button>
               )}
             </div>

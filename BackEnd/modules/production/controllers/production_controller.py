@@ -17,6 +17,80 @@ def parse_date(date_val):
     try: return pd.to_datetime(date_val)
     except: return None
 
+def is_invalid_spec(spec_str) -> bool:
+    if not spec_str:
+        return True
+    s = str(spec_str).strip()
+    if not s:
+        return True
+    if re.match(r'^[\s*_\-—–.,/\\#]+$', s):
+        return True
+    if re.match(r'^0(?:\s*[*xX×]\s*0)*$', s):
+        return True
+    if s.lower() in ["tiêu chuẩn", "quy cách tiêu chuẩn", "quy cách thành phẩm", "n/a", "na", "none", "null", "undefined", "—", "–"]:
+        return True
+    return False
+
+def extract_spec_from_text(text: str) -> str:
+    if not text:
+        return ""
+    text_str = str(text).strip()
+    m3d = re.search(r'(\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?(?:\s*mm|\s*cm)?)', text_str)
+    if m3d and not is_invalid_spec(m3d.group(1)):
+        return m3d.group(1).replace(' ', '')
+    m2d = re.search(r'(\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?(?:\s*mm|\s*cm)?)', text_str)
+    if m2d and not is_invalid_spec(m2d.group(1)):
+        return m2d.group(1).replace(' ', '')
+    m_bolt = re.search(r'([MØOD]?\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?(?:\s*mm)?)', text_str, re.IGNORECASE)
+    if m_bolt and not is_invalid_spec(m_bolt.group(1)):
+        return m_bolt.group(1).replace(' ', '')
+    m_hw = re.search(r'(\b\d{4,5}\s*[-–—*xX×]\s*\d{3,4}(?:mm|cm)?\b)', text_str)
+    if m_hw and not is_invalid_spec(m_hw.group(1)):
+        return m_hw.group(1).replace(' ', '')
+    return ""
+
+def format_dim(num):
+    if num is None:
+        return ""
+    try:
+        val = float(num)
+        if val <= 0:
+            return ""
+        return str(int(val)) if val.is_integer() else str(val)
+    except Exception:
+        return ""
+
+def resolve_clean_spec(raw_spec, name="", sku="", length=0, width=0, height=0, valid_specs_by_name=None, valid_specs_by_sku=None, fallback_spec=""):
+    if raw_spec and not is_invalid_spec(raw_spec):
+        return str(raw_spec).strip()
+    
+    clean_n = " ".join(str(name or "").strip().lower().split())
+    clean_s = str(sku or "").strip().lower()
+
+    if valid_specs_by_name and clean_n in valid_specs_by_name and not is_invalid_spec(valid_specs_by_name[clean_n]):
+        return valid_specs_by_name[clean_n]
+    if valid_specs_by_sku and clean_s in valid_specs_by_sku and not is_invalid_spec(valid_specs_by_sku[clean_s]):
+        return valid_specs_by_sku[clean_s]
+
+    h_s = format_dim(height)
+    w_s = format_dim(width)
+    l_s = format_dim(length)
+    if h_s and w_s and l_s:
+        return f"{h_s}*{w_s}*{l_s}"
+    if w_s and l_s:
+        return f"{w_s}*{l_s}"
+
+    spec_from_name = extract_spec_from_text(name)
+    if spec_from_name and not is_invalid_spec(spec_from_name):
+        return spec_from_name
+
+    spec_from_sku = extract_spec_from_text(sku)
+    if spec_from_sku and not is_invalid_spec(spec_from_sku):
+        return spec_from_sku
+
+    if fallback_spec and not is_invalid_spec(fallback_spec):
+        return str(fallback_spec).strip()
+
 def clean_val(val):
     if pd.isna(val): return None
     if isinstance(val, str):
@@ -188,9 +262,19 @@ def import_production_plan_from_excel(file_path: str, db: Session):
                 
                 m_prod = master_product_cache[sku]
 
+                prod_name_val = clean_val(row[col_names[idxs['name']]]) if idxs['name'] != -1 else sku
+                prod_spec_val = resolve_clean_spec(
+                    m_prod.specification if m_prod else None,
+                    name=prod_name_val,
+                    sku=sku,
+                    length=m_prod.length if m_prod else 0.0,
+                    width=m_prod.width if m_prod else 0.0,
+                    height=m_prod.height if m_prod else 0.0
+                )
+
                 db_product = Product(
                     order_id=db_order.id, sku=sku,
-                    name=clean_val(row[col_names[idxs['name']]]) if idxs['name'] != -1 else sku,
+                    name=prod_name_val,
                     unit=clean_val(row[col_names[idxs['unit']]]) if idxs['unit'] != -1 else "Bộ",
                     order_qty=get_num('order_qty'), production_qty=get_num('prod_qty'),
                     loss_qty=get_num('loss_qty'), total_qty=get_num('total_qty'),
@@ -202,7 +286,7 @@ def import_production_plan_from_excel(file_path: str, db: Session):
                     length=m_prod.length if m_prod else 0.0,
                     width=m_prod.width if m_prod else 0.0,
                     height=m_prod.height if m_prod else 0.0,
-                    specification=m_prod.specification if m_prod else None
+                    specification=prod_spec_val
                 )
                 db.add(db_product)
                 db.flush()
@@ -212,20 +296,44 @@ def import_production_plan_from_excel(file_path: str, db: Session):
                         
                         roots = []
                         children_map = {}
+                        valid_specs_by_name = {}
+                        valid_specs_by_sku = {}
                         for item in m_details:
+                            it_spec = (item.specification or "").strip()
+                            if it_spec and not is_invalid_spec(it_spec):
+                                if item.name:
+                                    c_it_name = " ".join(item.name.strip().lower().split())
+                                    if c_it_name and c_it_name not in valid_specs_by_name:
+                                        valid_specs_by_name[c_it_name] = it_spec
+                                if item.sku:
+                                    c_it_sku = item.sku.strip().lower()
+                                    if c_it_sku and c_it_sku not in valid_specs_by_sku:
+                                        valid_specs_by_sku[c_it_sku] = it_spec
+
                             if item.parent_id is None: roots.append(item)
                             else:
                                 if item.parent_id not in children_map: children_map[item.parent_id] = []
                                 children_map[item.parent_id].append(item)
-                        master_bom_cache[m_prod.id] = (roots, children_map)
+                        master_bom_cache[m_prod.id] = (roots, children_map, valid_specs_by_name, valid_specs_by_sku)
                     
-                    roots, children_map = master_bom_cache[m_prod.id]
+                    roots, children_map, valid_specs_by_name, valid_specs_by_sku = master_bom_cache[m_prod.id]
                             
                     def clone_node(m_item, new_p_id=None):
+                        resolved_spec = resolve_clean_spec(
+                            m_item.specification,
+                            name=m_item.name,
+                            sku=m_item.sku,
+                            length=m_item.length,
+                            width=m_item.width,
+                            height=m_item.height,
+                            valid_specs_by_name=valid_specs_by_name,
+                            valid_specs_by_sku=valid_specs_by_sku,
+                            fallback_spec=db_product.specification
+                        )
                         new_bom = BOMDetail(
                             product_id=db_product.id, parent_id=new_p_id,
                             sku=m_item.sku, name=m_item.name, unit=m_item.unit,
-                            specification=m_item.specification, length=m_item.length,
+                            specification=resolved_spec, length=m_item.length,
                             width=m_item.width, height=m_item.height,
                             quantity=m_item.quantity, waste_ratio=m_item.waste_ratio,
                             description=m_item.description, is_raw_material=m_item.is_raw_material,

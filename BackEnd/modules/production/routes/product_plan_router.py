@@ -11,7 +11,7 @@ from modules.production.schemas.product_plan import ProductPlanCreate, ProductPl
 from modules.production.models.mobile_daily_plan import MobileDailyPlan
 from typing import List, Optional
 from datetime import datetime
-from sqlalchemy import text
+from sqlalchemy import text, or_
 import re
 import traceback
 
@@ -205,10 +205,19 @@ def get_plans(
     if factory:
         query = query.join(Order).filter(Order.id.in_(allowed_order_ids))
 
-    # Nếu có tham số search (áp dụng khi phân trang)
+    # Nếu có tham số search (áp dụng khi tìm kiếm kế hoạch hoặc đơn hàng)
     if search:
         search_like = f"%{search}%"
-        query = query.filter((ProductPlan.name.like(search_like)) | (ProductPlan.code.like(search_like)))
+        query = query.filter(
+            or_(
+                ProductPlan.name.ilike(search_like),
+                ProductPlan.code.ilike(search_like),
+                ProductPlan.orders.any(Order.order_code.ilike(search_like)),
+                ProductPlan.orders.any(Order.production_code.ilike(search_like)),
+                ProductPlan.orders.any(Order.customer.ilike(search_like)),
+                ProductPlan.orders.any(Order.partner_po.ilike(search_like))
+            )
+        )
 
     # Nếu KHÔNG phân trang (tương thích ngược cho Mobile)
     if page is None:
@@ -917,7 +926,9 @@ def get_plan_detail(
                     "orders": result_orders
                 }
 
-            # Nếu CÓ phân trang (Server-side cho Hồ sơ chất lượng)
+            # Thu thập danh sách sản phẩm duy nhất của toàn bộ đơn hàng trong phạm vi (trước khi áp dụng các bộ lọc con để tránh làm mất danh sách lựa chọn)
+            unique_products = sorted(list(set([p["name"] for o in result_orders for p in o["products"] if p.get("name")])))
+
             # Lọc theo Tìm kiếm (q)
             if q:
                 q_lower = q.lower()
@@ -958,9 +969,6 @@ def get_plan_detail(
                     stats["has_data"] += 1
                 else:
                     stats["no_data"] += 1
-
-            # Thu thập danh sách sản phẩm duy nhất thuộc các orders hợp lệ (để hiển thị select filter)
-            unique_products = list(set([p["name"] for o in result_orders for p in o["products"] if p["name"]]))
 
             return {
                 "id": plan_info.id,

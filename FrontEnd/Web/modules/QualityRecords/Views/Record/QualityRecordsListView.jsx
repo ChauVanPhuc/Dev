@@ -10,7 +10,8 @@ import {
     Eye,
     FileText,
     CheckCircle2,
-    X
+    X,
+    RotateCcw
 } from 'lucide-react';
 import { planService } from '@modules/Plan/Models/plan.service';
 import { qualityService } from '@modules/QualityRecords/Models/quality.service';
@@ -26,8 +27,8 @@ const QualityRecordsListView = () => {
     const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/quality-records');
 
     const [plans, setPlans] = useState([]);
-    const [selectedPlan, setSelectedPlan] = useState(null);
-    const [selectedPlanId, setSelectedPlanId] = useState('');
+    const [selectedPlan, setSelectedPlan] = useState({ id: 'all', name: 'Tất cả KHSX', month: null, year: null });
+    const [selectedPlanId, setSelectedPlanId] = useState('all');
     const [selectedMonth, setSelectedMonth] = useState('');
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -81,7 +82,7 @@ const QualityRecordsListView = () => {
         }
     }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
-    // Lấy danh sách KHSX - mặc định chọn kế hoạch tháng hiện tại
+    // Lấy danh sách KHSX - Mặc định luôn là "Tất cả KHSX"
     useEffect(() => {
         const fetchPlans = async () => {
             setLoading(true);
@@ -90,22 +91,10 @@ const QualityRecordsListView = () => {
                 const plansData = Array.isArray(data) ? data : [];
                 setPlans(plansData);
 
-                if (plansData.length > 0) {
-                    const now = new Date();
-                    const currentMonth = now.getMonth() + 1; // 1-12
-                    const currentYear = now.getFullYear();
-
-                    // Tìm kế hoạch tháng hiện tại
-                    const currentMonthPlan = plansData.find(p =>
-                        parseInt(p.month) === currentMonth && parseInt(p.year) === currentYear
-                    );
-
-                    // Nếu có tháng hiện tại thì chọn, không thì lấy tháng mới nhất
-                    const defaultPlan = currentMonthPlan || plansData[0];
-                    const defaultMonth = `${defaultPlan.month}-${defaultPlan.year}`;
-                    setSelectedMonth(defaultMonth);
-                    setSelectedPlanId(defaultPlan.id.toString());
-                }
+                // Mặc định luôn chọn "Tất cả KHSX"
+                setSelectedPlanId('all');
+                setSelectedMonth('');
+                setSelectedPlan({ id: 'all', name: 'Tất cả KHSX', month: null, year: null });
             } catch (error) {
                 console.error("Lỗi khi tải kế hoạch sản xuất:", error);
             } finally {
@@ -143,7 +132,9 @@ const QualityRecordsListView = () => {
                 setOrders(res.orders || []);
                 setTotalCount(res.orders ? res.orders.length : 0);
             }
-            const currentPlan = plans.find(p => p.id === parseInt(selectedPlanId));
+            const currentPlan = selectedPlanId === 'all'
+                ? { id: 'all', name: 'Tất cả KHSX', month: null, year: null }
+                : plans.find(p => p.id === parseInt(selectedPlanId));
             setSelectedPlan(currentPlan);
         } catch (error) {
             console.error("Lỗi khi tải chi tiết đơn hàng:", error);
@@ -165,28 +156,47 @@ const QualityRecordsListView = () => {
     const totalPages = Math.ceil(totalCount / itemsPerPage) || 1;
 
     const monthOptions = useMemo(() => {
-        const map = new Map();
-        plans.forEach(p => {
-            if (p.month && p.year) {
-                const key = `${p.month}-${p.year}`;
-                if (!map.has(key)) {
-                    map.set(key, { ...p, key, label: `Tháng ${p.month}/${p.year}` });
-                }
-            }
-        });
-        return Array.from(map.values()).sort((a, b) => {
-            if (parseInt(b.year) !== parseInt(a.year)) return parseInt(b.year) - parseInt(a.year);
-            return parseInt(b.month) - parseInt(a.month);
+        return plans.map(p => {
+            const monthLabel = p.month && p.year ? `Tháng ${p.month}/${p.year}` : `KHSX #${p.id}`;
+            const planDesc = p.name ? ` (${p.name})` : (p.code ? ` (${p.code})` : '');
+            return {
+                ...p,
+                planId: p.id.toString(),
+                label: `${monthLabel}${planDesc}`
+            };
+        }).sort((a, b) => {
+            if (parseInt(b.year || 0) !== parseInt(a.year || 0)) return parseInt(b.year || 0) - parseInt(a.year || 0);
+            if (parseInt(b.month || 0) !== parseInt(a.month || 0)) return parseInt(b.month || 0) - parseInt(a.month || 0);
+            return b.id - a.id;
         });
     }, [plans]);
 
-    const handleMonthChange = (e) => {
-        const monthKey = e.target.value;
-        setSelectedMonth(monthKey);
-        const target = monthOptions.find(m => m.key === monthKey);
-        if (target) setSelectedPlanId(target.id.toString());
+    const handlePlanChange = (e) => {
+        const planId = e.target.value;
+        if (!planId || planId === 'all') {
+            setSelectedPlanId('all');
+            setSelectedMonth('');
+        } else {
+            setSelectedPlanId(planId);
+            const target = plans.find(p => p.id.toString() === planId);
+            setSelectedMonth(target && target.month && target.year ? `${target.month}-${target.year}` : '');
+        }
         setCurrentPage(1);
     };
+
+    const handleResetFilters = () => {
+        setSelectedPlanId('all');
+        setSelectedMonth('');
+        setStatusFilter('has_data');
+        setFilterProduct('all');
+        setItemsPerPage(15);
+        setSearchTerm('');
+        setSortBy('none');
+        setCurrentPage(1);
+    };
+
+    const isPlanFiltered = Boolean(selectedPlanId && selectedPlanId !== 'all');
+    const isFiltered = isPlanFiltered || statusFilter !== 'all' || filterProduct !== 'all' || itemsPerPage !== 15 || Boolean(searchTerm) || sortBy !== 'none';
 
     // --- CÁC HÀM TRỢ GIÚP ĐỊNH DẠNG EXCEL ---
     const formatExcelHeader = (worksheet, title, columnsCount) => {
@@ -1049,7 +1059,7 @@ const QualityRecordsListView = () => {
                     showFilter={true}
                     isFilterOpen={isFilterBarOpen}
                     onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
-                    activeFiltersCount={(statusFilter !== 'all' ? 1 : 0) + (selectedMonth ? 1 : 0) + (filterProduct !== 'all' ? 1 : 0)}
+                    activeFiltersCount={(statusFilter !== 'all' ? 1 : 0) + (isPlanFiltered ? 1 : 0) + (filterProduct !== 'all' ? 1 : 0) + (sortBy !== 'none' ? 1 : 0)}
                     onExport={() => setShowExportModal(true)}
                     isExporting={isExporting}
                     hasWritePermission={true}
@@ -1057,19 +1067,19 @@ const QualityRecordsListView = () => {
 
                 {/* INLINE EXPANDABLE FILTER BAR */}
                 {isFilterBarOpen && (
-                    <div className="filter-inline-bar">
+                    <div className="filter-inline-bar" style={{ alignItems: 'flex-end' }}>
                         {/* KHSX Tháng */}
                         <div className="filter-field-group">
                             <label className="filter-field-label">Tháng / KHSX</label>
                             <select
                                 className="qr-khsx-select"
-                                value={selectedMonth}
-                                onChange={handleMonthChange}
+                                value={selectedPlanId === 'all' || !selectedPlanId ? 'all' : selectedPlanId}
+                                onChange={handlePlanChange}
                             >
-                                <option value="">Tất cả KHSX</option>
+                                <option value="all">Tất cả KHSX</option>
                                 {monthOptions.map(m => (
-                                    <option key={m.key} value={m.key}>
-                                        {m.label} ({m.name || `Kế hoạch ${m.month}/${m.year}`})
+                                    <option key={m.planId} value={m.planId}>
+                                        {m.label}
                                     </option>
                                 ))}
                             </select>
@@ -1116,35 +1126,40 @@ const QualityRecordsListView = () => {
                             </select>
                         </div>
 
-                        {(statusFilter !== 'all' || filterProduct !== 'all' || itemsPerPage !== 15 || searchTerm || sortBy !== 'none') && (
-                            <div className="filter-field-group">
-                                <button
-                                    type="button"
-                                    className="page-btn"
-                                    onClick={() => {
-                                        setStatusFilter('all');
-                                        setFilterProduct('all');
-                                        setItemsPerPage(15);
-                                        setSearchTerm('');
-                                        setSortBy('none');
-                                        setCurrentPage(1);
-                                    }}
-                                    style={{
-                                        height: '36px',
-                                        padding: '0 12px',
-                                        fontSize: '0.8rem',
-                                        backgroundColor: '#FAF6F0',
-                                        color: '#7B5233',
-                                        border: '1px solid #EADCC9',
-                                        borderRadius: '6px',
-                                        cursor: 'pointer',
-                                        fontWeight: '600'
-                                    }}
-                                >
-                                    Xóa bộ lọc
-                                </button>
-                            </div>
-                        )}
+                        <div className="filter-field-group" style={{ minWidth: 'auto', alignSelf: 'flex-end' }}>
+                            <button
+                                type="button"
+                                onClick={handleResetFilters}
+                                style={{
+                                    height: '38px',
+                                    padding: '0 14px',
+                                    fontSize: '0.85rem',
+                                    backgroundColor: '#FAF6F0',
+                                    color: '#7B5233',
+                                    border: '1.5px solid #EADCC9',
+                                    borderRadius: '8px',
+                                    cursor: 'pointer',
+                                    fontWeight: '600',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    boxSizing: 'border-box',
+                                    whiteSpace: 'nowrap',
+                                    transition: 'all 0.2s ease'
+                                }}
+                                onMouseEnter={(e) => {
+                                    e.currentTarget.style.backgroundColor = '#F5EDE4';
+                                    e.currentTarget.style.borderColor = '#D8C7B8';
+                                }}
+                                onMouseLeave={(e) => {
+                                    e.currentTarget.style.backgroundColor = '#FAF6F0';
+                                    e.currentTarget.style.borderColor = '#EADCC9';
+                                }}
+                            >
+                                <RotateCcw size={14} />
+                                <span>Xóa bộ lọc</span>
+                            </button>
+                        </div>
                     </div>
                 )}
             </div>
@@ -1163,7 +1178,7 @@ const QualityRecordsListView = () => {
                         <div style={{ padding: '5rem', textAlign: 'center', backgroundColor: '#fff', borderRadius: '12px' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
                                 <FileText size={48} opacity={0.3} style={{ color: '#8D6E63' }} />
-                                <span>Không tìm thấy hồ sơ PO nào cho {monthOptions.find(m => m.key === selectedMonth)?.label || selectedPlan?.name || 'kế hoạch này'}.</span>
+                                <span>Không tìm thấy hồ sơ PO nào cho {selectedPlanId === 'all' ? 'tất cả kế hoạch' : (monthOptions.find(m => m.planId === selectedPlanId)?.label || selectedPlan?.name || 'kế hoạch này')}.</span>
                             </div>
                         </div>
                     ) : (

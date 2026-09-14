@@ -32,9 +32,42 @@ export const inspectionService = {
     }
   },
 
-  async getGuide(mode, productId = null, stageId = null, guideId = null) {
+  async getGuide(mode, productId = null, stageId = null, guideId = null, parameter = null) {
     try {
-      if (guideId) {
+      if (mode === 'process' && guideId) {
+        try {
+          const res = await apiClient.get(`/iso-documents/processes/${guideId}/details`)
+          const procData = res?.data !== undefined ? res.data : res
+          if (procData) {
+            let steps = []
+            if (Array.isArray(procData.steps)) {
+              steps = procData.steps.map((s, idx) => ({
+                id: s.id || idx + 1,
+                step_no: s.step_number || idx + 1,
+                title: s.name || `Bước ${s.step_number || idx + 1}`,
+                content: s.instructions || '',
+                standard: s.instructions || '',
+                role: s.assignee_role || '',
+                assignee_role: s.assignee_role || '',
+                images: [],
+                sub_steps: []
+              }))
+            }
+
+            return {
+              id: procData.id,
+              code: procData.code,
+              name: procData.name,
+              sections: procData.sections || {},
+              steps
+            }
+          }
+        } catch (err) {
+          console.warn('[inspectionService.getGuide] error fetching ISO process details:', err)
+        }
+      }
+
+      if (guideId && mode !== 'process') {
         // Fetch directly from inspection-guides endpoint (/admin/inspection-guides)
         try {
           const res = await apiClient.get(`/inspection-guides/${guideId}`)
@@ -67,6 +100,7 @@ export const inspectionService = {
       const params = new URLSearchParams()
       if (productId) params.append('product_id', productId)
       if (stageId) params.append('stage_id', stageId)
+      if (parameter) params.append('parameter', parameter)
       const queryStr = params.toString() ? `?${params.toString()}` : ''
       const url = `/inspection-guides/mobile/${mode}${queryStr}`
       const res = await apiClient.get(url)
@@ -86,60 +120,16 @@ export const inspectionService = {
 
   async getProcessGuides(stageName = '') {
     try {
-      const [guidesRes, stagesRes] = await Promise.allSettled([
-        apiClient.get('/inspection-guides'),
-        apiClient.get('/stages').catch(() => apiClient.get('/stages/'))
-      ])
-
-      const guides = guidesRes.status === 'fulfilled' ? (guidesRes.value?.data !== undefined ? guidesRes.value.data : guidesRes.value) : []
-      const stages = stagesRes.status === 'fulfilled' ? (stagesRes.value?.data !== undefined ? stagesRes.value.data : stagesRes.value) : []
-
-      const stagesList = Array.isArray(stages) ? stages : (stages?.items || [])
-      const stageMap = {}
-      stagesList.forEach(s => {
-        if (s.id && s.name) stageMap[s.id] = s.name.toLowerCase().trim()
-      })
-
-      let currentStageId = null
-      if (stageName && typeof stageName === 'string') {
-        const stLower = stageName.toLowerCase().trim()
-        const foundStage = stagesList.find(s => (s.name || '').toLowerCase().trim() === stLower || stLower.includes((s.name || '').toLowerCase().trim()) || (s.name || '').toLowerCase().trim().includes(stLower))
-        if (foundStage) currentStageId = foundStage.id
-      }
-
-      if (Array.isArray(guides) && guides.length > 0) {
-        let filtered = guides
-        if (stageName && typeof stageName === 'string' && stageName.trim()) {
-          const stLower = stageName.toLowerCase().trim()
-
-          filtered = guides.filter((g) => {
-            const assignments = g.assignments || []
-            // If guide has no assignments configured in Web Admin, do not display
-            if (assignments.length === 0) {
-              return false
-            }
-
-            // Check if any assignment matches current stage or applies to all stages
-            return assignments.some(a => {
-              if (a.stage_id === null || a.stage_id === undefined) {
-                return true
-              }
-              if (currentStageId && a.stage_id === currentStageId) {
-                return true
-              }
-              const assignedStageName = stageMap[a.stage_id] || ''
-              if (assignedStageName && (stLower.includes(assignedStageName) || assignedStageName.includes(stLower))) {
-                return true
-              }
-              return false
-            })
-          })
-        }
-
-        return filtered.map((g) => ({
-          id: String(g.id),
-          code: g.code,
-          name: g.name
+      const res = await apiClient.get('/iso-documents/processes')
+      const processes = res?.data !== undefined ? res.data : res
+      if (Array.isArray(processes) && processes.length > 0) {
+        return processes.map((p) => ({
+          id: String(p.id),
+          code: p.code,
+          name: p.name,
+          display_at: p.display_at || '',
+          iso_document_code: p.iso_document_code || '',
+          iso_document_name: p.iso_document_name || ''
         }))
       }
       return []
@@ -152,11 +142,15 @@ export const inspectionService = {
   async create(payload) {
     if (payload && (payload.mode === 'daily' || payload.mode === 'DAILY')) {
       const defects = (payload.errors || [])
-        .filter(e => (e.defectId || e.defect_id || e.id) && Number(e.qty) > 0)
-        .map(e => ({
-          defect_id: Number(e.defectId || e.defect_id || e.id),
-          quantity: Number(e.qty) || 0
-        }))
+        .filter(e => (e.defectId || e.defect_id || e.name || e.id) && Number(e.qty) > 0)
+        .map(e => {
+          const rawId = e.defectId || e.defect_id || e.id
+          const validId = rawId && !isNaN(Number(rawId)) && Number(rawId) < 100000000000 ? Number(rawId) : 1001
+          return {
+            defect_id: validId,
+            quantity: Number(e.qty) || 0
+          }
+        })
       
       const totalDefects = defects.reduce((sum, d) => sum + d.quantity, 0)
       const totalProducts = Number(payload.sampleQty || payload.total_products || payload.requiredQty) || 100

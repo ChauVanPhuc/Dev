@@ -49,6 +49,7 @@ import PackagingInspectionView from '@modules/inspection/Views/PackagingInspecti
 // Module Production V2 (CL06, CL07, CL08, CL09)
 import CL06_TransferListView from '@modules/production_v2/Views/CL06_TransferListView'
 import CL07_TransferCreateView from '@modules/production_v2/Views/CL07_TransferCreateView'
+import CL07_BackupQRTicketView from '@modules/production_v2/Views/CL07_BackupQRTicketView'
 import CL08_InspectionListView from '@modules/production_v2/Views/CL08_InspectionListView'
 import CL09A_FirstSampleView from '@modules/production_v2/Views/CL09A_FirstSampleView'
 import CL09B_ReInspectView from '@modules/production_v2/Views/CL09B_ReInspectView'
@@ -151,6 +152,8 @@ function App() {
             <Route path="/production_v2/transfer-list" element={<CL06_TransferListView />} />
             <Route path="/production_v2/transfer" element={<CL07_TransferCreateView />} />
             <Route path="/production_v2/transfer/:id" element={<CL07_TransferCreateView />} />
+            <Route path="/production_v2/backup-qr/:code" element={<CL07_BackupQRTicketView />} />
+            <Route path="/production_v2/backup-qr" element={<CL07_BackupQRTicketView />} />
             <Route path="/production_v2/inspection-list" element={<CL08_InspectionListView />} />
             <Route path="/production_v2/inspection/first-sample" element={<CL09A_FirstSampleView />} />
             <Route path="/production_v2/inspection/first-sample/:id" element={<CL09A_FirstSampleView />} />
@@ -166,6 +169,28 @@ function App() {
             <Route path="/production_v2/inspection/daily/:id" element={<CL09F_DailyInspectionView />} />
             <Route path="/production_v2/inspection" element={<Navigate to="/production_v2/inspection/first-sample" replace />} />
             <Route path="/production_v2/inspection/:id" element={<Navigate to="/production_v2/inspection/first-sample" replace />} />
+
+            {/* Compatibility routes for /production-v2 (hyphen) */}
+            <Route path="/production-v2/transfer-list" element={<CL06_TransferListView />} />
+            <Route path="/production-v2/transfer" element={<CL07_TransferCreateView />} />
+            <Route path="/production-v2/transfer/:id" element={<CL07_TransferCreateView />} />
+            <Route path="/production-v2/backup-qr/:code" element={<CL07_BackupQRTicketView />} />
+            <Route path="/production-v2/backup-qr" element={<CL07_BackupQRTicketView />} />
+            <Route path="/production-v2/inspection-list" element={<CL08_InspectionListView />} />
+            <Route path="/production-v2/inspection/first-sample" element={<CL09A_FirstSampleView />} />
+            <Route path="/production-v2/inspection/first-sample/:id" element={<CL09A_FirstSampleView />} />
+            <Route path="/production-v2/inspection/re-inspect" element={<CL09B_ReInspectView />} />
+            <Route path="/production-v2/inspection/re-inspect/:id" element={<CL09B_ReInspectView />} />
+            <Route path="/production-v2/inspection/parameter" element={<CL09C_ParameterView />} />
+            <Route path="/production-v2/inspection/parameter/:id" element={<CL09C_ParameterView />} />
+            <Route path="/production-v2/inspection/process" element={<CL09D_ProcessView />} />
+            <Route path="/production-v2/inspection/process/:id" element={<CL09D_ProcessView />} />
+            <Route path="/production-v2/inspection/qa" element={<CL09E_QAView />} />
+            <Route path="/production-v2/inspection/qa/:id" element={<CL09E_QAView />} />
+            <Route path="/production-v2/inspection/daily" element={<CL09F_DailyInspectionView />} />
+            <Route path="/production-v2/inspection/daily/:id" element={<CL09F_DailyInspectionView />} />
+            <Route path="/production-v2/inspection" element={<Navigate to="/production_v2/inspection/first-sample" replace />} />
+            <Route path="/production-v2/inspection/:id" element={<Navigate to="/production_v2/inspection/first-sample" replace />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/login" replace />} />

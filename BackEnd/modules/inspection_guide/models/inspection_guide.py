@@ -22,7 +22,15 @@ class InspectionGuide(Base):
     created_at = Column(DateTime, default=func.now(), nullable=False)
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
     deleted_at = Column(DateTime, nullable=True)
+    process_id = Column(Integer, ForeignKey("iso_processes.id", ondelete="SET NULL"), nullable=True, unique=True)
 
+    process = relationship(
+        "ISOProcess",
+        foreign_keys=[process_id],
+        uselist=False,
+        lazy="selectin",
+        post_update=True
+    )
     steps = relationship(
         "InspectionGuideStep",
         back_populates="guide",
@@ -32,6 +40,12 @@ class InspectionGuide(Base):
     )
     assignments = relationship(
         "InspectionGuideAssignment",
+        back_populates="guide",
+        cascade="all, delete-orphan",
+        lazy="selectin"
+    )
+    guide_parameters = relationship(
+        "InspectionGuideParameter",
         back_populates="guide",
         cascade="all, delete-orphan",
         lazy="selectin"
@@ -98,7 +112,7 @@ class InspectionGuideStepImage(Base):
     step_id = Column(Integer, ForeignKey("inspection_guide_steps.id", ondelete="CASCADE"), nullable=False, index=True)
     guide_id = Column(Integer, nullable=False, index=True)
     file_name = Column(NVARCHAR(255), nullable=False)
-    image_url = Column(NVARCHAR(500), nullable=False)
+    image_url = Column(NVARCHAR(None), nullable=False)
     display_order = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, default=func.now(), nullable=False)
 
@@ -121,3 +135,7 @@ class InspectionGuideAssignment(Base):
     created_at = Column(DateTime, default=func.now(), nullable=False)
 
     guide = relationship("InspectionGuide", back_populates="assignments")
+
+
+# Import to resolve relationship mapper
+from modules.inspection_guide.models.inspection_parameter import InspectionGuideParameter

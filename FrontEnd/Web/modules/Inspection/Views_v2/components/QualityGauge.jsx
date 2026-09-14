@@ -135,13 +135,13 @@ export const QualityGauge = ({
         alignItems: 'center',
         gap: '4px',
         fontSize: '0.66rem',
-        color: isMet ? '#3F7D58' : '#B94A3D',
+        color: isMet ? '#3F7D58' : '#8C5332',
         fontWeight: '800',
         marginTop: '2px',
-        backgroundColor: isMet ? '#EBF3EE' : '#F9EBE9',
+        backgroundColor: isMet ? '#EBF3EE' : '#FAF5F0',
         padding: '2px 8px',
         borderRadius: '10px',
-        border: `1px solid ${isMet ? '#C6DEC7' : '#EDC7C2'}`
+        border: `1px solid ${isMet ? '#C6DEC7' : '#D5C9BD'}`
       }}>
         <span>{targetText}</span>
       </div>

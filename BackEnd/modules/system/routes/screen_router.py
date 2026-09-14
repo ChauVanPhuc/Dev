@@ -12,6 +12,7 @@ from modules.auth.models.accounts import Account as AccountModel
 from modules.system.models.system_screen import SystemScreen as SystemScreenModel
 from modules.system.models.system_component import SystemComponent as SystemComponentModel
 from modules.system.models.system_guide import SystemGuide as SystemGuideModel
+from modules.system.models.screen_bug import ScreenBug as ScreenBugModel
 from modules.system.schemas.system_screen import (
     SystemScreen as SystemScreenSchema, 
     SystemScreenCreate,

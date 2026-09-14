@@ -4,12 +4,11 @@ Seeder script to populate system_components table with initial metadata for all 
 import sys
 import os
 import json
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 from sqlalchemy import text
 from config.database import get_db, engine
 from config.database import Base
-import app.models  # ensure models are registered
 from datetime import datetime
 
 def safe_print(text_msg):

@@ -66,12 +66,12 @@ export const planService = {
 
 
     reorderPriorities: async (orderIds) => {
-
         // orderIds: mảng ID theo thứ tự ưu tiên mới, index 0 = ưu tiên cao nhất
-
         return await api.post('/plans/reorder-priorities', orderIds);
+    },
 
+    deleteOrder: async (orderId) => {
+        return await api.delete(`/orders/${orderId}`);
     }
-
 };
 

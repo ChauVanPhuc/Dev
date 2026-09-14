@@ -120,6 +120,22 @@ try:
 except Exception as err:
     print(f"[MIGRATION] Seed QLCL checklists warning: {err}")
 
+# [MIGRATION] Seed HR Assessment & Quiz data
+try:
+    from database.seeders.seed_assessments import seed_assessments_data
+    seed_assessments_data()
+except Exception as ass_err:
+    print(f"[MIGRATION] Seed HR assessments warning: {ass_err}")
+
+# [MIGRATION] Add Assessment sidebar menu
+try:
+    from database.migrations.add_assessment_sidebar import add_assessment_sidebar
+    add_assessment_sidebar()
+except Exception as side_err:
+    print(f"[MIGRATION] Add assessment sidebar warning: {side_err}")
+
+
+
 
 
 # [MIGRATION] Add workshop column to machines table
@@ -394,6 +410,7 @@ async def check_write_permissions(request: Request, call_next):
             "/api/v1/claims/chat",
             "/api/v1/screen-bugs/upload-image",
             "/api/v1/master-products/upload-image",
+            "/api/v1/assessment",
             "/health",
             "/ws",
         )

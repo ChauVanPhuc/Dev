@@ -58,50 +58,51 @@ const Sidebar = () => {
             id: 'm-create-ticket',
             title: 'Khởi tạo phiếu',
             route_path: '#',
-            icon: 'MessageSquare',
+            icon: 'FolderPlus',
             is_active: true,
             children: [
-              { id: 'sub-pv2-1', title: 'Tạo phiếu luân chuyển', route_path: '/production_v2/transfer', icon: 'MessageSquare' },
-              { id: 'sub-pv2-2', title: 'Danh sách luân chuyển', route_path: '/production_v2/transfer-list', icon: 'MessageSquare' },
-              { id: 'sub-pv2-3', title: 'Tạo phiếu kiểm tra', route_path: '/production_v2/inspection', icon: 'MessageSquare' }
+              { id: 'sub-pv2-1', title: 'Tạo phiếu luân chuyển', route_path: '/production_v2/transfer', icon: 'FilePlus' },
+              { id: 'sub-pv2-2', title: 'Danh sách luân chuyển', route_path: '/production_v2/transfer-list', icon: 'ListOrdered' },
+              { id: 'sub-pv2-3', title: 'Tạo phiếu kiểm tra', route_path: '/production_v2/inspection', icon: 'ClipboardCheck' },
+              { id: 'sub-pv2-4', title: 'Danh sách kiểm tra', route_path: '/production_v2/inspection-list', icon: 'ClipboardList' }
             ]
           },
           {
             id: 'm-prod-info',
             title: 'Thông tin sản xuất',
             route_path: '#',
-            icon: 'Users',
+            icon: 'Factory',
             is_active: true,
             children: [
-              { id: 'sub-prod-1', title: 'Lệnh sản xuất', route_path: '/production/orders', icon: 'Users' },
-              { id: 'sub-prod-2', title: 'Kế hoạch sản xuất', route_path: '/production/plans', icon: 'Users' },
-              { id: 'sub-prod-3', title: 'Lịch sử luân chuyển', route_path: '/production/transfers', icon: 'Users' }
+              { id: 'sub-prod-1', title: 'Lệnh sản xuất', route_path: '/production/orders', icon: 'ClipboardList' },
+              { id: 'sub-prod-2', title: 'Kế hoạch sản xuất', route_path: '/production/plans', icon: 'Calendar' },
+              { id: 'sub-prod-3', title: 'Lịch sử luân chuyển', route_path: '/production_v2/transfer-list', icon: 'History' }
             ]
           },
           {
             id: 'm-report-group',
             title: 'Lập báo cáo',
             route_path: '#',
-            icon: 'Bell',
+            icon: 'FileBarChart',
             is_active: true,
             children: [
-              { id: 'sub-rep-1', title: 'Theo dõi CAPA', route_path: '/capa-list', icon: 'Bell' },
-              { id: 'sub-rep-2', title: 'Tạo báo cáo nhanh', route_path: '/quick-report-create', icon: 'Bell' },
-              { id: 'sub-rep-3', title: 'Lịch sử báo cáo', route_path: '/quick-report-list', icon: 'Bell' }
+              { id: 'sub-rep-1', title: 'Theo dõi CAPA', route_path: '/capa-list', icon: 'ShieldAlert' },
+              { id: 'sub-rep-2', title: 'Tạo báo cáo nhanh', route_path: '/quick-report-create', icon: 'Zap' },
+              { id: 'sub-rep-3', title: 'Lịch sử báo cáo', route_path: '/quick-report-list', icon: 'FileText' }
             ]
           },
           {
             id: 'm-violation',
             title: 'Báo cáo vi phạm',
             route_path: '/awards',
-            icon: 'LayoutGrid',
+            icon: 'AlertTriangle',
             is_active: true
           },
           {
             id: 'm-hr-kpi',
             title: 'Đánh giá nhân sự',
             route_path: '/kpi-staff',
-            icon: 'Heart',
+            icon: 'Award',
             is_active: true
           },
           {
@@ -342,7 +343,11 @@ const Sidebar = () => {
                         }}
                         style={getStyleForItem(sub, true)}
                       >
-                        <DynamicIcon name={sub.icon} fallbackName={item.icon} size={16} color={isActive(sub.route_path) ? '#5d3b32' : '#888'} />
+                        {sub.icon && sub.icon !== item.icon ? (
+                          <DynamicIcon name={sub.icon} size={16} color={isActive(sub.route_path) ? '#5d3b32' : '#888'} />
+                        ) : (
+                          <div style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: isActive(sub.route_path) ? '#5d3b32' : '#cbd5e1', flexShrink: 0, marginLeft: 5, marginRight: 5 }} />
+                        )}
                         <span>{sub.title}</span>
                       </div>
                     ))}

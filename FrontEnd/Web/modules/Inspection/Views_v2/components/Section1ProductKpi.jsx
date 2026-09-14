@@ -220,11 +220,11 @@ export const Section1ProductKpi = ({ kpiData, onEditKpi }) => {
     );
   };
 
-  // Hàm tính màu theo quy tắc chuẩn: >=90 xanh lá rêu (#3F7D58), 60-89 cam ochre (#C58A4B), <60 đỏ gạch (#B94A3D)
+  // Hàm tính màu theo quy tắc chuẩn: >=90 xanh lá rêu (#3F7D58), 60-89 cam ochre (#C58A4B), <60 gỗ trầm (#8C5332)
   const getKpiBadgeStyle = (score) => {
     if (score >= 90) return { bg: '#3F7D58', text: '#FFFDFC' };
     if (score >= 60) return { bg: '#C58A4B', text: '#FFFDFC' };
-    return { bg: '#B94A3D', text: '#FFFDFC' };
+    return { bg: '#8C5332', text: '#FFFDFC' };
   };
 
   // Tự động tính toán Điểm tổng quan "Mục tiêu chất lượng" ăn theo các thẻ KPI hiện tại
@@ -483,7 +483,7 @@ export const Section1ProductKpi = ({ kpiData, onEditKpi }) => {
                           {kpi.vanityChange && (
                             <span style={{
                               fontSize: '0.62rem',
-                              color: isIncreaseVanity ? '#3F7D58' : '#B94A3D',
+                              color: isIncreaseVanity ? '#3F7D58' : '#8C5332',
                               fontWeight: '800',
                               whiteSpace: 'nowrap',
                               display: 'inline-block'
@@ -501,7 +501,7 @@ export const Section1ProductKpi = ({ kpiData, onEditKpi }) => {
                           {kpi.furnitureChange && (
                             <span style={{
                               fontSize: '0.62rem',
-                              color: isIncreaseFurn ? '#3F7D58' : '#B94A3D',
+                              color: isIncreaseFurn ? '#3F7D58' : '#8C5332',
                               fontWeight: '800',
                               whiteSpace: 'nowrap',
                               display: 'inline-block'

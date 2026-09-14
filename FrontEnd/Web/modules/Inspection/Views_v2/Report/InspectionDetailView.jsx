@@ -209,6 +209,79 @@ const InspectionDetailView = () => {
       }
     }
 
+    let partsPdfHtml = '';
+    let parsedPdf = {};
+    try {
+      parsedPdf = typeof item.data_json === 'string' ? JSON.parse(item.data_json || '{}') : (item.data_json || {});
+    } catch (e) {}
+
+    let printPartsList = [];
+    if (Array.isArray(parsedPdf.parts_details) && parsedPdf.parts_details.length > 0) {
+      printPartsList = parsedPdf.parts_details.map(p => ({
+        name: p.part_name || p.name || '',
+        spec: p.specification || p.spec || '',
+        qty: p.plan_qty || p.qty || ''
+      }));
+    } else if (Array.isArray(parsedPdf.parts_with_specs) && parsedPdf.parts_with_specs.length > 0) {
+      printPartsList = parsedPdf.parts_with_specs.map(p => ({
+        name: p.part_name || p.name || '',
+        spec: p.specification || p.spec || '',
+        qty: p.plan_qty || p.qty || ''
+      }));
+    } else if (Array.isArray(item.parts_details) && item.parts_details.length > 0) {
+      printPartsList = item.parts_details.map(p => ({
+        name: p.part_name || p.name || '',
+        spec: p.specification || p.spec || '',
+        qty: p.plan_qty || p.qty || ''
+      }));
+    } else {
+      const rawProd = (item.product_sku || item.part_name || parsedPdf.product || '').trim();
+      const rawSpec = (item.specification || parsedPdf.spec || '').trim();
+      if (rawProd) {
+        const prodItems = rawProd.split(/,\s*(?=[^,]+)/).map(s => s.trim()).filter(Boolean);
+        const specItems = rawSpec ? rawSpec.split(/,\s*(?=[^,]+)/).map(s => s.trim()).filter(Boolean) : [];
+        printPartsList = prodItems.map((prodName, idx) => {
+          let assignedSpec = specItems[idx] || (specItems.length === 1 ? specItems[0] : '');
+          const dimMatch = prodName.match(/(\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?(?:\s*[*xX×]\s*\d+(?:[.,]\d+)?)?(?:\s*mm|\s*cm)?)/i);
+          let cleanName = prodName;
+          if (dimMatch) {
+            if (!assignedSpec || assignedSpec === 'Tiêu chuẩn' || assignedSpec === '—') {
+              assignedSpec = dimMatch[1].replace(/\s*/g, '');
+            }
+            cleanName = prodName.replace(dimMatch[0], '').replace(/\s*[-–—:]\s*$/, '').replace(/\s*,\s*$/, '').trim() || prodName;
+          }
+          return { name: cleanName, spec: assignedSpec, qty: '' };
+        });
+      }
+    }
+    printPartsList = printPartsList.filter(p => p.name || p.spec);
+
+    if (printPartsList.length > 1) {
+      partsPdfHtml = `
+        <div style="margin-top:15px; font-weight:bold; color:#7B5233; font-size:14px;">DANH SÁCH CHI TIẾT & QUY CÁCH KIỂM TRA (${printPartsList.length} chi tiết):</div>
+        <table style="width:100%; border-collapse:collapse; margin-top:8px;">
+          <thead>
+            <tr style="background:#F3E9DD; color:#7B5233;">
+              <th style="padding:8px; border:1px solid #EADCC9; width:40px; text-align:center;">STT</th>
+              <th style="padding:8px; border:1px solid #EADCC9; text-align:left;">Tên chi tiết / Bán thành phẩm</th>
+              <th style="padding:8px; border:1px solid #EADCC9; text-align:left; width:220px;">Quy cách (Dày x Rộng x Dài)</th>
+              ${printPartsList.some(p => p.qty) ? '<th style="padding:8px; border:1px solid #EADCC9; width:80px; text-align:center;">Số lượng</th>' : ''}
+            </tr>
+          </thead>
+          <tbody>
+            ${printPartsList.map((p, idx) => `
+              <tr style="background:${idx % 2 === 0 ? '#ffffff' : '#faf6f0'};">
+                <td style="padding:8px; border:1px solid #EADCC9; text-align:center; font-weight:bold; color:#8D6E63;">${idx + 1}</td>
+                <td style="padding:8px; border:1px solid #EADCC9; font-weight:600; color:#2D1A12;">${p.name || '—'}</td>
+                <td style="padding:8px; border:1px solid #EADCC9;"><span style="background:#FEF3C7; color:#92400E; padding:2px 6px; border-radius:4px; font-weight:bold; font-family:monospace; border:1px solid #FDE68A;">${p.spec || 'Theo tiêu chuẩn'}</span></td>
+                ${printPartsList.some(p => p.qty) ? `<td style="padding:8px; border:1px solid #EADCC9; text-align:center; font-weight:bold; color:#7B5233;">${p.qty || '—'}</td>` : ''}
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+
     const imagesHtml = imagesList.length > 0 ? `
       <div style="margin-top:20px;">
         <div style="font-weight:bold; color:#7B5233; margin-bottom:10px; font-size:14px;">HÌNH ẢNH MINH CHỨNG:</div>
@@ -265,13 +338,13 @@ const InspectionDetailView = () => {
           <div class="info-item"><label>Loại kiểm tra:</label> ${typeLabel}</div>
           <div class="info-item"><label>QC Thực Hiện:</label> ${isInput ? (item.inspector_name || 'N/A') : (item.inspector_name || 'N/A')}</div>
           ${isInput ? `
-            <div class="info-item"><label>Tên linh kiện:</label> ${item.part_name || 'N/A'}</div>
-            <div class="info-item"><label>Quy cách:</label> ${item.specification || 'N/A'}</div>
+            <div class="info-item"><label>Tên linh kiện:</label> ${printPartsList.length > 1 ? `${printPartsList.length} chi tiết/bán thành phẩm` : (item.part_name || 'N/A')}</div>
+            ${printPartsList.length <= 1 ? `<div class="info-item"><label>Quy cách:</label> ${item.specification || 'N/A'}</div>` : ''}
             <div class="info-item"><label>Container/PO:</label> ${item.cont_name || 'N/A'}</div>
             <div class="info-item"><label>Kết luận:</label> <span style="font-weight:bold; color:${item.result === 'Đạt' ? '#16a34a':'#dc2626'}">${item.result || 'N/A'}</span></div>
           ` : `
             <div class="info-item"><label>Mã PO (Lệnh SX):</label> ${item.batch_no || 'N/A'}</div>
-            <div class="info-item"><label>Mã Sản Phẩm:</label> ${item.product_sku || 'N/A'}</div>
+            <div class="info-item"><label>Mã Sản Phẩm:</label> ${printPartsList.length > 1 ? `${printPartsList.length} chi tiết/bán thành phẩm` : (item.product_sku || 'N/A')}</div>
             <div class="info-item"><label>Kết Luận:</label> <span style="font-weight:bold; color:${item.conclusion === 'pass' ? '#16a34a':'#dc2626'}">${item.conclusion === 'pass' ? 'ĐẠT' : 'LỖI'}</span></div>
           `}
         </div>
@@ -284,6 +357,7 @@ const InspectionDetailView = () => {
 
         ${item.notes || item.note ? `<div style="background:#fffbeb; padding:10px; border-radius:6px; border:1px solid #fef3c7; margin:15px 0; font-size:13px; color:#92400e;"><b>Ghi chú:</b> ${item.notes || item.note}</div>` : ''}
 
+        ${partsPdfHtml}
         ${detailsHtml}
         ${imagesHtml}
 
@@ -338,6 +412,54 @@ const InspectionDetailView = () => {
   const isPass = isInput ? item.result === 'Đạt' : item.conclusion === 'pass';
   const dateVal = isInput ? item.inspected_at : item.inspection_date;
   const imagesList = isInput ? [item.image_path_1, item.image_path_2, item.image_path_3].filter(Boolean) : getStageImages(item);
+
+  // Bóc tách dữ liệu chi tiết & quy cách cho trường hợp nhiều chi tiết / bán thành phẩm
+  let parsedData = {};
+  try {
+    parsedData = typeof item.data_json === 'string' ? JSON.parse(item.data_json || '{}') : (item.data_json || {});
+  } catch (e) {}
+
+  let inspectedPartsList = [];
+  if (Array.isArray(parsedData.parts_details) && parsedData.parts_details.length > 0) {
+    inspectedPartsList = parsedData.parts_details.map(p => ({
+      name: p.part_name || p.name || '',
+      spec: p.specification || p.spec || '',
+      qty: p.plan_qty || p.qty || ''
+    }));
+  } else if (Array.isArray(parsedData.parts_with_specs) && parsedData.parts_with_specs.length > 0) {
+    inspectedPartsList = parsedData.parts_with_specs.map(p => ({
+      name: p.part_name || p.name || '',
+      spec: p.specification || p.spec || '',
+      qty: p.plan_qty || p.qty || ''
+    }));
+  } else if (Array.isArray(item.parts_details) && item.parts_details.length > 0) {
+    inspectedPartsList = item.parts_details.map(p => ({
+      name: p.part_name || p.name || '',
+      spec: p.specification || p.spec || '',
+      qty: p.plan_qty || p.qty || ''
+    }));
+  } else {
+    const rawProd = (item.product_sku || item.part_name || parsedData.product || '').trim();
+    const rawSpec = (item.specification || parsedData.spec || '').trim();
+    if (rawProd) {
+      const prodItems = rawProd.split(/,\s*(?=[^,]+)/).map(s => s.trim()).filter(Boolean);
+      const specItems = rawSpec ? rawSpec.split(/,\s*(?=[^,]+)/).map(s => s.trim()).filter(Boolean) : [];
+      inspectedPartsList = prodItems.map((prodName, idx) => {
+        let assignedSpec = specItems[idx] || (specItems.length === 1 ? specItems[0] : '');
+        const dimMatch = prodName.match(/(\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?(?:\s*[*xX×]\s*\d+(?:[.,]\d+)?)?(?:\s*mm|\s*cm)?)/i);
+        let cleanName = prodName;
+        if (dimMatch) {
+          if (!assignedSpec || assignedSpec === 'Tiêu chuẩn' || assignedSpec === '—') {
+            assignedSpec = dimMatch[1].replace(/\s*/g, '');
+          }
+          cleanName = prodName.replace(dimMatch[0], '').replace(/\s*[-–—:]\s*$/, '').replace(/\s*,\s*$/, '').trim() || prodName;
+        }
+        return { name: cleanName, spec: assignedSpec, qty: '' };
+      });
+    }
+  }
+  inspectedPartsList = inspectedPartsList.filter(p => p.name || p.spec);
+  const hasMultipleParts = inspectedPartsList.length > 1;
 
   return (
     <div className="quality-records-container" style={{ fontFamily: "'Outfit', 'Inter', sans-serif" }}>
@@ -422,12 +544,31 @@ const InspectionDetailView = () => {
                 <>
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #FAF6F0', paddingBottom: '8px' }}>
                     <span style={{ color: '#8D6E63', fontWeight: '600' }}>Tên chi tiết / Linh kiện:</span>
-                    <span style={{ fontWeight: '700', color: '#2D1A12' }}>{item.part_name || 'N/A'}</span>
+                    <span style={{ fontWeight: '700', color: '#2D1A12' }}>
+                      {hasMultipleParts ? (
+                        <span style={{
+                          backgroundColor: '#F3E9DD',
+                          color: '#7B5233',
+                          padding: '2px 8px',
+                          borderRadius: '12px',
+                          fontSize: '0.8rem',
+                          fontWeight: '800',
+                          border: '1px solid #EADCC9',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {inspectedPartsList.length} chi tiết
+                        </span>
+                      ) : (
+                        item.part_name || 'N/A'
+                      )}
+                    </span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #FAF6F0', paddingBottom: '8px' }}>
-                    <span style={{ color: '#8D6E63', fontWeight: '600' }}>Quy cách:</span>
-                    <span style={{ fontWeight: '700', color: '#2D1A12' }}>{item.specification || 'N/A'}</span>
-                  </div>
+                  {!hasMultipleParts && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #FAF6F0', paddingBottom: '8px' }}>
+                      <span style={{ color: '#8D6E63', fontWeight: '600' }}>Quy cách:</span>
+                      <span style={{ fontWeight: '700', color: '#2D1A12' }}>{item.specification || 'N/A'}</span>
+                    </div>
+                  )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #FAF6F0', paddingBottom: '8px' }}>
                     <span style={{ color: '#8D6E63', fontWeight: '600' }}>Container / PO:</span>
                     <span style={{ fontWeight: '700', color: '#2D1A12' }}>{item.cont_name || 'N/A'}</span>
@@ -441,7 +582,24 @@ const InspectionDetailView = () => {
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #FAF6F0', paddingBottom: '8px' }}>
                     <span style={{ color: '#8D6E63', fontWeight: '600' }}>Mã sản phẩm / Công đoạn:</span>
-                    <span style={{ fontWeight: '700', color: '#2D1A12' }}>{item.product_sku || 'N/A'}</span>
+                    <span style={{ fontWeight: '700', color: '#2D1A12' }}>
+                      {hasMultipleParts ? (
+                        <span style={{
+                          backgroundColor: '#F3E9DD',
+                          color: '#7B5233',
+                          padding: '2px 8px',
+                          borderRadius: '12px',
+                          fontSize: '0.8rem',
+                          fontWeight: '800',
+                          border: '1px solid #EADCC9',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {inspectedPartsList.length} chi tiết
+                        </span>
+                      ) : (
+                        item.product_sku || 'N/A'
+                      )}
+                    </span>
                   </div>
                 </>
               )}
@@ -461,6 +619,98 @@ const InspectionDetailView = () => {
               </div>
             </div>
           </div>
+
+          {/* BẢNG CHI TIẾT & QUY CÁCH (Hiển thị khi có từ 2 chi tiết trở lên hoặc có danh sách chi tiết) */}
+          {hasMultipleParts && (
+            <div style={{
+              marginTop: '20px',
+              backgroundColor: '#FAF6F0',
+              borderRadius: '10px',
+              border: '1.5px solid #EADCC9',
+              overflow: 'hidden'
+            }}>
+              <div style={{
+                padding: '10px 14px',
+                backgroundColor: '#F3E9DD',
+                borderBottom: '1px solid #EADCC9',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.88rem', fontWeight: '800', color: '#7B5233' }}>
+                  <span>📋 Danh sách chi tiết & Quy cách kiểm tra</span>
+                  <span style={{
+                    backgroundColor: '#7B5233',
+                    color: '#ffffff',
+                    padding: '2px 8px',
+                    borderRadius: '999px',
+                    fontSize: '0.75rem',
+                    fontWeight: '700'
+                  }}>
+                    {inspectedPartsList.length} chi tiết
+                  </span>
+                </div>
+              </div>
+              <div style={{
+                maxHeight: '260px',
+                overflowY: 'auto',
+                overflowX: 'auto',
+                borderTop: '1px solid #EADCC9'
+              }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                  <thead style={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#FDFBF7' }}>
+                    <tr style={{ backgroundColor: '#FDFBF7', borderBottom: '1px solid #EADCC9', textAlign: 'left', color: '#8D6E63' }}>
+                      <th style={{ padding: '8px 12px', width: '45px', textAlign: 'center', backgroundColor: '#FDFBF7' }}>#</th>
+                      <th style={{ padding: '8px 12px', fontWeight: '700', backgroundColor: '#FDFBF7' }}>Tên chi tiết / Bán thành phẩm</th>
+                      <th style={{ padding: '8px 12px', fontWeight: '700', width: '220px', backgroundColor: '#FDFBF7' }}>Quy cách (Dày x Rộng x Dài)</th>
+                      {inspectedPartsList.some(p => p.qty) && (
+                        <th style={{ padding: '8px 12px', fontWeight: '700', width: '90px', textAlign: 'center', backgroundColor: '#FDFBF7' }}>Số lượng</th>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {inspectedPartsList.map((part, pIdx) => (
+                      <tr key={pIdx} style={{
+                        borderBottom: pIdx < inspectedPartsList.length - 1 ? '1px solid #F0E6D8' : 'none',
+                        backgroundColor: pIdx % 2 === 0 ? '#FFFFFF' : '#FAF6F0'
+                      }}>
+                        <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: '700', color: '#A89F91' }}>
+                          {pIdx + 1}
+                        </td>
+                        <td style={{ padding: '8px 12px', fontWeight: '600', color: '#2D1A12' }}>
+                          {part.name || '—'}
+                        </td>
+                        <td style={{ padding: '8px 12px' }}>
+                          {part.spec ? (
+                            <span style={{
+                              display: 'inline-block',
+                              padding: '2px 8px',
+                              backgroundColor: '#FEF3C7',
+                              color: '#92400E',
+                              borderRadius: '6px',
+                              fontWeight: '700',
+                              fontSize: '0.8rem',
+                              fontFamily: 'monospace',
+                              border: '1px solid #FDE68A'
+                            }}>
+                              {part.spec}
+                            </span>
+                          ) : (
+                            <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>Theo tiêu chuẩn</span>
+                          )}
+                        </td>
+                        {inspectedPartsList.some(p => p.qty) && (
+                          <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: '600', color: '#7B5233' }}>
+                            {part.qty || '—'}
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
           
           {/* Notes */}
           {(item.notes || item.note) && (

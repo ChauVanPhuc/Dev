@@ -1,3 +1,4 @@
+import json
 from sqlalchemy import Column, Integer, Float, ForeignKey, DateTime, Boolean
 from sqlalchemy.dialects.mssql import NVARCHAR
 from config.database import Base
@@ -16,6 +17,7 @@ class InputInspection(Base):
     plan_id         = Column(Integer, nullable=True)
     ticket_code     = Column(NVARCHAR(50), index=True, nullable=True)
     pallet_code     = Column(NVARCHAR(100), index=True, nullable=True)
+    backup_qr       = Column(NVARCHAR(100), index=True, nullable=True)
     inspection_type = Column(NVARCHAR(50), default="first_sample", nullable=True)
     batch_no        = Column(NVARCHAR(100), nullable=True)      # Mã PO
     product_sku     = Column(NVARCHAR(255), nullable=True)      # Tên sản phẩm
@@ -77,4 +79,15 @@ class InputInspection(Base):
     @inspection_date.setter
     def inspection_date(self, value):
         self.inspected_at = value
+
+    @property
+    def action(self):
+        if self.data_json:
+            try:
+                d = json.loads(self.data_json)
+                if d.get("action"):
+                    return d.get("action")
+            except Exception:
+                pass
+        return "chap-nhan" if (self.result in ["pass", "Đạt"] or self.conclusion in ["pass", "Đạt"]) else "tra-ve"
 

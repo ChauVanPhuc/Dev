@@ -20,6 +20,9 @@ const FactoryStructureView = lazy(() => import('@modules/Auth/Views/HR/FactorySt
 const HRManagementView = lazy(() => import('@modules/Auth/Views/HR/HRManagementView'));
 const EmployeeManagementView = lazy(() => import('@modules/Auth/Views/Employee/EmployeeManagementView'));
 const OrgStructureManagementView = lazy(() => import('@modules/Auth/Views/HR/OrgStructureManagementView'));
+const AssessmentListView = lazy(() => import('@modules/HR/Views/Assessment/AssessmentListView'));
+const CandidatePortalContainer = lazy(() => import('@modules/HR/Views/Candidate/CandidatePortalContainer'));
+
 const HandoverList = lazy(() => import('@modules/Delivery/Views/Handover/HandoverListView'));
 const IncidentLogs = lazy(() => import('@modules/System/Views/Monitor/IncidentLogsView'));
 const InspectionReports = lazy(() => import('@modules/Inspection/Views/Report/InspectionReportsView'));
@@ -642,7 +645,10 @@ function App() {
                 <Route path="hr/factory" element={<ProtectedRoute permissionKey="users"><HRManagementView defaultDiagram="factory" /></ProtectedRoute>} />
                 <Route path="hr/structures" element={<ProtectedRoute permissionKey="users"><OrgStructureManagementView /></ProtectedRoute>} />
                 <Route path="hr/employees" element={<ProtectedRoute permissionKey="users"><EmployeeListView /></ProtectedRoute>} />
+                <Route path="hr/assessments" element={<ProtectedRoute permissionKey="users"><AssessmentListView /></ProtectedRoute>} />
+                <Route path="assessments" element={<Navigate to="/admin/hr/assessments" replace />} />
                 <Route path="employees" element={<ProtectedRoute permissionKey="users"><EmployeeManagementView /></ProtectedRoute>} />
+
                 <Route path="delivery-handover" element={<ProtectedRoute permissionKey="handovers"><ManufactureHandover /></ProtectedRoute>} />
                 <Route path="delivery-receive" element={<ProtectedRoute permissionKey="handovers"><ManufactureReceive /></ProtectedRoute>} />
                 <Route path="manufacture-handover" element={<ProtectedRoute permissionKey="handovers"><ManufactureHandover /></ProtectedRoute>} />
@@ -784,8 +790,13 @@ function App() {
               <Route path="/claim/*" element={<Navigate to="/admin/claims" />} />
               <Route path="/admin/claim/*" element={<Navigate to="/admin/claims" />} />
 
+              {/* Cổng thi đánh giá năng lực công khai dành cho nhân sự (Mobile & Web qua QR code) */}
+              <Route path="/assessment/:code" element={<CandidatePortalContainer />} />
+              <Route path="/assessment/result/:id" element={<CandidatePortalContainer />} />
+
               {/* Chuyển hướng mặc định */}
               <Route path="/" element={<RootRoute />} />
+
 
               {/* Catch-all route to prevent white screen */}
               <Route path="*" element={<Navigate to="/" />} />

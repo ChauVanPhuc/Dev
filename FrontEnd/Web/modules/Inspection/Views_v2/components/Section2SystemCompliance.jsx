@@ -28,7 +28,7 @@ export const Section2SystemCompliance = ({ complianceData }) => {
     metrics: [
       { label: 'Tổng hồ sơ', value: '150 hồ sơ' },
       { label: 'Đạt chuẩn', value: '141 hồ sơ', color: '#3F7D58' },
-      { label: 'Cần bổ sung', value: '9 hồ sơ', color: '#B94A3D' }
+      { label: 'Cần bổ sung', value: '9 hồ sơ', color: '#8C5332' }
     ],
     sections: [
       {

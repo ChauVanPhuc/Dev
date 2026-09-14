@@ -560,6 +560,27 @@ const InspectionGuideDetailView = () => {
               }}>
                 {isSOS ? 'Hướng dẫn thao tác (SOS)' : isCTQ ? 'Lỗi cần chú ý (CTQ)' : 'Hướng dẫn kiểm tra (HDKT)'}
               </span>
+              {guide.process && (
+                <span
+                  onClick={() => window.open(`/admin/iso-processes/edit/${guide.process.id}`, '_blank')}
+                  style={{
+                    padding: '3px 10px',
+                    borderRadius: 6,
+                    backgroundColor: '#FEF3C7',
+                    color: '#92400E',
+                    border: '1px solid #FDE68A',
+                    fontWeight: 700,
+                    fontSize: 11.5,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    cursor: 'pointer'
+                  }}
+                  title="Bấm để mở Quy trình ISO liên kết"
+                >
+                  Quy trình ISO: [{guide.process.code}] {guide.process.name} ↗
+                </span>
+              )}
               <span style={{ fontSize: 13, color: '#64748B', fontWeight: 600 }}>
                 Tài liệu ban hành
               </span>
@@ -747,68 +768,54 @@ const InspectionGuideDetailView = () => {
           </div>
         </div>
 
-        {/* Tab Switcher */}
+        {/* Inline Assignment Config (compact mode) */}
+        <div style={{
+          borderTop: '1px solid #F1F5F9',
+          marginTop: 16,
+          paddingTop: 14
+        }}>
+          <GuideAssignmentTab
+            guideId={guide.id}
+            initialAssignments={guide.assignments || []}
+            initialGuideParameters={guide.guide_parameters || []}
+            onSaved={() => fetchGuide(selectedStepId)}
+            compact={true}
+            themeColor={themeColor}
+          />
+        </div>
+
+        {/* Tab Switcher — only Steps tab remains */}
         <div style={{
           display: 'flex',
           gap: 12,
           borderTop: '1px solid #F1F5F9',
-          marginTop: 18,
+          marginTop: 16,
           paddingTop: 14
         }}>
           <button
             type="button"
-            onClick={() => setActiveTab('steps')}
             style={{
               padding: '8px 18px',
               borderRadius: 8,
               border: 'none',
-              backgroundColor: activeTab === 'steps' ? themeColor : '#F1F5F9',
-              color: activeTab === 'steps' ? '#FFF' : '#64748B',
+              backgroundColor: themeColor,
+              color: '#FFF',
               fontSize: 13.5,
               fontWeight: 700,
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: 8,
-              transition: 'all 0.2s',
-              boxShadow: activeTab === 'steps' ? `0 2px 8px ${themeColor}30` : 'none'
+              boxShadow: `0 2px 8px ${themeColor}30`
             }}
           >
             <Layers size={16} /> Danh mục các {stepLabel} ({steps.length})
           </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('assignments')}
-            style={{
-              padding: '8px 18px',
-              borderRadius: 8,
-              border: 'none',
-              backgroundColor: activeTab === 'assignments' ? themeColor : '#F1F5F9',
-              color: activeTab === 'assignments' ? '#FFF' : '#64748B',
-              fontSize: 13.5,
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              transition: 'all 0.2s',
-              boxShadow: activeTab === 'assignments' ? `0 2px 8px ${themeColor}30` : 'none'
-            }}
-          >
-            <ShieldCheck size={16} /> Cấu hình Liên kết Loại phiếu & Công đoạn ({guide.assignments?.length || 0})
-          </button>
         </div>
       </div>
 
-      {/* Main Tab Content */}
-      {activeTab === 'assignments' ? (
-        <GuideAssignmentTab
-          guideId={guide.id}
-          initialAssignments={guide.assignments || []}
-          onSaved={() => fetchGuide(selectedStepId)}
-        />
-      ) : (
+      {/* Main Content — always show steps */}
+      {(
         /* TAB 1: MASTER-DETAIL 2-COLUMN WORKFLOW BUILDER */
         <div style={{
           display: 'grid',

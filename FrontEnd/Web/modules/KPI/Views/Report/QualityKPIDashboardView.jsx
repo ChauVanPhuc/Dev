@@ -896,14 +896,19 @@ const QualityKPIDashboardView = () => {
     return res.join(' ');
   };
 
-  // Helper: Định dạng ngày gọn gàng (DD/MM/YYYY HH:mm)
+  // Helper: Định dạng ngày gọn gàng (DD/MM/YYYY hoặc DD/MM/YYYY HH:mm)
   const formatCompactDate = (str) => {
     if (!str) return '';
     if (typeof str !== 'string') return String(str);
-    const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})(?:T|\s+)(\d{2}):(\d{2})/);
-    if (isoMatch) {
-      const [, y, m, d, hh, mm] = isoMatch;
+    const isoDateTimeMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})(?:T|\s+)(\d{2}):(\d{2})/);
+    if (isoDateTimeMatch) {
+      const [, y, m, d, hh, mm] = isoDateTimeMatch;
       return `${d}/${m}/${y} ${hh}:${mm}`;
+    }
+    const isoDateOnlyMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (isoDateOnlyMatch) {
+      const [, y, m, d] = isoDateOnlyMatch;
+      return `${d}/${m}/${y}`;
     }
     return str;
   };
@@ -2044,17 +2049,17 @@ const QualityKPIDashboardView = () => {
               )}
 
               <div className="admin-table-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+                <table style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
                   <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
                     <tr style={{ backgroundColor: '#FAF6F0', color: '#5D3B32', borderBottom: '1px solid #EADCC9', textAlign: 'left' }}>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '40px' }}>STT</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Mã NV / Họ tên</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Hành vi vi phạm</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '110px' }}>Mức độ vi phạm</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '80px' }}>Điểm trừ</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '100px' }}>Ngày vi phạm</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Người ghi nhận</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '80px' }}>Thao tác</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '45px', textAlign: 'center', whiteSpace: 'nowrap' }}>STT</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '140px', whiteSpace: 'nowrap' }}>Mã NV / Họ tên</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '180px', whiteSpace: 'nowrap' }}>Hành vi vi phạm</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '110px', whiteSpace: 'nowrap' }}>Mức độ vi phạm</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '85px', whiteSpace: 'nowrap' }}>Điểm trừ</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '105px', whiteSpace: 'nowrap' }}>Ngày vi phạm</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '130px', whiteSpace: 'nowrap' }}>Người ghi nhận</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '80px', whiteSpace: 'nowrap' }}>Thao tác</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2154,18 +2159,18 @@ const QualityKPIDashboardView = () => {
               )}
 
               <div className="admin-table-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+                <table style={{ width: '100%', minWidth: '1050px', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
                   <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
                     <tr style={{ backgroundColor: '#FAF6F0', color: '#5D3B32', borderBottom: '1px solid #EADCC9', textAlign: 'left' }}>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '40px' }}>STT</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Mã Khóa</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Tên Chương Trình Đào Tạo</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Đối Tượng Tham Gia</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center' }}>Thời Gian</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Giảng Viên</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Tài Liệu Đính Kèm (File)</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center' }}>Trạng Thái</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '90px' }}>Thao Tác</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '45px', textAlign: 'center', whiteSpace: 'nowrap' }}>STT</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '110px', whiteSpace: 'nowrap' }}>Mã Khóa</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '160px', whiteSpace: 'nowrap' }}>Tên Chương Trình Đào Tạo</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '190px', whiteSpace: 'nowrap' }}>Đối Tượng Tham Gia</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '105px', whiteSpace: 'nowrap' }}>Thời Gian</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '140px', whiteSpace: 'nowrap' }}>Giảng Viên</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '180px', whiteSpace: 'nowrap' }}>Tài Liệu Đính Kèm</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '115px', whiteSpace: 'nowrap' }}>Trạng Thái</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '95px', whiteSpace: 'nowrap' }}>Thao Tác</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2180,72 +2185,76 @@ const QualityKPIDashboardView = () => {
                             onClick={() => handleOpenTrainingDetail(item)}
                             style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0', cursor: 'pointer' }}
                           >
-                            <td style={{ padding: '5px 10px', fontWeight: '700', color: '#64748B' }}>{globalIdx + 1}</td>
-                            <td style={{ padding: '5px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.code}</td>
-                            <td style={{ padding: '5px 10px', fontWeight: '700', color: '#1E293B' }}>{item.name}</td>
-                            <td style={{ padding: '5px 10px', color: '#475569', fontWeight: '500' }}>
+                            <td style={{ padding: '6px 10px', fontWeight: '700', color: '#64748B', textAlign: 'center', whiteSpace: 'nowrap' }}>{globalIdx + 1}</td>
+                            <td style={{ padding: '6px 10px', fontWeight: '800', color: '#5D3B32', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{item.code}</td>
+                            <td style={{ padding: '6px 10px', fontWeight: '700', color: '#1E293B' }}>{item.name}</td>
+                            <td style={{ padding: '6px 10px', color: '#475569', fontWeight: '500' }}>
                               {(() => {
                                 if (!item.target) return 'Tất cả nhân sự QLCL';
                                 const list = item.target.split(',').map(s => s.trim()).filter(Boolean);
                                 if (list.length <= 2) return item.target;
                                 return (
-                                  <span>
-                                    {list[0]}, {list[1]}{' '}
-                                    <span style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8', padding: '1px 6px', borderRadius: '10px', fontSize: '0.68rem', fontWeight: '700', border: '1px solid #BFDBFE' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                    <span>{list[0]}, {list[1]}</span>
+                                    <span style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8', padding: '2px 8px', borderRadius: '10px', fontSize: '0.68rem', fontWeight: '700', border: '1px solid #BFDBFE', whiteSpace: 'nowrap', display: 'inline-block' }}>
                                       +{list.length - 2} nhân sự khác
                                     </span>
-                                  </span>
+                                  </div>
                                 );
                               })()}
                             </td>
-                            <td style={{ padding: '5px 10px', textAlign: 'center', color: '#64748B' }}>{item.time}</td>
-                            <td style={{ padding: '5px 10px', color: '#334155' }}>{item.teacher}</td>
-                            <td style={{ padding: '5px 10px' }}>
+                            <td style={{ padding: '6px 10px', textAlign: 'center', color: '#64748B', whiteSpace: 'nowrap', fontWeight: '600' }}>{formatCompactDate(item.time)}</td>
+                            <td style={{ padding: '6px 10px', color: '#334155', whiteSpace: 'nowrap', fontWeight: '600' }}>{item.teacher}</td>
+                            <td style={{ padding: '6px 10px' }}>
                               <div
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleOpenTrainingDetail(item);
                                 }}
-                                style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#2563EB', fontWeight: '700', cursor: 'pointer' }}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#2563EB', fontWeight: '700', cursor: 'pointer', maxWidth: '280px' }}
                                 title="Nhấn để xem danh sách tài liệu"
                               >
-                                <ExternalLink size={12} />
-                                {(() => {
-                                  const filesArr = Array.isArray(item.files) && item.files.length > 0 ? item.files : (item.fileName ? item.fileName.split(',').map(n => ({ name: n.trim() })) : []);
-                                  if (filesArr.length === 0) return 'Chưa có file';
-                                  if (filesArr.length === 1) return filesArr[0].name;
-                                  return `${filesArr[0].name} (+${filesArr.length - 1} file đính kèm)`;
-                                })()}
+                                <ExternalLink size={12} style={{ flexShrink: 0 }} />
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {(() => {
+                                    const filesArr = Array.isArray(item.files) && item.files.length > 0 ? item.files : (item.fileName ? item.fileName.split(',').map(n => ({ name: n.trim() })) : []);
+                                    if (filesArr.length === 0) return 'Chưa có file';
+                                    if (filesArr.length === 1) return filesArr[0].name;
+                                    return `${filesArr[0].name} (+${filesArr.length - 1} file đính kèm)`;
+                                  })()}
+                                </span>
                               </div>
                             </td>
-                            <td style={{ padding: '5px 10px', textAlign: 'center' }}>
+                            <td style={{ padding: '6px 10px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                               <span style={{
-                                padding: '2px 8px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: '800',
+                                padding: '3px 10px', borderRadius: '12px', fontSize: '0.68rem', fontWeight: '800',
                                 backgroundColor: item.status === 'Đã hoàn thành' ? '#DCFCE7' : '#FEF3C7',
-                                color: item.status === 'Đã hoàn thành' ? '#15803D' : '#B45309'
+                                color: item.status === 'Đã hoàn thành' ? '#15803D' : '#B45309',
+                                display: 'inline-flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap'
                               }}>
+                                <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: item.status === 'Đã hoàn thành' ? '#15803D' : '#D97706' }} />
                                 {item.status}
                               </span>
                             </td>
-                            <td style={{ padding: '5px 10px', textAlign: 'center' }}>
+                            <td style={{ padding: '6px 10px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                               <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleOpenTrainingDetail(item); }}
-                                  style={{ border: 'none', background: '#EFF6FF', color: '#2563EB', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                                  style={{ border: 'none', background: '#EFF6FF', color: '#2563EB', padding: '4px 6px', borderRadius: '4px', cursor: 'pointer' }}
                                   title="Xem chi tiết"
                                 >
                                   <Eye size={12} />
                                 </button>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleEditTrainingPlan(item); }}
-                                  style={{ border: 'none', background: '#FEF3C7', color: '#D97706', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                                  style={{ border: 'none', background: '#FEF3C7', color: '#D97706', padding: '4px 6px', borderRadius: '4px', cursor: 'pointer' }}
                                   title="Chỉnh sửa"
                                 >
                                   <Edit2 size={12} />
                                 </button>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleOpenDeleteTrainingConfirm(item); }}
-                                  style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                                  style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '4px 6px', borderRadius: '4px', cursor: 'pointer' }}
                                   title="Xóa khóa học"
                                 >
                                   <Trash2 size={12} />
@@ -2314,18 +2323,18 @@ const QualityKPIDashboardView = () => {
               )}
 
               <div className="admin-table-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+                <table style={{ width: '100%', minWidth: '1000px', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
                   <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
                     <tr style={{ backgroundColor: '#FAF6F0', color: '#5D3B32', borderBottom: '1px solid #EADCC9', textAlign: 'left' }}>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '40px' }}>STT</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Mã Báo Cáo</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Nhân Viên</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Bộ Phận</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Nhận Xét Đánh Giá Quản Lý</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center' }}>Điểm Đánh Giá</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Mã BBCH Khắc Phục</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center' }}>Ngày Lập</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center' }}>Trạng Thái</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '45px', textAlign: 'center', whiteSpace: 'nowrap' }}>STT</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '110px', whiteSpace: 'nowrap' }}>Mã Báo Cáo</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '130px', whiteSpace: 'nowrap' }}>Nhân Viên</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '120px', whiteSpace: 'nowrap' }}>Bộ Phận</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '200px', whiteSpace: 'nowrap' }}>Nhận Xét Đánh Giá Quản Lý</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '110px', whiteSpace: 'nowrap' }}>Điểm Đánh Giá</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '140px', whiteSpace: 'nowrap' }}>Mã BBCH Khắc Phục</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '105px', whiteSpace: 'nowrap' }}>Ngày Lập</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '110px', whiteSpace: 'nowrap' }}>Trạng Thái</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2418,19 +2427,19 @@ const QualityKPIDashboardView = () => {
               )}
 
               <div className="admin-table-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+                <table style={{ width: '100%', minWidth: '1050px', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
                   <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
                     <tr style={{ backgroundColor: '#FAF6F0', color: '#5D3B32', borderBottom: '1px solid #EADCC9', textAlign: 'left' }}>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '40px' }}>STT</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Mã Cảnh Báo</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Tiêu Đề Thông Báo</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Nội Dung Phát Đến Banner Mobile App</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Đối Tượng Nhận</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center' }}>Thời Gian Ban Hành</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center' }}>Thời Gian Kết Thúc</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center' }}>Tổng Thời Gian</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center' }}>Trạng Thái</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '80px' }}>Thao Tác</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '45px', textAlign: 'center', whiteSpace: 'nowrap' }}>STT</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '110px', whiteSpace: 'nowrap' }}>Mã Cảnh Báo</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '150px', whiteSpace: 'nowrap' }}>Tiêu Đề Thông Báo</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '220px', whiteSpace: 'nowrap' }}>Nội Dung Phát Đến Banner Mobile App</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '130px', whiteSpace: 'nowrap' }}>Đối Tượng Nhận</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '115px', whiteSpace: 'nowrap' }}>Thời Gian Ban Hành</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '115px', whiteSpace: 'nowrap' }}>Thời Gian Kết Thúc</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '100px', whiteSpace: 'nowrap' }}>Tổng Thời Gian</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '105px', whiteSpace: 'nowrap' }}>Trạng Thái</th>
+                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '80px', whiteSpace: 'nowrap' }}>Thao Tác</th>
                     </tr>
                   </thead>
                   <tbody>

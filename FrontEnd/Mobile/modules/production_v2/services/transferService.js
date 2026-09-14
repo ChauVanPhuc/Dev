@@ -38,8 +38,38 @@ export const transferService = {
   async getById(id) {
     if (!id || id === 'NEW') return null
     try {
-      const res = await apiClient.get(`/deliveries/${id}/`)
-      return res.data
+      const cleanId = String(id).replace(/^LC/i, '').replace(/^DEL-/i, '').replace(/^DLV-/i, '').trim()
+      let resData = null
+      try {
+        const res = await apiClient.get(`/deliveries/detail/${cleanId}`)
+        resData = res.data
+      } catch (e1) {
+        try {
+          const res2 = await apiClient.get(`/deliveries/${cleanId}/`)
+          resData = res2.data
+        } catch (e2) {
+          console.warn('[transferService.getById] fallback error:', e2)
+        }
+      }
+
+      if (!resData) return null
+
+      return {
+        ...resData,
+        code: resData.code || `LC${resData.id}`,
+        palletCode: resData.palletCode || resData.backup_qr || '',
+        totalQty: resData.totalQty || resData.quantity_total || 0,
+        fromStage: resData.fromStage || resData.delivery_stage || '',
+        toStage: resData.toStage || resData.receiving_stage || '',
+        detail: resData.detail || resData.part_name || '',
+        note: resData.note || '',
+        items: (resData.items || resData.details || []).map(it => ({
+          po: it.po || (it.order ? it.order.order_code : '') || '',
+          detail: it.detail || it.part_name || '',
+          spec: it.spec || it.element_name || it.specification || '',
+          qty: it.qty || it.quantity || 0,
+        }))
+      }
     } catch (e) {
       console.warn('[transferService.getById] error:', e)
       return null
@@ -69,7 +99,8 @@ export const transferService = {
     
     formData.append('part_name', mainPartName)
     formData.append('specification', mainSpec)
-    formData.append('backup_qr', payload.palletCode || payload.pallet_code || '')
+    const backupQrVal = payload.backup_qr || payload.backupQrCode || payload.palletCode || payload.pallet_code || ''
+    formData.append('backup_qr', backupQrVal)
     formData.append('note', payload.note || '')
     formData.append('details', JSON.stringify(items))
 

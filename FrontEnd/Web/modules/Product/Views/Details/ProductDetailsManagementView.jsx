@@ -493,8 +493,8 @@ const ProductDetailsManagementView = ({ isEmbedded = false }) => {
                           <td style={{ fontWeight: '800', color: '#2D1A12' }}>{item.name}</td>
                           <td style={{ textAlign: 'center', fontWeight: '800' }}>{item.quantity}</td>
                           <td style={{ textAlign: 'center' }}>{item.unit}</td>
-                          <td>{item.input_stage || '---'}</td>
                           <td>{item.output_stage || '---'}</td>
+                          <td>{item.input_stage || '---'}</td>
                           <td>{item.material || '---'}</td>
                           <td style={{ textAlign: 'center', position: 'relative' }}>
                             <button

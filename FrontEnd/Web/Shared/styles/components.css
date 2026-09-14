@@ -422,15 +422,14 @@
 
 .data-table tbody tr, .screens-table tbody tr, .manufacture-table tbody tr, .modern-table tbody tr, .dev-db-table tbody tr, .dev-api-params-table tbody tr, .mock-data-table tbody tr, .real-table-data tbody tr {
   background-color: #ffffff !important;
-  box-shadow: 0 4px 10px rgba(123, 82, 51, 0.04) !important;
-  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
-  animation: cardEntrance 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  box-shadow: 0 2px 6px rgba(123, 82, 51, 0.04) !important;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease !important;
 }
 
 .data-table tbody tr:hover, .screens-table tbody tr:hover, .manufacture-table tbody tr:hover, .modern-table tbody tr:hover, .dev-db-table tbody tr:hover, .dev-api-params-table tbody tr:hover, .mock-data-table tbody tr:hover, .real-table-data tbody tr:hover {
-  transform: translateY(-2px) !important;
-  box-shadow: 0 8px 20px rgba(123, 82, 51, 0.1) !important;
-  background-color: #FDFBF7 !important;
+  transform: none !important;
+  box-shadow: 0 4px 12px rgba(123, 82, 51, 0.08) !important;
+  background-color: #FAF6F0 !important;
 }
 
 .data-table td, .screens-table td, .manufacture-table td, .modern-table td, .dev-db-table td, .dev-api-params-table td, .mock-data-table td, .real-table-data td {

@@ -48,5 +48,6 @@ class InputInspectionRead(InputInspection):
     images_json: Optional[str] = None
     inspection_date: Optional[datetime] = None
     created_at: Optional[datetime] = None
+    action: Optional[str] = None
 
 

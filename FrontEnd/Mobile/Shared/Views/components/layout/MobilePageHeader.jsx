@@ -7,9 +7,6 @@ import useNotificationStore from '@shared/store/notificationStore' // [NEW] Impo
 import useAuthStore from '@modules/auth/Models/authModel'
 
 import QRScanner from '../media/QRScanner'
-
-import QRDisplayModal from '../media/QRDisplayModal'
-
 import UserProfileCard from '../user/UserProfileCard'
 
 import { useState, useEffect, useCallback } from 'react'
@@ -147,11 +144,6 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef, onBackClick 
 
 
   const [isScannerOpen, setIsScannerOpen] = useState(false)
-
-  const [showResult, setShowResult] = useState(false)
-
-  const [resultData, setResultData] = useState(null)
-
   const [showProfile, setShowProfile] = useState(false) // [NEW] State mở Profile card trực tiếp từ header
 
 
@@ -379,75 +371,140 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef, onBackClick 
 
 
   const handleScanResult = async (code) => {
-
     setIsScannerOpen(false)
-
-
 
     if (!code) return;
 
+    const trimmedCode = String(code).trim().toUpperCase();
 
+    // Mode to route map cho phiếu kiểm tra chất lượng
+    const modeRoutes = {
+      first_sample: '/production_v2/inspection/first-sample',
+      re_inspect: '/production_v2/inspection/re-inspect',
+      parameter: '/production_v2/inspection/parameter',
+      process: '/production_v2/inspection/process',
+      qa: '/production_v2/inspection/qa',
+      daily: '/production_v2/inspection/daily',
+    };
 
-    // [NEW] Xử lý mã QR dự phòng
-
-    if (code.startsWith('DP-') || code.startsWith('BACKUP-')) {
-
-      try {
-
-        // Lấy trạng thái của thẻ luân chuyển
-
-        const res = await apiClient.get(`deliveries/by-backup-qr/${code}`);
-
-        const qrData = res.data;
-
-
-
-        if (qrData && qrData.status === 'Đang Sử Dụng' && qrData.current_delivery_id) {
-
-          // Đã bị khóa vào một phiếu -> Đi tới trang Nhận hàng của phiếu đó
-
-          navigate(`/delivery-receive/${qrData.current_delivery_id}`);
-
-          return;
-
-        } else {
-
-          // Thẻ trống (chưa khóa) -> Đi tới trang Tạo phiếu mới
-
-          navigate('/delivery-create', { state: { backupQrCode: code } });
-
-          return;
-
-        }
-
-      } catch (error) {
-
-        console.error("Lỗi khi kiểm tra mã QR dự phòng:", error);
-
-        alert("Có lỗi khi kiểm tra thẻ QR luân chuyển.");
-
-        return;
-
-      }
-
+    // 1. Xử lý mã QR Thẻ Dự Phòng / Luân Chuyển (DP- hoặc BACKUP-)
+    // Điều hướng trực tiếp tới trang chuyên dụng phục vụ Thẻ dự phòng (gồm 2 tab Bàn giao & Kiểm tra)
+    if (trimmedCode.startsWith('DP-') || trimmedCode.startsWith('BACKUP-')) {
+      navigate(`/production_v2/backup-qr/${encodeURIComponent(trimmedCode)}`, {
+        state: { backupQrCode: trimmedCode }
+      });
+      return;
     }
 
+    // 2. Xử lý mã Phiếu Luân Chuyển / Bàn Giao (LC, TK-, PL-, DLV-, DEL-)
+    // [ƯU TIÊN HÀNG ĐẦU] Bất kỳ mã nào bắt đầu bằng LC (ví dụ: LC10029, LC001) đều là Phiếu Luân Chuyển,
+    // điều hướng ngay tới chi tiết phiếu luân chuyển (/production_v2/transfer/{id}),
+    // tuyệt đối không chuyển nhầm sang phiếu kiểm tra chất lượng.
+    const lcMatch = trimmedCode.match(/^LC(\d+)$/i);
+    if (lcMatch) {
+      const deliveryId = lcMatch[1];
+      navigate(`/production_v2/transfer/${deliveryId}`, {
+        state: { scannedCode: trimmedCode }
+      });
+      return;
+    }
 
+    if (trimmedCode.toUpperCase().startsWith('LC') || trimmedCode.startsWith('TK-') || trimmedCode.startsWith('PL-')) {
+      navigate(`/production_v2/transfer/${trimmedCode}`, {
+        state: { scannedCode: trimmedCode }
+      });
+      return;
+    }
 
-    // [FIX] Lọc bỏ tiền tố chữ (như DLV-123) để lấy ID số (123)
+    // 3. Xử lý mã Phiếu Giao Nhận V1/V2 (DLV- hoặc DEL-)
+    if (trimmedCode.startsWith('DLV-') || trimmedCode.startsWith('DEL-')) {
+      const match = trimmedCode.match(/(\d+)$/);
+      const cleanId = match ? match[1] : trimmedCode;
+      navigate(`/production_v2/transfer/${cleanId}`);
+      return;
+    }
 
-    // Giúp xử lý được cả mã cũ và mã mới
+    // 4. Xử lý mã Lệnh Sản Xuất / Đơn Hàng (PO- hoặc LSX-)
+    if (trimmedCode.startsWith('PO-') || trimmedCode.startsWith('LSX-')) {
+      navigate(`/production/order-detail/${trimmedCode}`);
+      return;
+    }
 
-    const match = String(code).match(/(\d+)$/);
+    // 5. Xử lý mã Phiếu Kiểm Tra có tiền tố DA (ví dụ: DA3515) hoặc KT (ví dụ: KT110267)
+    const daMatch = trimmedCode.match(/^DA(\d+)$/i) || trimmedCode.match(/^KT(\d+)$/i);
+    if (daMatch) {
+      const inspectId = daMatch[1];
+      try {
+        const res = await apiClient.get(`/inspections/${inspectId}/`);
+        if (res.data && res.data.id) {
+          const targetMode = res.data.mode || 're_inspect';
+          const targetPath = modeRoutes[targetMode] || '/production_v2/inspection/re-inspect';
+          navigate(`${targetPath}/${inspectId}`);
+          return;
+        }
+      } catch (err) {
+        // Mở trực tiếp màn hình chi tiết kiểm tra lại
+        navigate(`/production_v2/inspection/re-inspect/${inspectId}`);
+        return;
+      }
+    }
 
-    const cleanId = match ? match[1] : code;
+    // 6. Nếu là mã QC- hoặc INS-
+    if (trimmedCode.startsWith('QC-') || trimmedCode.startsWith('INS-')) {
+      navigate(`/production_v2/inspection/first-sample/${trimmedCode}`);
+      return;
+    }
 
+    // 7. Tra cứu thông tin theo mã Pallet hoặc mã phiếu qua API /inspections/pallet/{code}
+    // Chỉ điều hướng kiểm tra nếu thực sự có thông tin pallet hợp lệ trong DB
+    try {
+      const res = await apiClient.get(`/inspections/pallet/${encodeURIComponent(trimmedCode)}`);
+      const data = res.data;
+      if (data) {
+        if (data.last_inspection && data.last_inspection.id) {
+          const targetMode = data.last_inspection.mode || 're_inspect';
+          const targetPath = modeRoutes[targetMode] || '/production_v2/inspection/re-inspect';
+          navigate(`${targetPath}/${data.last_inspection.id}`);
+          return;
+        }
+        if (data.palletCode && (data.inspectionCount > 0 || data.po || data.product || data.spec)) {
+          // Là mã pallet đã có dữ liệu -> Mở tạo phiếu kiểm tra mới với mã pallet này
+          navigate('/production_v2/inspection/re-inspect', {
+            state: { palletCode: trimmedCode }
+          });
+          return;
+        }
+      }
+    } catch (err) {
+      // Tiếp tục các kiểm tra bên dưới
+    }
 
+    // 8. Xử lý mã số ID thuần túy (ví dụ: 3515 hoặc 123)
+    const matchNumeric = trimmedCode.match(/^(\d+)$/);
+    if (matchNumeric) {
+      const numId = matchNumeric[1];
+      try {
+        const res = await apiClient.get(`/inspections/${numId}/`);
+        if (res.data && res.data.id) {
+          const targetMode = res.data.mode || 'first_sample';
+          const targetPath = modeRoutes[targetMode] || '/production_v2/inspection/first-sample';
+          navigate(`${targetPath}/${numId}`);
+          return;
+        }
+      } catch (err) {
+        navigate(`/production_v2/transfer/${numId}`);
+        return;
+      }
+    }
 
-    // Chuyển hướng sang trang nhận hàng với ID quét được
-
-    navigate(`/delivery-receive/${cleanId}`)
-
+    // 9. Điều hướng thông minh theo trang hiện tại, tuyệt đối không hiện popup QR modal
+    if (location.pathname.includes('inspection')) {
+      navigate('/production_v2/inspection/re-inspect', {
+        state: { palletCode: trimmedCode }
+      });
+    } else {
+      navigate(`/production_v2/transfer/${trimmedCode}`);
+    }
   }
 
 
@@ -837,31 +894,10 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef, onBackClick 
 
 
       {/* QR Scanner Modal */}
-
       <QRScanner
-
         isOpen={isScannerOpen}
-
         onClose={() => setIsScannerOpen(false)}
-
         onResult={handleScanResult}
-
-      />
-
-
-
-      {/* Scanned Result Modal (Re-use QRDisplayModal in read-only mode) */}
-
-      <QRDisplayModal
-
-        isOpen={showResult}
-
-        onClose={() => setShowResult(false)}
-
-        code={resultData}
-
-        title="Thông tin quét được"
-
       />
 
 

@@ -608,7 +608,7 @@ const DailyInspection = () => {
                             border: '1px solid #fecaca'
                           }}>
                             <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#ef4444' }} />
-                            QA TRACK
+                            QA
                           </div>
                         )}
                           {defect.is_tracked_by_me && (

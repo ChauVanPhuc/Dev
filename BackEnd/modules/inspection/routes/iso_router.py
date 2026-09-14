@@ -460,11 +460,18 @@ def save_iso_process(
             role=payload.get("role", ""),
             document_level=payload.get("document_level") or iso_doc.document_level or "",
             diagram_data=payload.get("diagram_data", iso_doc.diagram_data or ""), # Clone diagram mẫu từ ISO nếu ko truyền
+            inspection_guide_id=payload.get("inspection_guide_id"),
             created_at=now_str,
             updated_at=now_str
         )
         db.add(proc)
         db.flush() # Lấy proc.id
+
+        if proc.inspection_guide_id:
+            from modules.inspection_guide.models.inspection_guide import InspectionGuide
+            guide_record = db.query(InspectionGuide).filter(InspectionGuide.id == proc.inspection_guide_id).first()
+            if guide_record:
+                guide_record.process_id = proc.id
         
         # Clone sections mẫu từ ISODocument nhưng để rỗng nội dung (chỉ hiển thị dạng hint, giữ lại metadata cấu hình)
         sections = payload.get("sections")
@@ -525,6 +532,20 @@ def save_iso_process(
         proc.role = payload.get("role", proc.role)
         proc.diagram_data = payload.get("diagram_data", proc.diagram_data)
         proc.updated_at = now_str
+
+        if "inspection_guide_id" in payload:
+            new_gid = payload.get("inspection_guide_id")
+            if new_gid != proc.inspection_guide_id:
+                from modules.inspection_guide.models.inspection_guide import InspectionGuide
+                if proc.inspection_guide_id:
+                    old_g = db.query(InspectionGuide).filter(InspectionGuide.id == proc.inspection_guide_id).first()
+                    if old_g:
+                        old_g.process_id = None
+                proc.inspection_guide_id = new_gid
+                if new_gid:
+                    new_g = db.query(InspectionGuide).filter(InspectionGuide.id == new_gid).first()
+                    if new_g:
+                        new_g.process_id = proc.id
 
         # Xóa các chi tiết cũ của quy trình để ghi đè cập nhật mới
         db.query(ISOProcessSection).filter(ISOProcessSection.process_id == proc.id).delete()
@@ -726,8 +747,187 @@ def get_iso_process_details(id: int, db: Session = Depends(get_db)):
         "revision_logs": revision_logs,
         "sections": sections,
         "template_sections": template_sections,
-        "steps": steps
+        "steps": steps,
+        "inspection_guide_id": proc.inspection_guide_id,
+        "inspection_guide": {
+            "id": proc.inspection_guide.id,
+            "code": proc.inspection_guide.code,
+            "name": proc.inspection_guide.name,
+            "doc_type": proc.inspection_guide.doc_type,
+            "is_active": proc.inspection_guide.is_active,
+            "steps_count": len(proc.inspection_guide.steps) if proc.inspection_guide and proc.inspection_guide.steps else 0
+        } if proc.inspection_guide else None
     }
+
+
+from modules.inspection_guide.schemas.inspection_guide import InspectionGuideOut
+
+@router.get("/processes/{id}/inspection-guide", response_model=Optional[InspectionGuideOut])
+def get_process_inspection_guide(id: int, db: Session = Depends(get_db)):
+    """
+    [GET] Lấy chi tiết Hướng dẫn kiểm tra (InspectionGuide) liên kết 1-1 với quy trình ISO.
+    """
+    proc = db.query(ISOProcess).filter(ISOProcess.id == id).first()
+    if not proc:
+        raise HTTPException(status_code=404, detail="Không tìm thấy quy trình ISO")
+    
+    if not proc.inspection_guide_id:
+        return None
+    
+    from modules.inspection_guide.services import inspection_guide_service
+    guide = inspection_guide_service.get_guide(db, proc.inspection_guide_id)
+    return guide
+
+
+@router.post("/processes/{id}/link-inspection-guide")
+def link_process_inspection_guide(id: int, payload: dict, db: Session = Depends(get_db)):
+    """
+    [POST] Liên kết 1-1 quy trình ISO với một Hướng dẫn kiểm tra có sẵn.
+    """
+    proc = db.query(ISOProcess).filter(ISOProcess.id == id).first()
+    if not proc:
+        raise HTTPException(status_code=404, detail="Không tìm thấy quy trình ISO")
+    
+    guide_id = payload.get("guide_id")
+    if not guide_id:
+        raise HTTPException(status_code=400, detail="Vui lòng cung cấp guide_id")
+        
+    from modules.inspection_guide.models.inspection_guide import InspectionGuide
+    guide = db.query(InspectionGuide).filter(InspectionGuide.id == guide_id, InspectionGuide.deleted_at.is_(None)).first()
+    if not guide:
+        raise HTTPException(status_code=404, detail="Không tìm thấy Hướng dẫn kiểm tra")
+        
+    # Kiểm tra quan hệ 1 - 1: guide này đã gắn với quy trình khác chưa
+    other_proc = db.query(ISOProcess).filter(ISOProcess.inspection_guide_id == guide_id, ISOProcess.id != id).first()
+    if other_proc:
+        raise HTTPException(status_code=400, detail=f"Hướng dẫn này đã được liên kết với quy trình '{other_proc.code} - {other_proc.name}'. Vui lòng chọn hướng dẫn khác.")
+        
+    # Gỡ liên kết cũ của quy trình này nếu có
+    if proc.inspection_guide_id and proc.inspection_guide_id != guide_id:
+        old_guide = db.query(InspectionGuide).filter(InspectionGuide.id == proc.inspection_guide_id).first()
+        if old_guide:
+            old_guide.process_id = None
+        proc.inspection_guide_id = None
+        db.flush()
+
+    # Cập nhật liên kết 1-1
+    proc.inspection_guide_id = guide.id
+    guide.process_id = proc.id
+    db.commit()
+    db.refresh(proc)
+    
+    from modules.inspection_guide.services import inspection_guide_service
+    guide_obj = inspection_guide_service.get_guide(db, guide.id)
+    return {
+        "message": "Đã liên kết thành công!",
+        "inspection_guide_id": proc.inspection_guide_id,
+        "guide": InspectionGuideOut.model_validate(guide_obj) if guide_obj else None
+    }
+
+
+
+@router.delete("/processes/{id}/unlink-inspection-guide")
+def unlink_process_inspection_guide(id: int, db: Session = Depends(get_db)):
+    """
+    [DELETE] Gỡ liên kết 1-1 giữa quy trình ISO và Hướng dẫn kiểm tra.
+    """
+    proc = db.query(ISOProcess).filter(ISOProcess.id == id).first()
+    if not proc:
+        raise HTTPException(status_code=404, detail="Không tìm thấy quy trình ISO")
+        
+    if proc.inspection_guide_id:
+        from modules.inspection_guide.models.inspection_guide import InspectionGuide
+        guide = db.query(InspectionGuide).filter(InspectionGuide.id == proc.inspection_guide_id).first()
+        if guide:
+            guide.process_id = None
+        proc.inspection_guide_id = None
+        db.commit()
+        
+    return {"message": "Đã gỡ liên kết thành công!"}
+
+
+@router.post("/processes/{id}/create-inspection-guide")
+def create_guide_for_process(id: int, payload: dict, db: Session = Depends(get_db)):
+    """
+    [POST] Tạo mới nhanh một Hướng dẫn kiểm tra (HDKT) và liên kết 1-1 với quy trình ISO.
+    """
+    proc = db.query(ISOProcess).filter(ISOProcess.id == id).first()
+    if not proc:
+        raise HTTPException(status_code=404, detail="Không tìm thấy quy trình ISO")
+        
+    code = (payload.get("code") or f"HD-{proc.code}").strip()
+    name = (payload.get("name") or f"Hướng dẫn kiểm tra {proc.name}").strip()
+    description = (payload.get("description") or f"Hướng dẫn kiểm tra thực hiện liên kết 1-1 với quy trình {proc.code} - {proc.name}").strip()
+    
+    from modules.inspection_guide.models.inspection_guide import InspectionGuide
+    # Kiểm tra trùng mã
+    exist_code = db.query(InspectionGuide).filter(InspectionGuide.code == code, InspectionGuide.deleted_at.is_(None)).first()
+    if exist_code:
+        import time
+        code = f"{code}-{int(time.time()) % 10000}"
+
+    new_guide = InspectionGuide(
+        code=code,
+        name=name,
+        doc_type="HDKT",
+        description=description,
+        is_active=True,
+        process_id=proc.id
+    )
+    db.add(new_guide)
+    db.flush()
+
+    # Gỡ guide cũ nếu có
+    if proc.inspection_guide_id:
+        old_g = db.query(InspectionGuide).filter(InspectionGuide.id == proc.inspection_guide_id).first()
+        if old_g:
+            old_g.process_id = None
+
+    proc.inspection_guide_id = new_guide.id
+    db.commit()
+    db.refresh(new_guide)
+    db.refresh(proc)
+    
+    from modules.inspection_guide.services import inspection_guide_service
+    guide_obj = inspection_guide_service.get_guide(db, new_guide.id)
+    return {
+        "message": "Đã tạo mới và liên kết Hướng dẫn kiểm tra thành công!",
+        "inspection_guide_id": proc.inspection_guide_id,
+        "guide": InspectionGuideOut.model_validate(guide_obj) if guide_obj else None
+    }
+
+
+
+@router.get("/unlinked-inspection-guides")
+def get_unlinked_inspection_guides(process_id: Optional[int] = None, db: Session = Depends(get_db)):
+    """
+    [GET] Lấy danh sách các Hướng dẫn kiểm tra (HDKT) chưa được liên kết với quy trình ISO nào (hoặc đang liên kết với chính process_id này).
+    """
+    from modules.inspection_guide.models.inspection_guide import InspectionGuide
+    query = db.query(InspectionGuide).filter(
+        InspectionGuide.deleted_at.is_(None),
+        InspectionGuide.doc_type == "HDKT"
+    )
+    if process_id:
+        query = query.filter(
+            (InspectionGuide.process_id.is_(None)) | (InspectionGuide.process_id == process_id)
+        )
+    else:
+        query = query.filter(InspectionGuide.process_id.is_(None))
+        
+    guides = query.order_by(InspectionGuide.code.asc()).all()
+    return [
+        {
+            "id": g.id,
+            "code": g.code,
+            "name": g.name,
+            "doc_type": g.doc_type,
+            "steps_count": len(g.steps) if g.steps else 0,
+            "is_current": g.process_id == process_id if process_id else False
+        }
+        for g in guides
+    ]
+
 
 
 @router.delete("/processes/{id}")

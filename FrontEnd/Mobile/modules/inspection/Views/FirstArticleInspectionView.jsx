@@ -1235,7 +1235,7 @@ const FirstArticleInspectionView = () => {
                       disabled={effectiveViewOnly}
                       style={{ width: '100%', height: '40px', boxSizing: 'border-box', padding: '0 10px', borderRadius: '8px', border: '1px solid #7B5233', fontSize: '13px', outline: 'none', backgroundColor: '#fff' }}
                     >
-                      <option value="">-- Chọn mã --</option>
+                      <option value="">Chọn mã</option>
                       {filteredMachines.map(m => (
                         <option key={m.code} value={m.code}>{m.code}</option>
                       ))}
@@ -1277,10 +1277,10 @@ const FirstArticleInspectionView = () => {
                     style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #7B5233', fontSize: '13px', outline: 'none', backgroundColor: (!poHeader || effectiveViewOnly) ? '#f1f5f9' : '#fff' }}
                   >
                     {!poHeader ? (
-                      <option value="">-- Vui lòng tìm kiếm PO trước --</option>
+                      <option value="">Vui lòng tìm kiếm PO trước</option>
                     ) : (
                       <>
-                        <option value="">-- Chọn mặt hàng chi tiết --</option>
+                        <option value="">Chọn mặt hàng chi tiết</option>
                         {poItems.map(item => (
                           <option key={item.id} value={item.item_code}>
                             {item.item_name}
@@ -1569,14 +1569,14 @@ const FirstArticleInspectionView = () => {
                             onChange={(e) => handleUpdateDefect(idx, 'defectId', e.target.value)}
                             style={{ flex: 2, padding: '8px', borderRadius: '6px', border: `1px solid ${def.defectId ? '#7B5233' : '#cbd5e1'}`, fontSize: '12px', outline: 'none', backgroundColor: '#fff' }}
                           >
-                            <option value="">-- {idx === 0 ? 'Chọn lỗi QA track' : 'Chọn lỗi khác'} --</option>
+                            <option value="">{idx === 0 ? 'Chọn lỗi QA' : 'Chọn lỗi khác'}</option>
                             {/* Hiện lỗi đang được chọn + những lỗi chưa chọn */}
                             {def.defectId && !availableDefects.find(t => String(t.id) === String(def.defectId)) && (() => {
                               const current = defectTypes.find(t => String(t.id) === String(def.defectId));
-                              return current ? <option key={current.id} value={current.id}>{current.code ? `[${current.code}] ${current.name}` : current.name}</option> : null;
+                              return current ? <option key={current.id} value={current.id}>{current.name}</option> : null;
                             })()}
                             {availableDefects.map(t => (
-                              <option key={t.id} value={t.id}>{t.code ? `[${t.code}] ${t.name}` : t.name}</option>
+                              <option key={t.id} value={t.id}>{t.name}</option>
                             ))}
                           </select>
 

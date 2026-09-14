@@ -6,7 +6,7 @@ import DepartmentModal from '@modules/auth/Views/Department/DepartmentModal';
 import { 
   FileText, Plus, Edit2, Trash2, Search, ArrowUp, ArrowDown, Layout, Smartphone, 
   X, HelpCircle, Save, ChevronRight, CheckSquare, Square, RefreshCw, Layers, Briefcase, Users, Building2, Sliders,
-  Tag, Factory, Contact, ShieldCheck, Palette, ClipboardList, ExternalLink, AlertOctagon
+  Tag, Factory, Contact, ShieldCheck, Palette, ClipboardList, ExternalLink, AlertOctagon, ClipboardCheck
 } from 'lucide-react';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
@@ -113,6 +113,26 @@ export default function SystemConfigView() {
   const [permIsActive, setPermIsActive] = useState(true);
   const [deptOptions, setDeptOptions] = useState([]);
 
+  // --- INSPECTION FORM TYPE (Loại phiếu kiểm tra) STATES ---
+  const [formTypeCode, setFormTypeCode] = useState('');
+  const [formTypeName, setFormTypeName] = useState('');
+  const [formTypeShortName, setFormTypeShortName] = useState('');
+  const [formTypeDesc, setFormTypeDesc] = useState('');
+  const [formTypeRoute, setFormTypeRoute] = useState('');
+  const [formTypeColor, setFormTypeColor] = useState('#0284C7');
+  const [formTypeBgColor, setFormTypeBgColor] = useState('#F0F9FF');
+  const [formTypeOrder, setFormTypeOrder] = useState(0);
+  const [formTypeIsActive, setFormTypeIsActive] = useState(true);
+
+  // --- INSPECTION PARAMETER (Thông số kiểm tra) STATES ---
+  const [paramCode, setParamCode] = useState('');
+  const [paramName, setParamName] = useState('');
+  const [paramUnit, setParamUnit] = useState('');
+  const [paramMin, setParamMin] = useState('');
+  const [paramMax, setParamMax] = useState('');
+  const [paramOrder, setParamOrder] = useState(0);
+  const [paramIsActive, setParamIsActive] = useState(true);
+
   // --- SIDEBAR TREE STATES ---
   const [sidebarPlatform, setSidebarPlatform] = useState('Web'); // 'Web' or 'Mobile'
   const [collapsedGroupIds, setCollapsedGroupIds] = useState({});
@@ -203,6 +223,12 @@ export default function SystemConfigView() {
         setDataList(permRes || []);
         setRoleOptions(Array.isArray(roleRes) ? roleRes : (roleRes?.data || []));
         setDeptOptions(Array.isArray(deptRes) ? deptRes : (deptRes?.data || []));
+      } else if (activeTab === 'inspection_form_type') {
+        const res = await api.get('/inspection-form-types?include_inactive=true');
+        setDataList(Array.isArray(res) ? res : (res?.data || []));
+      } else if (activeTab === 'inspection_parameter') {
+        const res = await api.get('/inspection-parameters?include_inactive=true');
+        setDataList(Array.isArray(res) ? res : (res?.data || []));
       }
     } catch (e) {
       console.error(e);
@@ -375,6 +401,31 @@ export default function SystemConfigView() {
           const list = Object.entries(perms).map(([key, level]) => ({ key, level }));
           setSubTableData(list);
         }
+      } else if (mainTab === 'inspection_form_type') {
+        setSubTableData([
+          { field: 'ID định danh', value: row.id },
+          { field: 'Mã loại phiếu (Code)', value: row.code },
+          { field: 'Tên loại phiếu', value: row.name },
+          { field: 'Tên hiển thị rút gọn / Badge', value: row.short_name || '---' },
+          { field: 'Đường dẫn Mobile (Route)', value: row.route_path || '---' },
+          { field: 'Mô tả / Phạm vi áp dụng', value: row.description || '---' },
+          { field: 'Màu nhận diện', value: row.color || '#0284C7' },
+          { field: 'Thứ tự hiển thị', value: row.display_order ?? 0 },
+          { field: 'Phân loại', value: row.is_system ? 'Mặc định hệ thống' : 'Tùy biến (Custom)' },
+          { field: 'Trạng thái', value: row.is_active ? 'Đang kích hoạt' : 'Tạm ẩn' },
+          { field: 'Ngày tạo', value: formatDate(row.created_at) }
+        ]);
+      } else if (mainTab === 'inspection_parameter') {
+        setSubTableData([
+          { field: 'ID định danh', value: row.id },
+          { field: 'Mã thông số (Code)', value: row.code },
+          { field: 'Tên thông số kỹ thuật', value: row.name },
+          { field: 'Đơn vị đo', value: row.unit || '---' },
+          { field: 'Khoảng chuẩn mặc định', value: (row.default_min != null && row.default_max != null) ? `${row.default_min} ~ ${row.default_max} ${row.unit || ''}` : '---' },
+          { field: 'Thứ tự hiển thị', value: row.display_order ?? 0 },
+          { field: 'Trạng thái', value: row.is_active ? 'Đang kích hoạt' : 'Tạm ẩn' },
+          { field: 'Ngày tạo', value: formatDate(row.created_at) }
+        ]);
       }
     } catch (err) {
       console.error(err);
@@ -512,6 +563,17 @@ export default function SystemConfigView() {
                (item.prefix || '').toLowerCase().includes(query) ||
                (item.description || '').toLowerCase().includes(query);
       }
+      if (activeTab === 'inspection_form_type') {
+        return (item.name || '').toLowerCase().includes(query) ||
+               (item.code || '').toLowerCase().includes(query) ||
+               (item.short_name || '').toLowerCase().includes(query) ||
+               (item.description || '').toLowerCase().includes(query);
+      }
+      if (activeTab === 'inspection_parameter') {
+        return (item.name || '').toLowerCase().includes(query) ||
+               (item.code || '').toLowerCase().includes(query) ||
+               (item.unit || '').toLowerCase().includes(query);
+      }
       return false;
     });
   }, [dataList, searchQuery, activeTab, sidebarPlatform]);
@@ -594,6 +656,24 @@ export default function SystemConfigView() {
       setFormIcon('LayoutGrid');
       setFormPermissionKey('');
       setFormIsActive(true);
+    } else if (activeTab === 'inspection_form_type') {
+      setFormTypeCode('');
+      setFormTypeName('');
+      setFormTypeShortName('');
+      setFormTypeDesc('');
+      setFormTypeRoute('/production_v2/inspection/first-sample');
+      setFormTypeColor('#0284C7');
+      setFormTypeBgColor('#F0F9FF');
+      setFormTypeOrder((dataList || []).length + 1);
+      setFormTypeIsActive(true);
+    } else if (activeTab === 'inspection_parameter') {
+      setParamCode('');
+      setParamName('');
+      setParamUnit('');
+      setParamMin('');
+      setParamMax('');
+      setParamOrder((dataList || []).length + 1);
+      setParamIsActive(true);
     }
     setIsModalOpen(true);
   };
@@ -681,6 +761,24 @@ export default function SystemConfigView() {
       setFormIcon(item.icon || 'LayoutGrid');
       setFormPermissionKey(item.permission_key || '');
       setFormIsActive(item.is_active);
+    } else if (activeTab === 'inspection_form_type') {
+      setFormTypeCode(item.code || '');
+      setFormTypeName(item.name || '');
+      setFormTypeShortName(item.short_name || '');
+      setFormTypeDesc(item.description || '');
+      setFormTypeRoute(item.route_path || '');
+      setFormTypeColor(item.color || '#0284C7');
+      setFormTypeBgColor(item.bg_color || '#F0F9FF');
+      setFormTypeOrder(item.display_order ?? 0);
+      setFormTypeIsActive(item.is_active !== false);
+    } else if (activeTab === 'inspection_parameter') {
+      setParamCode(item.code || '');
+      setParamName(item.name || '');
+      setParamUnit(item.unit || '');
+      setParamMin(item.default_min != null ? String(item.default_min) : '');
+      setParamMax(item.default_max != null ? String(item.default_max) : '');
+      setParamOrder(item.display_order ?? 0);
+      setParamIsActive(item.is_active !== false);
     }
     setIsModalOpen(true);
   };
@@ -839,6 +937,42 @@ export default function SystemConfigView() {
           await api.post('/system/sidebar', payload);
           toast('success', 'Thêm mới menu sidebar thành công!');
         }
+      } else if (activeTab === 'inspection_form_type') {
+        const payload = {
+          code: formTypeCode.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_'),
+          name: formTypeName.trim(),
+          short_name: formTypeShortName.trim() || formTypeName.trim(),
+          description: formTypeDesc.trim() || null,
+          route_path: formTypeRoute.trim() || null,
+          color: formTypeColor,
+          bg_color: formTypeBgColor,
+          display_order: parseInt(formTypeOrder) || 0,
+          is_active: formTypeIsActive
+        };
+        if (selectedItem) {
+          await api.put(`/inspection-form-types/${selectedItem.id}`, payload);
+          toast('success', 'Cập nhật loại phiếu kiểm tra thành công!');
+        } else {
+          await api.post('/inspection-form-types', payload);
+          toast('success', 'Thêm mới loại phiếu kiểm tra thành công!');
+        }
+      } else if (activeTab === 'inspection_parameter') {
+        const payload = {
+          code: paramCode.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_'),
+          name: paramName.trim(),
+          unit: paramUnit.trim() || null,
+          default_min: paramMin !== '' ? parseFloat(paramMin) : null,
+          default_max: paramMax !== '' ? parseFloat(paramMax) : null,
+          display_order: parseInt(paramOrder) || 0,
+          is_active: paramIsActive
+        };
+        if (selectedItem) {
+          await api.put(`/inspection-parameters/${selectedItem.id}`, payload);
+          toast('success', 'Cập nhật thông số kiểm tra thành công!');
+        } else {
+          await api.post('/inspection-parameters', payload);
+          toast('success', 'Thêm mới thông số kiểm tra thành công!');
+        }
       }
       setIsModalOpen(false);
       loadData();
@@ -877,6 +1011,16 @@ export default function SystemConfigView() {
         await api.delete(`/permissions/${deletingItem.id}`);
       } else if (activeTab === 'sidebar') {
         await api.delete(`/system/sidebar/${deletingItem.id}`);
+      } else if (activeTab === 'inspection_form_type') {
+        if (deletingItem.is_system) {
+          toast('warning', 'Không thể xóa loại phiếu mặc định hệ thống. Bạn có thể chọn tắt kích hoạt.');
+          setIsDeleteModalOpen(false);
+          setDeletingItem(null);
+          return;
+        }
+        await api.delete(`/inspection-form-types/${deletingItem.id}`);
+      } else if (activeTab === 'inspection_parameter') {
+        await api.delete(`/inspection-parameters/${deletingItem.id}`);
       }
       toast('success', 'Xóa cấu hình thành công!');
       setIsDeleteModalOpen(false);
@@ -1300,6 +1444,8 @@ export default function SystemConfigView() {
               { id: 'stage', label: 'Công đoạn SX', icon: Factory },
               { id: 'defect_category', label: 'Phân nhóm lỗi QC', icon: AlertOctagon },
               { id: 'qc_sampling', label: 'Quy tắc lấy mẫu QC', icon: Sliders },
+              { id: 'inspection_form_type', label: 'Loại phiếu kiểm tra', icon: ClipboardCheck },
+              { id: 'inspection_parameter', label: 'Thông số kiểm tra', icon: Sliders },
               { id: 'customer', label: 'Khách hàng', icon: Contact }
             ].map(tab => {
               const IconComp = tab.icon;
@@ -1420,6 +1566,8 @@ export default function SystemConfigView() {
                 {activeTab === 'stage' && 'Danh mục Công đoạn sản xuất'}
                 {activeTab === 'customer' && 'Danh mục Khách hàng & Đối tác'}
                 {activeTab === 'permission' && 'Danh mục Vị trí'}
+                {activeTab === 'inspection_form_type' && 'Danh mục Loại phiếu kiểm tra'}
+                {activeTab === 'inspection_parameter' && 'Danh mục Thông số đo kiểm tra'}
               </h3>
               <p style={{ margin: '4px 0 0 0', fontSize: '0.75rem', color: '#9CA3AF' }}>
                 {activeTab === 'factory' && 'Quản lý sơ đồ các Nhà máy, Phân xưởng và Tổ sản xuất vật lý.'}
@@ -1429,8 +1577,11 @@ export default function SystemConfigView() {
                 {activeTab === 'sidebar' && 'Thiết lập lưu đồ menu điều hướng cho bản Web và Mobile.'}
                 {activeTab === 'category' && 'Quản lý các dòng hàng mẫu và danh mục sản phẩm của toàn hệ thống.'}
                 {activeTab === 'stage' && 'Quản lý danh sách các công đoạn sản xuất tại các nhà máy và xưởng.'}
+                {activeTab === 'defect_category' && 'Quản lý phân nhóm lỗi QC (ngoại quan, sơn, kết cấu, vật tư...).'}
                 {activeTab === 'customer' && 'Quản lý danh bạ khách hàng, đối tác, mã số thuế và thông tin liên hệ.'}
                 {activeTab === 'permission' && 'Thiết lập vị trí, gán công đoạn phụ trách và quyền thao tác.'}
+                {activeTab === 'inspection_form_type' && 'Quản lý danh sách các loại phiếu kiểm tra (Đồng bộ trực tiếp với Mobile dropdown Chọn cách kiểm tra và Quản lý Hướng dẫn).'}
+                {activeTab === 'inspection_parameter' && 'Quản lý danh mục các thông số kỹ thuật đo đạc (Độ ẩm, Nhiệt độ, Ánh sáng, Độ bóng sơn...) áp dụng cho phiếu kiểm tra.'}
               </p>
             </div>
 
@@ -1612,6 +1763,26 @@ export default function SystemConfigView() {
                           <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Thuộc Phòng ban</th>
                           <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Thuộc Bộ phận</th>
                           <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Mô tả chức vụ</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Trạng thái</th>
+                        </>
+                      )}
+                      {activeTab === 'inspection_form_type' && (
+                        <>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Mã loại phiếu</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Tên loại phiếu / Nhãn</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Route Mobile</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800, textAlign: 'center' }}>Thứ tự</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800, textAlign: 'center' }}>Phân loại</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Trạng thái</th>
+                        </>
+                      )}
+                      {activeTab === 'inspection_parameter' && (
+                        <>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Mã thông số</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Tên thông số kỹ thuật</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800, textAlign: 'center' }}>Đơn vị đo</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800, textAlign: 'center' }}>Khoảng chuẩn mặc định</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800, textAlign: 'center' }}>Thứ tự</th>
                           <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Trạng thái</th>
                         </>
                       )}
@@ -1863,6 +2034,103 @@ export default function SystemConfigView() {
                                   fontSize: '0.7rem'
                                 }}>
                                   {item.is_active ? 'Kích hoạt' : 'Tạm khóa'}
+                                </span>
+                              </td>
+                            </>
+                          )}
+
+                          {activeTab === 'inspection_form_type' && (
+                            <>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1F2937', fontWeight: 'bold', fontFamily: 'monospace' }}>
+                                <code style={{ backgroundColor: '#F1F5F9', padding: '2px 6px', borderRadius: 4, fontSize: '0.8rem' }}>
+                                  {item.code}
+                                </code>
+                              </td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1F2937', fontWeight: 600 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span style={{
+                                    backgroundColor: item.bg_color || '#F0F9FF',
+                                    color: item.color || '#0284C7',
+                                    border: `1px solid ${item.color || '#0284C7'}33`,
+                                    padding: '2px 8px',
+                                    borderRadius: '12px',
+                                    fontWeight: 'bold',
+                                    fontSize: '0.72rem'
+                                  }}>
+                                    {item.short_name || item.name}
+                                  </span>
+                                  <span>{item.name}</span>
+                                </div>
+                              </td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.8rem', color: '#64748B', fontFamily: 'monospace' }}>
+                                {item.route_path || '---'}
+                              </td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', textAlign: 'center', fontWeight: 'bold', color: '#4B5563' }}>
+                                {item.display_order ?? 0}
+                              </td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.8rem', textAlign: 'center' }}>
+                                <span style={{
+                                  backgroundColor: item.is_system ? '#F1F5F9' : '#FEF3C7',
+                                  color: item.is_system ? '#475569' : '#92400E',
+                                  padding: '2px 8px',
+                                  borderRadius: '6px',
+                                  fontWeight: 'bold',
+                                  fontSize: '0.7rem'
+                                }}>
+                                  {item.is_system ? 'Hệ thống' : 'Tùy biến'}
+                                </span>
+                              </td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.8rem' }}>
+                                <span style={{
+                                  backgroundColor: item.is_active ? '#DCFCE7' : '#F3F4F6',
+                                  color: item.is_active ? '#15803D' : '#6B7280',
+                                  padding: '2px 8px',
+                                  borderRadius: '6px',
+                                  fontWeight: 'bold',
+                                  fontSize: '0.7rem'
+                                }}>
+                                  {item.is_active ? 'Kích hoạt' : 'Tạm ẩn'}
+                                </span>
+                              </td>
+                            </>
+                          )}
+
+                          {activeTab === 'inspection_parameter' && (
+                            <>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1F2937', fontWeight: 'bold', fontFamily: 'monospace' }}>
+                                <code style={{ backgroundColor: '#F1F5F9', padding: '2px 6px', borderRadius: 4, fontSize: '0.8rem' }}>
+                                  {item.code}
+                                </code>
+                              </td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1F2937', fontWeight: 700 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <Sliders size={14} style={{ color: '#7B5233' }} />
+                                  <span>{item.name}</span>
+                                </div>
+                              </td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', textAlign: 'center' }}>
+                                {item.unit ? (
+                                  <span style={{ backgroundColor: '#F5F3FF', color: '#7C3AED', padding: '2px 8px', borderRadius: '6px', fontWeight: 800, fontSize: '0.75rem' }}>
+                                    {item.unit}
+                                  </span>
+                                ) : '---'}
+                              </td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', textAlign: 'center', color: '#4B5563', fontWeight: 600 }}>
+                                {(item.default_min != null && item.default_max != null) ? `${item.default_min} ~ ${item.default_max} ${item.unit || ''}` : '---'}
+                              </td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', textAlign: 'center', fontWeight: 'bold', color: '#4B5563' }}>
+                                {item.display_order ?? 0}
+                              </td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.8rem' }}>
+                                <span style={{
+                                  backgroundColor: item.is_active ? '#DCFCE7' : '#F3F4F6',
+                                  color: item.is_active ? '#15803D' : '#6B7280',
+                                  padding: '2px 8px',
+                                  borderRadius: '6px',
+                                  fontWeight: 'bold',
+                                  fontSize: '0.7rem'
+                                }}>
+                                  {item.is_active ? 'Kích hoạt' : 'Tạm ẩn'}
                                 </span>
                               </td>
                             </>
@@ -2215,6 +2483,20 @@ export default function SystemConfigView() {
                       }}
                     >
                       Thông tin liên hệ & Pháp lý
+                    </button>
+                  )}
+
+                  {(activeTab === 'inspection_form_type' || activeTab === 'inspection_parameter') && (
+                    <button
+                      onClick={() => setActiveSubTab('subtab1')}
+                      style={{
+                        padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer',
+                        fontSize: '0.82rem', fontWeight: 800,
+                        color: '#7B5233',
+                        borderBottom: '2px solid #7B5233'
+                      }}
+                    >
+                      Thông tin chi tiết ({subTableData.length})
                     </button>
                   )}
 
@@ -3094,6 +3376,242 @@ export default function SystemConfigView() {
                           />
                           <span style={{ color: '#DC2626', fontWeight: 700 }}>● Tạm khóa</span>
                         </label>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* 9. INSPECTION FORM TYPE (LOẠI PHIẾU KIỂM TRA) FIELDS */}
+                {activeTab === 'inspection_form_type' && (
+                  <>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '10px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>MÃ ĐỊNH DANH (CODE) *</label>
+                        <input
+                          type="text"
+                          value={formTypeCode}
+                          onChange={(e) => setFormTypeCode(e.target.value.toLowerCase())}
+                          disabled={selectedItem && selectedItem.is_system}
+                          placeholder="Ví dụ: patrol, special_qc"
+                          style={{
+                            padding: '8px 12px',
+                            borderRadius: '8px',
+                            border: '1px solid #D1D5DB',
+                            fontSize: '0.85rem',
+                            outline: 'none',
+                            fontFamily: 'monospace',
+                            backgroundColor: (selectedItem && selectedItem.is_system) ? '#F3F4F6' : '#FFFFFF'
+                          }}
+                          required
+                        />
+                        <span style={{ fontSize: '0.7rem', color: '#9CA3AF' }}>
+                          {(selectedItem && selectedItem.is_system) ? 'Mã hệ thống gốc cố định' : 'Mã viết thường không dấu'}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>TÊN LOẠI PHIẾU HIỂN THỊ *</label>
+                        <input
+                          type="text"
+                          value={formTypeName}
+                          onChange={(e) => setFormTypeName(e.target.value)}
+                          placeholder="Ví dụ: Kiểm tra mẫu lần đầu, Kiểm tra quy trình..."
+                          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none' }}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>TÊN RÚT GỌN (BADGE NHÃN)</label>
+                        <input
+                          type="text"
+                          value={formTypeShortName}
+                          onChange={(e) => setFormTypeShortName(e.target.value)}
+                          placeholder="Ví dụ: Mẫu lần đầu, Quy trình"
+                          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none' }}
+                        />
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>ĐƯỜNG DẪN ROUTE MOBILE</label>
+                        <input
+                          type="text"
+                          value={formTypeRoute}
+                          onChange={(e) => setFormTypeRoute(e.target.value)}
+                          placeholder="/production_v2/inspection/..."
+                          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none', fontFamily: 'monospace' }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>MÀU SẮC NHẬN DIỆN</label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <input
+                            type="color"
+                            value={formTypeColor}
+                            onChange={(e) => setFormTypeColor(e.target.value)}
+                            style={{ width: '36px', height: '36px', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                          />
+                          <input
+                            type="text"
+                            value={formTypeColor}
+                            onChange={(e) => setFormTypeColor(e.target.value)}
+                            style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', width: '100px', outline: 'none', fontFamily: 'monospace' }}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>THỨ TỰ HIỂN THỊ</label>
+                        <input
+                          type="number"
+                          value={formTypeOrder}
+                          onChange={(e) => setFormTypeOrder(parseInt(e.target.value) || 0)}
+                          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none' }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>MÔ TẢ MỤC ĐÍCH SỬ DỤNG</label>
+                      <textarea
+                        value={formTypeDesc}
+                        onChange={(e) => setFormTypeDesc(e.target.value)}
+                        placeholder="Mô tả phạm vi áp dụng của loại phiếu này..."
+                        rows="2"
+                        style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none', resize: 'vertical' }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>TRẠNG THÁI HOẠT ĐỘNG</label>
+                      <div style={{ display: 'flex', gap: '20px', alignItems: 'center', marginTop: '4px' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.85rem' }}>
+                          <input
+                            type="radio"
+                            name="formTypeStatusRadio"
+                            checked={formTypeIsActive === true}
+                            onChange={() => setFormTypeIsActive(true)}
+                          />
+                          <span style={{ color: '#059669', fontWeight: 700 }}>● Kích hoạt (Hiển thị trên Mobile & Web)</span>
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.85rem' }}>
+                          <input
+                            type="radio"
+                            name="formTypeStatusRadio"
+                            checked={formTypeIsActive === false}
+                            onChange={() => setFormTypeIsActive(false)}
+                          />
+                          <span style={{ color: '#DC2626', fontWeight: 700 }}>● Tạm ẩn</span>
+                        </label>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* 10. INSPECTION PARAMETER (THÔNG SỐ ĐO KIỂM TRA) FIELDS */}
+                {activeTab === 'inspection_parameter' && (
+                  <>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '10px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>MÃ THÔNG SỐ (CODE) *</label>
+                        <input
+                          type="text"
+                          value={paramCode}
+                          onChange={(e) => setParamCode(e.target.value.toLowerCase())}
+                          placeholder="Ví dụ: do_am, nhiet_do, anh_sang"
+                          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none', fontFamily: 'monospace' }}
+                          required
+                        />
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>TÊN THÔNG SỐ ĐO *</label>
+                        <input
+                          type="text"
+                          value={paramName}
+                          onChange={(e) => setParamName(e.target.value)}
+                          placeholder="Ví dụ: Độ ẩm, Nhiệt độ sấy, Cường độ ánh sáng..."
+                          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none' }}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>ĐƠN VỊ ĐO</label>
+                        <input
+                          type="text"
+                          value={paramUnit}
+                          onChange={(e) => setParamUnit(e.target.value)}
+                          placeholder="Ví dụ: %, °C, Lux, GU, mm"
+                          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none' }}
+                        />
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>CHUẨN TỐI THIỂU (MIN)</label>
+                        <input
+                          type="number"
+                          step="any"
+                          value={paramMin}
+                          onChange={(e) => setParamMin(e.target.value)}
+                          placeholder="Min (VD: 6)"
+                          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none' }}
+                        />
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>CHUẨN TỐI ĐA (MAX)</label>
+                        <input
+                          type="number"
+                          step="any"
+                          value={paramMax}
+                          onChange={(e) => setParamMax(e.target.value)}
+                          placeholder="Max (VD: 14)"
+                          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none' }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>THỨ TỰ HIỂN THỊ</label>
+                        <input
+                          type="number"
+                          value={paramOrder}
+                          onChange={(e) => setParamOrder(parseInt(e.target.value) || 0)}
+                          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none' }}
+                        />
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>TRẠNG THÁI HOẠT ĐỘNG</label>
+                        <div style={{ display: 'flex', gap: '20px', alignItems: 'center', marginTop: '8px' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.85rem' }}>
+                            <input
+                              type="radio"
+                              name="paramStatusRadio"
+                              checked={paramIsActive === true}
+                              onChange={() => setParamIsActive(true)}
+                            />
+                            <span style={{ color: '#059669', fontWeight: 700 }}>● Kích hoạt</span>
+                          </label>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.85rem' }}>
+                            <input
+                              type="radio"
+                              name="paramStatusRadio"
+                              checked={paramIsActive === false}
+                              onChange={() => setParamIsActive(false)}
+                            />
+                            <span style={{ color: '#DC2626', fontWeight: 700 }}>● Tạm ẩn</span>
+                          </label>
+                        </div>
                       </div>
                     </div>
                   </>

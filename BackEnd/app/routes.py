@@ -33,9 +33,16 @@ from modules.purchasing.routes import purchase_requisition_router, purchase_orde
 from modules.inspection.routes.iso_router import router as iso_router
 from modules.inspection.routes.quality_objective_routes import router as quality_objective_router
 from modules.hr.routes import hr_router
+from modules.hr.routes.assessment_router import admin_assessment_router, public_assessment_router
 from modules.inspection_guide.routes.inspection_guide_router import router as inspection_guide_router
+from modules.inspection_guide.routes.inspection_guide_router import parameter_router as inspection_parameter_router
+from modules.inspection_guide.routes.inspection_form_type_router import router as inspection_form_type_router
 
 api_router = APIRouter()
+
+api_router.include_router(admin_assessment_router, prefix="/hr/assessments", tags=["hr-assessments"])
+api_router.include_router(public_assessment_router, prefix="/assessment", tags=["public-assessment"])
+
 
 api_router.include_router(quality_objective_router, prefix="/quality-objectives", tags=["quality-objectives"])
 
@@ -116,6 +123,8 @@ api_router.include_router(purchase_requisition_router.router, prefix="/purchase-
 
 api_router.include_router(purchase_order_item_router.router, prefix="/purchase-order-items", tags=["purchase-order-items"])
 api_router.include_router(inspection_guide_router, prefix="/inspection-guides", tags=["inspection-guides"])
+api_router.include_router(inspection_parameter_router, prefix="/inspection-parameters", tags=["inspection-parameters"])
+api_router.include_router(inspection_form_type_router, prefix="/inspection-form-types", tags=["inspection-form-types"])
 api_router.include_router(iso_router, prefix="/iso-documents", tags=["iso-documents"])
 api_router.include_router(hr_router.router, prefix="/hr", tags=["hr"])
 api_router.include_router(routing_router.router)

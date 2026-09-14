@@ -4,12 +4,13 @@ import {
   BookOpen, Plus, Search, Filter, LayoutGrid, List, Eye, Edit3, Trash2,
   CheckCircle2, XCircle, Layers, CheckSquare, Image as ImageIcon,
   Tag, RefreshCw, Sparkles, ShieldCheck, FileText, AlertTriangle, MoreVertical,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, Sliders
 } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
 import GuideQuickPreviewModal from './components/GuideQuickPreviewModal';
+import InspectionFormTypeModal from './components/InspectionFormTypeModal';
 import { INSPECTION_TYPE_OPTIONS } from './components/GuideAssignmentTab';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import '@styles/components.css';
@@ -26,7 +27,7 @@ const DOC_CONFIGS = {
     border: '#EADCC9',
     createPath: '/admin/inspection-guides/create',
     editBasePath: '/admin/inspection-guides/edit',
-    createText: '+ Tạo HDKT mới',
+    createText: 'Tạo HDKT mới',
     emptyTitle: 'Chưa có tài liệu Hướng dẫn kiểm tra (HDKT) nào'
   },
   SOS: {
@@ -40,7 +41,7 @@ const DOC_CONFIGS = {
     border: '#BAE6FD',
     createPath: '/admin/sos-guides/create',
     editBasePath: '/admin/sos-guides/edit',
-    createText: '+ Tạo SOS mới',
+    createText: 'Tạo SOS mới',
     emptyTitle: 'Chưa có tài liệu Hướng dẫn thao tác (SOS) nào'
   },
   CTQ: {
@@ -54,7 +55,7 @@ const DOC_CONFIGS = {
     border: '#FECDD3',
     createPath: '/admin/ctq-guides/create',
     editBasePath: '/admin/ctq-guides/edit',
-    createText: '+ Tạo CTQ mới',
+    createText: 'Tạo CTQ mới',
     emptyTitle: 'Chưa có tài liệu Lỗi cần chú ý (CTQ) nào'
   }
 };
@@ -90,12 +91,15 @@ const InspectionGuideManagementView = ({ docType }) => {
   const config = DOC_CONFIGS[activeDocType] || DOC_CONFIGS.HDKT;
 
   useEffect(() => {
-    if (screenCode && metaTitle) {
-      if (setCustomTitle) setCustomTitle(metaTitle);
-      if (setCustomSubtitle) setCustomSubtitle(metaSubtitle || '');
-      if (setCustomScreenCode) setCustomScreenCode(screenCode);
-    }
-  }, [screenCode, metaTitle, metaSubtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
+    if (setCustomTitle) setCustomTitle(metaTitle || config.title);
+    if (setCustomSubtitle) setCustomSubtitle(metaSubtitle || 'Tài liệu ban hành');
+    if (setCustomScreenCode && screenCode) setCustomScreenCode(screenCode);
+    return () => {
+      if (setCustomTitle) setCustomTitle('');
+      if (setCustomSubtitle) setCustomSubtitle('');
+      if (setCustomScreenCode) setCustomScreenCode('');
+    };
+  }, [screenCode, metaTitle, metaSubtitle, config, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
   const HeaderIcon = config.icon;
 
   const [guides, setGuides] = useState([]);
@@ -124,6 +128,25 @@ const InspectionGuideManagementView = ({ docType }) => {
       }
     };
     fetchStages();
+  }, []);
+
+  const [isTypeConfigOpen, setIsTypeConfigOpen] = useState(false);
+  const [formTypes, setFormTypes] = useState([]);
+
+  const fetchFormTypes = async () => {
+    try {
+      const res = await api.get('/inspection-form-types?include_inactive=true');
+      const list = Array.isArray(res) ? res : (res?.data || []);
+      if (list.length > 0) {
+        setFormTypes(list);
+      }
+    } catch (e) {
+      console.warn('Lỗi tải loại phiếu:', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchFormTypes();
   }, []);
 
   // Modals state
@@ -267,6 +290,20 @@ const InspectionGuideManagementView = ({ docType }) => {
     return { total, active, inactive, typesCount: assignedTypes.size };
   }, [guides]);
 
+  // Detect duplicate assignments across active guides: same (inspection_type, stage_id)
+  const conflictMap = useMemo(() => {
+    const map = {};
+    (guides || []).forEach(g => {
+      if (!g.is_active || !g.assignments) return;
+      g.assignments.forEach(a => {
+        const key = `${a.inspection_type}_${a.stage_id || 'all'}`;
+        if (!map[key]) map[key] = [];
+        map[key].push({ id: g.id, code: g.code, name: g.name });
+      });
+    });
+    return map;
+  }, [guides]);
+
   const getTypeLabel = (val) => {
     const legacyMap = {
       'mau-dau-tien': 'Kiểm tra mẫu lần đầu',
@@ -277,6 +314,8 @@ const InspectionGuideManagementView = ({ docType }) => {
       'bam-dinh': 'Kiểm tra bám dính sơn'
     };
     if (legacyMap[val]) return legacyMap[val];
+    const fromApi = formTypes.find(t => t.code === val);
+    if (fromApi) return fromApi.short_name || fromApi.name;
     const opt = INSPECTION_TYPE_OPTIONS.find(o => o.value === val);
     return opt ? opt.label : val;
   };
@@ -296,93 +335,6 @@ const InspectionGuideManagementView = ({ docType }) => {
         boxSizing: 'border-box'
       }}
     >
-      {/* Page Header */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        marginBottom: 16,
-        flexWrap: 'wrap',
-        gap: 12,
-        flexShrink: 0
-      }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-            <div style={{
-              width: 40,
-              height: 40,
-              borderRadius: 12,
-              backgroundColor: config.color,
-              color: '#FFF',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: `0 4px 12px ${config.color}35`
-            }}>
-              <HeaderIcon size={22} />
-            </div>
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                Tài liệu ban hành
-              </div>
-              <h1 style={{ margin: 0, fontSize: '1.65rem', color: '#2D1A12', fontWeight: 800, letterSpacing: '-0.02em' }}>
-                {config.title}
-              </h1>
-            </div>
-          </div>
-          <p style={{ margin: '4px 0 0 0', color: '#64748B', fontSize: 14 }}>
-            {config.subtitle}
-          </p>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button
-            onClick={() => fetchGuides()}
-            style={{
-              padding: '10px 16px',
-              borderRadius: 10,
-              border: '1px solid #EADCC9',
-              backgroundColor: '#FFFFFF',
-              color: '#7B5233',
-              fontWeight: 700,
-              fontSize: 13.5,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-              transition: 'all 0.2s'
-            }}
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#F5EFE9'}
-            onMouseLeave={e => e.currentTarget.style.backgroundColor = '#FFFFFF'}
-          >
-            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} /> Làm mới
-          </button>
-
-          <button
-            onClick={() => navigate(config.createPath)}
-            style={{
-              padding: '10px 20px',
-              borderRadius: 10,
-              border: 'none',
-              backgroundColor: config.color,
-              color: '#FFFFFF',
-              fontWeight: 700,
-              fontSize: 14,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              boxShadow: `0 4px 12px ${config.color}40`,
-              transition: 'all 0.2s'
-            }}
-            onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(0.9)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-            onMouseLeave={e => { e.currentTarget.style.filter = 'brightness(1)'; e.currentTarget.style.transform = 'translateY(0)'; }}
-          >
-            <Plus size={18} /> {config.createText}
-          </button>
-        </div>
-      </div>
 
       {/* Top KPI Metric Cards */}
       <div style={{
@@ -605,11 +557,15 @@ const InspectionGuideManagementView = ({ docType }) => {
               }}
             >
               <option value="all">Tất cả loại phiếu</option>
-              {INSPECTION_TYPE_OPTIONS.map(opt => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
+              {(formTypes.length > 0 ? formTypes : INSPECTION_TYPE_OPTIONS).map(opt => {
+                const val = opt.code || opt.value;
+                const label = opt.name || opt.label;
+                return (
+                  <option key={val} value={val}>
+                    {label}
+                  </option>
+                );
+              })}
             </select>
           </div>
 
@@ -686,6 +642,80 @@ const InspectionGuideManagementView = ({ docType }) => {
               <LayoutGrid size={14} /> Thẻ Card
             </button>
           </div>
+
+          <div style={{ width: 1, height: 24, backgroundColor: '#E2E8F0', margin: '0 2px' }} />
+
+          {/* Action buttons */}
+          <button
+            onClick={() => fetchGuides()}
+            style={{
+              padding: '8px 14px',
+              borderRadius: 8,
+              border: '1px solid #EADCC9',
+              backgroundColor: '#FFFFFF',
+              color: '#7B5233',
+              fontWeight: 700,
+              fontSize: 13,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#F5EFE9'}
+            onMouseLeave={e => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+          >
+            <RefreshCw size={15} className={loading ? 'animate-spin' : ''} /> Làm mới
+          </button>
+
+          {/* Button open Inspection Form Types Config Modal */}
+          <button
+            onClick={() => setIsTypeConfigOpen(true)}
+            style={{
+              padding: '8px 14px',
+              borderRadius: 8,
+              border: '1px solid #CBD5E1',
+              backgroundColor: '#FFFFFF',
+              color: '#334155',
+              fontWeight: 700,
+              fontSize: 13,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+              transition: 'all 0.2s'
+            }}
+            title="Cấu hình danh mục loại phiếu kiểm tra (Custom)"
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#F1F5F9'}
+            onMouseLeave={e => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+          >
+            <Sliders size={15} color="#7B5233" /> Cấu hình loại phiếu
+          </button>
+
+          <button
+            onClick={() => navigate(config.createPath)}
+            style={{
+              padding: '8px 16px',
+              borderRadius: 8,
+              border: 'none',
+              backgroundColor: config.color,
+              color: '#FFFFFF',
+              fontWeight: 700,
+              fontSize: 13.5,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              boxShadow: `0 3px 8px ${config.color}35`,
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(0.9)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+            onMouseLeave={e => { e.currentTarget.style.filter = 'brightness(1)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+          >
+            <Plus size={16} /> {config.createText}
+          </button>
         </div>
       </div>
 
@@ -729,10 +759,13 @@ const InspectionGuideManagementView = ({ docType }) => {
               border: 'none',
               fontWeight: 700,
               fontSize: 13.5,
-              cursor: 'pointer'
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6
             }}
           >
-            {config.createText}
+            <Plus size={16} /> {config.createText}
           </button>
         </div>
       ) : viewMode === 'table' ? (
@@ -815,6 +848,24 @@ const InspectionGuideManagementView = ({ docType }) => {
                       <div style={{ fontWeight: 800, color: '#2D1A12', fontSize: 14.5 }}>
                         {g.name}
                       </div>
+                      {g.process && (
+                        <div style={{ marginTop: 4 }}>
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            padding: '2px 8px',
+                            borderRadius: 4,
+                            backgroundColor: '#FEF3C7',
+                            color: '#92400E',
+                            border: '1px solid #FDE68A',
+                            fontSize: 11.5,
+                            fontWeight: 700
+                          }}>
+                            Quy trình ISO: [{g.process.code}] {g.process.name}
+                          </span>
+                        </div>
+                      )}
                       {g.description && (
                         <div style={{
                           color: '#64748B',
@@ -888,21 +939,34 @@ const InspectionGuideManagementView = ({ docType }) => {
                         <span style={{ fontSize: 12, color: '#9CA3AF', fontStyle: 'italic' }}>Chưa gán</span>
                       ) : (
                         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                          {g.assignments.slice(0, 2).map((a, aIdx) => (
-                            <span
-                              key={a.id || aIdx}
-                              style={{
-                                padding: '2px 8px',
-                                borderRadius: 4,
-                                backgroundColor: '#F1F5F9',
-                                color: '#475569',
-                                fontSize: 11,
-                                fontWeight: 700
-                              }}
-                            >
-                              {getTypeLabel(a.inspection_type)}
-                            </span>
-                          ))}
+                          {g.assignments.slice(0, 2).map((a, aIdx) => {
+                            const conflictKey = `${a.inspection_type}_${a.stage_id || 'all'}`;
+                            const conflictList = conflictMap[conflictKey] || [];
+                            const isConflicted = conflictList.length > 1;
+                            const otherConflicts = conflictList.filter(item => item.id !== g.id);
+
+                            return (
+                              <span
+                                key={a.id || aIdx}
+                                title={isConflicted ? `⚠️ Bị trùng gán cặp này với tài liệu: ${otherConflicts.map(c => c.code).join(', ')}` : ''}
+                                style={{
+                                  padding: '2px 8px',
+                                  borderRadius: 4,
+                                  backgroundColor: isConflicted ? '#FEE2E2' : '#F1F5F9',
+                                  color: isConflicted ? '#991B1B' : '#475569',
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 3,
+                                  border: isConflicted ? '1px solid #FCA5A5' : 'none'
+                                }}
+                              >
+                                {isConflicted && <AlertTriangle size={11} color="#DC2626" />}
+                                {getTypeLabel(a.inspection_type)}
+                              </span>
+                            );
+                          })}
                           {g.assignments.length > 2 && (
                             <span style={{
                               padding: '2px 6px',
@@ -927,19 +991,29 @@ const InspectionGuideManagementView = ({ docType }) => {
                         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                           {g.assignments.slice(0, 2).map((a, aIdx) => {
                             const stageText = a.stage_id ? (stagesMap[a.stage_id] || `CĐ #${a.stage_id}`) : 'Tất cả CĐ';
+                            const conflictKey = `${a.inspection_type}_${a.stage_id || 'all'}`;
+                            const conflictList = conflictMap[conflictKey] || [];
+                            const isConflicted = conflictList.length > 1;
+                            const otherConflicts = conflictList.filter(item => item.id !== g.id);
+
                             return (
                               <span
                                 key={a.id || aIdx}
+                                title={isConflicted ? `⚠️ Bị trùng gán cặp này với tài liệu: ${otherConflicts.map(c => c.code).join(', ')}` : ''}
                                 style={{
                                   padding: '2px 8px',
                                   borderRadius: 4,
-                                  backgroundColor: a.stage_id ? '#FEF3C7' : '#F1F5F9',
-                                  color: a.stage_id ? '#92400E' : '#475569',
+                                  backgroundColor: isConflicted ? '#FEE2E2' : (a.stage_id ? '#FEF3C7' : '#F1F5F9'),
+                                  color: isConflicted ? '#991B1B' : (a.stage_id ? '#92400E' : '#475569'),
                                   fontSize: 11,
                                   fontWeight: 700,
-                                  border: a.stage_id ? '1px solid #FDE68A' : 'none'
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 3,
+                                  border: isConflicted ? '1px solid #FCA5A5' : (a.stage_id ? '1px solid #FDE68A' : 'none')
                                 }}
                               >
+                                {isConflicted && <AlertTriangle size={11} color="#DC2626" />}
                                 {stageText}
                               </span>
                             );
@@ -1136,6 +1210,25 @@ const InspectionGuideManagementView = ({ docType }) => {
                   }}>
                     {g.name}
                   </h3>
+
+                  {g.process && (
+                    <div style={{ marginBottom: 8 }}>
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        padding: '2px 8px',
+                        borderRadius: 4,
+                        backgroundColor: '#FEF3C7',
+                        color: '#92400E',
+                        border: '1px solid #FDE68A',
+                        fontSize: 11.5,
+                        fontWeight: 700
+                      }}>
+                        Quy trình ISO: [{g.process.code}] {g.process.name}
+                      </span>
+                    </div>
+                  )}
 
                   {/* Description */}
                   {g.description && (
@@ -1384,6 +1477,16 @@ const InspectionGuideManagementView = ({ docType }) => {
           }}
         />
       )}
+
+      {/* Inspection Form Types Config Modal */}
+      <InspectionFormTypeModal
+        isOpen={isTypeConfigOpen}
+        onClose={() => setIsTypeConfigOpen(false)}
+        onUpdated={() => {
+          fetchFormTypes();
+          fetchGuides();
+        }}
+      />
     </div>
   );
 };

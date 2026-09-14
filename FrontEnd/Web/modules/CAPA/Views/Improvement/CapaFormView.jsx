@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, useParams, useOutletContext } from 'react-router-dom';
+import { useNavigate, useParams, useOutletContext, useLocation } from 'react-router-dom';
 import { 
   ArrowLeft, Download, Plus, Trash2, Camera, Lock, User, Check, 
   ChevronDown, X, Image as ImageIcon, ShieldCheck, AlertTriangle, 
@@ -509,6 +509,8 @@ const MultiUserSelect = ({ label, selectedUsers, onChange, allUsers, placeholder
 const CapaFormView = () => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
   const navigate = useNavigate();
+  const location = useLocation();
+  const returnUrl = location.state?.returnUrl || '/admin/defects?tab=capa';
   const { id } = useParams();
   const isCreate = !id || id === 'create';
   const { toast } = useToast();
@@ -761,7 +763,7 @@ const CapaFormView = () => {
         await api.put(`/capas/${id}`, payload);
         toast('success', 'Đã cập nhật báo cáo CAPA thành công!');
       }
-      navigate('/admin/capa');
+      navigate(returnUrl);
     } catch (err) {
       console.error('Lỗi khi lưu CAPA:', err);
       toast('error', 'Không thể lưu báo cáo CAPA.');
@@ -1324,6 +1326,25 @@ const CapaFormView = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto' }}>
+          <button
+            onClick={() => navigate(returnUrl)}
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '4px', 
+              padding: '5px 10px', 
+              borderRadius: '7px', 
+              border: '1px solid #cbd5e1', 
+              backgroundColor: '#fff', 
+              color: '#334155', 
+              fontSize: '0.8rem', 
+              fontWeight: '700', 
+              cursor: 'pointer' 
+            }}
+          >
+            <ArrowLeft size={13} /> Quay lại
+          </button>
+
           <button
             onClick={handleExportPdf}
             style={{ 

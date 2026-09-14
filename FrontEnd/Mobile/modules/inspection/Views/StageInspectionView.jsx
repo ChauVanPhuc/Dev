@@ -1598,7 +1598,7 @@ const StageInspection = () => {
                       ) : (
                         <>
                           <Camera size={20} color="#5d3b32" />
-                          <span>+ Thêm ảnh</span>
+                          <span>Thêm ảnh</span>
                         </>
                       )}
                     </button>
@@ -1703,7 +1703,7 @@ const StageInspection = () => {
                                   flexShrink: 0
                                 }}
                               >
-                                QA Track
+                                QA
                               </span>
                             ) : null}
                           </div>
@@ -1913,7 +1913,7 @@ const StageInspection = () => {
                     onClick={handleAddDefect}
                     style={{ width: '100%', border: '1px dashed #5d3b32', borderRadius: '8px', padding: '10px', backgroundColor: '#faf6f0', color: '#5d3b32', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', cursor: 'pointer', marginTop: '4px' }}
                   >
-                    <Plus size={16} /> + Thêm lỗi khác
+                    <Plus size={16} /> Thêm lỗi khác
                   </button>
                 </div>
               )}

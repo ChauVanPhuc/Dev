@@ -349,7 +349,6 @@ const StagePackagingView = () => {
           accept="image/*"
           capture="environment"
           onChange={onFileChange}
-          multiple
         />
 
         <div id="stage-form-card">

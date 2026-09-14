@@ -283,7 +283,7 @@ export const QualityDashboardToolbar = ({
                 onMouseEnter={(e) => { e.currentTarget.style.background = '#FAF6F0'; e.currentTarget.style.color = '#5B3924'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#302820'; }}
               >
-                <FileText size={14} color="#B94A3D" />
+                <FileText size={14} color="#70452D" />
                 <span>Xuất tài liệu (PDF)</span>
               </button>
             </div>

@@ -116,7 +116,7 @@ export const Section5TopDefectsTable = ({ defectsData: propDefects, linesData: p
                         )}
                       </td>
                       <td style={{ textAlign: 'center' }}>
-                        <MiniSparkline data={d.trend} color={d.isWorse ? '#B94A3D' : '#3F7D58'} width={55} height={16} />
+                        <MiniSparkline data={d.trend} color={d.isWorse ? '#8C5332' : '#3F7D58'} width={55} height={16} />
                       </td>
                     </tr>
                   ))}
@@ -137,7 +137,7 @@ export const Section5TopDefectsTable = ({ defectsData: propDefects, linesData: p
                       )}
                     </td>
                     <td style={{ textAlign: 'center' }}>
-                      <MiniSparkline data={totalDefectsTrend} color="#B94A3D" width={55} height={16} />
+                      <MiniSparkline data={totalDefectsTrend} color="#8C5332" width={55} height={16} />
                     </td>
                   </tr>
                 </>

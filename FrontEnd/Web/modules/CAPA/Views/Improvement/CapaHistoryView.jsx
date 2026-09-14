@@ -48,8 +48,8 @@ const UrgencyBadge = ({ value }) => {
   );
 };
 
-const CapaHistoryView = () => {
-  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext();
+const CapaHistoryView = ({ isEmbedded = false } = {}) => {
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
   const navigate = useNavigate();
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/capa');
 
@@ -97,10 +97,12 @@ const CapaHistoryView = () => {
   }, []);
 
   useEffect(() => {
-    if (setCustomTitle) setCustomTitle(title);
-    if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
-    if (setCustomScreenCode) setCustomScreenCode(screenCode || '');
-  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode]);
+    if (!isEmbedded && screenCode && title) {
+      if (setCustomTitle) setCustomTitle(title);
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || '');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode || '');
+    }
+  }, [setCustomTitle, setCustomSubtitle, setCustomScreenCode, title, subtitle, screenCode, isEmbedded]);
 
   useEffect(() => {
     fetchCapas();
@@ -130,11 +132,11 @@ const CapaHistoryView = () => {
   };
 
   const handleCreate = () => {
-    navigate('/admin/capa/create');
+    navigate('/admin/capa/create', { state: { returnUrl: isEmbedded ? '/admin/defects?tab=capa' : '/admin/capa' } });
   };
 
   const handleEdit = (item) => {
-    navigate(`/admin/capa/edit/${item.id}`);
+    navigate(`/admin/capa/edit/${item.id}`, { state: { returnUrl: isEmbedded ? '/admin/defects?tab=capa' : '/admin/capa' } });
   };
 
   const handleDelete = (item) => {
@@ -170,8 +172,8 @@ const CapaHistoryView = () => {
   const totalPages = Math.ceil(totalItems / pageSize) || 1;
 
   return (
-    <div className="mgmt-container">
-      <div className="mgmt-main">
+    <div className="mgmt-container" style={isEmbedded ? { height: '100%', minHeight: 0, flex: 1, display: 'flex', flexDirection: 'column', padding: 0 } : undefined}>
+      <div className="mgmt-main" style={isEmbedded ? { height: '100%', minHeight: 0, flex: 1, display: 'flex', flexDirection: 'column', padding: 0 } : undefined}>
         {/* Standard Page Toolbar */}
         <PageToolbar
           searchValue={searchQuery}
@@ -278,8 +280,8 @@ const CapaHistoryView = () => {
         )}
 
         {/* Main Table Layout */}
-        <div className="admin-list-layout">
-          <div className="mgmt-table card admin-table-card">
+        <div className="admin-list-layout" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+          <div className="mgmt-table card admin-table-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
             {loading ? (
               <div style={{ textAlign: 'center', padding: '40px', color: '#7B5233', fontWeight: '600' }}>Đang tải danh sách CAPA...</div>
             ) : filteredCapas.length === 0 ? (

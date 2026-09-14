@@ -1087,6 +1087,7 @@ const CL06_TransferListView = () => {
                     key={row.id || idx}
                     row={row}
                     defectOptions={defectOptions}
+                    allDefectOptions={defectOptions}
                     selectedDefectIds={rejectErrors
                       .filter((_, i) => i !== idx)
                       .flatMap((e) => [e?.defectId, e?.code, e?.name])
@@ -1112,7 +1113,7 @@ const CL06_TransferListView = () => {
                     gap: 4
                   }}
                 >
-                  <span style={{ fontSize: '1rem', fontWeight: 900 }}>+</span> Ghi nhận lỗi khác
+                  <Plus size={14} /> Ghi nhận lỗi khác
                 </button>
               </div>
 

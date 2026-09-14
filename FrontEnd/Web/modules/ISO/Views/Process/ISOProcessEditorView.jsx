@@ -100,7 +100,9 @@ const ISOProcessEditorView = () => {
     steps: [],
     instruction_steps: [],
     work_instructions: [],
-    related_templates: []
+    related_templates: [],
+    inspection_guide_id: null,
+    inspection_guide: null
   });
 
   const [loading, setLoading] = useState(false);
@@ -978,8 +980,11 @@ const ISOProcessEditorView = () => {
         })),
         instruction_steps: instructionSteps,
         work_instructions: workInstructions,
-        related_templates: relatedTemplates
+        related_templates: relatedTemplates,
+        inspection_guide_id: data.inspection_guide_id || null,
+        inspection_guide: data.inspection_guide || null
       });
+
       if (relatedTemplates && relatedTemplates.length > 0) {
         setSelectedTemplateId(relatedTemplates[0].id);
       }
@@ -2154,6 +2159,7 @@ const ISOProcessEditorView = () => {
     currentScreen,
     editingStepIdx,
     explanationExpanded,
+    fetchDocDetails,
     fileInputRef,
     flowchartCanvasRef,
     flowchartMode,

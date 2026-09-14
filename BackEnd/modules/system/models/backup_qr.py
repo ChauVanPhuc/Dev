@@ -14,5 +14,6 @@ class BackupQRCode(Base):
     code = Column(NVARCHAR(100), unique=True, index=True)
     status = Column(NVARCHAR(50), default="Trống") # 'Trống' hoặc 'Đang Sử Dụng'
     current_delivery_id = Column(Integer, ForeignKey("deliveries.id"), nullable=True)
+    current_inspection_id = Column(Integer, nullable=True)
     scheduled_release_at = Column(DateTime, nullable=True) # Mốc thời gian tự động giải phóng (7h ngày mai)
     created_at = Column(DateTime, default=get_vietnam_time)

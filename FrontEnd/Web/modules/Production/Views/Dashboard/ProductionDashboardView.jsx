@@ -23,7 +23,6 @@ const ProductionDashboardView = () => {
     { title: 'Quy trình sản xuất', code: 'SX04', path: '/admin/production-routing', icon: GitMerge, color: '#D97706', desc: 'Sơ đồ luồng & công đoạn' },
     { title: 'Kế hoạch bàn giao', code: 'SX05', path: '/admin/delivery-tracking', icon: Truck, color: '#7C3AED', desc: 'Bàn giao sản phẩm công đoạn' },
     { title: 'Phiếu ngoại lệ', code: 'SX06', path: '/admin/exception-deliveries', icon: AlertTriangle, color: '#DC2626', desc: 'Sự cố bàn giao pallet' },
-    { title: 'Quản lý mã QR', code: 'SX07', path: '/admin/backup-qrs', icon: QrCode, color: '#4B5563', desc: 'Quản lý in & quét mã QR' },
   ];
 
   return (

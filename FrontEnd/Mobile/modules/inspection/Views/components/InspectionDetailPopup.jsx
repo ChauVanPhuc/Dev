@@ -59,18 +59,24 @@ const InspectionDetailPopup = ({ item, onClose }) => {
     'sau-dong-goi': { icon: <Package size={20} />, color: '#10b981', label: 'KIỂM TRA SAU ĐÓNG GÓI' }
   }[item.inspection_type] || { icon: <ClipboardCheck size={20} />, color: '#64748b', label: 'KIỂM TRA CÔNG ĐOẠN' };
 
+  const isFailedConclusion = item.conclusion === 'fail' || item.result === 'Không đạt' || item.result === 'fail';
+
   const getActionLabel = (action) => {
     switch (action) {
-      case 'luu-kho': return 'Lưu kho';
+      case 'chap-nhan':
+      case 'luu-kho':
+        return isFailedConclusion ? 'Chấp nhận / Tự xử lý' : 'Chấp nhận';
       case 'cach-ly': return 'Cách ly';
       case 'tra-ve': return 'Trả về';
-      default: return 'N/A';
+      default: return action || 'N/A';
     }
   };
 
   const getActionColor = (action) => {
     switch (action) {
-      case 'luu-kho': return '#22c55e';
+      case 'chap-nhan':
+      case 'luu-kho':
+        return isFailedConclusion ? '#d97706' : '#22c55e';
       case 'cach-ly': return '#f59e0b';
       case 'tra-ve': return '#ef4444';
       default: return '#94a3b8';
@@ -79,7 +85,9 @@ const InspectionDetailPopup = ({ item, onClose }) => {
 
   const getActionBg = (action) => {
     switch (action) {
-      case 'luu-kho': return '#f0fdf4';
+      case 'chap-nhan':
+      case 'luu-kho':
+        return isFailedConclusion ? '#fffbeb' : '#f0fdf4';
       case 'cach-ly': return '#fffbeb';
       case 'tra-ve': return '#fef2f2';
       default: return '#f8fafc';
@@ -372,7 +380,7 @@ const InspectionDetailPopup = ({ item, onClose }) => {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                           <span style={{ fontSize: '0.9rem', fontWeight: '800', color: '#1e293b' }}>
-                            {def.defect_name || (def.code ? `[${def.code}]` : '') || `Lỗi #${def.defectId}`}
+                            {def.defect_name || def.name || `Lỗi #${def.defectId}`}
                           </span>
                           {def.isCTQ ? (
                             <span style={{ backgroundColor: '#fee2e2', color: '#b91c1c', border: '1px solid #f87171', padding: '1px 6px', borderRadius: '10px', fontSize: '9px', fontWeight: '800', boxShadow: '0 1px 2px rgba(185, 28, 28, 0.15)' }}>
@@ -380,7 +388,7 @@ const InspectionDetailPopup = ({ item, onClose }) => {
                             </span>
                           ) : (def.isQA || def.needs_tracking || def.qc_tracking || def.is_tracked_by_me) ? (
                             <span style={{ backgroundColor: '#fff7ed', color: '#c2410c', border: '1px solid #fdba74', padding: '1px 6px', borderRadius: '10px', fontSize: '9px', fontWeight: '700' }}>
-                              QA Track
+                              QA
                             </span>
                           ) : null}
                         </div>

@@ -19,7 +19,8 @@ import {
   Download,
   FileSpreadsheet,
   Printer,
-  MoreVertical
+  MoreVertical,
+  Trash2
 } from 'lucide-react';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
@@ -150,6 +151,10 @@ const InspectionReportsView = () => {
     setUnifiedPage,
     unifiedLimit,
     setUnifiedLimit,
+    deleteTarget,
+    setDeleteTarget,
+    isDeleting,
+    handleConfirmDelete,
     setActiveActionMenu,
     setActiveTab,
     setDailyEndDate,
@@ -217,6 +222,38 @@ const InspectionReportsView = () => {
     uniquePoList,
     usedImages,
   } = reports;
+
+  const renderActionBadge = (action, hasDefect = false) => {
+    if (action === 'cach-ly') {
+      return (
+        <span className="status-badge" style={{ backgroundColor: '#FEF3C7', color: '#D97706', borderColor: '#FDE68A', padding: '3px 8px', fontWeight: '700' }}>
+          Cách Ly
+        </span>
+      );
+    }
+    if (action === 'tra-ve') {
+      return (
+        <span className="status-badge" style={{ backgroundColor: '#FEF2F2', color: '#EF4444', borderColor: '#FCA5A5', padding: '3px 8px', fontWeight: '700' }}>
+          Trả hàng
+        </span>
+      );
+    }
+    if (action === 'chap-nhan') {
+      if (hasDefect) {
+        return (
+          <span className="status-badge" style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8', borderColor: '#BFDBFE', padding: '3px 8px', fontWeight: '700' }}>
+            Chấp nhận / Tự xử lý
+          </span>
+        );
+      }
+      return (
+        <span className="status-badge" style={{ backgroundColor: '#ECFDF5', color: '#10B981', borderColor: '#A7F3D0', padding: '3px 8px', fontWeight: '700' }}>
+          Chấp nhận
+        </span>
+      );
+    }
+    return <span style={{ color: '#9CA3AF', fontSize: '0.85rem' }}>---</span>;
+  };
 
   return (
     <div className="gold-layout">
@@ -372,6 +409,16 @@ const InspectionReportsView = () => {
           background-color: #FAF6F0;
           box-shadow: 0 0 0 3px rgba(123, 82, 51, 0.1);
         }
+        .admin-table-scroll .data-table tbody tr {
+          transform: none !important;
+          animation: none !important;
+          transition: background-color 0.15s ease !important;
+        }
+        .admin-table-scroll .data-table tbody tr:hover {
+          transform: none !important;
+          background-color: #FAF6F0 !important;
+          box-shadow: 0 2px 8px rgba(123, 82, 51, 0.08) !important;
+        }
       `}} />
 
       {/* ── STICKY TOP ZONE ── */}
@@ -428,9 +475,14 @@ const InspectionReportsView = () => {
                 style={{ width: '100%', height: '36px', borderRadius: '8px', border: '1px solid #EADCC9', padding: '0 10px', backgroundColor: '#fff', color: '#2D1A12', fontSize: '0.88rem' }}
               >
                 <option value="all">Tất cả</option>
-                <option value="stage">Kiểm tra lại</option>
-                <option value="input">Kiểm tra mẫu đầu tiên</option>
+                <option value="stage">Kiểm tra công đoạn</option>
+                <option value="first_sample">Mẫu đầu tiên (FQC)</option>
+                <option value="input">Đầu vào (IQC)</option>
                 <option value="process">Kiểm tra quy trình</option>
+                <option value="re_inspect">Kiểm tra lại</option>
+                <option value="do-am">Đo độ ẩm</option>
+                <option value="bam-dinh">Thử bám dính</option>
+                <option value="sau-dong-goi">Sau đóng gói (OQC)</option>
                 <option value="daily">Ghi nhận lỗi hàng ngày</option>
               </select>
             </div>
@@ -599,6 +651,7 @@ const InspectionReportsView = () => {
                       <th>Người kiểm QC</th>
                       <th style={{ width: '110px', textAlign: 'center' }}>Xác nhận</th>
                       <th style={{ width: '140px', textAlign: 'center' }}>Kết quả</th>
+                      <th style={{ width: '120px', textAlign: 'center' }}>Hành động</th>
                       <th style={{ width: '90px', textAlign: 'center' }}>Thao tác</th>
                     </tr>
                   </thead>
@@ -622,7 +675,38 @@ const InspectionReportsView = () => {
                       return (
                         <tr key={`${item.type}-${item.id}`} onClick={handleRowClick} style={{ cursor: 'pointer' }}>
                           <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#8D6E63' }}>#{item.id}</td>
-                          <td style={{ fontWeight: '600', color: '#7B5233' }}>{item.category}</td>
+                          <td style={{ whiteSpace: 'nowrap' }}>
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              padding: '3px 8px',
+                              borderRadius: '6px',
+                              fontSize: '0.8rem',
+                              fontWeight: '700',
+                              backgroundColor: item.category.includes('Mẫu đầu') ? '#EFF6FF' :
+                                               item.category.includes('Đầu vào') ? '#ECFDF5' :
+                                               item.category.includes('lại') ? '#FFFBEB' :
+                                               item.category.includes('quy trình') ? '#F0F9FF' :
+                                               item.category.includes('độ ẩm') ? '#FDF4FF' :
+                                               item.category.includes('lỗi hàng ngày') ? '#F8FAFC' : '#FAF6F0',
+                              color: item.category.includes('Mẫu đầu') ? '#1D4ED8' :
+                                     item.category.includes('Đầu vào') ? '#047857' :
+                                     item.category.includes('lại') ? '#B45309' :
+                                     item.category.includes('quy trình') ? '#0369A1' :
+                                     item.category.includes('độ ẩm') ? '#A21CAF' :
+                                     item.category.includes('lỗi hàng ngày') ? '#475569' : '#7B5233',
+                              border: `1px solid ${
+                                item.category.includes('Mẫu đầu') ? '#BFDBFE' :
+                                item.category.includes('Đầu vào') ? '#A7F3D0' :
+                                item.category.includes('lại') ? '#FDE68A' :
+                                item.category.includes('quy trình') ? '#BAE6FD' :
+                                item.category.includes('độ ẩm') ? '#F5D0FE' :
+                                item.category.includes('lỗi hàng ngày') ? '#CBD5E1' : '#EADCC9'
+                              }`
+                            }}>
+                              {item.category}
+                            </span>
+                          </td>
                           <td style={{ fontWeight: '600' }}>{formatDisplayDateTime(item.inspection_date)}</td>
                           <td style={{ color: '#7B5233', fontWeight: 'bold' }}>{item.batch_no || '---'}</td>
                           <td style={{ fontWeight: '700' }}>{item.stage || item.stage_name || item.product_sku || '---'}</td>
@@ -656,6 +740,9 @@ const InspectionReportsView = () => {
                                 </span>
                               </div>
                             )}
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            {renderActionBadge(item.action, hasDefect)}
                           </td>
                           <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
                             {renderActionDropdown(item.raw_item, item.type)}
@@ -700,6 +787,7 @@ const InspectionReportsView = () => {
                           <span className={`status-badge ${hasDefect ? 'fail' : 'pass'}`}>
                             {hasDefect ? `KHÔNG ĐẠT (${(item.defect_rate || 0).toFixed(2)}%)` : 'ĐẠT'}
                           </span>
+                          {renderActionBadge(item.action, hasDefect)}
                         </div>
                       </div>
                       <div style={{ fontSize: '0.85rem', color: '#8D6E63', fontWeight: 'bold', marginBottom: '4px' }}>
@@ -978,20 +1066,55 @@ const InspectionReportsView = () => {
           });
         }
         // Add general images (images_json)
-        let generalImages = [];
-        try {
-          const parsedImages = typeof item.images_json === 'string' ? JSON.parse(item.images_json || '{}') : (item.images_json || {});
-          Object.values(parsedImages).forEach(val => {
-            if (Array.isArray(val)) generalImages.push(...val);
-            else if (typeof val === 'string') generalImages.push(val);
-          });
-        } catch(e){}
-        const usedDetailImages = new Set(imagesList);
+          const usedDetailImages = new Set(imagesList);
         const remainingModalImages = Array.from(new Set(generalImages)).filter(img => img && !usedDetailImages.has(img));
+
+        // Bóc tách danh sách chi tiết & quy cách kiểm tra
+        let inspectedPartsList = [];
+        if (Array.isArray(parsedData.parts_details) && parsedData.parts_details.length > 0) {
+          inspectedPartsList = parsedData.parts_details.map(p => ({
+            name: p.part_name || p.name || '',
+            spec: p.specification || p.spec || '',
+            qty: p.plan_qty || p.qty || ''
+          }));
+        } else if (Array.isArray(parsedData.parts_with_specs) && parsedData.parts_with_specs.length > 0) {
+          inspectedPartsList = parsedData.parts_with_specs.map(p => ({
+            name: p.part_name || p.name || '',
+            spec: p.specification || p.spec || '',
+            qty: p.plan_qty || p.qty || ''
+          }));
+        } else if (Array.isArray(item.parts_details) && item.parts_details.length > 0) {
+          inspectedPartsList = item.parts_details.map(p => ({
+            name: p.part_name || p.name || '',
+            spec: p.specification || p.spec || '',
+            qty: p.plan_qty || p.qty || ''
+          }));
+        } else {
+          const rawProd = (item.product_sku || item.part_name || parsedData.product || '').trim();
+          const rawSpec = (item.specification || parsedData.spec || '').trim();
+          if (rawProd) {
+            const prodItems = rawProd.split(/,\s*(?=[^,]+)/).map(s => s.trim()).filter(Boolean);
+            const specItems = rawSpec ? rawSpec.split(/,\s*(?=[^,]+)/).map(s => s.trim()).filter(Boolean) : [];
+            inspectedPartsList = prodItems.map((prodName, idx) => {
+              let assignedSpec = specItems[idx] || (specItems.length === 1 ? specItems[0] : '');
+              const dimMatch = prodName.match(/(\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?(?:\s*[*xX×]\s*\d+(?:[.,]\d+)?)?(?:\s*mm|\s*cm)?)/i);
+              let cleanName = prodName;
+              if (dimMatch) {
+                if (!assignedSpec || assignedSpec === 'Tiêu chuẩn' || assignedSpec === '—') {
+                  assignedSpec = dimMatch[1].replace(/\s*/g, '');
+                }
+                cleanName = prodName.replace(dimMatch[0], '').replace(/\s*[-–—:]\s*$/, '').replace(/\s*,\s*$/, '').trim() || prodName;
+              }
+              return { name: cleanName, spec: assignedSpec, qty: '' };
+            });
+          }
+        }
+        inspectedPartsList = inspectedPartsList.filter(p => p.name || p.spec);
+        const hasMultipleParts = inspectedPartsList.length > 1;
 
         return (
           <div className="modal-overlay">
-            <div className="modal-container">
+            <div className="modal-container" style={{ maxWidth: '850px' }}>
               {/* Close Button */}
               <button 
                 onClick={() => setSelectedInspection(null)} 
@@ -1010,13 +1133,13 @@ const InspectionReportsView = () => {
                   </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button
+                  <button 
                     onClick={() => handleExportSingleExcel(item, 'stage')}
                     style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', backgroundColor: '#F0FDF4', color: '#16A34A', border: '1px solid #BBF7D0', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer' }}
                   >
                     <FileSpreadsheet size={15} /> Excel
                   </button>
-                  <button
+                  <button 
                     onClick={() => handleExportSinglePDF(item, 'stage')}
                     style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', backgroundColor: '#F0F9FF', color: '#0284C7', border: '1px solid #BAE6FD', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer' }}
                   >
@@ -1034,7 +1157,24 @@ const InspectionReportsView = () => {
                   </div>
                   <div className="detail-row-item" style={{ marginTop: '8px' }}>
                     <span>Sản phẩm / Công đoạn:</span>
-                    <span>{item.product_sku || 'N/A'}</span>
+                    <span>
+                      {hasMultipleParts ? (
+                        <span style={{
+                          backgroundColor: '#F3E9DD',
+                          color: '#7B5233',
+                          padding: '2px 8px',
+                          borderRadius: '12px',
+                          fontSize: '0.8rem',
+                          fontWeight: '800',
+                          border: '1px solid #EADCC9',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {inspectedPartsList.length} chi tiết
+                        </span>
+                      ) : (
+                        item.product_sku || 'N/A'
+                      )}
+                    </span>
                   </div>
                   <div className="detail-row-item" style={{ marginTop: '8px' }}>
                     <span>Loại công đoạn:</span>
@@ -1058,6 +1198,99 @@ const InspectionReportsView = () => {
                   </div>
                 </div>
               </div>
+
+              {/* BẢNG CHI TIẾT & QUY CÁCH (Hiển thị khi có từ 2 chi tiết trở lên hoặc có danh sách chi tiết) */}
+              {hasMultipleParts && (
+                <div style={{
+                  marginTop: '16px',
+                  marginBottom: '16px',
+                  backgroundColor: '#FAF6F0',
+                  borderRadius: '10px',
+                  border: '1.5px solid #EADCC9',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{
+                    padding: '10px 14px',
+                    backgroundColor: '#F3E9DD',
+                    borderBottom: '1px solid #EADCC9',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.88rem', fontWeight: '800', color: '#7B5233' }}>
+                      <span>📋 Danh sách chi tiết & Quy cách kiểm tra</span>
+                      <span style={{
+                        backgroundColor: '#7B5233',
+                        color: '#ffffff',
+                        padding: '2px 8px',
+                        borderRadius: '999px',
+                        fontSize: '0.75rem',
+                        fontWeight: '700'
+                      }}>
+                        {inspectedPartsList.length} chi tiết
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{
+                    maxHeight: '240px',
+                    overflowY: 'auto',
+                    overflowX: 'auto',
+                    borderTop: '1px solid #EADCC9'
+                  }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                      <thead style={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#FDFBF7' }}>
+                        <tr style={{ backgroundColor: '#FDFBF7', borderBottom: '1px solid #EADCC9', textAlign: 'left', color: '#8D6E63' }}>
+                          <th style={{ padding: '8px 12px', width: '45px', textAlign: 'center', backgroundColor: '#FDFBF7' }}>#</th>
+                          <th style={{ padding: '8px 12px', fontWeight: '700', backgroundColor: '#FDFBF7' }}>Tên chi tiết / Bán thành phẩm</th>
+                          <th style={{ padding: '8px 12px', fontWeight: '700', width: '220px', backgroundColor: '#FDFBF7' }}>Quy cách (Dày x Rộng x Dài)</th>
+                          {inspectedPartsList.some(p => p.qty) && (
+                            <th style={{ padding: '8px 12px', fontWeight: '700', width: '90px', textAlign: 'center', backgroundColor: '#FDFBF7' }}>Số lượng</th>
+                          )}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {inspectedPartsList.map((part, pIdx) => (
+                          <tr key={pIdx} style={{
+                            borderBottom: pIdx < inspectedPartsList.length - 1 ? '1px solid #F0E6D8' : 'none',
+                            backgroundColor: pIdx % 2 === 0 ? '#FFFFFF' : '#FAF6F0'
+                          }}>
+                            <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: '700', color: '#A89F91' }}>
+                              {pIdx + 1}
+                            </td>
+                            <td style={{ padding: '8px 12px', fontWeight: '600', color: '#2D1A12' }}>
+                              {part.name || '—'}
+                            </td>
+                            <td style={{ padding: '8px 12px' }}>
+                              {part.spec ? (
+                                <span style={{
+                                  display: 'inline-block',
+                                  padding: '2px 8px',
+                                  backgroundColor: '#FEF3C7',
+                                  color: '#92400E',
+                                  borderRadius: '6px',
+                                  fontWeight: '700',
+                                  fontSize: '0.8rem',
+                                  fontFamily: 'monospace',
+                                  border: '1px solid #FDE68A'
+                                }}>
+                                  {part.spec}
+                                </span>
+                              ) : (
+                                <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>Theo tiêu chuẩn</span>
+                              )}
+                            </td>
+                            {inspectedPartsList.some(p => p.qty) && (
+                              <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: '600', color: '#7B5233' }}>
+                                {part.qty || '—'}
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
 
               {/* 3 KPI SUMMARY CARDS */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', textAlign: 'center', marginBottom: '16px' }}>
@@ -1534,9 +1767,31 @@ const InspectionReportsView = () => {
         const imagesList = [item.image_path_1, item.image_path_2, item.image_path_3].filter(Boolean);
         const isPass = item.result === 'Đạt';
 
+        let inboundPartsList = [];
+        const rawInboundProd = (item.part_name || '').trim();
+        const rawInboundSpec = (item.specification || '').trim();
+        if (rawInboundProd) {
+          const prodItems = rawInboundProd.split(/,\s*(?=[^,]+)/).map(s => s.trim()).filter(Boolean);
+          const specItems = rawInboundSpec ? rawInboundSpec.split(/,\s*(?=[^,]+)/).map(s => s.trim()).filter(Boolean) : [];
+          inboundPartsList = prodItems.map((prodName, idx) => {
+            let assignedSpec = specItems[idx] || (specItems.length === 1 ? specItems[0] : '');
+            const dimMatch = prodName.match(/(\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?(?:\s*[*xX×]\s*\d+(?:[.,]\d+)?)?(?:\s*mm|\s*cm)?)/i);
+            let cleanName = prodName;
+            if (dimMatch) {
+              if (!assignedSpec || assignedSpec === 'Tiêu chuẩn' || assignedSpec === '—') {
+                assignedSpec = dimMatch[1].replace(/\s*/g, '');
+              }
+              cleanName = prodName.replace(dimMatch[0], '').replace(/\s*[-–—:]\s*$/, '').replace(/\s*,\s*$/, '').trim() || prodName;
+            }
+            return { name: cleanName, spec: assignedSpec, qty: '' };
+          });
+        }
+        inboundPartsList = inboundPartsList.filter(p => p.name || p.spec);
+        const hasMultipleInboundParts = inboundPartsList.length > 1;
+
         return (
           <div className="modal-overlay">
-            <div className="modal-container">
+            <div className="modal-container" style={{ maxWidth: '850px' }}>
               {/* Close Button */}
               <button 
                 onClick={() => setSelectedInbound(null)} 
@@ -1575,12 +1830,31 @@ const InspectionReportsView = () => {
                 <div>
                   <div className="detail-row-item">
                     <span>Tên chi tiết / Linh kiện:</span>
-                    <span>{item.part_name || 'N/A'}</span>
+                    <span>
+                      {hasMultipleInboundParts ? (
+                        <span style={{
+                          backgroundColor: '#F3E9DD',
+                          color: '#7B5233',
+                          padding: '2px 8px',
+                          borderRadius: '12px',
+                          fontSize: '0.8rem',
+                          fontWeight: '800',
+                          border: '1px solid #EADCC9',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {inboundPartsList.length} chi tiết
+                        </span>
+                      ) : (
+                        item.part_name || 'N/A'
+                      )}
+                    </span>
                   </div>
-                  <div className="detail-row-item" style={{ marginTop: '8px' }}>
-                    <span>Quy cách linh kiện:</span>
-                    <span>{item.specification || 'N/A'}</span>
-                  </div>
+                  {!hasMultipleInboundParts && (
+                    <div className="detail-row-item" style={{ marginTop: '8px' }}>
+                      <span>Quy cách linh kiện:</span>
+                      <span>{item.specification || 'N/A'}</span>
+                    </div>
+                  )}
                   <div className="detail-row-item" style={{ marginTop: '8px' }}>
                     <span>Container / PO:</span>
                     <span>{item.cont_name || 'N/A'}</span>
@@ -1603,6 +1877,91 @@ const InspectionReportsView = () => {
                   </div>
                 </div>
               </div>
+
+              {/* BẢNG CHI TIẾT & QUY CÁCH (Hiển thị khi có từ 2 chi tiết trở lên) */}
+              {hasMultipleInboundParts && (
+                <div style={{
+                  marginTop: '16px',
+                  marginBottom: '16px',
+                  backgroundColor: '#FAF6F0',
+                  borderRadius: '10px',
+                  border: '1.5px solid #EADCC9',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{
+                    padding: '10px 14px',
+                    backgroundColor: '#F3E9DD',
+                    borderBottom: '1px solid #EADCC9',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.88rem', fontWeight: '800', color: '#7B5233' }}>
+                      <span>📋 Danh sách chi tiết & Quy cách kiểm tra</span>
+                      <span style={{
+                        backgroundColor: '#7B5233',
+                        color: '#ffffff',
+                        padding: '2px 8px',
+                        borderRadius: '999px',
+                        fontSize: '0.75rem',
+                        fontWeight: '700'
+                      }}>
+                        {inboundPartsList.length} chi tiết
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{
+                    maxHeight: '240px',
+                    overflowY: 'auto',
+                    overflowX: 'auto',
+                    borderTop: '1px solid #EADCC9'
+                  }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                      <thead style={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#FDFBF7' }}>
+                        <tr style={{ backgroundColor: '#FDFBF7', borderBottom: '1px solid #EADCC9', textAlign: 'left', color: '#8D6E63' }}>
+                          <th style={{ padding: '8px 12px', width: '45px', textAlign: 'center', backgroundColor: '#FDFBF7' }}>#</th>
+                          <th style={{ padding: '8px 12px', fontWeight: '700', backgroundColor: '#FDFBF7' }}>Tên chi tiết / Bán thành phẩm</th>
+                          <th style={{ padding: '8px 12px', fontWeight: '700', width: '220px', backgroundColor: '#FDFBF7' }}>Quy cách (Dày x Rộng x Dài)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {inboundPartsList.map((part, pIdx) => (
+                          <tr key={pIdx} style={{
+                            borderBottom: pIdx < inboundPartsList.length - 1 ? '1px solid #F0E6D8' : 'none',
+                            backgroundColor: pIdx % 2 === 0 ? '#FFFFFF' : '#FAF6F0'
+                          }}>
+                            <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: '700', color: '#A89F91' }}>
+                              {pIdx + 1}
+                            </td>
+                            <td style={{ padding: '8px 12px', fontWeight: '600', color: '#2D1A12' }}>
+                              {part.name || '—'}
+                            </td>
+                            <td style={{ padding: '8px 12px' }}>
+                              {part.spec ? (
+                                <span style={{
+                                  display: 'inline-block',
+                                  padding: '2px 8px',
+                                  backgroundColor: '#FEF3C7',
+                                  color: '#92400E',
+                                  borderRadius: '6px',
+                                  fontWeight: '700',
+                                  fontSize: '0.8rem',
+                                  fontFamily: 'monospace',
+                                  border: '1px solid #FDE68A'
+                                }}>
+                                  {part.spec}
+                                </span>
+                              ) : (
+                                <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>Theo tiêu chuẩn</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
 
               {/* Notes */}
               {item.note && (
@@ -1704,6 +2063,108 @@ const InspectionReportsView = () => {
           >
             <X size={24} />
           </button>
+        </div>
+      )}
+
+      {/* MODAL XÁC NHẬN XÓA PHIẾU KIỂM TRA */}
+      {deleteTarget && (
+        <div 
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.45)',
+            backdropFilter: 'blur(3px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 100000,
+            padding: '16px'
+          }}
+          onClick={() => !isDeleting && setDeleteTarget(null)}
+        >
+          <div 
+            style={{
+              backgroundColor: '#ffffff',
+              borderRadius: '14px',
+              maxWidth: '440px',
+              width: '100%',
+              boxShadow: '0 20px 40px rgba(0, 0, 0, 0.2)',
+              border: '1.5px solid #FEE2E2',
+              overflow: 'hidden'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ padding: '20px 24px', backgroundColor: '#FEF2F2', borderBottom: '1px solid #FEE2E2', display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: '#FEE2E2', border: '1px solid #FCA5A5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Trash2 size={22} style={{ color: '#DC2626' }} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '800', color: '#991B1B' }}>Xác nhận xóa phiếu kiểm tra</h3>
+                <p style={{ margin: '2px 0 0 0', fontSize: '0.8rem', color: '#B91C1C' }}>Thao tác này không thể hoàn tác</p>
+              </div>
+            </div>
+
+            <div style={{ padding: '20px 24px' }}>
+              <p style={{ fontSize: '0.9rem', color: '#374151', margin: '0 0 16px 0', lineHeight: 1.5 }}>
+                Bạn có chắc chắn muốn xóa vĩnh viễn phiếu kiểm tra <b style={{ color: '#991B1B' }}>#{deleteTarget.item?.id}</b> khỏi hệ thống?
+              </p>
+
+              <div style={{ backgroundColor: '#FAF6F0', borderRadius: '8px', padding: '12px 14px', border: '1px solid #EADCC9', fontSize: '0.83rem', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#8D6E63' }}>Mã PO:</span>
+                  <span style={{ fontWeight: '700', color: '#2D1A12' }}>{deleteTarget.item?.batch_no || '---'}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#8D6E63' }}>Phân loại:</span>
+                  <span style={{ fontWeight: '700', color: '#7B5233' }}>{deleteTarget.item?.category || getInspectionTypeLabel(deleteTarget.item?.inspection_type)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#8D6E63' }}>Công đoạn:</span>
+                  <span style={{ fontWeight: '700', color: '#2D1A12' }}>{deleteTarget.item?.stage || deleteTarget.item?.stage_name || '---'}</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ padding: '14px 24px', backgroundColor: '#F9FAFB', borderTop: '1px solid #E5E7EB', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setDeleteTarget(null)}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  border: '1px solid #D1D5DB',
+                  backgroundColor: '#ffffff',
+                  color: '#374151',
+                  fontWeight: '600',
+                  fontSize: '0.85rem',
+                  cursor: isDeleting ? 'not-allowed' : 'pointer'
+                }}
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleConfirmDelete}
+                style={{
+                  padding: '8px 18px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  backgroundColor: isDeleting ? '#FCA5A5' : '#DC2626',
+                  color: '#ffffff',
+                  fontWeight: '700',
+                  fontSize: '0.85rem',
+                  cursor: isDeleting ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                {isDeleting ? 'Đang xóa...' : 'Xác nhận xóa'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

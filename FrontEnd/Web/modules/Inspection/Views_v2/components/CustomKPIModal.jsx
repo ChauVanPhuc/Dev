@@ -114,14 +114,57 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
   const [error, setError] = useState('');
   const [activeLineTab, setActiveLineTab] = useState('line1');
 
-  // Trạng thái chỉnh sửa trực tiếp lịch sử
-  const [editingHistId, setEditingHistId] = useState(null);
+  // Trạng thái chỉnh sửa lịch sử qua Popup riêng biệt
   const [editingHistRow, setEditingHistRow] = useState(null);
+  const [savingHist, setSavingHist] = useState(false);
   const [viewingHistDetail, setViewingHistDetail] = useState(null);
 
-  const handleDeleteHistory = async (histId) => {
-    if (!window.confirm('Bạn có chắc chắn muốn xóa bản ghi lịch sử này không?')) return;
-    const updated = historyList.filter(h => h.id !== histId);
+  // Tìm Dòng hàng chính tương ứng (Vanity hoặc Furniture) từ tên danh mục/nhãn
+  const getCategoryMainName = (label, fallback = 'Vanity') => {
+    if (!label) return fallback;
+    const s = String(label).trim();
+    if (s.toLowerCase() === 'vanity' || DEFAULT_PRODUCT_LINES.Vanity.map(x => x.toLowerCase()).includes(s.toLowerCase())) {
+      return 'Vanity';
+    }
+    if (s.toLowerCase() === 'furniture' || DEFAULT_PRODUCT_LINES.Furniture.map(x => x.toLowerCase()).includes(s.toLowerCase())) {
+      return 'Furniture';
+    }
+    for (const cat of categories) {
+      if (cat.name && cat.name.toLowerCase() === s.toLowerCase()) {
+        return cat.main_category || fallback;
+      }
+    }
+    return fallback;
+  };
+
+  // Lọc danh sách Dòng hàng phụ thuộc vào Dòng hàng chính được chọn
+  const getSubCategoriesForMain = (mainCatName) => {
+    if (!mainCatName) return [];
+    const fromApi = categories
+      .filter(c => (c.main_category || '').toLowerCase() === mainCatName.toLowerCase())
+      .map(c => c.name);
+
+    const defaults = DEFAULT_PRODUCT_LINES[mainCatName] || [];
+    const merged = Array.from(new Set([...fromApi, ...defaults]));
+    return merged;
+  };
+
+  // Kích hoạt Modal Popup xác nhận xóa bản ghi lịch sử chuẩn giao diện dự án
+  const handlePromptDeleteHistory = (histItem, index) => {
+    const label = histItem.month || histItem.created_at || `Lần ${index + 1}`;
+    setDeletingHistItem({ item: histItem, index, label });
+  };
+
+  // Thực thi thao tác xóa bản ghi lịch sử sau khi người dùng bấm Đồng ý trên Modal dự án
+  const executeDeleteHistory = async () => {
+    if (!deletingHistItem) return;
+    const { item, index, label } = deletingHistItem;
+    setDeletingLoading(true);
+
+    const updated = historyList.filter((h, i) => {
+      if (item.id && h.id) return h.id !== item.id;
+      return i !== index;
+    });
     setHistoryList(updated);
 
     try {
@@ -136,22 +179,339 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
         ...formData,
         history_json: updated
       });
+      setSuccessMessage(`Đã xóa bản ghi lịch sử "${label}" thành công!`);
+      setTimeout(() => setSuccessMessage(''), 2200);
       if (onSaveSuccess) onSaveSuccess();
     } catch (e) {
       console.error('Lỗi khi xóa dòng lịch sử:', e);
+      setError('Lỗi khi xóa dòng lịch sử: ' + (e.message || ''));
+    } finally {
+      setDeletingLoading(false);
+      setDeletingHistItem(null);
     }
   };
 
-  const handleStartEditHistory = (row) => {
-    setEditingHistId(row.id);
-    setEditingHistRow({ ...row });
+  const handleStartEditHistory = (row, originalIndex) => {
+    const vChange = parseChangeDetail(row.vanity_change);
+    const fChange = parseChangeDetail(row.furniture_change);
+
+    const vLabel = row.vanity_label || formData.vanityLabel || 'Vanity';
+    const fLabel = row.furniture_label || formData.furnitureLabel || 'Furniture';
+
+    // Xác định Dòng hàng chính chuẩn: Vanity hoặc Furniture
+    const vMainCat = getCategoryMainName(vLabel, formData.vanityMainCat || 'Vanity');
+    const fMainCat = getCategoryMainName(fLabel, formData.furnitureMainCat || 'Furniture');
+
+    const vSubs = getSubCategoriesForMain(vMainCat);
+    const fSubs = getSubCategoriesForMain(fMainCat);
+
+    // Parse an toàn line_values (hỗ trợ cả JSON string lẫn object)
+    let lineVals = {};
+    if (typeof row.line_values === 'string') {
+      try { lineVals = JSON.parse(row.line_values); } catch (e) { lineVals = {}; }
+    } else if (row.line_values && typeof row.line_values === 'object') {
+      lineVals = JSON.parse(JSON.stringify(row.line_values));
+    }
+
+    const pureVVal = parsePureNumber(row.vanity_val);
+    const pureFVal = parsePureNumber(row.furniture_val);
+
+    // Kiểm tra xem lineVals đã có dòng con nào thuộc Vanity chưa
+    const hasVanityInLines = Object.keys(lineVals).some(k => vSubs.includes(k));
+    // Nếu chưa có, đưa dòng có sẵn số liệu (vLabel) vào danh sách dòng con
+    if (!hasVanityInLines && (pureVVal !== '' || vLabel !== 'Vanity')) {
+      lineVals[vLabel] = {
+        a: '', b: '', c: '',
+        valNum: pureVVal || '',
+        changeDir: vChange.dir || '▼',
+        changeNum: vChange.num || ''
+      };
+    }
+
+    // Kiểm tra xem lineVals đã có dòng con nào thuộc Furniture chưa
+    const hasFurnitureInLines = Object.keys(lineVals).some(k => fSubs.includes(k));
+    // Nếu chưa có, đưa dòng có sẵn số liệu (fLabel) vào danh sách dòng con
+    if (!hasFurnitureInLines && (pureFVal !== '' || fLabel !== 'Furniture')) {
+      lineVals[fLabel] = {
+        a: '', b: '', c: '',
+        valNum: pureFVal || '',
+        changeDir: fChange.dir || '▼',
+        changeNum: fChange.num || ''
+      };
+    }
+
+    // Kế thừa các dòng con từ bản ghi lịch sử gần nhất từng có cấu hình dòng con nếu có
+    const priorWithLines = historyList.slice().reverse().find(h => {
+      if (!h.line_values) return false;
+      const lv = typeof h.line_values === 'string' ? JSON.parse(h.line_values || '{}') : h.line_values;
+      return lv && typeof lv === 'object' && Object.keys(lv).length > 0;
+    });
+    if (priorWithLines && priorWithLines.line_values) {
+      let pLines = priorWithLines.line_values;
+      if (typeof pLines === 'string') {
+        try { pLines = JSON.parse(pLines); } catch (e) { pLines = {}; }
+      }
+      Object.keys(pLines).forEach(k => {
+        if (!lineVals[k]) {
+          lineVals[k] = { a: '', b: '', c: '', valNum: '', changeDir: '▼', changeNum: '' };
+        }
+      });
+    }
+
+    const existingKeys = Object.keys(lineVals);
+    const activeV = existingKeys.filter(k => vSubs.includes(k));
+    const activeF = existingKeys.filter(k => fSubs.includes(k));
+    existingKeys.forEach(k => {
+      if (!activeV.includes(k) && !activeF.includes(k)) {
+        const catMain = getCategoryMainName(k, '');
+        if (catMain === 'Furniture') {
+          activeF.push(k);
+        } else {
+          activeV.push(k);
+        }
+      }
+    });
+
+    setEditingHistRow({
+      ...row,
+      _originalIndex: originalIndex,
+      month: row.month || '',
+      vanity_main_cat: vMainCat,
+      vanity_label: vLabel,
+      vanity_val_num: pureVVal,
+      vanity_change_dir: vChange.dir || '▼',
+      vanity_change_num: vChange.num,
+      furniture_main_cat: fMainCat,
+      furniture_label: fLabel,
+      furniture_val_num: pureFVal,
+      furniture_change_dir: fChange.dir || '▼',
+      furniture_change_num: fChange.num,
+      score_avg: row.score_avg !== null && row.score_avg !== undefined ? row.score_avg : '',
+      line_values: lineVals,
+      activeLineTab: 'line1',
+      activeVanityLines: activeV,
+      activeFurnitureLines: activeF
+    });
+  };
+
+  const handleEditHistFieldChange = (field, value) => {
+    setEditingHistRow(prev => prev ? ({ ...prev, [field]: value }) : null);
+  };
+
+  // Helper tính lại tổng hợp của 2 Dòng hàng chính khi thay đổi số liệu các dòng con trong Popup Sửa
+  const recalcEditRowAggregates = (rowObj) => {
+    let totVanA = 0, totVanC = 0;
+    const vanVals = [];
+    (rowObj.activeVanityLines || []).forEach(name => {
+      const d = rowObj.line_values?.[name];
+      if (d) {
+        const a = parseFloat(d.a), b = parseFloat(d.b), c = parseFloat(d.c), v = parseFloat(d.valNum);
+        if (!isNaN(a) && !isNaN(c) && c !== 0) {
+          totVanA += a + (isNaN(b) ? 0 : b);
+          totVanC += c;
+        } else if (!isNaN(v)) {
+          vanVals.push(v);
+        }
+      }
+    });
+
+    let aggVan = null;
+    if (totVanC > 0) {
+      aggVan = ((totVanA / totVanC) * 100).toFixed(1);
+    } else if (vanVals.length > 0) {
+      aggVan = (vanVals.reduce((acc, x) => acc + x, 0) / vanVals.length).toFixed(1);
+    }
+
+    let totFurA = 0, totFurC = 0;
+    const furVals = [];
+    (rowObj.activeFurnitureLines || []).forEach(name => {
+      const d = rowObj.line_values?.[name];
+      if (d) {
+        const a = parseFloat(d.a), b = parseFloat(d.b), c = parseFloat(d.c), v = parseFloat(d.valNum);
+        if (!isNaN(a) && !isNaN(c) && c !== 0) {
+          totFurA += a + (isNaN(b) ? 0 : b);
+          totFurC += c;
+        } else if (!isNaN(v)) {
+          furVals.push(v);
+        }
+      }
+    });
+
+    let aggFur = null;
+    if (totFurC > 0) {
+      aggFur = ((totFurA / totFurC) * 100).toFixed(1);
+    } else if (furVals.length > 0) {
+      aggFur = (furVals.reduce((acc, x) => acc + x, 0) / furVals.length).toFixed(1);
+    }
+
+    const next = { ...rowObj };
+    const origIdx = rowObj._originalIndex;
+    const priorHist = origIdx > 0 ? historyList[origIdx - 1] : null;
+
+    if (aggVan !== null) {
+      next.vanity_val_num = aggVan;
+      const prevVStr = parsePureNumber(priorHist?.vanity_val);
+      const calcV = autoCalculateDiff(aggVan, prevVStr);
+      if (calcV) { next.vanity_change_dir = calcV.dir; next.vanity_change_num = calcV.num; }
+    }
+    if (aggFur !== null) {
+      next.furniture_val_num = aggFur;
+      const prevFStr = parsePureNumber(priorHist?.furniture_val);
+      const calcF = autoCalculateDiff(aggFur, prevFStr);
+      if (calcF) { next.furniture_change_dir = calcF.dir; next.furniture_change_num = calcF.num; }
+    }
+    return next;
+  };
+
+  const handleAddEditSubLine = (tabKey, lineName) => {
+    if (!lineName) return;
+    setEditingHistRow(prev => {
+      if (!prev) return null;
+      const isVanity = tabKey === 'vanity';
+      const activeKey = isVanity ? 'activeVanityLines' : 'activeFurnitureLines';
+      const curActive = prev[activeKey] || [];
+      if (curActive.includes(lineName)) return prev;
+
+      const nextActive = [...curActive, lineName];
+      const nextLineValues = { ...(prev.line_values || {}) };
+      if (!nextLineValues[lineName]) {
+        nextLineValues[lineName] = { a: '', b: '', c: '', valNum: '', changeDir: '▼', changeNum: '' };
+      }
+      return {
+        ...prev,
+        [activeKey]: nextActive,
+        line_values: nextLineValues
+      };
+    });
+  };
+
+  const handleRemoveEditSubLine = (tabKey, lineName) => {
+    setEditingHistRow(prev => {
+      if (!prev) return null;
+      const isVanity = tabKey === 'vanity';
+      const activeKey = isVanity ? 'activeVanityLines' : 'activeFurnitureLines';
+      const nextActive = (prev[activeKey] || []).filter(l => l !== lineName);
+      const nextLineValues = { ...(prev.line_values || {}) };
+      delete nextLineValues[lineName];
+
+      const nextRow = {
+        ...prev,
+        [activeKey]: nextActive,
+        line_values: nextLineValues
+      };
+      return recalcEditRowAggregates(nextRow);
+    });
+  };
+
+  const handleEditHistLineInputChange = (tabKey, lineName, field, value, formulaType = 'div') => {
+    setEditingHistRow(prev => {
+      if (!prev) return null;
+      const current = prev.line_values?.[lineName] || { valNum: '', changeDir: '▼', changeNum: '', a: '', b: '', c: '' };
+      const nextLine = { ...current, [field]: value };
+
+      if (field === 'a' || field === 'b' || field === 'c') {
+        const a = parseFloat(field === 'a' ? value : nextLine.a);
+        const b = parseFloat(field === 'b' ? value : nextLine.b);
+        const c = parseFloat(field === 'c' ? value : nextLine.c);
+
+        let res = null;
+        if (formulaType === 'sum_div') {
+          if (!isNaN(a) && !isNaN(c) && c !== 0) {
+            const sum = a + (isNaN(b) ? 0 : b);
+            res = ((sum / c) * 100).toFixed(1);
+          }
+        } else {
+          if (!isNaN(a) && !isNaN(c) && c !== 0) {
+            res = ((a / c) * 100).toFixed(1);
+          }
+        }
+
+        if (res !== null) {
+          nextLine.valNum = res;
+          const origIdx = prev._originalIndex;
+          const priorHist = origIdx > 0 ? historyList[origIdx - 1] : null;
+          const prevStr = tabKey === 'vanity'
+            ? parsePureNumber(priorHist?.line_values?.[lineName]?.valNum || priorHist?.vanity_val)
+            : parsePureNumber(priorHist?.line_values?.[lineName]?.valNum || priorHist?.furniture_val);
+
+          const calculatedDiff = autoCalculateDiff(res, prevStr);
+          if (calculatedDiff) {
+            nextLine.changeDir = calculatedDiff.dir;
+            nextLine.changeNum = calculatedDiff.num;
+          }
+        }
+      }
+
+      const nextLineValues = { ...(prev.line_values || {}), [lineName]: nextLine };
+      const nextRow = {
+        ...prev,
+        line_values: nextLineValues
+      };
+      return recalcEditRowAggregates(nextRow);
+    });
+  };
+
+  const handleRecalcFromEditSubLines = () => {
+    setEditingHistRow(prev => prev ? recalcEditRowAggregates(prev) : null);
   };
 
   const handleSaveEditHistory = async () => {
     if (!editingHistRow) return;
-    const updated = historyList.map(h => h.id === editingHistRow.id ? editingHistRow : h);
-    setHistoryList(updated);
-    setEditingHistId(null);
+    setSavingHist(true);
+
+    const formatNum = (val) => {
+      if (val === '' || val === null || val === undefined) return '';
+      const n = parseFloat(val);
+      return isNaN(n) ? '' : `${n.toFixed(1)}%`;
+    };
+
+    const formatChange = (dir, num) => {
+      if (num === '' || num === null || num === undefined) return '';
+      const n = parseFloat(num);
+      return isNaN(n) ? '' : `${dir || '▼'} ${n.toFixed(1)}%`;
+    };
+
+    const cleanedLineValues = {};
+    [...(editingHistRow.activeVanityLines || []), ...(editingHistRow.activeFurnitureLines || [])].forEach(lineName => {
+      const d = editingHistRow.line_values?.[lineName];
+      if (d && (d.valNum !== '' || d.a !== '' || d.c !== '')) {
+        cleanedLineValues[lineName] = d;
+      }
+    });
+
+    const updatedRow = {
+      ...editingHistRow,
+      month: editingHistRow.month?.trim() || '',
+      vanity_label: editingHistRow.vanity_label || formData.vanityLabel || 'Vanity',
+      vanity_val: formatNum(editingHistRow.vanity_val_num),
+      vanity_change: formatChange(editingHistRow.vanity_change_dir, editingHistRow.vanity_change_num),
+      furniture_label: editingHistRow.furniture_label || formData.furnitureLabel || 'Furniture',
+      furniture_val: formatNum(editingHistRow.furniture_val_num),
+      furniture_change: formatChange(editingHistRow.furniture_change_dir, editingHistRow.furniture_change_num),
+      score_avg: editingHistRow.score_avg !== '' && !isNaN(parseFloat(editingHistRow.score_avg)) ? parseFloat(editingHistRow.score_avg) : null,
+      line_values: cleanedLineValues
+    };
+
+    delete updatedRow.vanity_main_cat;
+    delete updatedRow.furniture_main_cat;
+    delete updatedRow.vanity_val_num;
+    delete updatedRow.vanity_change_dir;
+    delete updatedRow.vanity_change_num;
+    delete updatedRow.furniture_val_num;
+    delete updatedRow.furniture_change_dir;
+    delete updatedRow.furniture_change_num;
+    delete updatedRow._originalIndex;
+    delete updatedRow.activeLineTab;
+    delete updatedRow.activeVanityLines;
+    delete updatedRow.activeFurnitureLines;
+
+    const updatedList = historyList.map((h, i) => {
+      if (editingHistRow.id && h.id && h.id === editingHistRow.id) return updatedRow;
+      if (editingHistRow._originalIndex !== undefined && i === editingHistRow._originalIndex) return updatedRow;
+      return h;
+    });
+
+    setHistoryList(updatedList);
     setEditingHistRow(null);
 
     try {
@@ -164,11 +524,16 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
       );
       await api.put(`/inspections/kpi-targets/${kKey}`, {
         ...formData,
-        history_json: updated
+        history_json: updatedList
       });
+      setSuccessMessage(`Đã cập nhật bản ghi lịch sử "${updatedRow.month}" thành công!`);
+      setTimeout(() => setSuccessMessage(''), 2500);
       if (onSaveSuccess) onSaveSuccess();
     } catch (e) {
       console.error('Lỗi khi cập nhật lịch sử:', e);
+      setError('Lỗi khi lưu cập nhật lịch sử: ' + (e.message || ''));
+    } finally {
+      setSavingHist(false);
     }
   };
 
@@ -187,6 +552,8 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
   // Trạng thái hiển thị modal xác nhận và thông báo thành công
   const [showConfirmSave, setShowConfirmSave] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [deletingHistItem, setDeletingHistItem] = useState(null);
+  const [deletingLoading, setDeletingLoading] = useState(false);
 
   // Hàm xoá sạch form nhập liệu sau khi lưu thành công
   const resetFormInputs = () => {
@@ -497,6 +864,31 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
             }
             setHistoryList(freshHist);
 
+            // Tự động khởi tạo danh sách dòng hàng active cho form Thêm mới từ bản ghi gần nhất có dòng hàng hoặc mặc định
+            const latestHistWithLines = freshHist.slice().reverse().find(h => {
+              if (!h.line_values) return false;
+              const lv = typeof h.line_values === 'string' ? JSON.parse(h.line_values || '{}') : h.line_values;
+              return lv && typeof lv === 'object' && Object.keys(lv).length > 0;
+            });
+            if (latestHistWithLines && latestHistWithLines.line_values) {
+              let lVals = latestHistWithLines.line_values;
+              if (typeof lVals === 'string') {
+                try { lVals = JSON.parse(lVals); } catch (e) { lVals = {}; }
+              }
+              const lKeys = Object.keys(lVals);
+              const vSubList = getSubCategoriesForMain(formData.vanityMainCat || 'Vanity');
+              const fSubList = getSubCategoriesForMain(formData.furnitureMainCat || 'Furniture');
+              const vActive = lKeys.filter(k => vSubList.includes(k));
+              const fActive = lKeys.filter(k => fSubList.includes(k));
+              if (vActive.length > 0) setActiveVanityLines(vActive);
+              if (fActive.length > 0) setActiveFurnitureLines(fActive);
+            } else {
+              const defaultV = formData.vanityLabel || 'Vanity';
+              const defaultF = formData.furnitureLabel || 'Furniture';
+              setActiveVanityLines(prev => prev.length === 0 ? [defaultV] : prev);
+              setActiveFurnitureLines(prev => prev.length === 0 ? [defaultF] : prev);
+            }
+
             if (targetObj.formula_text) {
               setFormData(prev => ({ ...prev, formulaText: targetObj.formula_text }));
             }
@@ -507,18 +899,6 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
   }, [kpiItem, isOpen]);
 
   if (!isOpen || !kpiItem) return null;
-
-  // Lọc danh sách Dòng hàng phụ thuộc vào Dòng hàng chính được chọn
-  const getSubCategoriesForMain = (mainCatName) => {
-    if (!mainCatName) return [];
-    const fromApi = categories
-      .filter(c => (c.main_category || '').toLowerCase() === mainCatName.toLowerCase())
-      .map(c => c.name);
-
-    const defaults = DEFAULT_PRODUCT_LINES[mainCatName] || [];
-    const merged = Array.from(new Set([...fromApi, ...defaults]));
-    return merged;
-  };
 
   const vanitySubOptions = getSubCategoriesForMain(formData.vanityMainCat);
   const furnitureSubOptions = getSubCategoriesForMain(formData.furnitureMainCat);
@@ -761,13 +1141,13 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
         <form onSubmit={handleSubmit} style={{ padding: '20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {error && (
             <div style={{
-              backgroundColor: '#FDF2F2',
-              color: '#B94A3D',
-              border: '1px solid #F8D7DA',
+              backgroundColor: '#FAF5F0',
+              color: '#70452D',
+              border: '1px solid #D5C9BD',
               padding: '8px 12px',
               borderRadius: '6px',
               fontSize: '0.8rem',
-              fontWeight: '600'
+              fontWeight: '700'
             }}>
               {error}
             </div>
@@ -868,17 +1248,17 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
 
           {/* TAB CHỌN DÒNG HÀNG CHÍNH */}
           <div style={{ marginTop: '10px' }}>
-            <div style={{ display: 'flex', gap: '6px', marginBottom: '8px', borderBottom: '2px solid #EAE3DC' }}>
+            <div style={{ display: 'flex', gap: '6px', marginBottom: '8px', borderBottom: '2px solid #DFD5CB' }}>
               <button
                 type="button"
                 onClick={() => setActiveLineTab('line1')}
                 style={{
                   flex: 1,
-                  padding: '8px 12px',
-                  border: '1px solid #EAE3DC',
-                  borderBottom: activeLineTab === 'line1' ? '3px solid #6D28D9' : '1px solid transparent',
-                  backgroundColor: activeLineTab === 'line1' ? '#EDE9FE' : '#FAF7F4',
-                  color: activeLineTab === 'line1' ? '#5B21B6' : '#70452D',
+                  padding: '9px 12px',
+                  border: activeLineTab === 'line1' ? '1px solid #DFD5CB' : '1px solid #EAE3DC',
+                  borderBottom: activeLineTab === 'line1' ? '3px solid #70452D' : '1px solid transparent',
+                  backgroundColor: activeLineTab === 'line1' ? '#FFFFFF' : '#F7F3EE',
+                  color: activeLineTab === 'line1' ? '#5B3924' : '#8C6547',
                   fontWeight: '800',
                   fontSize: '0.82rem',
                   borderRadius: '8px 8px 0 0',
@@ -887,11 +1267,20 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: '6px',
-                  transition: 'all 0.15s ease'
+                  transition: 'all 0.15s ease',
+                  boxShadow: activeLineTab === 'line1' ? '0 -2px 6px rgba(91, 57, 36, 0.05)' : 'none'
                 }}
               >
                 <span>Dòng hàng chính: {formData.vanityMainCat || 'Vanity'}</span>
-                <span style={{ fontSize: '0.7rem', backgroundColor: activeLineTab === 'line1' ? '#DDD6FE' : '#EAE3DC', padding: '1px 6px', borderRadius: '4px', color: '#4C1D95' }}>
+                <span style={{
+                  fontSize: '0.7rem',
+                  backgroundColor: activeLineTab === 'line1' ? '#EFE8E1' : '#ECE5DE',
+                  padding: '1px 6px',
+                  borderRadius: '4px',
+                  color: activeLineTab === 'line1' ? '#5B3924' : '#8C6547',
+                  border: activeLineTab === 'line1' ? '1px solid #DFD5CB' : '1px solid transparent',
+                  fontWeight: '700'
+                }}>
                   ({activeVanityLines.length} Dòng hàng)
                 </span>
               </button>
@@ -901,11 +1290,11 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
                 onClick={() => setActiveLineTab('line2')}
                 style={{
                   flex: 1,
-                  padding: '8px 12px',
-                  border: '1px solid #EAE3DC',
-                  borderBottom: activeLineTab === 'line2' ? '3px solid #D97706' : '1px solid transparent',
-                  backgroundColor: activeLineTab === 'line2' ? '#FEF3C7' : '#FAF7F4',
-                  color: activeLineTab === 'line2' ? '#92400E' : '#70452D',
+                  padding: '9px 12px',
+                  border: activeLineTab === 'line2' ? '1px solid #DFD5CB' : '1px solid #EAE3DC',
+                  borderBottom: activeLineTab === 'line2' ? '3px solid #70452D' : '1px solid transparent',
+                  backgroundColor: activeLineTab === 'line2' ? '#FFFFFF' : '#F7F3EE',
+                  color: activeLineTab === 'line2' ? '#5B3924' : '#8C6547',
                   fontWeight: '800',
                   fontSize: '0.82rem',
                   borderRadius: '8px 8px 0 0',
@@ -914,11 +1303,20 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: '6px',
-                  transition: 'all 0.15s ease'
+                  transition: 'all 0.15s ease',
+                  boxShadow: activeLineTab === 'line2' ? '0 -2px 6px rgba(91, 57, 36, 0.05)' : 'none'
                 }}
               >
                 <span>Dòng hàng chính: {formData.furnitureMainCat || 'Furniture'}</span>
-                <span style={{ fontSize: '0.7rem', backgroundColor: activeLineTab === 'line2' ? '#FDE68A' : '#EAE3DC', padding: '1px 6px', borderRadius: '4px', color: '#78350F' }}>
+                <span style={{
+                  fontSize: '0.7rem',
+                  backgroundColor: activeLineTab === 'line2' ? '#EFE8E1' : '#ECE5DE',
+                  padding: '1px 6px',
+                  borderRadius: '4px',
+                  color: activeLineTab === 'line2' ? '#5B3924' : '#8C6547',
+                  border: activeLineTab === 'line2' ? '1px solid #DFD5CB' : '1px solid transparent',
+                  fontWeight: '700'
+                }}>
                   ({activeFurnitureLines.length} Dòng hàng)
                 </span>
               </button>
@@ -926,8 +1324,8 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
 
             {/* CONTENT TAB 1: VANITY */}
             {activeLineTab === 'line1' && (
-              <div style={{ backgroundColor: '#FAF7F4', padding: '10px 12px', borderRadius: '10px', border: '1px solid #DDD6FE', maxHeight: '340px', overflowY: 'auto' }}>
-                <div style={{ fontSize: '0.74rem', fontWeight: '800', color: '#5B21B6', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ backgroundColor: '#FAF7F4', padding: '10px 12px', borderRadius: '10px', border: '1px solid #DFD5CB', maxHeight: '340px', overflowY: 'auto' }}>
+                <div style={{ fontSize: '0.74rem', fontWeight: '800', color: '#5B3924', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span>Dòng hàng thuộc {formData.vanityMainCat || 'Vanity'} ({activeVanityLines.length}/{vanitySubOptions.length}):</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     {vanitySubOptions.filter(l => !activeVanityLines.includes(l)).length > 0 && (
@@ -940,9 +1338,9 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
                         style={{
                           padding: '3px 8px',
                           borderRadius: '6px',
-                          border: '1px solid #C4B5FD',
-                          backgroundColor: '#EDE9FE',
-                          color: '#5B21B6',
+                          border: '1px solid #C59B73',
+                          backgroundColor: '#F5EFEA',
+                          color: '#5B3924',
                           fontSize: '0.72rem',
                           fontWeight: '800',
                           cursor: 'pointer'
@@ -954,14 +1352,14 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
                         ))}
                       </select>
                     )}
-                    <span style={{ fontSize: '0.65rem', color: '#6D28D9', backgroundColor: '#EDE9FE', padding: '2px 6px', borderRadius: '4px', fontWeight: '700' }}>
+                    <span style={{ fontSize: '0.65rem', color: '#70452D', backgroundColor: '#EFE8E1', border: '1px solid #DFD5CB', padding: '2px 6px', borderRadius: '4px', fontWeight: '700' }}>
                       Dòng k nhập sẽ tự bỏ qua
                     </span>
                   </div>
                 </div>
 
                 {activeVanityLines.length === 0 ? (
-                  <div style={{ padding: '16px', textAlign: 'center', color: '#6D28D9', fontSize: '0.8rem', fontStyle: 'italic' }}>
+                  <div style={{ padding: '16px', textAlign: 'center', color: '#8C6547', fontSize: '0.8rem', fontStyle: 'italic' }}>
                     Chưa chọn dòng hàng nào. Chọn dòng hàng ở menu <strong>Thêm dòng hàng</strong> phía trên để nhập số liệu.
                   </div>
                 ) : (
@@ -994,8 +1392,8 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
                             backgroundColor: isFilled ? '#FFFFFF' : '#FAF7F4',
                             padding: '6px 8px',
                             borderRadius: '8px',
-                            border: isFilled ? '1.5px solid #6D28D9' : '1px solid #EAE3DC',
-                            boxShadow: isFilled ? '0 1px 4px rgba(109, 40, 217, 0.1)' : 'none',
+                            border: isFilled ? '1.5px solid #8C6547' : '1px solid #EAE3DC',
+                            boxShadow: isFilled ? '0 1px 4px rgba(91, 57, 36, 0.08)' : 'none',
                             transition: 'all 0.15s ease'
                           }}
                         >
@@ -1005,9 +1403,9 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
                               <span style={{
                                 display: 'inline-block',
                                 padding: '4px 6px 4px 8px',
-                                backgroundColor: isFilled ? '#EDE9FE' : '#FFF',
-                                color: isFilled ? '#5B21B6' : '#70452D',
-                                border: isFilled ? '1px solid #C4B5FD' : '1px solid #D5C9BD',
+                                backgroundColor: isFilled ? '#F5EFEA' : '#FFF',
+                                color: '#5B3924',
+                                border: isFilled ? '1px solid #C59B73' : '1px solid #D5C9BD',
                                 borderRadius: '6px',
                                 fontSize: '0.78rem',
                                 fontWeight: '800',
@@ -1056,7 +1454,7 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
                                   style={{ width: '100%', minWidth: '35px', padding: '3px 4px', borderRadius: '4px', border: '1px solid #C59B73', fontSize: '0.78rem', fontWeight: '700', boxSizing: 'border-box' }}
                                 />
                                 <span style={{ fontWeight: '800', color: '#70452D', fontSize: '0.75rem' }}>=</span>
-                                <div style={{ padding: '2px 4px', backgroundColor: '#FEF3C7', border: '1px solid #F59E0B', borderRadius: '4px', fontSize: '0.75rem', fontWeight: '800', color: '#B45309', whiteSpace: 'nowrap', minWidth: '40px', textAlign: 'center' }}>
+                                <div style={{ padding: '2px 4px', backgroundColor: '#F5EFEA', border: '1px solid #C59B73', borderRadius: '4px', fontSize: '0.75rem', fontWeight: '800', color: '#5B3924', whiteSpace: 'nowrap', minWidth: '40px', textAlign: 'center' }}>
                                   {calcResultText}
                                 </div>
                               </div>
@@ -1096,7 +1494,7 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
                                   border: '1px solid #D5C9BD',
                                   fontSize: '0.78rem',
                                   fontWeight: '800',
-                                  color: lineData.changeDir === '▲' ? '#3F7D58' : '#B94A3D',
+                                  color: lineData.changeDir === '▲' ? '#3F7D58' : '#8C5332',
                                   backgroundColor: '#FFFFFF',
                                   cursor: 'pointer'
                                 }}
@@ -1136,13 +1534,16 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
                                 style={{
                                   background: 'none',
                                   border: 'none',
-                                  color: '#DC2626',
+                                  color: '#8C6547',
                                   fontSize: '1rem',
                                   fontWeight: '800',
                                   cursor: 'pointer',
                                   padding: '2px',
-                                  lineHeight: 1
+                                  lineHeight: 1,
+                                  transition: 'color 0.15s ease'
                                 }}
+                                onMouseEnter={(e) => e.currentTarget.style.color = '#5B3924'}
+                                onMouseLeave={(e) => e.currentTarget.style.color = '#8C6547'}
                               >
                                 ✕
                               </button>
@@ -1158,8 +1559,8 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
 
             {/* CONTENT TAB 2: FURNITURE */}
             {activeLineTab === 'line2' && (
-              <div style={{ backgroundColor: '#FAF5EE', padding: '10px 12px', borderRadius: '10px', border: '1px solid #FDE68A', maxHeight: '340px', overflowY: 'auto' }}>
-                <div style={{ fontSize: '0.74rem', fontWeight: '800', color: '#92400E', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ backgroundColor: '#FAF7F4', padding: '10px 12px', borderRadius: '10px', border: '1px solid #DFD5CB', maxHeight: '340px', overflowY: 'auto' }}>
+                <div style={{ fontSize: '0.74rem', fontWeight: '800', color: '#5B3924', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span>Dòng hàng thuộc {formData.furnitureMainCat || 'Furniture'} ({activeFurnitureLines.length}/{furnitureSubOptions.length}):</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     {furnitureSubOptions.filter(l => !activeFurnitureLines.includes(l)).length > 0 && (
@@ -1172,9 +1573,9 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
                         style={{
                           padding: '3px 8px',
                           borderRadius: '6px',
-                          border: '1px solid #FCD34D',
-                          backgroundColor: '#FEF3C7',
-                          color: '#92400E',
+                          border: '1px solid #C59B73',
+                          backgroundColor: '#F5EFEA',
+                          color: '#5B3924',
                           fontSize: '0.72rem',
                           fontWeight: '800',
                           cursor: 'pointer'
@@ -1186,14 +1587,14 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
                         ))}
                       </select>
                     )}
-                    <span style={{ fontSize: '0.65rem', color: '#D97706', backgroundColor: '#FEF3C7', padding: '2px 6px', borderRadius: '4px', fontWeight: '700' }}>
+                    <span style={{ fontSize: '0.65rem', color: '#70452D', backgroundColor: '#EFE8E1', border: '1px solid #DFD5CB', padding: '2px 6px', borderRadius: '4px', fontWeight: '700' }}>
                       Dòng k nhập sẽ tự bỏ qua
                     </span>
                   </div>
                 </div>
 
                 {activeFurnitureLines.length === 0 ? (
-                  <div style={{ padding: '16px', textAlign: 'center', color: '#92400E', fontSize: '0.8rem', fontStyle: 'italic' }}>
+                  <div style={{ padding: '16px', textAlign: 'center', color: '#8C6547', fontSize: '0.8rem', fontStyle: 'italic' }}>
                     Chưa chọn dòng hàng nào. Chọn dòng hàng ở menu <strong>Thêm dòng hàng</strong> phía trên để nhập số liệu.
                   </div>
                 ) : (
@@ -1223,11 +1624,11 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
                         <div
                           key={lineName}
                           style={{
-                            backgroundColor: isFilled ? '#FFFFFF' : '#FAF5EE',
+                            backgroundColor: isFilled ? '#FFFFFF' : '#FAF7F4',
                             padding: '6px 8px',
                             borderRadius: '8px',
-                            border: isFilled ? '1.5px solid #D97706' : '1px solid #FDE68A',
-                            boxShadow: isFilled ? '0 1px 4px rgba(217, 119, 6, 0.1)' : 'none',
+                            border: isFilled ? '1.5px solid #8C6547' : '1px solid #EAE3DC',
+                            boxShadow: isFilled ? '0 1px 4px rgba(91, 57, 36, 0.08)' : 'none',
                             transition: 'all 0.15s ease'
                           }}
                         >
@@ -1237,9 +1638,9 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
                               <span style={{
                                 display: 'inline-block',
                                 padding: '4px 6px 4px 8px',
-                                backgroundColor: isFilled ? '#FEF3C7' : '#FFF',
-                                color: isFilled ? '#92400E' : '#C58A4B',
-                                border: isFilled ? '1px solid #FCD34D' : '1px solid #D5C9BD',
+                                backgroundColor: isFilled ? '#F5EFEA' : '#FFF',
+                                color: '#5B3924',
+                                border: isFilled ? '1px solid #C59B73' : '1px solid #D5C9BD',
                                 borderRadius: '6px',
                                 fontSize: '0.78rem',
                                 fontWeight: '800',
@@ -1261,7 +1662,7 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
                                   onChange={(e) => handleLineInputChange('furniture', lineName, 'a', e.target.value, parsedForm.type)}
                                   placeholder={parsedForm.varA || 'Tử số'}
                                   title={parsedForm.varA}
-                                  style={{ width: '100%', minWidth: '35px', padding: '3px 4px', borderRadius: '4px', border: '1px solid #C58A4B', fontSize: '0.78rem', fontWeight: '700', boxSizing: 'border-box' }}
+                                  style={{ width: '100%', minWidth: '35px', padding: '3px 4px', borderRadius: '4px', border: '1px solid #C59B73', fontSize: '0.78rem', fontWeight: '700', boxSizing: 'border-box' }}
                                 />
                                 {parsedForm.type === 'sum_div' && (
                                   <>
@@ -1273,7 +1674,7 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
                                       onChange={(e) => handleLineInputChange('furniture', lineName, 'b', e.target.value, 'sum_div')}
                                       placeholder={parsedForm.varB || 'Biến B'}
                                       title={parsedForm.varB}
-                                      style={{ width: '100%', minWidth: '35px', padding: '3px 4px', borderRadius: '4px', border: '1px solid #C58A4B', fontSize: '0.78rem', fontWeight: '700', boxSizing: 'border-box' }}
+                                      style={{ width: '100%', minWidth: '35px', padding: '3px 4px', borderRadius: '4px', border: '1px solid #C59B73', fontSize: '0.78rem', fontWeight: '700', boxSizing: 'border-box' }}
                                     />
                                   </>
                                 )}
@@ -1285,10 +1686,10 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
                                   onChange={(e) => handleLineInputChange('furniture', lineName, 'c', e.target.value, parsedForm.type)}
                                   placeholder={parsedForm.varC || 'Mẫu số'}
                                   title={parsedForm.varC}
-                                  style={{ width: '100%', minWidth: '35px', padding: '3px 4px', borderRadius: '4px', border: '1px solid #C58A4B', fontSize: '0.78rem', fontWeight: '700', boxSizing: 'border-box' }}
+                                  style={{ width: '100%', minWidth: '35px', padding: '3px 4px', borderRadius: '4px', border: '1px solid #C59B73', fontSize: '0.78rem', fontWeight: '700', boxSizing: 'border-box' }}
                                 />
                                 <span style={{ fontWeight: '800', color: '#70452D', fontSize: '0.75rem' }}>=</span>
-                                <div style={{ padding: '2px 4px', backgroundColor: '#FEF3C7', border: '1px solid #F59E0B', borderRadius: '4px', fontSize: '0.75rem', fontWeight: '800', color: '#B45309', whiteSpace: 'nowrap', minWidth: '40px', textAlign: 'center' }}>
+                                <div style={{ padding: '2px 4px', backgroundColor: '#F5EFEA', border: '1px solid #C59B73', borderRadius: '4px', fontSize: '0.75rem', fontWeight: '800', color: '#5B3924', whiteSpace: 'nowrap', minWidth: '40px', textAlign: 'center' }}>
                                   {calcResultText}
                                 </div>
                               </div>
@@ -1314,7 +1715,7 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
                                   boxSizing: 'border-box'
                                 }}
                               />
-                              <span style={{ position: 'absolute', right: '4px', fontSize: '0.72rem', fontWeight: '800', color: '#C58A4B' }}>%</span>
+                              <span style={{ position: 'absolute', right: '4px', fontSize: '0.72rem', fontWeight: '800', color: '#70452D' }}>%</span>
                             </div>
 
                             {/* Chênh lệch % */}
@@ -1328,7 +1729,7 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
                                   border: '1px solid #D5C9BD',
                                   fontSize: '0.78rem',
                                   fontWeight: '800',
-                                  color: lineData.changeDir === '▲' ? '#3F7D58' : '#B94A3D',
+                                  color: lineData.changeDir === '▲' ? '#3F7D58' : '#8C5332',
                                   backgroundColor: '#FFFFFF',
                                   cursor: 'pointer'
                                 }}
@@ -1355,7 +1756,7 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
                                     boxSizing: 'border-box'
                                   }}
                                 />
-                                <span style={{ position: 'absolute', right: '3px', fontSize: '0.7rem', fontWeight: '800', color: '#C58A4B' }}>%</span>
+                                <span style={{ position: 'absolute', right: '3px', fontSize: '0.7rem', fontWeight: '800', color: '#70452D' }}>%</span>
                               </div>
                             </div>
 
@@ -1368,13 +1769,16 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
                                 style={{
                                   background: 'none',
                                   border: 'none',
-                                  color: '#DC2626',
+                                  color: '#8C6547',
                                   fontSize: '1rem',
                                   fontWeight: '800',
                                   cursor: 'pointer',
                                   padding: '2px',
-                                  lineHeight: 1
+                                  lineHeight: 1,
+                                  transition: 'color 0.15s ease'
                                 }}
+                                onMouseEnter={(e) => e.currentTarget.style.color = '#5B3924'}
+                                onMouseLeave={(e) => e.currentTarget.style.color = '#8C6547'}
                               >
                                 ✕
                               </button>
@@ -1429,11 +1833,11 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
             </div>
 
             {historyList.length === 0 ? (
-              <div style={{ fontSize: '0.75rem', color: '#9CA3AF', fontStyle: 'italic', textAlign: 'center', padding: '10px' }}>
+              <div style={{ fontSize: '0.75rem', color: '#8C6547', fontStyle: 'italic', textAlign: 'center', padding: '10px' }}>
                 Chưa có lịch sử cập nhật nào được ghi nhận.
               </div>
             ) : (
-              <div style={{ maxHeight: '160px', overflowY: 'auto', borderRadius: '6px', border: '1px solid #E5E7EB' }}>
+              <div style={{ maxHeight: '160px', overflowY: 'auto', borderRadius: '6px', border: '1px solid #DFD5CB' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', backgroundColor: '#FFFFFF' }}>
                   <thead>
                     <tr style={{ backgroundColor: '#FAF6F0', color: '#5B3924', borderBottom: '1px solid #EAE3DC' }}>
@@ -1446,126 +1850,63 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
                   </thead>
                   <tbody>
                     {historyList.slice().reverse().map((h, idx) => {
-                      const isEditing = editingHistId === h.id;
+                      const realIndex = historyList.length - 1 - idx;
                       return (
                         <tr 
                           key={h.id || idx} 
-                          onClick={() => {
-                            if (!isEditing) setViewingHistDetail(h);
-                          }}
-                          title={!isEditing ? "Bấm vào để xem chi tiết từng dòng hàng của tháng này" : ""}
+                          onClick={() => setViewingHistDetail(h)}
+                          title="Bấm vào để xem chi tiết từng dòng hàng của tháng này"
                           style={{ 
-                            borderBottom: '1px solid #F3F4F6', 
-                            backgroundColor: isEditing ? '#FEFCE8' : 'transparent',
-                            cursor: isEditing ? 'default' : 'pointer',
+                            borderBottom: '1px solid #EAE3DC', 
+                            backgroundColor: 'transparent',
+                            cursor: 'pointer',
                             transition: 'background-color 0.15s ease'
                           }}
                           onMouseEnter={(e) => {
-                            if (!isEditing) e.currentTarget.style.backgroundColor = '#FEF9F5';
+                            e.currentTarget.style.backgroundColor = '#F5EFEA';
                           }}
                           onMouseLeave={(e) => {
-                            if (!isEditing) e.currentTarget.style.backgroundColor = 'transparent';
+                            e.currentTarget.style.backgroundColor = 'transparent';
                           }}
                         >
-                          {isEditing ? (
-                            <>
-                              <td style={{ padding: '4px 6px' }} onClick={(e) => e.stopPropagation()}>
-                                <input
-                                  type="text"
-                                  value={editingHistRow?.month || ''}
-                                  onChange={(e) => setEditingHistRow(prev => ({ ...prev, month: e.target.value }))}
-                                  style={{ width: '100%', padding: '2px 4px', fontSize: '0.72rem', borderRadius: '3px', border: '1px solid #F59E0B' }}
-                                />
-                              </td>
-                              <td style={{ padding: '4px 6px' }} onClick={(e) => e.stopPropagation()}>
-                                <input
-                                  type="text"
-                                  value={editingHistRow?.vanity_val || ''}
-                                  onChange={(e) => setEditingHistRow(prev => ({ ...prev, vanity_val: e.target.value }))}
-                                  placeholder="VD: 8.3%"
-                                  style={{ width: '100%', padding: '2px 4px', fontSize: '0.72rem', borderRadius: '3px', border: '1px solid #F59E0B' }}
-                                />
-                              </td>
-                              <td style={{ padding: '4px 6px' }} onClick={(e) => e.stopPropagation()}>
-                                <input
-                                  type="text"
-                                  value={editingHistRow?.furniture_val || ''}
-                                  onChange={(e) => setEditingHistRow(prev => ({ ...prev, furniture_val: e.target.value }))}
-                                  placeholder="VD: 8.3%"
-                                  style={{ width: '100%', padding: '2px 4px', fontSize: '0.72rem', borderRadius: '3px', border: '1px solid #F59E0B' }}
-                                />
-                              </td>
-                              <td style={{ padding: '4px 6px' }} onClick={(e) => e.stopPropagation()}>
-                                <input
-                                  type="number"
-                                  step="any"
-                                  value={editingHistRow?.score_avg ?? ''}
-                                  onChange={(e) => setEditingHistRow(prev => ({ ...prev, score_avg: e.target.value ? parseFloat(e.target.value) : '' }))}
-                                  placeholder="95"
-                                  style={{ width: '100%', padding: '2px 4px', fontSize: '0.72rem', borderRadius: '3px', border: '1px solid #F59E0B', textAlign: 'center' }}
-                                />
-                              </td>
-                              <td style={{ padding: '4px 6px', textAlign: 'center', whiteSpace: 'nowrap' }} onClick={(e) => e.stopPropagation()}>
-                                <button
-                                  type="button"
-                                  onClick={handleSaveEditHistory}
-                                  style={{ border: 'none', background: 'none', color: '#16A34A', cursor: 'pointer', fontWeight: '800', marginRight: '4px', fontSize: '0.85rem' }}
-                                  title="Lưu sửa dòng lịch sử này"
-                                >
-                                  ✓
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setEditingHistId(null)}
-                                  style={{ border: 'none', background: 'none', color: '#DC2626', cursor: 'pointer', fontWeight: '800', fontSize: '0.85rem' }}
-                                  title="Hủy"
-                                >
-                                  ✕
-                                </button>
-                              </td>
-                            </>
-                          ) : (
-                            <>
-                              <td style={{ padding: '6px 8px', fontWeight: '700', color: '#374151' }}>
-                                {h.month || h.created_at || `Lần ${historyList.length - idx}`}
-                              </td>
-                              <td style={{ padding: '6px 8px', color: '#6D28D9', fontWeight: '700' }}>
-                                {h.vanity_val} <span style={{ fontSize: '0.7rem', color: h.vanity_change?.includes('▲') ? '#15803D' : '#B94A3D' }}>{h.vanity_change}</span>
-                              </td>
-                              <td style={{ padding: '6px 8px', color: '#D97706', fontWeight: '700' }}>
-                                {h.furniture_val} <span style={{ fontSize: '0.7rem', color: h.furniture_change?.includes('▲') ? '#15803D' : '#B94A3D' }}>{h.furniture_change}</span>
-                              </td>
-                              <td style={{ padding: '6px 8px', textAlign: 'center', fontWeight: '800', color: '#5B3924' }}>
-                                {h.score_avg ?? '---'}%
-                              </td>
-                              <td style={{ padding: '6px 8px', textAlign: 'center', whiteSpace: 'nowrap' }} onClick={(e) => e.stopPropagation()}>
-                                <button
-                                  type="button"
-                                  onClick={() => setViewingHistDetail(h)}
-                                  style={{ border: 'none', background: '#EDE9FE', color: '#6D28D9', borderRadius: '4px', padding: '2px 6px', cursor: 'pointer', fontSize: '0.72rem', fontWeight: '700', marginRight: '4px' }}
-                                  title="Xem chi tiết từng dòng hàng của tháng này"
-                                >
-                                  Xem
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleStartEditHistory(h)}
-                                  style={{ border: 'none', background: '#DBEAFE', color: '#1D4ED8', borderRadius: '4px', padding: '2px 6px', cursor: 'pointer', fontSize: '0.72rem', fontWeight: '700', marginRight: '4px' }}
-                                  title="Sửa bản ghi lịch sử này"
-                                >
-                                  Sửa
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteHistory(h.id)}
-                                  style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', borderRadius: '4px', padding: '2px 6px', cursor: 'pointer', fontSize: '0.72rem', fontWeight: '700' }}
-                                  title="Xóa bản ghi lịch sử này"
-                                >
-                                  Xóa
-                                </button>
-                              </td>
-                            </>
-                          )}
+                          <td style={{ padding: '6px 8px', fontWeight: '700', color: '#5B3924' }}>
+                            {h.month || h.created_at || `Lần ${historyList.length - idx}`}
+                          </td>
+                          <td style={{ padding: '6px 8px', color: '#332219', fontWeight: '700' }}>
+                            {h.vanity_val} <span style={{ fontSize: '0.7rem', color: h.vanity_change?.includes('▲') ? '#3F7D58' : '#8C5332' }}>{h.vanity_change}</span>
+                          </td>
+                          <td style={{ padding: '6px 8px', color: '#332219', fontWeight: '700' }}>
+                            {h.furniture_val} <span style={{ fontSize: '0.7rem', color: h.furniture_change?.includes('▲') ? '#3F7D58' : '#8C5332' }}>{h.furniture_change}</span>
+                          </td>
+                          <td style={{ padding: '6px 8px', textAlign: 'center', fontWeight: '800', color: '#5B3924' }}>
+                            {h.score_avg ?? '---'}%
+                          </td>
+                          <td style={{ padding: '6px 8px', textAlign: 'center', whiteSpace: 'nowrap' }} onClick={(e) => e.stopPropagation()}>
+                            <button
+                              type="button"
+                              onClick={() => setViewingHistDetail(h)}
+                              style={{ border: '1px solid #D5C9BD', background: '#F5EFEA', color: '#5B3924', borderRadius: '4px', padding: '3px 8px', cursor: 'pointer', fontSize: '0.72rem', fontWeight: '700', marginRight: '4px' }}
+                              title="Xem chi tiết từng dòng hàng của tháng này"
+                            >
+                              Xem
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditHistory(h, realIndex)}
+                              style={{ border: '1px solid #C4B2A2', background: '#EFE8E1', color: '#70452D', borderRadius: '4px', padding: '3px 8px', cursor: 'pointer', fontSize: '0.72rem', fontWeight: '700', marginRight: '4px' }}
+                              title="Mở popup chỉnh sửa số liệu bản ghi này"
+                            >
+                              Sửa
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handlePromptDeleteHistory(h, realIndex)}
+                              style={{ border: '1px solid #D5C9BD', background: '#F7F4F0', color: '#70452D', borderRadius: '4px', padding: '3px 8px', cursor: 'pointer', fontSize: '0.72rem', fontWeight: '700' }}
+                              title="Xóa bản ghi lịch sử này"
+                            >
+                              Xóa
+                            </button>
+                          </td>
                         </tr>
                       );
                     })}
@@ -1643,35 +1984,35 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
             width: '680px',
             maxWidth: '92vw',
             maxHeight: '85vh',
-            border: '2px solid #6D28D9',
+            border: '2px solid #5B3924',
             boxShadow: '0 16px 40px rgba(91, 57, 36, 0.3)',
             display: 'flex', flexDirection: 'column', overflow: 'hidden'
           }}>
             {/* Header */}
-            <div style={{ backgroundColor: '#6D28D9', color: '#FFF', padding: '12px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ backgroundColor: '#5B3924', color: '#FFFDFC', padding: '12px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span>Chi tiết số liệu từng dòng hàng - {viewingHistDetail.month}</span>
               </h4>
-              <button onClick={() => setViewingHistDetail(null)} style={{ background: 'none', border: 'none', color: '#FFF', fontSize: '1.2rem', cursor: 'pointer' }}>✕</button>
+              <button onClick={() => setViewingHistDetail(null)} style={{ background: 'none', border: 'none', color: '#FFFDFC', fontSize: '1.2rem', cursor: 'pointer' }}>✕</button>
             </div>
 
             {/* Content */}
             <div style={{ padding: '16px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '14px' }}>
               {/* Metric Overview cards */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
-                <div style={{ backgroundColor: '#EDE9FE', border: '1px solid #C4B5FD', padding: '8px 10px', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '0.72rem', fontWeight: '700', color: '#5B21B6' }}>Dòng {viewingHistDetail.vanity_label || 'Vanity'}</div>
-                  <div style={{ fontSize: '1rem', fontWeight: '800', color: '#6D28D9' }}>{viewingHistDetail.vanity_val || '---'}</div>
-                  <div style={{ fontSize: '0.7rem', fontWeight: '700', color: viewingHistDetail.vanity_change?.includes('▲') ? '#15803D' : '#B94A3D' }}>{viewingHistDetail.vanity_change || ''}</div>
+                <div style={{ backgroundColor: '#FAF7F4', border: '1px solid #DFD5CB', padding: '8px 10px', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: '700', color: '#70452D' }}>Dòng {viewingHistDetail.vanity_label || 'Vanity'}</div>
+                  <div style={{ fontSize: '1rem', fontWeight: '800', color: '#5B3924' }}>{viewingHistDetail.vanity_val || '---'}</div>
+                  <div style={{ fontSize: '0.7rem', fontWeight: '700', color: viewingHistDetail.vanity_change?.includes('▲') ? '#3F7D58' : '#8C5332' }}>{viewingHistDetail.vanity_change || ''}</div>
                 </div>
-                <div style={{ backgroundColor: '#FEF3C7', border: '1px solid #FCD34D', padding: '8px 10px', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '0.72rem', fontWeight: '700', color: '#92400E' }}>Dòng {viewingHistDetail.furniture_label || 'Furniture'}</div>
-                  <div style={{ fontSize: '1rem', fontWeight: '800', color: '#D97706' }}>{viewingHistDetail.furniture_val || '---'}</div>
-                  <div style={{ fontSize: '0.7rem', fontWeight: '700', color: viewingHistDetail.furniture_change?.includes('▲') ? '#15803D' : '#B94A3D' }}>{viewingHistDetail.furniture_change || ''}</div>
+                <div style={{ backgroundColor: '#FAF7F4', border: '1px solid #DFD5CB', padding: '8px 10px', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: '700', color: '#70452D' }}>Dòng {viewingHistDetail.furniture_label || 'Furniture'}</div>
+                  <div style={{ fontSize: '1rem', fontWeight: '800', color: '#5B3924' }}>{viewingHistDetail.furniture_val || '---'}</div>
+                  <div style={{ fontSize: '0.7rem', fontWeight: '700', color: viewingHistDetail.furniture_change?.includes('▲') ? '#3F7D58' : '#8C5332' }}>{viewingHistDetail.furniture_change || ''}</div>
                 </div>
-                <div style={{ backgroundColor: '#F3F4F6', border: '1px solid #E5E7EB', padding: '8px 10px', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '0.72rem', fontWeight: '700', color: '#374151' }}>Đánh giá Radar</div>
-                  <div style={{ fontSize: '1rem', fontWeight: '800', color: '#111827' }}>{viewingHistDetail.score_avg ?? '---'}%</div>
+                <div style={{ backgroundColor: '#FAF7F4', border: '1px solid #DFD5CB', padding: '8px 10px', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: '700', color: '#70452D' }}>Đánh giá Radar</div>
+                  <div style={{ fontSize: '1rem', fontWeight: '800', color: '#5B3924' }}>{viewingHistDetail.score_avg ?? '---'}%</div>
                 </div>
               </div>
 
@@ -1682,10 +2023,10 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
                 </h5>
 
                 {viewingHistDetail.line_values && Object.keys(viewingHistDetail.line_values).length > 0 ? (
-                  <div style={{ borderRadius: '8px', border: '1px solid #EAE3DC', overflow: 'hidden' }}>
+                  <div style={{ borderRadius: '8px', border: '1px solid #DFD5CB', overflow: 'hidden' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
                       <thead>
-                        <tr style={{ backgroundColor: '#F7F4F0', color: '#5B3924', borderBottom: '1px solid #EAE3DC' }}>
+                        <tr style={{ backgroundColor: '#F7F4F0', color: '#5B3924', borderBottom: '1px solid #DFD5CB' }}>
                           <th style={{ padding: '6px 10px', textAlign: 'left', fontWeight: '800' }}>Tên Dòng hàng</th>
                           <th style={{ padding: '6px 10px', textAlign: 'center', fontWeight: '800' }}>Tử số / Mẫu số</th>
                           <th style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '800' }}>Giá trị %</th>
@@ -1696,17 +2037,17 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
                         {Object.entries(viewingHistDetail.line_values).map(([lineName, lData], idx) => {
                           const hasVal = lData.valNum !== '' || lData.a !== '';
                           return (
-                            <tr key={lineName} style={{ borderBottom: '1px solid #F3F4F6', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF7F4' }}>
-                              <td style={{ padding: '6px 10px', fontWeight: '800', color: '#4C1D95' }}>
+                            <tr key={lineName} style={{ borderBottom: '1px solid #EAE3DC', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF7F4' }}>
+                              <td style={{ padding: '6px 10px', fontWeight: '800', color: '#5B3924' }}>
                                 {lineName}
                               </td>
                               <td style={{ padding: '6px 10px', textAlign: 'center', color: '#70452D' }}>
                                 {lData.a !== '' ? `${lData.a} / ${lData.c}` : '---'}
                               </td>
-                              <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '800', color: hasVal ? '#6D28D9' : '#9CA3AF' }}>
+                              <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '800', color: hasVal ? '#5B3924' : '#8C6547' }}>
                                 {lData.valNum !== '' ? `${lData.valNum}%` : '---'}
                               </td>
-                              <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '700', color: lData.changeDir === '▲' ? '#15803D' : '#B94A3D' }}>
+                              <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: '700', color: lData.changeDir === '▲' ? '#3F7D58' : '#8C5332' }}>
                                 {lData.changeNum !== '' ? `${lData.changeDir} ${lData.changeNum}%` : '---'}
                               </td>
                             </tr>
@@ -1724,11 +2065,11 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
             </div>
 
             {/* Footer Actions */}
-            <div style={{ padding: '12px 18px', backgroundColor: '#FAF7F4', borderTop: '1px solid #EAE3DC', display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+            <div style={{ padding: '12px 18px', backgroundColor: '#FAF7F4', borderTop: '1px solid #DFD5CB', display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
               <button
                 type="button"
                 onClick={() => setViewingHistDetail(null)}
-                style={{ padding: '7px 14px', backgroundColor: '#E5E7EB', color: '#374151', border: 'none', borderRadius: '6px', fontSize: '0.8rem', fontWeight: '700', cursor: 'pointer' }}
+                style={{ padding: '7px 18px', backgroundColor: '#F5EFEA', color: '#5B3924', border: '1px solid #D5C9BD', borderRadius: '6px', fontSize: '0.8rem', fontWeight: '700', cursor: 'pointer' }}
               >
                 Đóng
               </button>
@@ -1736,6 +2077,863 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
           </div>
         </div>
       )}
+
+      {/* POPUP CHỈNH SỬA SỐ LIỆU LỊCH SỬ */}
+      {editingHistRow && (() => {
+        const vMainCat = editingHistRow.vanity_main_cat || getCategoryMainName(editingHistRow.vanity_label || formData.vanityLabel || formData.vanityMainCat, 'Vanity');
+        const fMainCat = editingHistRow.furniture_main_cat || getCategoryMainName(editingHistRow.furniture_label || formData.furnitureLabel || formData.furnitureMainCat, 'Furniture');
+        const editVanitySubs = getSubCategoriesForMain(vMainCat);
+        const editFurnitureSubs = getSubCategoriesForMain(fMainCat);
+        const activeVLines = editingHistRow.activeVanityLines || [];
+        const activeFLines = editingHistRow.activeFurnitureLines || [];
+        const parsedForm = parseFormulaVariables(formData.formulaText);
+
+        return (
+          <div style={{
+            position: 'fixed',
+            top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(20, 15, 10, 0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 10000,
+            animation: 'fadeIn 0.15s ease'
+          }}>
+            <div style={{
+              backgroundColor: '#FFFDFC',
+              borderRadius: '14px',
+              width: '800px',
+              maxWidth: '96vw',
+              maxHeight: '90vh',
+              border: '2px solid #5B3924',
+              boxShadow: '0 16px 40px rgba(91, 57, 36, 0.35)',
+              display: 'flex', flexDirection: 'column', overflow: 'hidden'
+            }}>
+              {/* Header */}
+              <div style={{ backgroundColor: '#5B3924', color: '#FFFDFC', padding: '13px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>Chỉnh sửa Bản ghi Lịch sử: {editingHistRow.month || ''}</span>
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setEditingHistRow(null)}
+                  style={{ background: 'none', border: 'none', color: '#FFFDFC', fontSize: '1.2rem', cursor: 'pointer', lineHeight: 1 }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Body */}
+              <div style={{ padding: '18px 20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {/* Kỳ / Tháng ghi nhận */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '800', color: '#5B3924', marginBottom: '4px' }}>
+                    Kỳ / Tháng ghi nhận *
+                  </label>
+                  <input
+                    type="text"
+                    value={editingHistRow.month || ''}
+                    onChange={(e) => handleEditHistFieldChange('month', e.target.value)}
+                    placeholder="VD: Tháng 09/2026"
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      border: '1px solid #D5C9BD',
+                      fontSize: '0.85rem',
+                      fontWeight: '600',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
+                {/* Grid 2 Card Dòng Hàng Chính (Vanity & Furniture) */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  {/* Dòng hàng chính 1 */}
+                  <div style={{ backgroundColor: '#FAF7F4', border: '1px solid #DFD5CB', borderRadius: '10px', padding: '12px' }}>
+                    <div style={{ fontSize: '0.84rem', fontWeight: '800', color: '#5B3924', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>{vMainCat === (editingHistRow.vanity_label || 'Vanity') ? `Dòng hàng: ${vMainCat}` : `Dòng hàng: ${editingHistRow.vanity_label || 'Vanity'} (${vMainCat})`}</span>
+                      <span style={{ fontSize: '0.7rem', color: '#70452D', backgroundColor: '#EFE8E1', padding: '1px 6px', borderRadius: '4px', fontWeight: '700' }}>
+                        {activeVLines.length} dòng con
+                      </span>
+                    </div>
+
+                    <div style={{ marginBottom: '10px' }}>
+                      <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '700', color: '#70452D', marginBottom: '3px' }}>
+                        Giá trị (%)
+                      </label>
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <input
+                          type="number"
+                          step="any"
+                          min="0"
+                          max="100"
+                          value={editingHistRow.vanity_val_num ?? ''}
+                          onChange={(e) => handleEditHistFieldChange('vanity_val_num', e.target.value)}
+                          placeholder="VD: 8.3"
+                          style={{
+                            width: '100%',
+                            padding: '7px 24px 7px 8px',
+                            borderRadius: '6px',
+                            border: '1px solid #C59B73',
+                            fontSize: '0.84rem',
+                            fontWeight: '700',
+                            boxSizing: 'border-box'
+                          }}
+                        />
+                        <span style={{ position: 'absolute', right: '8px', fontSize: '0.78rem', fontWeight: '800', color: '#70452D' }}>%</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '700', color: '#70452D', marginBottom: '3px' }}>
+                        Biến động so với kỳ trước
+                      </label>
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        <select
+                          value={editingHistRow.vanity_change_dir || '▼'}
+                          onChange={(e) => handleEditHistFieldChange('vanity_change_dir', e.target.value)}
+                          style={{
+                            padding: '6px 6px',
+                            borderRadius: '6px',
+                            border: '1px solid #D5C9BD',
+                            fontSize: '0.82rem',
+                            fontWeight: '800',
+                            color: editingHistRow.vanity_change_dir === '▲' ? '#3F7D58' : '#8C5332',
+                            backgroundColor: '#FFFFFF',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <option value="▲">▲ Tăng</option>
+                          <option value="▼">▼ Giảm</option>
+                        </select>
+                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', flex: 1 }}>
+                          <input
+                            type="number"
+                            step="any"
+                            min="0"
+                            max="100"
+                            value={editingHistRow.vanity_change_num ?? ''}
+                            onChange={(e) => handleEditHistFieldChange('vanity_change_num', e.target.value)}
+                            placeholder="Lệch"
+                            style={{
+                              width: '100%',
+                              padding: '6px 20px 6px 8px',
+                              borderRadius: '6px',
+                              border: '1px solid #D5C9BD',
+                              fontSize: '0.82rem',
+                              fontWeight: '700',
+                              boxSizing: 'border-box'
+                            }}
+                          />
+                          <span style={{ position: 'absolute', right: '6px', fontSize: '0.74rem', fontWeight: '800', color: '#70452D' }}>%</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Dòng hàng chính 2 */}
+                  <div style={{ backgroundColor: '#FAF7F4', border: '1px solid #DFD5CB', borderRadius: '10px', padding: '12px' }}>
+                    <div style={{ fontSize: '0.84rem', fontWeight: '800', color: '#5B3924', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>{fMainCat === (editingHistRow.furniture_label || 'Furniture') ? `Dòng hàng: ${fMainCat}` : `Dòng hàng: ${editingHistRow.furniture_label || 'Furniture'} (${fMainCat})`}</span>
+                      <span style={{ fontSize: '0.7rem', color: '#70452D', backgroundColor: '#EFE8E1', padding: '1px 6px', borderRadius: '4px', fontWeight: '700' }}>
+                        {activeFLines.length} dòng con
+                      </span>
+                    </div>
+
+                    <div style={{ marginBottom: '10px' }}>
+                      <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '700', color: '#70452D', marginBottom: '3px' }}>
+                        Giá trị (%)
+                      </label>
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <input
+                          type="number"
+                          step="any"
+                          min="0"
+                          max="100"
+                          value={editingHistRow.furniture_val_num ?? ''}
+                          onChange={(e) => handleEditHistFieldChange('furniture_val_num', e.target.value)}
+                          placeholder="VD: 8.3"
+                          style={{
+                            width: '100%',
+                            padding: '7px 24px 7px 8px',
+                            borderRadius: '6px',
+                            border: '1px solid #C59B73',
+                            fontSize: '0.84rem',
+                            fontWeight: '700',
+                            boxSizing: 'border-box'
+                          }}
+                        />
+                        <span style={{ position: 'absolute', right: '8px', fontSize: '0.78rem', fontWeight: '800', color: '#70452D' }}>%</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '700', color: '#70452D', marginBottom: '3px' }}>
+                        Biến động so với kỳ trước
+                      </label>
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        <select
+                          value={editingHistRow.furniture_change_dir || '▼'}
+                          onChange={(e) => handleEditHistFieldChange('furniture_change_dir', e.target.value)}
+                          style={{
+                            padding: '6px 6px',
+                            borderRadius: '6px',
+                            border: '1px solid #D5C9BD',
+                            fontSize: '0.82rem',
+                            fontWeight: '800',
+                            color: editingHistRow.furniture_change_dir === '▲' ? '#3F7D58' : '#8C5332',
+                            backgroundColor: '#FFFFFF',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <option value="▲">▲ Tăng</option>
+                          <option value="▼">▼ Giảm</option>
+                        </select>
+                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', flex: 1 }}>
+                          <input
+                            type="number"
+                            step="any"
+                            min="0"
+                            max="100"
+                            value={editingHistRow.furniture_change_num ?? ''}
+                            onChange={(e) => handleEditHistFieldChange('furniture_change_num', e.target.value)}
+                            placeholder="Lệch"
+                            style={{
+                              width: '100%',
+                              padding: '6px 20px 6px 8px',
+                              borderRadius: '6px',
+                              border: '1px solid #D5C9BD',
+                              fontSize: '0.82rem',
+                              fontWeight: '700',
+                              boxSizing: 'border-box'
+                            }}
+                          />
+                          <span style={{ position: 'absolute', right: '6px', fontSize: '0.74rem', fontWeight: '800', color: '#70452D' }}>%</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* TABS DÒNG HÀNG CON: NHƯ FORM THÊM MỚI */}
+                <div style={{ marginTop: '2px' }}>
+                  {/* Tab Navigation */}
+                  <div style={{ display: 'flex', borderBottom: '2px solid #D5C9BD', gap: '4px', marginBottom: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => handleEditHistFieldChange('activeLineTab', 'line1')}
+                      style={{
+                        flex: 1,
+                        padding: '8px 12px',
+                        border: (editingHistRow.activeLineTab || 'line1') === 'line1' ? '1px solid #DFD5CB' : '1px solid #EAE3DC',
+                        borderBottom: (editingHistRow.activeLineTab || 'line1') === 'line1' ? '3px solid #70452D' : '1px solid transparent',
+                        backgroundColor: (editingHistRow.activeLineTab || 'line1') === 'line1' ? '#FFFFFF' : '#F7F3EE',
+                        color: (editingHistRow.activeLineTab || 'line1') === 'line1' ? '#5B3924' : '#8C6547',
+                        fontWeight: '800',
+                        fontSize: '0.82rem',
+                        borderRadius: '8px 8px 0 0',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        transition: 'all 0.15s ease',
+                        boxShadow: (editingHistRow.activeLineTab || 'line1') === 'line1' ? '0 -2px 6px rgba(91, 57, 36, 0.05)' : 'none'
+                      }}
+                    >
+                      <span>Dòng hàng chính: {vMainCat}</span>
+                      <span style={{
+                        fontSize: '0.7rem',
+                        backgroundColor: (editingHistRow.activeLineTab || 'line1') === 'line1' ? '#EFE8E1' : '#ECE5DE',
+                        padding: '1px 6px',
+                        borderRadius: '4px',
+                        color: (editingHistRow.activeLineTab || 'line1') === 'line1' ? '#5B3924' : '#8C6547',
+                        border: (editingHistRow.activeLineTab || 'line1') === 'line1' ? '1px solid #DFD5CB' : '1px solid transparent',
+                        fontWeight: '700'
+                      }}>
+                        ({activeVLines.length} Dòng hàng)
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleEditHistFieldChange('activeLineTab', 'line2')}
+                      style={{
+                        flex: 1,
+                        padding: '8px 12px',
+                        border: (editingHistRow.activeLineTab || 'line1') === 'line2' ? '1px solid #DFD5CB' : '1px solid #EAE3DC',
+                        borderBottom: (editingHistRow.activeLineTab || 'line1') === 'line2' ? '3px solid #70452D' : '1px solid transparent',
+                        backgroundColor: (editingHistRow.activeLineTab || 'line1') === 'line2' ? '#FFFFFF' : '#F7F3EE',
+                        color: (editingHistRow.activeLineTab || 'line1') === 'line2' ? '#5B3924' : '#8C6547',
+                        fontWeight: '800',
+                        fontSize: '0.82rem',
+                        borderRadius: '8px 8px 0 0',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        transition: 'all 0.15s ease',
+                        boxShadow: (editingHistRow.activeLineTab || 'line1') === 'line2' ? '0 -2px 6px rgba(91, 57, 36, 0.05)' : 'none'
+                      }}
+                    >
+                      <span>Dòng hàng chính: {fMainCat}</span>
+                      <span style={{
+                        fontSize: '0.7rem',
+                        backgroundColor: (editingHistRow.activeLineTab || 'line1') === 'line2' ? '#EFE8E1' : '#ECE5DE',
+                        padding: '1px 6px',
+                        borderRadius: '4px',
+                        color: (editingHistRow.activeLineTab || 'line1') === 'line2' ? '#5B3924' : '#8C6547',
+                        border: (editingHistRow.activeLineTab || 'line1') === 'line2' ? '1px solid #DFD5CB' : '1px solid transparent',
+                        fontWeight: '700'
+                      }}>
+                        ({activeFLines.length} Dòng hàng)
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* CONTENT TAB 1: VANITY SUB-LINES */}
+                  {(editingHistRow.activeLineTab || 'line1') === 'line1' && (
+                    <div style={{ backgroundColor: '#FAF7F4', padding: '10px 12px', borderRadius: '10px', border: '1px solid #DFD5CB', maxHeight: '300px', overflowY: 'auto' }}>
+                      <div style={{ fontSize: '0.74rem', fontWeight: '800', color: '#5B3924', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>Dòng hàng thuộc {vMainCat} ({activeVLines.length}/{editVanitySubs.length}):</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {editVanitySubs.filter(l => !activeVLines.includes(l)).length > 0 && (
+                            <select
+                              onChange={(e) => {
+                                handleAddEditSubLine('vanity', e.target.value);
+                                e.target.value = '';
+                              }}
+                              defaultValue=""
+                              style={{
+                                padding: '3px 8px',
+                                borderRadius: '6px',
+                                border: '1px solid #C59B73',
+                                backgroundColor: '#F5EFEA',
+                                color: '#5B3924',
+                                fontSize: '0.72rem',
+                                fontWeight: '800',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <option value="" disabled>Thêm dòng hàng...</option>
+                              {editVanitySubs.filter(l => !activeVLines.includes(l)).map(l => (
+                                <option key={l} value={l}>{l}</option>
+                              ))}
+                            </select>
+                          )}
+                          <span style={{ fontSize: '0.65rem', color: '#70452D', backgroundColor: '#EFE8E1', border: '1px solid #DFD5CB', padding: '2px 6px', borderRadius: '4px', fontWeight: '700' }}>
+                            Dòng k nhập sẽ tự bỏ qua
+                          </span>
+                        </div>
+                      </div>
+
+                      {activeVLines.length === 0 ? (
+                        <div style={{ padding: '16px', textAlign: 'center', color: '#8C6547', fontSize: '0.8rem', fontStyle: 'italic' }}>
+                          Chưa chọn dòng hàng nào. Chọn dòng hàng ở menu <strong>Thêm dòng hàng</strong> phía trên để nhập số liệu.
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          {activeVLines.map((lineName) => {
+                            const lineData = editingHistRow.line_values?.[lineName] || { valNum: '', changeDir: '▼', changeNum: '', a: '', b: '', c: '' };
+                            const a = parseFloat(lineData.a);
+                            const b = parseFloat(lineData.b);
+                            const c = parseFloat(lineData.c);
+
+                            let calcResultText = '--- %';
+                            if (parsedForm.type === 'sum_div') {
+                              if (!isNaN(a) && !isNaN(c) && c !== 0) {
+                                const sum = a + (isNaN(b) ? 0 : b);
+                                calcResultText = `${((sum / c) * 100).toFixed(1)}%`;
+                              }
+                            } else {
+                              if (!isNaN(a) && !isNaN(c) && c !== 0) {
+                                calcResultText = `${((a / c) * 100).toFixed(1)}%`;
+                              }
+                            }
+
+                            const isFilled = lineData.valNum !== '' || lineData.a !== '' || lineData.c !== '';
+
+                            return (
+                              <div
+                                key={lineName}
+                                style={{
+                                  backgroundColor: isFilled ? '#FFFFFF' : '#FAF7F4',
+                                  padding: '6px 8px',
+                                  borderRadius: '8px',
+                                  border: isFilled ? '1.5px solid #8C6547' : '1px solid #EAE3DC',
+                                  boxShadow: isFilled ? '0 1px 4px rgba(91, 57, 36, 0.08)' : 'none',
+                                  transition: 'all 0.15s ease'
+                                }}
+                              >
+                                <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr 105px 135px 28px', gap: '6px', alignItems: 'center' }}>
+                                  {/* Tên Dòng hàng */}
+                                  <div>
+                                    <span style={{
+                                      display: 'inline-block',
+                                      padding: '4px 6px 4px 8px',
+                                      backgroundColor: isFilled ? '#F5EFEA' : '#FFF',
+                                      color: '#5B3924',
+                                      border: isFilled ? '1px solid #C59B73' : '1px solid #D5C9BD',
+                                      borderRadius: '6px',
+                                      fontSize: '0.78rem',
+                                      fontWeight: '800',
+                                      width: '100%',
+                                      textAlign: 'left',
+                                      boxSizing: 'border-box'
+                                    }}>
+                                      {lineName}
+                                    </span>
+                                  </div>
+
+                                  {/* Bộ nhập Tử số / Mẫu số */}
+                                  <div style={{ backgroundColor: '#FFFDFC', padding: '3px 6px', borderRadius: '6px', border: '1px solid #D5C9BD' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                      <input
+                                        type="number"
+                                        step="any"
+                                        value={lineData.a ?? ''}
+                                        onChange={(e) => handleEditHistLineInputChange('vanity', lineName, 'a', e.target.value, parsedForm.type)}
+                                        placeholder={parsedForm.varA || 'Tử số'}
+                                        title={parsedForm.varA}
+                                        style={{ width: '100%', minWidth: '35px', padding: '3px 4px', borderRadius: '4px', border: '1px solid #C59B73', fontSize: '0.78rem', fontWeight: '700', boxSizing: 'border-box' }}
+                                      />
+                                      {parsedForm.type === 'sum_div' && (
+                                        <>
+                                          <span style={{ fontWeight: '800', color: '#70452D', fontSize: '0.75rem' }}>+</span>
+                                          <input
+                                            type="number"
+                                            step="any"
+                                            value={lineData.b ?? ''}
+                                            onChange={(e) => handleEditHistLineInputChange('vanity', lineName, 'b', e.target.value, 'sum_div')}
+                                            placeholder={parsedForm.varB || 'Biến B'}
+                                            title={parsedForm.varB}
+                                            style={{ width: '100%', minWidth: '35px', padding: '3px 4px', borderRadius: '4px', border: '1px solid #C59B73', fontSize: '0.78rem', fontWeight: '700', boxSizing: 'border-box' }}
+                                          />
+                                        </>
+                                      )}
+                                      <span style={{ fontWeight: '800', color: '#70452D', fontSize: '0.75rem' }}>/</span>
+                                      <input
+                                        type="number"
+                                        step="any"
+                                        value={lineData.c ?? ''}
+                                        onChange={(e) => handleEditHistLineInputChange('vanity', lineName, 'c', e.target.value, parsedForm.type)}
+                                        placeholder={parsedForm.varC || 'Mẫu số'}
+                                        title={parsedForm.varC}
+                                        style={{ width: '100%', minWidth: '35px', padding: '3px 4px', borderRadius: '4px', border: '1px solid #C59B73', fontSize: '0.78rem', fontWeight: '700', boxSizing: 'border-box' }}
+                                      />
+                                      <span style={{ fontWeight: '800', color: '#70452D', fontSize: '0.75rem' }}>=</span>
+                                      <div style={{ padding: '2px 4px', backgroundColor: '#F5EFEA', border: '1px solid #C59B73', borderRadius: '4px', fontSize: '0.75rem', fontWeight: '800', color: '#5B3924', whiteSpace: 'nowrap', minWidth: '40px', textAlign: 'center' }}>
+                                        {calcResultText}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Giá trị % */}
+                                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      min="0"
+                                      max="100"
+                                      value={lineData.valNum ?? ''}
+                                      onChange={(e) => handleEditHistLineInputChange('vanity', lineName, 'valNum', e.target.value)}
+                                      placeholder="Giá trị"
+                                      style={{
+                                        width: '100%',
+                                        padding: '5px 18px 5px 6px',
+                                        borderRadius: '6px',
+                                        border: '1px solid #D5C9BD',
+                                        fontSize: '0.78rem',
+                                        fontWeight: '700',
+                                        boxSizing: 'border-box'
+                                      }}
+                                    />
+                                    <span style={{ position: 'absolute', right: '4px', fontSize: '0.72rem', fontWeight: '800', color: '#70452D' }}>%</span>
+                                  </div>
+
+                                  {/* Chênh lệch % */}
+                                  <div style={{ display: 'flex', gap: '2px' }}>
+                                    <select
+                                      value={lineData.changeDir || '▼'}
+                                      onChange={(e) => handleEditHistLineInputChange('vanity', lineName, 'changeDir', e.target.value)}
+                                      style={{
+                                        padding: '5px 2px',
+                                        borderRadius: '6px',
+                                        border: '1px solid #D5C9BD',
+                                        fontSize: '0.78rem',
+                                        fontWeight: '800',
+                                        color: lineData.changeDir === '▲' ? '#3F7D58' : '#8C5332',
+                                        backgroundColor: '#FFFFFF',
+                                        cursor: 'pointer'
+                                      }}
+                                    >
+                                      <option value="▲">▲</option>
+                                      <option value="▼">▼</option>
+                                    </select>
+                                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', flex: 1 }}>
+                                      <input
+                                        type="number"
+                                        step="any"
+                                        min="0"
+                                        max="100"
+                                        value={lineData.changeNum ?? ''}
+                                        onChange={(e) => handleEditHistLineInputChange('vanity', lineName, 'changeNum', e.target.value)}
+                                        placeholder="Lệch"
+                                        style={{
+                                          width: '100%',
+                                          padding: '5px 16px 5px 4px',
+                                          borderRadius: '6px',
+                                          border: '1px solid #D5C9BD',
+                                          fontSize: '0.78rem',
+                                          fontWeight: '700',
+                                          boxSizing: 'border-box'
+                                        }}
+                                      />
+                                      <span style={{ position: 'absolute', right: '3px', fontSize: '0.7rem', fontWeight: '800', color: '#70452D' }}>%</span>
+                                    </div>
+                                  </div>
+
+                                  {/* Nút Xóa Dòng */}
+                                  <div style={{ textAlign: 'center' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveEditSubLine('vanity', lineName)}
+                                      title="Xóa dòng này"
+                                      style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        color: '#8C6547',
+                                        fontSize: '1rem',
+                                        fontWeight: '800',
+                                        cursor: 'pointer',
+                                        padding: '2px',
+                                        lineHeight: 1,
+                                        transition: 'color 0.15s ease'
+                                      }}
+                                      onMouseEnter={(e) => e.currentTarget.style.color = '#5B3924'}
+                                      onMouseLeave={(e) => e.currentTarget.style.color = '#8C6547'}
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* CONTENT TAB 2: FURNITURE SUB-LINES */}
+                  {(editingHistRow.activeLineTab || 'line1') === 'line2' && (
+                    <div style={{ backgroundColor: '#FAF7F4', padding: '10px 12px', borderRadius: '10px', border: '1px solid #DFD5CB', maxHeight: '300px', overflowY: 'auto' }}>
+                      <div style={{ fontSize: '0.74rem', fontWeight: '800', color: '#5B3924', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>Dòng hàng thuộc {fMainCat} ({activeFLines.length}/{editFurnitureSubs.length}):</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {editFurnitureSubs.filter(l => !activeFLines.includes(l)).length > 0 && (
+                            <select
+                              onChange={(e) => {
+                                handleAddEditSubLine('furniture', e.target.value);
+                                e.target.value = '';
+                              }}
+                              defaultValue=""
+                              style={{
+                                padding: '3px 8px',
+                                borderRadius: '6px',
+                                border: '1px solid #C59B73',
+                                backgroundColor: '#F5EFEA',
+                                color: '#5B3924',
+                                fontSize: '0.72rem',
+                                fontWeight: '800',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <option value="" disabled>Thêm dòng hàng...</option>
+                              {editFurnitureSubs.filter(l => !activeFLines.includes(l)).map(l => (
+                                <option key={l} value={l}>{l}</option>
+                              ))}
+                            </select>
+                          )}
+                          <span style={{ fontSize: '0.65rem', color: '#70452D', backgroundColor: '#EFE8E1', border: '1px solid #DFD5CB', padding: '2px 6px', borderRadius: '4px', fontWeight: '700' }}>
+                            Dòng k nhập sẽ tự bỏ qua
+                          </span>
+                        </div>
+                      </div>
+
+                      {activeFLines.length === 0 ? (
+                        <div style={{ padding: '16px', textAlign: 'center', color: '#8C6547', fontSize: '0.8rem', fontStyle: 'italic' }}>
+                          Chưa chọn dòng hàng nào. Chọn dòng hàng ở menu <strong>Thêm dòng hàng</strong> phía trên để nhập số liệu.
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          {activeFLines.map((lineName) => {
+                            const lineData = editingHistRow.line_values?.[lineName] || { valNum: '', changeDir: '▼', changeNum: '', a: '', b: '', c: '' };
+                            const a = parseFloat(lineData.a);
+                            const b = parseFloat(lineData.b);
+                            const c = parseFloat(lineData.c);
+
+                            let calcResultText = '--- %';
+                            if (parsedForm.type === 'sum_div') {
+                              if (!isNaN(a) && !isNaN(c) && c !== 0) {
+                                const sum = a + (isNaN(b) ? 0 : b);
+                                calcResultText = `${((sum / c) * 100).toFixed(1)}%`;
+                              }
+                            } else {
+                              if (!isNaN(a) && !isNaN(c) && c !== 0) {
+                                calcResultText = `${((a / c) * 100).toFixed(1)}%`;
+                              }
+                            }
+
+                            const isFilled = lineData.valNum !== '' || lineData.a !== '' || lineData.c !== '';
+
+                            return (
+                              <div
+                                key={lineName}
+                                style={{
+                                  backgroundColor: isFilled ? '#FFFFFF' : '#FAF7F4',
+                                  padding: '6px 8px',
+                                  borderRadius: '8px',
+                                  border: isFilled ? '1.5px solid #8C6547' : '1px solid #EAE3DC',
+                                  boxShadow: isFilled ? '0 1px 4px rgba(91, 57, 36, 0.08)' : 'none',
+                                  transition: 'all 0.15s ease'
+                                }}
+                              >
+                                <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr 105px 135px 28px', gap: '6px', alignItems: 'center' }}>
+                                  {/* Tên Dòng hàng */}
+                                  <div>
+                                    <span style={{
+                                      display: 'inline-block',
+                                      padding: '4px 6px 4px 8px',
+                                      backgroundColor: isFilled ? '#F5EFEA' : '#FFF',
+                                      color: '#5B3924',
+                                      border: isFilled ? '1px solid #C59B73' : '1px solid #D5C9BD',
+                                      borderRadius: '6px',
+                                      fontSize: '0.78rem',
+                                      fontWeight: '800',
+                                      width: '100%',
+                                      textAlign: 'left',
+                                      boxSizing: 'border-box'
+                                    }}>
+                                      {lineName}
+                                    </span>
+                                  </div>
+
+                                  {/* Bộ nhập Tử số / Mẫu số */}
+                                  <div style={{ backgroundColor: '#FFFDFC', padding: '3px 6px', borderRadius: '6px', border: '1px solid #D5C9BD' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                      <input
+                                        type="number"
+                                        step="any"
+                                        value={lineData.a ?? ''}
+                                        onChange={(e) => handleEditHistLineInputChange('furniture', lineName, 'a', e.target.value, parsedForm.type)}
+                                        placeholder={parsedForm.varA || 'Tử số'}
+                                        title={parsedForm.varA}
+                                        style={{ width: '100%', minWidth: '35px', padding: '3px 4px', borderRadius: '4px', border: '1px solid #C59B73', fontSize: '0.78rem', fontWeight: '700', boxSizing: 'border-box' }}
+                                      />
+                                      {parsedForm.type === 'sum_div' && (
+                                        <>
+                                          <span style={{ fontWeight: '800', color: '#70452D', fontSize: '0.75rem' }}>+</span>
+                                          <input
+                                            type="number"
+                                            step="any"
+                                            value={lineData.b ?? ''}
+                                            onChange={(e) => handleEditHistLineInputChange('furniture', lineName, 'b', e.target.value, 'sum_div')}
+                                            placeholder={parsedForm.varB || 'Biến B'}
+                                            title={parsedForm.varB}
+                                            style={{ width: '100%', minWidth: '35px', padding: '3px 4px', borderRadius: '4px', border: '1px solid #C59B73', fontSize: '0.78rem', fontWeight: '700', boxSizing: 'border-box' }}
+                                          />
+                                        </>
+                                      )}
+                                      <span style={{ fontWeight: '800', color: '#70452D', fontSize: '0.75rem' }}>/</span>
+                                      <input
+                                        type="number"
+                                        step="any"
+                                        value={lineData.c ?? ''}
+                                        onChange={(e) => handleEditHistLineInputChange('furniture', lineName, 'c', e.target.value, parsedForm.type)}
+                                        placeholder={parsedForm.varC || 'Mẫu số'}
+                                        title={parsedForm.varC}
+                                        style={{ width: '100%', minWidth: '35px', padding: '3px 4px', borderRadius: '4px', border: '1px solid #C59B73', fontSize: '0.78rem', fontWeight: '700', boxSizing: 'border-box' }}
+                                      />
+                                      <span style={{ fontWeight: '800', color: '#70452D', fontSize: '0.75rem' }}>=</span>
+                                      <div style={{ padding: '2px 4px', backgroundColor: '#F5EFEA', border: '1px solid #C59B73', borderRadius: '4px', fontSize: '0.75rem', fontWeight: '800', color: '#5B3924', whiteSpace: 'nowrap', minWidth: '40px', textAlign: 'center' }}>
+                                        {calcResultText}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Giá trị % */}
+                                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      min="0"
+                                      max="100"
+                                      value={lineData.valNum ?? ''}
+                                      onChange={(e) => handleEditHistLineInputChange('furniture', lineName, 'valNum', e.target.value)}
+                                      placeholder="Giá trị"
+                                      style={{
+                                        width: '100%',
+                                        padding: '5px 18px 5px 6px',
+                                        borderRadius: '6px',
+                                        border: '1px solid #D5C9BD',
+                                        fontSize: '0.78rem',
+                                        fontWeight: '700',
+                                        boxSizing: 'border-box'
+                                      }}
+                                    />
+                                    <span style={{ position: 'absolute', right: '4px', fontSize: '0.72rem', fontWeight: '800', color: '#70452D' }}>%</span>
+                                  </div>
+
+                                  {/* Chênh lệch % */}
+                                  <div style={{ display: 'flex', gap: '2px' }}>
+                                    <select
+                                      value={lineData.changeDir || '▼'}
+                                      onChange={(e) => handleEditHistLineInputChange('furniture', lineName, 'changeDir', e.target.value)}
+                                      style={{
+                                        padding: '5px 2px',
+                                        borderRadius: '6px',
+                                        border: '1px solid #D5C9BD',
+                                        fontSize: '0.78rem',
+                                        fontWeight: '800',
+                                        color: lineData.changeDir === '▲' ? '#3F7D58' : '#8C5332',
+                                        backgroundColor: '#FFFFFF',
+                                        cursor: 'pointer'
+                                      }}
+                                    >
+                                      <option value="▲">▲</option>
+                                      <option value="▼">▼</option>
+                                    </select>
+                                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', flex: 1 }}>
+                                      <input
+                                        type="number"
+                                        step="any"
+                                        min="0"
+                                        max="100"
+                                        value={lineData.changeNum ?? ''}
+                                        onChange={(e) => handleEditHistLineInputChange('furniture', lineName, 'changeNum', e.target.value)}
+                                        placeholder="Lệch"
+                                        style={{
+                                          width: '100%',
+                                          padding: '5px 16px 5px 4px',
+                                          borderRadius: '6px',
+                                          border: '1px solid #D5C9BD',
+                                          fontSize: '0.78rem',
+                                          fontWeight: '700',
+                                          boxSizing: 'border-box'
+                                        }}
+                                      />
+                                      <span style={{ position: 'absolute', right: '3px', fontSize: '0.7rem', fontWeight: '800', color: '#70452D' }}>%</span>
+                                    </div>
+                                  </div>
+
+                                  {/* Nút Xóa Dòng */}
+                                  <div style={{ textAlign: 'center' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveEditSubLine('furniture', lineName)}
+                                      title="Xóa dòng này"
+                                      style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        color: '#8C6547',
+                                        fontSize: '1rem',
+                                        fontWeight: '800',
+                                        cursor: 'pointer',
+                                        padding: '2px',
+                                        lineHeight: 1,
+                                        transition: 'color 0.15s ease'
+                                      }}
+                                      onMouseEnter={(e) => e.currentTarget.style.color = '#5B3924'}
+                                      onMouseLeave={(e) => e.currentTarget.style.color = '#8C6547'}
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Điểm đánh giá Radar */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '800', color: '#5B3924', marginBottom: '4px' }}>
+                    Điểm đánh giá Radar (%)
+                  </label>
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="100"
+                      value={editingHistRow.score_avg !== null && editingHistRow.score_avg !== undefined ? editingHistRow.score_avg : ''}
+                      onChange={(e) => handleEditHistFieldChange('score_avg', e.target.value)}
+                      placeholder="VD: 95.0"
+                      style={{
+                        width: '100%',
+                        padding: '8px 28px 8px 12px',
+                        borderRadius: '6px',
+                        border: '1px solid #D5C9BD',
+                        fontSize: '0.85rem',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                    <span style={{ position: 'absolute', right: '12px', fontSize: '0.85rem', fontWeight: '800', color: '#5B3924' }}>%</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer Actions */}
+              <div style={{ padding: '12px 20px', backgroundColor: '#FAF7F4', borderTop: '1px solid #DFD5CB', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setEditingHistRow(null)}
+                  disabled={savingHist}
+                  style={{
+                    padding: '8px 18px',
+                    backgroundColor: '#F7F4F0',
+                    color: '#5B3924',
+                    border: '1px solid #D5C9BD',
+                    borderRadius: '6px',
+                    fontSize: '0.82rem',
+                    fontWeight: '700',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEditHistory}
+                  disabled={savingHist}
+                  style={{
+                    padding: '8px 22px',
+                    backgroundColor: '#5B3924',
+                    color: '#FFFDFC',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontSize: '0.82rem',
+                    fontWeight: '800',
+                    cursor: savingHist ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 2px 6px rgba(91, 57, 36, 0.25)'
+                  }}
+                >
+                  {savingHist ? 'Đang lưu...' : 'Lưu cập nhật'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* MODAL XÁC NHẬN LƯU DỮ LIỆU */}
       {showConfirmSave && (
@@ -1758,18 +2956,18 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
             padding: '22px',
             textAlign: 'center'
           }}>
-            <h4 style={{ margin: '0 0 10px 0', fontSize: '1.1rem', fontWeight: '800', color: missingCategoryReminder ? '#B91C1C' : '#5B3924' }}>
+            <h4 style={{ margin: '0 0 10px 0', fontSize: '1.1rem', fontWeight: '800', color: '#5B3924' }}>
               Xác nhận lưu cập nhật KPI
             </h4>
 
             {missingCategoryReminder && (
               <div style={{
-                backgroundColor: '#FEF2F2',
-                border: '1.5px solid #FCA5A5',
+                backgroundColor: '#FAF5F0',
+                border: '1.5px solid #D5C9BD',
                 borderRadius: '8px',
                 padding: '10px 12px',
                 marginBottom: '14px',
-                color: '#991B1B',
+                color: '#70452D',
                 fontSize: '0.82rem',
                 fontWeight: '700',
                 textAlign: 'left',
@@ -1809,18 +3007,154 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
                   padding: '9px 24px',
                   borderRadius: '6px',
                   border: 'none',
-                  backgroundColor: missingCategoryReminder ? '#D97706' : '#16A34A',
-                  color: '#FFF',
+                  backgroundColor: missingCategoryReminder ? '#8C6547' : '#5B3924',
+                  color: '#FFFDFC',
                   fontWeight: '800',
                   fontSize: '0.84rem',
                   cursor: saving ? 'not-allowed' : 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '6px',
-                  boxShadow: missingCategoryReminder ? '0 3px 8px rgba(217, 119, 6, 0.35)' : '0 3px 8px rgba(22, 163, 74, 0.35)'
+                  boxShadow: '0 3px 8px rgba(91, 57, 36, 0.3)'
                 }}
               >
                 {saving ? 'Đang lưu...' : (missingCategoryReminder ? 'Vẫn lưu (Bỏ qua)' : 'Đồng ý lưu')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL XÁC NHẬN XÓA BẢN GHI LỊCH SỬ - GIAO DIỆN CHUẨN DỰ ÁN */}
+      {deletingHistItem && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(20, 15, 10, 0.65)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 10002,
+          animation: 'fadeIn 0.15s ease'
+        }}>
+          <div style={{
+            backgroundColor: '#FFFDFC',
+            borderRadius: '14px',
+            width: '450px',
+            maxWidth: '92vw',
+            border: '2px solid #5B3924',
+            boxShadow: '0 18px 45px rgba(91, 57, 36, 0.35)',
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+            animation: 'scaleUp 0.18s ease'
+          }}>
+            {/* Header */}
+            <div style={{
+              backgroundColor: '#5B3924',
+              color: '#FFFDFC',
+              padding: '12px 18px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>⚠️</span>
+                <span>Xác nhận xóa bản ghi lịch sử</span>
+              </h4>
+              <button
+                type="button"
+                onClick={() => !deletingLoading && setDeletingHistItem(null)}
+                disabled={deletingLoading}
+                style={{ background: 'none', border: 'none', color: '#FFFDFC', fontSize: '1.2rem', cursor: 'pointer', lineHeight: 1 }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Content */}
+            <div style={{ padding: '20px 22px', textAlign: 'center' }}>
+              <div style={{
+                width: '52px',
+                height: '52px',
+                borderRadius: '50%',
+                backgroundColor: '#F5EFEA',
+                border: '2px solid #D5C9BD',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 14px auto',
+                fontSize: '1.5rem',
+                color: '#70452D'
+              }}>
+                🗑️
+              </div>
+
+              <p style={{ fontSize: '0.88rem', color: '#5B3924', margin: '0 0 8px 0', lineHeight: '1.5' }}>
+                Bạn có chắc chắn muốn xóa bản ghi lịch sử:
+              </p>
+              <div style={{
+                backgroundColor: '#F5EFEA',
+                border: '1px solid #DFD5CB',
+                padding: '8px 12px',
+                borderRadius: '8px',
+                fontWeight: '800',
+                color: '#70452D',
+                fontSize: '0.92rem',
+                marginBottom: '12px'
+              }}>
+                "{deletingHistItem.label}"
+              </div>
+              <p style={{ fontSize: '0.78rem', color: '#8C6547', margin: 0, fontStyle: 'italic' }}>
+                Lưu ý: Thao tác này sẽ xóa vĩnh viễn bản ghi và không thể hoàn tác!
+              </p>
+            </div>
+
+            {/* Footer Buttons */}
+            <div style={{
+              backgroundColor: '#FAF7F4',
+              borderTop: '1px solid #DFD5CB',
+              padding: '12px 18px',
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '10px'
+            }}>
+              <button
+                type="button"
+                onClick={() => setDeletingHistItem(null)}
+                disabled={deletingLoading}
+                style={{
+                  padding: '8px 18px',
+                  borderRadius: '6px',
+                  border: '1px solid #D5C9BD',
+                  backgroundColor: '#F7F4F0',
+                  color: '#5B3924',
+                  fontWeight: '700',
+                  fontSize: '0.82rem',
+                  cursor: 'pointer'
+                }}
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={executeDeleteHistory}
+                disabled={deletingLoading}
+                style={{
+                  padding: '8px 20px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  backgroundColor: '#5B3924',
+                  color: '#FFFFFF',
+                  fontWeight: '800',
+                  fontSize: '0.82rem',
+                  cursor: deletingLoading ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 2px 6px rgba(91, 57, 36, 0.25)'
+                }}
+              >
+                {deletingLoading ? 'Đang xóa...' : 'Xác nhận xóa'}
               </button>
             </div>
           </div>
@@ -1833,11 +3167,12 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
           position: 'fixed',
           top: '24px',
           right: '24px',
-          backgroundColor: '#16A34A',
-          color: '#FFFFFF',
+          backgroundColor: '#5B3924',
+          color: '#FFFDFC',
+          border: '1px solid #C59B73',
           padding: '14px 22px',
           borderRadius: '10px',
-          boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
+          boxShadow: '0 10px 30px rgba(91, 57, 36, 0.35)',
           zIndex: 10002,
           fontWeight: '800',
           fontSize: '0.92rem',
@@ -1846,6 +3181,7 @@ export const CustomKPIModal = ({ isOpen, onClose, kpiItem, onSaveSuccess }) => {
           gap: '10px',
           animation: 'slideIn 0.2s ease'
         }}>
+          <span>✓</span>
           <span>{successMessage}</span>
         </div>
       )}

@@ -1299,18 +1299,20 @@ const PortalLayout = () => {
 
             setUploads(prev => prev.map(u => {
               if (u.id === uploadId) {
-                let progress = u.progress;
-                if (data.total_sheets && data.sheet_index) {
-                  const sheetProg = Math.round((data.sheet_index / data.total_sheets) * 100);
-                  progress = Math.min(99, Math.max(u.progress || 0, sheetProg));
+                let progress = u.progress || 0;
+                if (data.percent !== undefined) {
+                  progress = Math.min(99, Math.max(progress, data.percent));
                 } else if (data.total && data.processed !== undefined && data.total > 0) {
                   const itemProg = Math.round((data.processed / data.total) * 100);
-                  progress = Math.min(99, Math.max(u.progress || 0, itemProg));
+                  progress = Math.min(99, Math.max(progress, itemProg));
+                } else if (data.total_sheets && data.sheet_index) {
+                  const sheetProg = Math.round(((data.sheet_index - 1) / data.total_sheets) * 100);
+                  progress = Math.min(99, Math.max(progress, sheetProg));
                 }
                 return { 
                   ...u, 
                   ...patch,
-                  progress: data.status === 'completed' ? 100 : (progress || u.progress || 0)
+                  progress: data.status === 'completed' ? 100 : (progress || 0)
                 };
               }
               return u;

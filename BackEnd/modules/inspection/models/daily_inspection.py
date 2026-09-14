@@ -2,6 +2,8 @@ from sqlalchemy import Column, Integer, String, Float, DateTime, Date, ForeignKe
 from sqlalchemy.dialects.mssql import NVARCHAR
 from sqlalchemy.orm import relationship
 from config.database import Base
+from modules.inspection.models.defect_type import DefectType
+from modules.auth.models.accounts import Account
 import datetime
 
 class DailyInspectionRecord(Base):

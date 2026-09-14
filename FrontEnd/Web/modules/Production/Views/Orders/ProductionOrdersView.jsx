@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
-import { Pencil } from 'lucide-react';
+import { Pencil, Trash2, FileUp } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
@@ -14,8 +15,9 @@ import '@styles/components.css';
 const ProductionOrdersView = () => {
   const navigate = useNavigate();
   const outletContext = useOutletContext() || {};
-  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra } = outletContext;
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra, startGlobalUpload } = outletContext;
   const { toast } = useToast();
+  const fileInputRef = useRef(null);
 
   const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
   const [sortValue, setSortValue] = useState('time_desc');
@@ -160,6 +162,29 @@ const ProductionOrdersView = () => {
     navigate('/admin/production-orders/create');
   };
 
+  const handleDeleteOrder = async (item, e) => {
+    if (e) e.stopPropagation();
+
+    const orderName = item.code || item.orderNo || 'này';
+    const isConfirmed = window.confirm(
+      `Bạn có chắc chắn muốn xóa Lệnh sản xuất "${orderName}"?\n\nLưu ý: Thao tác này sẽ xóa toàn bộ danh sách sản phẩm và chi tiết BOM thuộc lệnh này khỏi hệ thống.`
+    );
+    if (!isConfirmed) return;
+
+    try {
+      setLoading(true);
+      await planService.deleteOrder(item.id);
+      if (toast) toast('success', `Đã xóa thành công Lệnh sản xuất "${orderName}"!`);
+      await fetchProductionOrders();
+    } catch (err) {
+      console.error('Lỗi khi xóa lệnh sản xuất:', err);
+      const errMsg = err.response?.data?.detail || err.message || 'Xóa lệnh sản xuất thất bại!';
+      if (toast) toast('error', `Lỗi: ${errMsg}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredOrders = useMemo(() => {
     let res = ordersList;
     if (filterStatus) res = res.filter(o => o.status === filterStatus);
@@ -182,8 +207,60 @@ const ProductionOrdersView = () => {
   const endIndex = Math.min(page * pageSize, totalCount);
   const currentItems = sortedOrders.slice((page - 1) * pageSize, page * pageSize);
 
+  const handleImportExcel = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      if (startGlobalUpload) {
+        await startGlobalUpload(
+          file, 
+          '/production-plans/import', 
+          () => fetchProductionOrders()
+        );
+      } else {
+        setLoading(true);
+        await planService.importExcel(file);
+        if (toast) toast('success', 'Nhập dữ liệu Lệnh sản xuất thành công!');
+        fetchProductionOrders();
+      }
+    } catch (error) {
+      console.error("Lỗi khi nhập dữ liệu Excel:", error);
+      if (toast) toast('error', 'Lỗi khi nhập file Excel: ' + (error.response?.data?.detail || error.message));
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      setLoading(false);
+    }
+  };
+
   const handleExport = () => {
-    if (toast) toast('info', 'Xuất danh sách Lệnh sản xuất');
+    if (sortedOrders.length === 0) {
+      if (toast) toast('warning', 'Không có dữ liệu Lệnh sản xuất để xuất Excel!');
+      return;
+    }
+    try {
+      const exportData = sortedOrders.map((item, idx) => ({
+        'STT': idx + 1,
+        'Mã lệnh': item.code,
+        'Đơn hàng': item.orderNo,
+        'Khách hàng': item.customer,
+        'Tổng số sản phẩm': item.totalProducts,
+        'Số lượng kế hoạch': item.planQty,
+        'Thời gian bắt đầu': toDisplayDate(item.startDate),
+        'Thời gian kết thúc': toDisplayDate(item.endDate),
+        'Mức độ ưu tiên': item.priority,
+        'Trạng thái': item.status
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'LenhSanXuat');
+      XLSX.writeFile(wb, `Danh_sach_Lenh_San_Xuat_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      if (toast) toast('success', 'Đã xuất file Excel danh sách Lệnh sản xuất thành công!');
+    } catch (err) {
+      console.error('Lỗi khi xuất file Excel:', err);
+      if (toast) toast('error', 'Xuất file Excel thất bại: ' + err.message);
+    }
   };
 
   return (
@@ -208,13 +285,27 @@ const ProductionOrdersView = () => {
           isFilterOpen={isFilterBarOpen}
           onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
           activeFiltersCount={activeFiltersCount}
-          importActions={[]}
+          importActions={[
+            {
+              label: 'Nhập Excel',
+              icon: <FileUp size={14} />,
+              onClick: () => fileInputRef.current?.click()
+            }
+          ]}
           onExport={handleExport}
           onCreate={handleOpenCreateOrder}
           createLabel="Thêm mới"
           hasWritePermission={true}
           extraActions={[]}
-        />
+        >
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            style={{ display: 'none' }} 
+            accept=".xlsx, .xls"
+            onChange={handleImportExcel}
+          />
+        </PageToolbar>
 
         {isFilterBarOpen && (
           <div className="filter-bar" style={{ margin: '0 0 20px 0', padding: '16px 20px', backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1.5px solid #EADCC9', boxShadow: '0 2px 8px rgba(45,26,18,0.04)' }}>
@@ -304,7 +395,7 @@ const ProductionOrdersView = () => {
                     <th style={{ textAlign: 'center', backgroundColor: '#6D4C3D', color: '#FFFFFF', fontWeight: '700' }}>Thời gian kết thúc</th>
                     <th style={{ textAlign: 'center', backgroundColor: '#6D4C3D', color: '#FFFFFF', fontWeight: '700' }}>Mức độ ưu tiên</th>
                     <th style={{ textAlign: 'center', backgroundColor: '#6D4C3D', color: '#FFFFFF', fontWeight: '700' }}>Trạng thái</th>
-                    <th style={{ textAlign: 'center', width: '70px', backgroundColor: '#6D4C3D', color: '#FFFFFF', fontWeight: '700' }}>Ghi chú</th>
+                    <th style={{ textAlign: 'center', width: '100px', backgroundColor: '#6D4C3D', color: '#FFFFFF', fontWeight: '700' }}>Thao tác</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -367,14 +458,46 @@ const ProductionOrdersView = () => {
                             </span>
                           </td>
                           <td style={{ textAlign: 'center' }}>
-                            <button
-                              type="button"
-                              onClick={() => handleOpenOrderDetail(item)}
-                              style={{ border: 'none', background: 'transparent', color: '#64748B', cursor: 'pointer', padding: '4px' }}
-                              title="Chỉnh sửa lệnh"
-                            >
-                              <Pencil size={16} />
-                            </button>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenOrderDetail(item)}
+                                style={{
+                                  border: 'none',
+                                  background: '#FAF6F0',
+                                  color: '#7B5233',
+                                  cursor: 'pointer',
+                                  padding: '5px',
+                                  borderRadius: '6px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  transition: 'all 0.2s'
+                                }}
+                                title="Chỉnh sửa lệnh sản xuất"
+                              >
+                                <Pencil size={15} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => handleDeleteOrder(item, e)}
+                                style={{
+                                  border: 'none',
+                                  background: '#FEF2F2',
+                                  color: '#EF4444',
+                                  cursor: 'pointer',
+                                  padding: '5px',
+                                  borderRadius: '6px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  transition: 'all 0.2s'
+                                }}
+                                title="Xóa lệnh sản xuất"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -506,6 +629,47 @@ const ProductionOrdersView = () => {
                           <div>SL KH: <strong style={{ color: '#2D1A12', fontSize: '0.9rem' }}>{item.planQty}</strong></div>
                           <div>Bắt đầu: <span>{toDisplayDate(item.startDate) || '---'}</span></div>
                           <div>Kết thúc: <span>{toDisplayDate(item.endDate) || '---'}</span></div>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', paddingTop: '8px', borderTop: '1px solid #F1F5F9' }}>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleOpenOrderDetail(item); }}
+                            style={{
+                              padding: '5px 12px',
+                              borderRadius: '6px',
+                              border: '1px solid #EADCC9',
+                              backgroundColor: '#FAF6F0',
+                              color: '#7B5233',
+                              fontSize: '0.8rem',
+                              fontWeight: '700',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Pencil size={13} /> Sửa
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteOrder(item, e)}
+                            style={{
+                              padding: '5px 12px',
+                              borderRadius: '6px',
+                              border: '1px solid #FECACA',
+                              backgroundColor: '#FEF2F2',
+                              color: '#EF4444',
+                              fontSize: '0.8rem',
+                              fontWeight: '700',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Trash2 size={13} /> Xóa
+                          </button>
                         </div>
                       </div>
                     );

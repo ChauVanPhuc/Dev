@@ -773,27 +773,27 @@ const ScreenManagement = () => {
         background: '#fff',
         border: '1px solid #EADCC9',
         borderRadius: '10px',
-        padding: '14px 20px',
-        boxShadow: '0 4px 12px rgba(123, 82, 51, 0.05)',
+        padding: '10px 16px',
+        boxShadow: '0 2px 8px rgba(123, 82, 51, 0.04)',
         flex: 1,
-        minWidth: '220px',
+        minWidth: '180px',
         display: 'flex',
         flexDirection: 'column',
-        gap: '4px'
+        gap: '2px'
       }}>
-        <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#7B5233' }}>{title}</div>
+        <div style={{ fontSize: '0.78rem', fontWeight: 'bold', color: '#7B5233' }}>{title}</div>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-          <span style={{ fontSize: '1.8rem', fontWeight: '800', color: '#2D1A12', lineHeight: 1 }}>{numerator}</span>
-          <span style={{ fontSize: '0.9rem', color: '#8D6E63' }}>/{denominator}</span>
+          <span style={{ fontSize: '1.4rem', fontWeight: '800', color: '#2D1A12', lineHeight: 1 }}>{numerator}</span>
+          <span style={{ fontSize: '0.85rem', color: '#8D6E63' }}>/{denominator}</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '2px' }}>
-          <div style={{ flex: 1, height: '6px', backgroundColor: '#FAF6F0', borderRadius: '3px', overflow: 'hidden', border: '1px solid rgba(123, 82, 51, 0.1)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
+          <div style={{ flex: 1, height: '5px', backgroundColor: '#FAF6F0', borderRadius: '3px', overflow: 'hidden', border: '1px solid rgba(123, 82, 51, 0.1)' }}>
             <div style={{ width: `${percentage}%`, height: '100%', backgroundColor: '#7B5233', borderRadius: '3px' }} />
           </div>
-          <span style={{ fontSize: '0.78rem', color: '#8D6E63', fontWeight: 'bold', minWidth: '30px', textAlign: 'right' }}>{percentage}%</span>
+          <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 'bold', minWidth: '28px', textAlign: 'right' }}>{percentage}%</span>
         </div>
         {hint && (
-          <div style={{ fontSize: '0.7rem', color: '#8D6E63', opacity: 0.85, marginTop: '2px', lineHeight: '1.2' }}>
+          <div style={{ fontSize: '0.68rem', color: '#8D6E63', opacity: 0.85, marginTop: '1px', lineHeight: '1.2', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {hint}
           </div>
         )}
@@ -803,13 +803,132 @@ const ScreenManagement = () => {
 
   return (
     <>
-      <div className="manufacture-plan-container screen-management-container">
-        <div className="sticky-top-zone">
+      <style dangerouslySetInnerHTML={{
+        __html: `
+        @media (min-width: 769px) {
+          .dashboard-content:has(.screen-mgmt-root),
+          .dashboard-content.allow-y-scroll:has(.screen-mgmt-root) {
+            height: calc(100vh - 60px) !important;
+            max-height: calc(100vh - 60px) !important;
+            min-height: 0 !important;
+            padding: 8px 16px 6px 16px !important;
+            overflow: hidden !important;
+            display: flex !important;
+            flex-direction: column !important;
+            box-sizing: border-box !important;
+          }
+          .dashboard-content > .screen-mgmt-root,
+          .screen-mgmt-root {
+            height: calc(100vh - 74px) !important;
+            max-height: calc(100vh - 74px) !important;
+            min-height: 0 !important;
+            overflow: hidden !important;
+            display: flex !important;
+            flex-direction: column !important;
+            flex: 1 1 0% !important;
+            box-sizing: border-box !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            gap: 4px !important;
+          }
+          .screen-mgmt-root .sticky-top-zone {
+            flex-shrink: 0 !important;
+            flex-grow: 0 !important;
+            margin-bottom: 2px !important;
+          }
+          .screen-mgmt-root .progress-cards-container {
+            margin-bottom: 4px !important;
+            gap: 8px !important;
+          }
+          .screen-mgmt-root .page-toolbar {
+            margin-bottom: 2px !important;
+            padding: 6px 12px !important;
+          }
+          .screen-mgmt-root .admin-list-layout {
+            flex: 1 1 0% !important;
+            height: 100% !important;
+            min-height: 0 !important;
+            max-height: 100% !important;
+            overflow: hidden !important;
+            display: flex !important;
+            flex-direction: column !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          .screen-mgmt-root .admin-table-card {
+            flex: 1 1 0% !important;
+            height: 100% !important;
+            min-height: 0 !important;
+            max-height: 100% !important;
+            overflow: hidden !important;
+            display: flex !important;
+            flex-direction: column !important;
+            margin: 0 !important;
+            border-radius: 8px !important;
+            border: 1px solid #EADCC9 !important;
+            background-color: #fff !important;
+            box-shadow: 0 4px 12px rgba(123, 82, 51, 0.05) !important;
+          }
+          .screen-mgmt-root .table-responsive.admin-table-scroll {
+            flex: 1 1 0% !important;
+            height: 100% !important;
+            min-height: 0 !important;
+            overflow-x: auto !important;
+            overflow-y: auto !important;
+            display: block !important;
+            position: relative !important;
+            -webkit-overflow-scrolling: touch !important;
+          }
+          .screen-mgmt-root .admin-table-scroll table thead th {
+            position: sticky !important;
+            top: 0 !important;
+            z-index: 20 !important;
+            background-color: #FAF6F0 !important;
+            box-shadow: 0 1px 0 #EADCC9 !important;
+            padding: 8px 10px !important;
+            font-size: 0.78rem !important;
+          }
+          .screen-mgmt-root .admin-table-scroll table tbody td {
+            padding: 7px 10px !important;
+            font-size: 0.82rem !important;
+          }
+          .screen-mgmt-root .admin-pagination-desktop {
+            flex-shrink: 0 !important;
+            flex-grow: 0 !important;
+            height: 38px !important;
+            min-height: 38px !important;
+            max-height: 38px !important;
+            padding: 0 14px !important;
+            margin-top: auto !important;
+            background: #FFFFFF !important;
+            border-top: 1px solid #EADCC9 !important;
+            z-index: 15 !important;
+            display: flex !important;
+            justify-content: space-between !important;
+            align-items: center !important;
+            box-sizing: border-box !important;
+          }
+        }
+        `
+      }} />
+      <div className="gold-layout screen-mgmt-root screen-management-container" style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: 'calc(100vh - 74px)',
+        maxHeight: 'calc(100vh - 74px)',
+        minHeight: 0,
+        overflow: 'hidden',
+        boxSizing: 'border-box',
+        width: '100%',
+        gap: '4px'
+      }}>
+        <div className="sticky-top-zone" style={{ flexShrink: 0 }}>
           <div className="progress-cards-container" style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-            gap: '20px',
-            marginBottom: '20px'
+            gridTemplateColumns: 'repeat(4, 1fr)',
+            gap: '8px',
+            marginBottom: '4px'
           }}>
             {renderProgressCard("Tiến độ xây dựng", stats.completedScreens, stats.totalScreens, stats.buildPercentage, "Số màn hình hoàn thành / Tổng thiết kế")}
             {renderProgressCard("Tiến độ chỉnh sửa", stats.completedBugs, stats.totalBugs, stats.editPercentage, "Lỗi đã sửa (Resolved) / Tổng số lỗi")}
@@ -822,10 +941,10 @@ const ScreenManagement = () => {
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            padding: '12px 20px',
+            padding: '8px 16px',
             background: '#fff',
             borderRadius: '8px',
-            marginBottom: '12px',
+            marginBottom: '6px',
             border: '1px solid #EADCC9'
           }}>
             {/* Left side: Search, Sort, Filter */}
@@ -1238,8 +1357,15 @@ const ScreenManagement = () => {
             </div>
           )}
         </div>
-        <div className="admin-list-layout">
+        <div className="admin-list-layout" style={{ flex: '1 1 0%', display: 'flex', flexDirection: 'column', minHeight: 0, height: '100%', maxHeight: '100%', overflow: 'hidden' }}>
           <div className="mgmt-table admin-table-card card-shadow" style={{
+            flex: '1 1 0%',
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: 0,
+            height: '100%',
+            maxHeight: '100%',
+            overflow: 'hidden',
             background: '#fff',
             border: '1px solid #EADCC9'
           }}>
@@ -1252,7 +1378,7 @@ const ScreenManagement = () => {
               <div className="empty-state" style={{ padding: 40, textAlign: 'center', color: '#888' }}>Không tìm thấy màn hình nào phù hợp</div>
             ) : (
               <>
-                <div className="table-responsive desktop-only admin-table-scroll">
+                <div className="table-responsive desktop-only admin-table-scroll" style={{ flex: '1 1 0%', overflowY: 'auto', overflowX: 'auto', minHeight: 0, display: 'block' }}>
                   <table className="data-table">
                     <thead>
                       <tr>
@@ -1516,7 +1642,19 @@ const ScreenManagement = () => {
                 </div>
 
                 {totalPages > 1 && (
-                  <div className="admin-pagination-desktop">
+                  <div className="admin-pagination-desktop" style={{
+                    flexShrink: 0,
+                    height: '38px',
+                    minHeight: '38px',
+                    maxHeight: '38px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    background: '#FFFFFF',
+                    borderTop: '1px solid #EADCC9',
+                    padding: '0 14px',
+                    boxSizing: 'border-box'
+                  }}>
                     <div style={{ color: '#8D6E63', fontSize: '0.8rem', fontWeight: '600' }}>
                       Hiển thị <b>{filteredScreens.length > 0 ? (currentPage - 1) * pageSize + 1 : 0} - {Math.min(currentPage * pageSize, filteredScreens.length)}</b> trên <b>{filteredScreens.length}</b> kết quả
                     </div>

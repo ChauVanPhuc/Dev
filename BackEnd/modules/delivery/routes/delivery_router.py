@@ -1077,18 +1077,26 @@ def get_deliveries_by_plan(plan_id: int, skip: int = 0, limit: int = 100, db: Se
             db.rollback()
             raise HTTPException(status_code=500, detail=str(e))
 @router.get("/detail/{delivery_id}", response_model=DeliverySchema)
-def get_delivery_detail(delivery_id: int, db: Session = Depends(get_db)):
+def get_delivery_detail(delivery_id: str, db: Session = Depends(get_db)):
     """
     [GET] Lấy thông tin chi tiết của một phiếu bàn giao cụ thể.
     Tích hợp tự động sửa lỗi Database nếu thiếu cột độ ẩm.
+    Hỗ trợ cả mã ID thuần túy (10029) hoặc có tiền tố (LC10029, DEL-10029).
     """
     from sqlalchemy.orm import joinedload
     from sqlalchemy import text
+    import re
     try:
+        raw_str = str(delivery_id).strip()
+        num_match = re.search(r'(\d+)', raw_str)
+        numeric_id = int(num_match.group(1)) if num_match else None
+        if numeric_id is None:
+            raise HTTPException(status_code=400, detail="Mã phiếu giao nhận không hợp lệ.")
+
         from modules.delivery.models.order import Order as OrderModel
         delivery = db.query(Delivery).with_hint(Delivery, 'WITH (NOLOCK)').options(
             joinedload(Delivery.details).joinedload(DeliveryDetailsModel.order).joinedload(OrderModel.products)
-        ).filter(Delivery.id == delivery_id).first()
+        ).filter(Delivery.id == numeric_id).first()
         if not delivery:
             raise HTTPException(status_code=404, detail="Không tìm thấy phiếu bàn giao này.")
             
@@ -1128,29 +1136,53 @@ def get_delivery_by_backup_qr(qr_code: str, db: Session = Depends(get_db)):
     [GET] Kiểm tra mã QR dự phòng. Nếu chưa có thì tự động tạo mới.
     """
     from modules.system.models.backup_qr import BackupQRCode
-    backup_qr = db.query(BackupQRCode).filter(BackupQRCode.code == qr_code).first()
+    clean_code = qr_code.strip().upper()
+    backup_qr = db.query(BackupQRCode).filter(BackupQRCode.code == clean_code).first()
     
     if not backup_qr:
-        backup_qr = BackupQRCode(code=qr_code, status="Trống")
+        backup_qr = BackupQRCode(code=clean_code, status="Trống")
         db.add(backup_qr)
         db.commit()
         db.refresh(backup_qr)
-    else:
         # Tự động giải phóng nếu đang được sử dụng nhưng đã quá thời hạn khóa đặt lịch
         if backup_qr.status == "Đang Sử Dụng" and backup_qr.scheduled_release_at:
             from shared.utils.timezone import get_vietnam_time
             if get_vietnam_time() >= backup_qr.scheduled_release_at:
                 backup_qr.status = "Trống"
                 backup_qr.current_delivery_id = None
+                backup_qr.current_inspection_id = None
                 backup_qr.scheduled_release_at = None
                 db.commit()
                 db.refresh(backup_qr)
-        
+
+    # Kiểm tra phiếu kiểm tra gắn với mã thẻ dự phòng
+    current_insp_id = getattr(backup_qr, "current_inspection_id", None)
+    if not current_insp_id:
+        try:
+            from modules.inspection.models.input_inspection import InputInspection
+            insp = db.query(InputInspection).filter(
+                or_(
+                    InputInspection.backup_qr == qr_code,
+                    InputInspection.pallet_code == qr_code
+                )
+            ).order_by(InputInspection.id.desc()).first()
+            if insp:
+                current_insp_id = insp.id
+                backup_qr.current_inspection_id = insp.id
+                backup_qr.status = "Đang Sử Dụng"
+                db.commit()
+        except Exception as e_insp:
+            print(f"[get_delivery_by_backup_qr] Lỗi tra cứu kiểm tra: {e_insp}")
+
+    is_in_use = (backup_qr.status == "Đang Sử Dụng") or bool(backup_qr.current_delivery_id) or bool(current_insp_id)
+    final_status = "Đang Sử Dụng" if is_in_use else "Trống"
+
     return {
         "id": backup_qr.id,
         "code": backup_qr.code,
-        "status": backup_qr.status,
+        "status": final_status,
         "current_delivery_id": backup_qr.current_delivery_id,
+        "current_inspection_id": current_insp_id,
         "scheduled_release_at": backup_qr.scheduled_release_at.isoformat() if backup_qr.scheduled_release_at else None
     }
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useOutletContext, useLocation } from 'react-router-dom';
+import { useOutletContext, useLocation, useNavigate } from 'react-router-dom';
 import api from '@webShared/Services/api.service';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -10,6 +10,7 @@ import '@styles/components.css';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import ClaimListView from '@modules/Claim/views/Claim/ClaimListView';
+import '@modules/Claim/styles/claim.css';
 import { TimeFilterDropdown, TimeFilterChips } from '@webShared/Views/components/ui/TimeFilterDropdown';
 
 const COLORS = ['#7B5233', '#A67C52', '#D9B99B', '#F2E2CE', '#4b301e', '#8c6a51'];
@@ -27,6 +28,8 @@ const STAGES_LIST = [
 import DefectDashboardView from '../DefectDashboard/DefectDashboardView';
 import QualityOverviewDashboard from '../QualityOverview/QualityOverviewDashboard';
 import InspectionHeaderNavCard from '../components/InspectionHeaderNavCard';
+import InspectionReportsView from '../Report/InspectionReportsView';
+import CapaHistoryView from '@modules/CAPA/Views/Improvement/CapaHistoryView';
 
 const DefectAnalytics = DefectDashboardView;
 
@@ -35,19 +38,31 @@ const DefectAnalytics = DefectDashboardView;
  */
 const DefectManagement = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra } = useOutletContext() || {};
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/defects');
 
   const searchParams = new URLSearchParams(location.search);
-  const initialTab = searchParams.get('tab') || 'list';
-  const [viewTab, setViewTab] = useState(initialTab); // 'overview', 'analytics', 'list', 'field', 'complaint', 'capa'
+  const currentTabFromUrl = searchParams.get('tab') || 'list';
+  const [viewTab, setViewTab] = useState(currentTabFromUrl); // 'overview', 'analytics', 'list', 'field', 'complaint', 'capa'
 
-  // ─── Đưa 5 Tab điều hướng lên Header thanh tiêu đề ───
+  useEffect(() => {
+    if (currentTabFromUrl && currentTabFromUrl !== viewTab) {
+      setViewTab(currentTabFromUrl);
+    }
+  }, [currentTabFromUrl]);
+
+  const handleTabChange = (key) => {
+    setViewTab(key);
+    navigate(`/admin/defects?tab=${key}`, { replace: true });
+  };
+
+  // ─── Đưa 4 Tab điều hướng lên Header thanh tiêu đề ───
   useEffect(() => {
     const timer = setTimeout(() => {
       if (setHeaderExtra) {
         setHeaderExtra(
-          <InspectionHeaderNavCard activeTab={viewTab} onTabChange={setViewTab} />
+          <InspectionHeaderNavCard activeTab={viewTab} onTabChange={handleTabChange} />
         );
       }
     }, 0);
@@ -123,12 +138,16 @@ const DefectManagement = () => {
   const [sortOrder, setSortOrder] = useState('desc'); // 'desc', 'asc'
 
   // ─── State cho 2 biểu đồ phân tích nhanh & Bộ lọc thời gian ──────────
-  const [filterYear, setFilterYear] = useState('2026');
-  const [filterMonth, setFilterMonth] = useState('9');
-  const [filterStartDate, setFilterStartDate] = useState('2026-09-01');
-  const [filterEndDate, setFilterEndDate] = useState('2026-09-30');
+  const [filterYear, setFilterYear] = useState(() => String(new Date().getFullYear()));
+  const [filterMonth, setFilterMonth] = useState(() => String(new Date().getMonth() + 1));
+  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState('');
   const [chartDefectFilter, setChartDefectFilter] = useState('all');
-  const [chartDateFilter, setChartDateFilter] = useState('2026-09-04');
+  const [chartDateFilter, setChartDateFilter] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
+  const [isChartRefreshing, setIsChartRefreshing] = useState(false);
 
   const formattedChartMonthYear = useMemo(() => {
     if (filterMonth && filterYear) {
@@ -154,54 +173,54 @@ const DefectManagement = () => {
   const [dbDonutTotalDefects, setDbDonutTotalDefects] = useState(0);
   const [chartDataLoaded, setChartDataLoaded] = useState(false);
 
-  useEffect(() => {
-    const fetchChartData = async () => {
-      try {
-        const params = new URLSearchParams();
-        if (filterYear) params.append('year', filterYear);
-        if (filterMonth) params.append('month', filterMonth);
-        if (chartDefectFilter && chartDefectFilter !== 'all') params.append('defect_name', chartDefectFilter);
-        if (chartDateFilter) params.append('view_date', chartDateFilter);
+  const fetchChartData = async (isManual = false) => {
+    if (isManual) setIsChartRefreshing(true);
+    try {
+      const params = new URLSearchParams();
+      if (filterYear) params.append('year', filterYear);
+      if (filterMonth) params.append('month', filterMonth);
+      if (chartDefectFilter && chartDefectFilter !== 'all') params.append('defect_name', chartDefectFilter);
+      if (chartDateFilter) params.append('view_date', chartDateFilter);
 
-        const res = await api.get(`/inspections/daily/defect-charts-analytics?${params.toString()}`);
-        if (res && res.success) {
-          if (Array.isArray(res.lineChartData)) setDbLineChartData(res.lineChartData);
-          if (typeof res.averageDefectsValue === 'number') setDbAvgDefectsValue(res.averageDefectsValue);
-          if (Array.isArray(res.donutStageData)) setDbDonutStageData(res.donutStageData);
-          if (typeof res.donutTotalDefects === 'number') setDbDonutTotalDefects(res.donutTotalDefects);
-          setChartDataLoaded(true);
-        }
-      } catch (err) {
-        console.error('[DefectManagementView] Error fetching chart analytics:', err);
+      const res = await api.get(`/inspections/daily/defect-charts-analytics?${params.toString()}`);
+      if (res && res.success) {
+        if (Array.isArray(res.lineChartData)) setDbLineChartData(res.lineChartData);
+        if (typeof res.averageDefectsValue === 'number') setDbAvgDefectsValue(res.averageDefectsValue);
+        if (Array.isArray(res.donutStageData)) setDbDonutStageData(res.donutStageData);
+        if (typeof res.donutTotalDefects === 'number') setDbDonutTotalDefects(res.donutTotalDefects);
+        setChartDataLoaded(true);
       }
-    };
+    } catch (err) {
+      console.error('[DefectManagementView] Error fetching chart analytics:', err);
+    } finally {
+      if (isManual) {
+        setTimeout(() => setIsChartRefreshing(false), 500);
+      }
+    }
+  };
 
+  useEffect(() => {
     fetchChartData();
+    // Tự động làm mới dữ liệu realtime mỗi 30 giây
+    const timer = setInterval(() => {
+      fetchChartData();
+    }, 30000);
+    return () => clearInterval(timer);
   }, [filterYear, filterMonth, chartDefectFilter, chartDateFilter]);
 
-  // Dữ liệu biểu đồ lỗi theo thời gian (Line Chart 31 ngày kèm đường trung bình)
+  // Dữ liệu biểu đồ lỗi theo thời gian (Line Chart thực tế từ CSDL)
   const lineChartData = useMemo(() => {
     if (chartDataLoaded && dbLineChartData.length > 0) {
       return dbLineChartData;
     }
-    const rawWave = [
-      15, 10, 6, 21, 48, 29, 15, 5, 12, 21,
-      54, 25, 13, 15, 27, 46, 21, 9, 16, 26,
-      57, 32, 12, 20, 44, 20, 30, 25, 42, 20, 30
-    ];
-    const factor = chartDefectFilter === 'all' ? 1.0 : 0.28;
-    const mapped = rawWave.map((cnt, idx) => ({
-      day: String(idx + 1).padStart(2, '0'),
-      count: Math.round(cnt * factor),
-      isPeak: [4, 10, 15, 20, 24, 28].includes(idx)
-    }));
-    const sum = mapped.reduce((acc, c) => acc + c.count, 0);
-    const avg = Math.round((sum / mapped.length) * 10) / 10;
-    return mapped.map(item => ({
-      ...item,
-      avgCount: avg
-    }));
-  }, [chartDataLoaded, dbLineChartData, chartDefectFilter]);
+    return [];
+  }, [chartDataLoaded, dbLineChartData]);
+
+  const maxDefectInMonth = useMemo(() => {
+    if (!lineChartData || lineChartData.length === 0) return 10;
+    const maxVal = Math.max(...lineChartData.map(d => Math.max(d.count || 0, d.avgCount || 0)));
+    return Math.max(Math.ceil((maxVal * 1.25) / 5) * 5, 10);
+  }, [lineChartData]);
 
   const averageDefectsValue = useMemo(() => {
     if (chartDataLoaded && dbLineChartData.length > 0) return dbAvgDefectsValue;
@@ -212,6 +231,7 @@ const DefectManagement = () => {
   // Dữ liệu biểu đồ cơ cấu theo công đoạn (Donut Chart)
   const RADIAN = Math.PI / 180;
   const renderStageDonutLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
+    if (donutStageData.length === 0) return null;
     if (percent === undefined || percent === null) return null;
     const normalizedPct = percent <= 1 ? percent * 100 : percent;
     if (normalizedPct < 7) return null;
@@ -241,25 +261,27 @@ const DefectManagement = () => {
   };
 
   const donutStageData = useMemo(() => {
-    if (chartDataLoaded && dbDonutStageData.length > 0) {
+    if (chartDataLoaded) {
       return dbDonutStageData;
     }
-    return [
-      { name: 'Sơn', count: 42, pct: '33.3%', color: '#5B3924' },
-      { name: 'Chà nhám', count: 28, pct: '22.2%', color: '#7D4F33' },
-      { name: 'Lắp ráp', count: 24, pct: '19.0%', color: '#A16840' },
-      { name: 'CNC', count: 20, pct: '15.9%', color: '#C58A4B' },
-      { name: 'Đóng gói', count: 12, pct: '9.5%', color: '#DDAA77' }
-    ];
+    return [];
   }, [chartDataLoaded, dbDonutStageData]);
 
+  const renderDonutData = useMemo(() => {
+    if (donutStageData.length > 0) return donutStageData;
+    return [{ name: 'Không có lỗi', count: 1, color: '#E4DDD5', pct: '0%' }];
+  }, [donutStageData]);
+
   const donutTotalDefects = useMemo(() => {
-    if (chartDataLoaded && dbDonutStageData.length > 0) return dbDonutTotalDefects;
-    return donutStageData.reduce((acc, curr) => acc + curr.count, 0);
-  }, [chartDataLoaded, dbDonutStageData, dbDonutTotalDefects, donutStageData]);
+    if (chartDataLoaded) return dbDonutTotalDefects;
+    return 0;
+  }, [chartDataLoaded, dbDonutTotalDefects]);
 
   const formattedChartDate = useMemo(() => {
-    if (!chartDateFilter) return '30/08/2026';
+    if (!chartDateFilter) {
+      const d = new Date();
+      return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+    }
     const parts = chartDateFilter.split('-');
     if (parts.length === 3) {
       return `${parts[2]}/${parts[1]}/${parts[0]}`;
@@ -821,6 +843,28 @@ const DefectManagement = () => {
           flex-direction: column !important;
           overflow: hidden !important;
         }
+        .field-view {
+          flex: 1 !important;
+          min-height: 0 !important;
+          display: flex !important;
+          flex-direction: column !important;
+          overflow: hidden !important;
+          width: 100% !important;
+          height: 100% !important;
+        }
+        .capa-view {
+          flex: 1 !important;
+          min-height: 0 !important;
+          display: flex !important;
+          flex-direction: column !important;
+          overflow: hidden !important;
+          width: 100% !important;
+          height: 100% !important;
+        }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
         .defect-list-layout {
           display: flex;
           flex-direction: column;
@@ -1229,8 +1273,7 @@ const DefectManagement = () => {
                         interval={0}
                       />
                       <YAxis
-                        domain={[0, 65]}
-                        ticks={[0, 20, 40, 60]}
+                        domain={[0, maxDefectInMonth]}
                         fontSize={8.5}
                         stroke="#334155"
                         tick={{ fill: '#475569', fontSize: 8.5, fontWeight: 700 }}
@@ -1245,7 +1288,6 @@ const DefectManagement = () => {
                         labelFormatter={(lbl) => `Ngày ${lbl}`}
                         contentStyle={{ backgroundColor: '#FFFFFF', borderRadius: '6px', border: '1px solid #E2E8F0', fontSize: '0.72rem', padding: '4px 8px' }}
                       />
-                      {/* Đường Trung bình (Nét đứt màu Teak #C58A4B kèm Badge TB ở cuối trục phải không bị dính vào đường) */}
                       <Line
                         type="monotone"
                         dataKey="avgCount"
@@ -1289,7 +1331,6 @@ const DefectManagement = () => {
                           );
                         }}
                       />
-                      {/* Đường Số lỗi theo ngày (Nét liền đậm rõ) */}
                       <Line
                         type="monotone"
                         dataKey="count"
@@ -1346,7 +1387,7 @@ const DefectManagement = () => {
                 </div>
               </div>
 
-              {/* 2. Biểu đồ phải: Cơ cấu theo công đoạn (Có ngày cụ thể, không subtitle, donut to đẹp) */}
+              {/* 2. Biểu đồ phải: Cơ cấu theo công đoạn */}
               <div style={{
                 background: '#FFFFFF',
                 border: '1px solid #EADCC9',
@@ -1363,7 +1404,46 @@ const DefectManagement = () => {
                     Cơ cấu theo công đoạn <span style={{ color: '#7B5233', fontWeight: '700' }}>({formattedChartDate})</span>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      fontSize: '0.66rem',
+                      fontWeight: '700',
+                      color: '#16A34A',
+                      background: '#F0FDF4',
+                      border: '1px solid #BBF7D0',
+                      borderRadius: '10px',
+                      padding: '1px 6px'
+                    }}>
+                      <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#22C55E' }}></span>
+                      Realtime
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() => fetchChartData(true)}
+                      title="Làm mới dữ liệu từ CSDL"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        height: '24px',
+                        padding: '0 7px',
+                        border: '1px solid #EADCC9',
+                        borderRadius: '4px',
+                        background: '#FAF8F5',
+                        color: '#5B3924',
+                        fontSize: '0.7rem',
+                        fontWeight: '700',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <RefreshCw size={11} style={{ animation: isChartRefreshing ? 'spin 0.8s linear infinite' : 'none' }} />
+                      <span>Làm mới</span>
+                    </button>
+
                     <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                       <span style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: '600' }}>Ngày xem</span>
                       <input
@@ -1387,11 +1467,9 @@ const DefectManagement = () => {
                   </div>
                 </div>
 
-                {/* Body Card 2: Donut tròn bắt đầu từ trục thẳng đứng 12h + Bảng phân bổ chi tiết */}
+                {/* Body Card 2 */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minHeight: '215px' }}>
-                  {/* Left: Donut Chart tròn bắt đầu từ trục 12h thẳng đứng (~46%) */}
                   <div style={{ width: '46%', height: '210px', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {/* Tổng lỗi giữa tâm Donut */}
                     <div style={{
                       position: 'absolute',
                       top: '50%',
@@ -1410,14 +1488,14 @@ const DefectManagement = () => {
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
-                          data={donutStageData}
+                          data={renderDonutData}
                           cx="50%"
                           cy="50%"
                           startAngle={90}
                           endAngle={-270}
                           innerRadius="54%"
                           outerRadius="88%"
-                          paddingAngle={2}
+                          paddingAngle={donutStageData.length > 0 ? 2 : 0}
                           dataKey="count"
                           nameKey="name"
                           stroke="#FFFFFF"
@@ -1425,20 +1503,22 @@ const DefectManagement = () => {
                           labelLine={false}
                           label={renderStageDonutLabel}
                         >
-                          {donutStageData.map((entry, index) => (
+                          {renderDonutData.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={entry.color} />
                           ))}
                         </Pie>
                         <Tooltip
                           wrapperStyle={{ zIndex: 999, pointerEvents: 'none' }}
-                          formatter={(val, name, props) => [`${val} lỗi (${props.payload.pct})`, name]}
+                          formatter={(val, name, props) => {
+                            if (donutStageData.length === 0) return ['0 lỗi', 'Không có lỗi'];
+                            return [`${val} lỗi (${props.payload.pct})`, name];
+                          }}
                           contentStyle={{ backgroundColor: '#FFFFFF', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.72rem', padding: '5px 9px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}
                         />
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
 
-                  {/* Right: Bordered Mini Table (~54%) */}
                   <div style={{
                     width: '54%',
                     border: '1px solid #EADCC9',
@@ -1456,21 +1536,34 @@ const DefectManagement = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {donutStageData.map((item, idx) => (
-                          <tr key={idx} style={{ borderBottom: '1px solid #F8FAFC' }}>
-                            <td style={{ padding: '5px 8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <span style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: item.color, display: 'inline-block', flexShrink: 0 }}></span>
-                              <span style={{ fontWeight: '600', color: '#334155' }}>{item.name}</span>
+                        {donutStageData.length === 0 ? (
+                          <tr>
+                            <td colSpan={3} style={{ textAlign: 'center', padding: '24px 8px', color: '#16A34A', fontWeight: '600' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                                <span style={{ fontSize: '1.2rem', color: '#16A34A' }}>✓</span>
+                                <span style={{ color: '#15803D' }}>Không ghi nhận lỗi nào trong ngày {formattedChartDate}</span>
+                              </div>
                             </td>
-                            <td style={{ textAlign: 'center', padding: '5px 8px', fontWeight: '700', color: '#1E293B' }}>{item.count}</td>
-                            <td style={{ textAlign: 'center', padding: '5px 8px', color: '#64748B', fontWeight: '600' }}>{item.pct}</td>
                           </tr>
-                        ))}
-                        <tr style={{ backgroundColor: '#FAF8F5', borderTop: '1px solid #EADCC9' }}>
-                          <td style={{ padding: '6px 8px', fontWeight: '800', color: '#1E293B' }}>Tổng</td>
-                          <td style={{ textAlign: 'center', padding: '6px 8px', fontWeight: '900', color: '#1E293B' }}>{donutTotalDefects}</td>
-                          <td style={{ textAlign: 'center', padding: '6px 8px', fontWeight: '800', color: '#1E293B' }}>100%</td>
-                        </tr>
+                        ) : (
+                          donutStageData.map((item, idx) => (
+                            <tr key={idx} style={{ borderBottom: '1px solid #F8FAFC' }}>
+                              <td style={{ padding: '5px 8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: item.color, display: 'inline-block', flexShrink: 0 }}></span>
+                                <span style={{ fontWeight: '600', color: '#334155' }}>{item.name}</span>
+                              </td>
+                              <td style={{ textAlign: 'center', padding: '5px 8px', fontWeight: '700', color: '#1E293B' }}>{item.count}</td>
+                              <td style={{ textAlign: 'center', padding: '5px 8px', color: '#64748B', fontWeight: '600' }}>{item.pct}</td>
+                            </tr>
+                          ))
+                        )}
+                        {donutStageData.length > 0 && (
+                          <tr style={{ backgroundColor: '#FAF8F5', borderTop: '1px solid #EADCC9' }}>
+                            <td style={{ padding: '6px 8px', fontWeight: '800', color: '#1E293B' }}>Tổng</td>
+                            <td style={{ textAlign: 'center', padding: '6px 8px', fontWeight: '900', color: '#1E293B' }}>{donutTotalDefects}</td>
+                            <td style={{ textAlign: 'center', padding: '6px 8px', fontWeight: '800', color: '#1E293B' }}>100%</td>
+                          </tr>
+                        )}
                       </tbody>
                     </table>
                   </div>
@@ -2006,36 +2099,22 @@ const DefectManagement = () => {
 
           {/* ── Field Defects Tab Content ── */}
           {viewTab === 'field' && (
-            <div className="field-view animate-fade-in">
-              <div className="card" style={{ padding: '40px', textAlign: 'center' }}>
-                <div style={{ fontSize: '3rem', marginBottom: '20px' }}>🏭</div>
-                <h3 style={{ color: '#4b301e', marginBottom: '10px' }}>Lỗi hiện trường</h3>
-                <p style={{ color: '#64748b', marginBottom: '20px' }}>Quản lý các lỗi phát hiện tại hiện trường sản xuất</p>
-                <div style={{ padding: '20px', backgroundColor: '#f8fafc', borderRadius: '10px', color: '#94a3b8' }}>
-                  Tính năng đang được phát triển...
-                </div>
-              </div>
+            <div className="field-view animate-fade-in" style={{ height: '100%', minHeight: 0, flex: 1, display: 'flex', flexDirection: 'column', width: '100%' }}>
+              <InspectionReportsView onlyDefects={true} isEmbedded={true} />
             </div>
           )}
 
           {/* ── Complaint Defects Tab Content ── */}
           {viewTab === 'complaint' && (
-            <div className="complaint-view animate-fade-in">
+            <div className="complaint-view animate-fade-in" style={{ height: '100%', minHeight: 0, flex: 1, display: 'flex', flexDirection: 'column', width: '100%' }}>
               <ClaimListView />
             </div>
           )}
 
           {/* ── CAPA Management Tab Content ── */}
           {viewTab === 'capa' && (
-            <div className="capa-view animate-fade-in">
-              <div className="card" style={{ padding: '40px', textAlign: 'center' }}>
-                <div style={{ fontSize: '3rem', marginBottom: '20px' }}>🔧</div>
-                <h3 style={{ color: '#4b301e', marginBottom: '10px' }}>Quản lý CAPA</h3>
-                <p style={{ color: '#64748b', marginBottom: '20px' }}>Quản lý Corrective and Preventive Actions</p>
-                <div style={{ padding: '20px', backgroundColor: '#f8fafc', borderRadius: '10px', color: '#94a3b8' }}>
-                  Tính năng đang được phát triển...
-                </div>
-              </div>
+            <div className="capa-view animate-fade-in" style={{ height: '100%', minHeight: 0, flex: 1, display: 'flex', flexDirection: 'column', width: '100%' }}>
+              <CapaHistoryView isEmbedded={true} />
             </div>
           )}
         </div>
@@ -2462,7 +2541,7 @@ const DefectManagement = () => {
             </div>
             <div className="modal-body" style={{ padding: '20px 0' }}>
               <p>Bạn có chắc chắn muốn ngưng sử dụng lỗi <strong>"{deleteTarget.name}"</strong> không?</p>
-              <p style={{ color: '#D32F2F', fontSize: '0.85rem', marginTop: '10px' }}>
+              <p style={{ color: '#8C6547', fontSize: '0.85rem', marginTop: '10px' }}>
                 * Lỗi này sẽ không xuất hiện trong các mục tạo QC mới trên Mobile nhưng dữ liệu lịch sử cũ vẫn được giữ nguyên.
               </p>
             </div>

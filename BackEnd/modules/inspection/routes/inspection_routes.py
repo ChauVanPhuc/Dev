@@ -1,13 +1,15 @@
 import os
 import uuid
 import datetime
+from datetime import timedelta
+import calendar
 import json
 from collections import defaultdict
 from typing import List, Optional
 import app.models
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Body, Request, Query
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func, and_, or_, Date, cast, case
+from sqlalchemy import func, and_, or_, Date, cast, case, text
 from config.database import get_db
 from config.settings import get_upload_dir
 from modules.inspection.models.input_inspection import InputInspection
@@ -16,6 +18,7 @@ from modules.inspection.schemas.input_inspection import InputInspection as Inspe
 from modules.inspection.models.defect_type import DefectType, ClientDefect, DefectGlossary
 from modules.inspection.models.defect_category import DefectCategory
 from modules.inspection.models.user_defect_tracking import UserDefectTracking
+from modules.inspection.models.qc_sampling_rule import QCSamplingRule
 from modules.inspection.schemas.defect_type import DefectType as DefectTypeSchema, DefectTypeCreate, ClientDefect as ClientDefectSchema
 from modules.inspection.schemas.defect_category import DefectCategoryCreate, DefectCategoryUpdate, DefectCategoryResponse
 from modules.inspection.schemas.daily_inspection import (
@@ -543,6 +546,44 @@ def do_update_stage(id: int, data: StageInspectionCreate, db: Session):
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Lỗi khi cập nhật phiếu kiểm tra: {str(e)}")
 
+@router.delete("/stage/{id}")
+@router.delete("/input/{id}")
+@router.delete("/{id}")
+def delete_inspection(id: int, db: Session = Depends(get_db)):
+    """
+    [DELETE] Xóa một phiếu kiểm tra công đoạn / đầu vào theo ID.
+    """
+    record = db.query(InputInspection).filter(InputInspection.id == id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail=f"Không tìm thấy phiếu kiểm tra #{id}")
+    
+    try:
+        db.delete(record)
+        db.commit()
+        return {"status": "success", "message": f"Đã xóa phiếu kiểm tra #{id}"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Lỗi khi xóa phiếu kiểm tra: {str(e)}")
+
+@router.delete("/daily/{id}")
+def delete_daily_inspection(id: int, db: Session = Depends(get_db)):
+    """
+    [DELETE] Xóa một bản ghi kiểm tra lỗi hàng ngày và danh sách lỗi liên quan.
+    """
+    record = db.query(DailyInspectionRecord).filter(DailyInspectionRecord.id == id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail=f"Không tìm thấy bản ghi kiểm tra hàng ngày #{id}")
+    
+    try:
+        # Xóa các defects liên quan trước
+        db.query(DailyInspectionDefect).filter(DailyInspectionDefect.record_id == id).delete()
+        db.delete(record)
+        db.commit()
+        return {"status": "success", "message": f"Đã xóa bản ghi kiểm tra hàng ngày #{id}"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Lỗi khi xóa bản ghi: {str(e)}")
+
 @router.get("/stage", response_model=List[InputInspectionRead])
 def get_stage_inspections(
     skip: int = 0,
@@ -707,6 +748,9 @@ def get_inspections_list(
         error_qty = r.error_qty or data_dict.get("errorQty", 0)
         t_code = r.ticket_code or f"DA{r.id:03d}"
 
+        res_val = r.conclusion or r.result or data_dict.get("result") or "pass"
+        action_val = data_dict.get("action") or ("chap-nhan" if res_val in ["pass", "Đạt"] else "tra-ve")
+
         items.append({
             "id": r.id,
             "code": t_code,
@@ -714,16 +758,18 @@ def get_inspections_list(
             "time_str": r.inspected_at.strftime("%H:%M | %d/%m/%Y") if r.inspected_at else "",
             "time": r.inspected_at.strftime("%H:%M") if r.inspected_at else "",
             "date": r.inspected_at.strftime("%d/%m/%Y") if r.inspected_at else "",
-            "mode": r.inspection_type or "first_sample",
+            "mode": r.inspection_type or data_dict.get("mode") or "first_sample",
             "stage": stage_name,
-            "po": r.batch_no or r.cont_name or "",
-            "poCode": r.batch_no or r.cont_name or "",
-            "product": r.product_sku or r.part_name or "",
-            "spec": r.specification or "",
-            "result": r.conclusion or r.result or "pass",
+            "po": r.batch_no or r.cont_name or data_dict.get("po") or "",
+            "poCode": r.batch_no or r.cont_name or data_dict.get("po") or "",
+            "product": r.product_sku or r.part_name or data_dict.get("product") or "",
+            "spec": r.specification or data_dict.get("spec") or "",
+            "result": res_val,
+            "action": action_val,
             "sampleQty": sample_qty,
             "errorQty": error_qty,
-            "note": r.note or "",
+            "palletCode": r.pallet_code or data_dict.get("palletCode") or "",
+            "note": r.note or data_dict.get("note") or "",
             "images": img_list,
             "requiredQty": r.required_qty or data_dict.get("requiredQty") or "",
             "creator": r.inspector_name or data_dict.get("created_by") or "QC",
@@ -739,6 +785,144 @@ def get_inspections_list(
         "page": page,
         "pageSize": limit
     }
+
+
+
+@router.get("/all-by-po/{po_code:path}")
+def get_all_inspections_by_po(
+    po_code: str,
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Lấy tất cả các phiếu kiểm tra chất lượng liên quan đến một Mã PO / Đơn hàng.
+    Phục vụ cho Tab 'Tất cả phiếu kiểm tra' trên màn hình Hồ sơ chất lượng PO (/admin/quality-records/:id).
+    """
+    import json
+    po_clean = (po_code or "").strip()
+    if not po_clean:
+        return []
+
+    records = db.query(InputInspection).filter(
+        or_(
+            InputInspection.batch_no == po_clean,
+            InputInspection.batch_no.ilike(f"%{po_clean}%"),
+            InputInspection.cont_name == po_clean,
+            InputInspection.cont_name.ilike(f"%{po_clean}%"),
+            InputInspection.data_json.ilike(f"%{po_clean}%")
+        )
+    ).order_by(InputInspection.inspected_at.desc(), InputInspection.id.desc()).all()
+
+    # Batch load inspector names if missing
+    inspector_ids = list({r.inspector_id for r in records if r.inspector_id})
+    name_map = {}
+    if inspector_ids:
+        accounts = db.query(Account.id, Account.full_name).filter(Account.id.in_(inspector_ids)).all()
+        name_map = {a.id: a.full_name for a in accounts}
+
+    items = []
+    for r in records:
+        pj = {}
+        if r.data_json:
+            try:
+                pj = json.loads(r.data_json) if isinstance(r.data_json, str) else r.data_json
+            except Exception:
+                pass
+
+        # Xác định phân loại phiếu (type_label)
+        itype = (r.inspection_type or pj.get("mode") or "").lower()
+        if itype in ['first_sample', 'mau-dau-tien', 'dau-vao', 'nhap-kho', 'first_article']:
+            type_label = "Mẫu đầu tiên"
+        elif itype in ['re_inspect', 'tai-kiem-tra', 'tai_kiem_tra', 'reinspect', 'kiem-tra-lai']:
+            type_label = "Tái kiểm tra"
+        elif itype in ['spec', 'thong-so', 'do-am', 'bam-dinh', 'kich-thuoc']:
+            type_label = "Thông số kỹ thuật"
+        else:
+            type_label = "Công đoạn"
+
+        # Kết quả Đạt / Không đạt
+        is_pass = (
+            str(r.conclusion or '').lower() in ['pass', 'dat', 'đạt'] or 
+            str(r.result or '').lower() in ['pass', 'dat', 'đạt'] or
+            bool(r.is_confirmed and (r.error_qty or 0) == 0)
+        )
+        result_str = "Đạt" if is_pass else "Không đạt"
+
+        raw_parts = r.part_name or r.product_sku or pj.get("product") or ""
+        raw_specs = r.specification or pj.get("spec") or "N/A"
+
+        parts_list = [p.strip() for p in raw_parts.split(',') if p.strip()]
+        specs_list = [s.strip() for s in raw_specs.split(',') if s.strip()]
+
+        parts_with_specs = []
+        for idx, p in enumerate(parts_list):
+            s = specs_list[idx] if idx < len(specs_list) else (specs_list[0] if specs_list else "N/A")
+            parts_with_specs.append({"name": p, "spec": s})
+
+        # Danh sách ảnh minh chứng
+        img_list = [img for img in [r.image_path_1, r.image_path_2, r.image_path_3] if img]
+        if pj.get("images") and isinstance(pj.get("images"), list):
+            for img in pj.get("images"):
+                if img and img not in img_list:
+                    img_list.append(img)
+
+        sample_qty = r.sample_qty or pj.get("sampleQty") or (len(parts_list) if parts_list else 1)
+        error_qty = r.error_qty or pj.get("errorQty") or 0
+        t_code = r.ticket_code or f"DA{r.id:03d}"
+
+        inspector = r.inspector_name
+        if not inspector or inspector in ['None', 'N/A', '']:
+            if r.inspector_id and r.inspector_id in name_map:
+                inspector = name_map[r.inspector_id]
+            else:
+                inspector = pj.get("created_by") or "QC"
+
+        items.append({
+            "id": r.id,
+            "ticket_code": t_code,
+            "type_label": type_label,
+            "inspection_type": itype,
+            "result": result_str,
+            "is_pass": is_pass,
+            "stage": r.stage or pj.get("stage") or "QC",
+            "part_name": raw_parts,
+            "parts_list": parts_list,
+            "specification": raw_specs,
+            "parts_with_specs": parts_with_specs,
+            "parts_count": len(parts_list) if parts_list else 1,
+            "sample_qty": int(sample_qty) if str(sample_qty).isdigit() else 1,
+            "error_qty": int(error_qty) if str(error_qty).isdigit() else 0,
+            "inspector_name": inspector,
+            "created_at": (r.inspected_at or r.created_at or "").isoformat() if hasattr(r.inspected_at or r.created_at, 'isoformat') else str(r.inspected_at or ""),
+            "images": img_list,
+            "note": r.note or pj.get("note") or "",
+            "data_json": pj
+        })
+
+    return items
+
+
+@router.get("/inbound/po/{po_code:path}")
+def get_inbound_inspections_by_po(
+    po_code: str,
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Lấy danh sách phiếu kiểm tra đầu vào theo mã PO.
+    """
+    po_clean = (po_code or "").strip()
+    if not po_clean:
+        return []
+
+    records = db.query(InputInspection).filter(
+        or_(
+            InputInspection.batch_no == po_clean,
+            InputInspection.batch_no.ilike(f"%{po_clean}%"),
+            InputInspection.cont_name == po_clean,
+            InputInspection.cont_name.ilike(f"%{po_clean}%")
+        )
+    ).order_by(InputInspection.inspected_at.desc(), InputInspection.id.desc()).all()
+
+    return records
 
 
 @router.get("/pallets")
@@ -1377,6 +1561,7 @@ async def create_inspection(
         stage = body.get("stage") or ""
         po = body.get("po") or ""
         result = body.get("result", "pass")
+        action = body.get("action") or ("chap-nhan" if result in ["pass", "Đạt"] else "tra-ve")
         product = body.get("product") or ""
         spec = body.get("spec") or ""
         sample_qty = int(body.get("sampleQty") or 0)
@@ -1385,6 +1570,7 @@ async def create_inspection(
         errors = body.get("errors") or []
         images = body.get("images") or []
         creator = body.get("creator") or "QC Hệ thống"
+        backup_qr = (body.get("backup_qr") or body.get("backupQrCode") or "").strip()
 
         # Tự động sinh mã Pallet nếu tạo Kiểm tra mẫu lần đầu mà chưa có mã pallet
         pallet_code_val = body.get("palletCode")
@@ -1402,11 +1588,13 @@ async def create_inspection(
             "po": po,
             "product": product,
             "spec": spec,
+            "action": action,
             "requiredQty": body.get("requiredQty"),
             "sampleQty": sample_qty,
             "errorQty": error_qty,
             "errors": errors,
             "palletCode": pallet_code_val,
+            "backup_qr": backup_qr or None,
             "subLot": body.get("subLot"),
             "humidity": body.get("humidity"),
             "machine": body.get("machine"),
@@ -1432,6 +1620,7 @@ async def create_inspection(
         new_stage = InputInspection(
             ticket_code     = t_code,
             pallet_code     = pallet_code_val,
+            backup_qr       = backup_qr or None,
             inspection_type = mode,
             batch_no        = po,
             product_sku     = product,
@@ -1453,6 +1642,19 @@ async def create_inspection(
         )
         db.add(new_stage)
         db.flush()
+
+        if backup_qr:
+            try:
+                from modules.system.models.backup_qr import BackupQRCode
+                b_qr = db.query(BackupQRCode).filter(BackupQRCode.code == backup_qr).first()
+                if not b_qr:
+                    b_qr = BackupQRCode(code=backup_qr, status="Đang Sử Dụng", current_inspection_id=new_stage.id)
+                    db.add(b_qr)
+                else:
+                    b_qr.status = "Đang Sử Dụng"
+                    b_qr.current_inspection_id = new_stage.id
+            except Exception as bqr_e:
+                print(f"[Backup QR Update Error] {bqr_e}")
 
         # Đồng bộ lỗi nếu có vào DailyInspectionDefect
         if errors and stage:
@@ -1498,6 +1700,7 @@ async def create_inspection(
             "stage": stage,
             "po": po,
             "result": result,
+            "action": action,
             "product": product,
             "spec": spec,
             "sampleQty": sample_qty,
@@ -1612,14 +1815,37 @@ async def upload_inspection_images(
 @router.post("/{id}/confirm")
 @router.post("/{id}/confirm/")
 def confirm_inspection_ticket(
-    id: int,
+    id: str,
     data: Optional[dict] = Body(None),
     db: Session = Depends(get_db)
 ):
     """
     [PATCH/POST] Xác nhận hoàn thành phiếu kiểm tra QC.
     """
-    rec = db.query(InputInspection).filter(InputInspection.id == id).first()
+    id_clean = str(id).strip()
+    rec = None
+    
+    if id_clean.isdigit():
+        rec = db.query(InputInspection).filter(InputInspection.id == int(id_clean)).first()
+        
+    if not rec:
+        rec = db.query(InputInspection).filter(
+            or_(
+                InputInspection.ticket_code == id_clean,
+                InputInspection.ticket_code.ilike(id_clean),
+                InputInspection.pallet_code == id_clean,
+                InputInspection.pallet_code.ilike(id_clean),
+                InputInspection.batch_no == id_clean
+            )
+        ).first()
+
+    if not rec:
+        import re
+        m = re.search(r'\d+', id_clean)
+        if m:
+            extracted_num = int(m.group())
+            rec = db.query(InputInspection).filter(InputInspection.id == extracted_num).first()
+
     if not rec:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu kiểm tra")
     rec.is_confirmed = True
@@ -2087,22 +2313,6 @@ def get_defect_types(
     
     target_dept = department or stage
 
-    # Tự động lấy bộ phận từ tài khoản nếu user_id được truyền lên mà chưa có department/stage
-    if not target_dept and user_id:
-        acc = db.query(Account).filter(Account.id == user_id).first()
-        if acc:
-            dept_name = None
-            if acc.department_id:
-                dept_obj = db.query(Department).filter(Department.id == acc.department_id).first()
-                if dept_obj and dept_obj.name:
-                    dept_name = dept_obj.name
-            if not dept_name:
-                dept_obj = db.query(Department).filter(Department.account_id == acc.id).first()
-                if dept_obj and dept_obj.name:
-                    dept_name = dept_obj.name
-            if dept_name:
-                target_dept = dept_name
-
     if target_dept and target_dept.strip():
         target_clean = target_dept.strip().lower()
         if target_clean not in ['tat ca', 'tất cả', 'all', 'admin', 'quan ly', 'quản lý', 'phòng qc', 'phong qc', 'qc', 'qa', 'qlcl', 'quản lý chất lượng']:
@@ -2117,6 +2327,9 @@ def get_defect_types(
             )
 
     defects = query.all()
+    # Fallback nếu query theo công đoạn rỗng nhưng CSDL có lỗi hoạt động
+    if not defects and not include_inactive:
+        defects = db.query(DefectType).filter(DefectType.is_active == True).all()
     
     # Nếu có user_id, lấy danh sách ID lỗi mà user này đang track
     tracked_defect_ids = []
@@ -2340,6 +2553,86 @@ def delete_defect_category(
     db.delete(cat)
     db.commit()
     return {"message": f"Đã xóa phân nhóm '{cat.name}' thành công"}
+
+
+# ==============================================================================
+# QC SAMPLING RULES (AQL STANDARD) ROUTES
+# ==============================================================================
+
+@router.get("/qc-sampling/lookup")
+def lookup_qc_sampling_rule(
+    lot_size: int = Query(..., ge=1),
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Tra cứu mốc lấy mẫu AQL từ DB theo quy mô lô hàng (lot_size).
+    """
+    rule = db.query(QCSamplingRule).filter(
+        QCSamplingRule.is_active == True,
+        QCSamplingRule.min_lot_size <= lot_size,
+        or_(
+            QCSamplingRule.max_lot_size >= lot_size,
+            QCSamplingRule.max_lot_size.is_(None)
+        )
+    ).first()
+
+    if rule:
+        return {
+            "success": True,
+            "rule": {
+                "id": rule.id,
+                "min_lot_size": rule.min_lot_size,
+                "max_lot_size": rule.max_lot_size,
+                "sample_rate_desc": rule.sample_rate_desc,
+                "sample_size": rule.sample_size,
+                "major_ac": rule.major_ac,
+                "major_re": rule.major_re,
+                "minor_ac": rule.minor_ac,
+                "minor_re": rule.minor_re
+            }
+        }
+
+    # Fallback nếu không có mốc khớp
+    fallback_sample = max(1, min(lot_size, int(round(lot_size * 0.05))))
+    return {
+        "success": True,
+        "rule": {
+            "sample_size": fallback_sample,
+            "major_ac": 0,
+            "major_re": 1,
+            "sample_rate_desc": "5%"
+        }
+    }
+
+
+@router.get("/qc-sampling/rules")
+def get_qc_sampling_rules(db: Session = Depends(get_db)):
+    """
+    [GET] Danh sách toàn bộ các quy tắc lấy mẫu QC AQL.
+    """
+    rules = db.query(QCSamplingRule).order_by(QCSamplingRule.min_lot_size.asc()).all()
+    return rules
+
+
+@router.put("/qc-sampling/rules/{rule_id}")
+def update_qc_sampling_rule(
+    rule_id: int,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db)
+):
+    """
+    [PUT] Cập nhật quy tắc lấy mẫu QC AQL.
+    """
+    rule = db.query(QCSamplingRule).filter(QCSamplingRule.id == rule_id).first()
+    if not rule:
+        raise HTTPException(status_code=404, detail="Không tìm thấy quy tắc lấy mẫu!")
+    for k, v in payload.items():
+        if hasattr(rule, k):
+            setattr(rule, k, v)
+    db.commit()
+    db.refresh(rule)
+    return rule
+
 
 def generate_unique_defect_code(category: str, db: Session) -> str:
     """
@@ -2685,6 +2978,217 @@ def delete_defect_type(defect_id: int, db: Session = Depends(get_db)):
 
 # --- ANALYTICS ENDPOINTS ---
 
+@router.get("/daily/defect-charts-analytics")
+def get_defect_charts_analytics(
+    year: Optional[int] = Query(None),
+    month: Optional[int] = Query(None),
+    defect_name: Optional[str] = Query("all"),
+    view_date: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Phân tích dữ liệu biểu đồ lỗi thực tế theo thời gian (Line Chart 31 ngày)
+    và cơ cấu phân bổ lỗi theo công đoạn (Donut Chart) từ cơ sở dữ liệu.
+    """
+    now = datetime.date.today()
+    if not year or year <= 0:
+        year = now.year
+    if not month or not (1 <= month <= 12):
+        month = now.month
+
+    num_days = calendar.monthrange(year, month)[1]
+    start_date = datetime.date(year, month, 1)
+    end_date = datetime.date(year, month, num_days)
+    start_dt = datetime.datetime.combine(start_date, datetime.time.min)
+    end_dt = datetime.datetime.combine(end_date, datetime.time.max)
+
+    daily_counts = {day: 0 for day in range(1, num_days + 1)}
+
+    # 1. Truy vấn daily_inspection_records trong tháng
+    try:
+        if defect_name and defect_name != 'all':
+            q_daily = text("""
+                SELECT DAY(r.inspection_date) as d, SUM(d.quantity) as cnt
+                FROM daily_inspection_records r
+                JOIN daily_inspection_defects d ON d.record_id = r.id
+                JOIN defect_types dt ON dt.id = d.defect_id
+                WHERE r.inspection_date >= :s AND r.inspection_date <= :e
+                  AND (dt.name = :dname OR dt.code = :dname)
+                GROUP BY DAY(r.inspection_date)
+            """)
+            res_daily = db.execute(q_daily, {"s": start_date, "e": end_date, "dname": defect_name}).fetchall()
+        else:
+            q_daily = text("""
+                SELECT DAY(inspection_date) as d, SUM(COALESCE(total_defects, 0)) as cnt
+                FROM daily_inspection_records
+                WHERE inspection_date >= :s AND inspection_date <= :e
+                GROUP BY DAY(inspection_date)
+            """)
+            res_daily = db.execute(q_daily, {"s": start_date, "e": end_date}).fetchall()
+
+        for r in res_daily:
+            d = r[0]
+            cnt = r[1] or 0
+            if d in daily_counts:
+                daily_counts[d] += cnt
+    except Exception as e:
+        print("[defect-charts-analytics] Error querying daily_inspection_records:", e)
+
+    # 2. Truy vấn input_inspections (các phiếu kiểm tra công đoạn/đầu vào) trong tháng
+    try:
+        q_inp = text("""
+            SELECT DAY(created_at) as d, error_qty, data_json
+            FROM input_inspections
+            WHERE created_at >= :s AND created_at <= :e
+        """)
+        res_inp = db.execute(q_inp, {"s": start_dt, "e": end_dt}).fetchall()
+        for r in res_inp:
+            d = r[0]
+            err_qty = r[1] or 0
+            djson = r[2]
+            
+            if defect_name and defect_name != 'all':
+                if djson:
+                    try:
+                        pj = json.loads(djson) if isinstance(djson, str) else djson
+                        defs = pj.get('defects', []) if isinstance(pj, dict) else []
+                        for df in defs:
+                            df_name = df.get('defect_name') or df.get('name') or ''
+                            if defect_name.lower() in df_name.lower():
+                                daily_counts[d] += (df.get('quantity') or df.get('count') or 1)
+                    except Exception:
+                        pass
+            else:
+                cnt = err_qty
+                if cnt == 0 and djson:
+                    try:
+                        pj = json.loads(djson) if isinstance(djson, str) else djson
+                        defs = pj.get('defects', []) if isinstance(pj, dict) else []
+                        if isinstance(defs, list):
+                            cnt = sum((df.get('quantity') or df.get('count') or 1) for df in defs if isinstance(df, dict))
+                    except Exception:
+                        pass
+                if d in daily_counts:
+                    daily_counts[d] += cnt
+    except Exception as e:
+        print("[defect-charts-analytics] Error querying input_inspections:", e)
+
+    total_month_defects = sum(daily_counts.values())
+    avg_defects = round(total_month_defects / num_days, 1) if num_days > 0 else 0
+
+    line_chart_data = []
+    for day_num in range(1, num_days + 1):
+        c = daily_counts[day_num]
+        line_chart_data.append({
+            "day": f"{day_num:02d}",
+            "count": c,
+            "avgCount": avg_defects,
+            "isPeak": c > (avg_defects * 1.5) and c > 0
+        })
+
+    # 3. Phân bổ theo công đoạn cho view_date (Donut Chart)
+    if view_date:
+        try:
+            v_date = datetime.datetime.strptime(view_date, "%Y-%m-%d").date()
+        except Exception:
+            v_date = now
+    else:
+        v_date = now
+
+    def normalize_stage(name):
+        if not name:
+            return 'Khác'
+        n = name.strip()
+        low = n.lower()
+        if 'nhập' in low or 'nhap' in low or 'đầu vào' in low or 'dau-vao' in low:
+            return 'Nhập kho'
+        if 'phôi' in low or 'phoi' in low:
+            return 'Tạo phôi'
+        if 'định hình' in low or 'dinh hinh' in low:
+            return 'Định hình'
+        if 'lắp ráp' in low or 'lap rap' in low:
+            return 'Lắp ráp'
+        if 'sơn' in low or 'son' in low:
+            return 'Sơn'
+        if 'đóng gói' in low or 'dong goi' in low:
+            return 'Đóng gói'
+        if 'lưu kho' in low or 'luu kho' in low:
+            return 'Lưu kho'
+        return n
+
+    stage_counts = {}
+
+    # Lấy từ daily_inspection_records theo ngày xem
+    try:
+        q_stage_daily = text("""
+            SELECT stage_name, SUM(COALESCE(total_defects, 0)) as cnt
+            FROM daily_inspection_records
+            WHERE inspection_date = :vdate
+            GROUP BY stage_name
+        """)
+        res_sd = db.execute(q_stage_daily, {"vdate": v_date}).fetchall()
+        for r in res_sd:
+            stg = normalize_stage(r[0])
+            cnt = r[1] or 0
+            if cnt > 0:
+                stage_counts[stg] = stage_counts.get(stg, 0) + cnt
+    except Exception as e:
+        print("[defect-charts-analytics] Error querying stage daily:", e)
+
+    # Lấy từ input_inspections theo ngày xem
+    try:
+        v_dt_start = datetime.datetime.combine(v_date, datetime.time.min)
+        v_dt_end = datetime.datetime.combine(v_date, datetime.time.max)
+        q_stage_inp = text("""
+            SELECT stage, error_qty, data_json
+            FROM input_inspections
+            WHERE created_at >= :s AND created_at <= :e
+        """)
+        res_si = db.execute(q_stage_inp, {"s": v_dt_start, "e": v_dt_end}).fetchall()
+        for r in res_si:
+            stg = normalize_stage(r[0])
+            err_qty = r[1] or 0
+            djson = r[2]
+            cnt = err_qty
+            if cnt == 0 and djson:
+                try:
+                    pj = json.loads(djson) if isinstance(djson, str) else djson
+                    defs = pj.get('defects', []) if isinstance(pj, dict) else []
+                    if isinstance(defs, list):
+                        cnt = sum((df.get('quantity') or df.get('count') or 1) for df in defs if isinstance(df, dict))
+                except Exception:
+                    pass
+            if cnt > 0:
+                stage_counts[stg] = stage_counts.get(stg, 0) + cnt
+    except Exception as e:
+        print("[defect-charts-analytics] Error querying stage input:", e)
+
+    total_date_defects = sum(stage_counts.values())
+
+    WOOD_COLORS = ['#5B3924', '#7D4F33', '#A16840', '#C58A4B', '#DDAA77', '#8C6547', '#6F4E37', '#9C6644']
+
+    donut_stage_data = []
+    sorted_stages = sorted(stage_counts.items(), key=lambda x: x[1], reverse=True)
+    for idx, (stg_name, cnt) in enumerate(sorted_stages):
+        pct = (cnt / total_date_defects * 100) if total_date_defects > 0 else 0
+        donut_stage_data.append({
+            "name": stg_name,
+            "count": cnt,
+            "pct": f"{pct:.1f}%",
+            "color": WOOD_COLORS[idx % len(WOOD_COLORS)]
+        })
+
+    return {
+        "success": True,
+        "lineChartData": line_chart_data,
+        "averageDefectsValue": avg_defects,
+        "donutStageData": donut_stage_data,
+        "donutTotalDefects": total_date_defects,
+        "view_date": str(v_date),
+        "year": year,
+        "month": month
+    }
+
 @router.get("/daily/analytics", response_model=DailyInspectionAnalytics)
 def get_daily_inspection_analytics(
     start_date: Optional[datetime.date] = None,
@@ -2854,21 +3358,27 @@ def get_daily_inspection_analytics(
 from fastapi import Body
 
 def get_inspectionTypeLabel_local(t: str) -> str:
+    if not t:
+        return 'Kiểm tra công đoạn'
     mapping = {
-        'dau-vao': 'Nhập kho',
-        'nhap-kho': 'Nhập kho',
-        'do-am': 'Độ ẩm',
-        'kich-thuoc': 'Kích thước',
-        'ngoai-quan': 'Ngoại quan',
-        'chuc-nang': 'Chức năng',
+        'first_sample': 'Kiểm tra mẫu đầu',
+        'mau-dau-tien': 'Kiểm tra mẫu đầu',
+        'dau-vao': 'Kiểm tra nhập kho',
+        'nhap-kho': 'Kiểm tra nhập kho',
+        're_inspect': 'Tái kiểm tra',
+        'tai-kiem': 'Tái kiểm tra',
+        'do-am': 'Kiểm tra độ ẩm',
+        'kich-thuoc': 'Kiểm tra kích thước',
+        'ngoai-quan': 'Kiểm tra ngoại quan',
+        'chuc-nang': 'Kiểm tra chức năng',
         'cong-doan': 'Kiểm tra công đoạn',
         'bam-dinh': 'Kiểm tra bám dính',
         'sau-dong-goi': 'Kiểm tra sau đóng gói',
         'phu-kien': 'Kiểm tra phụ kiện',
-        'quy-trinh': 'Kiểm tra quy trình',
-        'mau-dau-tien': 'Kiểm tra mẫu đầu tiên'
+        'quy-trinh': 'Kiểm tra quy trình'
     }
-    return mapping.get(t, t or 'Kiểm tra công đoạn')
+    t_key = str(t).strip().lower()
+    return mapping.get(t_key, mapping.get(t, t or 'Kiểm tra công đoạn'))
 
 @router.get("/input/{id}", response_model=InputInspectionRead)
 def get_input_inspection(id: int, db: Session = Depends(get_db)):
@@ -3060,9 +3570,10 @@ def get_input_inspection_by_plan_and_part(
     # 3. Tự động khởi tạo phiếu kiểm định phôi MB2.4 & Mã Pallet cho phiếu bàn giao ăn theo
     try:
         gen_res = generate_unique_pallet_code("DA", db)
-        pallet_code_gen = gen_res.get("palletCode") or f"DA-{datetime.now().strftime('%Y%m%d')}-0001"
+        pallet_code_gen = gen_res.get("palletCode") or f"DA-{datetime.datetime.now().strftime('%Y%m%d')}-0001"
         
         # Tìm thông tin sản phẩm / quy cách từ ProductionPlanDetail hoặc Delivery
+        # pyrefly: ignore [missing-import]
         from modules.production.models.plans import ProductionPlanDetail
         from modules.delivery.models.deliveries import Delivery
         
@@ -3080,7 +3591,7 @@ def get_input_inspection_by_plan_and_part(
         
         # Tìm delivery tương ứng để lấy thời gian lập phiếu
         deliv = db.query(Delivery).filter(Delivery.plan_id == plan_id).order_by(Delivery.created_at.asc()).first()
-        base_time = deliv.created_at if (deliv and deliv.created_at) else datetime.now()
+        base_time = deliv.created_at if (deliv and deliv.created_at) else datetime.datetime.now()
         inp_time = base_time - timedelta(hours=24)
 
         new_inp = InputInspection(
@@ -3112,7 +3623,7 @@ def get_input_inspection_by_plan_and_part(
                 quantity_plan=100,
                 quantity_actual=100,
                 status=1,
-                created_at=datetime.now()
+                created_at=datetime.datetime.now()
             )
             db.add(new_card)
 
@@ -3340,9 +3851,19 @@ def get_pending_inspections(
         part_str = item.part_name or item.product_sku or item.batch_no or "N/A"
         rec_date = item.inspected_at or item.created_at or datetime.datetime.now()
         
+        data_dict = {}
+        if item.data_json:
+            try:
+                data_dict = json.loads(item.data_json)
+            except Exception:
+                data_dict = {}
+        action_val = data_dict.get("action") or ("chap-nhan" if (item.result in ["pass", "Đạt"] or item.conclusion in ["pass", "Đạt"]) else "tra-ve")
+
         pending_tasks.append({
             "id": item.id,
             "type": task_type,
+            "inspection_type": item.inspection_type,
+            "stage": item.stage,
             "ticket_code": ticket_str,
             "task_name": f"Xác nhận hồ sơ kiểm tra #{ticket_str} ({part_str})" if ticket_str else f"Xác nhận hồ sơ kiểm tra - {part_str}",
             "category": type_label,
@@ -3352,12 +3873,18 @@ def get_pending_inspections(
             "completion_date": rec_date.isoformat() if hasattr(rec_date, 'isoformat') else str(rec_date),
             "notes": item.note or item.notes or "Chờ xác nhận kết quả kiểm tra",
             "part_name": item.part_name or item.product_sku or "",
+            "specification": item.specification or "",
+            "required_qty": item.required_qty or 0,
+            "sample_qty": item.sample_qty or 0,
+            "error_qty": item.error_qty or 0,
             "batch_no": item.batch_no or "",
             "inspector_name": item.inspector_name or "QC",
             "result": item.result or item.conclusion or "pass",
+            "action": action_val,
             "image_path_1": item.image_path_1,
             "image_path_2": item.image_path_2,
             "image_path_3": item.image_path_3,
+            "data_json": item.data_json or "",
             "is_confirmed": False
         })
         
@@ -3397,6 +3924,90 @@ def confirm_inspection(type: str, id: int, confirmed_by: Optional[int] = Body(No
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Lỗi khi lưu xác nhận: {str(e)}")
+
+
+@router.post("/confirm-batch")
+@router.post("/confirm-batch/")
+def confirm_inspections_batch(
+    ids: List[int] = Body(..., embed=True),
+    confirmed_by: Optional[int] = Body(None, embed=True),
+    db: Session = Depends(get_db)
+):
+    """
+    [POST] Xác nhận nhanh hàng loạt phiếu kiểm tra theo danh sách IDs.
+    """
+    if not ids:
+        raise HTTPException(status_code=400, detail="Danh sách ID phiếu xác nhận không được để trống")
+
+    now = datetime.datetime.now()
+    try:
+        updated_count = db.query(InputInspection).filter(
+            InputInspection.id.in_(ids)
+        ).update(
+            {
+                InputInspection.is_confirmed: True,
+                InputInspection.confirmed_at: now,
+                InputInspection.confirmed_by: confirmed_by
+            },
+            synchronize_session=False
+        )
+        db.commit()
+        return {
+            "success": True,
+            "message": f"Đã xác nhận thành công {updated_count} phiếu kiểm tra",
+            "confirmed_count": updated_count,
+            "confirmed_at": now.isoformat()
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Lỗi khi xác nhận hàng loạt: {str(e)}")
+
+
+@router.post("/cancel-return/{id}")
+@router.post("/cancel-return/{id}/")
+def cancel_inspection_return(id: int, reason: Optional[str] = Body(None, embed=True), db: Session = Depends(get_db)):
+    """
+    [POST] Hủy trả hàng cho phiếu kiểm tra có hành động 'tra-ve'.
+    Chuyển action thành 'chap-nhan' (Chấp nhận / Tự xử lý).
+    """
+    record = db.query(InputInspection).filter(InputInspection.id == id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail=f"Không tìm thấy phiếu kiểm tra có ID {id}")
+
+    data_dict = {}
+    if record.data_json:
+        try:
+            data_dict = json.loads(record.data_json)
+        except Exception:
+            data_dict = {}
+
+    data_dict["action"] = "chap-nhan"
+    data_dict["cancel_return_at"] = datetime.datetime.now().isoformat()
+    if reason:
+        data_dict["cancel_return_reason"] = reason
+
+    record.data_json = json.dumps(data_dict, ensure_ascii=False)
+
+    cancel_msg = f"[Đã hủy trả hàng: {reason}]" if reason else "[Đã hủy trả hàng]"
+    if record.note:
+        if cancel_msg not in record.note:
+            record.note = f"{record.note} - {cancel_msg}"
+    else:
+        record.note = cancel_msg
+
+    try:
+        db.commit()
+        db.refresh(record)
+        return {
+            "success": True,
+            "message": f"Đã hủy trả hàng cho phiếu #{record.ticket_code or record.id}",
+            "id": record.id,
+            "action": "chap-nhan",
+            "note": record.note
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Lỗi khi hủy trả hàng: {str(e)}")
 
 
 @router.post("/upload-image")
@@ -4315,4 +4926,104 @@ def get_quality_overview(
     except Exception as e:
         print(f"[quality-overview] Exception: {e}")
         raise HTTPException(status_code=500, detail=f"Lỗi truy vấn dữ liệu tổng quan chất lượng: {str(e)}")
+
+
+@router.get("/{id}")
+@router.get("/{id}/")
+def get_inspection_detail_by_id(id: str, db: Session = Depends(get_db)):
+    """
+    [GET] Lấy chi tiết một phiếu kiểm tra theo ID / Ticket Code / Pallet Code cho Mobile / Web QC.
+    Đặt ở cuối file để tránh xung đột định tuyến với các route tĩnh.
+    """
+    id_clean = str(id).strip()
+    record = None
+    
+    # 1. Thử tìm theo ID số nguyên
+    if id_clean.isdigit():
+        record = db.query(InputInspection).filter(InputInspection.id == int(id_clean)).first()
+        
+    # 2. Thử tìm theo ticket_code hoặc pallet_code hoặc batch_no
+    if not record:
+        record = db.query(InputInspection).filter(
+            or_(
+                InputInspection.ticket_code == id_clean,
+                InputInspection.ticket_code.ilike(id_clean),
+                InputInspection.pallet_code == id_clean,
+                InputInspection.pallet_code.ilike(id_clean),
+                InputInspection.batch_no == id_clean
+            )
+        ).first()
+
+    # 3. Thử trích xuất phần số từ mã (ví dụ DA4522 -> 4522, DA001 -> 1)
+    if not record:
+        import re
+        m = re.search(r'\d+', id_clean)
+        if m:
+            extracted_num = int(m.group())
+            record = db.query(InputInspection).filter(InputInspection.id == extracted_num).first()
+
+    if not record:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phiếu kiểm tra")
+
+    data_dict = {}
+    if record.data_json:
+        try:
+            data_dict = json.loads(record.data_json) if isinstance(record.data_json, str) else record.data_json
+        except Exception:
+            pass
+
+    img_list = [img for img in [record.image_path_1, record.image_path_2, record.image_path_3] if img]
+    if not img_list and data_dict.get("images"):
+        img_list = data_dict.get("images")
+
+    stage_name = record.stage or data_dict.get("stage") or record.inspection_type or "QC"
+    sample_qty = record.sample_qty or data_dict.get("sampleQty", 0)
+    error_qty = record.error_qty or data_dict.get("errorQty", 0)
+    t_code = record.ticket_code or f"DA{record.id:03d}"
+    res_val = record.conclusion or record.result or data_dict.get("result") or "pass"
+    action_val = data_dict.get("action") or ("chap-nhan" if res_val in ["pass", "Đạt"] else "tra-ve")
+
+    return {
+        "id": record.id,
+        "code": t_code,
+        "ticket_code": t_code,
+        "time_str": record.inspected_at.strftime("%H:%M | %d/%m/%Y") if record.inspected_at else "",
+        "time": record.inspected_at.strftime("%H:%M") if record.inspected_at else "",
+        "date": record.inspected_at.strftime("%d/%m/%Y") if record.inspected_at else "",
+        "mode": record.inspection_type or data_dict.get("mode") or "first_sample",
+        "stage": stage_name,
+        "po": record.batch_no or record.cont_name or data_dict.get("po") or "",
+        "poCode": record.batch_no or record.cont_name or data_dict.get("po") or "",
+        "product": record.product_sku or record.part_name or data_dict.get("product") or "",
+        "spec": record.specification or data_dict.get("spec") or "",
+        "result": res_val,
+        "action": action_val,
+        "sampleQty": sample_qty,
+        "errorQty": error_qty,
+        "note": record.note or data_dict.get("note") or "",
+        "images": img_list,
+        "palletCode": record.pallet_code or data_dict.get("palletCode") or "",
+        "requiredQty": record.required_qty or data_dict.get("requiredQty") or "",
+        "creator": record.inspector_name or data_dict.get("created_by") or "QC",
+        "status": "done" if record.is_confirmed else "pending",
+        "is_confirmed": bool(record.is_confirmed),
+        "created_at": record.inspected_at.isoformat() if record.inspected_at else "",
+        "errors": data_dict.get("errors", []),
+        "answers": data_dict.get("answers", {}),
+        "steps": data_dict.get("steps", []),
+        "subLot": data_dict.get("subLot"),
+        "humidity": data_dict.get("humidity"),
+        "machine": data_dict.get("machine"),
+        "area": data_dict.get("area"),
+        "process": data_dict.get("process"),
+        "staff": data_dict.get("staff"),
+        "parameter": data_dict.get("parameter"),
+        "paramStage": data_dict.get("paramStage"),
+        "paramPo": data_dict.get("paramPo"),
+        "paramProduct": data_dict.get("paramProduct"),
+        "paramSample": data_dict.get("paramSample"),
+        "paramPass": data_dict.get("paramPass"),
+        "paramFail": data_dict.get("paramFail")
+    }
+
 

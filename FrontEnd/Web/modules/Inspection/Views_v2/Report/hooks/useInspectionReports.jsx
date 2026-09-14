@@ -19,33 +19,180 @@ import {
   Download,
   FileSpreadsheet,
   Printer,
-  MoreVertical
+  MoreVertical,
+  Trash2
 } from 'lucide-react';
 import api, { API_ROOT } from '@webShared/Services/api.service';
 import ExcelJS from 'exceljs';
+import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
 export const getInspectionTypeLabel = (type) => {
   switch (type) {
     case 'dau-vao':
-    case 'nhap-kho': return 'Nhập kho';
+    case 'nhap-kho':
+    case 'input': return 'Kiểm tra đầu vào (IQC)';
+    case 'mau-dau-tien':
+    case 'first_sample':
+    case 'first-sample':
+    case 'first-article': return 'Mẫu đầu tiên';
+    case 'cong-doan':
+    case 'stage': return 'Công đoạn';
+    case 'recheck':
+    case 'kiem-tra-lai': return 'Kiểm tra lại';
     case 'do-am': return 'Độ ẩm';
     case 'kich-thuoc': return 'Kích thước';
     case 'ngoai-quan': return 'Ngoại quan';
     case 'chuc-nang': return 'Chức năng';
-    case 'cong-doan': return 'Công đoạn';
     case 'bam-dinh': return 'Bám dính';
     case 'sau-dong-goi': return 'Sau đóng gói';
     case 'phu-kien': return 'Phụ kiện';
-    case 'quy-trinh': return 'Quy trình';
-    case 'mau-dau-tien': return 'Mẫu đầu tiên';
+    case 'quy-trinh':
+    case 'process': return 'Quy trình';
+    case 'daily': return 'Ghi nhận lỗi hàng ngày';
     default: return type || 'N/A';
   }
 };
 
+export const extractDetailedCategory = (item) => {
+  if (!item) return 'Kiểm tra chất lượng';
 
-export const useInspectionReports = () => {
+  let stage = (item.stage || '').trim();
+  let itype = (item.inspection_type || '').trim().toLowerCase();
+
+  // Đọc thêm từ data_json nếu item chưa có stage hoặc itype
+  if ((!stage || !itype) && item.data_json) {
+    try {
+      const pj = typeof item.data_json === 'string' ? JSON.parse(item.data_json) : item.data_json;
+      if (pj && typeof pj === 'object') {
+        if (!stage) stage = (pj.stage || pj.process || '').trim();
+        if (!itype) itype = (pj.inspection_type || pj.mode || pj.type || '').trim().toLowerCase();
+      }
+    } catch (e) {}
+  }
+
+  // Chuẩn hóa tên công đoạn
+  let cleanStage = '';
+  const sLower = stage.toLowerCase();
+  if (sLower === 'nhap-kho' || sLower === 'nhập kho' || sLower === 'dau-vao' || sLower === 'đầu vào') {
+    cleanStage = 'Nhập kho';
+  } else if (sLower === 'nhập kho/đầu vào' || sLower === 'nhap kho/dau vao') {
+    cleanStage = 'Nhập kho / Đầu vào';
+  } else if (sLower === 'tạo phôi' || sLower === 'tao phoi') {
+    cleanStage = 'Tạo phôi';
+  } else if (sLower === 'định hình' || sLower === 'dinh hinh') {
+    cleanStage = 'Định hình';
+  } else if (sLower === 'định hình 3' || sLower === 'dinh hinh 3') {
+    cleanStage = 'Định hình 3';
+  } else if (sLower === 'lắp ráp' || sLower === 'lap rap') {
+    cleanStage = 'Lắp ráp';
+  } else if (sLower === 'sơn' || sLower === 'son') {
+    cleanStage = 'Sơn';
+  } else if (sLower === 'đóng gói' || sLower === 'dong goi') {
+    cleanStage = 'Đóng gói';
+  } else if (sLower === 'lưu kho' || sLower === 'luu kho') {
+    cleanStage = 'Lưu kho';
+  } else if (stage) {
+    cleanStage = stage;
+  }
+
+  // Xác định phân loại chi tiết (subtype)
+  let subtype = '';
+  if (itype === 'first_sample' || itype === 'mau-dau-tien') {
+    subtype = 'Mẫu đầu tiên';
+  } else if (itype === 'quy-trinh') {
+    subtype = 'Quy trình';
+  } else if (itype === 'do-am') {
+    subtype = 'Đo độ ẩm';
+  } else if (itype === 'bam-dinh') {
+    subtype = 'Thử bám dính';
+  } else if (itype === 'kich-thuoc') {
+    subtype = 'Đo kích thước';
+  } else if (itype === 'ngoai-quan') {
+    subtype = 'Ngoại quan';
+  } else if (itype === 'chuc-nang') {
+    subtype = 'Chức năng';
+  } else if (itype === 'sau-dong-goi') {
+    subtype = 'Sau đóng gói';
+  } else if (itype === 'phu-kien') {
+    subtype = 'Phụ kiện';
+  } else if (itype === 'nhap-kho' || itype === 'dau-vao') {
+    subtype = 'Nhập kho';
+  }
+
+  // Kết hợp công đoạn và phân loại
+  if (cleanStage) {
+    if (cleanStage === 'Nhập kho' || cleanStage === 'Nhập kho / Đầu vào') {
+      if (subtype && subtype !== 'Nhập kho' && subtype !== 'Nhập kho / Đầu vào') {
+        return `${cleanStage} (${subtype})`;
+      }
+      return cleanStage;
+    }
+    if (subtype && subtype !== 'Công đoạn') {
+      return `${cleanStage} (${subtype})`;
+    }
+    return cleanStage;
+  }
+
+  if (subtype) {
+    if (subtype === 'Quy trình') return 'Kiểm tra quy trình';
+    return subtype;
+  }
+
+  return 'Kiểm tra công đoạn';
+};
+
+
+export const extractDefectSummary = (item) => {
+  if (!item) return '';
+  const defects = [];
+  
+  // 1. From daily inspection defects array
+  if (Array.isArray(item.defects) && item.defects.length > 0) {
+    item.defects.forEach(d => {
+      const name = d.defect_name || d.name || 'Lỗi';
+      const qty = d.quantity || d.count || 1;
+      defects.push(`${name} (${qty})`);
+    });
+  }
+  
+  // 2. From stage inspection data_json
+  if (item.data_json) {
+    try {
+      const parsed = typeof item.data_json === 'string' ? JSON.parse(item.data_json) : item.data_json;
+      if (Array.isArray(parsed?.defects) && parsed.defects.length > 0) {
+        parsed.defects.forEach(d => {
+          const name = d.defect_name || d.name || 'Lỗi';
+          const qty = d.quantity || d.count || 1;
+          defects.push(`${name} (${qty})`);
+        });
+      }
+      if (Array.isArray(parsed?.checklist_results)) {
+        parsed.checklist_results.filter(r => r.status === 'fail').forEach(r => {
+          defects.push(`${r.title || 'Lỗi kiểm tra'}`);
+        });
+      }
+      if (Array.isArray(parsed?.detailsList)) {
+        parsed.detailsList.filter(d => d.conclusion === 'fail').forEach(d => {
+          defects.push(`${d.name || 'Lỗi linh kiện'}`);
+        });
+      }
+    } catch (e) {}
+  }
+
+  if (defects.length > 0) {
+    return defects.join(', ');
+  }
+  
+  if (item.total_defects && item.total_defects > 0) {
+    return `${item.total_defects} lỗi`;
+  }
+
+  return '';
+};
+
+export const useInspectionReports = ({ onlyDefects = false, isEmbedded = false } = {}) => {
   const navigate = useNavigate();
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
@@ -55,9 +202,16 @@ export const useInspectionReports = () => {
   // Lấy metadata từ database thay vì hardcode
   const { screenCode, title, subtitle } = useScreenMetadataCached(location.pathname || '/admin/reports');
   
+  const { toast } = useToast() || {};
+  
   // Tab control: 'stage' | 'input' | 'daily' | 'process'
   const [activeTab, setActiveTab] = useState('stage');
   const [activeActionMenu, setActiveActionMenu] = useState(null);
+  const [actionMenuPos, setActionMenuPos] = useState({ top: '0px', bottom: 'auto', right: '0px' });
+  
+  // Delete Modal state
+  const [deleteTarget, setDeleteTarget] = useState(null); // { item, tabType }
+  const [isDeleting, setIsDeleting] = useState(false);
   
   // Data lists
   const [stageInspections, setStageInspections] = useState([]);
@@ -81,7 +235,7 @@ export const useInspectionReports = () => {
   // Search & Filter state for Stage Inspections & Process Inspections (shared or separate)
   const [stageSearch, setStageSearch] = useState('');
   const [stageTypeFilter, setStageTypeFilter] = useState('all');
-  const [stageStatusFilter, setStageStatusFilter] = useState('all');
+  const [stageStatusFilter, setStageStatusFilter] = useState(onlyDefects ? 'fail' : 'all');
   const [stageStartDate, setStageStartDate] = useState('');
   const [stageEndDate, setStageEndDate] = useState('');
   const [stageSort, setStageSort] = useState('date_desc');
@@ -135,21 +289,52 @@ export const useInspectionReports = () => {
     }
   }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
-  // Close action dropdown menu on global click
+  // Close action dropdown menu on outside click
   useEffect(() => {
-    const handleGlobalClick = () => setActiveActionMenu(null);
-    window.addEventListener('click', handleGlobalClick);
-    return () => window.removeEventListener('click', handleGlobalClick);
-  }, []);
+    if (!activeActionMenu) return;
+    const handleOutsideClick = (e) => {
+      if (!e.target.closest(`[data-action-menu-id="${activeActionMenu}"]`)) {
+        setActiveActionMenu(null);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, [activeActionMenu]);
+
+  const handleToggleActionMenu = (e, menuKey) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (activeActionMenu === menuKey) {
+      setActiveActionMenu(null);
+    } else {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const openUpward = spaceBelow < 190 && rect.top > 190;
+
+      setActionMenuPos({
+        top: openUpward ? 'auto' : `${Math.round(rect.bottom + 4)}px`,
+        bottom: openUpward ? `${Math.round(window.innerHeight - rect.top + 4)}px` : 'auto',
+        right: `${Math.round(Math.max(12, window.innerWidth - rect.right))}px`
+      });
+      setActiveActionMenu(menuKey);
+    }
+  };
 
   const renderActionDropdown = (item, tabType) => {
     const menuKey = `${tabType}-${item.id}`;
     const isOpen = activeActionMenu === menuKey;
 
     return (
-      <div style={{ position: 'relative', display: 'inline-block' }} onClick={(e) => e.stopPropagation()}>
+      <div 
+        data-action-menu-id={menuKey}
+        style={{ position: 'relative', display: 'inline-block' }} 
+        onClick={(e) => e.stopPropagation()}
+      >
         <button
-          onClick={() => setActiveActionMenu(isOpen ? null : menuKey)}
+          type="button"
+          onClick={(e) => handleToggleActionMenu(e, menuKey)}
           style={{
             border: 'none',
             background: isOpen ? '#EADCC9' : 'transparent',
@@ -157,37 +342,47 @@ export const useInspectionReports = () => {
             color: '#7B5233',
             padding: '6px 8px',
             borderRadius: '6px',
-            display: 'flex',
+            display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
-            transition: 'all 0.2s'
+            transition: 'background-color 0.15s ease'
           }}
-          title="Thao tác"
+          onMouseEnter={(e) => { if (!isOpen) e.currentTarget.style.backgroundColor = '#FAF6F0'; }}
+          onMouseLeave={(e) => { if (!isOpen) e.currentTarget.style.backgroundColor = 'transparent'; }}
         >
           <MoreVertical size={18} />
         </button>
 
         {isOpen && (
           <div 
+            data-action-menu-id={menuKey}
             style={{
-              position: 'absolute',
-              right: 0,
-              top: '100%',
-              marginTop: '4px',
+              position: 'fixed',
+              top: actionMenuPos.top,
+              bottom: actionMenuPos.bottom,
+              right: actionMenuPos.right,
               backgroundColor: '#ffffff',
               borderRadius: '8px',
-              boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+              boxShadow: '0 10px 30px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.08)',
               border: '1px solid #EADCC9',
-              zIndex: 1000,
-              minWidth: '150px',
-              padding: '4px 0',
+              zIndex: 99999,
+              minWidth: '160px',
+              padding: '6px 0',
               textAlign: 'left'
             }}
+            onClick={(e) => e.stopPropagation()}
           >
             <button
               onClick={() => {
                 setActiveActionMenu(null);
                 if (tabType === 'daily') setSelectedDaily(item);
+                else if (isEmbedded) {
+                  if (tabType === 'input' && item && (item.part_name || item.cont_name)) {
+                    setSelectedInbound(item);
+                  } else {
+                    setSelectedInspection(item);
+                  }
+                }
                 else if (tabType === 'input') navigate(`/admin/reports/detail/input/${item.id}`);
                 else if (tabType === 'stage' || tabType === 'process') navigate(`/admin/reports/detail/stage/${item.id}`);
                 else setSelectedInspection(item);
@@ -204,7 +399,8 @@ export const useInspectionReports = () => {
                 gap: '8px',
                 fontSize: '0.82rem',
                 color: '#2D1A12',
-                fontWeight: '600'
+                fontWeight: '600',
+                transition: 'background-color 0.15s ease'
               }}
               onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FAF6F0'}
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
@@ -229,7 +425,8 @@ export const useInspectionReports = () => {
                 gap: '8px',
                 fontSize: '0.82rem',
                 color: '#15803d',
-                fontWeight: '600'
+                fontWeight: '600',
+                transition: 'background-color 0.15s ease'
               }}
               onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F0FDF4'}
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
@@ -254,17 +451,71 @@ export const useInspectionReports = () => {
                 gap: '8px',
                 fontSize: '0.82rem',
                 color: '#0284c7',
-                fontWeight: '600'
+                fontWeight: '600',
+                transition: 'background-color 0.15s ease'
               }}
               onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F0F9FF'}
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
             >
               <Printer size={15} /> In / Xuất PDF
             </button>
+
+            <div style={{ height: '1px', backgroundColor: '#F3E9DD', margin: '4px 0' }} />
+
+            <button
+              onClick={() => {
+                setActiveActionMenu(null);
+                setDeleteTarget({ item, tabType });
+              }}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: 'none',
+                background: 'transparent',
+                textAlign: 'left',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontSize: '0.82rem',
+                color: '#DC2626',
+                fontWeight: '600',
+                transition: 'background-color 0.15s ease'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FEF2F2'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            >
+              <Trash2 size={15} style={{ color: '#DC2626' }} /> Xóa phiếu
+            </button>
           </div>
         )}
       </div>
     );
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget?.item) return;
+    const { item, tabType } = deleteTarget;
+    setIsDeleting(true);
+    try {
+      const deleteUrl = tabType === 'daily' ? `/inspections/daily/${item.id}` : `/inspections/stage/${item.id}`;
+      await api.delete(deleteUrl);
+      
+      if (tabType === 'daily') {
+        setDailyInspections(prev => prev.filter(i => i.id !== item.id));
+      } else {
+        setStageInspections(prev => prev.filter(i => i.id !== item.id));
+      }
+      
+      if (toast) toast('success', `Đã xóa thành công phiếu kiểm tra #${item.id}!`);
+      setDeleteTarget(null);
+    } catch (err) {
+      console.error('Lỗi khi xóa phiếu kiểm tra:', err);
+      if (toast) toast('error', err.response?.data?.detail || 'Xóa phiếu kiểm tra thất bại!');
+      else alert(err.response?.data?.detail || 'Xóa phiếu kiểm tra thất bại!');
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   // Load all data on mount / refresh
@@ -558,16 +809,42 @@ export const useInspectionReports = () => {
     
     // 1. Stage Inspections
     stageInspections.forEach(item => {
-      let cat = "Kiểm tra công đoạn";
+      const defectSummary = extractDefectSummary(item);
+      const isDefectReport = item.conclusion === 'fail' || !!defectSummary;
+
+      // Nếu onlyDefects = true, chỉ lấy các phiếu kiểm tra có lỗi (loại bỏ phiếu Đạt không lỗi)
+      if (onlyDefects && !isDefectReport) {
+        return;
+      }
+
+      const cat = extractDetailedCategory(item);
       let typeLabel = "stage";
-      if (item.inspection_type === 'quy-trinh') {
-        cat = "Kiểm tra quy trình";
+      const sLower = (item.stage || '').toLowerCase();
+      const itLower = (item.inspection_type || '').toLowerCase();
+      if (itLower === 'quy-trinh') {
         typeLabel = "process";
-      } else if (item.inspection_type === 'mau-dau-tien') {
-        cat = "Kiểm tra đầu vào";
+      } else if (
+        itLower === 'nhap-kho' || 
+        itLower === 'dau-vao' || 
+        sLower.includes('nhập kho') || 
+        sLower.includes('nhap-kho') || 
+        sLower.includes('đầu vào') || 
+        sLower.includes('dau-vao')
+      ) {
         typeLabel = "input";
       }
       
+      let act = item.action;
+      if (!act && item.data_json) {
+        try {
+          const parsed = typeof item.data_json === 'string' ? JSON.parse(item.data_json) : item.data_json;
+          act = parsed?.action;
+        } catch (e) {}
+      }
+      if (!act) {
+        act = item.conclusion === 'pass' ? 'chap-nhan' : 'tra-ve';
+      }
+
       list.push({
         id: item.id,
         raw_item: item,
@@ -582,18 +859,36 @@ export const useInspectionReports = () => {
         confirmed_at: item.confirmed_at,
         confirmed_by: item.confirmed_by,
         conclusion: item.conclusion,
+        action: act,
         result_label: item.conclusion === 'pass' ? 'Đạt' : 'Lỗi',
-        notes: item.notes || item.notes_json || ""
+        notes: item.notes || item.notes_json || "",
+        defect_summary: defectSummary
       });
     });
     
     // 2. Daily Inspections
     dailyInspections.forEach(item => {
+      const defectSummary = extractDefectSummary(item);
+      const hasDefects = (item.total_defects > 0) || (Array.isArray(item.defects) && item.defects.length > 0);
+
+      // Nếu onlyDefects = true, chỉ lấy các phiếu ghi nhận có lỗi
+      if (onlyDefects && !hasDefects) {
+        return;
+      }
+
+      const dailyStage = (item.stage_name || '').trim();
+      const dailyCat = dailyStage ? `Lỗi hàng ngày (${dailyStage})` : "Ghi nhận lỗi hàng ngày";
+
+      let dailyAct = item.action;
+      if (!dailyAct) {
+        dailyAct = (Number(item.total_defects || 0) > 0) ? 'tra-ve' : 'chap-nhan';
+      }
+
       list.push({
         id: item.id,
         raw_item: item,
         type: "daily",
-        category: "Ghi nhận lỗi hàng ngày",
+        category: dailyCat,
         inspection_date: item.created_at || item.inspection_date,
         created_at: item.created_at,
         batch_no: item.batch_no || "N/A",
@@ -601,8 +896,10 @@ export const useInspectionReports = () => {
         inspector_name: item.inspector_name || getDisplayInspector(item),
         is_confirmed: null,
         conclusion: null,
+        action: dailyAct,
         result_label: `Lỗi: ${item.total_defects || 0}/${item.total_inspected || 0} (${item.defect_rate || 0}%)`,
-        notes: item.notes || ""
+        notes: item.notes || "",
+        defect_summary: defectSummary
       });
     });
 
@@ -627,7 +924,28 @@ export const useInspectionReports = () => {
     
     // Type filter
     if (stageTypeFilter !== 'all') {
-      list = list.filter(item => item.type === stageTypeFilter);
+      list = list.filter(item => {
+        if (stageTypeFilter === 'daily') return item.type === 'daily';
+        if (stageTypeFilter === 'first_sample') {
+          return item.type === 'first_sample' || (item.category && item.category.includes('Mẫu đầu'));
+        }
+        if (stageTypeFilter === 'input') {
+          return item.type === 'input' || (item.category && (item.category.includes('Đầu vào') || item.category.includes('Nhập kho')));
+        }
+        if (stageTypeFilter === 'process') {
+          return item.type === 'process' || (item.category && item.category.includes('quy trình'));
+        }
+        if (stageTypeFilter === 're_inspect' || stageTypeFilter === 'kiem-tra-lai') {
+          return item.type === 're_inspect' || (item.category && item.category.includes('lại'));
+        }
+        if (stageTypeFilter === 'stage') {
+          return item.type === 'stage' || item.category === 'Kiểm tra công đoạn';
+        }
+        if (stageTypeFilter === 'do-am') return item.type === 'do-am' || (item.category && item.category.includes('độ ẩm'));
+        if (stageTypeFilter === 'bam-dinh') return item.type === 'bam-dinh' || (item.category && item.category.includes('bám dính'));
+        if (stageTypeFilter === 'sau-dong-goi') return item.type === 'sau-dong-goi' || (item.category && item.category.includes('đóng gói'));
+        return item.type === stageTypeFilter || item.category === stageTypeFilter;
+      });
     }
     
     // Status filter
@@ -662,7 +980,7 @@ export const useInspectionReports = () => {
     }
     
     return list;
-  }, [stageInspections, dailyInspections, filterPending24h, stageSearch, stageTypeFilter, stageStatusFilter, stageStartDate, stageEndDate, stageSort]);
+  }, [stageInspections, dailyInspections, filterPending24h, stageSearch, stageTypeFilter, stageStatusFilter, stageStartDate, stageEndDate, stageSort, onlyDefects]);
 
   const paginatedUnifiedList = useMemo(() => {
     const startIdx = (unifiedPage - 1) * unifiedLimit;
@@ -747,7 +1065,7 @@ export const useInspectionReports = () => {
   const handleResetFilters = () => {
     setStageSearch('');
     setStageTypeFilter('all');
-    setStageStatusFilter('all');
+    setStageStatusFilter(onlyDefects ? 'fail' : 'all');
     setStageStartDate('');
     setStageEndDate('');
     setStagePage(1);
@@ -1938,5 +2256,11 @@ export const useInspectionReports = () => {
     setUnifiedPage,
     unifiedLimit,
     setUnifiedLimit,
+    onlyDefects,
+    isEmbedded,
+    deleteTarget,
+    setDeleteTarget,
+    isDeleting,
+    handleConfirmDelete,
   };
 };

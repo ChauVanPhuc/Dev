@@ -19,10 +19,12 @@ import {
   Download,
   FileSpreadsheet,
   Printer,
-  MoreVertical
+  MoreVertical,
+  Trash2
 } from 'lucide-react';
 import api, { API_ROOT } from '@webShared/Services/api.service';
 import ExcelJS from 'exceljs';
+import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
@@ -30,22 +32,108 @@ export const getInspectionTypeLabel = (type) => {
   switch (type) {
     case 'dau-vao':
     case 'nhap-kho':
+    case 'input':
+    case 'iqc': return 'Kiểm tra đầu vào (IQC)';
     case 'mau-dau-tien':
-    case 'input': return 'Kiểm tra mẫu đầu tiên';
+    case 'first_sample':
+    case 'first-sample':
+    case 'first-article':
+    case 'fai': return 'Mẫu đầu tiên (FQC)';
     case 'cong-doan':
-    case 'stage': return 'Kiểm tra lại';
-    case 'do-am': return 'Độ ẩm';
-    case 'kich-thuoc': return 'Kích thước';
+    case 'stage':
+    case 'ipqc': return 'Kiểm tra công đoạn';
+    case 're_inspect':
+    case 'recheck':
+    case 'tai-kiem':
+    case 'kiem-tra-lai': return 'Kiểm tra lại';
+    case 'do-am': return 'Đo độ ẩm';
+    case 'kich-thuoc': return 'Đo kích thước';
     case 'ngoai-quan': return 'Ngoại quan';
     case 'chuc-nang': return 'Chức năng';
-    case 'bam-dinh': return 'Bám dính';
-    case 'sau-dong-goi': return 'Sau đóng gói';
+    case 'bam-dinh': return 'Thử bám dính';
+    case 'sau-dong-goi':
+    case 'oqc': return 'Sau đóng gói (OQC)';
     case 'phu-kien': return 'Phụ kiện';
     case 'quy-trinh':
     case 'process': return 'Kiểm tra quy trình';
     case 'daily': return 'Ghi nhận lỗi hàng ngày';
     default: return type || 'N/A';
   }
+};
+
+export const extractDetailedCategory = (item) => {
+  if (!item) return 'Kiểm tra công đoạn';
+
+  if (item.type === 'daily' || item.is_daily) {
+    return 'Ghi nhận lỗi hàng ngày';
+  }
+
+  let itype = (item.inspection_type || item.type || '').trim().toLowerCase();
+  let stage = (item.stage || item.stage_name || '').trim();
+
+  // Đọc thêm từ data_json nếu item chưa có stage hoặc itype cụ thể
+  if ((!itype || itype === 'stage' || itype === 'cong-doan') && item.data_json) {
+    try {
+      const pj = typeof item.data_json === 'string' ? JSON.parse(item.data_json) : item.data_json;
+      if (pj && typeof pj === 'object') {
+        const jsonType = (pj.inspection_type || pj.check_type || pj.mode || pj.type || '').trim().toLowerCase();
+        if (jsonType) itype = jsonType;
+        if (!stage) stage = (pj.stage || pj.stage_name || pj.process || '').trim();
+      }
+    } catch (e) {}
+  }
+
+  // 1. Kiểm tra mẫu đầu tiên (FQC / FAI)
+  if (['first_sample', 'mau-dau-tien', 'first-sample', 'first-article', 'fai'].includes(itype)) {
+    return 'Mẫu đầu tiên (FQC)';
+  }
+
+  // 2. Tái kiểm tra / Kiểm tra lại (Re-inspection)
+  if (['re_inspect', 'recheck', 'tai-kiem', 'kiem-tra-lai', 'reinspect'].includes(itype)) {
+    return 'Kiểm tra lại';
+  }
+
+  // 3. Kiểm tra đầu vào (IQC / Inbound)
+  if (['nhap-kho', 'dau-vao', 'input', 'iqc'].includes(itype)) {
+    return 'Đầu vào (IQC)';
+  }
+  const sLower = stage.toLowerCase();
+  if (sLower === 'nhập kho' || sLower === 'nhap-kho' || sLower === 'đầu vào' || sLower === 'dau-vao' || sLower === 'nhập kho/đầu vào') {
+    if (!itype || itype === 'stage' || itype === 'cong-doan') {
+      return 'Đầu vào (IQC)';
+    }
+  }
+
+  // 4. Kiểm tra quy trình (Process)
+  if (['quy-trinh', 'process'].includes(itype)) {
+    return 'Kiểm tra quy trình';
+  }
+
+  // 5. Đo thông số chuyên biệt (Độ ẩm / Kích thước / Bám dính / Ngoại quan / Chức năng / Sau đóng gói / Phụ kiện)
+  if (itype === 'do-am' || itype.includes('do-am') || itype.includes('độ ẩm')) {
+    return 'Đo độ ẩm';
+  }
+  if (itype === 'kich-thuoc' || itype.includes('kich-thuoc') || itype.includes('kích thước')) {
+    return 'Đo kích thước';
+  }
+  if (itype === 'bam-dinh' || itype.includes('bam-dinh') || itype.includes('bám dính')) {
+    return 'Thử bám dính';
+  }
+  if (itype === 'ngoai-quan' || itype.includes('ngoại quan')) {
+    return 'Kiểm tra ngoại quan';
+  }
+  if (itype === 'chuc-nang' || itype.includes('chức năng')) {
+    return 'Kiểm tra chức năng';
+  }
+  if (itype === 'sau-dong-goi' || itype === 'oqc' || itype.includes('dong-goi')) {
+    return 'Sau đóng gói (OQC)';
+  }
+  if (itype === 'phu-kien') {
+    return 'Phụ kiện';
+  }
+
+  // 6. Mặc định là kiểm tra công đoạn
+  return 'Kiểm tra công đoạn';
 };
 
 
@@ -59,11 +147,16 @@ export const useInspectionReports = () => {
   // Lấy metadata từ database thay vì hardcode
   const { screenCode, title, subtitle } = useScreenMetadataCached(location.pathname || '/admin/reports');
   
+  const { toast } = useToast() || {};
+  
   // Tab control: 'stage' | 'input' | 'daily' | 'process'
   const [activeTab, setActiveTab] = useState('stage');
   const [activeActionMenu, setActiveActionMenu] = useState(null);
+  const [actionMenuPos, setActionMenuPos] = useState({ top: '0px', bottom: 'auto', right: '0px' });
   
-  // Data lists
+  // Delete Modal state
+  const [deleteTarget, setDeleteTarget] = useState(null); // { item, tabType }
+  const [isDeleting, setIsDeleting] = useState(false);
   const [stageInspections, setStageInspections] = useState([]);
   const [dailyInspections, setDailyInspections] = useState([]);
   const [defectTypesMap, setDefectTypesMap] = useState({});
@@ -151,21 +244,52 @@ export const useInspectionReports = () => {
     }
   }, [screenCode, title, subtitle, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
-  // Close action dropdown menu on global click
+  // Close action dropdown menu on outside click
   useEffect(() => {
-    const handleGlobalClick = () => setActiveActionMenu(null);
-    window.addEventListener('click', handleGlobalClick);
-    return () => window.removeEventListener('click', handleGlobalClick);
-  }, []);
+    if (!activeActionMenu) return;
+    const handleOutsideClick = (e) => {
+      if (!e.target.closest(`[data-action-menu-id="${activeActionMenu}"]`)) {
+        setActiveActionMenu(null);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, [activeActionMenu]);
+
+  const handleToggleActionMenu = (e, menuKey) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (activeActionMenu === menuKey) {
+      setActiveActionMenu(null);
+    } else {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const openUpward = spaceBelow < 190 && rect.top > 190;
+
+      setActionMenuPos({
+        top: openUpward ? 'auto' : `${Math.round(rect.bottom + 4)}px`,
+        bottom: openUpward ? `${Math.round(window.innerHeight - rect.top + 4)}px` : 'auto',
+        right: `${Math.round(Math.max(12, window.innerWidth - rect.right))}px`
+      });
+      setActiveActionMenu(menuKey);
+    }
+  };
 
   const renderActionDropdown = (item, tabType) => {
     const menuKey = `${tabType}-${item.id}`;
     const isOpen = activeActionMenu === menuKey;
 
     return (
-      <div style={{ position: 'relative', display: 'inline-block' }} onClick={(e) => e.stopPropagation()}>
+      <div 
+        data-action-menu-id={menuKey}
+        style={{ position: 'relative', display: 'inline-block' }} 
+        onClick={(e) => e.stopPropagation()}
+      >
         <button
-          onClick={() => setActiveActionMenu(isOpen ? null : menuKey)}
+          type="button"
+          onClick={(e) => handleToggleActionMenu(e, menuKey)}
           style={{
             border: 'none',
             background: isOpen ? '#EADCC9' : 'transparent',
@@ -173,32 +297,35 @@ export const useInspectionReports = () => {
             color: '#7B5233',
             padding: '6px 8px',
             borderRadius: '6px',
-            display: 'flex',
+            display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
-            transition: 'all 0.2s'
+            transition: 'background-color 0.15s ease'
           }}
-          title="Thao tác"
+          onMouseEnter={(e) => { if (!isOpen) e.currentTarget.style.backgroundColor = '#FAF6F0'; }}
+          onMouseLeave={(e) => { if (!isOpen) e.currentTarget.style.backgroundColor = 'transparent'; }}
         >
           <MoreVertical size={18} />
         </button>
 
         {isOpen && (
           <div 
+            data-action-menu-id={menuKey}
             style={{
-              position: 'absolute',
-              right: 0,
-              top: '100%',
-              marginTop: '4px',
+              position: 'fixed',
+              top: actionMenuPos.top,
+              bottom: actionMenuPos.bottom,
+              right: actionMenuPos.right,
               backgroundColor: '#ffffff',
               borderRadius: '8px',
-              boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+              boxShadow: '0 10px 30px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.08)',
               border: '1px solid #EADCC9',
-              zIndex: 1000,
-              minWidth: '150px',
-              padding: '4px 0',
+              zIndex: 99999,
+              minWidth: '160px',
+              padding: '6px 0',
               textAlign: 'left'
             }}
+            onClick={(e) => e.stopPropagation()}
           >
             <button
               onClick={() => {
@@ -219,7 +346,8 @@ export const useInspectionReports = () => {
                 gap: '8px',
                 fontSize: '0.82rem',
                 color: '#2D1A12',
-                fontWeight: '600'
+                fontWeight: '600',
+                transition: 'background-color 0.15s ease'
               }}
               onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FAF6F0'}
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
@@ -244,7 +372,8 @@ export const useInspectionReports = () => {
                 gap: '8px',
                 fontSize: '0.82rem',
                 color: '#15803d',
-                fontWeight: '600'
+                fontWeight: '600',
+                transition: 'background-color 0.15s ease'
               }}
               onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F0FDF4'}
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
@@ -269,17 +398,71 @@ export const useInspectionReports = () => {
                 gap: '8px',
                 fontSize: '0.82rem',
                 color: '#0284c7',
-                fontWeight: '600'
+                fontWeight: '600',
+                transition: 'background-color 0.15s ease'
               }}
               onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F0F9FF'}
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
             >
               <Printer size={15} /> In / Xuất PDF
             </button>
+
+            <div style={{ height: '1px', backgroundColor: '#F3E9DD', margin: '4px 0' }} />
+
+            <button
+              onClick={() => {
+                setActiveActionMenu(null);
+                setDeleteTarget({ item, tabType });
+              }}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: 'none',
+                background: 'transparent',
+                textAlign: 'left',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontSize: '0.82rem',
+                color: '#DC2626',
+                fontWeight: '600',
+                transition: 'background-color 0.15s ease'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FEF2F2'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            >
+              <Trash2 size={15} style={{ color: '#DC2626' }} /> Xóa phiếu
+            </button>
           </div>
         )}
       </div>
     );
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget?.item) return;
+    const { item, tabType } = deleteTarget;
+    setIsDeleting(true);
+    try {
+      const deleteUrl = tabType === 'daily' ? `/inspections/daily/${item.id}` : `/inspections/stage/${item.id}`;
+      await api.delete(deleteUrl);
+      
+      if (tabType === 'daily') {
+        setDailyInspections(prev => prev.filter(i => i.id !== item.id));
+      } else {
+        setStageInspections(prev => prev.filter(i => i.id !== item.id));
+      }
+      
+      if (toast) toast('success', `Đã xóa thành công phiếu kiểm tra #${item.id}!`);
+      setDeleteTarget(null);
+    } catch (err) {
+      console.error('Lỗi khi xóa phiếu kiểm tra:', err);
+      if (toast) toast('error', err.response?.data?.detail || 'Xóa phiếu kiểm tra thất bại!');
+      else alert(err.response?.data?.detail || 'Xóa phiếu kiểm tra thất bại!');
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   // Load all data on mount / refresh
@@ -596,14 +779,22 @@ export const useInspectionReports = () => {
     
     // 1. Stage Inspections
     stageInspections.forEach(item => {
-      let cat = "Kiểm tra lại";
+      const cat = extractDetailedCategory(item);
       let typeLabel = "stage";
-      if (item.inspection_type === 'quy-trinh') {
-        cat = "Kiểm tra quy trình";
-        typeLabel = "process";
-      } else if (item.inspection_type === 'mau-dau-tien' || item.inspection_type === 'dau-vao' || item.inspection_type === 'nhap-kho') {
-        cat = "Kiểm tra mẫu đầu tiên";
+      if (cat.includes('Mẫu đầu')) {
+        typeLabel = "first_sample";
+      } else if (cat.includes('Đầu vào') || cat.includes('Nhập kho')) {
         typeLabel = "input";
+      } else if (cat.includes('quy trình')) {
+        typeLabel = "process";
+      } else if (cat.includes('lại')) {
+        typeLabel = "re_inspect";
+      } else if (cat.includes('độ ẩm')) {
+        typeLabel = "do-am";
+      } else if (cat.includes('bám dính')) {
+        typeLabel = "bam-dinh";
+      } else if (cat.includes('đóng gói')) {
+        typeLabel = "sau-dong-goi";
       }
       
       const sQty = item.sample_qty || item.required_qty || 1;
@@ -611,6 +802,17 @@ export const useInspectionReports = () => {
       const isPass = item.conclusion === 'pass';
       const dRate = isPass ? 0 : (sQty > 0 ? (eQty / sQty) * 100 : 0);
       const stName = normalizeStage(item.stage || item.stage_name || item.product_sku);
+
+      let act = item.action;
+      if (!act && item.data_json) {
+        try {
+          const parsed = typeof item.data_json === 'string' ? JSON.parse(item.data_json) : item.data_json;
+          act = parsed?.action;
+        } catch (e) {}
+      }
+      if (!act) {
+        act = isPass ? 'chap-nhan' : 'tra-ve';
+      }
 
       list.push({
         id: item.id,
@@ -627,6 +829,7 @@ export const useInspectionReports = () => {
         confirmed_at: item.confirmed_at,
         confirmed_by: item.confirmed_by,
         conclusion: item.conclusion,
+        action: act,
         defect_rate: dRate,
         sample_qty: sQty,
         error_qty: eQty,
@@ -639,6 +842,11 @@ export const useInspectionReports = () => {
     dailyInspections.forEach(item => {
       const dRate = Number(item.defect_rate || 0);
       const stName = normalizeStage(item.stage_name || item.stage || item.product_sku);
+      let dailyAct = item.action;
+      if (!dailyAct) {
+        dailyAct = (Number(item.total_defects || 0) > 0) ? 'tra-ve' : 'chap-nhan';
+      }
+
       list.push({
         id: item.id,
         raw_item: item,
@@ -652,6 +860,7 @@ export const useInspectionReports = () => {
         inspector_name: item.inspector_name || getDisplayInspector(item),
         is_confirmed: true,
         conclusion: null,
+        action: dailyAct,
         defect_rate: dRate,
         sample_qty: item.total_products || item.total_inspected || 0,
         error_qty: item.total_defects || 0,
@@ -681,7 +890,28 @@ export const useInspectionReports = () => {
     
     // Type filter
     if (stageTypeFilter !== 'all') {
-      list = list.filter(item => item.type === stageTypeFilter);
+      list = list.filter(item => {
+        if (stageTypeFilter === 'daily') return item.type === 'daily';
+        if (stageTypeFilter === 'first_sample') {
+          return item.type === 'first_sample' || (item.category && item.category.includes('Mẫu đầu'));
+        }
+        if (stageTypeFilter === 'input') {
+          return item.type === 'input' || (item.category && (item.category.includes('Đầu vào') || item.category.includes('Nhập kho')));
+        }
+        if (stageTypeFilter === 'process') {
+          return item.type === 'process' || (item.category && item.category.includes('quy trình'));
+        }
+        if (stageTypeFilter === 're_inspect' || stageTypeFilter === 'kiem-tra-lai') {
+          return item.type === 're_inspect' || (item.category && item.category.includes('lại'));
+        }
+        if (stageTypeFilter === 'stage') {
+          return item.type === 'stage' || item.category === 'Kiểm tra công đoạn';
+        }
+        if (stageTypeFilter === 'do-am') return item.type === 'do-am' || (item.category && item.category.includes('độ ẩm'));
+        if (stageTypeFilter === 'bam-dinh') return item.type === 'bam-dinh' || (item.category && item.category.includes('bám dính'));
+        if (stageTypeFilter === 'sau-dong-goi') return item.type === 'sau-dong-goi' || (item.category && item.category.includes('đóng gói'));
+        return item.type === stageTypeFilter || item.category === stageTypeFilter;
+      });
     }
     
     // Status filter
@@ -1997,5 +2227,9 @@ export const useInspectionReports = () => {
     setUnifiedPage,
     unifiedLimit,
     setUnifiedLimit,
+    deleteTarget,
+    setDeleteTarget,
+    isDeleting,
+    handleConfirmDelete,
   };
 };

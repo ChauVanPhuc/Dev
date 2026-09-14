@@ -427,7 +427,6 @@ const QualityEmployeeCalendarView = ({ onOpenLeaveModal, onOpenOtModal, onOpenSu
                   <span style={{
                     fontWeight: 800,
                     fontSize: '0.85rem',
-                    color: isSunday ? '#DC2626' : '#2D1A12',
                     width: '22px',
                     height: '22px',
                     borderRadius: '50%',

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react'
-import { Search, ChevronDown, X } from 'lucide-react'
+import { Search, ChevronDown, X, Lock } from 'lucide-react'
 
 /**
  * FormMultiSearchSelect - Component chọn nhiều kết hợp tìm kiếm (Multi-select Searchable Dropdown)
@@ -13,11 +13,14 @@ const FormMultiSearchSelect = ({
   placeholder = 'Chọn...',
   itemType = '', // 'chi tiết', 'sản phẩm', 'quy cách'
   required = false,
-  disabled = false
+  disabled = false,
+  lockedValues = [], // Mảng các ID/value không được phép bỏ chọn (cố định)
+  lockedMessage = 'Quy cách duy nhất của chi tiết, không thể bỏ chọn'
 }) => {
   const [isOpen, setIsOpen] = useState(false)
   const [alignRight, setAlignRight] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
+  const [lockedHint, setLockedHint] = useState(null)
   const containerRef = useRef(null)
   const searchInputRef = useRef(null)
 
@@ -83,8 +86,17 @@ const FormMultiSearchSelect = ({
   const handleToggleOption = (val) => {
     if (disabled) return
     const valStr = val?.toString()
+    const isChecked = values.includes(valStr)
+    const isLocked = lockedValues.map(v => v?.toString()).includes(valStr) && isChecked
+
+    if (isLocked) {
+      setLockedHint(valStr)
+      setTimeout(() => setLockedHint(null), 2500)
+      return
+    }
+
     let newValues
-    if (values.includes(valStr)) {
+    if (isChecked) {
       newValues = values.filter(v => v !== valStr)
     } else {
       newValues = [...values, valStr]
@@ -195,7 +207,11 @@ const FormMultiSearchSelect = ({
           <div style={{ overflowY: 'auto', flex: 1, padding: '4px' }}>
             {filteredOptions.length > 0 ? (
               filteredOptions.map((opt, idx) => {
-                const isChecked = values.includes(opt.value?.toString())
+                const optValStr = opt.value?.toString()
+                const isChecked = values.includes(optValStr)
+                const isLocked = lockedValues.map(v => v?.toString()).includes(optValStr) && isChecked
+                const isShowHint = lockedHint === optValStr
+
                 return (
                   <div
                     key={idx}
@@ -206,7 +222,7 @@ const FormMultiSearchSelect = ({
                       fontSize: '12.5px',
                       color: isChecked ? '#5c2d0e' : '#334155',
                       backgroundColor: isChecked ? '#fdf2e9' : 'transparent',
-                      cursor: 'pointer',
+                      cursor: isLocked ? 'default' : 'pointer',
                       transition: 'background 0.15s ease',
                       fontWeight: isChecked ? '700' : '500',
                       borderBottom: idx < filteredOptions.length - 1 ? '1px solid #f8fafc' : 'none',
@@ -218,15 +234,41 @@ const FormMultiSearchSelect = ({
                     onMouseEnter={(e) => { if (!isChecked) e.currentTarget.style.backgroundColor = '#f8fafc' }}
                     onMouseLeave={(e) => { if (!isChecked) e.currentTarget.style.backgroundColor = 'transparent' }}
                   >
-                    <span style={{ wordBreak: 'break-word', lineHeight: '1.35', flex: 1 }}>{opt.label}</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                        <span style={{ wordBreak: 'break-word', lineHeight: '1.35' }}>{opt.label}</span>
+                        {isLocked && (
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '3px',
+                            fontSize: '10px',
+                            padding: '1px 5px',
+                            borderRadius: '4px',
+                            backgroundColor: '#fef3c7',
+                            color: '#92400e',
+                            fontWeight: '700',
+                            border: '1px solid #fde68a',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            <Lock size={10} /> Cố định
+                          </span>
+                        )}
+                      </div>
+                      {isShowHint && (
+                        <span style={{ fontSize: '11px', color: '#b45309', marginTop: '3px', fontWeight: '600' }}>
+                          {lockedMessage}
+                        </span>
+                      )}
+                    </div>
                     
                     {/* Ô Checkbox bên phải */}
                     <div style={{
                       width: '18px',
                       height: '18px',
                       borderRadius: '4px',
-                      border: `1.5px solid ${isChecked ? '#5c2d0e' : '#94a3b8'}`,
-                      backgroundColor: isChecked ? '#5c2d0e' : 'transparent',
+                      border: `1.5px solid ${isLocked ? '#b45309' : isChecked ? '#5c2d0e' : '#94a3b8'}`,
+                      backgroundColor: isLocked ? '#92400e' : isChecked ? '#5c2d0e' : 'transparent',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',

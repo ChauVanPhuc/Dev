@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useOutletContext, useNavigate, useParams, useLocation } from 'react-router-dom';
 import {
-  Pencil, Download, Upload, Send, ChevronDown, Eye, Plus, ArrowRight
+  Pencil, Download, Upload, Send, ChevronDown, Eye, Plus, ArrowRight, Trash2
 } from 'lucide-react';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
@@ -310,6 +310,44 @@ const ProductionOrderCreateView = () => {
       items.forEach(item => roots.push(item));
     }
 
+    // Pre-scan valid specifications map across all items for cross-lookup
+    const validSpecsByName = new Map();
+    items.forEach(item => {
+      if (!item) return;
+      const s = String(item.spec || item.specification || '').trim();
+      const isBad = !s || /^[\s*_\-—–.,/\\#]+$/.test(s) || /^0(?:\s*[*xX×]\s*0)*$/i.test(s) || ['tiêu chuẩn', 'n/a', 'na', 'none', 'null', 'undefined'].includes(s.toLowerCase());
+      if (!isBad) {
+        const n = String(item.compName || item.name || '').trim().toLowerCase();
+        if (n && !validSpecsByName.has(n)) {
+          validSpecsByName.set(n, s);
+        }
+      }
+    });
+
+    const extractCleanSpec = (rawSpec, compName = '', sku = '') => {
+      const s = String(rawSpec || '').trim();
+      const isBad = !s || /^[\s*_\-—–.,/\\#]+$/.test(s) || /^0(?:\s*[*xX×]\s*0)*$/i.test(s) || ['tiêu chuẩn', 'n/a', 'na', 'none', 'null', 'undefined'].includes(s.toLowerCase());
+      if (!isBad) return s;
+
+      const cleanName = String(compName || '').trim().toLowerCase();
+      if (validSpecsByName.has(cleanName)) return validSpecsByName.get(cleanName);
+
+      const nameStr = String(compName || '').trim();
+      const m3d = nameStr.match(/(\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?(?:\s*mm|\s*cm)?)/i);
+      if (m3d) return m3d[1].replace(/\s*/g, '');
+
+      const m2d = nameStr.match(/(\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?(?:\s*mm|\s*cm)?)/i);
+      if (m2d) return m2d[1].replace(/\s*/g, '');
+
+      const mBolt = nameStr.match(/([MØOD]?\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?(?:\s*mm)?)/i);
+      if (mBolt) return mBolt[1].replace(/\s*/g, '');
+
+      const mHw = nameStr.match(/(\b\d{4,5}\s*[-–—*xX×]\s*\d{3,4}(?:mm|cm)?\b)/i);
+      if (mHw) return mHw[1].replace(/\s*/g, '');
+
+      return '';
+    };
+
     let result = [];
     const seenMap = new Map();
 
@@ -319,26 +357,63 @@ const ProductionOrderCreateView = () => {
         seenMap.set(codeKey, true);
 
         const isChild = currentStt.includes('.');
-        const rowType = item.type || item.component_type || (isChild ? 'Chi tiết' : 'Sản phẩm');
+        const rowType = item.type || item.component_type || (item.parent_id == null ? (item.name || 'Khung tủ') : (isChild ? 'Chi tiết' : 'Sản phẩm'));
 
-        const rawFrom = item.stageFrom || item.input_stage || 'Tạo phôi';
-        const rawTo = item.stageTo || item.output_stage || 'Định hình';
+        // Công đoạn giao: output_stage (stageFrom), Công đoạn nhận: input_stage (stageTo)
+        let rawFrom = item.output_stage || item.stageFrom;
+        let rawTo = item.input_stage || item.stageTo;
+
+        if (!rawFrom && rawTo) {
+          const toLower = rawTo.toLowerCase();
+          if (toLower.includes('đóng gói') || toLower.includes('gói')) rawFrom = 'Sơn';
+          else if (toLower.includes('sơn')) rawFrom = 'Lắp ráp';
+          else if (toLower.includes('lắp ráp') || toLower.includes('lắp')) rawFrom = 'Định hình';
+          else if (toLower.includes('định hình')) rawFrom = isChild ? 'Tạo phôi' : 'Kho';
+          else if (toLower.includes('phôi')) rawFrom = 'Kho';
+          else rawFrom = 'Tạo phôi';
+        }
+
+        if (!rawTo && rawFrom) {
+          const fromLower = rawFrom.toLowerCase();
+          if (fromLower.includes('phôi')) rawTo = 'Định hình';
+          else if (fromLower.includes('định hình')) rawTo = 'Lắp ráp';
+          else if (fromLower.includes('lắp ráp') || fromLower.includes('lắp')) rawTo = 'Sơn';
+          else if (fromLower.includes('sơn')) rawTo = 'Đóng gói';
+          else if (fromLower.includes('đóng gói') || fromLower.includes('gói')) rawTo = 'Kho';
+          else rawTo = 'Lắp ráp';
+        }
+
+        if (!rawFrom) rawFrom = isChild ? 'Tạo phôi' : 'Định hình';
+        if (!rawTo) rawTo = isChild ? 'Định hình' : 'Lắp ráp';
+
+        if (rawFrom === rawTo) {
+          const stgLower = rawFrom.toLowerCase();
+          if (stgLower.includes('định hình')) rawFrom = 'Tạo phôi';
+          else if (stgLower.includes('lắp ráp')) rawFrom = 'Định hình';
+          else if (stgLower.includes('sơn')) rawFrom = 'Lắp ráp';
+          else if (stgLower.includes('đóng gói')) rawFrom = 'Sơn';
+          else rawFrom = 'Kho';
+        }
+
         const pair = mapStagePairToFactory(rawFrom, rawTo, item.factory || 'NM1', stageOptions);
+
+        const rawSpec = item.spec || item.specification || '';
+        const cleanSpec = extractCleanSpec(rawSpec, item.compName || item.name, item.compCode || item.sku);
 
         result.push({
           id: item.id || `bom-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           parentCode: item.parentCode || pCode,
           parent_id: item.parent_id || null,
-          stt: item.stt || item.tree_stt || currentStt,
+          stt: item.tree_stt || item.stt || currentStt,
           type: rowType,
           stageFrom: pair.stageFrom,
           stageTo: pair.stageTo,
-          compCode: item.compCode || item.component_sku || item.sku || `SKU.${currentStt}`,
-          compName: item.compName || item.name || 'Linh kiện',
-          quantity: item.quantity !== undefined ? item.quantity : '1',
+          compCode: item.sku || item.compCode || item.component_sku || (item.id ? `SKU-${item.id}` : `SKU.${currentStt}`),
+          compName: item.name || item.compName || 'Linh kiện',
+          quantity: item.quantity !== undefined ? item.quantity : 1,
           unit: item.unit || 'Cái',
           material: item.material || 'Gỗ / MDF',
-          spec: item.spec || item.specification || '',
+          spec: cleanSpec || rawSpec || '',
           volume: item.volume !== undefined ? item.volume : 1,
           note: item.note || item.description || '',
           status: item.status || 'Chờ sản xuất'
@@ -475,14 +550,29 @@ const ProductionOrderCreateView = () => {
               };
             });
 
-            const allBomDetails = item.products.flatMap((p, pIdx) => {
+            const allBomDetailsPromises = item.products.map(async (p, pIdx) => {
               const pCode = p.sku || p.productCode || `SP-${pIdx + 1}`;
-              const bomItems = p.bom_details || p.master_bom_details || p.bom || [];
+              let bomItems = p.bom_details || p.master_bom_details || p.bom || [];
+              if (!bomItems || bomItems.length === 0) {
+                try {
+                  const searchRes = await api.get('/master/master-products', { params: { search: pCode, limit: 5 } }).catch(() => null);
+                  const mpList = Array.isArray(searchRes) ? searchRes : (searchRes?.items || searchRes?.master_products || []);
+                  const matchedMp = mpList.find(m => m.sku === pCode || m.sku?.toLowerCase() === pCode.toLowerCase()) || mpList[0];
+                  if (matchedMp) {
+                    const fullMp = await api.get(`/master/master-products/${matchedMp.id}`).catch(() => matchedMp);
+                    bomItems = fullMp?.master_bom_details || matchedMp?.master_bom_details || [];
+                  }
+                } catch (e) {
+                  console.warn('Không thể nạp Master BOM cho', pCode, e);
+                }
+              }
               if (Array.isArray(bomItems) && bomItems.length > 0) {
                 return processBackendBOM(bomItems, pCode, pIdx + 1);
               }
               return generateBomForProduct(pCode, p.name || p.productName, p.quantity || 50, pIdx + 1);
             });
+
+            const allBomDetails = (await Promise.all(allBomDetailsPromises)).flat();
 
             setOrderProducts(formattedProducts);
             setProductDetails(allBomDetails);
@@ -524,16 +614,29 @@ const ProductionOrderCreateView = () => {
   const getBomQtyDisplay = useCallback((det) => {
     if (!det) return '0/0';
 
+    const targetProd = (orderProducts || []).find(p => p && p.productCode === (det.parentCode || selectedProductCode));
+    const prodOrderQty = targetProd ? (targetProd.totalQty || targetProd.orderQty || 1) : 1;
+
     let planned = 0;
     if (typeof det.quantity === 'number') {
-      planned = det.quantity;
+      planned = det.quantity <= 50 && prodOrderQty > 1 ? (det.quantity * prodOrderQty) : det.quantity;
     } else if (typeof det.quantity === 'string') {
-      const parts = det.quantity.split('/');
-      planned = parseInt(parts[parts.length - 1] || '0', 10);
+      if (det.quantity.includes('/')) {
+        const parts = det.quantity.split('/');
+        planned = parseFloat(parts[parts.length - 1] || '0');
+      } else {
+        const parsed = parseFloat(det.quantity || '0');
+        planned = parsed <= 50 && prodOrderQty > 1 ? (parsed * prodOrderQty) : parsed;
+      }
     }
     if (!planned || planned <= 0) {
-      const targetProd = (orderProducts || []).find(p => p && p.productCode === (det.parentCode || selectedProductCode));
-      planned = targetProd ? (targetProd.totalQty || targetProd.orderQty) : 100;
+      planned = prodOrderQty;
+    }
+
+    if (planned < 1 && planned > 0) {
+      planned = Number(planned.toFixed(4));
+    } else {
+      planned = Math.round(planned);
     }
 
     if (!orderDeliveries || orderDeliveries.length === 0) {
@@ -541,7 +644,6 @@ const ProductionOrderCreateView = () => {
     }
 
     const pCode = String(det.parentCode || selectedProductCode || '').toLowerCase();
-    const targetProd = (orderProducts || []).find(p => p && String(p.productCode || '').toLowerCase() === pCode);
     const pName = String(targetProd?.productName || '').toLowerCase();
     const cCode = String(det.compCode || '').toLowerCase();
     const cName = String(det.compName || '').toLowerCase();
@@ -778,8 +880,8 @@ const ProductionOrderCreateView = () => {
           quantity: planned,
           unit: d.unit || 'Cái',
           specification: [d.spec, d.material].filter(Boolean).join(' - '),
-          input_stage: d.stageFrom || 'Định hình',
-          output_stage: d.stageTo || 'Lắp ráp',
+          output_stage: d.stageFrom || 'Định hình', // Công đoạn giao
+          input_stage: d.stageTo || 'Lắp ráp',     // Công đoạn nhận
           description: d.note || '',
           children: []
         };
@@ -879,6 +981,27 @@ const ProductionOrderCreateView = () => {
       console.warn('Lỗi lưu Lệnh sản xuất:', err);
       if (toast) toast('error', 'Lưu Lệnh sản xuất thất bại!');
     } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteCurrentOrder = async () => {
+    if (!editingOrderId) return;
+    const orderName = orderForm.code || orderForm.orderId || 'này';
+    const isConfirmed = window.confirm(
+      `Bạn có chắc chắn muốn xóa Lệnh sản xuất "${orderName}"?\n\nLưu ý: Thao tác này sẽ xóa toàn bộ danh sách sản phẩm và chi tiết BOM thuộc lệnh này khỏi hệ thống.`
+    );
+    if (!isConfirmed) return;
+
+    try {
+      setLoading(true);
+      await planService.deleteOrder(editingOrderId);
+      if (toast) toast('success', `Đã xóa thành công Lệnh sản xuất "${orderName}"!`);
+      navigate('/admin/production-orders');
+    } catch (err) {
+      console.error('Lỗi khi xóa lệnh sản xuất:', err);
+      const errMsg = err.response?.data?.detail || err.message || 'Xóa lệnh sản xuất thất bại!';
+      if (toast) toast('error', `Lỗi: ${errMsg}`);
       setLoading(false);
     }
   };
@@ -1264,6 +1387,31 @@ const ProductionOrderCreateView = () => {
                     </div>
                   )}
                 </div>
+
+                {isEditMode && (
+                  <button
+                    type="button"
+                    onClick={handleDeleteCurrentOrder}
+                    disabled={loading}
+                    style={{
+                      padding: '8px 16px',
+                      backgroundColor: '#FEF2F2',
+                      border: '1.5px solid #FECACA',
+                      borderRadius: '8px',
+                      color: '#EF4444',
+                      fontWeight: '800',
+                      fontSize: '0.88rem',
+                      cursor: loading ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      transition: 'all 0.2s'
+                    }}
+                    title="Xóa lệnh sản xuất này"
+                  >
+                    <Trash2 size={16} /> Xóa Lệnh SX
+                  </button>
+                )}
 
                 <button
                   type="button"

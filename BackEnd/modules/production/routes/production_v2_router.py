@@ -306,6 +306,53 @@ def get_factories(db: Session = Depends(get_db)):
         ]}
 
 # ----------------------------------------------------------------------
+# 1.5. Danh sách mã PO siêu nhanh cho Dropdown Lựa chọn (Inspection / Transfer)
+# ----------------------------------------------------------------------
+@router.get("/po-codes")
+def get_po_codes(
+    month: Optional[int] = Query(None),
+    search: Optional[str] = Query(None),
+    limit: int = Query(1000, ge=1, le=5000),
+    db: Session = Depends(get_db)
+):
+    """
+    TRUY VẤN SIÊU TỐC (5-10ms): Chỉ query các cột mã PO (order_code, partner_po, production_code),
+    không join bảng delivery / không tính toán tiến độ giúp Mobile mở dropdown tức thì.
+    """
+    try:
+        query = db.query(Order.order_code, Order.partner_po, Order.production_code, Order.id)
+        
+        search_clean = search.strip() if isinstance(search, str) and search.strip() else None
+        
+        if month is not None and not search_clean:
+            query = query.join(ProductPlan, Order.plan_id == ProductPlan.id).filter(ProductPlan.month == month)
+            
+        if search_clean:
+            s = f"%{search_clean}%"
+            query = query.filter(or_(
+                Order.order_code.ilike(s),
+                Order.partner_po.ilike(s),
+                Order.production_code.ilike(s)
+            ))
+            
+        rows = query.order_by(Order.id.desc()).limit(limit).all()
+        
+        codes = []
+        seen = set()
+        for r in rows:
+            for val in [r.order_code, r.partner_po, r.production_code]:
+                if val:
+                    code = val.strip()
+                    if code and code not in seen:
+                        seen.add(code)
+                        codes.append(code)
+                        break
+        return {"codes": codes, "total": len(codes)}
+    except Exception as e:
+        logger.error(f"Lỗi khi lấy po-codes: {e}")
+        return {"codes": [], "total": 0}
+
+# ----------------------------------------------------------------------
 # 2. CL02: Danh sách Lệnh sản xuất (POs Accordion) từ Kế hoạch sản xuất & Phân quyền CSDL
 # ----------------------------------------------------------------------
 @router.get("/orders")
@@ -339,8 +386,8 @@ def get_production_orders(
         # 2. Query Orders linked to ProductPlans, filtered by month
         query = db.query(Order).options(joinedload(Order.products), joinedload(Order.product_plan))
 
-        # Filter by month: join ProductPlan and filter by month column
-        if month is not None:
+        # Filter by month: join ProductPlan and filter by month column (only when not searching full)
+        if month is not None and not search_clean:
             query = query.join(ProductPlan, Order.plan_id == ProductPlan.id).filter(ProductPlan.month == month)
 
         db_orders = query.all()
@@ -754,24 +801,65 @@ def get_order_bom(
         if not clean_po:
             return []
 
+        # 1. Exact match first (fast index)
         order = db.query(Order).options(joinedload(Order.products)).filter(
             or_(
                 Order.order_code == clean_po,
                 Order.partner_po == clean_po,
                 Order.production_code == clean_po,
-                Order.order_code == f"LSX-{clean_po}",
-                Order.order_code.ilike(f"%{clean_po}%"),
-                Order.partner_po.ilike(f"%{clean_po}%")
+                Order.order_code == f"LSX-{clean_po}"
             )
         ).first()
 
-        if not order and clean_po.isdigit():
-            order = db.query(Order).options(joinedload(Order.products)).filter(Order.id == int(clean_po)).first()
+        # 2. Fallback to ilike / ID if not found
+        if not order:
+            if clean_po.isdigit():
+                order = db.query(Order).options(joinedload(Order.products)).filter(Order.id == int(clean_po)).first()
+            if not order:
+                order = db.query(Order).options(joinedload(Order.products)).filter(
+                    or_(
+                        Order.order_code.ilike(f"%{clean_po}%"),
+                        Order.partner_po.ilike(f"%{clean_po}%")
+                    )
+                ).first()
 
         product_ids = [p.id for p in order.products] if (order and order.products) else []
         boms = db.query(BOMDetail).filter(BOMDetail.product_id.in_(product_ids)).all() if product_ids else []
 
-        # Lọc theo công đoạn giao (input_stage) nếu có stage
+        def is_invalid_spec(spec_str: str) -> bool:
+            import re
+            if not spec_str:
+                return True
+            s = str(spec_str).strip()
+            if not s:
+                return True
+            # Check if only non-alphanumeric punctuation (e.g. **, *, ***, -, --, _, ., /, \)
+            if re.match(r'^[\s*_\-—–.,/\\#]+$', s):
+                return True
+            # Check all zeros dimension (e.g. 0*0*0, 0x0, 0)
+            if re.match(r'^0(?:\s*[*xX×]\s*0)*$', s):
+                return True
+            lower = s.lower()
+            if lower in ["tiêu chuẩn", "quy cách tiêu chuẩn", "quy cách thành phẩm", "n/a", "na", "none", "null", "undefined", "—", "–"]:
+                return True
+            return False
+
+        # Build dictionary of valid specifications across ALL BOM items of this order
+        valid_specs_by_name = {}
+        valid_specs_by_sku = {}
+        for b in boms:
+            b_spec = (b.specification or "").strip()
+            if b_spec and not is_invalid_spec(b_spec):
+                if b.name:
+                    clean_n = " ".join(b.name.strip().lower().split())
+                    if clean_n and clean_n not in valid_specs_by_name:
+                        valid_specs_by_name[clean_n] = b_spec
+                if b.sku:
+                    clean_s = b.sku.strip().lower()
+                    if clean_s and clean_s not in valid_specs_by_sku:
+                        valid_specs_by_sku[clean_s] = b_spec
+
+        # Lọc theo công đoạn giao/nhận nếu có stage
         if stage and stage.strip() and stage.strip().upper() not in ["ALL", "TẤT CẢ", "TẤT CẢ CÔNG ĐOẠN", ""]:
             import re
             def clean_st(s: str) -> str:
@@ -805,8 +893,21 @@ def get_order_bom(
 
             def is_matching_stage(bom_item) -> bool:
                 in_st = clean_st(bom_item.input_stage)
-                if not in_st:
+                out_st = clean_st(bom_item.output_stage)
+                if not out_st and not in_st:
                     return True
+                if selected_clean == "tạo phôi":
+                    return "phôi" in out_st or "cắt" in out_st or "phôi" in in_st or (not out_st and "định hình" in in_st)
+                if selected_clean == "định hình":
+                    return "định hình" in out_st or (not out_st and "lắp ráp" in in_st)
+                if selected_clean == "lắp ráp":
+                    return "lắp ráp" in out_st or "chà nhám" in out_st or (not out_st and ("sơn" in in_st or "đóng gói" in in_st))
+                if selected_clean == "sơn":
+                    return "sơn" in out_st or (not out_st and "đóng gói" in in_st)
+                if selected_clean == "đóng gói":
+                    return "đóng gói" in out_st or "bao bì" in out_st or "đóng gói" in in_st
+                if out_st:
+                    return check_single_stage(out_st)
                 return check_single_stage(in_st)
 
             matched_boms = [b for b in boms if is_matching_stage(b)]
@@ -815,6 +916,62 @@ def get_order_bom(
             else:
                 boms = []
 
+        def extract_spec_from_name_and_content(name: str, item_code: str = "", content: str = "", master_prod: Any = None) -> str:
+            import re
+            name_str = (name or "").strip()
+            clean_n = " ".join(name_str.lower().split())
+            clean_sku = (item_code or "").strip().lower()
+
+            # 0. Tra cứu từ điển quy cách chuẩn của toàn bộ BOM đơn hàng
+            if clean_n in valid_specs_by_name and not is_invalid_spec(valid_specs_by_name[clean_n]):
+                return valid_specs_by_name[clean_n]
+            if clean_sku in valid_specs_by_sku and not is_invalid_spec(valid_specs_by_sku[clean_sku]):
+                return valid_specs_by_sku[clean_sku]
+
+            # 1. 3D Dimensions in Part Name: e.g. 50*50*876, 12*486*717, 18*1220*2440, 18x536x876, 18.5*42*1636.5
+            m3d = re.search(r'(\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?(?:\s*mm|\s*cm)?)', name_str)
+            if m3d and not is_invalid_spec(m3d.group(1)):
+                return m3d.group(1).replace(' ', '')
+
+            # 2. 2D Dimensions in Part Name: e.g. 295*540, 295x540
+            m2d = re.search(r'(\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?(?:\s*mm|\s*cm)?)', name_str)
+            if m2d and not is_invalid_spec(m2d.group(1)):
+                return m2d.group(1).replace(' ', '')
+
+            # 3. Threaded / Screw / Dowel in Part Name: e.g. M8x40, Ø10x50, D10x50
+            m_bolt = re.search(r'([MØOD]?\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?(?:\s*mm)?)', name_str, re.IGNORECASE)
+            if m_bolt and not is_invalid_spec(m_bolt.group(1)):
+                return m_bolt.group(1).replace(' ', '')
+
+            # 4. Hardware Model & Size in Part Name: e.g. 5018x350, 5018-350mm
+            m_hw = re.search(r'(\b\d{4,5}\s*[-–—*xX×]\s*\d{3,4}(?:mm|cm)?\b)', name_str)
+            if m_hw and not is_invalid_spec(m_hw.group(1)):
+                return m_hw.group(1).replace(' ', '')
+
+            # 5. Check content / BOM detail specification if it has a non-default value
+            content_str = (content or "").strip()
+            if content_str and content_str != item_code and not is_invalid_spec(content_str):
+                return content_str
+
+            # 6. Check item_code for dimensions
+            if item_code and not is_invalid_spec(item_code):
+                m_code = re.search(r'(\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?(?:\s*[*xX×]\s*\d+(?:[.,]\d+)?)?)', item_code)
+                if m_code and not is_invalid_spec(m_code.group(1)):
+                    return m_code.group(1).replace(' ', '')
+
+            # 7. Dynamic dimension from MasterProduct DB record
+            if master_prod:
+                mp_spec = (getattr(master_prod, 'specification', '') or '').strip()
+                if mp_spec and not is_invalid_spec(mp_spec):
+                    return mp_spec
+                l = getattr(master_prod, 'length', 0) or 0
+                w = getattr(master_prod, 'width', 0) or 0
+                h = getattr(master_prod, 'height', 0) or 0
+                if l and w and h and (float(l) > 0 and float(w) > 0 and float(h) > 0):
+                    return f"{int(l)}*{int(w)}*{int(h)}"
+
+            return "Tiêu chuẩn"
+
         parts_map = {}
         if boms and order:
             for p in order.products:
@@ -822,7 +979,11 @@ def get_order_bom(
                 for b in [b for b in boms if b.product_id == p.id]:
                     qty = max(1, int(prod_q * float(b.quantity or 1.0)))
                     name = b.name or b.sku or "Chi tiết"
-                    spec = b.specification or "Tiêu chuẩn"
+                    spec_raw = (b.specification or "").strip()
+                    if is_invalid_spec(spec_raw):
+                        spec = extract_spec_from_name_and_content(name, b.sku or "", p.specification or "")
+                    else:
+                        spec = spec_raw
 
                     if name not in parts_map:
                         parts_map[name] = {"part_name": name, "total_qty": 0, "specs_map": {}}
@@ -831,47 +992,6 @@ def get_order_bom(
                     if spec not in parts_map[name]["specs_map"]:
                         parts_map[name]["specs_map"][spec] = 0
                     parts_map[name]["specs_map"][spec] += qty
-
-        def extract_spec_from_name_and_content(name: str, item_code: str = "", content: str = "", master_prod: Any = None) -> str:
-            import re
-            content_str = (content or "").strip()
-            if content_str and content_str != item_code and content_str.lower() not in ["tiêu chuẩn", "quy cách tiêu chuẩn", "quy cách thành phẩm"]:
-                return content_str
-                
-            name_str = (name or "").strip()
-            
-            # 1. 3D Dimensions: e.g. 50*50*876, 12*486*717, 18*1220*2440, 18x536x876
-            m3d = re.search(r'(\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?(?:\s*mm|\s*cm)?)', name_str)
-            if m3d:
-                return m3d.group(1).replace(' ', '')
-
-            # 2. 2D Dimensions: e.g. 295*540, 295x540
-            m2d = re.search(r'(\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?(?:\s*mm|\s*cm)?)', name_str)
-            if m2d:
-                return m2d.group(1).replace(' ', '')
-
-            # 3. Threaded / Screw / Dowel: e.g. M8x40, Ø10x50, D10x50
-            m_bolt = re.search(r'([MØOD]?\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?(?:\s*mm)?)', name_str, re.IGNORECASE)
-            if m_bolt:
-                return m_bolt.group(1).replace(' ', '')
-
-            # 4. Hardware Model & Size: e.g. 5018x350, 5018-350mm
-            m_hw = re.search(r'(\b\d{4,5}\s*[-–—*xX×]\s*\d{3,4}(?:mm|cm)?\b)', name_str)
-            if m_hw:
-                return m_hw.group(1).replace(' ', '')
-
-            # 5. Dynamic dimension from MasterProduct DB record
-            if master_prod:
-                mp_spec = (getattr(master_prod, 'specification', '') or '').strip()
-                if mp_spec and mp_spec.lower() not in ["tiêu chuẩn", "quy cách tiêu chuẩn", "quy cách thành phẩm"]:
-                    return mp_spec
-                l = getattr(master_prod, 'length', 0) or 0
-                w = getattr(master_prod, 'width', 0) or 0
-                h = getattr(master_prod, 'height', 0) or 0
-                if l and w and h:
-                    return f"{int(l)}*{int(w)}*{int(h)}"
-
-            return item_code or name_str
 
         # Fallback handling if order has no BOM entries in bom_details table
         if not parts_map and order and order.products:
@@ -885,22 +1005,23 @@ def get_order_bom(
                 prod_sku = p.sku or p.name or ""
                 p_qty = int(p.order_qty or p.quantity or 1)
                 
-                # Step 1: Try exact SKU match
-                master_prods = db.query(MasterProduct).filter(
-                    or_(MasterProduct.sku == prod_sku, MasterProduct.sku.ilike(f"%{prod_sku}%"))
-                ).all() if prod_sku else []
+                # Step 1: Try exact SKU match first (fast B-Tree index lookup)
+                master_prods = []
+                if prod_sku:
+                    master_prods = db.query(MasterProduct).filter(MasterProduct.sku == prod_sku).limit(5).all()
+                    if not master_prods:
+                        master_prods = db.query(MasterProduct).filter(MasterProduct.sku.ilike(f"{prod_sku}%")).limit(5).all()
+                    if not master_prods:
+                        master_prods = db.query(MasterProduct).filter(MasterProduct.sku.ilike(f"%{prod_sku}%")).limit(5).all()
 
                 # Step 2: If no exact match, try size pattern match (e.g. APT7-48-GRY -> size 48 -> APT%-48%)
                 if not master_prods and prod_sku and "-" in prod_sku:
                     parts = prod_sku.split("-")
                     if len(parts) >= 2 and parts[1]:
                         size_code = parts[1]
-                        master_prods = db.query(MasterProduct).filter(
-                            or_(
-                                MasterProduct.sku.ilike(f"APT%-{size_code}%"),
-                                MasterProduct.sku.ilike(f"%{size_code}%")
-                            )
-                        ).all()
+                        master_prods = db.query(MasterProduct).filter(MasterProduct.sku.ilike(f"APT%-{size_code}%")).limit(5).all()
+                        if not master_prods:
+                            master_prods = db.query(MasterProduct).filter(MasterProduct.sku.ilike(f"%{size_code}%")).limit(5).all()
 
                 first_mp = master_prods[0] if master_prods else None
                 mb_found = False
@@ -914,34 +1035,43 @@ def get_order_bom(
                     
                     master_boms = mb_query.all()
                     if master_boms:
-                        # Stage-based filtering of BOM components
+                        # Stage-based filtering of BOM components theo công đoạn giao (output_stage)
                         filtered_boms = []
                         if stage_str:
                             for mb in master_boms:
+                                out_st = (mb.output_stage or "").lower().strip()
                                 in_st = (mb.input_stage or "").lower().strip()
+                                # Ưu tiên công đoạn giao (output_stage), nếu không có mới dùng input_stage
+                                target_st = out_st if out_st else in_st
+
                                 if "phôi" in stage_str or "phoi" in stage_str:
-                                    if "phôi" in in_st or in_st == "" or "chưa phân công" in in_st:
+                                    if "phôi" in out_st or "phoi" in out_st or "cắt" in out_st or "phôi" in in_st or "phoi" in in_st or (not out_st and ("định hình" in in_st or "dinh hinh" in in_st)):
                                         filtered_boms.append(mb)
                                 elif "định hình" in stage_str or "dinh hinh" in stage_str:
-                                    if "định hình" in in_st or "dinh hinh" in in_st:
+                                    if "định hình" in out_st or "dinh hinh" in out_st or (not out_st and ("lắp ráp" in in_st or "lap rap" in in_st)):
                                         filtered_boms.append(mb)
                                 elif "lắp ráp" in stage_str or "lap rap" in stage_str:
-                                    if "lắp ráp" in in_st or "lap rap" in in_st:
+                                    if "lắp ráp" in out_st or "lap rap" in out_st or "chà nhám" in out_st or (not out_st and ("sơn" in in_st or "son" in in_st or "đóng gói" in in_st or "dong goi" in in_st)):
                                         filtered_boms.append(mb)
                                 elif "sơn" in stage_str or "son" in stage_str:
-                                    if "sơn" in in_st or "son" in in_st:
+                                    if "sơn" in out_st or "son" in out_st or (not out_st and ("đóng gói" in in_st or "dong goi" in in_st)):
                                         filtered_boms.append(mb)
                                 elif "đóng gói" in stage_str or "dong goi" in stage_str:
-                                    if "đóng gói" in in_st or "dong goi" in in_st:
+                                    if "đóng gói" in out_st or "dong goi" in out_st or "bao bì" in out_st or "đóng gói" in in_st or "dong goi" in in_st:
                                         filtered_boms.append(mb)
+                                elif "lưu kho" in stage_str or "kho" in stage_str:
+                                    if "kho" in out_st or "lưu kho" in out_st or "container" in out_st or "kho" in in_st or "lưu kho" in in_st:
+                                        filtered_boms.append(mb)
+                                elif not target_st or target_st in ["all", "chung", "tất cả"]:
+                                    filtered_boms.append(mb)
                         
-                        target_boms = filtered_boms if (filtered_boms or not is_component_stage) else master_boms
+                        target_boms = filtered_boms if filtered_boms else []
                         if target_boms:
                             mb_found = True
                             for mb in target_boms:
                                 part_n = mb.name.strip()
                                 spec_raw = (mb.specification or "").strip()
-                                if not spec_raw or spec_raw.lower() in ["tiêu chuẩn", "quy cách tiêu chuẩn", "quy cách thành phẩm"]:
+                                if is_invalid_spec(spec_raw):
                                     spec_n = extract_spec_from_name_and_content(mb.name, prod_sku, master_prod=first_mp)
                                 else:
                                     spec_n = spec_raw
@@ -2087,7 +2217,7 @@ def get_production_transfers(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/order_bom", response_model=List[dict])
-def get_order_bom(
+def get_order_bom_list(
     order_code: str,
     stage: Optional[str] = None,
     db: Session = Depends(get_db)

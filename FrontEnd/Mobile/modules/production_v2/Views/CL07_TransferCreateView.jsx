@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import useAuthStore from '@modules/auth/Models/authModel'
-import { useParams, useNavigate } from 'react-router-dom'
-import { Eye, ImagePlus, X, ChevronDown, Check } from 'lucide-react'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
+import { Eye, ImagePlus, X, ChevronDown, Check, ScanLine, ArrowLeft, Camera, Plus } from 'lucide-react'
 import Layout from '@mobile/Shared/Views/components/layout/MobileLayout'
 import PageHeader from '@mobile/Shared/Views/components/layout/MobilePageHeader'
 import CustomSelect from '@mobile/Shared/Views/components/form/CustomSelect'
 import FormMultiSearchSelect from '@mobile/Shared/Views/components/form/FormMultiSearchSelect'
+import QRScanner from '@mobile/Shared/Views/components/media/QRScanner'
 import { useTransferController, useTransferDetail } from '../Controllers/useTransferController'
 import useProduction_v2Store from '../Models/production_v2Store'
 import { stageService } from '../services/stageService'
@@ -23,6 +24,46 @@ const palletOpts = [{ value: '', label: 'Chọn mã pallet' }]
 
 const newItems = () => []
 
+const isInvalidSpec = (spec) => {
+  if (!spec) return true
+  const str = String(spec).trim()
+  if (!str) return true
+  if (/^[\s*_\-—–.,/\\#]+$/.test(str)) return true
+  if (/^0(?:\s*[*xX×]\s*0)*$/i.test(str)) return true
+  const lower = str.toLowerCase()
+  if (['tiêu chuẩn', 'quy cách tiêu chuẩn', 'quy cách thành phẩm', 'n/a', 'na', 'none', 'null', 'undefined', '—', '–'].includes(lower)) {
+    return true
+  }
+  return false
+}
+
+const parseDimensionStringFromText = (text) => {
+  if (!text) return null
+  const str = String(text)
+  const m3d = str.match(/(\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?(?:\s*mm|\s*cm)?)/i)
+  if (m3d) return m3d[1].replace(/\s*/g, '')
+  const mHw = str.match(/(\b\d{4,5}\s*[-–—*xX×]\s*\d{3,4}(?:mm|cm)?\b)/i)
+  if (mHw) return mHw[1].replace(/\s*/g, '')
+  const m2d = str.match(/(\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?(?:\s*mm|\s*cm)?)/i)
+  if (m2d) return m2d[1].replace(/\s*/g, '')
+  const mBolt = str.match(/([MØOD]?\d+(?:[.,]\d+)?\s*[*xX×-]\s*\d+(?:[.,]\d+)?(?:\s*mm)?)/i)
+  if (mBolt) return mBolt[1].replace(/\s*/g, '')
+  const mCode = str.match(/(\b[A-Z0-9]{2,6}\s*[-–—]\s*\d{2,4}(?:mm|cm)?\b)/i)
+  if (mCode) return mCode[1].replace(/\s*/g, '')
+  const mUnit = str.match(/(\b\d+(?:[.,]\d+)?\s*(?:mm|cm|m)\b)/i)
+  if (mUnit) return mUnit[1].replace(/\s*/g, '')
+  return null
+}
+
+const getEffectiveSpec = (specRaw, partName) => {
+  const dimStr = parseDimensionStringFromText(partName)
+  if (dimStr && !isInvalidSpec(dimStr)) return dimStr
+  if (specRaw && !isInvalidSpec(specRaw)) {
+    return String(specRaw).trim()
+  }
+  return 'Tiêu chuẩn'
+}
+
 const generateAutoPalletCode = () => {
   const now = new Date()
   const yy = String(now.getFullYear()).slice(-2)
@@ -32,14 +73,31 @@ const generateAutoPalletCode = () => {
   return `BG-${yy}${mm}${dd}-${rand}`
 }
 
-const CL07_TransferCreateView = () => {
-  const { id } = useParams()
+const CL07_TransferCreateView = ({ embedded = false, backupQrCode: propBackupQrCode, deliveryId: propDeliveryId }) => {
+  const { id: routeId } = useParams()
+  const id = propDeliveryId !== undefined ? propDeliveryId : routeId
   const navigate = useNavigate()
+  const location = useLocation()
+  const backupQrCode = propBackupQrCode || location.state?.backupQrCode || null
+  const [isQrScannerOpen, setIsQrScannerOpen] = useState(false)
   const isNew = !id || id === 'NEW'
+  const readOnly = !isNew
   const [ticketCode, setTicketCode] = useState('LC---')
   const user = useAuthStore((state) => state.user)
   const creatorName = user?.full_name || user?.username || 'Nguyễn Văn A'
   const { createTicket, confirmTicket } = useTransferController()
+
+  useEffect(() => {
+    if (backupQrCode) {
+      setForm((f) => ({ ...f, palletCode: backupQrCode }))
+      setPalletOpts((prev) => {
+        if (!prev.some((o) => o.value === backupQrCode)) {
+          return [{ value: backupQrCode, label: `Thẻ DP: ${backupQrCode}` }, ...prev]
+        }
+        return prev
+      })
+    }
+  }, [backupQrCode])
 
   useEffect(() => {
     if (!isNew) {
@@ -86,6 +144,7 @@ const CL07_TransferCreateView = () => {
   const [selectedDetails, setSelectedDetails] = useState([])
   const [specOptions, setSpecOptions] = useState([{ value: '', label: 'Chọn quy cách' }])
   const [specDropdownOpen, setSpecDropdownOpen] = useState(false)
+  const [previewImage, setPreviewImage] = useState(null)
 
   // Load danh sách mã pallet đã được kiểm tra từ CL09A / StageInspections
   useEffect(() => {
@@ -328,7 +387,7 @@ const CL07_TransferCreateView = () => {
     const itemSurplus = updatedItems.reduce((acc, item) => {
       const q = Number(item.qty) || 0
       const t = Number(item.total) || 0
-      return acc + Math.max(0, q - t)
+      return acc + (t > 0 ? Math.max(0, q - t) : 0)
     }, 0)
 
     setForm((prev) => ({
@@ -355,16 +414,18 @@ const CL07_TransferCreateView = () => {
 
       if (partObj && Array.isArray(partObj.specs) && partObj.specs.length > 0) {
         partObj.specs.forEach((s) => {
+          const specVal = getEffectiveSpec(s.specification, dName)
           newSpecOpts.push({
-            value: detailsList.length > 1 ? `[${dName}] ${s.specification}` : s.specification,
-            label: detailsList.length > 1 ? `[${dName}] ${s.specification}` : s.specification,
+            value: detailsList.length > 1 ? `[${dName}] ${specVal}` : specVal,
+            label: detailsList.length > 1 ? `[${dName}] ${specVal}` : specVal,
             detail: dName,
-            rawSpec: s.specification,
+            rawSpec: specVal,
             targetQty: Number(s.target_qty || s.remaining_qty || partObj.remaining_qty || fallbackTargetQty)
           })
         })
       } else {
-        const fallbackSpec = matchedIns?.specification || currentPallet?.spec || 'Tiêu chuẩn'
+        const rawFallback = matchedIns?.specification || currentPallet?.spec
+        const fallbackSpec = getEffectiveSpec(rawFallback, dName)
         newSpecOpts.push({
           value: detailsList.length > 1 ? `[${dName}] ${fallbackSpec}` : fallbackSpec,
           label: detailsList.length > 1 ? `[${dName}] ${fallbackSpec}` : fallbackSpec,
@@ -402,7 +463,8 @@ const CL07_TransferCreateView = () => {
     const addedItems = newlyAddedDetails.map((dName, i) => {
       const partObj = partsData.find((p) => (p.part_name || p.name) === dName)
       const matchedIns = (currentPalletInfo?.inspected_details || []).find((d) => d.part_name === dName)
-      const specVal = matchedIns?.specification || currentPalletInfo?.inspected_specs?.[i] || partObj?.specs?.[0]?.specification || 'Tiêu chuẩn'
+      const rawSpecVal = matchedIns?.specification || currentPalletInfo?.inspected_specs?.[i] || partObj?.specs?.[0]?.specification
+      const specVal = getEffectiveSpec(rawSpecVal, dName)
       const targetQty = Number(partObj?.specs?.[0]?.target_qty || partObj?.remaining_qty || matchedIns?.remaining_qty || matchedIns?.plan_qty || fallbackTargetQty)
       return {
         id: String(Date.now() + i + Math.random()),
@@ -488,9 +550,11 @@ const CL07_TransferCreateView = () => {
       if (Array.isArray(palletInfo.inspected_parts) && palletInfo.inspected_parts.length > 0) {
         inspectedList = palletInfo.inspected_parts
       } else if (palletInfo.product) {
-        inspectedList = palletInfo.product.includes(',')
-          ? palletInfo.product.split(',').map((p) => p.trim()).filter(Boolean)
-          : [palletInfo.product.trim()]
+        const prodTrim = palletInfo.product.trim()
+        const isExactPart = partsData.some((p) => (p.part_name || p.name) === prodTrim)
+        inspectedList = (!isExactPart && prodTrim.includes(', '))
+          ? prodTrim.split(', ').map((p) => p.trim()).filter(Boolean)
+          : [prodTrim]
       }
 
       setPalletInspectedParts(inspectedList)
@@ -528,6 +592,19 @@ const CL07_TransferCreateView = () => {
     } catch (err) {
       console.warn(`Lỗi khi tải chi tiết mã pallet ${val}:`, err)
     }
+  }
+
+  const handleInFormScanResult = (scanned) => {
+    setIsQrScannerOpen(false)
+    if (!scanned) return
+    const trimmed = String(scanned).trim()
+    setPalletOpts((prev) => {
+      if (!prev.some((o) => o.value === trimmed)) {
+        return [{ value: trimmed, label: `Quét được: ${trimmed}` }, ...prev]
+      }
+      return prev
+    })
+    handlePalletChange(trimmed)
   }
 
   const handleToggleNoPallet = () => {
@@ -568,8 +645,10 @@ const CL07_TransferCreateView = () => {
   }
 
   const handleImagePick = async (e) => {
-    const files = Array.from(e.target.files)
+    const files = Array.from(e.target?.files || [])
+    if (files.length === 0) return
     for (const f of files) await addImage(f)
+    if (e.target) e.target.value = ''
   }
 
   const handleConfirmQty = (updated) => {
@@ -583,11 +662,11 @@ const CL07_TransferCreateView = () => {
   }
 
   const handleOpenPallet = async () => {
-    const detailsList = selectedDetails.length > 0 
-      ? selectedDetails 
-      : (form.detail ? form.detail.split(',').map((s) => s.trim()).filter(Boolean) : [items[0]?.detail].filter(Boolean))
+    const detailsList = selectedDetails.length > 0
+      ? selectedDetails
+      : [form.detail || items[0]?.detail].filter(Boolean)
     const spec = items.length === 1 ? items[0]?.spec : (form.spec || items.map((it) => it.spec).filter(Boolean).join(', ') || '')
-    
+
     let matching = []
     try {
       const fiveMonths = noPallet ? get5MonthWindow(selectedMonth) : null
@@ -675,6 +754,7 @@ const CL07_TransferCreateView = () => {
       if (isNew) {
         await createTicket({
           ...form,
+          backup_qr: backupQrCode || form.palletCode,
           items,
           plan_id: planId,
           user_id: user?.id || 1
@@ -701,11 +781,9 @@ const CL07_TransferCreateView = () => {
 
   const title = isNew ? 'Tạo phiếu luân chuyển' : 'Xác nhận luân chuyển'
 
-  return (
-    <Layout>
-      <PageHeader title="Khởi tạo phiếu" subTitle="CL07: Tạo phiếu luân chuyển" showBack={true} />
-
-      <div className="pv2-page pv2-page--form">
+  const content = (
+    <>
+      <div className="pv2-page pv2-page--form" style={embedded ? { paddingTop: 4 } : {}}>
         <div className="pv2-form-card">
           <h1 className="pv2-form-heading">Thông Tin Bàn Giao</h1>
 
@@ -719,22 +797,55 @@ const CL07_TransferCreateView = () => {
             </button>
           </div>
 
+          {!embedded && backupQrCode && (
+            <div style={{
+              backgroundColor: '#fef3c7',
+              border: '1px solid #f59e0b',
+              borderRadius: '8px',
+              padding: '8px 12px',
+              marginBottom: '14px',
+              color: '#92400e',
+              fontWeight: '600',
+              fontSize: '0.85rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              <ScanLine size={18} /> Đang liên kết Thẻ luân chuyển dự phòng: <strong>{backupQrCode}</strong>
+            </div>
+          )}
+
           <div className="pv2-form">
-            <div className="pv2-field-row pv2-field-row--3col">
-              <div className="pv2-field pv2-field--grow">
-                <label>Mã pallet <span className="pv2-req">*</span></label>
-                {noPallet ? (
-                  <input
-                    type="text"
-                    className="pv2-input pv2-input--disabled"
-                    value={form.palletCode}
-                    readOnly
-                    disabled
-                  />
-                ) : (
-                  <CustomSelect value={form.palletCode} options={palletOpts} onChange={handlePalletChange} />
+            <div className="pv2-field" style={{ marginBottom: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <label style={{ margin: 0, fontWeight: 700, fontSize: '0.85rem' }}>
+                  Mã pallet <span className="pv2-req">*</span>
+                </label>
+                {!readOnly && (
+                  <button
+                    type="button"
+                    className="pv2-link-underline"
+                    onClick={handleToggleNoPallet}
+                    style={{ fontSize: '0.82rem', fontWeight: 600, padding: 0, border: 'none', background: 'none', cursor: 'pointer' }}
+                  >
+                    {noPallet ? '← Chọn mã pallet' : 'Không có mã pallet'}
+                  </button>
                 )}
               </div>
+              {readOnly || noPallet ? (
+                <input
+                  type="text"
+                  className="pv2-input pv2-input--disabled"
+                  value={form.palletCode}
+                  readOnly
+                  disabled
+                />
+              ) : (
+                <CustomSelect value={form.palletCode} options={palletOpts} onChange={handlePalletChange} />
+              )}
+            </div>
+
+            <div className="pv2-field-row pv2-field-row--2col" style={{ marginBottom: '10px' }}>
               <div className="pv2-field">
                 <label>Tổng số lượng <span className="pv2-req">*</span></label>
                 <div className="pv2-input-unit-wrap pv2-input-unit-wrap--disabled">
@@ -765,85 +876,94 @@ const CL07_TransferCreateView = () => {
               </div>
             </div>
 
-            <div className="pv2-link-row">
-              <button type="button" className="pv2-link-underline" onClick={handleToggleNoPallet}>
-                {noPallet ? '← Chọn mã pallet' : 'Không có mã pallet'}
-              </button>
-            </div>
-
             <div className="pv2-field-row pv2-field-row--2col">
               <div className="pv2-field">
-                <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span>Chi tiết <span className="pv2-req">*</span></span>
-                  {!noPallet && Boolean(form.palletCode) && (
-                    <span style={{ fontSize: '0.72rem', color: '#b45309', fontWeight: 700 }}>
-                      Mục đã kiểm tra {selectedDetails.length > 0 ? `(${selectedDetails.length})` : ''}
-                    </span>
-                  )}
-                </label>
-                <FormMultiSearchSelect
-                  values={selectedDetails}
-                  options={
-                    (!noPallet && Boolean(form.palletCode) && palletInspectedParts.length > 0)
-                      ? palletInspectedParts.map((p) => ({ value: p, label: p }))
-                      : productOptions.filter((o) => Boolean(o.value))
-                  }
-                  onChange={handleMultiDetailChange}
-                  placeholder="Chọn chi tiết..."
-                  required
-                />
+                <label>Chi tiết <span className="pv2-req">*</span></label>
+                {readOnly ? (
+                  <input
+                    type="text"
+                    className="pv2-input pv2-input--disabled"
+                    value={selectedDetails.join(', ') || form.detail}
+                    readOnly
+                    disabled
+                  />
+                ) : (
+                  <FormMultiSearchSelect
+                    values={selectedDetails}
+                    options={
+                      (!noPallet && Boolean(form.palletCode) && palletInspectedParts.length > 0)
+                        ? palletInspectedParts.map((p) => ({ value: p, label: p }))
+                        : productOptions.filter((o) => Boolean(o.value))
+                    }
+                    onChange={handleMultiDetailChange}
+                    placeholder="Chọn chi tiết..."
+                    required
+                  />
+                )}
               </div>
               <div className="pv2-field" ref={specDropRef} style={{ position: 'relative' }}>
                 <label>Quy cách <span className="pv2-req">*</span></label>
-                <div
-                  className="pv2-input"
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' }}
-                  onClick={() => setSpecDropdownOpen((v) => !v)}
-                >
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {selectedSpecs.length > 0 ? `${selectedSpecs.length} quy cách đã chọn` : 'Chọn quy cách'}
-                  </span>
-                  <ChevronDown size={16} style={{ flexShrink: 0, transform: specDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
-                </div>
-                {specDropdownOpen && specOptions.filter((o) => o.value).length > 0 && (
-                  <div style={{
-                    position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
-                    background: '#fff', border: '1px solid #d4a574', borderRadius: 8,
-                    boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 50,
-                    maxHeight: 220, overflowY: 'auto'
-                  }}>
-                    {specOptions.filter((o) => o.value).map((opt) => {
-                      const specVal = opt.rawSpec || opt.value
-                      const dName = opt.detail || (selectedDetails[0] || form.detail)
-                      const isChecked = items.some((it) => it.spec === specVal && it.detail === dName)
-                      return (
-                        <div
-                          key={opt.value}
-                          onClick={() => handleSpecToggle(opt)}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: 10,
-                            padding: '10px 14px', cursor: 'pointer',
-                            background: isChecked ? '#fdf6ef' : '#fff',
-                            borderBottom: '1px solid #f0e6da',
-                            transition: 'background 0.15s'
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = isChecked ? '#faecd8' : '#fdf6ef'}
-                          onMouseLeave={(e) => e.currentTarget.style.background = isChecked ? '#fdf6ef' : '#fff'}
-                        >
-                          <div style={{
-                            width: 20, height: 20, borderRadius: 4,
-                            border: isChecked ? '2px solid #8B5E3C' : '2px solid #ccc',
-                            background: isChecked ? '#8B5E3C' : '#fff',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            flexShrink: 0, transition: 'all 0.15s'
-                          }}>
-                            {isChecked && <Check size={14} color="#fff" strokeWidth={3} />}
-                          </div>
-                          <span style={{ fontSize: 14, color: '#333' }}>{opt.label}</span>
-                        </div>
-                      )
-                    })}
-                  </div>
+                {readOnly ? (
+                  <input
+                    type="text"
+                    className="pv2-input pv2-input--disabled"
+                    value={selectedSpecs.join(', ') || (items[0] && items[0].spec) || 'Tiêu chuẩn'}
+                    readOnly
+                    disabled
+                  />
+                ) : (
+                  <>
+                    <div
+                      className="pv2-input"
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' }}
+                      onClick={() => setSpecDropdownOpen((v) => !v)}
+                    >
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {selectedSpecs.length > 0 ? `${selectedSpecs.length} quy cách đã chọn` : 'Chọn quy cách'}
+                      </span>
+                      <ChevronDown size={16} style={{ flexShrink: 0, transform: specDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                    </div>
+                    {specDropdownOpen && specOptions.filter((o) => o.value).length > 0 && (
+                      <div style={{
+                        position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
+                        background: '#fff', border: '1px solid #d4a574', borderRadius: 8,
+                        boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 50,
+                        maxHeight: 220, overflowY: 'auto'
+                      }}>
+                        {specOptions.filter((o) => o.value).map((opt) => {
+                          const specVal = opt.rawSpec || opt.value
+                          const dName = opt.detail || (selectedDetails[0] || form.detail)
+                          const isChecked = items.some((it) => it.spec === specVal && it.detail === dName)
+                          return (
+                            <div
+                              key={opt.value}
+                              onClick={() => handleSpecToggle(opt)}
+                              style={{
+                                display: 'flex', alignItems: 'center', gap: 10,
+                                padding: '10px 14px', cursor: 'pointer',
+                                background: isChecked ? '#fdf6ef' : '#fff',
+                                borderBottom: '1px solid #f0e6da',
+                                transition: 'background 0.15s'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = isChecked ? '#faecd8' : '#fdf6ef'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = isChecked ? '#fdf6ef' : '#fff'}
+                            >
+                              <div style={{
+                                width: 20, height: 20, borderRadius: 4,
+                                border: isChecked ? '2px solid #8B5E3C' : '2px solid #ccc',
+                                background: isChecked ? '#8B5E3C' : '#fff',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                flexShrink: 0, transition: 'all 0.15s'
+                              }}>
+                                {isChecked && <Check size={14} color="#fff" strokeWidth={3} />}
+                              </div>
+                              <span style={{ fontSize: 14, color: '#333' }}>{opt.label}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -861,36 +981,188 @@ const CL07_TransferCreateView = () => {
               </div>
               <div className="pv2-field">
                 <label>Công đoạn nhận <span className="pv2-req">*</span></label>
-                <CustomSelect value={form.toStage} options={stageOptions} onChange={(v) => upd('toStage', v)} />
+                {readOnly ? (
+                  <input
+                    type="text"
+                    className="pv2-input pv2-input--disabled"
+                    value={form.toStage}
+                    readOnly
+                    disabled
+                  />
+                ) : (
+                  <CustomSelect value={form.toStage} options={stageOptions} onChange={(v) => upd('toStage', v)} />
+                )}
               </div>
             </div>
 
             <div className="pv2-field">
               <label>Ghi chú</label>
               <textarea
-                className="pv2-textarea"
+                className={`pv2-textarea ${readOnly ? 'pv2-input--disabled' : ''}`}
                 rows={3}
                 value={form.note}
                 onChange={(e) => upd('note', e.target.value)}
+                readOnly={readOnly}
+                disabled={readOnly}
+                placeholder={readOnly ? 'Không có ghi chú' : 'Nhập ghi chú...'}
               />
             </div>
 
-            <div className="pv2-upload-area">
-              <button type="button" className="pv2-btn-add-image-link" onClick={() => fileRef.current.click()}>
-                <span className="pv2-plus-icon">+</span> Thêm ảnh pallet
-              </button>
-              <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={handleImagePick} />
+            <div className="pv2-upload-area" style={{ marginTop: 12, marginBottom: 12 }}>
+              {/* Header của mục hình ảnh */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Camera size={16} color="#7B5233" />
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#4A240E' }}>
+                    Hình ảnh đính kèm {!readOnly && <span style={{ color: '#94a3b8', fontWeight: 500, fontSize: 11 }}>(tùy chọn)</span>}
+                  </span>
+                </div>
+                {images.length > 0 && (
+                  <span style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: '#15803D',
+                    backgroundColor: '#DCFCE7',
+                    padding: '2px 8px',
+                    borderRadius: '12px'
+                  }}>
+                    ✓ Đã chọn {images.length} ảnh
+                  </span>
+                )}
+              </div>
 
-              {images.length > 0 && (
-                <div className="pv2-image-preview-row">
+              {!readOnly && (
+                <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={handleImagePick} />
+              )}
+
+              {/* Grid hiển thị ảnh hoặc nút thêm ảnh */}
+              {images.length === 0 ? (
+                !readOnly ? (
+                  <button
+                    type="button"
+                    onClick={() => fileRef.current?.click()}
+                    style={{
+                      width: '100%',
+                      padding: '16px 12px',
+                      borderRadius: 10,
+                      border: '1.5px dashed #C89D7C',
+                      backgroundColor: '#FFF9F5',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
+                    <div style={{
+                      width: 38,
+                      height: 38,
+                      borderRadius: '50%',
+                      backgroundColor: '#FDEEE4',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#7B5233',
+                    }}>
+                      <ImagePlus size={20} />
+                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#4A240E' }}>
+                      Thêm ảnh pallet
+                    </div>
+                    <div style={{ fontSize: 11, color: '#94a3b8' }}>
+                      Chạm để chụp hoặc chọn ảnh từ thư viện
+                    </div>
+                  </button>
+                ) : (
+                  <div style={{ fontSize: 12, color: '#94a3b8', fontStyle: 'italic', padding: '6px 0' }}>
+                    Không có hình ảnh đính kèm cho phiếu này.
+                  </div>
+                )
+              ) : (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
                   {images.map((src, i) => (
-                    <div key={i} className="pv2-img-thumb">
-                      <img src={getFullImageUrl(src)} alt="Ảnh pallet" />
-                      <button type="button" className="pv2-img-remove" onClick={() => removeImage(i)}>
-                        <X size={12} />
-                      </button>
+                    <div
+                      key={i}
+                      style={{
+                        position: 'relative',
+                        width: 68,
+                        height: 68,
+                        borderRadius: 10,
+                        overflow: 'hidden',
+                        border: '1.5px solid #EADBCE',
+                        boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                        background: '#f8fafc',
+                      }}
+                      onClick={() => setPreviewImage(getFullImageUrl(src))}
+                    >
+                      <img
+                        src={getFullImageUrl(src)}
+                        alt={`Ảnh pallet ${i + 1}`}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                      {!readOnly && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            removeImage(i)
+                          }}
+                          title="Xóa ảnh"
+                          style={{
+                            position: 'absolute',
+                            top: 3,
+                            right: 3,
+                            width: 20,
+                            height: 20,
+                            borderRadius: '50%',
+                            backgroundColor: 'rgba(0,0,0,0.65)',
+                            color: '#fff',
+                            border: 'none',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            padding: 0,
+                          }}
+                        >
+                          <X size={12} strokeWidth={2.5} />
+                        </button>
+                      )}
                     </div>
                   ))}
+
+                  {!readOnly && (
+                    <button
+                      type="button"
+                      onClick={() => fileRef.current?.click()}
+                      style={{
+                        width: 68,
+                        height: 68,
+                        borderRadius: 10,
+                        border: '1.5px dashed #C89D7C',
+                        backgroundColor: '#FFF9F5',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 3,
+                        cursor: 'pointer',
+                        color: '#7B5233',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        transition: 'all 0.15s',
+                        padding: '4px 6px',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <Plus size={20} color="#7B5233" strokeWidth={2.5} />
+                      <span>Thêm</span>
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -898,23 +1170,39 @@ const CL07_TransferCreateView = () => {
             <TransferItemTable
               items={items}
               onEditItem={(item, idx) => {
+                if (readOnly) return
                 setEditItem(item)
                 setEditIdx(idx)
                 setConfirmModal(true)
               }}
               onUpdateQty={handleUpdateQty}
+              readOnly={readOnly}
             />
-
-            <div className="pv2-card-actions">
-              <button type="button" className="pv2-btn-cancel" onClick={() => navigate(ROUTES.TRANSFER_LIST)}>
-                Hủy bỏ
-              </button>
-              <button type="button" className="pv2-btn-submit" onClick={handleSubmit} disabled={submitting}>
-                {submitting ? 'Đang lưu...' : 'Xác nhận'}
-              </button>
-            </div>
           </div>
         </div>
+      </div>
+
+      {/* Cố định neo cuối màn hình (Fixed Bottom Action Bar) */}
+      <div className="pv2-fixed-bottom-actions">
+        {readOnly ? (
+          <button
+            type="button"
+            className="pv2-btn-cancel"
+            style={{ width: '100%', justifyContent: 'center', background: '#f1f5f9', color: '#334155', fontWeight: 700 }}
+            onClick={() => navigate(ROUTES.TRANSFER_LIST)}
+          >
+            <ArrowLeft size={17} /> Quay lại danh sách
+          </button>
+        ) : (
+          <>
+            <button type="button" className="pv2-btn-cancel" onClick={() => navigate(ROUTES.TRANSFER_LIST)}>
+              <X size={17} /> Hủy bỏ
+            </button>
+            <button type="button" className="pv2-btn-submit" onClick={handleSubmit} disabled={submitting}>
+              <Check size={17} /> {submitting ? 'Đang lưu...' : 'Xác nhận'}
+            </button>
+          </>
+        )}
       </div>
 
       <ConfirmQtyModal
@@ -949,6 +1237,76 @@ const CL07_TransferCreateView = () => {
         data={palletData}
         partProducts={palletPartProducts}
       />
+
+      <QRScanner
+        isOpen={isQrScannerOpen}
+        onClose={() => setIsQrScannerOpen(false)}
+        onResult={handleInFormScanResult}
+      />
+
+      {/* Lightbox xem ảnh lớn */}
+      {previewImage && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.85)',
+            zIndex: 99999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+          onClick={() => setPreviewImage(null)}
+        >
+          <div style={{ position: 'relative', maxWidth: '100%', maxHeight: '100%' }} onClick={(e) => e.stopPropagation()}>
+            <img
+              src={previewImage}
+              alt="Xem ảnh lớn"
+              style={{ maxWidth: '100%', maxHeight: '85vh', borderRadius: 8, objectFit: 'contain' }}
+            />
+            <button
+              type="button"
+              style={{
+                position: 'absolute',
+                top: -14,
+                right: -14,
+                background: '#fff',
+                border: 'none',
+                borderRadius: '50%',
+                width: 32,
+                height: 32,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+              }}
+              onClick={() => setPreviewImage(null)}
+            >
+              <X size={18} color="#000" />
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  )
+
+  if (embedded) {
+    return content
+  }
+
+  return (
+    <Layout>
+      <PageHeader
+        title={isNew ? 'Khởi tạo phiếu' : 'Chi tiết phiếu'}
+        subTitle={isNew ? 'CL07: Tạo phiếu luân chuyển' : `CL07: Chi tiết phiếu ${ticketCode}`}
+        showBack={true}
+      />
+      {content}
     </Layout>
   )
 }

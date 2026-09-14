@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import useAuthStore from '@modules/auth/Models/authModel'
 import apiClient from '@shared/services/api'
 import { useInspectionController, useInspectionDetail } from './useInspectionController'
@@ -17,13 +17,27 @@ import { inspectionService } from '../services/inspectionService'
 
 const initErrors = () => [{ id: 1, name: '', qty: 0 }]
 
-const compactSpec = (spec) => {
-  if (!spec) return ''
+const isInvalidSpec = (spec) => {
+  if (!spec) return true
   const str = String(spec).trim()
-  if (str === 'Tiêu chuẩn') return str
+  if (!str) return true
+  // Check if only non-alphanumeric punctuation (e.g. **, *, ***, -, --, _, ., /, \)
+  if (/^[\s*_\-—–.,/\\#]+$/.test(str)) return true
+  // Check all zeros (e.g. 0*0*0, 0x0, 0)
+  if (/^0(?:\s*[*xX×]\s*0)*$/i.test(str)) return true
+  const lower = str.toLowerCase()
+  if (['tiêu chuẩn', 'quy cách tiêu chuẩn', 'quy cách thành phẩm', 'n/a', 'na', 'none', 'null', 'undefined', '—', '–'].includes(lower)) {
+    return true
+  }
+  return false
+}
+
+const compactSpec = (spec) => {
+  if (isInvalidSpec(spec)) return ''
+  const str = String(spec).trim()
   if (str.includes(' - ')) {
     const parts = str.split(/\s+-\s+/)
-    if (parts[0] && parts[0].trim().length > 0) {
+    if (parts[0] && parts[0].trim().length > 0 && !isInvalidSpec(parts[0])) {
       return parts[0].trim()
     }
   }
@@ -46,20 +60,20 @@ const parseDimensionStringFromText = (text) => {
   if (!text) return null
   const str = String(text)
   
-  // 1. 3D Dimensions: e.g. 18*42*1636, 18x42x1636
-  const m3d = str.match(/(\d+(?:\.\d+)?\s*[*xX×]\s*\d+(?:\.\d+)?\s*[*xX×]\s*\d+(?:\.\d+)?(?:\s*mm|\s*cm)?)/i)
+  // 1. 3D Dimensions: e.g. 50*50*876, 18*42*1636, 18x42x1636, 18.5*42*1636.5
+  const m3d = str.match(/(\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?(?:\s*mm|\s*cm)?)/i)
   if (m3d) return m3d[1].replace(/\s*/g, '')
 
-  // 2. Hardware Model & Size: e.g. 5018-350mm, 5018-350
-  const mHw = str.match(/(\b\d{3,5}\s*[-–—*xX×]\s*\d{2,4}(?:mm|cm)?\b)/i)
+  // 2. Hardware Model & Size: e.g. 5018-350mm, 5018-350, 5018*350
+  const mHw = str.match(/(\b\d{4,5}\s*[-–—*xX×]\s*\d{3,4}(?:mm|cm)?\b)/i)
   if (mHw) return mHw[1].replace(/\s*/g, '')
 
   // 3. 2D Dimensions: e.g. 295*540, 295x540
-  const m2d = str.match(/(\d+(?:\.\d+)?\s*[*xX×]\s*\d+(?:\.\d+)?(?:\s*mm|\s*cm)?)/i)
+  const m2d = str.match(/(\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?(?:\s*mm|\s*cm)?)/i)
   if (m2d) return m2d[1].replace(/\s*/g, '')
 
   // 4. Threaded / Screw / Dowel: e.g. M8x40, Ø10x50, D10x50
-  const mBolt = str.match(/([MØOD]?\d+(?:\.\d+)?\s*[*xX×-]\s*\d+(?:\.\d+)?(?:\s*mm)?)/i)
+  const mBolt = str.match(/([MØOD]?\d+(?:[.,]\d+)?\s*[*xX×-]\s*\d+(?:[.,]\d+)?(?:\s*mm)?)/i)
   if (mBolt) return mBolt[1].replace(/\s*/g, '')
 
   // 5. Model code with dash: e.g. SS10-350
@@ -67,18 +81,18 @@ const parseDimensionStringFromText = (text) => {
   if (mCode) return mCode[1].replace(/\s*/g, '')
 
   // 6. Single size with unit: e.g. 350mm, 500mm
-  const mUnit = str.match(/(\b\d+(?:\.\d+)?\s*(?:mm|cm|m)\b)/i)
+  const mUnit = str.match(/(\b\d+(?:[.,]\d+)?\s*(?:mm|cm|m)\b)/i)
   if (mUnit) return mUnit[1].replace(/\s*/g, '')
 
   return null
 }
 
 const getEffectiveSpec = (specRaw, partName) => {
-  const cSpec = compactSpec(specRaw)
-  if (cSpec && cSpec !== 'Tiêu chuẩn') return cSpec
   const dimStr = parseDimensionStringFromText(partName)
-  if (dimStr) return dimStr
-  return cSpec || 'Tiêu chuẩn'
+  if (dimStr && !isInvalidSpec(dimStr)) return dimStr
+  const cSpec = compactSpec(specRaw)
+  if (cSpec) return cSpec
+  return 'Tiêu chuẩn'
 }
 
 const getQuantityConversionDetails = (partNameOrSpec, rawQty, unit = '', isConvertedHint = false) => {
@@ -194,22 +208,28 @@ const isStageMatching = (selectedStage, targetStage) => {
 
 const DEFAULT_FALLBACK_DEFECTS = []
 
-export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) => {
-  const { id } = useParams()
+export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, propId = null, propBackupQrCode = null) => {
+  const { id: routeId } = useParams()
+  const id = propId !== undefined && propId !== null ? propId : routeId
   const navigate = useNavigate()
+  const location = useLocation()
+  const backupQrCode = propBackupQrCode || location.state?.backupQrCode || null
   const isNew = !id || id === 'NEW'
   const readOnly = !isNew
 
   const user = useAuthStore((state) => state.user)
   const creatorName = user?.full_name || user?.username || ''
   const { createTicket, confirmTicket } = useInspectionController()
-  const { ticket, loading, steps, setSteps, images, setImages, addImage, removeImage, loadGuide, getLastResult } =
+  const { ticket, loading, steps, setSteps, images, setImages, addImage, removeImage, loadGuide, getLastResult, currentGuide } =
     useInspectionDetail(isNew ? null : id)
 
   const [mode, setMode] = useState(fixedMode)
+  const [modeOptions, setModeOptions] = useState(INSPECT_MODE_OPTIONS)
+  const [formTypeRoutes, setFormTypeRoutes] = useState(MODE_TO_ROUTE)
   const [stage, setStage] = useState('')
   const [po, setPo] = useState('')
   const [result, setResult] = useState('pass')
+  const [action, setAction] = useState('luu-kho')
   const [product, setProduct] = useState('')
   const [spec, setSpec] = useState('')
   const [selectedProducts, setSelectedProducts] = useState([])
@@ -251,7 +271,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
   const [isQtyConverted, setIsQtyConverted] = useState(false)
   const [samplingRule, setSamplingRule] = useState(null)
 
-  const [guideVisible, setGuideVisible] = useState(false)
+  const [guideVisible, setGuideVisible] = useState(true)
   const [palletCode, setPalletCode] = useState('')
   const [palletOptions, setPalletOptions] = useState([])
   const [recentTickets, setRecentTickets] = useState([])
@@ -311,6 +331,53 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
         }
       })
       .catch((e) => console.warn('[useInspectionFormBase] getPallets error:', e))
+
+    // Load custom inspection parameters from backend
+    apiClient.get('/inspection-parameters')
+      .then((res) => {
+        const data = res?.data !== undefined ? res.data : res
+        if (Array.isArray(data) && data.length > 0) {
+          setParameterOptions(data.map((p) => ({
+            value: p.code,
+            label: p.name,
+            unit: p.unit,
+            min: p.default_min,
+            max: p.default_max
+          })))
+        }
+      })
+      .catch((e) => console.warn('[useInspectionFormBase] getParameters error:', e))
+
+    // Load customizable inspection form types from backend
+    apiClient.get('/inspection-form-types')
+      .then((res) => {
+        const data = res?.data !== undefined ? res.data : res
+        if (Array.isArray(data) && data.length > 0) {
+          const activeTypes = data.filter((t) => t.is_active !== false)
+          if (activeTypes.length > 0) {
+            setModeOptions(activeTypes.map((t) => ({
+              value: t.code,
+              label: t.name,
+              shortName: t.short_name || t.name,
+              route: t.route_path,
+              color: t.color,
+              bgColor: t.bg_color,
+            })))
+            const routeMap = { ...MODE_TO_ROUTE }
+            activeTypes.forEach((t) => {
+              if (t.route_path) {
+                let r = t.route_path
+                if (r.startsWith('/production-v2/')) {
+                  r = r.replace('/production-v2/', '/production_v2/')
+                }
+                routeMap[t.code] = r
+              }
+            })
+            setFormTypeRoutes(routeMap)
+          }
+        }
+      })
+      .catch((e) => console.warn('[useInspectionFormBase] getInspectionFormTypes error:', e))
   }, [user?.id])
 
   const handlePalletSelect = async (selectedPallet) => {
@@ -377,6 +444,13 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
       console.warn('[useInspectionFormBase] handlePalletSelect error:', e)
     }
   }
+
+  const scannedPalletFromNav = location.state?.palletCode || location.state?.scannedCode || null
+  useEffect(() => {
+    if (scannedPalletFromNav && isNew) {
+      handlePalletSelect(scannedPalletFromNav)
+    }
+  }, [scannedPalletFromNav, isNew])
 
   const applyRecentTicket = (histTicket) => {
     if (!histTicket) return
@@ -511,6 +585,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
       name: d.name,
       label: d.code ? `[${d.code}] ${d.name}` : d.name,
       category: d.category,
+      stage: d.stage,
       needs_tracking: d.needs_tracking,
       qc_tracking: d.qc_tracking,
       is_tracked_by_me: d.is_tracked_by_me,
@@ -520,6 +595,102 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
       defect_type_id: d.defect_type_id,
     }))
   }, [combinedDefects])
+
+  // Toàn bộ danh mục lỗi trong hệ thống (không bị lọc theo công đoạn), dùng khi tìm kiếm
+  const allDefectsList = useMemo(() => {
+    const list = []
+    const seenCodes = new Set()
+    const seenNames = new Set()
+
+    const ctqList = Array.isArray(ctqGuides) ? ctqGuides : []
+    const catList = Array.isArray(defectCatalog) ? defectCatalog : []
+
+    // 1. CTQ items
+    ctqList.forEach((ctq) => {
+      let code = ctq.code || ''
+      let name = ctq.name || ''
+      const ctqStage = parseCTQStage(ctq.description)
+      list.push({
+        id: `ctq_${ctq.id}`,
+        ctq_id: ctq.id,
+        code,
+        name,
+        label: code ? `[${code}] ${name}` : name,
+        category: 'CTQ',
+        stage: ctqStage && ctqStage !== 'Chung' ? [ctqStage] : null,
+        description: ctq.description,
+        needs_tracking: true,
+        isQA: true,
+        isCTQ: true,
+        source: 'CTQ',
+      })
+      if (code) seenCodes.add(code.toLowerCase().trim())
+      if (name) seenNames.add(name.toLowerCase().trim())
+    })
+
+    // 2. All catalog items
+    catList.forEach((d) => {
+      const dCode = (d.code || '').toLowerCase().trim()
+      const dName = (d.name || '').toLowerCase().trim()
+
+      if ((dCode && seenCodes.has(dCode)) || (dName && seenNames.has(dName))) {
+        const existing = list.find(
+          (item) =>
+            (dCode && item.code?.toLowerCase().trim() === dCode) ||
+            (dName && item.name?.toLowerCase().trim() === dName)
+        )
+        if (existing) {
+          existing.defect_type_id = d.id
+          if (!existing.category || existing.category === 'CTQ') {
+            existing.category = d.category || 'CTQ'
+          }
+          if (d.needs_tracking) existing.needs_tracking = true
+          if (d.qc_tracking) existing.qc_tracking = true
+          if (d.is_tracked_by_me) existing.is_tracked_by_me = true
+          if (d.stage) existing.stage = d.stage
+        }
+        return
+      }
+
+      list.push({
+        id: d.id,
+        code: d.code,
+        name: d.name,
+        label: d.code ? `[${d.code}] ${d.name}` : d.name,
+        category: d.category,
+        stage: d.stage,
+        description: d.description,
+        needs_tracking: d.needs_tracking,
+        qc_tracking: d.qc_tracking,
+        is_tracked_by_me: d.is_tracked_by_me,
+        isQA: Boolean(d.needs_tracking || d.qc_tracking || d.is_tracked_by_me),
+        source: 'catalog',
+      })
+      if (dCode) seenCodes.add(dCode)
+      if (dName) seenNames.add(dName)
+    })
+
+    return list
+  }, [defectCatalog, ctqGuides])
+
+  const allDefectOptions = useMemo(() => {
+    return allDefectsList.map((d) => ({
+      value: d.id,
+      id: d.id,
+      code: d.code,
+      name: d.name,
+      label: d.code ? `[${d.code}] ${d.name}` : d.name,
+      category: d.category,
+      stage: d.stage,
+      needs_tracking: d.needs_tracking,
+      qc_tracking: d.qc_tracking,
+      is_tracked_by_me: d.is_tracked_by_me,
+      isQA: Boolean(d.needs_tracking || d.qc_tracking || d.is_tracked_by_me || d.isCTQ),
+      isCTQ: d.isCTQ,
+      ctq_id: d.ctq_id,
+      defect_type_id: d.defect_type_id,
+    }))
+  }, [allDefectsList])
 
   // Tự động hiện sẵn các lỗi QA Track / QC Track / CTQ theo công đoạn hiện tại vào danh sách ghi nhận lỗi
   useEffect(() => {
@@ -687,6 +858,44 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
       })
   }, [stage, area, paramStage])
 
+  // Cache danh sách PO của tháng hiện tại
+  const monthPoCacheRef = useRef([])
+  // Cache kết quả BOM để khi chọn PO mở chi tiết tức thì (0ms)
+  const bomCacheRef = useRef({})
+
+  // Hàm tìm kiếm PO full trên Server khi người dùng nhập từ khóa
+  const handlePoSearch = useCallback((searchTerm) => {
+    const activeStage = stage || paramStage
+    if (!activeStage) return
+    const isIncoming = activeStage.toLowerCase().includes('đầu vào') || activeStage.toLowerCase().includes('nhập kho')
+    const term = (searchTerm || '').trim()
+
+    if (!term) {
+      // Khi xóa ô tìm kiếm -> hiển thị lại danh sách PO của tháng hiện tại
+      if (monthPoCacheRef.current.length > 0) {
+        setPoOptions([{ value: '', label: 'Nhập hoặc chọn PO...' }, ...monthPoCacheRef.current])
+      }
+      return
+    }
+
+    if (isIncoming) {
+      orderService.getPurchaseOrders(term)
+        .then((poCodes) => {
+          const opts = (poCodes || []).map((code) => ({ value: code, label: code }))
+          setPoOptions([{ value: '', label: 'Nhập hoặc chọn PO...' }, ...opts])
+        })
+        .catch(() => {})
+    } else {
+      // Tìm kiếm Lệnh sản xuất Full siêu tốc (5-10ms)
+      orderService.getPoCodes({ search: term, limit: 1000 })
+        .then((codes) => {
+          const opts = (codes || []).map((code) => ({ value: code, label: code }))
+          setPoOptions([{ value: '', label: 'Nhập hoặc chọn PO...' }, ...opts])
+        })
+        .catch(() => {})
+    }
+  }, [stage, paramStage])
+
   useEffect(() => {
     const activeStage = stage || paramStage
     if (!activeStage) {
@@ -697,17 +906,20 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
     if (isIncoming) {
       orderService.getPurchaseOrders()
         .then((poCodes) => {
-          const opts = poCodes.map((code) => ({ value: code, label: code }))
+          const opts = (poCodes || []).map((code) => ({ value: code, label: code }))
+          monthPoCacheRef.current = opts
           setPoOptions([{ value: '', label: 'Nhập hoặc chọn PO...' }, ...opts])
         })
         .catch(() => {
           setPoOptions([{ value: '', label: 'Nhập hoặc chọn PO...' }])
         })
     } else {
-      orderService.getAll()
-        .then((res) => {
-          const orders = res.orders || []
-          const opts = orders.map((o) => ({ value: o.po_code, label: o.po_code }))
+      // Mặc định chỉ lấy danh sách PO thuộc tháng hiện tại qua API siêu tốc
+      const currentMonth = new Date().getMonth() + 1
+      orderService.getPoCodes({ month: currentMonth, limit: 1000 })
+        .then((codes) => {
+          const opts = (codes || []).map((code) => ({ value: code, label: code }))
+          monthPoCacheRef.current = opts
           setPoOptions([{ value: '', label: 'Nhập hoặc chọn PO...' }, ...opts])
         })
         .catch(() => {
@@ -727,7 +939,13 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
       const prodVal = ticket.product || ticket.product_name || ticket.detail_name || ''
       if (prodVal) {
         setProduct(prodVal)
-        setSelectedProducts(prodVal.split(', ').map(s => s.trim()).filter(Boolean))
+        if (Array.isArray(ticket.parts_details) && ticket.parts_details.length > 0) {
+          setSelectedProducts(ticket.parts_details.map(p => (p.part_name || p.name || '').trim()).filter(Boolean))
+        } else if (Array.isArray(ticket.parts_with_specs) && ticket.parts_with_specs.length > 0) {
+          setSelectedProducts(ticket.parts_with_specs.map(p => (p.part_name || p.name || '').trim()).filter(Boolean))
+        } else {
+          setSelectedProducts([prodVal.trim()])
+        }
       }
 
       const specVal = ticket.spec || ticket.specification || ''
@@ -749,6 +967,9 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
       const resVal = ticket.result || ticket.conclusion || 'pass'
       setResult(resVal)
 
+      const actVal = ticket.action || (resVal === 'pass' ? 'luu-kho' : 'tra-ve')
+      setAction(actVal)
+
       if (ticket.note || ticket.notes) setNote(ticket.note || ticket.notes || '')
       if (ticket.palletCode || ticket.pallet_code) setPalletCode(ticket.palletCode || ticket.pallet_code)
       if (ticket.parameter) setParameter(ticket.parameter)
@@ -763,7 +984,18 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
       if (ticket.staff) setStaff(ticket.staff)
       if (Array.isArray(ticket.answers) && ticket.answers.length > 0) setAnswers(ticket.answers)
       if (resVal && ticket.mode === INSPECT_MODES.QA) setQaResult(resVal)
-      if (Array.isArray(ticket.errors) && ticket.errors.length > 0) setErrors(ticket.errors)
+      if (Array.isArray(ticket.errors) && ticket.errors.length > 0) {
+        const cleanedErrors = ticket.errors.map((e) => {
+          const nameStr = (e.name || '').trim()
+          const codeStr = (e.code || '').trim()
+          if (!nameStr && !codeStr && Number(e.qty) > 0) {
+            const fallbackName = (ticket.note || ticket.notes || '').trim() || 'Lỗi ghi nhận'
+            return { ...e, name: fallbackName, is_custom: true }
+          }
+          return e
+        })
+        setErrors(cleanedErrors)
+      }
 
       if (prodVal) {
         setProductOptions((prev) => {
@@ -835,109 +1067,104 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
       return
     }
 
-    orderService.getBom(activePo, activeStage)
-      .then((data) => {
-        const bomList = data || []
-        setBomData(bomList)
-        const opts = bomList.map((p) => ({ value: p.part_name, label: p.part_name }))
+    const applyBomData = (data) => {
+      const bomList = data || []
+      setBomData(bomList)
+      const opts = bomList.map((p) => ({ value: p.part_name, label: p.part_name }))
+      
+      if (bomList.length === 0) {
+        setProductOptions([{ value: '', label: 'Không có chi tiết cho công đoạn này' }])
+        setSpecOptions([{ value: '', label: 'Không có quy cách' }])
+      } else {
+        setProductOptions([{ value: '', label: 'Chọn sản phẩm' }, ...opts])
+      }
+
+      if (isNew && bomList.length > 0) {
+        const currentProdStr = product || paramProduct
+        const currentProdArray = currentProdStr ? currentProdStr.split(', ').map(s => s.trim()).filter(Boolean) : []
         
-        if (bomList.length === 0) {
-          setProductOptions([{ value: '', label: 'Không có chi tiết cho công đoạn này' }])
-          setSpecOptions([{ value: '', label: 'Không có quy cách' }])
-        } else {
-          setProductOptions([{ value: '', label: 'Chọn sản phẩm' }, ...opts])
+        let matchedParts = []
+        if (currentProdArray.length > 0) {
+          matchedParts = bomList.filter(p => currentProdArray.includes(p.part_name))
         }
 
-        if (isNew && bomList.length > 0) {
-          const currentProdStr = product || paramProduct
-          const currentProdArray = currentProdStr ? currentProdStr.split(', ').map(s => s.trim()).filter(Boolean) : []
+        if (matchedParts.length > 0) {
+          const partNames = matchedParts.map(p => p.part_name)
+          const combinedName = partNames.join(', ')
+          setProduct(combinedName)
+          setParamProduct(combinedName)
+          setSelectedProducts(partNames)
           
-          let matchedParts = []
-          if (currentProdArray.length > 0) {
-            matchedParts = bomList.filter(p => currentProdArray.includes(p.part_name))
+          let allSpecs = []
+          let totalQtySum = 0
+          let isAnyConverted = false
+          matchedParts.forEach(part => {
+            if (Array.isArray(part.specs)) {
+              part.specs.forEach(s => {
+                allSpecs.push({
+                  specification: getEffectiveSpec(s.specification, part.part_name),
+                  partName: part.part_name
+                })
+              })
+            }
+            if (part.total_qty) {
+              const details = getQuantityConversionDetails(part.part_name || combinedName, part.total_qty, part.unit, part.is_converted)
+              totalQtySum += Number(details.qty)
+              if (details.isConverted) isAnyConverted = true
+            }
+          })
+          
+          const specOpts = allSpecs.map((s) => ({
+            value: s.specification,
+            label: s.specification
+          }))
+          const uniqueSpecOpts = Array.from(new Set(specOpts.map((s) => s.value))).map((val) => ({ value: val, label: val }))
+          setSpecOptions([{ value: '', label: 'Chọn quy cách' }, ...uniqueSpecOpts])
+          
+          if (totalQtySum > 0) {
+            setRequiredQty(String(totalQtySum))
+            setIsQtyConverted(isAnyConverted)
+            const initSample = Math.max(1, Math.min(totalQtySum, Math.ceil(totalQtySum * 0.05)))
+            setSampleQty(String(initSample))
+            setParamSample(String(initSample))
           }
-
-          if (matchedParts.length > 0) {
-            const partNames = matchedParts.map(p => p.part_name)
-            const combinedName = partNames.join(', ')
-            setProduct(combinedName)
-            setParamProduct(combinedName)
-            setSelectedProducts(partNames)
-            
-            let allSpecs = []
-            let totalQtySum = 0
-            let isAnyConverted = false
-            matchedParts.forEach(part => {
-              if (Array.isArray(part.specs)) allSpecs.push(...part.specs)
-              if (part.total_qty) {
-                const details = getQuantityConversionDetails(part.part_name || combinedName, part.total_qty, part.unit, part.is_converted)
-                totalQtySum += Number(details.qty)
-                if (details.isConverted) isAnyConverted = true
-              }
-            })
-            
-            const specOpts = allSpecs.map((s) => {
-              const val = getEffectiveSpec(s.specification, combinedName)
-              return { value: val, label: val }
-            })
-            const uniqueSpecOpts = Array.from(new Set(specOpts.map((s) => s.value))).map((val) => ({ value: val, label: val }))
-            setSpecOptions([{ value: '', label: 'Chọn quy cách' }, ...uniqueSpecOpts])
-            
-            if (totalQtySum > 0) {
-              setRequiredQty(String(totalQtySum))
-              setIsQtyConverted(isAnyConverted)
-            }
-          } else {
-            const matchedPart = bomList[0]
-            const pName = matchedPart.part_name
-            setProduct(pName)
-            setParamProduct(pName)
-            setSelectedProducts([pName])
-            
-            const firstSpecs = matchedPart.specs || []
-            let specOpts = firstSpecs.map((s) => {
-              const val = getEffectiveSpec(s.specification, pName)
-              return { value: val, label: val }
-            })
-            if (specOpts.length === 0) {
-              const effSpec = getEffectiveSpec('', pName)
-              specOpts = [{ value: effSpec, label: effSpec }]
-            }
-            setSpecOptions([{ value: '', label: 'Chọn quy cách' }, ...specOpts])
-            const sVal = specOpts[0]?.value || getEffectiveSpec('', pName)
-            setSpec(sVal)
-            setSelectedSpecs([sVal])
-
-            if (matchedPart.total_qty) {
-              const details = getQuantityConversionDetails(matchedPart.part_name, matchedPart.total_qty, matchedPart.unit, matchedPart.is_converted)
-              setRequiredQty(String(details.qty))
-              setIsQtyConverted(details.isConverted)
-            } else {
-              setRequiredQty('')
-              setIsQtyConverted(false)
-            }
-          }
-        } else if (isNew) {
+        } else {
+          // Mặc định không tự chọn chi tiết nào, để người dùng chủ động chọn
           setProduct('')
           setParamProduct('')
-          setSpec('')
           setSelectedProducts([])
-          setSelectedSpecs([])
-          setSpecOptions([{ value: '', label: 'Chọn quy cách' }])
-          setRequiredQty('')
-        }
-      })
-      .catch(() => {
-        setBomData([])
-        if (isNew) {
-          setProductOptions([{ value: '', label: 'Chọn sản phẩm' }])
-          setSpecOptions([{ value: '', label: 'Chọn quy cách' }])
-          setProduct('')
-          setParamProduct('')
           setSpec('')
+          setSelectedSpecs([])
+          setSpecOptions([{ value: '', label: 'Vui lòng chọn chi tiết trước' }])
           setRequiredQty('')
+          setSampleQty('')
+          setParamSample('')
+          setIsQtyConverted(false)
         }
-      })
+      } else if (isNew) {
+        setProduct('')
+        setParamProduct('')
+        setSpec('')
+        setSelectedProducts([])
+        setSelectedSpecs([])
+        setSpecOptions([{ value: '', label: 'Chọn quy cách' }])
+        setRequiredQty('')
+      }
+    }
+
+    const cacheKey = `${activePo}_${activeStage}`
+    if (bomCacheRef.current[cacheKey]) {
+      applyBomData(bomCacheRef.current[cacheKey])
+    } else {
+      orderService.getBom(activePo, activeStage)
+        .then((data) => {
+          bomCacheRef.current[cacheKey] = data || []
+          applyBomData(data)
+        })
+        .catch(() => {
+          applyBomData([])
+        })
+    }
   }, [po, paramPo, stage, paramStage, isNew])
 
   // Tự động tra cứu mốc lấy mẫu AQL từ Database theo tổng SL lô hàng N (requiredQty)
@@ -957,11 +1184,18 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
             const calculatedSample = String(resData.rule.sample_size)
             setSampleQty(calculatedSample)
             setParamSample(calculatedSample)
+            return
           }
         }
+        const fallbackSample = String(Math.max(1, Math.min(lotSize, Math.ceil(lotSize * 0.05))))
+        setSampleQty(fallbackSample)
+        setParamSample(fallbackSample)
       })
       .catch((err) => {
-        console.warn('Lỗi tra cứu mốc lấy mẫu AQL:', err)
+        console.warn('Lỗi tra cứu mốc lấy mẫu AQL, dùng fallback 5%:', err)
+        const fallbackSample = String(Math.max(1, Math.min(lotSize, Math.ceil(lotSize * 0.05))))
+        setSampleQty(fallbackSample)
+        setParamSample(fallbackSample)
       })
   }, [requiredQty])
 
@@ -986,8 +1220,10 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
 
     if (totalFail > 0) {
       setResult('fail')
+      setAction((prev) => (prev === 'cach-ly' ? 'cach-ly' : 'tra-ve'))
     } else if (sampleVal > 0 && totalFail === 0) {
       setResult('pass')
+      setAction('chap-nhan')
     }
   }, [paramSample, sampleQty, errors])
 
@@ -1003,6 +1239,14 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
       return
     }
 
+    if (mode === INSPECT_MODES.PARAMETER) {
+      const currentStg = paramStage || stage
+      const matchedStage = stagesList.find((s) => s.name === currentStg || (s.name && currentStg && s.name.toLowerCase() === currentStg.toLowerCase()))
+      const stageId = matchedStage ? matchedStage.id : null
+      loadGuide(mode, null, stageId, null, parameter)
+      return
+    }
+
     if (mode === INSPECT_MODES.FIRST_SAMPLE || mode === INSPECT_MODES.RE_INSPECT) {
       const matchedStage = stagesList.find((s) => s.name === stage)
       const stageId = matchedStage ? matchedStage.id : null
@@ -1010,7 +1254,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
     } else {
       setSteps([])
     }
-  }, [mode, stage, process, stagesList, isNew, ticket])
+  }, [mode, stage, paramStage, parameter, process, stagesList, isNew, ticket])
 
   const hasFailedStep = steps.some((s) => s.result === 'fail')
   const isFailedResult =
@@ -1081,22 +1325,22 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
     selectedParts.forEach((part) => {
       const partSpecs = (Array.isArray(part.specs) && part.specs.length > 0)
         ? part.specs
-        : [{ specification: 'Tiêu chuẩn' }]
+        : [{ specification: getEffectiveSpec('', part.part_name) }]
 
       partSpecs.forEach((s) => {
-        const rawSpec = (s.specification || 'Tiêu chuẩn').trim()
-        if (!specOptsMap.has(rawSpec)) {
-          specOptsMap.set(rawSpec, {
-            value: rawSpec,
-            label: rawSpec,
+        const effSpec = getEffectiveSpec(s.specification, part.part_name)
+        if (!specOptsMap.has(effSpec)) {
+          specOptsMap.set(effSpec, {
+            value: effSpec,
+            label: effSpec,
             partName: part.part_name,
-            rawSpec
+            rawSpec: effSpec
           })
         }
       })
 
       if (partSpecs.length >= 1) {
-        const firstVal = (partSpecs[0].specification || 'Tiêu chuẩn').trim()
+        const firstVal = getEffectiveSpec(partSpecs[0].specification, part.part_name)
         if (!autoSelectedSpecs.includes(firstVal)) {
           autoSelectedSpecs.push(firstVal)
         }
@@ -1122,11 +1366,38 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
     }
   }
 
+  // Danh sách các quy cách không được phép bỏ chọn (khi chi tiết đã chọn chỉ có đúng 1 quy cách duy nhất)
+  const lockedSpecs = useMemo(() => {
+    const locked = new Set()
+    if (!Array.isArray(selectedProducts) || selectedProducts.length === 0 || !Array.isArray(bomData)) {
+      return []
+    }
+    selectedProducts.forEach((pName) => {
+      const part = bomData.find((p) => p.part_name === pName)
+      if (part) {
+        let rawSpecs = []
+        if (Array.isArray(part.specs) && part.specs.length > 0) {
+          rawSpecs = part.specs.map((s) => getEffectiveSpec(s.specification, pName)).filter(Boolean)
+        } else if (part.specification) {
+          rawSpecs = [getEffectiveSpec(part.specification, pName)]
+        } else {
+          rawSpecs = [getEffectiveSpec('', pName)]
+        }
+        const uniqueSpecs = Array.from(new Set(rawSpecs))
+        if (uniqueSpecs.length === 1 && uniqueSpecs[0]) {
+          locked.add(uniqueSpecs[0])
+        }
+      }
+    })
+    return Array.from(locked)
+  }, [selectedProducts, bomData])
+
   const handleMultiSpecChange = (specArray) => {
     if (readOnly) return
     setIsDirty(true)
-    setSelectedSpecs(specArray)
-    const combinedStr = specArray.join(', ')
+    const enforced = Array.from(new Set([...(specArray || []), ...lockedSpecs]))
+    setSelectedSpecs(enforced)
+    const combinedStr = enforced.join(', ')
     setSpec(combinedStr)
   }
 
@@ -1140,7 +1411,14 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
   const handleImagePick = async (e) => {
     if (readOnly) return
     setIsDirty(true)
-    for (const f of Array.from(e.target.files)) await addImage(f)
+    const files = Array.from(e.target?.files || [])
+    if (files.length === 0) return
+    for (const f of files) {
+      await addImage(f)
+    }
+    if (e.target) {
+      e.target.value = ''
+    }
   }
 
   const addErrorRow = () => {
@@ -1150,7 +1428,12 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
 
   const removeErrorRow = (idx) => {
     if (readOnly) return
-    setErrors((p) => p.filter((_, i) => i !== idx))
+    setErrors((p) => {
+      const next = p.filter((_, i) => i !== idx)
+      const totalErr = next.reduce((sum, item) => sum + (Number(item.qty) || 0), 0)
+      setErrorQty(String(totalErr))
+      return next
+    })
   }
 
   const updateError = (idx, row) => {
@@ -1158,8 +1441,9 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
     setErrors((p) => {
       const next = p.map((r, i) => (i === idx ? row : r))
       const totalErr = next.reduce((sum, item) => sum + (Number(item.qty) || 0), 0)
+      setErrorQty(String(totalErr))
       if (totalErr > 0) {
-        setErrorQty(String(totalErr))
+        setResult('fail')
       }
       return next
     })
@@ -1168,7 +1452,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
   const handleCreatePallet = async () => {
     if (readOnly) return
     try {
-      const activeStage = (mode === INSPECT_MODES.PARAMETER ? paramStage : (mode === INSPECT_MODES.PROCESS ? area : stage)) || ''
+      const activeStage = (mode === INSPECT_MODES.PARAMETER ? paramStage : (mode === INSPECT_MODES.PROCESS ? (area || stage || 'Quy trình ISO') : stage)) || ''
       const activePo = (mode === INSPECT_MODES.PARAMETER ? paramPo : po) || ''
 
       const stLower = activeStage.toLowerCase().trim()
@@ -1222,10 +1506,6 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
         showMessage('Thiếu thông tin', 'Vui lòng chọn Quy trình trước khi tiếp tục.', 'warning')
         return
       }
-      if (!stage && !area) {
-        showMessage('Thiếu thông tin', 'Vui lòng chọn Công đoạn trước khi tiếp tục.', 'warning')
-        return
-      }
     } else if (mode === INSPECT_MODES.QA) {
       if (!staff) {
         showMessage('Thiếu thông tin', 'Vui lòng chọn Tên nhân sự trước khi tiếp tục.', 'warning')
@@ -1260,40 +1540,68 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
       const finalPalletCode = (modalData && typeof modalData === 'object' && modalData.palletCode !== undefined)
         ? modalData.palletCode
         : (palletCode || '')
-      const activeStage = mode === INSPECT_MODES.PARAMETER ? paramStage : (mode === INSPECT_MODES.PROCESS ? area : stage)
+      const activeResult = mode === INSPECT_MODES.QA ? qaResult : result
+      const finalAction = (modalData && modalData.action) || action || (activeResult === 'pass' ? 'chap-nhan' : 'tra-ve')
+      // Hành động ăn theo kết quả:
+      // - Trả hàng: luôn là Không đạt ('fail')
+      // - Chấp nhận / Cách ly: lấy theo kết quả modalData?.result (khi phiếu Không đạt nhưng chọn Chấp nhận/Tự xử lý thì kết quả vẫn là 'fail')
+      const finalResult = (finalAction === 'tra-ve')
+        ? 'fail'
+        : (modalData?.result || activeResult)
+      const finalNote = (modalData && modalData.note !== undefined && modalData.note !== '') ? modalData.note : note
+      const activeStage = mode === INSPECT_MODES.PARAMETER ? paramStage : (mode === INSPECT_MODES.PROCESS ? (area || stage || 'Quy trình ISO') : stage)
       const activePo = mode === INSPECT_MODES.PARAMETER ? paramPo : po
       const activeProduct = mode === INSPECT_MODES.PARAMETER ? paramProduct : product
-      const activeResult = mode === INSPECT_MODES.QA ? qaResult : result
       const activeSampleQty = mode === INSPECT_MODES.PARAMETER ? paramSample : sampleQty
       const activeErrorQty = mode === INSPECT_MODES.PARAMETER ? paramFail : errorQty
-      const partsDetails = (selectedProducts && selectedProducts.length > 0)
-        ? selectedProducts.map((pName, i) => {
-            const partObj = bomData.find((b) => b.part_name === pName)
-            const cQty = partObj?.total_qty ? convertQuantityToPiecesIfNeeded(pName, partObj.total_qty, partObj.unit) : 0
-            const matchedSpec = selectedSpecs[i] || spec || 'Tiêu chuẩn'
-            return {
-              part_name: pName,
-              specification: matchedSpec,
-              plan_qty: Number(cQty) || 0
-            }
-          })
+      const partsDetails = (currentPartsDetails && currentPartsDetails.length > 0)
+        ? currentPartsDetails
         : [{ part_name: activeProduct, specification: compactSpec(spec), plan_qty: Number(requiredQty || sampleQty) || 0 }]
+
+      setResult(finalResult)
+      setAction(finalAction)
+
+      // Chuẩn hóa danh sách lỗi khi lưu:
+      // 1. Lọc bỏ các dòng hoàn toàn trống (qty === 0 và không có tên/mã)
+      // 2. Nếu dòng có qty > 0 nhưng chưa có tên, tự động lấy finalNote hoặc 'Lỗi ghi nhận'
+      const sanitizedErrors = (Array.isArray(errors) ? errors : [])
+        .filter((e) => {
+          const qtyNum = Number(e.qty) || 0
+          const hasNameOrCode = Boolean((e.name && String(e.name).trim()) || (e.code && String(e.code).trim()) || e.defectId)
+          return qtyNum > 0 || hasNameOrCode
+        })
+        .map((e) => {
+          const qtyNum = Number(e.qty) || 0
+          const nameStr = (e.name || '').trim()
+          const codeStr = (e.code || '').trim()
+          if (qtyNum > 0 && !nameStr && !codeStr && !e.defectId) {
+            return {
+              ...e,
+              name: (finalNote || '').trim() || 'Lỗi ghi nhận',
+              is_custom: true
+            }
+          }
+          return e
+        })
 
       await createTicket({
         mode,
         stage: activeStage,
         po: activePo,
-        result: activeResult,
+        result: finalResult,
+        action: finalAction,
         product: activeProduct,
         spec: compactSpec(spec),
         requiredQty: requiredQty || sampleQty,
         sampleQty: activeSampleQty,
         errorQty: activeErrorQty,
-        note,
-        errors,
-        images,
+        note: finalNote,
+        errors: sanitizedErrors,
+        images: (images || []).filter((img) => img && !String(img).startsWith('blob:')),
         creator: creatorName,
-        palletCode: finalPalletCode,
+        palletCode: finalPalletCode || backupQrCode || '',
+        backup_qr: backupQrCode || null,
+        backupQrCode: backupQrCode || null,
         parts_details: partsDetails,
         parameter,
         paramPass,
@@ -1361,11 +1669,79 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
   const displayTime = ticket?.time_str || (ticket?.created_at ? new Date(ticket.created_at).toLocaleString('vi-VN') : '')
   const isDone = ticket?.status === 'done' || ticket?.is_confirmed === true
 
-  const summary = {
+  const currentPartsDetails = useMemo(() => {
+    if (selectedProducts && selectedProducts.length > 0) {
+      return selectedProducts.map((pName, i) => {
+        const partObj = (bomData || []).find((b) => b.part_name === pName)
+        const matchedSpec = (selectedSpecs && selectedSpecs[i]) || (partObj?.specs?.[0]?.specification) || spec || 'Tiêu chuẩn'
+        const effective = getEffectiveSpec(matchedSpec, pName)
+        return {
+          part_name: pName,
+          name: pName,
+          specification: effective,
+          spec: effective,
+          plan_qty: partObj?.total_qty ? convertQuantityToPiecesIfNeeded(pName, partObj.total_qty, partObj.unit) : 0
+        }
+      })
+    }
+
+    if (ticket?.parts_details && Array.isArray(ticket.parts_details) && ticket.parts_details.length > 0) {
+      return ticket.parts_details.map((item) => {
+        const pName = (item.part_name || item.name || '').trim()
+        const effective = getEffectiveSpec(item.specification || item.spec, pName)
+        return {
+          part_name: pName,
+          name: pName,
+          specification: effective,
+          spec: effective,
+          plan_qty: item.plan_qty
+        }
+      }).filter((p) => p.name && p.name !== '—')
+    }
+
+    if (ticket?.parts_with_specs && Array.isArray(ticket.parts_with_specs) && ticket.parts_with_specs.length > 0) {
+      return ticket.parts_with_specs.map((item) => {
+        const pName = (item.part_name || item.name || '').trim()
+        const effective = getEffectiveSpec(item.specification || item.spec, pName)
+        return {
+          part_name: pName,
+          name: pName,
+          specification: effective,
+          spec: effective,
+          plan_qty: item.plan_qty
+        }
+      }).filter((p) => p.name && p.name !== '—')
+    }
+
+    if (product && product !== '—') {
+      const pName = product.trim()
+      const effective = getEffectiveSpec(spec, pName)
+      return [{
+        part_name: pName,
+        name: pName,
+        specification: effective,
+        spec: effective
+      }]
+    }
+
+    return []
+  }, [selectedProducts, selectedSpecs, bomData, spec, product, ticket])
+
+  const curSummaryResult = mode === INSPECT_MODES.QA
+    ? qaResult
+    : (isFailedResult ? 'fail' : (result || ticket?.conclusion || ticket?.result || 'pass'))
+  const curSummaryAction = curSummaryResult === 'pass'
+    ? 'chap-nhan'
+    : (action === 'cach-ly' ? 'cach-ly' : 'tra-ve')
+
+  const summary = useMemo(() => ({
     poCode: mode === INSPECT_MODES.PARAMETER ? (paramPo || '—') : (po || ticket?.po_code || ticket?.po || '—'),
-    result: mode === INSPECT_MODES.QA ? qaResult : (result || ticket?.conclusion || ticket?.result || 'pass'),
+    result: curSummaryResult,
+    action: curSummaryAction,
+    isFailed: isFailedResult,
     product: mode === INSPECT_MODES.PARAMETER ? (paramProduct || '—') : (product || ticket?.product_name || ticket?.detail_name || ticket?.product || '—'),
     spec: compactSpec(spec || ticket?.specification || ticket?.spec) || '—',
+    partsDetails: currentPartsDetails,
     needQty: (() => {
       const details = getQuantityConversionDetails(product || spec || ticket?.product_name || ticket?.detail_name, requiredQty || ticket?.quantity_plan || ticket?.required_qty || sampleQty)
       const val = details.qty || '—'
@@ -1373,14 +1749,35 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
     })(),
     sampleQty: (mode === INSPECT_MODES.PARAMETER ? paramSample : (sampleQty || ticket?.sample_qty || ticket?.sampleQty)) || '—',
     errorQty: (mode === INSPECT_MODES.PARAMETER ? paramFail : (errorQty || ticket?.error_qty || ticket?.errorQty)) || '0',
-  }
+  }), [
+    mode,
+    paramPo,
+    po,
+    ticket,
+    curSummaryResult,
+    curSummaryAction,
+    isFailedResult,
+    paramProduct,
+    product,
+    spec,
+    currentPartsDetails,
+    requiredQty,
+    sampleQty,
+    isQtyConverted,
+    paramSample,
+    paramFail,
+    errorQty
+  ])
 
   const handleModeChange = (newMode) => {
     if (newMode === mode) return
     const doChange = () => {
       setIsDirty(false)
       setMode(newMode)
-      const targetRoute = MODE_TO_ROUTE[newMode] || ROUTES.INSPECTION_FIRST_SAMPLE
+      let targetRoute = formTypeRoutes[newMode] || MODE_TO_ROUTE[newMode] || ROUTES.INSPECTION_FIRST_SAMPLE
+      if (typeof targetRoute === 'string' && targetRoute.startsWith('/production-v2/')) {
+        targetRoute = targetRoute.replace('/production-v2/', '/production_v2/')
+      }
       const targetUrl = isNew ? `${targetRoute}/NEW` : `${targetRoute}/${id}`
       navigate(targetUrl, { replace: true })
     }
@@ -1491,13 +1888,34 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
     }
   }
 
-  const setResultWithDirty = (val) => { setResult(val); setIsDirty(true); }
+  const handleResultChange = (val) => {
+    setResult(val)
+    setIsDirty(true)
+    if (val === 'pass') {
+      setAction('chap-nhan')
+    } else {
+      setAction((prev) => (prev === 'cach-ly' ? 'cach-ly' : 'tra-ve'))
+    }
+  }
+
+  const handleActionChange = (val) => {
+    setAction(val)
+    setIsDirty(true)
+    if (val === 'chap-nhan' || val === 'luu-kho') {
+      setResult('pass')
+    } else if (val === 'tra-ve') {
+      setResult('fail')
+    }
+  }
+
+  const setResultWithDirty = handleResultChange
+  const setActionWithDirty = handleActionChange
   const setProductWithDirty = (val) => { setProduct(val); setIsDirty(true); }
   const setSpecWithDirty = (val) => { setSpec(val); setIsDirty(true); }
   const setSampleQtyWithDirty = (val) => {
     let num = Number(val)
     if (mode !== INSPECT_MODES.DAILY) {
-      const maxAllowed = samplingRule?.sample_size || Number(requiredQty) || 0
+      const maxAllowed = Number(requiredQty) || samplingRule?.sample_size || 0
       if (maxAllowed > 0 && num > maxAllowed) {
         num = maxAllowed
       }
@@ -1514,7 +1932,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
   const setParamProductWithDirty = (val) => { setParamProduct(val); setIsDirty(true); }
   const setParamSampleWithDirty = (val) => {
     let num = Number(val)
-    const maxAllowed = samplingRule?.sample_size || Number(requiredQty) || 0
+    const maxAllowed = Number(requiredQty) || samplingRule?.sample_size || 0
     if (maxAllowed > 0 && num > maxAllowed) {
       num = maxAllowed
     }
@@ -1549,7 +1967,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
     removeImage,
     mode,
     setMode,
-    modeOptions: INSPECT_MODE_OPTIONS,
+    modeOptions,
     handleModeChange,
     stage,
     setStage: handleStageChange,
@@ -1558,7 +1976,11 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
     setPo: handlePoChange,
     handlePoChange,
     result,
-    setResult: setResultWithDirty,
+    setResult: handleResultChange,
+    action,
+    setAction: handleActionChange,
+    handleResultChange,
+    handleActionChange,
     product,
     setProduct: setProductWithDirty,
     spec,
@@ -1610,6 +2032,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
     stageOptions,
     processOptions,
     poOptions,
+    handlePoSearch,
     productOptions,
     specOptions,
     bomData,
@@ -1634,6 +2057,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
     setFinishModal,
     submitting,
     defectOptions,
+    allDefectOptions,
     previewImage,
     setPreviewImage,
     modalConfig,
@@ -1649,6 +2073,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
     setSelectedProducts,
     selectedSpecs,
     setSelectedSpecs,
+    lockedSpecs,
     handleMultiProductChange,
     handleMultiSpecChange,
     handleProductChange,
@@ -1666,5 +2091,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE) =>
     displayTime,
     isDone,
     summary,
+    currentGuide,
+    setSteps,
   }
 }
