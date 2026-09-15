@@ -173,6 +173,7 @@ def get_plans(
     status: Optional[str] = None,
     user_stage: Optional[str] = None,
     sortDirection: Optional[str] = 'desc',
+    include_boms: bool = False,
     db: Session = Depends(get_db)
 ):
     from sqlalchemy.orm import selectinload
@@ -221,9 +222,11 @@ def get_plans(
 
     # Nếu KHÔNG phân trang (tương thích ngược cho Mobile)
     if page is None:
-        plans = query.options(
-            selectinload(ProductPlan.orders).selectinload(Order.products).selectinload(Product.bom_details)
-        ).order_by(ProductPlan.id.desc()).all()
+        plan_options = selectinload(ProductPlan.orders).selectinload(Order.products)
+        if include_boms:
+            plan_options = plan_options.selectinload(Product.bom_details)
+
+        plans = query.options(plan_options).order_by(ProductPlan.id.desc()).all()
 
         result = []
         for plan in plans:
@@ -235,38 +238,37 @@ def get_plans(
                 products = []
                 for product in order.products:
                     boms = []
-                    for b in product.bom_details:
-                        boms.append({
-                            "id": b.id,
-                            "sku": b.sku,
-                            "compCode": b.sku,
-                            "compName": b.name,
-                            "name": b.name,
-                            "planned": int(b.quantity or 0),
-                            "quantity": int(b.quantity or 0),
-                            "delivered": 0,
-                            "delivered_qty": 0,
-                            "unit": b.unit,
-                            "material": b.material,
-                            "specification": b.specification,
-                            "spec": b.specification,
-                            "input_stage": b.input_stage,
-                            "output_stage": b.output_stage,
-                            "stageFrom": b.input_stage,
-                            "stageTo": b.output_stage,
-                            "volume": b.weight or 1,
-                            "status": b.status,
-                            "description": b.description,
-                            "note": b.description
-                        })
-                    prod_factory = "NM1"
-                    for b in product.bom_details:
-                        stage_candidate = b.input_stage or b.output_stage or ""
-                        if " - " in stage_candidate:
-                            pref = stage_candidate.split(" - ")[0].strip()
-                            if pref.startswith("NM"):
-                                prod_factory = pref
-                                break
+                    prod_factory = getattr(product, 'factory', 'NM1') or 'NM1'
+                    if include_boms:
+                        for b in product.bom_details:
+                            boms.append({
+                                "id": b.id,
+                                "sku": b.sku,
+                                "compCode": b.sku,
+                                "compName": b.name,
+                                "name": b.name,
+                                "planned": int(b.quantity or 0),
+                                "quantity": int(b.quantity or 0),
+                                "delivered": 0,
+                                "delivered_qty": 0,
+                                "unit": b.unit,
+                                "material": b.material,
+                                "specification": b.specification,
+                                "spec": b.specification,
+                                "input_stage": b.input_stage,
+                                "output_stage": b.output_stage,
+                                "stageFrom": b.input_stage,
+                                "stageTo": b.output_stage,
+                                "volume": b.weight or 1,
+                                "status": b.status,
+                                "description": b.description,
+                                "note": b.description
+                            })
+                            stage_candidate = b.input_stage or b.output_stage or ""
+                            if " - " in stage_candidate:
+                                pref = stage_candidate.split(" - ")[0].strip()
+                                if pref.startswith("NM"):
+                                    prod_factory = pref
 
                     products.append({
                         "id": product.id,
@@ -327,9 +329,11 @@ def get_plans(
 
     # 4. Phân trang
     total_count = query.count()
-    paginated_plans = query.options(
-        selectinload(ProductPlan.orders).selectinload(Order.products).selectinload(Product.bom_details)
-    ).offset((page - 1) * pageSize).limit(pageSize).all()
+    plan_options = selectinload(ProductPlan.orders).selectinload(Order.products)
+    if include_boms:
+        plan_options = plan_options.selectinload(Product.bom_details)
+
+    paginated_plans = query.options(plan_options).offset((page - 1) * pageSize).limit(pageSize).all()
 
     result = []
     for plan in paginated_plans:
@@ -341,38 +345,37 @@ def get_plans(
             products = []
             for product in order.products:
                 boms = []
-                for b in product.bom_details:
-                    boms.append({
-                        "id": b.id,
-                        "sku": b.sku,
-                        "compCode": b.sku,
-                        "compName": b.name,
-                        "name": b.name,
-                        "planned": int(b.quantity or 0),
-                        "quantity": int(b.quantity or 0),
-                        "delivered": 0,
-                        "delivered_qty": 0,
-                        "unit": b.unit,
-                        "material": b.material,
-                        "specification": b.specification,
-                        "spec": b.specification,
-                        "input_stage": b.input_stage,
-                        "output_stage": b.output_stage,
-                        "stageFrom": b.input_stage,
-                        "stageTo": b.output_stage,
-                        "volume": b.weight or 1,
-                        "status": b.status,
-                        "description": b.description,
-                        "note": b.description
-                    })
-                prod_factory = "NM1"
-                for b in product.bom_details:
-                    stage_candidate = b.input_stage or b.output_stage or ""
-                    if " - " in stage_candidate:
-                        pref = stage_candidate.split(" - ")[0].strip()
-                        if pref.startswith("NM"):
-                            prod_factory = pref
-                            break
+                prod_factory = getattr(product, 'factory', 'NM1') or 'NM1'
+                if include_boms:
+                    for b in product.bom_details:
+                        boms.append({
+                            "id": b.id,
+                            "sku": b.sku,
+                            "compCode": b.sku,
+                            "compName": b.name,
+                            "name": b.name,
+                            "planned": int(b.quantity or 0),
+                            "quantity": int(b.quantity or 0),
+                            "delivered": 0,
+                            "delivered_qty": 0,
+                            "unit": b.unit,
+                            "material": b.material,
+                            "specification": b.specification,
+                            "spec": b.specification,
+                            "input_stage": b.input_stage,
+                            "output_stage": b.output_stage,
+                            "stageFrom": b.input_stage,
+                            "stageTo": b.output_stage,
+                            "volume": b.weight or 1,
+                            "status": b.status,
+                            "description": b.description,
+                            "note": b.description
+                        })
+                        stage_candidate = b.input_stage or b.output_stage or ""
+                        if " - " in stage_candidate:
+                            pref = stage_candidate.split(" - ")[0].strip()
+                            if pref.startswith("NM"):
+                                prod_factory = pref
 
                 products.append({
                     "id": product.id,

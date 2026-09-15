@@ -56,7 +56,8 @@ class Product(Base):
             if 'Vanity 2' in self.description: return 'NM2'
             if 'Furniture' in self.description: return 'NM3'
             return self.description
-        if self.bom_details:
+        # Chỉ kiểm tra bom_details nếu đã được eager-load trong bộ nhớ, tránh nổ 2300 truy vấn N+1
+        if 'bom_details' in self.__dict__ and self.bom_details:
             for b in self.bom_details:
                 for stg in [b.input_stage, b.output_stage]:
                     if stg and 'NM' in stg:

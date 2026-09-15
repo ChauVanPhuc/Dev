@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
-import { Pencil, Trash2, FileUp } from 'lucide-react';
+import { Pencil, Trash2, FileUp, RefreshCw } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import { planService } from '@modules/Plan/Models/plan.service';
+import api from '@webShared/Services/api.service';
 import '@styles/components.css';
 
 /**
@@ -263,6 +264,31 @@ const ProductionOrdersView = () => {
     }
   };
 
+  const [isSyncingBOM, setIsSyncingBOM] = useState(false);
+
+  const handleSyncAllOrdersBOM = async () => {
+    if (isSyncingBOM) return;
+    const confirmed = window.confirm(
+      "Bạn có chắc muốn đồng bộ lại Quy cách & Cây BOM từ Sản phẩm mẫu (Master Products) sang toàn bộ các Lệnh sản xuất (POs)?\n\nThao tác này sẽ cập nhật quy cách và tái lập cây linh kiện đa tầng cho tất cả đơn hàng."
+    );
+    if (!confirmed) return;
+
+    try {
+      setIsSyncingBOM(true);
+      if (toast) toast('info', 'Đang đồng bộ BOM từ Sản phẩm mẫu sang các đơn hàng...');
+      const res = await api.post('/orders/sync-all-from-master-bom');
+      if (toast) {
+        toast('success', `Đồng bộ thành công ${res?.updated_orders || 0} lệnh SX, tạo mới ${res?.created_boms || 0} chi tiết BOM!`);
+      }
+      fetchProductionOrders();
+    } catch (error) {
+      console.error("Lỗi đồng bộ BOM:", error);
+      if (toast) toast('error', 'Lỗi đồng bộ: ' + (error.response?.data?.detail || error.message));
+    } finally {
+      setIsSyncingBOM(false);
+    }
+  };
+
   return (
     <div className="gold-layout">
 
@@ -296,7 +322,14 @@ const ProductionOrdersView = () => {
           onCreate={handleOpenCreateOrder}
           createLabel="Thêm mới"
           hasWritePermission={true}
-          extraActions={[]}
+          extraActions={[
+            {
+              label: isSyncingBOM ? 'Đang đồng bộ...' : 'Đồng bộ BOM từ SP mẫu',
+              icon: <RefreshCw size={14} className={isSyncingBOM ? 'animate-spin' : ''} />,
+              onClick: handleSyncAllOrdersBOM,
+              disabled: isSyncingBOM
+            }
+          ]}
         >
           <input 
             type="file" 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ResponsiveContainer,
   RadarChart,
@@ -17,6 +17,13 @@ import {
 export const Section1ProductKpi = ({ kpiData, onEditKpi }) => {
   // Checkbox chuyển đổi: false = 2 đường riêng Vanity & Furniture, true = chỉ 1 đường Tổng quan
   const [isOverallOnly, setIsOverallOnly] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 850);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 850);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Bảng 2 màu chuẩn so sánh theo theme Walnut & Warm Cream: Vanity (#70452D Gỗ Óc chó) & Furniture (#C58A4B Gỗ Teak vàng ấm)
   const COLOR_VANITY = '#70452D';
@@ -91,7 +98,7 @@ export const Section1ProductKpi = ({ kpiData, onEditKpi }) => {
     }
   ];
 
-  const kpiCards = kpiData?.kpiCards || [];
+  const kpiCards = (kpiData?.kpiCards && kpiData.kpiCards.length > 0) ? kpiData.kpiCards : [];
   const vanityLabel = kpiCards[0]?.vanityLabel || 'Vanity';
   const furnitureLabel = kpiCards[0]?.furnitureLabel || 'Furniture';
 
@@ -103,30 +110,41 @@ export const Section1ProductKpi = ({ kpiData, onEditKpi }) => {
   const vShort = getShortLabel(vanityLabel);
   const fShort = getShortLabel(furnitureLabel);
 
-  const rawRadarData = kpiData?.radarData && kpiData.radarData.length > 0 ? kpiData.radarData : (kpiData ? [] : defaultRadarData);
+  // Đảm bảo luôn có dữ liệu hiển thị Radar Chart, không bao giờ để trống
+  const rawRadarData = (kpiData?.radarData && Array.isArray(kpiData.radarData) && kpiData.radarData.length > 0)
+    ? kpiData.radarData
+    : defaultRadarData;
 
   const radarData = rawRadarData.map((rItem, idx) => {
     const card = kpiCards[idx];
-    if (!card) return rItem;
 
-    const vVal = card.vanityVal || '';
-    const fVal = card.furnitureVal || '';
-    const vLbl = card.vanityLabel || vanityLabel;
-    const fLbl = card.furnitureLabel || furnitureLabel;
+    const vVal = card?.vanityVal || '';
+    const fVal = card?.furnitureVal || '';
+    const vLbl = card?.vanityLabel || vanityLabel;
+    const fLbl = card?.furnitureLabel || furnitureLabel;
     const vS = getShortLabel(vLbl);
     const fS = getShortLabel(fLbl);
 
-    const lines = (rItem.displaySubject || rItem.title || '').split('\n');
-    const firstLine = lines[0] || rItem.title;
+    const lines = (rItem.displaySubject || rItem.title || 'Chỉ số').split('\n');
+    const firstLine = lines[0] || rItem.title || 'Chỉ số';
     const updatedDisplaySubject = (vVal && fVal) 
       ? `${firstLine}\n${fS} ${fVal} - ${vS} ${vVal}`
-      : (rItem.displaySubject || rItem.title);
+      : (rItem.displaySubject || rItem.title || 'Chỉ số');
+
+    const parseScore = (val, fallback = 85) => {
+      if (typeof val === 'number' && !isNaN(val)) return val;
+      const n = parseFloat(val);
+      return isNaN(n) ? fallback : n;
+    };
 
     return {
       ...rItem,
       displaySubject: updatedDisplaySubject,
-      vanityText: vVal ? `${vVal} (${card.vanityChange || ''})` : rItem.vanityText,
-      furnitureText: fVal ? `${fVal} (${card.furnitureChange || ''})` : rItem.furnitureText
+      scoreAvg: parseScore(rItem.scoreAvg, 85),
+      scoreVanity: parseScore(rItem.scoreVanity, 85),
+      scoreFurniture: parseScore(rItem.scoreFurniture, 85),
+      vanityText: vVal ? `${vVal} (${card?.vanityChange || ''})` : rItem.vanityText,
+      furnitureText: fVal ? `${fVal} (${card?.furnitureChange || ''})` : rItem.furnitureText
     };
   });
 
@@ -141,14 +159,14 @@ export const Section1ProductKpi = ({ kpiData, onEditKpi }) => {
     { month: 'T6', fullName: '06/2026', vanity: 1.44, furniture: 2.11 },
     { month: 'T7', fullName: '07/2026', vanity: 1.26, furniture: 1.86 },
     { month: 'T8', fullName: '08/2026', vanity: 0.92, furniture: 1.37 },
-    { month: 'T9', fullName: '09/2026', vanity: 0.97, furniture: 1.41 }
+    { month: 'T9', fullName: '09/2026', vanity: 1.01, furniture: 1.45 }
   ];
 
   const claimLineData = kpiData ? (kpiData.claimLineData || []) : [
-    { month: 'T6', fullName: '06/2026', vanity: 0.36, furniture: 0.83 },
-    { month: 'T7', fullName: '07/2026', vanity: 0.32, furniture: 0.73 },
-    { month: 'T8', fullName: '08/2026', vanity: 0.23, furniture: 0.54 },
-    { month: 'T9', fullName: '09/2026', vanity: 0.24, furniture: 0.56 }
+    { month: 'T6', fullName: '06/2026', vanity: 0.64, furniture: 1.63 },
+    { month: 'T7', fullName: '07/2026', vanity: 0.58, furniture: 1.45 },
+    { month: 'T8', fullName: '08/2026', vanity: 0.48, furniture: 1.15 },
+    { month: 'T9', fullName: '09/2026', vanity: 0.50, furniture: 1.20 }
   ];
 
   const periodTitle = kpiData?.periodTitle 
@@ -191,16 +209,19 @@ export const Section1ProductKpi = ({ kpiData, onEditKpi }) => {
     return null;
   };
 
-  // Render nhãn các đỉnh của Radar thành 2 dòng to, rõ nét, dễ đọc:
-  // Dòng 1 (9.5px, bold 900): Tên KPI (Trung bình)
-  // Dòng 2 (8.4px, bold 800): Fur XX% - Van YY%
-  const renderPolarAngleTick = ({ payload, x, y, cx, cy }) => {
-    const lines = (payload.value || '').split('\n');
+  // Render nhãn các đỉnh của Radar thành 2 dòng to, rõ nét, an toàn không crash:
+  const renderPolarAngleTick = (props) => {
+    if (!props || !props.payload) return null;
+    const { payload, x, y, cx, cy } = props;
+    if (x === undefined || y === undefined || isNaN(x) || isNaN(y)) return null;
+
+    const val = typeof payload.value === 'string' ? payload.value : String(payload.value || '');
+    const lines = val.split('\n');
     return (
       <text
         x={x}
         y={y}
-        textAnchor={x > cx + 8 ? 'start' : x < cx - 8 ? 'end' : 'middle'}
+        textAnchor={cx !== undefined && x > cx + 8 ? 'start' : cx !== undefined && x < cx - 8 ? 'end' : 'middle'}
         dominantBaseline="central"
       >
         {lines.map((line, idx) => (
@@ -210,7 +231,7 @@ export const Section1ProductKpi = ({ kpiData, onEditKpi }) => {
             dy={idx === 0 ? -(lines.length - 1) * 6.5 : 13.5}
             fill={idx === 1 ? '#70452D' : '#302820'}
             fontWeight={idx === 1 ? 800 : 900}
-            fontSize={idx === 1 ? 8.4 : 9.5}
+            fontSize={idx === 1 ? (isMobile ? 7.6 : 8.4) : (isMobile ? 8.6 : 9.5)}
             letterSpacing={-0.1}
           >
             {line}
@@ -280,7 +301,13 @@ export const Section1ProductKpi = ({ kpiData, onEditKpi }) => {
         {/* Hàng trên: Radar Chart (trái) + Cụm KPI tổng hợp (phải) */}
         <div className="qd-sec1-top">
           {/* Cột trái: Radar Chart */}
-          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            height: isMobile ? 'auto' : '100%',
+            minHeight: isMobile ? 290 : 0,
+            width: '100%'
+          }}>
             {/* Header Radar: Chú thích màu + Checkbox Tổng quan */}
             <div style={{
               display: 'flex',
@@ -343,9 +370,18 @@ export const Section1ProductKpi = ({ kpiData, onEditKpi }) => {
               </label>
             </div>
 
-            <div style={{ flex: 1, minHeight: 0, width: '100%' }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <RadarChart cx="50%" cy="50%" outerRadius="58%" data={radarData}>
+            <div
+              className="qd-radar-chart-container"
+              style={{
+                flex: isMobile ? 'none' : 1,
+                minHeight: isMobile ? 260 : 0,
+                height: isMobile ? 260 : '100%',
+                width: '100%',
+                position: 'relative'
+              }}
+            >
+              <ResponsiveContainer width="100%" height={isMobile ? 260 : "100%"}>
+                <RadarChart cx="50%" cy="50%" outerRadius={isMobile ? 70 : "58%"} data={radarData}>
                   <PolarGrid stroke="#E4DDD5" />
                   <PolarAngleAxis
                     dataKey="displaySubject"
@@ -467,7 +503,6 @@ export const Section1ProductKpi = ({ kpiData, onEditKpi }) => {
                       <span style={{
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
                         fontWeight: '800'
                       }}>
                         {kpi.title}
@@ -476,36 +511,30 @@ export const Section1ProductKpi = ({ kpiData, onEditKpi }) => {
 
                     {/* Hàng Giá trị số Vanity & Furniture */}
                     <div className="qd-kpi-item-num-row">
-                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                        <div className="qd-brand-label">{kpi.vanityLabel || 'Vanity'}</div>
-                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '3px', whiteSpace: 'nowrap' }}>
+                      <div className="qd-kpi-brand-col">
+                        <div className="qd-brand-label">
+                          <span className="qd-brand-dot" style={{ backgroundColor: COLOR_VANITY }}></span>
+                          <span>{kpi.vanityLabel || 'Vanity'}</span>
+                        </div>
+                        <div className="qd-brand-val-group">
                           <span className="qd-brand-value" style={{ color: COLOR_VANITY }}>{kpi.vanityVal}</span>
                           {kpi.vanityChange && (
-                            <span style={{
-                              fontSize: '0.62rem',
-                              color: isIncreaseVanity ? '#3F7D58' : '#8C5332',
-                              fontWeight: '800',
-                              whiteSpace: 'nowrap',
-                              display: 'inline-block'
-                            }}>
+                            <span className="qd-brand-change" style={{ color: isIncreaseVanity ? '#3F7D58' : '#8C5332' }}>
                               {kpi.vanityChange}
                             </span>
                           )}
                         </div>
                       </div>
 
-                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', textAlign: 'right' }}>
-                        <div className="qd-brand-label">{kpi.furnitureLabel || 'Furniture'}</div>
-                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '3px', justifyContent: 'flex-end', whiteSpace: 'nowrap' }}>
+                      <div className="qd-kpi-brand-col qd-kpi-brand-right">
+                        <div className="qd-brand-label">
+                          <span className="qd-brand-dot" style={{ backgroundColor: COLOR_FURNITURE }}></span>
+                          <span>{kpi.furnitureLabel || 'Furniture'}</span>
+                        </div>
+                        <div className="qd-brand-val-group qd-val-right">
                           <span className="qd-brand-value" style={{ color: COLOR_FURNITURE }}>{kpi.furnitureVal}</span>
                           {kpi.furnitureChange && (
-                            <span style={{
-                              fontSize: '0.62rem',
-                              color: isIncreaseFurn ? '#3F7D58' : '#8C5332',
-                              fontWeight: '800',
-                              whiteSpace: 'nowrap',
-                              display: 'inline-block'
-                            }}>
+                            <span className="qd-brand-change" style={{ color: isIncreaseFurn ? '#3F7D58' : '#8C5332' }}>
                               {kpi.furnitureChange}
                             </span>
                           )}
@@ -527,7 +556,7 @@ export const Section1ProductKpi = ({ kpiData, onEditKpi }) => {
             <div style={{ flex: 1, minHeight: 0, height: '100%', width: '100%' }}>
               {defectLineData && defectLineData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={defectLineData} margin={{ top: 14, right: 14, left: -22, bottom: 2 }}>
+                  <LineChart data={defectLineData} margin={{ top: 14, right: isMobile ? 8 : 14, left: isMobile ? -6 : -22, bottom: 2 }}>
                     <CartesianGrid strokeDasharray="2 2" vertical={false} stroke="#E4DDD5" />
                     <XAxis dataKey="month" fontSize={7.8} stroke="#786B61" tickLine={false} />
                     <YAxis domain={['auto', 'auto']} fontSize={7.5} stroke="#786B61" tickLine={false} tickFormatter={(v) => `${v}%`} />
@@ -572,7 +601,7 @@ export const Section1ProductKpi = ({ kpiData, onEditKpi }) => {
             <div style={{ flex: 1, minHeight: 0, height: '100%', width: '100%' }}>
               {reworkLineData && reworkLineData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={reworkLineData} margin={{ top: 14, right: 14, left: -22, bottom: 2 }}>
+                  <LineChart data={reworkLineData} margin={{ top: 14, right: isMobile ? 8 : 14, left: isMobile ? -6 : -22, bottom: 2 }}>
                     <CartesianGrid strokeDasharray="2 2" vertical={false} stroke="#E4DDD5" />
                     <XAxis dataKey="month" fontSize={7.8} stroke="#786B61" tickLine={false} />
                     <YAxis domain={['auto', 'auto']} fontSize={7.5} stroke="#786B61" tickLine={false} tickFormatter={(v) => `${v}%`} />
@@ -617,7 +646,7 @@ export const Section1ProductKpi = ({ kpiData, onEditKpi }) => {
             <div style={{ flex: 1, minHeight: 0, height: '100%', width: '100%' }}>
               {claimLineData && claimLineData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={claimLineData} margin={{ top: 14, right: 14, left: -22, bottom: 2 }}>
+                  <LineChart data={claimLineData} margin={{ top: 14, right: isMobile ? 8 : 14, left: isMobile ? -6 : -22, bottom: 2 }}>
                     <CartesianGrid strokeDasharray="2 2" vertical={false} stroke="#E4DDD5" />
                     <XAxis dataKey="month" fontSize={7.8} stroke="#786B61" tickLine={false} />
                     <YAxis domain={['auto', 'auto']} fontSize={7.5} stroke="#786B61" tickLine={false} tickFormatter={(v) => `${v}%`} />

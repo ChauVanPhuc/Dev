@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useOutletContext, useNavigate, useParams, useLocation } from 'react-router-dom';
 import {
-  Pencil, Download, Upload, Send, ChevronDown, Eye, Plus, ArrowRight, Trash2
+  Pencil, Download, Upload, Send, ChevronDown, Eye, Plus, ArrowRight, Trash2, RefreshCw
 } from 'lucide-react';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
@@ -843,6 +843,29 @@ const ProductionOrderCreateView = () => {
     setOrderForm(prev => ({ ...prev, endDate: newEndDate }));
   };
 
+  const [isSyncingSingleBOM, setIsSyncingSingleBOM] = useState(false);
+
+  const handleSyncOrderBOM = async () => {
+    if (!editingOrderId || isSyncingSingleBOM) return;
+    const confirmed = window.confirm(
+      "Bạn có chắc muốn đồng bộ lại Quy cách & Cây BOM từ Sản phẩm mẫu (Master Products) cho Lệnh sản xuất này?\\n\\nThao tác này sẽ cập nhật quy cách và nạp lại đầy đủ cây linh kiện đa tầng."
+    );
+    if (!confirmed) return;
+
+    try {
+      setIsSyncingSingleBOM(true);
+      if (toast) toast('info', 'Đang đồng bộ BOM từ Sản phẩm mẫu...');
+      await api.post(`/orders/${editingOrderId}/sync-bom`);
+      if (toast) toast('success', 'Đồng bộ BOM chuẩn thành công!');
+      window.location.reload();
+    } catch (err) {
+      console.error("Lỗi đồng bộ BOM đơn hàng:", err);
+      if (toast) toast('error', 'Lỗi đồng bộ: ' + (err.response?.data?.detail || err.message));
+    } finally {
+      setIsSyncingSingleBOM(false);
+    }
+  };
+
   const handleSaveOrder = async () => {
     if (!orderForm.code && !orderForm.orderId) {
       if (toast) toast('warning', 'Vui lòng nhập Mã lệnh sản xuất hoặc Mã đơn hàng!');
@@ -1410,6 +1433,31 @@ const ProductionOrderCreateView = () => {
                     title="Xóa lệnh sản xuất này"
                   >
                     <Trash2 size={16} /> Xóa Lệnh SX
+                  </button>
+                )}
+
+                {isEditMode && (
+                  <button
+                    type="button"
+                    onClick={handleSyncOrderBOM}
+                    disabled={isSyncingSingleBOM || loading}
+                    style={{
+                      padding: '8px 16px',
+                      backgroundColor: '#FDF8F3',
+                      border: '1.5px solid #6D4C3D',
+                      borderRadius: '8px',
+                      color: '#6D4C3D',
+                      fontWeight: '800',
+                      fontSize: '0.88rem',
+                      cursor: (isSyncingSingleBOM || loading) ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      transition: 'all 0.2s'
+                    }}
+                    title="Đồng bộ lại Quy cách và Cây linh kiện từ Master Product"
+                  >
+                    <RefreshCw size={16} className={isSyncingSingleBOM ? 'animate-spin' : ''} /> {isSyncingSingleBOM ? 'Đang đồng bộ...' : 'Đồng bộ BOM'}
                   </button>
                 )}
 

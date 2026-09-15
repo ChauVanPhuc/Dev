@@ -1233,13 +1233,23 @@ const PortalLayout = () => {
 
   const startGlobalUpload = async (file, endpoint, onComplete, extraFormData = null) => {
     const uploadId = Date.now().toString();
+    const isMulti = Array.isArray(file) || (file && typeof file.length === 'number' && typeof file.item === 'function');
+    let displayName = 'Đang đồng bộ dữ liệu';
+    if (isMulti) {
+      displayName = `${file.length} file Excel`;
+    } else if (file && file.name) {
+      displayName = file.name;
+    } else if (extraFormData && extraFormData.fileName) {
+      displayName = extraFormData.fileName;
+    }
+
     const newUpload = {
       id: uploadId,
       active: true,
       progress: 0,
       processed: 0,
       total: 0,
-      fileName: file.name,
+      fileName: displayName,
       status: 'uploading',
       message: ''
     };
@@ -1248,7 +1258,13 @@ const PortalLayout = () => {
     await new Promise(r => setTimeout(r, 100));
 
     const formData = new FormData();
-    formData.append('file', file);
+    if (isMulti) {
+      Array.from(file).forEach(f => {
+        formData.append('files', f);
+      });
+    } else if (file) {
+      formData.append('file', file);
+    }
     if (extraFormData && typeof extraFormData === 'object') {
       Object.keys(extraFormData).forEach(k => {
         if (extraFormData[k] !== undefined && extraFormData[k] !== null) {

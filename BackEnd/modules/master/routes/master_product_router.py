@@ -44,19 +44,64 @@ async def inspect_master_products_excel_sheets_endpoint(file: UploadFile = File(
 
 @router.post("/import-excel")
 async def import_master_products(
-    file: UploadFile = File(...),
+    file: Optional[UploadFile] = File(None),
+    files: Optional[List[UploadFile]] = File(None),
     sheets: Optional[str] = Form(None),
     db: Session = Depends(get_db)
 ):
     """
-    [POST] Nhập dữ liệu sản phẩm mẫu và BOM từ file Excel (Hỗ trợ Streaming Progress và chọn Sheet).
+    [POST] Nhập dữ liệu sản phẩm mẫu và BOM từ 1 hoặc nhiều file Excel (Hỗ trợ Streaming Progress).
     """
-    if not file.filename.endswith(('.xlsx', '.xls')):
-        raise HTTPException(status_code=400, detail="Vui lòng tải lên file Excel (.xlsx hoặc .xls)")
-    
-    contents = await file.read()
+    upload_files = []
+    if files:
+        upload_files = [f for f in files if f.filename and f.filename.endswith(('.xlsx', '.xls')) and not os.path.basename(f.filename).startswith('~$')]
+    elif file:
+        if not file.filename.endswith(('.xlsx', '.xls')):
+            raise HTTPException(status_code=400, detail="Vui lòng tải lên file Excel (.xlsx hoặc .xls)")
+        upload_files = [file]
+
+    if not upload_files:
+        raise HTTPException(status_code=400, detail="Vui lòng chọn ít nhất một file Excel (.xlsx hoặc .xls)")
+
+    if len(upload_files) == 1:
+        contents = await upload_files[0].read()
+        return StreamingResponse(
+            master_product_controller.import_master_products_from_excel(db, contents, selected_sheets=sheets),
+            media_type="text/event-stream",
+            headers={
+                "X-Accel-Buffering": "no",
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive"
+            }
+        )
+    else:
+        # Multi-file batch import
+        files_data = []
+        for uf in upload_files:
+            b = await uf.read()
+            files_data.append((uf.filename, b))
+
+        return StreamingResponse(
+            master_product_controller.import_master_products_from_excel_batch(db, files_data),
+            media_type="text/event-stream",
+            headers={
+                "X-Accel-Buffering": "no",
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive"
+            }
+        )
+
+@router.post("/sync-bom-directory")
+def sync_bom_directory_endpoint(
+    directory_path: Optional[str] = Form(r"D:\SmartFlow\BOM"),
+    db: Session = Depends(get_db)
+):
+    """
+    [POST] Đồng bộ trực tiếp toàn bộ các file BOM Excel từ thư mục máy chủ (mặc định D:\\SmartFlow\\BOM).
+    """
+    target_dir = directory_path or r"D:\SmartFlow\BOM"
     return StreamingResponse(
-        master_product_controller.import_master_products_from_excel(db, contents, selected_sheets=sheets),
+        master_product_controller.sync_all_boms_from_directory(db, directory_path=target_dir),
         media_type="text/event-stream",
         headers={
             "X-Accel-Buffering": "no",
@@ -64,6 +109,7 @@ async def import_master_products(
             "Connection": "keep-alive"
         }
     )
+
 
 
 @router.get("/", response_model=MasterProductListResponse)

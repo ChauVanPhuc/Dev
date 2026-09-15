@@ -669,23 +669,32 @@ def produce_from_bom(db: Session, master_product_id: int, quantity_to_produce: f
 
 def parse_dimensions(spec_str):
     if not spec_str: return 0.0, 0.0, 0.0
-    # Match standard dimension pattern like 100x50x25 or 100*50 (with float support)
-    match = re.search(r"(\d+(?:\.\d+)?\s*[*xX]\s*\d+(?:\.\d+)?(?:\s*[*xX]\s*\d+(?:\.\d+)?)?)", str(spec_str))
+    s = str(spec_str).replace(',', '.').replace('×', '*').replace('X', '*').replace('x', '*')
+    match = re.search(r"(\d+(?:\.\d+)?)\s*[*]\s*(\d+(?:\.\d+)?)(?:\s*[*]\s*(\d+(?:\.\d+)?))?", s)
     if match:
-        dims = re.findall(r"[-+]?\d*\.\d+|\d+", match.group(1).replace(',', '.'))
-        if len(dims) >= 3:
-            return float(dims[0]), float(dims[1]), float(dims[2])
-        elif len(dims) == 2:
-            return float(dims[0]), float(dims[1]), 0.0
+        try:
+            d1 = float(match.group(1))
+            d2 = float(match.group(2))
+            d3 = float(match.group(3)) if match.group(3) is not None else 0.0
+            if d3 > 0:
+                return d3, d2, d1
+            elif d2 > 0:
+                return d2, d1, 0.0
+        except Exception:
+            pass
             
     # Fallback to general numbers find
-    dims = re.findall(r"[-+]?\d*\.\d+|\d+", str(spec_str).replace(',', '.'))
+    dims = re.findall(r"[-+]?\d*\.\d+|\d+", s)
     try:
-        l = float(dims[0]) if len(dims) > 0 else 0.0
-        w = float(dims[1]) if len(dims) > 1 else 0.0
-        h = float(dims[2]) if len(dims) > 2 else 0.0
-        return l, w, h
-    except: return 0.0, 0.0, 0.0
+        if len(dims) >= 3:
+            return float(dims[2]), float(dims[1]), float(dims[0])
+        elif len(dims) == 2:
+            return float(dims[1]), float(dims[0]), 0.0
+        elif len(dims) == 1:
+            return float(dims[0]), 0.0, 0.0
+        return 0.0, 0.0, 0.0
+    except:
+        return 0.0, 0.0, 0.0
 
 def parse_color(sku, name, desc=None):
     if not sku: return None
@@ -839,24 +848,25 @@ def inspect_master_products_excel_sheets(file_content: bytes):
         }
 
 
-def import_master_products_from_excel(db: Session, file_content: bytes, selected_sheets: Optional[Any] = None):
+def _process_bom_workbook(db: Session, wb, filename: str = "BOM.xlsx", selected_sheets: Optional[Any] = None, file_index: int = 1, total_files: int = 1, category_cache: Optional[dict] = None):
     """
-    [MULTI-SHEET STREAMING IMPORT] Nhập dữ liệu Master BOM chuẩn từ file Excel:
-    - Hỗ trợ chọn 1, nhiều hoặc toàn bộ sheet.
-    - Ánh xạ đầy đủ 58 cột thuộc tính kỹ thuật.
-    - Duyệt cây BOM phân cấp đệ quy chính xác (parent_id).
-    - Tự động liên kết Dòng hàng (MasterCategory) và Mẫu màu sơn (paint_color_samples).
-    - Cập nhật thời gian thực qua Server-Sent Events (SSE).
+    Hàm nội bộ xử lý bóc tách 1 workbook Excel BOM với thuật toán Two-pass Tree Assembly:
+    - Pass 1: Nhận diện tất cả các linh kiện con (Child Leaf & Components).
+    - Pass 2: Khởi tạo/cập nhật cụm bán thành phẩm (Sub-assemblies) với đúng Quy cách và ĐVT của chính cụm đó.
+    - Chuẩn hóa kích thước 3D length/width/height và đồng bộ auxiliary tables.
     """
-    import io, openpyxl, json, re
+    import json, re
     from modules.master.models.master_category import MasterCategory
     from modules.master.models.master_product_detail import MasterProductDetail
     from modules.master.models.paint_color_sample import PaintColorSample
 
+    if category_cache is None:
+        category_cache = {}
+
     def clean_val(val):
         if val is None or pd.isna(val): return None
         s = str(val).strip()
-        if not s or s.lower() == 'nan' or s.lower() == 'none': return None
+        if not s or s.lower() in ('nan', 'none', 'null', 'undefined'): return None
         return s
 
     def to_bool(val):
@@ -882,434 +892,589 @@ def import_master_products_from_excel(db: Session, file_content: bytes, selected
         elif isinstance(selected_sheets, (list, set)):
             target_sheet_filter = list(selected_sheets)
 
-    try:
-        wb = openpyxl.load_workbook(io.BytesIO(file_content), data_only=True)
-        all_sheetnames = wb.sheetnames
+    all_sheetnames = wb.sheetnames
+    valid_sheetnames = []
+    for sname in all_sheetnames:
+        if target_sheet_filter is not None:
+            if sname in target_sheet_filter:
+                valid_sheetnames.append(sname)
+        else:
+            ws = wb[sname]
+            if ws.max_row >= 2:
+                valid_sheetnames.append(sname)
 
-        valid_sheetnames = []
-        for sname in all_sheetnames:
-            if target_sheet_filter is not None:
-                if sname in target_sheet_filter:
-                    valid_sheetnames.append(sname)
-            else:
-                ws = wb[sname]
-                if ws.max_row >= 2:
-                    valid_sheetnames.append(sname)
-
-        if not valid_sheetnames:
-            yield json.dumps({"status": "error", "message": "Không tìm thấy sheet nào hợp lệ để nhập dữ liệu."}) + "\n"
-            return
-
-        total_sheets = len(valid_sheetnames)
+    if not valid_sheetnames:
         yield json.dumps({
-            "status": "reading",
-            "total_sheets": total_sheets,
-            "sheets": valid_sheetnames,
-            "message": f"Bắt đầu nạp {total_sheets} sheet được chọn..."
+            "status": "warning", 
+            "file_index": file_index,
+            "total_files": total_files,
+            "file_name": filename,
+            "message": f"[{filename}] Không tìm thấy sheet nào có dữ liệu hợp lệ."
         }) + "\n"
+        return
 
-        total_prods_imported = 0
-        total_boms_imported = 0
-        category_cache = {}
+    total_sheets = len(valid_sheetnames)
+    total_prods_imported = 0
+    total_boms_imported = 0
 
-        for sheet_idx, sheet_name in enumerate(valid_sheetnames):
-            ws = wb[sheet_name]
-            if ws.max_row < 2:
+    for sheet_idx, sheet_name in enumerate(valid_sheetnames):
+        ws = wb[sheet_name]
+        all_rows = list(ws.iter_rows(values_only=True))
+        if not all_rows or len(all_rows) < 2:
+            continue
+
+        # 1. Tìm dòng tiêu đề (Header row)
+        h_row_idx = 0
+        for idx, r_vals in enumerate(all_rows[:15]):
+            row_str = ' '.join([str(c or '').lower() for c in r_vals[:20]])
+            if any(k in row_str for k in ['mã chi tiết', 'tên chi tiết', 'mã mặt hàng', 'mã sản phẩm']):
+                h_row_idx = idx
+                break
+
+        headers = [str(c or '').replace('\n', ' ').strip().lower() for c in all_rows[h_row_idx]]
+
+        def get_c_idx(names, default=None):
+            for name in names:
+                for i, h in enumerate(headers):
+                    if name == h: return i
+            for name in names:
+                for i, h in enumerate(headers):
+                    if name in h: return i
+            return default
+
+        c_root_sku = get_c_idx(['mã mặt hàng gốc', 'mã sp gốc', 'mã thành phẩm gốc'], None)
+        c_root_name = get_c_idx(['tên mặt hàng gốc', 'tên sp gốc', 'tên thành phẩm gốc'], None)
+        c_parent_sku = get_c_idx(['mã mặt hàng', 'mã sp', 'mã sản phẩm', 'mã bán thành phẩm'], 0)
+        c_parent_name = get_c_idx(['tên mặt hàng', 'tên sp', 'tên sản phẩm'], 1)
+        c_parent_unit = get_c_idx(['đvt'], None)
+        c_parent_spec = get_c_idx(['quy cách'], None)
+        
+        c_stt = get_c_idx(['stt'], 2)
+        c_material = get_c_idx(['nguyên liệu', 'vật liệu', 'chất liệu'], 3)
+        c_child_sku = get_c_idx(['mã chi tiết', 'mã linh kiện', 'mã nvl'], 4)
+        c_child_name = get_c_idx(['tên chi tiết', 'tên linh kiện', 'tên nvl'], 5)
+        c_child_unit = get_c_idx(['đvt chi tiết', 'đơn vị'], 6)
+        c_child_spec = get_c_idx(['quy cách chi tiết'], None)
+        
+        c_h = get_c_idx(['dày', 'chiều dày', 'dày (mm)'], None)
+        c_w = get_c_idx(['rộng', 'chiều rộng', 'rộng (mm)'], None)
+        c_l = get_c_idx(['dài', 'chiều dài', 'dài (mm)'], None)
+        c_color = get_c_idx(['màu sắc', 'màu', 'mã màu'], None)
+        c_qty = get_c_idx(['số lượng', 'sl/ part', 'sl/ set', 'định mức', 'tổng sl'], 11)
+        c_qty_part = get_c_idx(['sl/ part'], None)
+        c_qty_set = get_c_idx(['sl/ set'], None)
+        c_desc = get_c_idx(['mô tả', 'ghi chú'], None)
+        c_waste = get_c_idx(['tỷ lệ hao hụt', 'hao hụt', 'bù hao'], None)
+        c_is_fin = get_c_idx(['là thành phẩm c/k', 'là thành phẩm'], None)
+        c_is_raw = get_c_idx(['là nguyên liệu', 'là nvl c/k', 'là nvl'], None)
+        c_exclude = get_c_idx(['không đưa vào qtsx', 'không đưa vào sx'], None)
+        c_brand = get_c_idx(['năng suất mục tiêu', 'thương hiệu', 'dòng hàng'], None)
+        c_in_stage = get_c_idx(['công đoạn vào', 'cộng đoạn vào', 'khâu vào', 'input stage'], None)
+        c_out_stage = get_c_idx(['công đoạn ra', 'khâu ra', 'output stage'], None)
+        c_cat = get_c_idx(['danh mục mặt hàng', 'danh mục', 'ngành hàng'], None)
+
+        def col_val(row, c_idx):
+            if c_idx is not None and 0 <= c_idx < len(row):
+                return clean_val(row[c_idx])
+            return None
+
+        # 2. Đọc toàn bộ dòng trong Sheet và gom nhóm theo Thành phẩm gốc
+        products_dict = {}
+
+        for r_idx, row in enumerate(all_rows[h_row_idx + 1:], start=h_row_idx + 2):
+            if not row: continue
+
+            r_sku = col_val(row, c_root_sku)
+            r_name = col_val(row, c_root_name)
+            p_sku = col_val(row, c_parent_sku)
+            p_name = col_val(row, c_parent_name)
+            p_unit = col_val(row, c_parent_unit)
+            p_spec = col_val(row, c_parent_spec)
+
+            c_sku = col_val(row, c_child_sku)
+            c_name = col_val(row, c_child_name)
+            c_unit = col_val(row, c_child_unit)
+            c_spec = col_val(row, c_child_spec)
+
+            if not c_sku and not p_sku and not r_sku:
                 continue
 
-            # 1. Tìm dòng tiêu đề (Header row)
-            h_row = 1
-            for r in range(1, min(15, ws.max_row + 1)):
-                row_vals = [str(ws.cell(r, c).value or '').lower() for c in range(1, min(ws.max_column + 1, 20))]
-                if any(k in ' '.join(row_vals) for k in ['mã chi tiết', 'tên chi tiết', 'mã mặt hàng', 'mã sản phẩm']):
-                    h_row = r
+            eff_root_sku = clean_and_standardize_sku(r_sku if r_sku else p_sku)
+            eff_root_name = clean_and_standardize_name(r_name if r_name else (p_name or eff_root_sku))
+            p_sku_std = clean_and_standardize_sku(p_sku if p_sku else eff_root_sku)
+            p_name_std = clean_and_standardize_name(p_name or p_sku_std)
+            c_sku_std = clean_and_standardize_sku(c_sku if c_sku else p_sku_std)
+            c_name_std = clean_and_standardize_name(c_name or c_sku_std)
+
+            is_fin = to_bool(col_val(row, c_is_fin))
+            
+            # Dimensions
+            h_val = to_float(col_val(row, c_h))
+            w_val = to_float(col_val(row, c_w))
+            l_val = to_float(col_val(row, c_l))
+            if not (h_val or w_val or l_val) and c_spec:
+                pl, pw, ph = parse_dimensions(c_spec)
+                l_val, w_val, h_val = pl, pw, ph
+
+            color = col_val(row, c_color)
+            material = col_val(row, c_material)
+            
+            qty_val = to_float(col_val(row, c_qty), 1.0)
+            if c_qty_part and col_val(row, c_qty_part) is not None:
+                qty_val = to_float(col_val(row, c_qty_part), qty_val)
+            qty_set = to_float(col_val(row, c_qty_set), qty_val) if c_qty_set else qty_val
+            
+            waste = to_float(col_val(row, c_waste), 1.0) if c_waste else 1.0
+            is_raw = to_bool(col_val(row, c_is_raw))
+            exclude = to_bool(col_val(row, c_exclude))
+            raw_in_val = str(col_val(row, c_in_stage) or '')
+            raw_out_val = str(col_val(row, c_out_stage) or '')
+            detected_row_fac = None
+            for f in ['NM1', 'NM2', 'NM3', 'Vanity 1', 'Vanity 2', 'Furniture']:
+                if f in raw_in_val or f in raw_out_val:
+                    if '1' in f or 'NM1' in f: detected_row_fac = 'NM1'
+                    elif '2' in f or 'NM2' in f: detected_row_fac = 'NM2'
+                    elif '3' in f or 'NM3' in f or 'Furniture' in f: detected_row_fac = 'NM3'
                     break
 
-            headers = [str(ws.cell(h_row, c).value or '').replace('\n', ' ').strip().lower() for c in range(1, ws.max_column + 1)]
+            in_stg = clean_stage_name(col_val(row, c_in_stage))
+            out_stg = clean_stage_name(col_val(row, c_out_stage))
+            note = col_val(row, c_desc)
+            brand = col_val(row, c_brand) or ('FOL' if 'FOL' in eff_root_sku.upper() else 'ATLAS')
+            cat = col_val(row, c_cat) or brand
+            stt_val = col_val(row, c_stt)
 
-            def get_c_idx(names, default=None):
-                for name in names:
-                    for i, h in enumerate(headers):
-                        if name == h: return i + 1
-                for name in names:
-                    for i, h in enumerate(headers):
-                        if name in h: return i + 1
-                return default
+            rec = {
+                'row': r_idx,
+                'root_sku': eff_root_sku,
+                'root_name': eff_root_name,
+                'parent_sku': p_sku_std,
+                'parent_name': p_name_std,
+                'parent_unit': p_unit,
+                'parent_spec': p_spec,
+                'child_sku': c_sku_std,
+                'child_name': c_name_std,
+                'child_unit': c_unit or 'Cái',
+                'child_spec': c_spec,
+                'stt': stt_val,
+                'material': material,
+                'length': l_val,
+                'width': w_val,
+                'height': h_val,
+                'color': color,
+                'qty': qty_val,
+                'qty_set': qty_set,
+                'waste': waste,
+                'is_fin': is_fin,
+                'is_raw': is_raw,
+                'exclude': exclude,
+                'in_stage': in_stg,
+                'out_stage': out_stg,
+                'brand': brand,
+                'category': cat,
+                'note': note
+            }
 
-            c_root_sku = get_c_idx(['mã mặt hàng gốc', 'mã sp gốc', 'mã thành phẩm gốc'], None)
-            c_root_name = get_c_idx(['tên mặt hàng gốc', 'tên sp gốc', 'tên thành phẩm gốc'], None)
-            c_parent_sku = get_c_idx(['mã mặt hàng', 'mã sp', 'mã sản phẩm', 'mã bán thành phẩm'], 1)
-            c_parent_name = get_c_idx(['tên mặt hàng', 'tên sp', 'tên sản phẩm'], 2)
-            c_stt = get_c_idx(['stt'], 3)
-            c_material = get_c_idx(['nguyên liệu', 'vật liệu', 'chất liệu'], 4)
-            c_child_sku = get_c_idx(['mã chi tiết', 'mã linh kiện', 'mã nvl'], 5)
-            c_child_name = get_c_idx(['tên chi tiết', 'tên linh kiện', 'tên nvl'], 6)
-            c_unit = get_c_idx(['đvt chi tiết', 'đvt', 'đơn vị'], 7)
-            c_h = get_c_idx(['dày', 'chiều dày', 'dày (mm)'], None)
-            c_w = get_c_idx(['rộng', 'chiều rộng', 'rộng (mm)'], None)
-            c_l = get_c_idx(['dài', 'chiều dài', 'dài (mm)'], None)
-            c_raw_h = get_c_idx(['phôi dày'], None)
-            c_raw_w = get_c_idx(['phôi rộng'], None)
-            c_raw_l = get_c_idx(['phôi dài'], None)
-            c_color = get_c_idx(['màu sắc', 'màu', 'mã màu'], None)
-            c_qty = get_c_idx(['số lượng', 'sl/ part', 'sl/ set', 'định mức', 'tổng sl'], 12)
-            c_qty_part = get_c_idx(['sl/ part'], None)
-            c_qty_set = get_c_idx(['sl/ set'], None)
-            c_total_qty = get_c_idx(['tổng sl', 'tổng số lượng'], None)
-            c_desc = get_c_idx(['mô tả', 'ghi chú'], None)
-            c_waste = get_c_idx(['tỷ lệ hao hụt', 'hao hụt', 'bù hao'], None)
-            c_is_fin = get_c_idx(['là thành phẩm c/k', 'là thành phẩm'], None)
-            c_is_raw = get_c_idx(['là nguyên liệu', 'là nvl c/k', 'là nvl'], None)
-            c_exclude = get_c_idx(['không đưa vào qtsx', 'không đưa vào sx'], None)
-            c_brand = get_c_idx(['năng suất mục tiêu', 'thương hiệu', 'dòng hàng'], None)
-            c_in_stage = get_c_idx(['công đoạn vào', 'cộng đoạn vào', 'khâu vào', 'input stage'], None)
-            c_out_stage = get_c_idx(['công đoạn ra', 'khâu ra', 'output stage'], None)
-            c_spec = get_c_idx(['quy cách chi tiết', 'quy cách'], None)
-            c_cat = get_c_idx(['danh mục mặt hàng', 'danh mục', 'ngành hàng'], None)
-
-            # 2. Đọc toàn bộ dòng trong Sheet và gom nhóm theo Thành phẩm gốc
-            products_dict = {} # eff_root_sku -> {'name': ..., 'brand': ..., 'color': ..., 'spec': ..., 'unit': ..., 'rows': []}
-
-            for r in range(h_row + 1, ws.max_row + 1):
-                r_sku = clean_val(ws.cell(r, c_root_sku).value) if c_root_sku else None
-                r_name = clean_val(ws.cell(r, c_root_name).value) if c_root_name else None
-                p_sku = clean_val(ws.cell(r, c_parent_sku).value) if c_parent_sku else None
-                p_name = clean_val(ws.cell(r, c_parent_name).value) if c_parent_name else None
-                c_sku = clean_val(ws.cell(r, c_child_sku).value) if c_child_sku else None
-                c_name = clean_val(ws.cell(r, c_child_name).value) if c_child_name else None
-
-                if not c_sku and not p_sku and not r_sku:
-                    continue
-
-                eff_root_sku = clean_and_standardize_sku(r_sku if r_sku else p_sku)
-                eff_root_name = clean_and_standardize_name(r_name if r_name else (p_name or eff_root_sku))
-                p_sku_std = clean_and_standardize_sku(p_sku if p_sku else eff_root_sku)
-                p_name_std = clean_and_standardize_name(p_name or p_sku_std)
-                c_sku_std = clean_and_standardize_sku(c_sku if c_sku else p_sku_std)
-                c_name_std = clean_and_standardize_name(c_name or c_sku_std)
-
-                is_fin = to_bool(ws.cell(r, c_is_fin).value) if c_is_fin else False
-                spec = clean_val(ws.cell(r, c_spec).value) if c_spec else None
-                
-                h_val = to_float(ws.cell(r, c_h).value) if c_h else 0.0
-                w_val = to_float(ws.cell(r, c_w).value) if c_w else 0.0
-                l_val = to_float(ws.cell(r, c_l).value) if c_l else 0.0
-                if not (h_val and w_val and l_val) and spec:
-                    p_h, p_w, p_l = parse_dimensions(spec)
-                    if not h_val: h_val = p_h
-                    if not w_val: w_val = p_w
-                    if not l_val: l_val = p_l
-
-                raw_h = to_float(ws.cell(r, c_raw_h).value) if c_raw_h else 0.0
-                raw_w = to_float(ws.cell(r, c_raw_w).value) if c_raw_w else 0.0
-                raw_l = to_float(ws.cell(r, c_raw_l).value) if c_raw_l else 0.0
-
-                color = clean_val(ws.cell(r, c_color).value) if c_color else None
-                material = clean_val(ws.cell(r, c_material).value) if c_material else None
-                unit = clean_val(ws.cell(r, c_unit).value) if c_unit else 'Cái'
-                
-                qty_val = to_float(ws.cell(r, c_qty).value, 1.0) if c_qty else 1.0
-                if c_qty_part and ws.cell(r, c_qty_part).value is not None:
-                    qty_val = to_float(ws.cell(r, c_qty_part).value, qty_val)
-                qty_set = to_float(ws.cell(r, c_qty_set).value, qty_val) if c_qty_set else qty_val
-                
-                waste = to_float(ws.cell(r, c_waste).value, 1.0) if c_waste else 1.0
-                is_raw = to_bool(ws.cell(r, c_is_raw).value) if c_is_raw else False
-                exclude = to_bool(ws.cell(r, c_exclude).value) if c_exclude else False
-                in_stg = clean_stage_name(clean_val(ws.cell(r, c_in_stage).value)) if c_in_stage else None
-                out_stg = clean_stage_name(clean_val(ws.cell(r, c_out_stage).value)) if c_out_stage else None
-                note = clean_val(ws.cell(r, c_desc).value) if c_desc else None
-                brand = (clean_val(ws.cell(r, c_brand).value) if c_brand else None) or ('FOL' if 'FOL' in eff_root_sku.upper() else 'ATLAS')
-                cat = (clean_val(ws.cell(r, c_cat).value) if c_cat else None) or brand
-                stt_val = clean_val(ws.cell(r, c_stt).value) if c_stt else None
-
-                rec = {
-                    'row': r,
-                    'root_sku': eff_root_sku,
-                    'root_name': eff_root_name,
-                    'parent_sku': p_sku_std,
-                    'parent_name': p_name_std,
-                    'child_sku': c_sku_std,
-                    'child_name': c_name_std,
-                    'stt': stt_val,
-                    'material': material,
-                    'unit': unit or 'Cái',
-                    'length': l_val,
-                    'width': w_val,
-                    'height': h_val,
-                    'raw_length': raw_l,
-                    'raw_width': raw_w,
-                    'raw_height': raw_h,
-                    'color': color,
-                    'qty': qty_val,
-                    'qty_set': qty_set,
-                    'waste': waste,
-                    'is_fin': is_fin,
-                    'is_raw': is_raw,
-                    'exclude': exclude,
-                    'in_stage': in_stg,
-                    'out_stage': out_stg,
-                    'spec': spec,
+            if eff_root_sku not in products_dict:
+                # ĐVT và Quy cách của Root Product lấy từ dòng Root hoặc parent
+                root_u = p_unit if (p_sku_std == eff_root_sku and p_unit) else 'Bộ'
+                root_sp = p_spec if (p_sku_std == eff_root_sku and p_spec) else ''
+                pl, pw, ph = parse_dimensions(root_sp) if root_sp else (0.0, 0.0, 0.0)
+                products_dict[eff_root_sku] = {
+                    'sku': eff_root_sku,
+                    'name': eff_root_name,
                     'brand': brand,
                     'category': cat,
-                    'note': note
+                    'color': color or parse_color(eff_root_sku, eff_root_name),
+                    'factory': detected_row_fac,
+                    'spec': root_sp,
+                    'length': pl,
+                    'width': pw,
+                    'height': ph,
+                    'unit': root_u,
+                    'rows': []
+                }
+            elif detected_row_fac and not products_dict[eff_root_sku].get('factory'):
+                products_dict[eff_root_sku]['factory'] = detected_row_fac
+
+            products_dict[eff_root_sku]['rows'].append(rec)
+
+            # Cập nhật root name/spec/unit từ các dòng tiếp theo nếu có data tốt hơn
+            rd = products_dict[eff_root_sku]
+            # Nếu dòng có parent == root và có thông tin tốt hơn (quy cách, tên dài hơn)
+            if p_sku_std == eff_root_sku:
+                if p_spec and not rd['spec']:
+                    rd['spec'] = p_spec
+                    pl2, pw2, ph2 = parse_dimensions(p_spec)
+                    if pl2 or pw2 or ph2:
+                        rd['length'], rd['width'], rd['height'] = pl2, pw2, ph2
+                if p_unit and rd['unit'] == 'Bộ':
+                    rd['unit'] = p_unit
+            # Cập nhật tên nếu r_name (c2) dài hơn tên hiện tại
+            if r_name and len(r_name) > len(rd.get('name', '')):
+                rd['name'] = clean_and_standardize_name(r_name)
+
+        sheet_prod_count = len(products_dict)
+        base_percent = int(((file_index - 1) / max(1, total_files)) * 100)
+        file_slice = int(100 / max(1, total_files))
+
+        yield json.dumps({
+            "status": "processing",
+            "file_index": file_index,
+            "total_files": total_files,
+            "file_name": filename,
+            "sheet": sheet_name,
+            "sheet_index": sheet_idx + 1,
+            "total_sheets": total_sheets,
+            "processed": 0,
+            "total": sheet_prod_count,
+            "percent": min(99, base_percent + 2),
+            "message": f"[{filename}] Đang lưu {sheet_prod_count} SP từ Sheet '{sheet_name}'..."
+        }) + "\n"
+
+        # 3. Lưu từng sản phẩm Root và Cây BOM phân cấp theo Two-pass Tree Assembly
+        for root_idx, (root_sku, prod_info) in enumerate(products_dict.items()):
+            cat_name = prod_info.get('category') or prod_info.get('brand') or 'ATLAS'
+            if cat_name not in category_cache:
+                cat_obj = db.query(MasterCategory).filter(MasterCategory.name == cat_name).first()
+                if not cat_obj:
+                    cat_obj = MasterCategory(name=cat_name, description=f"Dòng sản phẩm {cat_name} cao cấp", status=1)
+                    db.add(cat_obj)
+                    db.flush()
+                category_cache[cat_name] = cat_obj.id
+
+            cat_id = category_cache[cat_name]
+            p_color = prod_info.get('color') or parse_color(root_sku, prod_info['name']) or 'BRO'
+
+            p_factory = prod_info.get('factory')
+            p_obj = db.query(MasterProduct).filter(MasterProduct.sku == root_sku).first()
+            if not p_obj:
+                p_obj = MasterProduct(
+                    sku=root_sku,
+                    name=prod_info['name'],
+                    category_id=cat_id,
+                    brand_name=prod_info['brand'],
+                    color=p_color,
+                    specification=prod_info.get('spec') or '',
+                    length=prod_info.get('length') or 0.0,
+                    width=prod_info.get('width') or 0.0,
+                    height=prod_info.get('height') or 0.0,
+                    unit=prod_info.get('unit') or 'Bộ',
+                    description=p_factory or 'NM1',
+                    status='Active'
+                )
+                db.add(p_obj)
+                db.flush()
+            else:
+                p_obj.name = prod_info['name']
+                p_obj.category_id = cat_id
+                p_obj.brand_name = prod_info['brand']
+                p_obj.color = p_color or p_obj.color
+                p_obj.specification = prod_info.get('spec') or ''
+                p_obj.length = prod_info.get('length') or 0.0
+                p_obj.width = prod_info.get('width') or 0.0
+                p_obj.height = prod_info.get('height') or 0.0
+                p_obj.unit = prod_info.get('unit') or 'Bộ'
+                if p_factory:
+                    p_obj.description = p_factory
+                db.flush()
+
+            # Xóa sạch BOM cũ của sản phẩm này để nạp mới chuẩn xác
+            db.query(MasterBOMDetail).filter(MasterBOMDetail.master_product_id == p_obj.id).update({MasterBOMDetail.parent_id: None}, synchronize_session=False)
+            db.query(MasterBOMDetail).filter(MasterBOMDetail.master_product_id == p_obj.id).delete(synchronize_session=False)
+
+            # 4. Xây dựng cây BOM phân cấp — Thuật toán Assembly/Leaf Separation
+            #    - Assembly nodes (cụm bán thành phẩm .1, .1.1, ...): unique theo SKU
+            #    - Leaf nodes (nguyên liệu CSU, ROA, HMR, ...): mỗi dòng Excel = 1 bản ghi riêng
+            prod_rows = prod_info['rows']
+
+            # Bước 4a: Xác định SKU nào là assembly (xuất hiện ở cột parent_sku của dòng khác)
+            assembly_skus = set()
+            for r in prod_rows:
+                p_sku = r['parent_sku']
+                if p_sku and p_sku != root_sku:
+                    assembly_skus.add(p_sku)
+
+            # Bước 4b: Thu thập nodes — assembly unique, leaf per-row
+            assembly_nodes = {}   # sku -> node dict (unique cho assembly)
+            leaf_nodes = []       # list of node dicts (mỗi dòng 1 entry)
+
+            for row_idx, r in enumerate(prod_rows):
+                c_sku = r['child_sku']
+                p_sku = r['parent_sku']
+                if not c_sku or c_sku == root_sku:
+                    continue
+
+                c_spec = r['child_spec'] or ''
+                c_unit = r['child_unit'] or 'Cái'
+                c_l, c_w, c_h = r['length'], r['width'], r['height']
+                if not (c_l or c_w or c_h) and c_spec:
+                    c_l, c_w, c_h = parse_dimensions(c_spec)
+
+                node = {
+                    'sku': c_sku,
+                    'parent_sku': p_sku if p_sku != root_sku else None,
+                    'name': r['child_name'] or c_sku,
+                    'unit': c_unit,
+                    'spec': c_spec,
+                    'length': c_l,
+                    'width': c_w,
+                    'height': c_h,
+                    'color': r['color'] or p_color,
+                    'material': r['material'] or '',
+                    'quantity': r['qty'],
+                    'waste_ratio': r['waste'],
+                    'is_raw_material': r['is_raw'],
+                    'exclude_production': r['exclude'],
+                    'input_stage': r['in_stage'],
+                    'output_stage': r['out_stage'],
+                    'description': r['note'] or '',
+                    'is_assembly': c_sku in assembly_skus
                 }
 
-                if eff_root_sku not in products_dict:
-                    products_dict[eff_root_sku] = {
-                        'sku': eff_root_sku,
-                        'name': eff_root_name,
-                        'brand': brand,
-                        'category': cat,
-                        'color': color or parse_color(eff_root_sku, eff_root_name),
-                        'spec': spec,
-                        'unit': 'Bộ' if 'bộ' in str(unit).lower() else unit,
-                        'length': l_val,
-                        'width': w_val,
-                        'height': h_val,
-                        'rows': []
-                    }
-
-                products_dict[eff_root_sku]['rows'].append(rec)
-
-            sheet_prod_count = len(products_dict)
-            yield json.dumps({
-                "status": "processing",
-                "sheet": sheet_name,
-                "sheet_index": sheet_idx + 1,
-                "total_sheets": total_sheets,
-                "processed": 0,
-                "total": sheet_prod_count,
-                "percent": 5,
-                "message": f"Đã đọc {sheet_prod_count} SP ({sheet_idx + 1}/{total_sheets}). Đang lưu vào CSDL..."
-            }) + "\n"
-
-            # 3. Lưu từng sản phẩm Root và Cây BOM phân cấp
-            for root_idx, (root_sku, prod_info) in enumerate(products_dict.items()):
-                cat_name = prod_info.get('category') or prod_info.get('brand') or 'ATLAS'
-                if cat_name not in category_cache:
-                    cat_obj = db.query(MasterCategory).filter(MasterCategory.name == cat_name).first()
-                    if not cat_obj:
-                        cat_obj = MasterCategory(name=cat_name, description=f"Dòng sản phẩm {cat_name} cao cấp", status=1)
-                        db.add(cat_obj)
-                        db.flush()
-                    category_cache[cat_name] = cat_obj.id
-
-                cat_id = category_cache[cat_name]
-                p_color = prod_info.get('color') or parse_color(root_sku, prod_info['name']) or 'BRO'
-
-                p_obj = db.query(MasterProduct).filter(MasterProduct.sku == root_sku).first()
-                if not p_obj:
-                    p_obj = MasterProduct(
-                        sku=root_sku,
-                        name=prod_info['name'],
-                        category_id=cat_id,
-                        brand_name=prod_info['brand'],
-                        color=p_color,
-                        specification=prod_info.get('spec') or '',
-                        length=prod_info.get('length') or 0.0,
-                        width=prod_info.get('width') or 0.0,
-                        height=prod_info.get('height') or 0.0,
-                        unit=prod_info.get('unit') or 'Bộ',
-                        status='Active'
-                    )
-                    db.add(p_obj)
-                    db.flush()
+                if c_sku in assembly_skus:
+                    # Assembly node: chỉ lưu 1 lần, bổ sung thông tin thiếu
+                    if c_sku not in assembly_nodes:
+                        assembly_nodes[c_sku] = node
+                    else:
+                        existing = assembly_nodes[c_sku]
+                        if not existing['spec'] and c_spec: existing['spec'] = c_spec
+                        if (not existing['length'] and not existing['width'] and not existing['height']) and (c_l or c_w or c_h):
+                            existing['length'], existing['width'], existing['height'] = c_l, c_w, c_h
+                        if not existing['material'] and r['material']: existing['material'] = r['material']
+                        if not existing['input_stage'] and r['in_stage']: existing['input_stage'] = r['in_stage']
+                        if not existing['output_stage'] and r['out_stage']: existing['output_stage'] = r['out_stage']
                 else:
-                    p_obj.name = prod_info['name']
-                    p_obj.category_id = cat_id
-                    p_obj.brand_name = prod_info['brand']
-                    p_obj.color = p_color or p_obj.color
-                    if prod_info.get('spec'): p_obj.specification = prod_info['spec']
-                    db.flush()
+                    # Leaf node (nguyên liệu thô): mỗi dòng tạo 1 bản ghi riêng
+                    leaf_nodes.append(node)
 
-                # Xóa sạch BOM cũ của sản phẩm này
-                db.query(MasterBOMDetail).filter(MasterBOMDetail.master_product_id == p_obj.id).update({MasterBOMDetail.parent_id: None}, synchronize_session=False)
-                db.query(MasterBOMDetail).filter(MasterBOMDetail.master_product_id == p_obj.id).delete(synchronize_session=False)
+            # Bước 4c: Cập nhật assembly từ parent columns (ĐVT, Quy cách đúng của cụm cha)
+            for r in prod_rows:
+                p_sku = r['parent_sku']
+                if p_sku and p_sku != root_sku:
+                    p_sp = r['parent_spec']
+                    p_un = r['parent_unit']
+                    p_nm = r['parent_name']
+                    pl, pw, ph = parse_dimensions(p_sp) if p_sp else (0.0, 0.0, 0.0)
 
-                # 4. Xây dựng cây BOM phân cấp (Multi-level Hierarchy)
-                sku_to_bom = {}
-                prod_rows = sorted(prod_info['rows'], key=lambda x: x['row'])
-
-                # Pre-scan valid specs maps for this product
-                valid_specs_by_name = {}
-                valid_specs_by_sku = {}
-                for row in prod_rows:
-                    r_sp = (row.get('spec') or "").strip()
-                    if r_sp and not is_invalid_spec(r_sp):
-                        for n in [row.get('child_name'), row.get('parent_name')]:
-                            if n:
-                                cn = " ".join(n.strip().lower().split())
-                                if cn and cn not in valid_specs_by_name:
-                                    valid_specs_by_name[cn] = r_sp
-                        for s in [row.get('child_sku'), row.get('parent_sku')]:
-                            if s:
-                                cs = s.strip().lower()
-                                if cs and cs not in valid_specs_by_sku:
-                                    valid_specs_by_sku[cs] = r_sp
-
-                # Bước 4.1: Tạo các Node cụm bán thành phẩm (Sub-assemblies) nếu có
-                sub_assembly_parents = []
-                for row in prod_rows:
-                    p_sku = row['parent_sku']
-                    if p_sku and p_sku != root_sku and p_sku not in [s['sku'] for s in sub_assembly_parents]:
-                        sub_assembly_parents.append({
+                    if p_sku in assembly_nodes:
+                        an = assembly_nodes[p_sku]
+                        an['is_assembly'] = True
+                        if p_nm and (not an['name'] or an['name'] == p_sku):
+                            an['name'] = p_nm
+                        if p_un:
+                            an['unit'] = p_un
+                        if p_sp:
+                            an['spec'] = p_sp
+                            if pl or pw or ph:
+                                an['length'], an['width'], an['height'] = pl, pw, ph
+                    else:
+                        # Assembly chưa từng xuất hiện làm child — tạo mới
+                        p_parts = p_sku.rsplit('.', 1)
+                        direct_p = p_parts[0] if (len(p_parts) == 2 and p_parts[0] != root_sku) else None
+                        new_node = {
                             'sku': p_sku,
-                            'name': row['parent_name'] or p_sku,
-                            'unit': row['unit'] or 'Bộ',
-                            'spec': row.get('spec') or ''
-                        })
+                            'name': p_nm or p_sku,
+                            'parent_sku': direct_p,
+                            'unit': p_un or 'Bộ',
+                            'spec': p_sp or '',
+                            'length': pl,
+                            'width': pw,
+                            'height': ph,
+                            'color': p_color,
+                            'material': r.get('material') or 'Gỗ / MDF',
+                            'quantity': 1.0,
+                            'waste_ratio': 1.0,
+                            'is_raw_material': False,
+                            'exclude_production': False,
+                            'input_stage': r['in_stage'],
+                            'output_stage': r['out_stage'],
+                            'description': r['note'] or '',
+                            'is_assembly': True
+                        }
+                        assembly_nodes[p_sku] = new_node
 
-                # Sắp xếp các cụm cha theo độ dài SKU hoặc dấu chấm để tạo node cha trước node con (vd ADV714.2 trước ADV714.2.1)
-                sub_assembly_parents.sort(key=lambda s: len(s['sku'].split('.')))
-                for sub in sub_assembly_parents:
-                    parent_bom_id = None
-                    # Tìm xem cụm này có cụm cha cấp trên hay không
-                    parts = sub['sku'].rsplit('.', 1)
-                    if len(parts) == 2 and parts[0] in sku_to_bom:
-                        parent_bom_id = sku_to_bom[parts[0]].id
+            # Bước 4d: Sắp xếp assemblies theo depth (cha trước con), rồi lưu vào DB
+            sorted_assembly_skus = sorted(assembly_nodes.keys(), key=lambda s: (len(s.split('.')), s))
+            sku_to_db_id = {}
 
-                    resolved_sub_spec = resolve_clean_spec(
-                        sub.get('spec'),
-                        name=sub['name'],
-                        sku=sub['sku'],
-                        valid_specs_by_name=valid_specs_by_name,
-                        valid_specs_by_sku=valid_specs_by_sku,
-                        fallback_spec=p_obj.specification
+            # Lưu assemblies trước (cần parent_id resolved)
+            for a_sku in sorted_assembly_skus:
+                node = assembly_nodes[a_sku]
+                parent_db_id = None
+                p_sku = node['parent_sku']
+                if p_sku and p_sku in sku_to_db_id:
+                    parent_db_id = sku_to_db_id[p_sku]
+                elif '.' in a_sku:
+                    prefix_p = a_sku.rsplit('.', 1)[0]
+                    if prefix_p in sku_to_db_id:
+                        parent_db_id = sku_to_db_id[prefix_p]
+
+                resolved_spec = node['spec']
+                if not resolved_spec or is_invalid_spec(resolved_spec):
+                    resolved_spec = resolve_clean_spec(
+                        "",
+                        name=node['name'],
+                        sku=node['sku'],
+                        length=node['length'],
+                        width=node['width'],
+                        height=node['height']
                     )
 
-                    sub_bom_item = MasterBOMDetail(
+                bom_item = MasterBOMDetail(
+                    master_product_id=p_obj.id,
+                    parent_id=parent_db_id,
+                    sku=node['sku'],
+                    name=clean_and_standardize_name(node['name']),
+                    unit=node['unit'],
+                    length=node['length'],
+                    width=node['width'],
+                    height=node['height'],
+                    color=node['color'],
+                    material=node['material'],
+                    quantity=node['quantity'],
+                    specification=resolved_spec,
+                    waste_ratio=node['waste_ratio'],
+                    is_raw_material=node['is_raw_material'],
+                    exclude_production=node['exclude_production'],
+                    input_stage=node['input_stage'],
+                    output_stage=node['output_stage'],
+                    description=node['description'],
+                    status='Active'
+                )
+                db.add(bom_item)
+                db.flush()
+                sku_to_db_id[a_sku] = bom_item.id
+                total_boms_imported += 1
+
+            # Lưu leaf nodes (raw materials) — mỗi dòng 1 bản ghi, parent resolved từ sku_to_db_id
+            for node in leaf_nodes:
+                parent_db_id = None
+                p_sku = node['parent_sku']
+                if p_sku and p_sku in sku_to_db_id:
+                    parent_db_id = sku_to_db_id[p_sku]
+                elif '.' in node['sku']:
+                    prefix_p = node['sku'].rsplit('.', 1)[0]
+                    if prefix_p in sku_to_db_id:
+                        parent_db_id = sku_to_db_id[prefix_p]
+
+                resolved_spec = node['spec']
+                if not resolved_spec or is_invalid_spec(resolved_spec):
+                    resolved_spec = resolve_clean_spec(
+                        "",
+                        name=node['name'],
+                        sku=node['sku'],
+                        length=node['length'],
+                        width=node['width'],
+                        height=node['height']
+                    )
+
+                bom_item = MasterBOMDetail(
+                    master_product_id=p_obj.id,
+                    parent_id=parent_db_id,
+                    sku=node['sku'],
+                    name=clean_and_standardize_name(node['name']),
+                    unit=node['unit'],
+                    length=node['length'],
+                    width=node['width'],
+                    height=node['height'],
+                    color=node['color'],
+                    material=node['material'],
+                    quantity=node['quantity'],
+                    specification=resolved_spec,
+                    waste_ratio=node['waste_ratio'],
+                    is_raw_material=node['is_raw_material'],
+                    exclude_production=node['exclude_production'],
+                    input_stage=node['input_stage'],
+                    output_stage=node['output_stage'],
+                    description=node['description'],
+                    status='Active'
+                )
+                db.add(bom_item)
+                db.flush()
+                total_boms_imported += 1
+
+            # Bước 4e: Suy kích thước root product từ child assembly level 1
+            if not (p_obj.length or p_obj.width or p_obj.height):
+                # Tìm assembly con trực tiếp (level 1) có kích thước lớn nhất
+                for a_sku in sorted_assembly_skus:
+                    an = assembly_nodes[a_sku]
+                    # Assembly cấp 1: parent_sku is None (con trực tiếp của root)
+                    if an.get('parent_sku') is None and (an['length'] or an['width'] or an['height']):
+                        p_obj.length = an['length']
+                        p_obj.width = an['width']
+                        p_obj.height = an['height']
+                        if an['spec']:
+                            p_obj.specification = an['spec']
+                        break
+                db.flush()
+
+            # 5. Đồng bộ Mẫu màu sơn (paint_color_samples)
+            if p_color:
+                pcs = db.query(PaintColorSample).filter(
+                    PaintColorSample.master_product_id == p_obj.id,
+                    PaintColorSample.color_code == p_color
+                ).first()
+                if not pcs:
+                    db.add(PaintColorSample(
                         master_product_id=p_obj.id,
-                        parent_id=parent_bom_id,
-                        sku=sub['sku'],
-                        name=sub['name'],
-                        unit=sub['unit'],
-                        quantity=1.0,
-                        specification=resolved_sub_spec,
-                        status='Active'
-                    )
-                    db.add(sub_bom_item)
-                    db.flush()
-                    sku_to_bom[sub['sku']] = sub_bom_item
-                    total_boms_imported += 1
+                        color_code=p_color,
+                        color_name=f"Màu sơn {p_color}",
+                        supplier="G7 Paint Standards"
+                    ))
 
-                # Bước 4.2: Nạp các chi tiết linh kiện lá (Leaf / Components)
-                for row in prod_rows:
-                    if row['child_sku'] == root_sku:
-                        continue
-
-                    # Nếu chi tiết con chính là cụm đã tạo ở bước 4.1 thì cập nhật thuộc tính
-                    if row['child_sku'] in sku_to_bom:
-                        existing_node = sku_to_bom[row['child_sku']]
-                        if row['parent_sku'] in sku_to_bom and row['parent_sku'] != row['child_sku']:
-                            existing_node.parent_id = sku_to_bom[row['parent_sku']].id
-                        if row['qty']: existing_node.quantity = row['qty']
-                        if row['material']: existing_node.material = row['material']
-                        if row['in_stage']: existing_node.input_stage = row['in_stage']
-                        if row['out_stage']: existing_node.output_stage = row['out_stage']
-                        continue
-
-                    parent_bom_id = None
-                    if row['parent_sku'] in sku_to_bom:
-                        parent_bom_id = sku_to_bom[row['parent_sku']].id
-
-                    resolved_leaf_spec = resolve_clean_spec(
-                        row.get('spec'),
-                        name=row['child_name'],
-                        sku=row['child_sku'],
-                        length=row.get('length') or 0.0,
-                        width=row.get('width') or 0.0,
-                        height=row.get('height') or 0.0,
-                        valid_specs_by_name=valid_specs_by_name,
-                        valid_specs_by_sku=valid_specs_by_sku,
-                        fallback_spec=p_obj.specification
-                    )
-
-                    bom_item = MasterBOMDetail(
+            # 6. Đồng bộ Chi tiết KT (master_product_details)
+            db.query(MasterProductDetail).filter(MasterProductDetail.master_product_id == p_obj.id).delete(synchronize_session=False)
+            for r in prod_rows:
+                if r['child_sku'] != root_sku and (r['in_stage'] or r['out_stage']):
+                    db.add(MasterProductDetail(
                         master_product_id=p_obj.id,
-                        parent_id=parent_bom_id,
-                        sku=row['child_sku'],
-                        name=row['child_name'],
-                        unit=row['unit'],
-                        length=row['length'],
-                        width=row['width'],
-                        height=row['height'],
-                        color=row['color'] or p_color,
-                        material=row['material'],
-                        quantity=row['qty'],
-                        specification=resolved_leaf_spec,
-                        waste_ratio=row['waste'],
-                        is_raw_material=row['is_raw'],
-                        exclude_production=row['exclude'],
-                        input_stage=row['in_stage'],
-                        output_stage=row['out_stage'],
-                        description=row['note'],
-                        status='Active'
-                    )
-                    db.add(bom_item)
-                    db.flush()
-                    sku_to_bom[row['child_sku']] = bom_item
-                    total_boms_imported += 1
+                        name=r['child_name'],
+                        quantity=r['qty_set'] or r['qty'],
+                        unit=r['child_unit'] or 'Cái',
+                        input_stage=r['in_stage'],
+                        output_stage=r['out_stage'],
+                        parent_name=r['parent_name'],
+                        material=r['material']
+                    ))
 
-                # 5. Đồng bộ Mẫu màu sơn (paint_color_samples - KT03.3)
-                if p_color:
-                    pcs = db.query(PaintColorSample).filter(
-                        PaintColorSample.master_product_id == p_obj.id,
-                        PaintColorSample.color_code == p_color
-                    ).first()
-                    if not pcs:
-                        db.add(PaintColorSample(
-                            master_product_id=p_obj.id,
-                            color_code=p_color,
-                            color_name=f"Màu sơn {p_color}",
-                            supplier="G7 Paint Standards"
-                        ))
+            total_prods_imported += 1
 
-                # 6. Đồng bộ Chi tiết KT (master_product_details - KT03.1)
-                db.query(MasterProductDetail).filter(MasterProductDetail.master_product_id == p_obj.id).delete(synchronize_session=False)
-                for row in prod_rows:
-                    if row['child_sku'] != root_sku and (row['in_stage'] or row['out_stage']):
-                        db.add(MasterProductDetail(
-                            master_product_id=p_obj.id,
-                            name=row['child_name'],
-                            quantity=row['qty_set'] or row['qty'],
-                            unit=row['unit'],
-                            input_stage=row['in_stage'],
-                            output_stage=row['out_stage'],
-                            parent_name=row['parent_name'],
-                            material=row['material']
-                        ))
+            # Báo cáo tiến trình mỗi 15 sản phẩm hoặc sản phẩm cuối
+            if (root_idx + 1) % 15 == 0 or (root_idx + 1) == sheet_prod_count:
+                cur_prog = base_percent + int(((root_idx + 1) / max(1, sheet_prod_count)) * file_slice * 0.95)
+                yield json.dumps({
+                    "status": "processing",
+                    "file_index": file_index,
+                    "total_files": total_files,
+                    "file_name": filename,
+                    "sheet": sheet_name,
+                    "sheet_index": sheet_idx + 1,
+                    "total_sheets": total_sheets,
+                    "processed": root_idx + 1,
+                    "total": sheet_prod_count,
+                    "percent": min(98, cur_prog),
+                    "message": f"[{filename}] Đang lưu {root_idx + 1}/{sheet_prod_count} SP ({root_sku})..."
+                }) + "\n"
 
-                total_prods_imported += 1
+            if (root_idx + 1) % 50 == 0:
+                db.commit()
 
-                # Phát tín hiệu tiến trình thời gian thực mỗi 15 sản phẩm hoặc sản phẩm cuối cùng
-                if (root_idx + 1) % 15 == 0 or (root_idx + 1) == sheet_prod_count:
-                    prog_pct = int(5 + ((root_idx + 1) / max(1, sheet_prod_count)) * 90)
-                    yield json.dumps({
-                        "status": "processing",
-                        "sheet": sheet_name,
-                        "sheet_index": sheet_idx + 1,
-                        "total_sheets": total_sheets,
-                        "processed": root_idx + 1,
-                        "total": sheet_prod_count,
-                        "percent": min(95, prog_pct),
-                        "message": f"Đang lưu {root_idx + 1}/{sheet_prod_count} SP ({root_sku})..."
-                    }) + "\n"
+        db.commit()
 
-                # Commit định kỳ mỗi 50 sản phẩm để giảm tải bộ nhớ
-                if (root_idx + 1) % 50 == 0:
-                    db.commit()
 
-            db.commit()
+def import_master_products_from_excel(db: Session, file_content: bytes, selected_sheets: Optional[Any] = None):
+    """
+    [STREAMING IMPORT] Nhập dữ liệu 1 file Excel BOM với thuật toán chuẩn hóa Two-pass Tree Assembly.
+    """
+    import io, openpyxl, json
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(file_content), read_only=True, data_only=True)
+        yield from _process_bom_workbook(db, wb, filename="Excel BOM", selected_sheets=selected_sheets, file_index=1, total_files=1)
 
         # Đồng bộ toàn bộ dữ liệu phụ trợ
         yield json.dumps({
             "status": "processing",
-            "sheet": valid_sheetnames[-1] if valid_sheetnames else "",
-            "sheet_index": total_sheets,
-            "total_sheets": total_sheets,
-            "processed": total_prods_imported,
-            "total": total_prods_imported,
             "percent": 98,
             "message": "Đang đồng bộ định mức vật tư và hoàn tất..."
         }) + "\n"
@@ -1321,11 +1486,8 @@ def import_master_products_from_excel(db: Session, file_content: bytes, selected
 
         yield json.dumps({
             "status": "completed",
-            "total_products": total_prods_imported,
-            "total_bom_items": total_boms_imported,
-            "total_sheets": total_sheets,
             "percent": 100,
-            "message": f"Đã nhập thành công {total_prods_imported} sản phẩm mẫu ({total_boms_imported} chi tiết BOM) từ {total_sheets} sheet!"
+            "message": "Đã nhập thành công toàn bộ dữ liệu BOM vào hệ thống!"
         }) + "\n"
 
     except Exception as exc:
@@ -1333,6 +1495,150 @@ def import_master_products_from_excel(db: Session, file_content: bytes, selected
         import traceback
         traceback.print_exc()
         print(f"=== [IMPORT ERROR] {exc}")
+        yield json.dumps({"status": "error", "message": str(exc)}) + "\n"
+
+
+def import_master_products_from_excel_batch(db: Session, files_list: List[tuple]):
+    """
+    [BATCH STREAMING IMPORT] Nhập dữ liệu danh sách nhiều file Excel BOM [(filename, bytes), ...]:
+    - Lần lượt nạp từng file và streaming tiến trình theo thời gian thực.
+    - Cuối cùng đồng bộ auxiliary tables 1 lần duy nhất để tối ưu tốc độ.
+    """
+    import io, openpyxl, json
+    total_files = len(files_list)
+    if total_files == 0:
+        yield json.dumps({"status": "error", "message": "Không có file nào được cung cấp."}) + "\n"
+        return
+
+    category_cache = {}
+
+    yield json.dumps({
+        "status": "reading",
+        "file_index": 0,
+        "total_files": total_files,
+        "percent": 0,
+        "message": f"Bắt đầu nạp {total_files} file BOM vào hệ thống..."
+    }) + "\n"
+
+    try:
+        for f_idx, (fname, fbytes) in enumerate(files_list, start=1):
+            try:
+                wb = openpyxl.load_workbook(io.BytesIO(fbytes), read_only=True, data_only=True)
+                yield from _process_bom_workbook(
+                    db, wb, 
+                    filename=fname, 
+                    file_index=f_idx, 
+                    total_files=total_files, 
+                    category_cache=category_cache
+                )
+            except Exception as f_err:
+                print(f"=== [BATCH FILE ERROR {fname}] {f_err}")
+                yield json.dumps({
+                    "status": "warning",
+                    "file_index": f_idx,
+                    "total_files": total_files,
+                    "file_name": fname,
+                    "message": f"Lỗi xử lý file {fname}: {str(f_err)}"
+                }) + "\n"
+
+        # Đồng bộ toàn bộ dữ liệu phụ trợ
+        yield json.dumps({
+            "status": "processing",
+            "percent": 98,
+            "message": "Đang đồng bộ định mức vật tư và hoàn tất..."
+        }) + "\n"
+
+        try:
+            sync_bom_data_to_auxiliary_tables(db)
+        except Exception as sync_err:
+            print(f"=== [SYNC AUX ERROR] {sync_err}")
+
+        yield json.dumps({
+            "status": "completed",
+            "percent": 100,
+            "message": f"Đã hoàn tất nạp thành công toàn bộ {total_files} file BOM!"
+        }) + "\n"
+
+    except Exception as exc:
+        db.rollback()
+        import traceback
+        traceback.print_exc()
+        print(f"=== [BATCH IMPORT ERROR] {exc}")
+        yield json.dumps({"status": "error", "message": str(exc)}) + "\n"
+
+
+def sync_all_boms_from_directory(db: Session, directory_path: str = r"D:\SmartFlow\BOM"):
+    """
+    [DIRECTORY AUTO-SYNC] Quét trực tiếp toàn bộ các file .xlsx trong thư mục chỉ định và nạp vào DB.
+    """
+    import os, glob, openpyxl, json
+
+    if not os.path.isdir(directory_path):
+        yield json.dumps({"status": "error", "message": f"Thư mục không tồn tại: {directory_path}"}) + "\n"
+        return
+
+    raw_files = sorted(glob.glob(os.path.join(directory_path, "*.xlsx")) + glob.glob(os.path.join(directory_path, "*.xls")))
+    files = [f for f in raw_files if not os.path.basename(f).startswith("~$")]
+
+    if not files:
+        yield json.dumps({"status": "error", "message": f"Không tìm thấy file Excel nào trong {directory_path}"}) + "\n"
+        return
+
+    total_files = len(files)
+    yield json.dumps({
+        "status": "reading",
+        "total_files": total_files,
+        "percent": 0,
+        "message": f"Tìm thấy {total_files} file BOM trong {directory_path}. Bắt đầu nạp..."
+    }) + "\n"
+
+    category_cache = {}
+    try:
+        for f_idx, fpath in enumerate(files, start=1):
+            fname = os.path.basename(fpath)
+            try:
+                wb = openpyxl.load_workbook(fpath, read_only=True, data_only=True)
+                yield from _process_bom_workbook(
+                    db, wb, 
+                    filename=fname, 
+                    file_index=f_idx, 
+                    total_files=total_files, 
+                    category_cache=category_cache
+                )
+            except Exception as f_err:
+                print(f"=== [DIR SYNC FILE ERROR {fname}] {f_err}")
+                yield json.dumps({
+                    "status": "warning",
+                    "file_index": f_idx,
+                    "total_files": total_files,
+                    "file_name": fname,
+                    "message": f"Lỗi đọc file {fname}: {str(f_err)}"
+                }) + "\n"
+
+        # Đồng bộ toàn bộ dữ liệu phụ trợ
+        yield json.dumps({
+            "status": "processing",
+            "percent": 98,
+            "message": "Đang đồng bộ định mức vật tư và hoàn tất..."
+        }) + "\n"
+
+        try:
+            sync_bom_data_to_auxiliary_tables(db)
+        except Exception as sync_err:
+            print(f"=== [SYNC AUX ERROR] {sync_err}")
+
+        yield json.dumps({
+            "status": "completed",
+            "total_files": total_files,
+            "percent": 100,
+            "message": f"Đã đồng bộ thành công {total_files} file BOM từ thư mục {directory_path}!"
+        }) + "\n"
+
+    except Exception as exc:
+        db.rollback()
+        import traceback
+        traceback.print_exc()
+        print(f"=== [DIR SYNC ERROR] {exc}")
         yield json.dumps({"status": "error", "message": str(exc)}) + "\n"
 
 

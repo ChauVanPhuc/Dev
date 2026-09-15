@@ -15,30 +15,196 @@ def _generate_order_code():
     suffix = ''.join(random.choices(string.digits, k=4))
     return f"DH-{now.year}-{suffix}"
 
-def sync_order_bom_from_master(db: Session, order: Order):
-    """Tự động đồng bộ cấu trúc BOM chuẩn từ MasterProduct (master_bom_details) vào order products nếu chưa có BOM"""
+def sync_order_bom_from_master(db: Session, order: Order, force_refresh: bool = False):
+    """
+    Tự động đồng bộ Quy cách, kích thước và cấu trúc cây BOM chuẩn từ MasterProduct (master_bom_details)
+    vào các sản phẩm thuộc đơn hàng (Order / PO).
+    """
     if not order or not order.products:
         return order
 
     from modules.master.models.master_product import MasterProduct
     from modules.master.models.master_bom_detail import MasterBOMDetail
+    from sqlalchemy.orm import selectinload
 
     modified = False
     for prod in order.products:
-        if not prod.bom_details or len(prod.bom_details) == 0:
+        has_bom = prod.bom_details and len(prod.bom_details) > 0
+        if not has_bom or force_refresh:
             mp = None
             if prod.sku:
-                mp = db.query(MasterProduct).filter(MasterProduct.sku == prod.sku).first()
+                mp = db.query(MasterProduct).options(
+                    selectinload(MasterProduct.master_bom_details)
+                ).filter(MasterProduct.sku == prod.sku).first()
                 if not mp:
-                    mp = db.query(MasterProduct).filter(MasterProduct.sku.ilike(f"{prod.sku}%")).first()
-                if not mp:
-                    mp = db.query(MasterProduct).filter(MasterProduct.sku.ilike(f"%{prod.sku}%")).first()
+                    mp = db.query(MasterProduct).options(
+                        selectinload(MasterProduct.master_bom_details)
+                    ).filter(MasterProduct.sku.ilike(prod.sku)).first()
             if not mp and prod.name:
-                mp = db.query(MasterProduct).filter(MasterProduct.name == prod.name).first()
+                mp = db.query(MasterProduct).options(
+                    selectinload(MasterProduct.master_bom_details)
+                ).filter(MasterProduct.name == prod.name).first()
 
-            if mp and mp.master_bom_details and len(mp.master_bom_details) > 0:
-                id_map = {}
+            if mp:
+                # Cập nhật thông số kỹ thuật và quy cách từ Master
+                if mp.specification: prod.specification = mp.specification
+                if mp.length: prod.length = mp.length
+                if mp.width: prod.width = mp.width
+                if mp.height: prod.height = mp.height
+                if mp.material: prod.material = mp.material
+                if mp.color: prod.color = mp.color
+                if mp.unit: prod.unit = mp.unit
+                if mp.weight: prod.weight = mp.weight
+                if mp.price and (not prod.price or prod.price == 0):
+                    prod.price = mp.price
+                if mp.description and (force_refresh or not prod.description):
+                    prod.description = mp.description
+                modified = True
+
+                if mp.master_bom_details and len(mp.master_bom_details) > 0:
+                    # Nếu làm mới toàn bộ, xóa BOM cũ
+                    if has_bom and force_refresh:
+                        db.query(BOMDetail).filter(BOMDetail.product_id == prod.id).update({BOMDetail.parent_id: None}, synchronize_session=False)
+                        db.flush()
+                        db.query(BOMDetail).filter(BOMDetail.product_id == prod.id).delete(synchronize_session=False)
+                        db.flush()
+
+                    # Xây dựng children map
+                    children_map = {}
+                    for mb in mp.master_bom_details:
+                        if mb.parent_id is not None:
+                            children_map.setdefault(mb.parent_id, []).append(mb)
+
+                    roots = [b for b in mp.master_bom_details if b.parent_id is None]
+                    p_qty = prod.quantity or prod.order_qty or prod.production_qty or 1.0
+                    if p_qty <= 0:
+                        p_qty = 1.0
+
+                    def clone_node(mb, parent_new_id=None):
+                        nb_qty = round((mb.quantity if mb.quantity is not None else 1.0) * p_qty, 6)
+                        nb = BOMDetail(
+                            sku=mb.sku,
+                            name=mb.name,
+                            product_id=prod.id,
+                            parent_id=parent_new_id,
+                            length=mb.length,
+                            width=mb.width,
+                            height=mb.height,
+                            unit=mb.unit,
+                            specification=mb.specification,
+                            material=mb.material,
+                            color=mb.color,
+                            weight=mb.weight,
+                            waste_ratio=mb.waste_ratio,
+                            is_raw_material=mb.is_raw_material,
+                            exclude_production=mb.exclude_production,
+                            input_stage=mb.input_stage,
+                            output_stage=mb.output_stage,
+                            status="Active",
+                            quantity=nb_qty,
+                            description=mb.description
+                        )
+                        db.add(nb)
+                        db.flush()
+                        for child in children_map.get(mb.id, []):
+                            clone_node(child, nb.id)
+
+                    for root_mb in roots:
+                        clone_node(root_mb)
+                    modified = True
+
+    if modified:
+        db.commit()
+        db.refresh(order)
+    return order
+
+
+def sync_all_orders_boms_from_master(db: Session, force_refresh: bool = True):
+    """
+    Đồng bộ quy cách, kích thước và toàn bộ cây BOM chuẩn từ MasterProduct sang 100% các đơn hàng / PO.
+    """
+    from modules.master.models.master_product import MasterProduct
+    from modules.master.models.master_bom_detail import MasterBOMDetail
+    from sqlalchemy.orm import selectinload
+
+    # 1. Tải sẵn toàn bộ MasterProducts có BOM vào bộ nhớ để tối ưu tốc độ (chạy trong vài giây)
+    all_mps = db.query(MasterProduct).options(
+        selectinload(MasterProduct.master_bom_details)
+    ).all()
+
+    mp_sku_map = {}
+    for mp in all_mps:
+        if mp.sku:
+            s_clean = mp.sku.strip().lower()
+            mp_sku_map[s_clean] = mp
+            mp_sku_map[s_clean.replace('-', '').replace(' ', '')] = mp
+
+    # 2. Tải toàn bộ đơn hàng kèm sản phẩm
+    orders = db.query(Order).options(
+        selectinload(Order.products)
+    ).order_by(Order.id).all()
+
+    total_orders = len(orders)
+    updated_orders = 0
+    updated_products = 0
+    created_boms = 0
+    unmatched_products = []
+
+    for order in orders:
+        order_modified = False
+        for prod in (order.products or []):
+            p_sku = (prod.sku or '').strip().lower()
+            mp = mp_sku_map.get(p_sku) or mp_sku_map.get(p_sku.replace('-', '').replace(' ', ''))
+
+            if not mp:
+                unmatched_products.append({
+                    'order_id': order.id,
+                    'order_code': order.order_code,
+                    'prod_id': prod.id,
+                    'sku': prod.sku,
+                    'name': prod.name
+                })
+                continue
+
+            # Cập nhật thông số sản phẩm
+            if mp.specification: prod.specification = mp.specification
+            if mp.length: prod.length = mp.length
+            if mp.width: prod.width = mp.width
+            if mp.height: prod.height = mp.height
+            if mp.material: prod.material = mp.material
+            if mp.color: prod.color = mp.color
+            if mp.unit: prod.unit = mp.unit
+            if mp.weight: prod.weight = mp.weight
+            if mp.price and (not prod.price or prod.price == 0):
+                prod.price = mp.price
+            if mp.description and (force_refresh or not prod.description):
+                prod.description = mp.description
+
+            # Đồng bộ cây BOM
+            if mp.master_bom_details and len(mp.master_bom_details) > 0:
+                if force_refresh:
+                    db.query(BOMDetail).filter(BOMDetail.product_id == prod.id).update({BOMDetail.parent_id: None}, synchronize_session=False)
+                    db.flush()
+                    db.query(BOMDetail).filter(BOMDetail.product_id == prod.id).delete(synchronize_session=False)
+                    db.flush()
+                else:
+                    existing_count = db.query(BOMDetail).filter(BOMDetail.product_id == prod.id).count()
+                    if existing_count > 0:
+                        continue
+
+                children_map = {}
+                for mb in mp.master_bom_details:
+                    if mb.parent_id is not None:
+                        children_map.setdefault(mb.parent_id, []).append(mb)
+
+                roots = [mb for mb in mp.master_bom_details if mb.parent_id is None]
+                p_qty = prod.quantity or prod.order_qty or prod.production_qty or 1.0
+                if p_qty <= 0:
+                    p_qty = 1.0
+
                 def clone_node(mb, parent_new_id=None):
+                    nonlocal created_boms
+                    nb_qty = round((mb.quantity if mb.quantity is not None else 1.0) * p_qty, 6)
                     nb = BOMDetail(
                         sku=mb.sku,
                         name=mb.name,
@@ -58,23 +224,45 @@ def sync_order_bom_from_master(db: Session, order: Order):
                         input_stage=mb.input_stage,
                         output_stage=mb.output_stage,
                         status="Active",
-                        quantity=mb.quantity,
+                        quantity=nb_qty,
                         description=mb.description
                     )
                     db.add(nb)
                     db.flush()
-                    id_map[mb.id] = nb.id
-                    for child in mb.children:
+                    created_boms += 1
+                    for child in children_map.get(mb.id, []):
                         clone_node(child, nb.id)
 
-                for root_mb in [b for b in mp.master_bom_details if b.parent_id is None]:
+                for root_mb in roots:
                     clone_node(root_mb)
-                modified = True
 
-    if modified:
-        db.commit()
-        db.refresh(order)
-    return order
+                updated_products += 1
+                order_modified = True
+
+        if order_modified:
+            updated_orders += 1
+
+        if updated_orders % 50 == 0:
+            db.commit()
+
+    db.commit()
+
+    # Xóa cache kế hoạch sản xuất để frontend nhận dữ liệu mới ngay
+    try:
+        from modules.production.routes.product_plan_router import clear_plans_cache
+        clear_plans_cache()
+    except Exception:
+        pass
+
+    return {
+        "status": "success",
+        "total_orders": total_orders,
+        "updated_orders": updated_orders,
+        "updated_products": updated_products,
+        "created_boms": created_boms,
+        "unmatched_products_count": len(unmatched_products),
+        "unmatched_products": unmatched_products[:10]
+    }
 
 def get_orders(db: Session, skip: int = 0, limit: int = 100):
     return db.query(Order).order_by(Order.id).offset(skip).limit(limit).all()
@@ -111,12 +299,19 @@ def create_order(db: Session, order: OrderCreate):
         for p_data in order.products_details:
             p_name_std = clean_and_standardize_name(p_data.name)
             p_sku_std = clean_and_standardize_sku(p_data.sku)
+            p_fac = p_data.factory
+            if not p_fac:
+                from modules.master.models.master_product import MasterProduct
+                m_p = db.query(MasterProduct).filter(MasterProduct.sku == p_sku_std).first()
+                if m_p and m_p.description:
+                    p_fac = m_p.description
+
             db_product = Product(
                 name=p_name_std,
                 sku=p_sku_std,
                 quantity=p_data.quantity,
                 order_id=db_order.id,
-                description=p_data.factory if p_data.factory else None,
+                description=p_fac if p_fac else None,
                 status="Active",
                 created_at=datetime.datetime.utcnow()
             )
@@ -200,12 +395,19 @@ def update_order(db: Session, order_id: int, order: OrderUpdate):
             for p_data in order.products_details:
                 p_name_std = clean_and_standardize_name(p_data.name)
                 p_sku_std = clean_and_standardize_sku(p_data.sku)
+                p_fac = p_data.factory
+                if not p_fac:
+                    from modules.master.models.master_product import MasterProduct
+                    m_p = db.query(MasterProduct).filter(MasterProduct.sku == p_sku_std).first()
+                    if m_p and m_p.description:
+                        p_fac = m_p.description
+
                 db_product = Product(
                     name=p_name_std,
                     sku=p_sku_std,
                     quantity=p_data.quantity,
                     order_id=db_order.id,
-                    description=p_data.factory if p_data.factory else None,
+                    description=p_fac if p_fac else None,
                     status="Active",
                     created_at=datetime.datetime.utcnow()
                 )

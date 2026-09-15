@@ -108,7 +108,7 @@ const TableControlToolbar = ({
   isFilterActive = false
 }) => {
   return (
-    <div style={{
+    <div className="kpi-table-control-toolbar" style={{
       display: 'inline-flex',
       alignItems: 'center',
       gap: '6px',
@@ -119,13 +119,14 @@ const TableControlToolbar = ({
       boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
     }}>
       {/* Ô tìm kiếm bo tròn */}
-      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+      <div className="kpi-table-control-search" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
         <Search size={13} style={{ position: 'absolute', left: '10px', color: '#94A3B8' }} />
         <input
           type="text"
           placeholder={placeholder}
           value={searchValue || ''}
           onChange={onSearchChange}
+          className="kpi-table-control-input"
           style={{
             padding: '4px 10px 4px 28px',
             borderRadius: '14px',
@@ -229,6 +230,19 @@ const QualityKPIDashboardView = () => {
 
   // State Tabs: 'quality_targets' | 'work_indicators' | 'violations_list' | 'training_plan' | 'reports_bbch' | 'alerts_setup'
   const [activeTab, setActiveTab] = useState('quality_targets');
+
+  // Mobile detection for responsive Card View on narrow screens
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== 'undefined' ? window.innerWidth <= 850 : false
+  );
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 850);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Global Filter & Search States
   const [selectedMonth, setSelectedMonth] = useState('Tháng 8/2026');
@@ -1473,7 +1487,7 @@ const QualityKPIDashboardView = () => {
   };
 
   return (
-    <div className="gold-layout" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 68px)', backgroundColor: '#FAF6F0', padding: '12px 14px', boxSizing: 'border-box', overflow: 'hidden' }}>
+    <div className="gold-layout kpi-dashboard-container" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 68px)', backgroundColor: '#FAF6F0', padding: '12px 14px', boxSizing: 'border-box', overflow: 'hidden' }}>
       
       {/* 7 MAIN TAB BUTTONS (CLEAN TEXT-ONLY, COMPACT DESIGN) */}
       <div style={{
@@ -1483,11 +1497,11 @@ const QualityKPIDashboardView = () => {
         justifyContent: 'space-between',
         gap: '8px',
         borderBottom: '2px solid #EADCC9',
-        marginBottom: '10px',
+        marginBottom: '8px',
         paddingBottom: '2px',
         flexShrink: 0
       }}>
-        <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', flex: 1, alignItems: 'center' }}>
+        <div className="kpi-dashboard-tabs-scroll" style={{ display: 'flex', gap: '6px', overflowX: 'auto', flex: 1, alignItems: 'center' }}>
           {[
             { id: 'quality_targets', label: 'Tổng quan' },
             { id: 'work_indicators', label: 'Chỉ số công việc' },
@@ -1503,7 +1517,7 @@ const QualityKPIDashboardView = () => {
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 style={{
-                  padding: '6px 14px',
+                  padding: '6px 12px',
                   border: 'none',
                   borderBottom: isActive ? '2px solid #5D3B32' : '2px solid transparent',
                   backgroundColor: isActive ? '#FFFFFF' : 'transparent',
@@ -1513,7 +1527,8 @@ const QualityKPIDashboardView = () => {
                   borderRadius: '6px 6px 0 0',
                   cursor: 'pointer',
                   transition: 'all 0.15s ease',
-                  whiteSpace: 'nowrap'
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0
                 }}
               >
                 {tab.label}
@@ -1527,10 +1542,11 @@ const QualityKPIDashboardView = () => {
           <button
             onClick={fetchDatabaseData}
             disabled={loading}
-            style={{ display: 'flex', alignItems: 'center', gap: '4px', border: '1px solid #EADCC9', backgroundColor: '#FFFFFF', color: '#5D3B32', borderRadius: '6px', padding: '4px 10px', fontSize: '0.75rem', fontWeight: '800', cursor: 'pointer' }}
+            style={{ display: 'flex', alignItems: 'center', gap: '4px', border: '1px solid #EADCC9', backgroundColor: '#FFFFFF', color: '#5D3B32', borderRadius: '6px', padding: '5px 8px', fontSize: '0.75rem', fontWeight: '800', cursor: 'pointer', whiteSpace: 'nowrap' }}
+            title="Làm mới CSDL"
           >
             <RefreshCw size={13} className={loading ? 'spin' : ''} />
-            {loading ? 'Tải DB...' : 'Làm mới DB'}
+            <span className="kpi-refresh-btn-text">{loading ? 'Tải DB...' : 'Làm mới DB'}</span>
           </button>
         </div>
       </div>
@@ -1551,10 +1567,10 @@ const QualityKPIDashboardView = () => {
         {/* TAB 2: CHỈ SỐ CÔNG VIỆC                                                   */}
         {/* ========================================================================= */}
         {activeTab === 'work_indicators' && (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0, overflow: 'hidden' }}>
+          <div className="kpi-tab-pane" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0 }}>
             
             {/* TOP 4 CARDS matching Mockup Screen 2 */}
-            <div style={{ flexShrink: 0, display: 'grid', gridTemplateColumns: '1.1fr 1fr 1.3fr 1.3fr', gap: '10px' }}>
+            <div className="kpi-work-indicators-top-cards" style={{ flexShrink: 0 }}>
               
               {/* Card 1: Điểm KPI Trung bình */}
               <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9' }}>
@@ -1633,9 +1649,9 @@ const QualityKPIDashboardView = () => {
 
             </div>
 
-            {/* TABLE: Danh mục Chỉ số KPI công việc */}
+            {/* TABLE / CARD VIEW: Danh mục Chỉ số KPI công việc */}
             <div className="mgmt-table card admin-table-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, backgroundColor: '#FFFFFF', borderRadius: '10px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
-              <div style={{ flexShrink: 0, padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="kpi-mgmt-table-header" style={{ flexShrink: 0, padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                 <TableControlToolbar
                   searchValue={indicatorSearch}
                   onSearchChange={(e) => setIndicatorSearch(e.target.value)}
@@ -1648,14 +1664,15 @@ const QualityKPIDashboardView = () => {
                 />
                 <button
                   onClick={() => { setEditingTarget(null); setIsTargetModalOpen(true); }}
-                  style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 12px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '800', fontSize: '0.75rem', cursor: 'pointer' }}
+                  className="kpi-btn-add-primary"
+                  style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 14px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '800', fontSize: '0.75rem', cursor: 'pointer' }}
                 >
                   <Plus size={13} /> Thêm chỉ số KPI mới
                 </button>
               </div>
 
               {filterOpen && (
-                <div style={{ flexShrink: 0, padding: '6px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.72rem' }}>
+                <div style={{ flexShrink: 0, padding: '6px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.72rem', flexWrap: 'wrap' }}>
                   <span style={{ fontWeight: '800', color: '#5D3B32' }}>Bộ lọc trạng thái:</span>
                   {['Tất cả', 'Đã duyệt / Đạt', 'Chờ xử lý / Cần làm'].map(opt => (
                     <button
@@ -1678,94 +1695,240 @@ const QualityKPIDashboardView = () => {
                 </div>
               )}
 
-              <div className="admin-table-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', tableLayout: 'fixed' }}>
-                  <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
-                    <tr style={{ backgroundColor: '#FAF6F0', color: '#5D3B32', borderBottom: '1px solid #EADCC9', textAlign: 'left' }}>
-                      <th style={{ padding: '8px 6px', fontWeight: '800', width: '40px', textAlign: 'center' }}>STT</th>
-                      <th style={{ padding: '8px 8px', fontWeight: '800', width: '80px', textAlign: 'center' }}>Mã KPI</th>
-                      <th style={{ padding: '8px 12px', fontWeight: '800', width: '32%' }}>Tên Chỉ Số KPI Công Việc</th>
-                      <th style={{ padding: '8px 12px', fontWeight: '800', width: '38%' }}>Công Thức / Cách Tính</th>
-                      <th style={{ padding: '8px 6px', fontWeight: '800', textAlign: 'center', width: '75px' }}>Tỷ Trọng</th>
-                      <th style={{ padding: '8px 8px', fontWeight: '800', textAlign: 'center', width: '100px' }}>Mục Tiêu Đạt</th>
-                      <th style={{ padding: '8px 8px', fontWeight: '800', textAlign: 'center', width: '95px' }}>Tần Suất</th>
-                      <th style={{ padding: '8px 8px', fontWeight: '800', textAlign: 'center', width: '95px' }}>Trạng Thái</th>
-                      <th style={{ padding: '8px 6px', fontWeight: '800', textAlign: 'center', width: '80px' }}>Thao Tác</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(() => {
-                      const allData = filterAndSortData(workIndicators, indicatorSearch);
-                      const pagedData = allData.slice((indicatorPage - 1) * indicatorPageSize, indicatorPage * indicatorPageSize);
-                      return pagedData.map((item, idx) => {
-                        const globalIdx = (indicatorPage - 1) * indicatorPageSize + idx;
-                        return (
-                          <tr
-                            key={item.id || idx}
-                            style={{ borderBottom: '1px solid #E2E8F0', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}
-                          >
-                            <td style={{ padding: '8px 6px', fontWeight: '700', color: '#64748B', textAlign: 'center' }}>{globalIdx + 1}</td>
-                            <td style={{ padding: '8px 8px', fontWeight: '800', color: '#5D3B32', textAlign: 'center' }}>{item.code || `KPI${String(globalIdx + 1).padStart(2, '0')}`}</td>
-                            <td style={{ padding: '8px 12px', fontWeight: '700', color: '#1E293B', wordBreak: 'break-word', lineHeight: '1.4' }}>{item.name}</td>
-                            <td style={{ padding: '8px 12px', color: '#334155', fontWeight: '500', lineHeight: '1.45', wordBreak: 'break-word' }}>
-                              <span style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px',
+              <div className="admin-table-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: isMobile ? 'hidden' : 'auto' }}>
+                {(() => {
+                  const allData = filterAndSortData(workIndicators, indicatorSearch);
+                  const pagedData = allData.slice((indicatorPage - 1) * indicatorPageSize, indicatorPage * indicatorPageSize);
+
+                  if (isMobile) {
+                    return (
+                      <div className="kpi-mobile-cards-container" style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {pagedData.map((item, idx) => {
+                          const globalIdx = (indicatorPage - 1) * indicatorPageSize + idx;
+                          return (
+                            <div
+                              key={item.id || idx}
+                              className="kpi-data-mobile-card"
+                              style={{
+                                background: idx % 2 === 0 ? '#FFFFFF' : '#FFFDFB',
+                                borderRadius: '8px',
+                                border: '1px solid #EADCC9',
+                                padding: '10px 12px',
+                                boxShadow: '0 1px 4px rgba(91, 57, 36, 0.05)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '8px'
+                              }}
+                            >
+                              {/* Header: STT + Code + Status + Actions */}
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <span style={{
+                                    background: '#5D3B32',
+                                    color: '#FFFFFF',
+                                    borderRadius: '50%',
+                                    width: '20px',
+                                    height: '20px',
+                                    fontSize: '0.68rem',
+                                    fontWeight: '800',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexShrink: 0
+                                  }}>
+                                    {globalIdx + 1}
+                                  </span>
+                                  <span style={{ fontWeight: '800', color: '#5D3B32', fontSize: '0.82rem' }}>
+                                    {item.code || `KPI${String(globalIdx + 1).padStart(2, '0')}`}
+                                  </span>
+                                  <span style={{
+                                    padding: '2px 8px',
+                                    borderRadius: '6px',
+                                    fontSize: '0.65rem',
+                                    fontWeight: '800',
+                                    backgroundColor: '#ECFDF5',
+                                    color: '#059669',
+                                    border: '1px solid #A7F3D0'
+                                  }}>
+                                    {item.status || 'Áp dụng'}
+                                  </span>
+                                </div>
+
+                                <div style={{ display: 'flex', gap: '6px' }}>
+                                  <button
+                                    onClick={() => { setEditingTarget(item); setIsTargetModalOpen(true); }}
+                                    style={{ border: 'none', background: '#E0F2FE', color: '#0369A1', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '0.72rem', fontWeight: '700' }}
+                                    title="Sửa"
+                                  >
+                                    <Edit2 size={12} /> Sửa
+                                  </button>
+                                  <button
+                                    onClick={() => handleOpenDeleteConfirm(item)}
+                                    style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '0.72rem', fontWeight: '700' }}
+                                    title="Xóa"
+                                  >
+                                    <Trash2 size={12} /> Xóa
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Title */}
+                              <div style={{ fontWeight: '800', color: '#1E293B', fontSize: '0.86rem', lineHeight: '1.4' }}>
+                                {item.name}
+                              </div>
+
+                              {/* Calc Method */}
+                              <div style={{
                                 backgroundColor: '#FAF6F0',
                                 border: '1px solid #EADCC9',
                                 color: '#5D3B32',
-                                padding: '4px 9px',
+                                padding: '5px 8px',
                                 borderRadius: '6px',
                                 fontSize: '0.72rem',
-                                fontWeight: '700'
+                                fontWeight: '600',
+                                lineHeight: '1.35'
                               }}>
+                                <span style={{ fontWeight: '800', color: '#7B5233' }}>Cách tính: </span>
                                 {getCalcMethodLabel(item.calc_method || item.description)}
-                              </span>
-                            </td>
-                            <td style={{ padding: '8px 6px', textAlign: 'center', fontWeight: '800', color: '#5D3B32' }}>{item.weight || '20%'}</td>
-                            <td style={{ padding: '8px 8px', textAlign: 'center' }}>
-                              <span style={{ backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', color: '#15803D', padding: '3px 8px', borderRadius: '6px', fontWeight: '700', display: 'inline-block', fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
-                                {item.target || item.standard || '>= 98%'}
-                              </span>
-                            </td>
-                            <td style={{ padding: '8px 8px', textAlign: 'center', color: '#475569', fontWeight: '600' }}>
-                              <span style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', padding: '3px 8px', borderRadius: '4px', fontSize: '0.68rem', whiteSpace: 'nowrap', display: 'inline-block' }}>
-                                {item.unit && item.unit !== '%' ? item.unit : 'Hàng tháng'}
-                              </span>
-                            </td>
-                            <td style={{ padding: '8px 8px', textAlign: 'center' }}>
-                              <span style={{
-                                padding: '3px 10px', borderRadius: '6px', fontSize: '0.68rem', fontWeight: '800',
-                                backgroundColor: '#ECFDF5', color: '#059669', border: '1px solid #A7F3D0', whiteSpace: 'nowrap', display: 'inline-block'
-                              }}>
-                                {item.status || 'Áp dụng'}
-                              </span>
-                            </td>
-                            <td style={{ padding: '8px 6px', textAlign: 'center' }}>
-                              <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
-                                <button
-                                  onClick={() => { setEditingTarget(item); setIsTargetModalOpen(true); }}
-                                  style={{ border: 'none', background: '#E0F2FE', color: '#0369A1', padding: '4px 7px', borderRadius: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-                                  title="Sửa"
-                                >
-                                  <Edit2 size={13} />
-                                </button>
-                                <button
-                                  onClick={() => handleOpenDeleteConfirm(item)}
-                                  style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '4px 7px', borderRadius: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-                                  title="Xóa"
-                                >
-                                  <Trash2 size={13} />
-                                </button>
                               </div>
-                            </td>
-                          </tr>
-                        );
-                      });
-                    })()}
-                  </tbody>
-                </table>
+
+                              {/* Key Metrics */}
+                              <div style={{
+                                display: 'grid',
+                                gridTemplateColumns: '1fr 1.3fr 1fr',
+                                gap: '6px',
+                                paddingTop: '6px',
+                                borderTop: '1px dashed #EADCC9',
+                                alignItems: 'center'
+                              }}>
+                                <div>
+                                  <div style={{ fontSize: '0.62rem', color: '#64748B', fontWeight: '700' }}>Tỷ Trọng</div>
+                                  <div style={{ fontSize: '0.85rem', fontWeight: '900', color: '#5D3B32' }}>{item.weight || '20%'}</div>
+                                </div>
+                                <div>
+                                  <div style={{ fontSize: '0.62rem', color: '#64748B', fontWeight: '700' }}>Mục Tiêu Đạt</div>
+                                  <span style={{
+                                    backgroundColor: '#F0FDF4',
+                                    border: '1px solid #BBF7D0',
+                                    color: '#15803D',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    fontWeight: '800',
+                                    display: 'inline-block',
+                                    fontSize: '0.72rem'
+                                  }}>
+                                    {item.target || item.standard || '>= 98%'}
+                                  </span>
+                                </div>
+                                <div>
+                                  <div style={{ fontSize: '0.62rem', color: '#64748B', fontWeight: '700' }}>Tần Suất</div>
+                                  <span style={{
+                                    backgroundColor: '#F8FAFC',
+                                    border: '1px solid #E2E8F0',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    fontSize: '0.68rem',
+                                    fontWeight: '700',
+                                    color: '#475569',
+                                    display: 'inline-block'
+                                  }}>
+                                    {item.unit && item.unit !== '%' ? item.unit : 'Hàng tháng'}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', tableLayout: 'fixed' }}>
+                      <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
+                        <tr style={{ backgroundColor: '#FAF6F0', color: '#5D3B32', borderBottom: '1px solid #EADCC9', textAlign: 'left' }}>
+                          <th style={{ padding: '8px 6px', fontWeight: '800', width: '40px', textAlign: 'center' }}>STT</th>
+                          <th style={{ padding: '8px 8px', fontWeight: '800', width: '80px', textAlign: 'center' }}>Mã KPI</th>
+                          <th style={{ padding: '8px 12px', fontWeight: '800', width: '32%' }}>Tên Chỉ Số KPI Công Việc</th>
+                          <th style={{ padding: '8px 12px', fontWeight: '800', width: '38%' }}>Công Thức / Cách Tính</th>
+                          <th style={{ padding: '8px 6px', fontWeight: '800', textAlign: 'center', width: '75px' }}>Tỷ Trọng</th>
+                          <th style={{ padding: '8px 8px', fontWeight: '800', textAlign: 'center', width: '100px' }}>Mục Tiêu Đạt</th>
+                          <th style={{ padding: '8px 8px', fontWeight: '800', textAlign: 'center', width: '95px' }}>Tần Suất</th>
+                          <th style={{ padding: '8px 8px', fontWeight: '800', textAlign: 'center', width: '95px' }}>Trạng Thái</th>
+                          <th style={{ padding: '8px 6px', fontWeight: '800', textAlign: 'center', width: '80px' }}>Thao Tác</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pagedData.map((item, idx) => {
+                          const globalIdx = (indicatorPage - 1) * indicatorPageSize + idx;
+                          return (
+                            <tr
+                              key={item.id || idx}
+                              style={{ borderBottom: '1px solid #E2E8F0', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}
+                            >
+                              <td style={{ padding: '8px 6px', fontWeight: '700', color: '#64748B', textAlign: 'center' }}>{globalIdx + 1}</td>
+                              <td style={{ padding: '8px 8px', fontWeight: '800', color: '#5D3B32', textAlign: 'center' }}>{item.code || `KPI${String(globalIdx + 1).padStart(2, '0')}`}</td>
+                              <td style={{ padding: '8px 12px', fontWeight: '700', color: '#1E293B', wordBreak: 'break-word', lineHeight: '1.4' }}>{item.name}</td>
+                              <td style={{ padding: '8px 12px', color: '#334155', fontWeight: '500', lineHeight: '1.45', wordBreak: 'break-word' }}>
+                                <span style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  backgroundColor: '#FAF6F0',
+                                  border: '1px solid #EADCC9',
+                                  color: '#5D3B32',
+                                  padding: '4px 9px',
+                                  borderRadius: '6px',
+                                  fontSize: '0.72rem',
+                                  fontWeight: '700'
+                                }}>
+                                  {getCalcMethodLabel(item.calc_method || item.description)}
+                                </span>
+                              </td>
+                              <td style={{ padding: '8px 6px', textAlign: 'center', fontWeight: '800', color: '#5D3B32' }}>{item.weight || '20%'}</td>
+                              <td style={{ padding: '8px 8px', textAlign: 'center' }}>
+                                <span style={{ backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', color: '#15803D', padding: '3px 8px', borderRadius: '6px', fontWeight: '700', display: 'inline-block', fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
+                                  {item.target || item.standard || '>= 98%'}
+                                </span>
+                              </td>
+                              <td style={{ padding: '8px 8px', textAlign: 'center', color: '#475569', fontWeight: '600' }}>
+                                <span style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', padding: '3px 8px', borderRadius: '4px', fontSize: '0.68rem', whiteSpace: 'nowrap', display: 'inline-block' }}>
+                                  {item.unit && item.unit !== '%' ? item.unit : 'Hàng tháng'}
+                                </span>
+                              </td>
+                              <td style={{ padding: '8px 8px', textAlign: 'center' }}>
+                                <span style={{
+                                  padding: '3px 10px', borderRadius: '6px', fontSize: '0.68rem', fontWeight: '800',
+                                  backgroundColor: '#ECFDF5', color: '#059669', border: '1px solid #A7F3D0', whiteSpace: 'nowrap', display: 'inline-block'
+                                }}>
+                                  {item.status || 'Áp dụng'}
+                                </span>
+                              </td>
+                              <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+                                <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
+                                  <button
+                                    onClick={() => { setEditingTarget(item); setIsTargetModalOpen(true); }}
+                                    style={{ border: 'none', background: '#E0F2FE', color: '#0369A1', padding: '4px 7px', borderRadius: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                                    title="Sửa"
+                                  >
+                                    <Edit2 size={13} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleOpenDeleteConfirm(item)}
+                                    style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '4px 7px', borderRadius: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                                    title="Xóa"
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  );
+                })()}
               </div>
 
               {renderPaginationControl(indicatorPage, setIndicatorPage, indicatorPageSize, filterAndSortData(workIndicators, indicatorSearch).length, 'chỉ số')}
@@ -1778,10 +1941,10 @@ const QualityKPIDashboardView = () => {
         {/* TAB 3: CHECKLIST CÔNG VIỆC                                                */}
         {/* ========================================================================= */}
         {activeTab === 'checklist_work' && (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0, overflow: 'hidden' }}>
+          <div className="kpi-tab-pane" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0 }}>
             
             {/* TOP 3 CARDS matching Mockup Screen 3 */}
-            <div style={{ flexShrink: 0, display: 'grid', gridTemplateColumns: '1fr 1.2fr 1.6fr', gap: '10px' }}>
+            <div className="kpi-checklist-top-cards" style={{ flexShrink: 0 }}>
               
               {/* Card 1: Điểm KPI Trung bình */}
               <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9' }}>
@@ -1838,9 +2001,9 @@ const QualityKPIDashboardView = () => {
 
             </div>
 
-            {/* TABLE AREA WITH SEARCH & FILTER */}
+            {/* TABLE / CARD VIEW WITH SEARCH & FILTER */}
             <div className="mgmt-table card admin-table-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, backgroundColor: '#FFFFFF', borderRadius: '10px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
-              <div style={{ flexShrink: 0, padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="kpi-mgmt-table-header" style={{ flexShrink: 0, padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                 <TableControlToolbar
                   searchValue={checklistSearch}
                   onSearchChange={(e) => setChecklistSearch(e.target.value)}
@@ -1853,7 +2016,8 @@ const QualityKPIDashboardView = () => {
                 />
                 <button
                   onClick={handleAddDashboardChecklist}
-                  style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 12px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '800', fontSize: '0.75rem', cursor: 'pointer' }}
+                  className="kpi-btn-add-primary"
+                  style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 14px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '800', fontSize: '0.75rem', cursor: 'pointer' }}
                 >
                   <Plus size={13} /> Thêm Checklist mới
                 </button>
@@ -1861,7 +2025,7 @@ const QualityKPIDashboardView = () => {
 
               {/* BAR BỘ LỌC BỘ PHẬN QLCL - NẰM TRONG BỘ LỌC PHỄU (filterOpen) - COMPACT GỖ NÂU */}
               {filterOpen && (
-                <div style={{ flexShrink: 0, padding: '6px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.72rem' }}>
+                <div style={{ flexShrink: 0, padding: '6px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.72rem', flexWrap: 'wrap' }}>
                   <span style={{ fontWeight: '800', color: '#5D3B32' }}>Bộ phận phụ trách:</span>
                   <select
                     value={selectedChecklistDept}
@@ -1886,67 +2050,200 @@ const QualityKPIDashboardView = () => {
                 </div>
               )}
 
-              <div className="admin-table-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
-                  <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
-                    <tr style={{ backgroundColor: '#FAF6F0', color: '#5D3B32', borderBottom: '1px solid #EADCC9', textAlign: 'left' }}>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '50px', textAlign: 'center' }}>STT</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '100px' }}>Mã CV</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '110px' }}>Bộ phận</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800' }}>Nội dung Checklist công việc</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '140px' }}>Tần suất thực hiện</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '110px' }}>Thao tác</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(() => {
-                      const filtered = filterAndSortData(allChecklists, checklistSearch)
-                        .filter(item => selectedChecklistDept === 'ALL' || item.department_code === selectedChecklistDept);
-                      const paged = filtered.slice((checklistPage - 1) * checklistPageSize, checklistPage * checklistPageSize);
-                      return paged.map((item, idx) => {
-                        const globalIdx = (checklistPage - 1) * checklistPageSize + idx;
-                        const badge = getDeptBadgeStyle(item.department_code);
-                        return (
-                          <tr
-                            key={item.id || idx}
-                            style={{ borderBottom: '1px solid #EADCC9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}
-                          >
-                            <td style={{ padding: '8px 10px', fontWeight: '700', color: '#64748B', textAlign: 'center' }}>{globalIdx + 1}</td>
-                            <td style={{ padding: '8px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.task_code || item.code || `CL-00${globalIdx + 1}`}</td>
-                            <td style={{ padding: '8px 10px' }}>
-                              <span style={{
-                                padding: '2px 8px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: '700',
-                                backgroundColor: badge.bg, color: badge.color, border: `1px solid ${badge.border}`
-                              }}>
-                                {badge.label}
-                              </span>
-                            </td>
-                            <td style={{ padding: '8px 10px', fontWeight: '600', color: '#1E293B', fontSize: '0.82rem' }}>{item.content}</td>
-                            <td style={{ padding: '8px 10px', color: '#475569', fontWeight: '600' }}>{item.frequency || 'Hàng ngày'}</td>
-                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                              <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                                <button
-                                  onClick={() => handleEditDashboardChecklist(item)}
-                                  style={{ border: '1px solid #EADCC9', background: '#FFFFFF', color: '#5D3B32', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontWeight: '600', fontSize: '0.7rem' }}
-                                  title="Chỉnh sửa"
-                                >
-                                  <Edit2 size={12} /> Sửa
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteDashboardChecklist(item)}
-                                  style={{ border: '1px solid #FCA5A5', background: '#FEF2F2', color: '#DC2626', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontWeight: '600', fontSize: '0.7rem' }}
-                                  title="Xóa công việc"
-                                >
-                                  <Trash2 size={12} /> Xóa
-                                </button>
+              <div className="admin-table-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: isMobile ? 'hidden' : 'auto' }}>
+                {(() => {
+                  const filtered = filterAndSortData(allChecklists, checklistSearch)
+                    .filter(item => selectedChecklistDept === 'ALL' || item.department_code === selectedChecklistDept);
+                  const paged = filtered.slice((checklistPage - 1) * checklistPageSize, checklistPage * checklistPageSize);
+
+                  if (isMobile) {
+                    return (
+                      <div className="kpi-mobile-cards-container" style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {paged.map((item, idx) => {
+                          const globalIdx = (checklistPage - 1) * checklistPageSize + idx;
+                          const badge = getDeptBadgeStyle(item.department_code);
+                          return (
+                            <div
+                              key={item.id || idx}
+                              className="kpi-data-mobile-card"
+                              style={{
+                                background: idx % 2 === 0 ? '#FFFFFF' : '#FFFDFB',
+                                borderRadius: '8px',
+                                border: '1px solid #EADCC9',
+                                padding: '10px 12px',
+                                boxShadow: '0 1px 4px rgba(91, 57, 36, 0.05)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '8px'
+                              }}
+                            >
+                              {/* Header: STT + Task Code + Dept Badge + Actions */}
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <span style={{
+                                    background: '#5D3B32',
+                                    color: '#FFFFFF',
+                                    borderRadius: '50%',
+                                    width: '20px',
+                                    height: '20px',
+                                    fontSize: '0.68rem',
+                                    fontWeight: '800',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexShrink: 0
+                                  }}>
+                                    {globalIdx + 1}
+                                  </span>
+                                  <span style={{ fontWeight: '800', color: '#5D3B32', fontSize: '0.82rem' }}>
+                                    {item.task_code || item.code || `CL-00${globalIdx + 1}`}
+                                  </span>
+                                  <span style={{
+                                    padding: '2px 8px',
+                                    borderRadius: '4px',
+                                    fontSize: '0.68rem',
+                                    fontWeight: '700',
+                                    backgroundColor: badge.bg,
+                                    color: badge.color,
+                                    border: `1px solid ${badge.border}`
+                                  }}>
+                                    {badge.label}
+                                  </span>
+                                </div>
+
+                                <div style={{ display: 'flex', gap: '6px' }}>
+                                  <button
+                                    onClick={() => handleEditDashboardChecklist(item)}
+                                    style={{
+                                      border: '1px solid #EADCC9',
+                                      background: '#FFFFFF',
+                                      color: '#5D3B32',
+                                      padding: '4px 8px',
+                                      borderRadius: '4px',
+                                      cursor: 'pointer',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '3px',
+                                      fontWeight: '700',
+                                      fontSize: '0.72rem'
+                                    }}
+                                    title="Chỉnh sửa"
+                                  >
+                                    <Edit2 size={12} /> Sửa
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteDashboardChecklist(item)}
+                                    style={{
+                                      border: '1px solid #FCA5A5',
+                                      background: '#FEF2F2',
+                                      color: '#DC2626',
+                                      padding: '4px 8px',
+                                      borderRadius: '4px',
+                                      cursor: 'pointer',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '3px',
+                                      fontWeight: '700',
+                                      fontSize: '0.72rem'
+                                    }}
+                                    title="Xóa công việc"
+                                  >
+                                    <Trash2 size={12} /> Xóa
+                                  </button>
+                                </div>
                               </div>
-                            </td>
-                          </tr>
-                        );
-                      });
-                    })()}
-                  </tbody>
-                </table>
+
+                              {/* Body: Nội dung Checklist công việc */}
+                              <div style={{ fontWeight: '700', color: '#1E293B', fontSize: '0.85rem', lineHeight: '1.45' }}>
+                                {item.content}
+                              </div>
+
+                              {/* Footer: Tần suất thực hiện */}
+                              <div style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                paddingTop: '6px',
+                                borderTop: '1px dashed #EADCC9',
+                                fontSize: '0.72rem'
+                              }}>
+                                <span style={{ color: '#64748B', fontWeight: '600' }}>Tần suất thực hiện:</span>
+                                <span style={{
+                                  backgroundColor: '#FAF6F0',
+                                  border: '1px solid #EADCC9',
+                                  padding: '2px 8px',
+                                  borderRadius: '4px',
+                                  fontWeight: '700',
+                                  color: '#5D3B32'
+                                }}>
+                                  {item.frequency || 'Hàng ngày'}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+                      <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
+                        <tr style={{ backgroundColor: '#FAF6F0', color: '#5D3B32', borderBottom: '1px solid #EADCC9', textAlign: 'left' }}>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', width: '50px', textAlign: 'center' }}>STT</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', width: '100px' }}>Mã CV</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', width: '110px' }}>Bộ phận</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800' }}>Nội dung Checklist công việc</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', width: '140px' }}>Tần suất thực hiện</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '110px' }}>Thao tác</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paged.map((item, idx) => {
+                          const globalIdx = (checklistPage - 1) * checklistPageSize + idx;
+                          const badge = getDeptBadgeStyle(item.department_code);
+                          return (
+                            <tr
+                              key={item.id || idx}
+                              style={{ borderBottom: '1px solid #EADCC9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}
+                            >
+                              <td style={{ padding: '8px 10px', fontWeight: '700', color: '#64748B', textAlign: 'center' }}>{globalIdx + 1}</td>
+                              <td style={{ padding: '8px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.task_code || item.code || `CL-00${globalIdx + 1}`}</td>
+                              <td style={{ padding: '8px 10px' }}>
+                                <span style={{
+                                  padding: '2px 8px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: '700',
+                                  backgroundColor: badge.bg, color: badge.color, border: `1px solid ${badge.border}`
+                                }}>
+                                  {badge.label}
+                                </span>
+                              </td>
+                              <td style={{ padding: '8px 10px', fontWeight: '600', color: '#1E293B', fontSize: '0.82rem' }}>{item.content}</td>
+                              <td style={{ padding: '8px 10px', color: '#475569', fontWeight: '600' }}>{item.frequency || 'Hàng ngày'}</td>
+                              <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                                  <button
+                                    onClick={() => handleEditDashboardChecklist(item)}
+                                    style={{ border: '1px solid #EADCC9', background: '#FFFFFF', color: '#5D3B32', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontWeight: '600', fontSize: '0.7rem' }}
+                                    title="Chỉnh sửa"
+                                  >
+                                    <Edit2 size={12} /> Sửa
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteDashboardChecklist(item)}
+                                    style={{ border: '1px solid #FCA5A5', background: '#FEF2F2', color: '#DC2626', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontWeight: '600', fontSize: '0.7rem' }}
+                                    title="Xóa công việc"
+                                  >
+                                    <Trash2 size={12} /> Xóa
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  );
+                })()}
               </div>
 
               {renderPaginationControl(checklistPage, setChecklistPage, checklistPageSize, filterAndSortData(allChecklists, checklistSearch).filter(item => selectedChecklistDept === 'ALL' || item.department_code === selectedChecklistDept).length, 'checklists')}
@@ -1959,10 +2256,10 @@ const QualityKPIDashboardView = () => {
         {/* TAB 4: DANH SÁCH VI PHẠM                                                  */}
         {/* ========================================================================= */}
         {activeTab === 'violations_list' && (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0, overflow: 'hidden' }}>
+          <div className="kpi-tab-pane" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0 }}>
             
             {/* TOP 2 CARDS matching Mockup Screen 4 */}
-            <div style={{ flexShrink: 0, display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: '10px' }}>
+            <div className="kpi-violations-top-cards" style={{ flexShrink: 0 }}>
               
               {/* Card 1: Số vụ vi phạm trong tháng */}
               <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
@@ -2003,9 +2300,9 @@ const QualityKPIDashboardView = () => {
 
             </div>
 
-            {/* TABLE AREA WITH SEARCH & FILTER */}
+            {/* TABLE / CARD VIEW WITH SEARCH & FILTER */}
             <div className="mgmt-table card admin-table-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, backgroundColor: '#FFFFFF', borderRadius: '10px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
-              <div style={{ flexShrink: 0, padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="kpi-mgmt-table-header" style={{ flexShrink: 0, padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                 <TableControlToolbar
                   searchValue={violationSearch}
                   onSearchChange={(e) => setViolationSearch(e.target.value)}
@@ -2018,14 +2315,15 @@ const QualityKPIDashboardView = () => {
                 />
                 <button
                   onClick={() => handleOpenViolationModal(null)}
-                  style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 12px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '800', fontSize: '0.75rem', cursor: 'pointer' }}
+                  className="kpi-btn-add-primary"
+                  style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 14px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '800', fontSize: '0.75rem', cursor: 'pointer' }}
                 >
                   <Plus size={13} /> Thêm mới
                 </button>
               </div>
 
               {filterOpen && (
-                <div style={{ flexShrink: 0, padding: '6px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.72rem' }}>
+                <div style={{ flexShrink: 0, padding: '6px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.72rem', flexWrap: 'wrap' }}>
                   <span style={{ fontWeight: '800', color: '#5D3B32' }}>Bộ lọc trạng thái:</span>
                   {['Tất cả', 'Đã duyệt / Đạt', 'Chờ xử lý / Cần làm'].map(opt => (
                     <button
@@ -2048,58 +2346,144 @@ const QualityKPIDashboardView = () => {
                 </div>
               )}
 
-              <div className="admin-table-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto' }}>
-                <table style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
-                  <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
-                    <tr style={{ backgroundColor: '#FAF6F0', color: '#5D3B32', borderBottom: '1px solid #EADCC9', textAlign: 'left' }}>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '45px', textAlign: 'center', whiteSpace: 'nowrap' }}>STT</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '140px', whiteSpace: 'nowrap' }}>Mã NV / Họ tên</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '180px', whiteSpace: 'nowrap' }}>Hành vi vi phạm</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '110px', whiteSpace: 'nowrap' }}>Mức độ vi phạm</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '85px', whiteSpace: 'nowrap' }}>Điểm trừ</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '105px', whiteSpace: 'nowrap' }}>Ngày vi phạm</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '130px', whiteSpace: 'nowrap' }}>Người ghi nhận</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '80px', whiteSpace: 'nowrap' }}>Thao tác</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(() => {
-                      const allData = filterAndSortData(violations, violationSearch);
-                      const pagedData = allData.slice((violationPage - 1) * violationPageSize, violationPage * violationPageSize);
-                      return pagedData.map((item, idx) => {
-                        const globalIdx = (violationPage - 1) * violationPageSize + idx;
-                        return (
-                          <tr key={item.id || idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}>
-                            <td style={{ padding: '5px 10px', fontWeight: '700', color: '#64748B' }}>{globalIdx + 1}</td>
-                            <td style={{ padding: '5px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.code} • {item.emp}</td>
-                            <td style={{ padding: '5px 10px', color: '#DC2626', fontWeight: '600' }}>{item.rule}</td>
-                            <td style={{ padding: '5px 10px', textAlign: 'center' }}>
-                              <span style={{
-                                padding: '2px 8px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: '800',
-                                backgroundColor: Math.abs(item.score) >= 15 ? '#FEE2E2' : '#FEF3C7',
-                                color: Math.abs(item.score) >= 15 ? '#DC2626' : '#B45309'
+              <div className="admin-table-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: isMobile ? 'hidden' : 'auto' }}>
+                {(() => {
+                  const allData = filterAndSortData(violations, violationSearch);
+                  const pagedData = allData.slice((violationPage - 1) * violationPageSize, violationPage * violationPageSize);
+
+                  if (isMobile) {
+                    return (
+                      <div className="kpi-mobile-cards-container" style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {pagedData.map((item, idx) => {
+                          const globalIdx = (violationPage - 1) * violationPageSize + idx;
+                          const isSevere = Math.abs(item.score) >= 15;
+                          return (
+                            <div
+                              key={item.id || idx}
+                              className="kpi-data-mobile-card"
+                              style={{
+                                background: idx % 2 === 0 ? '#FFFFFF' : '#FFFDFB',
+                                borderRadius: '8px',
+                                border: '1px solid #EADCC9',
+                                padding: '10px 12px',
+                                boxShadow: '0 1px 4px rgba(91, 57, 36, 0.05)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '6px'
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <span style={{
+                                    background: '#5D3B32',
+                                    color: '#FFFFFF',
+                                    borderRadius: '50%',
+                                    width: '20px',
+                                    height: '20px',
+                                    fontSize: '0.68rem',
+                                    fontWeight: '800',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center'
+                                  }}>
+                                    {globalIdx + 1}
+                                  </span>
+                                  <span style={{ fontWeight: '800', color: '#5D3B32', fontSize: '0.82rem' }}>
+                                    {item.code} • {item.emp}
+                                  </span>
+                                  <span style={{
+                                    padding: '2px 8px',
+                                    borderRadius: '4px',
+                                    fontSize: '0.65rem',
+                                    fontWeight: '800',
+                                    backgroundColor: isSevere ? '#FEE2E2' : '#FEF3C7',
+                                    color: isSevere ? '#DC2626' : '#B45309'
+                                  }}>
+                                    {isSevere ? 'Nặng' : 'Vừa'}
+                                  </span>
+                                </div>
+
+                                <button
+                                  onClick={() => handleOpenViolationModal(item)}
+                                  style={{ border: 'none', background: '#EFF6FF', color: '#2563EB', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '0.72rem', fontWeight: '700' }}
+                                >
+                                  <Eye size={12} /> Chi tiết
+                                </button>
+                              </div>
+
+                              <div style={{ color: '#DC2626', fontWeight: '700', fontSize: '0.85rem' }}>
+                                {item.rule}
+                              </div>
+
+                              <div style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                paddingTop: '6px',
+                                borderTop: '1px dashed #EADCC9',
+                                fontSize: '0.72rem'
                               }}>
-                                {Math.abs(item.score) >= 15 ? 'Nặng' : 'Vừa'}
-                              </span>
-                            </td>
-                            <td style={{ padding: '5px 10px', textAlign: 'center', fontWeight: '900', color: '#DC2626' }}>{item.score} điểm</td>
-                            <td style={{ padding: '5px 10px', textAlign: 'center', color: '#64748B', whiteSpace: 'nowrap', fontWeight: '600' }}>{formatCompactDate(item.date)}</td>
-                            <td style={{ padding: '5px 10px', color: '#475569' }}>{item.reporter}</td>
-                            <td style={{ padding: '5px 10px', textAlign: 'center' }}>
-                              <button
-                                onClick={() => handleOpenViolationModal(item)}
-                                style={{ border: 'none', background: '#EFF6FF', color: '#2563EB', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
-                                title="Xem chi tiết / Chỉnh sửa"
-                              >
-                                <Eye size={12} />
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      });
-                    })()}
-                  </tbody>
-                </table>
+                                <span style={{ fontWeight: '900', color: '#DC2626' }}>Điểm trừ: {item.score} điểm</span>
+                                <span style={{ color: '#64748B', fontWeight: '600' }}>{formatCompactDate(item.date)}</span>
+                                <span style={{ color: '#475569' }}>{item.reporter}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <table style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+                      <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
+                        <tr style={{ backgroundColor: '#FAF6F0', color: '#5D3B32', borderBottom: '1px solid #EADCC9', textAlign: 'left' }}>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', width: '45px', textAlign: 'center', whiteSpace: 'nowrap' }}>STT</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '140px', whiteSpace: 'nowrap' }}>Mã NV / Họ tên</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '180px', whiteSpace: 'nowrap' }}>Hành vi vi phạm</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '110px', whiteSpace: 'nowrap' }}>Mức độ vi phạm</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '85px', whiteSpace: 'nowrap' }}>Điểm trừ</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '105px', whiteSpace: 'nowrap' }}>Ngày vi phạm</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '130px', whiteSpace: 'nowrap' }}>Người ghi nhận</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '80px', whiteSpace: 'nowrap' }}>Thao tác</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pagedData.map((item, idx) => {
+                          const globalIdx = (violationPage - 1) * violationPageSize + idx;
+                          return (
+                            <tr key={item.id || idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}>
+                              <td style={{ padding: '5px 10px', fontWeight: '700', color: '#64748B' }}>{globalIdx + 1}</td>
+                              <td style={{ padding: '5px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.code} • {item.emp}</td>
+                              <td style={{ padding: '5px 10px', color: '#DC2626', fontWeight: '600' }}>{item.rule}</td>
+                              <td style={{ padding: '5px 10px', textAlign: 'center' }}>
+                                <span style={{
+                                  padding: '2px 8px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: '800',
+                                  backgroundColor: Math.abs(item.score) >= 15 ? '#FEE2E2' : '#FEF3C7',
+                                  color: Math.abs(item.score) >= 15 ? '#DC2626' : '#B45309'
+                                }}>
+                                  {Math.abs(item.score) >= 15 ? 'Nặng' : 'Vừa'}
+                                </span>
+                              </td>
+                              <td style={{ padding: '5px 10px', textAlign: 'center', fontWeight: '900', color: '#DC2626' }}>{item.score} điểm</td>
+                              <td style={{ padding: '5px 10px', textAlign: 'center', color: '#64748B', whiteSpace: 'nowrap', fontWeight: '600' }}>{formatCompactDate(item.date)}</td>
+                              <td style={{ padding: '5px 10px', color: '#475569' }}>{item.reporter}</td>
+                              <td style={{ padding: '5px 10px', textAlign: 'center' }}>
+                                <button
+                                  onClick={() => handleOpenViolationModal(item)}
+                                  style={{ border: 'none', background: '#EFF6FF', color: '#2563EB', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                                  title="Xem chi tiết / Chỉnh sửa"
+                                >
+                                  <Eye size={12} />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  );
+                })()}
               </div>
 
               {renderPaginationControl(violationPage, setViolationPage, violationPageSize, filterAndSortData(violations, violationSearch).length, 'vi phạm')}
@@ -2112,10 +2496,10 @@ const QualityKPIDashboardView = () => {
         {/* TAB 5: KẾ HOẠCH ĐÀO TẠO                                                  */}
         {/* ========================================================================= */}
         {activeTab === 'training_plan' && (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0, overflow: 'hidden' }}>
+          <div className="kpi-tab-pane" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0 }}>
             
             <div className="mgmt-table card admin-table-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, backgroundColor: '#FFFFFF', borderRadius: '10px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
-              <div style={{ flexShrink: 0, padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="kpi-mgmt-table-header" style={{ flexShrink: 0, padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                 <TableControlToolbar
                   searchValue={trainingSearch}
                   onSearchChange={(e) => setTrainingSearch(e.target.value)}
@@ -2128,14 +2512,15 @@ const QualityKPIDashboardView = () => {
                 />
                 <button
                   onClick={() => setIsTrainingModalOpen(true)}
-                  style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 12px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '800', fontSize: '0.75rem', cursor: 'pointer' }}
+                  className="kpi-btn-add-primary"
+                  style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 14px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '800', fontSize: '0.75rem', cursor: 'pointer' }}
                 >
                   <Plus size={13} /> Tạo kế hoạch đào tạo
                 </button>
               </div>
 
               {filterOpen && (
-                <div style={{ flexShrink: 0, padding: '6px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.72rem' }}>
+                <div style={{ flexShrink: 0, padding: '6px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.72rem', flexWrap: 'wrap' }}>
                   <span style={{ fontWeight: '800', color: '#5D3B32' }}>Bộ lọc trạng thái:</span>
                   {['Tất cả', 'Đã duyệt / Đạt', 'Chờ xử lý / Cần làm'].map(opt => (
                     <button
@@ -2158,115 +2543,223 @@ const QualityKPIDashboardView = () => {
                 </div>
               )}
 
-              <div className="admin-table-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto' }}>
-                <table style={{ width: '100%', minWidth: '1050px', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
-                  <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
-                    <tr style={{ backgroundColor: '#FAF6F0', color: '#5D3B32', borderBottom: '1px solid #EADCC9', textAlign: 'left' }}>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '45px', textAlign: 'center', whiteSpace: 'nowrap' }}>STT</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '110px', whiteSpace: 'nowrap' }}>Mã Khóa</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '160px', whiteSpace: 'nowrap' }}>Tên Chương Trình Đào Tạo</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '190px', whiteSpace: 'nowrap' }}>Đối Tượng Tham Gia</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '105px', whiteSpace: 'nowrap' }}>Thời Gian</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '140px', whiteSpace: 'nowrap' }}>Giảng Viên</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '180px', whiteSpace: 'nowrap' }}>Tài Liệu Đính Kèm</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '115px', whiteSpace: 'nowrap' }}>Trạng Thái</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '95px', whiteSpace: 'nowrap' }}>Thao Tác</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(() => {
-                      const allData = filterAndSortData(trainingPlans, trainingSearch);
-                      const pagedData = allData.slice((trainingPage - 1) * trainingPageSize, trainingPage * trainingPageSize);
-                      return pagedData.map((item, idx) => {
-                        const globalIdx = (trainingPage - 1) * trainingPageSize + idx;
-                        return (
-                          <tr
-                            key={item.id || idx}
-                            onClick={() => handleOpenTrainingDetail(item)}
-                            style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0', cursor: 'pointer' }}
-                          >
-                            <td style={{ padding: '6px 10px', fontWeight: '700', color: '#64748B', textAlign: 'center', whiteSpace: 'nowrap' }}>{globalIdx + 1}</td>
-                            <td style={{ padding: '6px 10px', fontWeight: '800', color: '#5D3B32', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{item.code}</td>
-                            <td style={{ padding: '6px 10px', fontWeight: '700', color: '#1E293B' }}>{item.name}</td>
-                            <td style={{ padding: '6px 10px', color: '#475569', fontWeight: '500' }}>
-                              {(() => {
-                                if (!item.target) return 'Tất cả nhân sự QLCL';
-                                const list = item.target.split(',').map(s => s.trim()).filter(Boolean);
-                                if (list.length <= 2) return item.target;
-                                return (
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                    <span>{list[0]}, {list[1]}</span>
-                                    <span style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8', padding: '2px 8px', borderRadius: '10px', fontSize: '0.68rem', fontWeight: '700', border: '1px solid #BFDBFE', whiteSpace: 'nowrap', display: 'inline-block' }}>
-                                      +{list.length - 2} nhân sự khác
-                                    </span>
-                                  </div>
-                                );
-                              })()}
-                            </td>
-                            <td style={{ padding: '6px 10px', textAlign: 'center', color: '#64748B', whiteSpace: 'nowrap', fontWeight: '600' }}>{formatCompactDate(item.time)}</td>
-                            <td style={{ padding: '6px 10px', color: '#334155', whiteSpace: 'nowrap', fontWeight: '600' }}>{item.teacher}</td>
-                            <td style={{ padding: '6px 10px' }}>
-                              <div
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleOpenTrainingDetail(item);
-                                }}
-                                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#2563EB', fontWeight: '700', cursor: 'pointer', maxWidth: '280px' }}
-                                title="Nhấn để xem danh sách tài liệu"
-                              >
-                                <ExternalLink size={12} style={{ flexShrink: 0 }} />
-                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  {(() => {
-                                    const filesArr = Array.isArray(item.files) && item.files.length > 0 ? item.files : (item.fileName ? item.fileName.split(',').map(n => ({ name: n.trim() })) : []);
-                                    if (filesArr.length === 0) return 'Chưa có file';
-                                    if (filesArr.length === 1) return filesArr[0].name;
-                                    return `${filesArr[0].name} (+${filesArr.length - 1} file đính kèm)`;
-                                  })()}
-                                </span>
+              <div className="admin-table-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: isMobile ? 'hidden' : 'auto' }}>
+                {(() => {
+                  const allData = filterAndSortData(trainingPlans, trainingSearch);
+                  const pagedData = allData.slice((trainingPage - 1) * trainingPageSize, trainingPage * trainingPageSize);
+
+                  if (isMobile) {
+                    return (
+                      <div className="kpi-mobile-cards-container" style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {pagedData.map((item, idx) => {
+                          const globalIdx = (trainingPage - 1) * trainingPageSize + idx;
+                          return (
+                            <div
+                              key={item.id || idx}
+                              onClick={() => handleOpenTrainingDetail(item)}
+                              className="kpi-data-mobile-card"
+                              style={{
+                                background: idx % 2 === 0 ? '#FFFFFF' : '#FFFDFB',
+                                borderRadius: '8px',
+                                border: '1px solid #EADCC9',
+                                padding: '10px 12px',
+                                boxShadow: '0 1px 4px rgba(91, 57, 36, 0.05)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '8px',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <span style={{
+                                    background: '#5D3B32',
+                                    color: '#FFFFFF',
+                                    borderRadius: '50%',
+                                    width: '20px',
+                                    height: '20px',
+                                    fontSize: '0.68rem',
+                                    fontWeight: '800',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexShrink: 0
+                                  }}>
+                                    {globalIdx + 1}
+                                  </span>
+                                  <span style={{ fontWeight: '800', color: '#5D3B32', fontFamily: 'monospace', fontSize: '0.82rem' }}>
+                                    {item.code}
+                                  </span>
+                                  <span style={{
+                                    padding: '2px 8px', borderRadius: '10px', fontSize: '0.65rem', fontWeight: '800',
+                                    backgroundColor: item.status === 'Đã hoàn thành' ? '#DCFCE7' : '#FEF3C7',
+                                    color: item.status === 'Đã hoàn thành' ? '#15803D' : '#B45309',
+                                    display: 'inline-flex', alignItems: 'center', gap: '3px'
+                                  }}>
+                                    <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: item.status === 'Đã hoàn thành' ? '#15803D' : '#D97706' }} />
+                                    {item.status}
+                                  </span>
+                                </div>
+
+                                <div style={{ display: 'flex', gap: '4px' }}>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleOpenTrainingDetail(item); }}
+                                    style={{ border: 'none', background: '#EFF6FF', color: '#2563EB', padding: '4px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                                    title="Xem chi tiết"
+                                  >
+                                    <Eye size={12} />
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleEditTrainingPlan(item); }}
+                                    style={{ border: 'none', background: '#FEF3C7', color: '#D97706', padding: '4px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                                    title="Chỉnh sửa"
+                                  >
+                                    <Edit2 size={12} />
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleOpenDeleteTrainingConfirm(item); }}
+                                    style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '4px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                                    title="Xóa khóa học"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
                               </div>
-                            </td>
-                            <td style={{ padding: '6px 10px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                              <span style={{
-                                padding: '3px 10px', borderRadius: '12px', fontSize: '0.68rem', fontWeight: '800',
-                                backgroundColor: item.status === 'Đã hoàn thành' ? '#DCFCE7' : '#FEF3C7',
-                                color: item.status === 'Đã hoàn thành' ? '#15803D' : '#B45309',
-                                display: 'inline-flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap'
+
+                              <div style={{ fontWeight: '800', color: '#1E293B', fontSize: '0.86rem' }}>
+                                {item.name}
+                              </div>
+
+                              <div style={{ fontSize: '0.72rem', color: '#475569' }}>
+                                <span style={{ fontWeight: '700', color: '#5D3B32' }}>Đối tượng: </span>
+                                {item.target || 'Tất cả nhân sự QLCL'}
+                              </div>
+
+                              <div style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                paddingTop: '6px',
+                                borderTop: '1px dashed #EADCC9',
+                                fontSize: '0.72rem'
                               }}>
-                                <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: item.status === 'Đã hoàn thành' ? '#15803D' : '#D97706' }} />
-                                {item.status}
-                              </span>
-                            </td>
-                            <td style={{ padding: '6px 10px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                              <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); handleOpenTrainingDetail(item); }}
-                                  style={{ border: 'none', background: '#EFF6FF', color: '#2563EB', padding: '4px 6px', borderRadius: '4px', cursor: 'pointer' }}
-                                  title="Xem chi tiết"
-                                >
-                                  <Eye size={12} />
-                                </button>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); handleEditTrainingPlan(item); }}
-                                  style={{ border: 'none', background: '#FEF3C7', color: '#D97706', padding: '4px 6px', borderRadius: '4px', cursor: 'pointer' }}
-                                  title="Chỉnh sửa"
-                                >
-                                  <Edit2 size={12} />
-                                </button>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); handleOpenDeleteTrainingConfirm(item); }}
-                                  style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '4px 6px', borderRadius: '4px', cursor: 'pointer' }}
-                                  title="Xóa khóa học"
-                                >
-                                  <Trash2 size={12} />
-                                </button>
+                                <span><strong style={{ color: '#5D3B32' }}>Thời gian:</strong> {formatCompactDate(item.time)}</span>
+                                <span><strong style={{ color: '#5D3B32' }}>GV:</strong> {item.teacher}</span>
                               </div>
-                            </td>
-                          </tr>
-                        );
-                      });
-                    })()}
-                  </tbody>
-                </table>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <table style={{ width: '100%', minWidth: '1050px', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+                      <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
+                        <tr style={{ backgroundColor: '#FAF6F0', color: '#5D3B32', borderBottom: '1px solid #EADCC9', textAlign: 'left' }}>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', width: '45px', textAlign: 'center', whiteSpace: 'nowrap' }}>STT</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', width: '110px', whiteSpace: 'nowrap' }}>Mã Khóa</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '160px', whiteSpace: 'nowrap' }}>Tên Chương Trình Đào Tạo</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '190px', whiteSpace: 'nowrap' }}>Đối Tượng Tham Gia</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '105px', whiteSpace: 'nowrap' }}>Thời Gian</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', width: '140px', whiteSpace: 'nowrap' }}>Giảng Viên</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '180px', whiteSpace: 'nowrap' }}>Tài Liệu Đính Kèm</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '115px', whiteSpace: 'nowrap' }}>Trạng Thái</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '95px', whiteSpace: 'nowrap' }}>Thao Tác</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pagedData.map((item, idx) => {
+                          const globalIdx = (trainingPage - 1) * trainingPageSize + idx;
+                          return (
+                            <tr
+                              key={item.id || idx}
+                              onClick={() => handleOpenTrainingDetail(item)}
+                              style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0', cursor: 'pointer' }}
+                            >
+                              <td style={{ padding: '6px 10px', fontWeight: '700', color: '#64748B', textAlign: 'center', whiteSpace: 'nowrap' }}>{globalIdx + 1}</td>
+                              <td style={{ padding: '6px 10px', fontWeight: '800', color: '#5D3B32', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{item.code}</td>
+                              <td style={{ padding: '6px 10px', fontWeight: '700', color: '#1E293B' }}>{item.name}</td>
+                              <td style={{ padding: '6px 10px', color: '#475569', fontWeight: '500' }}>
+                                {(() => {
+                                  if (!item.target) return 'Tất cả nhân sự QLCL';
+                                  const list = item.target.split(',').map(s => s.trim()).filter(Boolean);
+                                  if (list.length <= 2) return item.target;
+                                  return (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                      <span>{list[0]}, {list[1]}</span>
+                                      <span style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8', padding: '2px 8px', borderRadius: '10px', fontSize: '0.68rem', fontWeight: '700', border: '1px solid #BFDBFE', whiteSpace: 'nowrap', display: 'inline-block' }}>
+                                        +{list.length - 2} nhân sự khác
+                                      </span>
+                                    </div>
+                                  );
+                                })()}
+                              </td>
+                              <td style={{ padding: '6px 10px', textAlign: 'center', color: '#64748B', whiteSpace: 'nowrap', fontWeight: '600' }}>{formatCompactDate(item.time)}</td>
+                              <td style={{ padding: '6px 10px', color: '#334155', whiteSpace: 'nowrap', fontWeight: '600' }}>{item.teacher}</td>
+                              <td style={{ padding: '6px 10px' }}>
+                                <div
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenTrainingDetail(item);
+                                  }}
+                                  style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#2563EB', fontWeight: '700', cursor: 'pointer', maxWidth: '280px' }}
+                                  title="Nhấn để xem danh sách tài liệu"
+                                >
+                                  <ExternalLink size={12} style={{ flexShrink: 0 }} />
+                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {(() => {
+                                      const filesArr = Array.isArray(item.files) && item.files.length > 0 ? item.files : (item.fileName ? item.fileName.split(',').map(n => ({ name: n.trim() })) : []);
+                                      if (filesArr.length === 0) return 'Chưa có file';
+                                      if (filesArr.length === 1) return filesArr[0].name;
+                                      return `${filesArr[0].name} (+${filesArr.length - 1} file đính kèm)`;
+                                    })()}
+                                  </span>
+                                </div>
+                              </td>
+                              <td style={{ padding: '6px 10px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                                <span style={{
+                                  padding: '3px 10px', borderRadius: '12px', fontSize: '0.68rem', fontWeight: '800',
+                                  backgroundColor: item.status === 'Đã hoàn thành' ? '#DCFCE7' : '#FEF3C7',
+                                  color: item.status === 'Đã hoàn thành' ? '#15803D' : '#B45309',
+                                  display: 'inline-flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap'
+                                }}>
+                                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: item.status === 'Đã hoàn thành' ? '#15803D' : '#D97706' }} />
+                                  {item.status}
+                                </span>
+                              </td>
+                              <td style={{ padding: '6px 10px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                                <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleOpenTrainingDetail(item); }}
+                                    style={{ border: 'none', background: '#EFF6FF', color: '#2563EB', padding: '4px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                                    title="Xem chi tiết"
+                                  >
+                                    <Eye size={12} />
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleEditTrainingPlan(item); }}
+                                    style={{ border: 'none', background: '#FEF3C7', color: '#D97706', padding: '4px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                                    title="Chỉnh sửa"
+                                  >
+                                    <Edit2 size={12} />
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleOpenDeleteTrainingConfirm(item); }}
+                                    style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '4px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                                    title="Xóa khóa học"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  );
+                })()}
               </div>
 
               {renderPaginationControl(trainingPage, setTrainingPage, trainingPageSize, filterAndSortData(trainingPlans, trainingSearch).length, 'khóa học')}
@@ -2279,10 +2772,10 @@ const QualityKPIDashboardView = () => {
         {/* TAB 6: BÁO CÁO VÀ BBCH                                                   */}
         {/* ========================================================================= */}
         {activeTab === 'reports_bbch' && (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0, overflow: 'hidden' }}>
+          <div className="kpi-tab-pane" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0 }}>
             
             <div className="mgmt-table card admin-table-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, backgroundColor: '#FFFFFF', borderRadius: '10px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
-              <div style={{ flexShrink: 0, padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="kpi-mgmt-table-header" style={{ flexShrink: 0, padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                 <TableControlToolbar
                   searchValue={reportSearch}
                   onSearchChange={(e) => setReportSearch(e.target.value)}
@@ -2322,52 +2815,136 @@ const QualityKPIDashboardView = () => {
                 </div>
               )}
 
-              <div className="admin-table-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto' }}>
-                <table style={{ width: '100%', minWidth: '1000px', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
-                  <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
-                    <tr style={{ backgroundColor: '#FAF6F0', color: '#5D3B32', borderBottom: '1px solid #EADCC9', textAlign: 'left' }}>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '45px', textAlign: 'center', whiteSpace: 'nowrap' }}>STT</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '110px', whiteSpace: 'nowrap' }}>Mã Báo Cáo</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '130px', whiteSpace: 'nowrap' }}>Nhân Viên</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '120px', whiteSpace: 'nowrap' }}>Bộ Phận</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '200px', whiteSpace: 'nowrap' }}>Nhận Xét Đánh Giá Quản Lý</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '110px', whiteSpace: 'nowrap' }}>Điểm Đánh Giá</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '140px', whiteSpace: 'nowrap' }}>Mã BBCH Khắc Phục</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '105px', whiteSpace: 'nowrap' }}>Ngày Lập</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '110px', whiteSpace: 'nowrap' }}>Trạng Thái</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(() => {
-                      const allData = filterAndSortData(staffEvaluations, reportSearch);
-                      const pagedData = allData.slice((reportPage - 1) * reportPageSize, reportPage * reportPageSize);
-                      return pagedData.map((item, idx) => {
-                        const globalIdx = (reportPage - 1) * reportPageSize + idx;
-                        return (
-                          <tr key={item.id || idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}>
-                            <td style={{ padding: '5px 10px', fontWeight: '700', color: '#64748B' }}>{globalIdx + 1}</td>
-                            <td style={{ padding: '5px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.code || `BC_${String(globalIdx + 1).padStart(2, '0')}`}</td>
-                            <td style={{ padding: '5px 10px', fontWeight: '700', color: '#1E293B' }}>{item.emp || item.name}</td>
-                            <td style={{ padding: '5px 10px', color: '#475569' }}>{item.dept || 'Phòng QA/QC'}</td>
-                            <td style={{ padding: '5px 10px', color: '#334155' }}>{item.manager_note || item.note || 'Hoàn thành nhiệm vụ được giao'}</td>
-                            <td style={{ padding: '5px 10px', textAlign: 'center', fontWeight: '900', color: '#15803D' }}>{item.eval_score || item.score || 92} điểm</td>
-                            <td style={{ padding: '5px 10px', fontWeight: '700', color: '#0284C7' }}>{item.bbch_code || `BBCH-2026-${String(globalIdx + 1).padStart(2, '0')}`}</td>
-                            <td style={{ padding: '5px 10px', textAlign: 'center', color: '#64748B' }}>{item.date || '01/03/2026'}</td>
-                            <td style={{ padding: '5px 10px', textAlign: 'center' }}>
-                              <span style={{
-                                padding: '2px 8px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: '800',
-                                backgroundColor: (item.status === 'Đã phê duyệt' || item.status === 'Hoàn thành') ? '#DCFCE7' : '#FEF3C7',
-                                color: (item.status === 'Đã phê duyệt' || item.status === 'Hoàn thành') ? '#15803D' : '#B45309'
+              <div className="admin-table-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: isMobile ? 'hidden' : 'auto' }}>
+                {(() => {
+                  const allData = filterAndSortData(staffEvaluations, reportSearch);
+                  const pagedData = allData.slice((reportPage - 1) * reportPageSize, reportPage * reportPageSize);
+
+                  if (isMobile) {
+                    return (
+                      <div className="kpi-mobile-cards-container" style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {pagedData.map((item, idx) => {
+                          const globalIdx = (reportPage - 1) * reportPageSize + idx;
+                          return (
+                            <div
+                              key={item.id || idx}
+                              className="kpi-data-mobile-card"
+                              style={{
+                                background: idx % 2 === 0 ? '#FFFFFF' : '#FFFDFB',
+                                borderRadius: '8px',
+                                border: '1px solid #EADCC9',
+                                padding: '10px 12px',
+                                boxShadow: '0 1px 4px rgba(91, 57, 36, 0.05)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '6px'
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <span style={{
+                                    background: '#5D3B32',
+                                    color: '#FFFFFF',
+                                    borderRadius: '50%',
+                                    width: '20px',
+                                    height: '20px',
+                                    fontSize: '0.68rem',
+                                    fontWeight: '800',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center'
+                                  }}>
+                                    {globalIdx + 1}
+                                  </span>
+                                  <span style={{ fontWeight: '800', color: '#5D3B32', fontSize: '0.82rem' }}>
+                                    {item.code || `BC_${String(globalIdx + 1).padStart(2, '0')}`}
+                                  </span>
+                                  <span style={{ fontWeight: '700', color: '#1E293B', fontSize: '0.82rem' }}>
+                                    • {item.emp || item.name}
+                                  </span>
+                                </div>
+                                <span style={{ fontWeight: '900', color: '#15803D', fontSize: '0.82rem' }}>
+                                  {item.eval_score || item.score || 92} điểm
+                                </span>
+                              </div>
+
+                              <div style={{ fontSize: '0.74rem', color: '#475569' }}>
+                                <span style={{ fontWeight: '700', color: '#5D3B32' }}>Bộ phận: </span>{item.dept || 'Phòng QA/QC'}
+                              </div>
+
+                              <div style={{ fontSize: '0.78rem', color: '#334155', fontWeight: '500', lineHeight: '1.4' }}>
+                                {item.manager_note || item.note || 'Hoàn thành nhiệm vụ được giao'}
+                              </div>
+
+                              <div style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                paddingTop: '6px',
+                                borderTop: '1px dashed #EADCC9',
+                                fontSize: '0.72rem'
                               }}>
-                                {item.status || 'Đã phê duyệt'}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      });
-                    })()}
-                  </tbody>
-                </table>
+                                <span style={{ fontWeight: '700', color: '#0284C7' }}>{item.bbch_code || `BBCH-2026-${String(globalIdx + 1).padStart(2, '0')}`}</span>
+                                <span style={{ color: '#64748B' }}>{item.date || '01/03/2026'}</span>
+                                <span style={{
+                                  padding: '2px 8px', borderRadius: '4px', fontSize: '0.65rem', fontWeight: '800',
+                                  backgroundColor: (item.status === 'Đã phê duyệt' || item.status === 'Hoàn thành') ? '#DCFCE7' : '#FEF3C7',
+                                  color: (item.status === 'Đã phê duyệt' || item.status === 'Hoàn thành') ? '#15803D' : '#B45309'
+                                }}>
+                                  {item.status || 'Đã phê duyệt'}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <table style={{ width: '100%', minWidth: '1000px', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+                      <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
+                        <tr style={{ backgroundColor: '#FAF6F0', color: '#5D3B32', borderBottom: '1px solid #EADCC9', textAlign: 'left' }}>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', width: '45px', textAlign: 'center', whiteSpace: 'nowrap' }}>STT</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', width: '110px', whiteSpace: 'nowrap' }}>Mã Báo Cáo</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '130px', whiteSpace: 'nowrap' }}>Nhân Viên</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '120px', whiteSpace: 'nowrap' }}>Bộ Phận</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '200px', whiteSpace: 'nowrap' }}>Nhận Xét Đánh Giá Quản Lý</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '110px', whiteSpace: 'nowrap' }}>Điểm Đánh Giá</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '140px', whiteSpace: 'nowrap' }}>Mã BBCH Khắc Phục</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '105px', whiteSpace: 'nowrap' }}>Ngày Lập</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '110px', whiteSpace: 'nowrap' }}>Trạng Thái</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pagedData.map((item, idx) => {
+                          const globalIdx = (reportPage - 1) * reportPageSize + idx;
+                          return (
+                            <tr key={item.id || idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}>
+                              <td style={{ padding: '5px 10px', fontWeight: '700', color: '#64748B' }}>{globalIdx + 1}</td>
+                              <td style={{ padding: '5px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.code || `BC_${String(globalIdx + 1).padStart(2, '0')}`}</td>
+                              <td style={{ padding: '5px 10px', fontWeight: '700', color: '#1E293B' }}>{item.emp || item.name}</td>
+                              <td style={{ padding: '5px 10px', color: '#475569' }}>{item.dept || 'Phòng QA/QC'}</td>
+                              <td style={{ padding: '5px 10px', color: '#334155' }}>{item.manager_note || item.note || 'Hoàn thành nhiệm vụ được giao'}</td>
+                              <td style={{ padding: '5px 10px', textAlign: 'center', fontWeight: '900', color: '#15803D' }}>{item.eval_score || item.score || 92} điểm</td>
+                              <td style={{ padding: '5px 10px', fontWeight: '700', color: '#0284C7' }}>{item.bbch_code || `BBCH-2026-${String(globalIdx + 1).padStart(2, '0')}`}</td>
+                              <td style={{ padding: '5px 10px', textAlign: 'center', color: '#64748B' }}>{item.date || '01/03/2026'}</td>
+                              <td style={{ padding: '5px 10px', textAlign: 'center' }}>
+                                <span style={{
+                                  padding: '2px 8px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: '800',
+                                  backgroundColor: (item.status === 'Đã phê duyệt' || item.status === 'Hoàn thành') ? '#DCFCE7' : '#FEF3C7',
+                                  color: (item.status === 'Đã phê duyệt' || item.status === 'Hoàn thành') ? '#15803D' : '#B45309'
+                                }}>
+                                  {item.status || 'Đã phê duyệt'}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  );
+                })()}
               </div>
 
               {renderPaginationControl(reportPage, setReportPage, reportPageSize, filterAndSortData(staffEvaluations, reportSearch).length, 'báo cáo')}
@@ -2380,10 +2957,10 @@ const QualityKPIDashboardView = () => {
         {/* TAB 7: THIẾT LẬP CẢNH BÁO                                                 */}
         {/* ========================================================================= */}
         {activeTab === 'alerts_setup' && (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0, overflow: 'hidden' }}>
+          <div className="kpi-tab-pane" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0 }}>
             
             <div className="mgmt-table card admin-table-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, backgroundColor: '#FFFFFF', borderRadius: '10px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
-              <div style={{ flexShrink: 0, padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="kpi-mgmt-table-header" style={{ flexShrink: 0, padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                 <TableControlToolbar
                   searchValue={alertSearch}
                   onSearchChange={(e) => setAlertSearch(e.target.value)}
@@ -2396,7 +2973,8 @@ const QualityKPIDashboardView = () => {
                 />
                 <button
                   onClick={() => { setEditingAlert(null); setIsAlertModalOpen(true); }}
-                  style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 12px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '800', fontSize: '0.75rem', cursor: 'pointer' }}
+                  className="kpi-btn-add-primary"
+                  style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 14px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '800', fontSize: '0.75rem', cursor: 'pointer' }}
                 >
                   <Send size={13} /> Bắn thông báo mới đến Mobile
                 </button>
@@ -2426,63 +3004,162 @@ const QualityKPIDashboardView = () => {
                 </div>
               )}
 
-              <div className="admin-table-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto' }}>
-                <table style={{ width: '100%', minWidth: '1050px', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
-                  <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
-                    <tr style={{ backgroundColor: '#FAF6F0', color: '#5D3B32', borderBottom: '1px solid #EADCC9', textAlign: 'left' }}>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '45px', textAlign: 'center', whiteSpace: 'nowrap' }}>STT</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', width: '110px', whiteSpace: 'nowrap' }}>Mã Cảnh Báo</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '150px', whiteSpace: 'nowrap' }}>Tiêu Đề Thông Báo</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '220px', whiteSpace: 'nowrap' }}>Nội Dung Phát Đến Banner Mobile App</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '130px', whiteSpace: 'nowrap' }}>Đối Tượng Nhận</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '115px', whiteSpace: 'nowrap' }}>Thời Gian Ban Hành</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '115px', whiteSpace: 'nowrap' }}>Thời Gian Kết Thúc</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '100px', whiteSpace: 'nowrap' }}>Tổng Thời Gian</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '105px', whiteSpace: 'nowrap' }}>Trạng Thái</th>
-                      <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '80px', whiteSpace: 'nowrap' }}>Thao Tác</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(() => {
-                      const allData = filterAndSortData(alertsList, alertSearch);
-                      const pagedData = allData.slice((alertPage - 1) * alertPageSize, alertPage * alertPageSize);
-                      return pagedData.map((item, idx) => {
-                        const globalIdx = (alertPage - 1) * alertPageSize + idx;
-                        return (
-                          <tr key={item.id || idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}>
-                            <td style={{ padding: '5px 10px', fontWeight: '700', color: '#64748B' }}>{globalIdx + 1}</td>
-                            <td style={{ padding: '5px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.code || `CB_${String(globalIdx + 1).padStart(2, '0')}`}</td>
-                            <td style={{ padding: '5px 10px', fontWeight: '700', color: '#1E293B' }}>{item.title || item.name}</td>
-                            <td style={{ padding: '5px 10px', color: '#0F172A', fontWeight: '600', maxWidth: '320px' }}>{item.content}</td>
-                            <td style={{ padding: '5px 10px', color: '#475569' }}>{item.receiver || 'Tất cả nhân sự'}</td>
-                            <td style={{ padding: '5px 10px', textAlign: 'center', color: '#5D3B32', fontWeight: '700' }}>{item.issuedAt || item.date || '03/09/2026 10:00'}</td>
-                            <td style={{ padding: '5px 10px', textAlign: 'center', color: '#DC2626', fontWeight: '700' }}>{item.expiresAt || '10/09/2026 17:00'}</td>
-                            <td style={{ padding: '5px 10px', textAlign: 'center', color: '#15803D', fontWeight: '800' }}>{calculateDuration(item.issuedAt, item.expiresAt) || '7 ngày'}</td>
-                            <td style={{ padding: '5px 10px', textAlign: 'center', color: '#16A34A', fontWeight: '800' }}>{item.status || 'Đã phát'}</td>
-                            <td style={{ padding: '5px 10px', textAlign: 'center' }}>
-                              <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
-                                <button
-                                  onClick={() => handleEditAlert(item)}
-                                  style={{ border: 'none', background: '#FEF3C7', color: '#D97706', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
-                                  title="Chỉnh sửa"
-                                >
-                                  <Edit2 size={12} />
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteAlert(item)}
-                                  style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
-                                  title="Xóa thông báo"
-                                >
-                                  <Trash2 size={12} />
-                                </button>
+              <div className="admin-table-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: isMobile ? 'hidden' : 'auto' }}>
+                {(() => {
+                  const allData = filterAndSortData(alertsList, alertSearch);
+                  const pagedData = allData.slice((alertPage - 1) * alertPageSize, alertPage * alertPageSize);
+
+                  if (isMobile) {
+                    return (
+                      <div className="kpi-mobile-cards-container" style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {pagedData.map((item, idx) => {
+                          const globalIdx = (alertPage - 1) * alertPageSize + idx;
+                          return (
+                            <div
+                              key={item.id || idx}
+                              className="kpi-data-mobile-card"
+                              style={{
+                                background: idx % 2 === 0 ? '#FFFFFF' : '#FFFDFB',
+                                borderRadius: '8px',
+                                border: '1px solid #EADCC9',
+                                padding: '10px 12px',
+                                boxShadow: '0 1px 4px rgba(91, 57, 36, 0.05)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '6px'
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <span style={{
+                                    background: '#5D3B32',
+                                    color: '#FFFFFF',
+                                    borderRadius: '50%',
+                                    width: '20px',
+                                    height: '20px',
+                                    fontSize: '0.68rem',
+                                    fontWeight: '800',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center'
+                                  }}>
+                                    {globalIdx + 1}
+                                  </span>
+                                  <span style={{ fontWeight: '800', color: '#5D3B32', fontSize: '0.82rem' }}>
+                                    {item.code || `CB_${String(globalIdx + 1).padStart(2, '0')}`}
+                                  </span>
+                                  <span style={{
+                                    padding: '2px 8px', borderRadius: '4px', fontSize: '0.65rem', fontWeight: '800',
+                                    backgroundColor: '#DCFCE7', color: '#15803D'
+                                  }}>
+                                    {item.status || 'Đã phát'}
+                                  </span>
+                                </div>
+
+                                <div style={{ display: 'flex', gap: '4px' }}>
+                                  <button
+                                    onClick={() => handleEditAlert(item)}
+                                    style={{ border: 'none', background: '#FEF3C7', color: '#D97706', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px', fontSize: '0.72rem', fontWeight: '700' }}
+                                    title="Sửa"
+                                  >
+                                    <Edit2 size={12} /> Sửa
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteAlert(item)}
+                                    style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px', fontSize: '0.72rem', fontWeight: '700' }}
+                                    title="Xóa"
+                                  >
+                                    <Trash2 size={12} /> Xóa
+                                  </button>
+                                </div>
                               </div>
-                            </td>
-                          </tr>
-                        );
-                      });
-                    })()}
-                  </tbody>
-                </table>
+
+                              <div style={{ fontWeight: '800', color: '#1E293B', fontSize: '0.86rem' }}>
+                                {item.title || item.name}
+                              </div>
+
+                              <div style={{ color: '#334155', fontSize: '0.75rem', lineHeight: '1.4' }}>
+                                {item.content}
+                              </div>
+
+                              <div style={{ fontSize: '0.72rem', color: '#64748B' }}>
+                                <strong style={{ color: '#5D3B32' }}>Đối tượng:</strong> {item.receiver || 'Tất cả nhân sự'}
+                              </div>
+
+                              <div style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                paddingTop: '6px',
+                                borderTop: '1px dashed #EADCC9',
+                                fontSize: '0.7rem',
+                                color: '#64748B'
+                              }}>
+                                <span>{item.issuedAt || '03/09/2026 10:00'} → {item.expiresAt || '10/09/2026 17:00'}</span>
+                                <span style={{ color: '#15803D', fontWeight: '800' }}>{calculateDuration(item.issuedAt, item.expiresAt) || '7 ngày'}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <table style={{ width: '100%', minWidth: '1050px', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+                      <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
+                        <tr style={{ backgroundColor: '#FAF6F0', color: '#5D3B32', borderBottom: '1px solid #EADCC9', textAlign: 'left' }}>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', width: '45px', textAlign: 'center', whiteSpace: 'nowrap' }}>STT</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', width: '110px', whiteSpace: 'nowrap' }}>Mã Cảnh Báo</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '150px', whiteSpace: 'nowrap' }}>Tiêu Đề Thông Báo</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '220px', whiteSpace: 'nowrap' }}>Nội Dung Phát Đến Banner Mobile App</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', minWidth: '130px', whiteSpace: 'nowrap' }}>Đối Tượng Nhận</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '115px', whiteSpace: 'nowrap' }}>Thời Gian Ban Hành</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '115px', whiteSpace: 'nowrap' }}>Thời Gian Kết Thúc</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '100px', whiteSpace: 'nowrap' }}>Tổng Thời Gian</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '105px', whiteSpace: 'nowrap' }}>Trạng Thái</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '80px', whiteSpace: 'nowrap' }}>Thao Tác</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pagedData.map((item, idx) => {
+                          const globalIdx = (alertPage - 1) * alertPageSize + idx;
+                          return (
+                            <tr key={item.id || idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}>
+                              <td style={{ padding: '5px 10px', fontWeight: '700', color: '#64748B' }}>{globalIdx + 1}</td>
+                              <td style={{ padding: '5px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.code || `CB_${String(globalIdx + 1).padStart(2, '0')}`}</td>
+                              <td style={{ padding: '5px 10px', fontWeight: '700', color: '#1E293B' }}>{item.title || item.name}</td>
+                              <td style={{ padding: '5px 10px', color: '#0F172A', fontWeight: '600', maxWidth: '320px' }}>{item.content}</td>
+                              <td style={{ padding: '5px 10px', color: '#475569' }}>{item.receiver || 'Tất cả nhân sự'}</td>
+                              <td style={{ padding: '5px 10px', textAlign: 'center', color: '#5D3B32', fontWeight: '700' }}>{item.issuedAt || item.date || '03/09/2026 10:00'}</td>
+                              <td style={{ padding: '5px 10px', textAlign: 'center', color: '#DC2626', fontWeight: '700' }}>{item.expiresAt || '10/09/2026 17:00'}</td>
+                              <td style={{ padding: '5px 10px', textAlign: 'center', color: '#15803D', fontWeight: '800' }}>{calculateDuration(item.issuedAt, item.expiresAt) || '7 ngày'}</td>
+                              <td style={{ padding: '5px 10px', textAlign: 'center', color: '#16A34A', fontWeight: '800' }}>{item.status || 'Đã phát'}</td>
+                              <td style={{ padding: '5px 10px', textAlign: 'center' }}>
+                                <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                                  <button
+                                    onClick={() => handleEditAlert(item)}
+                                    style={{ border: 'none', background: '#FEF3C7', color: '#D97706', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                                    title="Chỉnh sửa"
+                                  >
+                                    <Edit2 size={12} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteAlert(item)}
+                                    style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                                    title="Xóa thông báo"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  );
+                })()}
               </div>
 
               {renderPaginationControl(alertPage, setAlertPage, alertPageSize, filterAndSortData(alertsList, alertSearch).length, 'cảnh báo')}

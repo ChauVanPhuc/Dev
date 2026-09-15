@@ -71,6 +71,33 @@
   overflow: hidden !important;
 }
 
+/* ─── TOOLBAR BASE ─── */
+.erp-toolbar-row1 {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  min-height: 32px !important;
+}
+
+.erp-search-wrapper {
+  width: 280px !important;
+  flex-shrink: 0 !important;
+}
+
+.erp-toolbar-actions-bar {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  flex: 1 !important;
+  margin-left: 8px !important;
+}
+
+.erp-toolbar-btn-group {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
 /* ─── 3. SECTION CARDS ─── */
 .qd-section-card {
   background: #FFFDFC !important;
@@ -193,12 +220,24 @@
   margin-top: auto !important;
 }
 
+.qd-brand-dot {
+  display: inline-block !important;
+  width: 6px !important;
+  height: 6px !important;
+  border-radius: 50% !important;
+  flex-shrink: 0 !important;
+  vertical-align: middle !important;
+  margin-right: 4px !important;
+}
+
 .qd-brand-label {
   font-size: 0.68rem !important;
   color: #786B61 !important;
   font-weight: 700 !important;
   line-height: 1 !important;
   margin-bottom: 1px !important;
+  display: inline-flex !important;
+  align-items: center !important;
 }
 
 .qd-brand-value {
@@ -304,4 +343,527 @@
 .qd-change-pos {
   color: #3F7D58 !important;
   font-weight: 800 !important;
+}
+
+/* Section 4 Grid class for Desktop vs Mobile */
+.qd-sec4-body-grid {
+  display: grid !important;
+  grid-template-columns: 50fr 50fr !important;
+  gap: 8px !important;
+  align-items: stretch !important;
+  flex: 1 !important;
+  min-height: 0 !important;
+  height: 100% !important;
+}
+
+/* ==========================================================================
+   RESPONSIVE MOBILE & TABLET STYLES (SINGLE-COLUMN STACKED CARDS)
+   Targets screens <= 900px and especially smartphones <= 640px
+   ========================================================================== */
+@media (max-width: 900px) {
+  .quality-dashboard-root {
+    height: auto !important;
+    max-height: none !important;
+    min-height: 100% !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding: 8px 6px 40px 6px !important;
+    gap: 12px !important;
+  }
+
+  .qd-main-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+    height: auto !important;
+    min-height: unset !important;
+    overflow: visible !important;
+  }
+
+  .qd-row-top {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+    height: auto !important;
+    min-height: unset !important;
+    overflow: visible !important;
+  }
+
+  .qd-col-right {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+    height: auto !important;
+    min-height: unset !important;
+    overflow: visible !important;
+  }
+
+  .qd-row-bottom {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+    height: auto !important;
+    min-height: unset !important;
+    overflow: visible !important;
+  }
+
+  .qd-section-card {
+    height: auto !important;
+    min-height: unset !important;
+    overflow: visible !important;
+    border-radius: 8px !important;
+    box-shadow: 0 2px 6px rgba(91, 57, 36, 0.06) !important;
+  }
+
+  .qd-section-header {
+    height: 32px !important;
+    font-size: 0.85rem !important;
+    padding: 6px 12px !important;
+  }
+
+  .qd-section-body {
+    height: auto !important;
+    min-height: unset !important;
+    overflow: visible !important;
+    padding: 10px 8px !important;
+  }
+
+  /* Section 1 Mobile */
+  .qd-sec1-top {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+    height: auto !important;
+    min-height: unset !important;
+    overflow: visible !important;
+    border-bottom: 1px dashed #E4DDD5 !important;
+    padding-bottom: 10px !important;
+  }
+
+  .qd-radar-chart-container {
+    height: 260px !important;
+    min-height: 260px !important;
+    width: 100% !important;
+    display: block !important;
+    position: relative !important;
+  }
+
+  .qd-kpi-cluster {
+    height: auto !important;
+    min-height: unset !important;
+    gap: 8px !important;
+  }
+
+  .qd-kpi-grid-6 {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+    height: auto !important;
+    min-height: unset !important;
+  }
+
+  .qd-kpi-item-card {
+    height: auto !important;
+    min-height: 66px !important;
+    padding: 8px 10px !important;
+    border-radius: 7px !important;
+  }
+
+  .qd-kpi-item-title {
+    font-size: 0.78rem !important;
+    margin-bottom: 4px !important;
+  }
+
+  .qd-brand-value {
+    font-size: 1.15rem !important;
+  }
+
+  .qd-sec1-bottom {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+    height: auto !important;
+    min-height: unset !important;
+    padding-top: 8px !important;
+  }
+
+  .qd-mini-chart-card {
+    height: 180px !important;
+    min-height: 180px !important;
+    border-radius: 7px !important;
+    padding: 6px 8px !important;
+  }
+
+  .qd-mini-chart-title {
+    font-size: 0.74rem !important;
+    margin-bottom: 4px !important;
+  }
+
+  /* Section 2 Mobile */
+  .qd-gauges-row {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 8px !important;
+    height: auto !important;
+  }
+
+  /* Section 3 Mobile */
+  .qd-sec3-charts {
+    height: 270px !important;
+    min-height: 270px !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  /* Section 4 Mobile */
+  .qd-sec4-body-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+    height: auto !important;
+    min-height: unset !important;
+  }
+
+  .qd-sec4-circle-box {
+    height: 190px !important;
+    min-height: 190px !important;
+  }
+
+  .qd-sec4-table-box {
+    height: auto !important;
+    min-height: 170px !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  /* Section 5 & 6 Mobile */
+  .qd-sec5-table-box {
+    height: auto !important;
+    min-height: 210px !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .qd-sec6-box {
+    height: auto !important;
+    min-height: 170px !important;
+  }
+
+  .qd-table {
+    font-size: 0.75rem !important;
+  }
+
+  .qd-table th, .qd-table td {
+    padding: 5px 8px !important;
+  }
+}
+
+/* Smartphone screen optimizations (<= 640px) */
+@media (max-width: 640px) {
+  .quality-dashboard-root {
+    padding-bottom: 84px !important;
+  }
+
+  /* Toolbar mobile: Search 100% on top, Actions balanced row below */
+  .erp-toolbar-row1 {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+
+  .erp-search-wrapper {
+    width: 100% !important;
+  }
+
+  .erp-toolbar-actions-bar {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    width: 100% !important;
+    margin-left: 0 !important;
+  }
+
+  .qd-gauges-row {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .qd-kpi-summary-box {
+    padding: 8px 12px !important;
+    border-radius: 8px !important;
+    background: linear-gradient(135deg, #FAF6F0 0%, #F4ECE1 100%) !important;
+    border: 1px solid #E2D7CB !important;
+  }
+
+  /* Section 1 KPI cards: 2 columns, clean vertical stacked brand rows */
+  .qd-kpi-grid-6 {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+  }
+
+  .qd-kpi-item-card {
+    padding: 8px !important;
+    border-radius: 8px !important;
+    background: #FFFFFF !important;
+    border: 1px solid #E8E0D7 !important;
+    box-shadow: 0 1px 3px rgba(91, 57, 36, 0.05) !important;
+  }
+
+  .qd-kpi-item-title {
+    font-size: 0.72rem !important;
+    font-weight: 800 !important;
+    white-space: normal !important;
+    line-height: 1.25 !important;
+    min-height: 28px !important;
+    align-items: flex-start !important;
+    margin-bottom: 6px !important;
+  }
+
+  .qd-kpi-item-num-row {
+    flex-direction: column !important;
+    gap: 4px !important;
+    margin-top: auto !important;
+    width: 100% !important;
+  }
+
+  .qd-kpi-brand-col {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    width: 100% !important;
+    padding: 1px 0 !important;
+  }
+
+  .qd-kpi-brand-col.qd-kpi-brand-right {
+    text-align: left !important;
+    border-top: 1px dashed #EDE5DC !important;
+    padding-top: 4px !important;
+  }
+
+  .qd-brand-label {
+    font-size: 0.68rem !important;
+    color: #6B5E54 !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    margin-bottom: 0 !important;
+  }
+
+  .qd-brand-val-group {
+    display: flex !important;
+    align-items: baseline !important;
+    gap: 3px !important;
+  }
+
+  .qd-brand-value {
+    font-size: 0.88rem !important;
+    font-weight: 900 !important;
+  }
+
+  .qd-brand-change {
+    font-size: 0.64rem !important;
+    font-weight: 800 !important;
+  }
+}
+
+/* KPI Tab Bar & Container Mobile Optimizations */
+.kpi-dashboard-tabs-scroll::-webkit-scrollbar {
+  display: none !important;
+}
+
+.kpi-dashboard-tabs-scroll {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+@media (max-width: 900px) {
+  .kpi-dashboard-container {
+    padding: 8px 6px !important;
+  }
+}
+
+@media (max-width: 600px) {
+  .kpi-refresh-btn-text {
+    display: none !important;
+  }
+}
+
+/* Tab 2 Work Indicators Top Cards Responsive Grid */
+.kpi-work-indicators-top-cards {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr 1.3fr 1.3fr;
+  gap: 10px;
+}
+
+@media (max-width: 900px) {
+  .kpi-work-indicators-top-cards {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+}
+
+@media (max-width: 600px) {
+  .kpi-work-indicators-top-cards {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+}
+
+/* Tab 3 Checklist Top Cards Responsive Grid */
+.kpi-checklist-top-cards {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 1.6fr;
+  gap: 10px;
+}
+
+@media (max-width: 900px) {
+  .kpi-checklist-top-cards {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+}
+
+/* Tab 4 Violations Top Cards Responsive Grid */
+.kpi-violations-top-cards {
+  display: grid;
+  grid-template-columns: 1fr 1.6fr;
+  gap: 10px;
+}
+
+@media (max-width: 900px) {
+  .kpi-violations-top-cards {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+}
+
+/* Management Table Header & Toolbar Responsive */
+@media (max-width: 850px) {
+  .kpi-mgmt-table-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+
+  .kpi-btn-add-primary {
+    width: 100% !important;
+    justify-content: center !important;
+    padding: 8px 14px !important;
+  }
+
+  .kpi-table-control-toolbar {
+    width: 100% !important;
+    display: flex !important;
+    box-sizing: border-box !important;
+    justify-content: space-between !important;
+    gap: 4px !important;
+  }
+
+  .kpi-table-control-search {
+    flex: 1 !important;
+    min-width: 0 !important;
+  }
+
+  .kpi-table-control-input {
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+}
+
+/* Mobile Data Cards Container & Cards */
+.kpi-mobile-cards-container {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  padding: 4px !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+}
+
+.kpi-data-mobile-card {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  transition: transform 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+.kpi-data-mobile-card:active {
+  transform: scale(0.99) !important;
+}
+
+/* Mobile Scrollbar & Scroll Container for KPI Cards */
+@media (max-width: 850px) {
+  .kpi-dashboard-container {
+    height: 100% !important;
+    max-height: 100% !important;
+    min-height: 100% !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding-bottom: 24px !important;
+  }
+
+  .kpi-dashboard-container .admin-list-layout {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  .kpi-dashboard-container .kpi-tab-pane {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  .kpi-dashboard-container .mgmt-table.card.admin-table-card {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  /* Cụm chứa thẻ Card: Thanh cuộn dọc riêng biệt, rõ nét, mượt mà */
+  .kpi-dashboard-container .admin-table-scroll {
+    flex: 1 1 auto !important;
+    min-height: 240px !important;
+    max-height: 52vh !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior-y: contain !important;
+    border: 1.5px solid #EADCC9 !important;
+    border-radius: 8px !important;
+    background: #FAF6F0 !important;
+    margin: 4px 0 !important;
+    padding: 6px 4px !important;
+    box-shadow: inset 0 1px 3px rgba(91, 57, 36, 0.05) !important;
+  }
+
+  /* Hiển thị thanh cuộn (Scrollbar) Walnut rõ ràng ngay trên mobile */
+  .kpi-dashboard-container .admin-table-scroll::-webkit-scrollbar {
+    width: 6px !important;
+    height: 6px !important;
+    display: block !important;
+    -webkit-appearance: none !important;
+  }
+
+  .kpi-dashboard-container .admin-table-scroll::-webkit-scrollbar-track {
+    background: #F2ECE4 !important;
+    border-radius: 4px !important;
+  }
+
+  .kpi-dashboard-container .admin-table-scroll::-webkit-scrollbar-thumb {
+    background: #7B5233 !important;
+    border-radius: 4px !important;
+    border: 1px solid #FAF6F0 !important;
+  }
+
+  .kpi-dashboard-container .admin-table-scroll::-webkit-scrollbar-thumb:hover {
+    background: #5D3B32 !important;
+  }
+
+  .kpi-dashboard-container .admin-table-scroll {
+    scrollbar-width: thin !important;
+    scrollbar-color: #7B5233 #F2ECE4 !important;
+  }
 }

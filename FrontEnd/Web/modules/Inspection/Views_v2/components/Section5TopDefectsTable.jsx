@@ -77,7 +77,7 @@ export const Section5TopDefectsTable = ({ defectsData: propDefects, linesData: p
         </div>
       </div>
 
-      <div className="qd-section-body" style={{ padding: '0', overflowY: 'auto', flex: 1, minHeight: 0 }}>
+      <div className="qd-section-body qd-sec5-table-box" style={{ padding: '0', overflowY: 'auto', overflowX: 'auto', flex: 1, minHeight: 0 }}>
         {activeTab === 'defects' ? (
           /* BẢNG 1: TOP LỖI THƯỜNG GẶP */
           <table className="qd-table">

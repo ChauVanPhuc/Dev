@@ -227,17 +227,9 @@ export const Section4QualityTrends = ({ groupsData }) => {
             Không có dữ liệu cơ cấu nhóm lỗi trong khoảng thời gian này
           </div>
         ) : (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '50fr 50fr',
-            gap: '8px',
-            alignItems: 'stretch',
-            flex: 1,
-            minHeight: 0,
-            height: '100%'
-          }}>
+          <div className="qd-sec4-body-grid">
           {/* CỘT TRÁI: 2 HÌNH TRÒN (TRÒN LỚN KHIẾU NẠI KH, TRÒN NHỎ HIỆN TRƯỜNG) */}
-          <div style={{
+          <div className="qd-sec4-circle-box" style={{
             display: 'flex',
             flexDirection: 'column',
             height: '100%',
@@ -467,7 +459,7 @@ export const Section4QualityTrends = ({ groupsData }) => {
           </div>
 
           {/* CỘT PHẢI: BẢNG CHI TIẾT (ĐỒNG BỘ 100% VỚI 2 BIỂU ĐỒ) */}
-          <div style={{
+          <div className="qd-sec4-table-box" style={{
             display: 'flex',
             flexDirection: 'column',
             height: '100%',

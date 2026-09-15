@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import api, { getBaseURL, API_URL } from '@webShared/Services/api.service';
-import { Search, Plus, FileSpreadsheet, FileText, ArrowUpDown, ChevronLeft, ChevronRight, Package, ShoppingBag } from 'lucide-react';
+import { Search, Plus, FileSpreadsheet, FileText, ArrowUpDown, ChevronLeft, ChevronRight, Package, ShoppingBag, RefreshCw } from 'lucide-react';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
@@ -97,51 +97,84 @@ const ManufactureProducts = () => {
   };
 
   const handleImportExcel = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
     try {
-      // 1. Quét nhanh metadata các sheet trong file Excel
-      const formData = new FormData();
-      formData.append('file', file);
+      if (files.length === 1) {
+        const file = files[0];
+        // 1. Quét nhanh metadata các sheet trong file Excel nếu là 1 file
+        const formData = new FormData();
+        formData.append('file', file);
 
-      const token = localStorage.getItem('token');
-      const authHeaders = { 'ngrok-skip-browser-warning': 'true' };
-      if (token && token !== 'null' && token !== 'undefined') {
-        authHeaders['Authorization'] = `Bearer ${token}`;
-      }
-
-      const response = await fetch(`${API_URL}master-products/inspect-excel-sheets`, {
-        method: 'POST',
-        body: formData,
-        headers: authHeaders
-      });
-
-      if (response.ok) {
-        const inspectRes = await response.json();
-        if (inspectRes && inspectRes.sheets && inspectRes.sheets.length > 1) {
-          // Nhiều sheet: Mở Modal cho người dùng chọn sheet mong muốn
-          setSheetModal({
-            visible: true,
-            file: file,
-            sheets: inspectRes.sheets
-          });
-          return;
+        const token = localStorage.getItem('token');
+        const authHeaders = { 'ngrok-skip-browser-warning': 'true' };
+        if (token && token !== 'null' && token !== 'undefined') {
+          authHeaders['Authorization'] = `Bearer ${token}`;
         }
-      }
 
-      // File 1 sheet: Upload trực tiếp
-      await startGlobalUpload(
-        file, 
-        '/master-products/import-excel', 
-        () => fetchProducts()
-      );
+        const response = await fetch(`${API_URL}master-products/inspect-excel-sheets`, {
+          method: 'POST',
+          body: formData,
+          headers: authHeaders
+        });
+
+        if (response.ok) {
+          const inspectRes = await response.json();
+          if (inspectRes && inspectRes.sheets && inspectRes.sheets.length > 1) {
+            // Nhiều sheet: Mở Modal cho người dùng chọn sheet mong muốn
+            setSheetModal({
+              visible: true,
+              file: file,
+              sheets: inspectRes.sheets
+            });
+            return;
+          }
+        }
+
+        // File 1 sheet: Upload trực tiếp
+        await startGlobalUpload(
+          file, 
+          '/master-products/import-excel', 
+          () => fetchProducts()
+        );
+      } else {
+        // Multi-file batch upload
+        await startGlobalUpload(
+          files,
+          '/master-products/import-excel',
+          () => fetchProducts()
+        );
+      }
     } catch (error) {
       console.error('Lỗi khi chuẩn bị upload:', error);
       toast('error', 'Không thể xử lý file Excel. Vui lòng kiểm tra lại định dạng file.');
     } finally {
       e.target.value = ''; // Reset input để có thể chọn lại cùng file
     }
+  };
+
+  const handleSyncFolderBom = () => {
+    setConfirmModal({
+      visible: true,
+      title: 'Đồng bộ BOM từ D:\\SmartFlow\\BOM',
+      message: 'Hệ thống sẽ quét và nạp toàn bộ các file BOM Excel trong thư mục D:\\SmartFlow\\BOM trên máy chủ để cập nhật dữ liệu cấu trúc chi tiết, quy cách và ĐVT chuẩn xác.\n\nBạn có muốn tiếp tục không?',
+      type: 'primary',
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, visible: false }));
+        try {
+          await startGlobalUpload(
+            null,
+            '/master-products/sync-bom-directory',
+            () => fetchProducts(),
+            { fileName: 'Đồng bộ thư mục D:\\SmartFlow\\BOM' }
+          );
+        } catch (err) {
+          console.error('Lỗi khi kích hoạt đồng bộ thư mục:', err);
+          toast('error', 'Không thể kết nối đến dịch vụ đồng bộ thư mục.');
+        }
+      }
+    });
   };
 
   const handleConfirmSheetImport = async (selectedSheets) => {
@@ -227,9 +260,14 @@ const ManufactureProducts = () => {
           activeFiltersCount={(filterType !== 'all' ? 1 : 0) + (woodFilter ? 1 : 0) + (statusFilter ? 1 : 0)}
           importActions={[
             {
-              label: 'Nhập Excel',
+              label: 'Nhập file Excel (1 hoặc nhiều)',
               icon: <FileSpreadsheet size={16} />,
               onClick: () => document.getElementById('excel-upload').click()
+            },
+            {
+              label: 'Đồng bộ D:\\SmartFlow\\BOM',
+              icon: <RefreshCw size={16} />,
+              onClick: handleSyncFolderBom
             }
           ]}
           onExport={null}
@@ -247,7 +285,7 @@ const ManufactureProducts = () => {
           createLabel="Thêm trực tiếp"
           hasWritePermission={true}
         >
-          <input type="file" id="excel-upload" style={{ display: 'none' }} accept=".xlsx, .xls" onChange={handleImportExcel} />
+          <input type="file" id="excel-upload" style={{ display: 'none' }} accept=".xlsx, .xls" multiple onChange={handleImportExcel} />
         </PageToolbar>
 
         {/* INLINE EXPANDABLE FILTER BAR */}

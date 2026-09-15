@@ -352,4 +352,36 @@ def delete_order(order_id: int, db: Session = Depends(get_db)):
     clear_plans_cache()
     return {"message": "Xóa đơn hàng thành công"}
 
+@router.post("/sync-all-from-master-bom")
+def sync_all_orders_boms(force_refresh: bool = True, db: Session = Depends(get_db)):
+    """
+    [POST] Đồng bộ toàn bộ quy cách, kích thước và cây BOM từ Master Products sang 100% các POs / Đơn hàng.
+    """
+    try:
+        res = order_controller.sync_all_orders_boms_from_master(db=db, force_refresh=force_refresh)
+        clear_plans_cache()
+        return res
+    except Exception as e:
+        print(f"Error syncing all orders BOM: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/{order_id}/sync-bom")
+def sync_single_order_bom(order_id: int, force_refresh: bool = True, db: Session = Depends(get_db)):
+    """
+    [POST] Đồng bộ quy cách và cây BOM từ Master Product sang 1 đơn hàng / PO cụ thể.
+    """
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng")
+    try:
+        updated = order_controller.sync_order_bom_from_master(db=db, order=order, force_refresh=force_refresh)
+        clear_plans_cache()
+        return {"status": "success", "order_id": order.id, "order_code": order.order_code}
+    except Exception as e:
+        print(f"Error syncing order BOM {order_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 
