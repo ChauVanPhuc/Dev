@@ -92,12 +92,13 @@ const CL09C_ParameterView = () => {
   const safeSelectedDefectIds = safeErrors.map((e) => e?.defectId || e?.defect_id || (e?.code ? e?.code : null)).filter(Boolean)
 
   return (
-    <InspectionFormShell
-      title="Kiểm tra thông số"
-      subTitle="CL09.3: Phiếu kiểm tra thông số"
-      formState={formState}
-    >
-      {({ renderImageUploadArea, isFormFilled }) => (
+    <>
+      <InspectionFormShell
+        title="Kiểm tra thông số"
+        subTitle="CL09.3: Phiếu kiểm tra thông số"
+        formState={formState}
+      >
+        {({ renderImageUploadArea, isFormFilled }) => (
         <>
           {/* Lựa chọn 1 trong 2: Theo Mã PO hoặc Theo Mã Pallet */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '12px', padding: '4px 0' }}>
@@ -330,12 +331,13 @@ const CL09C_ParameterView = () => {
           )}
         </>
       )}
+      </InspectionFormShell>
       <QRScanner
         isOpen={isQrScannerOpen}
         onClose={() => setIsQrScannerOpen(false)}
         onResult={handleInFormPalletScan}
       />
-    </InspectionFormShell>
+    </>
   )
 }
 

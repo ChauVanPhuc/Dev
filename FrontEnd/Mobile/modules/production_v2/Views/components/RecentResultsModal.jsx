@@ -114,7 +114,9 @@ const RecentResultsModal = ({
                       <span style={{ color: '#94a3b8' }}>Người lập:</span> {t.creator || t.creatorName || '—'}
                     </div>
                     <div>
-                      <span style={{ color: '#94a3b8' }}>SL Cần Kiểm:</span> <strong style={{ color: '#1e293b' }}>{t.requiredQty ?? t.required_qty ?? t.plan_qty ?? '—'}</strong>
+                      <span style={{ color: '#94a3b8' }}>
+                        {Boolean(t.stage && (t.stage.toLowerCase().includes('nhập kho') || t.stage.toLowerCase().includes('nhap kho') || t.stage.toLowerCase().includes('đầu vào') || t.stage.toLowerCase().includes('dau vao'))) ? 'SL Cần Kiểm:' : 'SL Kiểm Tra:'}
+                      </span> <strong style={{ color: '#1e293b' }}>{t.requiredQty ?? t.required_qty ?? t.plan_qty ?? '—'}</strong>
                     </div>
                     <div>
                       <span style={{ color: '#94a3b8' }}>SL Mẫu:</span> <strong>{t.sampleQty ?? t.sample_qty ?? '—'}</strong>

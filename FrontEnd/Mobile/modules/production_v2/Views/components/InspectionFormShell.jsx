@@ -1,3 +1,4 @@
+import React from 'react'
 import { X, ArrowLeft, CheckCircle2, Download, ImagePlus, CheckSquare, Layers, ClipboardCheck, Camera, Plus } from 'lucide-react'
 import Layout from '@mobile/Shared/Views/components/layout/MobileLayout'
 import PageHeader from '@mobile/Shared/Views/components/layout/MobilePageHeader'
@@ -486,7 +487,19 @@ const InspectionFormShell = ({ title, subTitle, formState, children, showLastRes
             </div>
 
             <div className="pv2-form">
-              {typeof children === 'function' ? children({ renderImageUploadArea, isStageReady, isFormFilled }) : children}
+              {(() => {
+                if (typeof children === 'function') {
+                  return children({ renderImageUploadArea, isStageReady, isFormFilled })
+                }
+                if (Array.isArray(children)) {
+                  return children.map((child, idx) =>
+                    typeof child === 'function'
+                      ? <React.Fragment key={idx}>{child({ renderImageUploadArea, isStageReady, isFormFilled })}</React.Fragment>
+                      : child
+                  )
+                }
+                return children
+              })()}
             </div>
           </div>
         )}

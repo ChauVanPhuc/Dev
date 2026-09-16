@@ -641,7 +641,7 @@ const FinishInspectionModal = ({ open, summary, palletCode, onConfirm, onClose, 
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)', gap: '10px', width: '100%', boxSizing: 'border-box' }}>
             <div style={{ minWidth: 0 }}>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: '#1e293b', marginBottom: '6px', whiteSpace: 'nowrap' }}>
-                SL Cần Kiểm
+                {Boolean(summary?.stage && (summary.stage.toLowerCase().includes('nhập kho') || summary.stage.toLowerCase().includes('nhap kho') || summary.stage.toLowerCase().includes('đầu vào') || summary.stage.toLowerCase().includes('dau vao'))) ? 'SL Cần Kiểm' : 'Số lượng kiểm tra'}
               </label>
               <div style={{
                 backgroundColor: '#e2e8f0',

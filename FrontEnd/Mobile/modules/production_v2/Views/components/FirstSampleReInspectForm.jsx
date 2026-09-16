@@ -76,6 +76,19 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
   const isQtyDisabled = readOnly || isReInspect || !hasStage || !hasPo || !hasProduct || !hasSpec
   const isSampleQtyDisabled = readOnly || !hasStage || !hasPo || !hasProduct || !hasSpec
 
+  const isIncoming = Boolean(
+    isIncomingStage ||
+    (stage && (
+      stage.toLowerCase().includes('nhập kho') ||
+      stage.toLowerCase().includes('nhap kho') ||
+      stage.toLowerCase().includes('đầu vào') ||
+      stage.toLowerCase().includes('dau vao')
+    ))
+  )
+
+  const totalQtyLabel = isIncoming ? 'Tổng số lượng' : 'Số lượng sản xuất'
+  const requiredQtyLabel = isIncoming ? 'SL Cần Kiểm' : 'Số lượng kiểm tra'
+
   const isComponentStage = stage && ['tạo phôi', 'phôi', 'định hình', 'lắp ráp'].some(s => stage.toLowerCase().includes(s))
   const isFinishedStage = stage && ['sơn', 'đóng gói', 'bao bì', 'lưu kho'].some(s => stage.toLowerCase().includes(s))
   const isPackagingStage = stage && ['đóng gói', 'dong goi', 'bao bì', 'đóng thùng'].some(s => stage.toLowerCase().includes(s))
@@ -92,7 +105,7 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
         ? `Chọn ${itemLabel.toLowerCase()} trước`
         : (!hasSpec
           ? 'Chọn quy cách trước...'
-          : 'Nhập SL giao đợt này...')))
+          : (isIncoming ? 'Nhập SL giao đợt này...' : 'Nhập SL kiểm tra đợt này...'))))
 
   const hasSampleQty = Boolean(sampleQty || requiredQty)
   const isFormFilled = readOnly || (hasPo && hasProduct && hasSpec && hasSampleQty)
@@ -203,10 +216,10 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
         </div>
       )}
 
-      {/* Hàng 1: Tổng số lượng (hiển thị tỉ lệ Đã kiểm/Tổng SL khi chọn quy cách) & SL Cần Kiểm (người dùng tự do nhập theo đợt giao) */}
+      {/* Hàng 1: Tổng số lượng / Số lượng sản xuất & SL Cần Kiểm / Số lượng kiểm tra */}
       <div className="pv2-field-row pv2-field-row--2col">
         <div className="pv2-field">
-          <label>Tổng số lượng</label>
+          <label>{totalQtyLabel}</label>
           <input
             type="text"
             className="pv2-input pv2-input--disabled"
@@ -217,7 +230,7 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
           />
         </div>
         <div className="pv2-field">
-          <label>SL Cần Kiểm <span className="pv2-req">*</span></label>
+          <label>{requiredQtyLabel} <span className="pv2-req">*</span></label>
           <input
             type="number"
             min="1"
