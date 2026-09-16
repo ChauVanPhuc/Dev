@@ -1481,8 +1481,9 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     setTotalBatchQty('')
     totalBatchQtyRef.current = ''
     setRequiredQty('')
-    setSampleQty('')
-    setParamSample('')
+    const defaultDailySample = mode === INSPECT_MODES.DAILY ? '100' : ''
+    setSampleQty(defaultDailySample)
+    setParamSample(defaultDailySample)
   }
 
   // Bỏ gán cứng khóa quy cách để người dùng linh hoạt chọn/bỏ chọn theo từng dòng tủ
@@ -1519,8 +1520,9 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       setTotalBatchQty('')
       totalBatchQtyRef.current = ''
       setRequiredQty('')
-      setSampleQty('')
-      setParamSample('')
+      const defaultDailySample = mode === INSPECT_MODES.DAILY ? '100' : ''
+      setSampleQty(defaultDailySample)
+      setParamSample(defaultDailySample)
     }
   }
 

@@ -46,6 +46,9 @@ export const useAuthController = () => {
           full_name: response.data.full_name || username,
           email: response.data.email || '',
           employee_id: response.data.employee_id || '',
+          department_id: response.data.department_id || null,
+          department_name: response.data.department_name || '',
+          department_description: response.data.department_description || '',
           role_name: response.data.role_name || '',
           role_description: response.data.role_description || '',
           permission_name: response.data.permission_name || '',
@@ -101,3 +104,35 @@ export const useAuthController = () => {
     error,
   }
 }
+
+/**
+ * Kiểm tra xem người dùng có thuộc bộ phận / vai trò QC (Quản lý chất lượng) hay không
+ * @param {Object} user - Đối tượng user từ AuthStore
+ * @returns {boolean}
+ */
+export const isQCUser = (user) => {
+  if (!user) return false;
+
+  const dept = (user.department_name || user.department || '').toLowerCase();
+  const role = (user.role_name || user.role_description || '').toLowerCase();
+  const perm = (user.permission_name || user.permission_description || '').toLowerCase();
+  const stage = (user.stage_name || user.activeStageName || '').toLowerCase();
+  const username = (user.username || '').toLowerCase();
+
+  const combined = `${dept} | ${role} | ${perm} | ${stage} | ${username}`;
+
+  const qcKeywords = [
+    'qc',
+    'qlcl',
+    'kcs',
+    'chất lượng',
+    'chat luong',
+    'kiểm soát quy trình',
+    'kiem soat quy trinh',
+    'kiểm tra',
+    'kiem tra',
+    'qa'
+  ];
+
+  return qcKeywords.some(kw => combined.includes(kw));
+};

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { useAuthController } from '@modules/auth/Controllers/authController'
+import { useAuthController, isQCUser } from '@modules/auth/Controllers/authController'
 import useAuthStore from '@modules/auth/Models/authModel'
 import PushNotificationService from '@shared/services/pushNotificationService';
 import Button from '@mobile/Shared/Views/components/ui/Button'
@@ -22,9 +22,23 @@ const Login = () => {
   const { isAuthenticated, user } = useAuthStore()
   const { login, loading, error } = useAuthController()
 
-  const fromPath = location.state?.from?.pathname
-    ? (location.state.from.pathname + (location.state.from.search || ''))
-    : '/dashboard';
+  // Xác định đường dẫn điều hướng sau đăng nhập
+  const getDestinationPath = (currentUser) => {
+    const from = location.state?.from?.pathname
+      ? (location.state.from.pathname + (location.state.from.search || ''))
+      : null;
+
+    if (from && from !== '/' && from !== '/dashboard') {
+      return from;
+    }
+
+    // Nếu là tài khoản bộ phận QC, vào thẳng màn hình First Sample
+    if (isQCUser(currentUser)) {
+      return '/production_v2/inspection/first-sample';
+    }
+
+    return '/dashboard';
+  };
 
   const [formData, setFormData] = useState({
     username: '',
@@ -39,7 +53,7 @@ const Login = () => {
     const handleAutoLogin = async () => {
       // 1. Nếu đã đăng nhập rồi thì chỉ việc đi tiếp
       if (isAuthenticated) {
-        navigate(fromPath, { replace: true });
+        navigate(getDestinationPath(user), { replace: true });
         return;
       }
 
@@ -57,7 +71,7 @@ const Login = () => {
               PushNotificationService.init(userState.id);
             } catch (err) { }
 
-            navigate(fromPath, { replace: true });
+            navigate(getDestinationPath(userState), { replace: true });
           }
         } catch (e) { }
       }
@@ -121,7 +135,7 @@ const Login = () => {
         console.error("Lỗi khởi tạo Push:", err);
       }
 
-      navigate(fromPath);
+      navigate(getDestinationPath(userState));
     }
   }
 

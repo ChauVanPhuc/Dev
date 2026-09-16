@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import CustomSelect from '@mobile/Shared/Views/components/form/CustomSelect'
 import FormMultiSearchSelect from '@mobile/Shared/Views/components/form/FormMultiSearchSelect'
 import { useInspectionFormBase } from '../Controllers/useInspectionFormBase'
@@ -25,7 +25,9 @@ const CL09F_DailyInspectionView = () => {
     productOptions,
     selectedProducts,
     selectedSpecs,
+    specOptions,
     handleMultiProductChange,
+    handleMultiSpecChange,
     sampleQty,
     setSampleQty,
     note,
@@ -38,20 +40,32 @@ const CL09F_DailyInspectionView = () => {
     addErrorRow,
   } = formState
 
+  // Đảm bảo chế độ ghi nhận lỗi hằng ngày (DAILY) luôn có SL mẫu mặc định là 100 nếu chưa nhập
+  useEffect(() => {
+    if (!readOnly && (sampleQty === '' || sampleQty === null || sampleQty === undefined)) {
+      setSampleQty('100')
+    }
+  }, [readOnly, sampleQty, setSampleQty])
+
   const hasStage = Boolean(stage)
   const hasPo = Boolean(po)
   const hasProduct = Boolean(product || (selectedProducts && selectedProducts.length > 0))
 
   const isPoDisabled = readOnly || !hasStage
   const isProductDisabled = readOnly || !hasStage || !hasPo
+  const isSpecDisabled = readOnly || !hasStage || !hasPo || !hasProduct
   const isSampleDisabled = readOnly || !hasStage || !hasPo || !hasProduct
 
   const poPlaceholder = !hasStage ? 'Chọn công đoạn trước' : 'Nhập hoặc chọn PO...'
   const productPlaceholder = !hasStage 
     ? 'Chọn công đoạn trước' 
     : (!hasPo ? 'Chọn PO trước' : 'Chọn sản phẩm / chi tiết...')
+  const specPlaceholder = !hasStage 
+    ? 'Chọn công đoạn trước' 
+    : (!hasPo ? 'Chọn PO trước' : (!hasProduct ? 'Chọn chi tiết trước' : 'Chọn quy cách...'))
 
   const safeProductOptions = Array.isArray(productOptions) ? productOptions.filter((o) => Boolean(o && o.value)) : []
+  const safeSpecOptions = Array.isArray(specOptions) ? specOptions.filter((o) => Boolean(o && o.value)) : []
 
   // Tự động tính toán tổng số lỗi & tỷ lệ lỗi %
   const totalDefects = useMemo(() => {
@@ -119,46 +133,33 @@ const CL09F_DailyInspectionView = () => {
             </div>
           </div>
 
-          {/* Hàng 2: Chi tiết / Sản phẩm */}
-          <div className="pv2-field" style={{ marginTop: '8px' }}>
-            <label>Chi tiết / Sản phẩm <span className="pv2-req">*</span></label>
-            <FormMultiSearchSelect
-              values={selectedProducts || []}
-              options={safeProductOptions}
-              onChange={handleMultiProductChange}
-              placeholder={productPlaceholder}
-              itemType="sản phẩm"
-              required
-              disabled={isProductDisabled}
-            />
-          </div>
-
-          {/* Hàng 3: Quy cách (Nhiều quy cách nếu chọn nhiều chi tiết) */}
-          {selectedSpecs && selectedSpecs.length > 0 && (
-            <div className="pv2-field" style={{ marginTop: '8px' }}>
-              <label>Quy cách liên quan:</label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
-                {selectedSpecs.map((sp, idx) => (
-                  <span
-                    key={idx}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      padding: '4px 10px',
-                      backgroundColor: '#FAF5EE',
-                      border: '1px solid #EADCC9',
-                      borderRadius: '6px',
-                      fontSize: '12px',
-                      fontWeight: '600',
-                      color: '#7B5233',
-                    }}
-                  >
-                    {sp}
-                  </span>
-                ))}
-              </div>
+          {/* Hàng 2: Chi tiết / Sản phẩm & Quy cách (2 cột) */}
+          <div className="pv2-field-row pv2-field-row--2col" style={{ marginTop: '8px' }}>
+            <div className="pv2-field">
+              <label>Chi tiết / Sản phẩm <span className="pv2-req">*</span></label>
+              <FormMultiSearchSelect
+                values={selectedProducts || []}
+                options={safeProductOptions}
+                onChange={handleMultiProductChange}
+                placeholder={productPlaceholder}
+                itemType="sản phẩm"
+                required
+                disabled={isProductDisabled}
+              />
             </div>
-          )}
+
+            <div className="pv2-field">
+              <label>Quy cách <span className="pv2-req">*</span></label>
+              <FormMultiSearchSelect
+                values={selectedSpecs || []}
+                options={safeSpecOptions}
+                onChange={handleMultiSpecChange}
+                placeholder={specPlaceholder}
+                itemType="quy cách"
+                disabled={isSpecDisabled}
+              />
+            </div>
+          </div>
 
           {/* Tiến trình: Danh sách lỗi chỉ xuất hiện khi đã điền thông tin phiếu */}
           {!isFormFilled && !readOnly ? (
