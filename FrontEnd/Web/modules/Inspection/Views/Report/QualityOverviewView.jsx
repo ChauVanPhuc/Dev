@@ -60,6 +60,17 @@ const QualityOverviewView = () => {
     }
   };
 
+  const getImageUrl = (path) => {
+    if (!path) return '';
+    if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('blob:') || path.startsWith('data:')) {
+      return path;
+    }
+    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    const baseApi = (api.defaults.baseURL || '').replace(/\/api\/v1\/?$/, '').replace(/\/+$/, '');
+    const origin = baseApi || window.location.origin;
+    return `${origin}${cleanPath}`;
+  };
+
   useEffect(() => {
     fetchPendingTasks();
   }, []);
@@ -1360,22 +1371,25 @@ const QualityOverviewView = () => {
                       Hình ảnh minh chứng
                     </div>
                     <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                      {[selectedTask.image_path_1, selectedTask.image_path_2, selectedTask.image_path_3].filter(Boolean).map((img, idx) => (
-                        <a 
-                          key={idx} 
-                          href={img.startsWith('http') ? img : `${api.defaults.baseURL || ''}${img}`}
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                        >
-                          <img 
-                            src={img.startsWith('http') ? img : `${api.defaults.baseURL || ''}${img}`}
-                            alt="Minh chứng"
-                            style={{ width: '84px', height: '84px', objectFit: 'cover', borderRadius: '8px', border: '1.5px solid #EADCC9', cursor: 'pointer', transition: 'transform 0.15s' }}
-                            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-                            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                          />
-                        </a>
-                      ))}
+                      {[selectedTask.image_path_1, selectedTask.image_path_2, selectedTask.image_path_3].filter(Boolean).map((img, idx) => {
+                        const imgUrl = getImageUrl(img);
+                        return (
+                          <a 
+                            key={idx} 
+                            href={imgUrl}
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                          >
+                            <img 
+                              src={imgUrl}
+                              alt="Minh chứng"
+                              style={{ width: '84px', height: '84px', objectFit: 'cover', borderRadius: '8px', border: '1.5px solid #EADCC9', cursor: 'pointer', transition: 'transform 0.15s' }}
+                              onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                              onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                            />
+                          </a>
+                        );
+                      })}
                     </div>
                   </div>
                 )}

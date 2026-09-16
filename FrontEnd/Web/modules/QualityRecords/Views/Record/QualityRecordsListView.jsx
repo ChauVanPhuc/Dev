@@ -1048,11 +1048,12 @@ const QualityRecordsListView = () => {
                     searchPlaceholder="Tìm kiếm theo Mã PO..."
                     showSort={true}
                     sortOptions={[
-                        { value: 'none', label: 'Sắp xếp: Mặc định' },
+                        { value: 'none', label: 'Sắp xếp: Dữ liệu mới nhất (Mặc định)' },
                         { value: 'po_asc', label: 'Mã PO (A-Z)' },
                         { value: 'po_desc', label: 'Mã PO (Z-A)' },
                         { value: 'qty_asc', label: 'Sản lượng (Tăng dần)' },
-                        { value: 'qty_desc', label: 'Sản lượng (Giảm dần)' }
+                        { value: 'qty_desc', label: 'Sản lượng (Giảm dần)' },
+                        { value: 'oldest_data', label: 'Dữ liệu phát sinh cũ nhất' }
                     ]}
                     sortValue={sortBy}
                     onSortChange={(val) => { setSortBy(val); setCurrentPage(1); }}
@@ -1213,7 +1214,15 @@ const QualityRecordsListView = () => {
                                                     onClick={() => navigate(`/admin/quality-records/${order.order_code || order.name}`)}
                                                 >
                                                     <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#8D6E63' }}>#{stt}</td>
-                                                    <td className="font-bold" style={{ color: '#7B5233', fontWeight: 'bold' }}>{order.name || order.order_code}</td>
+                                                    <td className="font-bold" style={{ color: '#7B5233', fontWeight: 'bold' }}>
+                                                        <div>{order.name || order.order_code}</div>
+                                                        {order.last_activity && (
+                                                            <div style={{ fontSize: '0.72rem', color: '#6B7280', fontWeight: '500', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                                                <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10B981' }}></span>
+                                                                Hoạt động: {new Date(order.last_activity.replace(' ', 'T')).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}
+                                                            </div>
+                                                        )}
+                                                    </td>
                                                     <td style={{ textAlign: 'right', paddingRight: '24px', fontWeight: '600' }}>
                                                         {totalQty.toLocaleString()} <span style={{ fontSize: '0.8rem', color: '#8D6E63', fontWeight: 'normal' }}>sản phẩm</span>
                                                     </td>
@@ -1296,9 +1305,15 @@ const QualityRecordsListView = () => {
                                                     {hasData ? 'ĐÃ CÓ DỮ LIỆU' : 'CHƯA CÓ DỮ LIỆU'}
                                                 </span>
                                             </div>
-                                            <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#7B5233', marginBottom: '4px' }}>
+                                            <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#7B5233', marginBottom: '2px' }}>
                                                 {order.name || order.order_code}
                                             </div>
+                                            {order.last_activity && (
+                                                <div style={{ fontSize: '0.72rem', color: '#6B7280', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                    <span style={{ display: 'inline-block', width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#10B981' }}></span>
+                                                    Hoạt động: {new Date(order.last_activity.replace(' ', 'T')).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}
+                                                </div>
+                                            )}
                                             <div style={{ fontSize: '0.8rem', color: '#6B7280' }}>
                                                 Số lượng: <strong>{totalQty}</strong> sản phẩm
                                             </div>

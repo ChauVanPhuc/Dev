@@ -410,6 +410,9 @@ async def check_write_permissions(request: Request, call_next):
             "/api/v1/claims/chat",
             "/api/v1/screen-bugs/upload-image",
             "/api/v1/master-products/upload-image",
+            "/api/v1/inspections/upload-image",
+            "/api/v1/inspections/upload",
+            "/api/v1/deliveries/upload-image",
             "/api/v1/assessment",
             "/health",
             "/ws",
@@ -723,6 +726,8 @@ get_upload_dir("inspections")
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
+app.mount("/api/v1/static", StaticFiles(directory=STATIC_DIR), name="api_v1_static")
+app.mount("/api/v1/uploads", StaticFiles(directory=UPLOADS_DIR), name="api_v1_uploads")
 
 
 

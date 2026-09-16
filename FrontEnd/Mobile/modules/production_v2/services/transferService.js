@@ -1,4 +1,5 @@
 import apiClient from '@shared/services/api'
+import { compressImage } from '@shared/utils/imageCompressor'
 import { PAGE_SIZE } from '../constants'
 
 export const transferService = {
@@ -194,15 +195,23 @@ export const transferService = {
   },
 
   async uploadImage(file) {
+    let uploadPayload = file
+    try {
+      uploadPayload = await compressImage(file)
+    } catch (err) {
+      console.warn('[transferService] Nén ảnh thất bại, dùng file gốc:', err)
+    }
+
     try {
       const form = new FormData()
-      form.append('image', file)
+      form.append('image', uploadPayload)
       const res = await apiClient.post('/deliveries/upload-image/', form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 60000,
       })
       return res.data
     } catch (e) {
-      return { url: URL.createObjectURL(file) }
+      console.error('[transferService] Upload image failed:', e)
+      throw e
     }
   },
 }

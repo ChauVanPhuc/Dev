@@ -24,6 +24,7 @@ const CustomSelect = ({
   const selectedItemRef = useRef(null)
   const inputRef = useRef(null)
   const searchTimerRef = useRef(null)
+  const userSelectedRef = useRef(false)
 
   // Cleanup search timer on unmount
   useEffect(() => {
@@ -50,8 +51,10 @@ const CustomSelect = ({
       const dashIndex = valStr.indexOf(' - ')
       const codePart = dashIndex !== -1 ? valStr.substring(0, dashIndex).toUpperCase() : valStr.toUpperCase()
       setInputValue(codePart)
-    } else {
-      setInputValue('')
+    } else if (!value) {
+      if (document.activeElement !== inputRef.current) {
+        setInputValue('')
+      }
     }
   }, [value, options, selectedOption])
 
@@ -102,7 +105,7 @@ const CustomSelect = ({
     ? options.filter((opt) => opt.value !== '' && opt.value !== null && opt.value !== undefined)
     : options
 
-  const filteredOptions = allowCustomInput && inputValue
+  const filteredOptions = allowCustomInput && inputValue && !onSearch
     ? availableOptions.filter((opt) => {
         const term = inputValue.toLowerCase().trim()
         const labelStr = String(opt.label || '').toLowerCase()
@@ -114,10 +117,15 @@ const CustomSelect = ({
   const handleInputChange = (e) => {
     const val = e.target.value.toUpperCase()
     setInputValue(val)
+    userSelectedRef.current = false
     if (!isOpen) setIsOpen(true)
-    if (onChange) {
+    
+    // Nếu KHÔNG có onSearch (custom input tự do thuần túy), truyền trực tiếp giá trị vào onChange
+    if (onChange && !onSearch) {
       onChange(val)
     }
+
+    // Nếu CÓ onSearch, từ khóa nhập chỉ dùng để tìm kiếm trên Server, không lưu tạm vào form
     if (onSearch) {
       if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
       searchTimerRef.current = setTimeout(() => {
@@ -127,6 +135,8 @@ const CustomSelect = ({
   }
 
   const handleOptionSelect = (opt) => {
+    if (!opt || opt.value === '') return
+    userSelectedRef.current = true
     const labelStr = String(opt.label || opt.value || '')
     const dashIndex = labelStr.indexOf(' - ')
     const codePart = dashIndex !== -1 ? labelStr.substring(0, dashIndex).toUpperCase() : String(opt.value || labelStr).toUpperCase()
@@ -136,6 +146,51 @@ const CustomSelect = ({
     if (onChange) {
       onChange(opt.value || codePart)
     }
+  }
+
+  const handleInputKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      const validOpts = options.filter((opt) => opt.value && opt.value !== '')
+      if (validOpts.length > 0) {
+        handleOptionSelect(validOpts[0])
+      }
+    }
+  }
+
+  const handleInputBlur = () => {
+    // Chỉ xử lý khi có onSearch
+    if (!onSearch) return
+
+    // Chờ một khoảng thời gian ngắn để nếu người dùng vừa bấm vào 1 mục trên dropdown,
+    // sự kiện click của mục đó (handleOptionSelect) sẽ chạy trước
+    setTimeout(() => {
+      // 1. Nếu người dùng đã bấm chọn mục rồi -> BỎ QUA (không đổi)
+      if (userSelectedRef.current) {
+        userSelectedRef.current = false
+        return
+      }
+
+      // 2. Nếu người dùng chưa chọn mà trong ô có từ khóa tìm kiếm:
+      if (inputValue && inputValue.trim()) {
+        const validOpts = options.filter((opt) => opt.value && opt.value !== '')
+        if (validOpts.length === 1) {
+          // Có 1 cái thì chọn luôn cái đó
+          handleOptionSelect(validOpts[0])
+        } else if (validOpts.length > 1) {
+          // Có nhiều cái thì chọn cái đầu
+          handleOptionSelect(validOpts[0])
+        } else {
+          // Không có kết quả nào
+          setInputValue('')
+          if (onChange) onChange('')
+        }
+      } else {
+        // Ô nhập trống
+        if (onChange) onChange('')
+      }
+      setIsOpen(false)
+    }, 180)
   }
 
   const renderOptionContent = (option, isSelected) => {
@@ -213,6 +268,8 @@ const CustomSelect = ({
             value={inputValue}
             onChange={handleInputChange}
             onFocus={() => !disabled && setIsOpen(true)}
+            onBlur={handleInputBlur}
+            onKeyDown={handleInputKeyDown}
             placeholder={placeholder || 'Nhập hoặc chọn...'}
             disabled={disabled}
             style={{
@@ -252,6 +309,7 @@ const CustomSelect = ({
                   e.stopPropagation()
                   setInputValue('')
                   if (onChange) onChange('')
+                  if (onSearch) onSearch('')
                   if (inputRef.current) inputRef.current.focus()
                 }}
                 style={{
@@ -321,6 +379,7 @@ const CustomSelect = ({
               <div
                 key={`${option.value}_${idx}`}
                 ref={isSelected ? selectedItemRef : null}
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => handleOptionSelect(option)}
                 style={{
                   padding: '9px 10px',
@@ -348,7 +407,7 @@ const CustomSelect = ({
           })}
           {filteredOptions.length === 0 && (
             <div style={{ padding: '10px', textAlign: 'center', color: '#9ca3af', fontSize: '12.5px' }}>
-              Không tìm thấy (bấm ngoài để giữ giá trị đã nhập)
+              {onSearch ? 'Không tìm thấy mã PO phù hợp' : 'Không tìm thấy (bấm ngoài để giữ giá trị đã nhập)'}
             </div>
           )}
         </div>

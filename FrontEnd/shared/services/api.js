@@ -64,7 +64,14 @@ apiClient.interceptors.request.use((config) => {
   
   // Xử lý đặc biệt cho FormData: Xóa Content-Type để Axios tự động set boundary
   if (config.data instanceof FormData) {
-    delete config.headers['Content-Type']
+    if (config.headers) {
+      if (typeof config.headers.delete === 'function') {
+        config.headers.delete('Content-Type')
+        config.headers.delete('content-type')
+      }
+      delete config.headers['Content-Type']
+      delete config.headers['content-type']
+    }
   }
   
   return config

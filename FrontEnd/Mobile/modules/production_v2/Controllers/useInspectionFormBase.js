@@ -80,19 +80,24 @@ const parseDimensionStringFromText = (text) => {
   const mCode = str.match(/(\b[A-Z0-9]{2,6}\s*[-–—]\s*\d{2,4}(?:mm|cm)?\b)/i)
   if (mCode) return mCode[1].replace(/\s*/g, '')
 
-  // 6. Single size with unit: e.g. 350mm, 500mm
-  const mUnit = str.match(/(\b\d+(?:[.,]\d+)?\s*(?:mm|cm|m)\b)/i)
+  // 6. Single size with unit: e.g. 350mm, 50cm (chỉ chấp nhận mm hoặc cm, không match đơn vị 'm' để tránh nhầm các từ tiếng Việt như 'mặt', 'màu', 'mép')
+  const mUnit = str.match(/(?:^|[^\p{L}\d])(\d+(?:[.,]\d+)?\s*(?:mm|cm))(?:$|[^\p{L}\d])/iu)
   if (mUnit) return mUnit[1].replace(/\s*/g, '')
 
   return null
 }
 
 const getEffectiveSpec = (specRaw, partName) => {
+  // 1. Ưu tiên hàng đầu: Lấy quy cách thực tế đã có trong CSDL (specRaw)
+  const cSpec = compactSpec(specRaw)
+  if (cSpec && !isInvalidSpec(cSpec)) return cSpec
+
+  // 2. Dự phòng: Nếu CSDL không có hoặc invalid, mới trích xuất kích thước từ tên chi tiết (partName)
   const dimStr = parseDimensionStringFromText(partName)
   if (dimStr && !isInvalidSpec(dimStr)) return dimStr
-  const cSpec = compactSpec(specRaw)
-  if (cSpec) return cSpec
-  return 'Tiêu chuẩn'
+
+  // 3. Fallback cuối cùng
+  return (specRaw && !isInvalidSpec(specRaw)) ? String(specRaw).trim() : 'Tiêu chuẩn'
 }
 
 const getQuantityConversionDetails = (partNameOrSpec, rawQty, unit = '', isConvertedHint = false) => {
@@ -196,12 +201,19 @@ const isStageMatching = (selectedStage, targetStage) => {
     }
 
     const stNorm = normalizeStageName(st)
+
+    // Khi chọn công đoạn Lắp Ráp, lấy kèm các tiêu chuẩn / danh mục lỗi của công đoạn Sơn
+    const isAssemblyAndPaint =
+      (sNorm.includes('lắp ráp') || sNorm.includes('lap rap') || sRaw.includes('lắp ráp') || sRaw.includes('lap rap')) &&
+      (stNorm.includes('sơn') || stNorm.includes('son') || stRaw.includes('sơn') || stRaw.includes('son'))
+
     return (
       sRaw === stRaw ||
       sNorm === stNorm ||
       sRaw.includes(stRaw) ||
       stRaw.includes(sRaw) ||
-      (sNorm && stNorm && (sNorm.includes(stNorm) || stNorm.includes(sNorm)))
+      (sNorm && stNorm && (sNorm.includes(stNorm) || stNorm.includes(sNorm))) ||
+      isAssemblyAndPaint
     )
   })
 }
@@ -863,6 +875,32 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
   // Cache kết quả BOM để khi chọn PO mở chi tiết tức thì (0ms)
   const bomCacheRef = useRef({})
 
+  const handlePoChange = useCallback((newPo) => {
+    if (readOnly) return
+    setIsDirty(true)
+    setPo(newPo)
+    setParamPo(newPo)
+
+    setProduct('')
+    setParamProduct('')
+    setSelectedProducts([])
+    setSpec('')
+    setSelectedSpecs([])
+    setRequiredQty('')
+    setSampleQty('')
+    setParamSample('')
+    setErrorQty('0')
+    setParamPass('')
+    setParamFail('')
+
+    if (!newPo) {
+      const activeStage = stage || paramStage
+      setProductOptions([{ value: '', label: !activeStage ? 'Vui lòng chọn công đoạn trước' : 'Vui lòng chọn PO trước' }])
+      setSpecOptions([{ value: '', label: !activeStage ? 'Vui lòng chọn công đoạn trước' : 'Vui lòng chọn PO trước' }])
+      setBomData([])
+    }
+  }, [readOnly, stage, paramStage])
+
   // Hàm tìm kiếm PO full trên Server khi người dùng nhập từ khóa
   const handlePoSearch = useCallback((searchTerm) => {
     const activeStage = stage || paramStage
@@ -871,7 +909,8 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     const term = (searchTerm || '').trim()
 
     if (!term) {
-      // Khi xóa ô tìm kiếm -> hiển thị lại danh sách PO của tháng hiện tại
+      // Khi xóa ô tìm kiếm -> xóa PO đã chọn và khôi phục danh sách PO của tháng hiện tại
+      handlePoChange('')
       if (monthPoCacheRef.current.length > 0) {
         setPoOptions([{ value: '', label: 'Nhập hoặc chọn PO...' }, ...monthPoCacheRef.current])
       }
@@ -881,20 +920,30 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     if (isIncoming) {
       orderService.getPurchaseOrders(term)
         .then((poCodes) => {
-          const opts = (poCodes || []).map((code) => ({ value: code, label: code }))
-          setPoOptions([{ value: '', label: 'Nhập hoặc chọn PO...' }, ...opts])
+          const rawCodes = poCodes || []
+          if (rawCodes.length === 0) {
+            setPoOptions([{ value: '', label: 'Không tìm thấy PO phù hợp' }])
+          } else {
+            const opts = rawCodes.map((code) => ({ value: code, label: code }))
+            setPoOptions([{ value: '', label: 'Nhập hoặc chọn PO...' }, ...opts])
+          }
         })
         .catch(() => {})
     } else {
       // Tìm kiếm Lệnh sản xuất Full siêu tốc (5-10ms)
       orderService.getPoCodes({ search: term, limit: 1000 })
         .then((codes) => {
-          const opts = (codes || []).map((code) => ({ value: code, label: code }))
-          setPoOptions([{ value: '', label: 'Nhập hoặc chọn PO...' }, ...opts])
+          const rawCodes = codes || []
+          if (rawCodes.length === 0) {
+            setPoOptions([{ value: '', label: 'Không tìm thấy PO phù hợp' }])
+          } else {
+            const opts = rawCodes.map((code) => ({ value: code, label: code }))
+            setPoOptions([{ value: '', label: 'Nhập hoặc chọn PO...' }, ...opts])
+          }
         })
         .catch(() => {})
     }
-  }, [stage, paramStage])
+  }, [stage, paramStage, handlePoChange])
 
   useEffect(() => {
     const activeStage = stage || paramStage
@@ -1070,7 +1119,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     const applyBomData = (data) => {
       const bomList = data || []
       setBomData(bomList)
-      const opts = bomList.map((p) => ({ value: p.part_name, label: p.part_name }))
+      const opts = bomList.map((p) => ({ value: p.part_name, label: p.label || p.part_name }))
       
       if (bomList.length === 0) {
         setProductOptions([{ value: '', label: 'Không có chi tiết cho công đoạn này' }])
@@ -1085,7 +1134,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
         
         let matchedParts = []
         if (currentProdArray.length > 0) {
-          matchedParts = bomList.filter(p => currentProdArray.includes(p.part_name))
+          matchedParts = bomList.filter(p => currentProdArray.includes(p.part_name) || (p.sku && currentProdArray.includes(p.sku)))
         }
 
         if (matchedParts.length > 0) {
@@ -1862,31 +1911,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     setProcess('')
   }
 
-  const handlePoChange = (newPo) => {
-    if (readOnly) return
-    setIsDirty(true)
-    setPo(newPo)
-    setParamPo(newPo)
 
-    setProduct('')
-    setParamProduct('')
-    setSelectedProducts([])
-    setSpec('')
-    setSelectedSpecs([])
-    setRequiredQty('')
-    setSampleQty('')
-    setParamSample('')
-    setErrorQty('0')
-    setParamPass('')
-    setParamFail('')
-
-    if (!newPo) {
-      const activeStage = stage || paramStage
-      setProductOptions([{ value: '', label: !activeStage ? 'Vui lòng chọn công đoạn trước' : 'Vui lòng chọn PO trước' }])
-      setSpecOptions([{ value: '', label: !activeStage ? 'Vui lòng chọn công đoạn trước' : 'Vui lòng chọn PO trước' }])
-      setBomData([])
-    }
-  }
 
   const handleResultChange = (val) => {
     setResult(val)

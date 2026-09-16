@@ -851,32 +851,57 @@ def get_plan_detail(
             orders = orders_query.order_by(Order.is_priority.desc(), Order.priority_score.desc(), Order.id.desc()).all()
             
             from modules.inspection.models.input_inspection import InputInspection
-            # [NEW] Lấy danh sách ID đơn hàng đã có dữ liệu bàn giao (không phụ thuộc plan_id của delivery)
-            # Tối ưu hóa: Chỉ lọc theo danh sách ID đơn hàng thuộc kế hoạch này thay vị quét toàn bộ bảng
+            # [NEW] Lấy danh sách ID đơn hàng đã có dữ liệu bàn giao & thời gian hoạt động gần nhất
             order_ids_list = [o.id for o in orders]
+            activity_by_order_id = {}
+            has_data_ids = set()
+
             if order_ids_list:
-                # [PERF] Sử dụng UNION SQL để lấy các order_id có dữ liệu từ cả deliveries và delivery_details trong 1 câu SQL
                 from sqlalchemy import bindparam
-                union_sql = text("""
-                    SELECT DISTINCT order_id FROM deliveries WITH (NOLOCK) WHERE order_id IN :ids AND order_id IS NOT NULL
-                    UNION
-                    SELECT DISTINCT order_id FROM delivery_details WITH (NOLOCK) WHERE order_id IN :ids AND order_id IS NOT NULL
+                activity_sql = text("""
+                    SELECT order_id, MAX(last_dt) as last_dt
+                    FROM (
+                        SELECT order_id, MAX(created_at) as last_dt 
+                        FROM deliveries WITH (NOLOCK) 
+                        WHERE order_id IN :ids AND order_id IS NOT NULL 
+                        GROUP BY order_id
+                        UNION ALL
+                        SELECT dd.order_id, MAX(d.created_at) as last_dt
+                        FROM delivery_details dd WITH (NOLOCK)
+                        JOIN deliveries d WITH (NOLOCK) ON dd.delivery_id = d.id
+                        WHERE dd.order_id IN :ids AND dd.order_id IS NOT NULL
+                        GROUP BY dd.order_id
+                    ) t
+                    GROUP BY order_id
                 """).bindparams(bindparam("ids", expanding=True))
-                # Batch chunk to avoid 2100 limit
-                has_data_ids = set()
+
                 for chunk in [order_ids_list[i:i + 1000] for i in range(0, len(order_ids_list), 1000)]:
-                    rows = db.execute(union_sql, {"ids": tuple(chunk)}).fetchall()
+                    rows = db.execute(activity_sql, {"ids": tuple(chunk)}).fetchall()
                     for r in rows:
                         if r[0] is not None:
                             has_data_ids.add(r[0])
-            else:
-                has_data_ids = set()
+                            if r[1] is not None:
+                                activity_by_order_id[r[0]] = r[1]
 
-            # 3. Từ InputInspection (Kiểm tra đầu vào) - Khớp theo mã PO trong cùng KHSX
-            insp_query = db.query(InputInspection.cont_name).filter(InputInspection.cont_name != None)
-            if not is_all:
-                insp_query = insp_query.filter(InputInspection.plan_id == plan_info.id)
-            has_inspection_codes = {r[0] for r in insp_query.distinct().all()}
+            # Lấy hoạt động từ InputInspection (Kiểm tra đầu vào / Phiếu kiểm tra Mobile)
+            insp_rows = db.execute(text("""
+                SELECT cont_name, batch_no, MAX(COALESCE(inspected_at, created_at)) as last_dt
+                FROM input_inspections WITH (NOLOCK)
+                WHERE cont_name IS NOT NULL OR batch_no IS NOT NULL
+                GROUP BY cont_name, batch_no
+            """)).fetchall()
+
+            activity_by_code = {}
+            has_inspection_codes = set()
+            for r in insp_rows:
+                dt = r[2]
+                for val in (r[0], r[1]):
+                    if val:
+                        s = str(val).strip().upper()
+                        if s:
+                            has_inspection_codes.add(s)
+                            if dt and (s not in activity_by_code or dt > activity_by_code[s]):
+                                activity_by_code[s] = dt
 
             result_orders = []
             total_plan_qty = 0
@@ -897,8 +922,30 @@ def get_plan_detail(
                         "bom_details": []
                     })
                 
-                # Check has_data: Có bàn giao (ID) hoặc Có kiểm tra đầu vào (Mã code)
-                order_has_data = (o.id in has_data_ids) or (o.order_code in has_inspection_codes)
+                # Xác định thời gian hoạt động gần nhất (bàn giao hoặc kiểm tra QC)
+                order_code = (o.order_code or "").strip().upper()
+                short_code = None
+                if '-' in order_code:
+                    parts = order_code.split('-')
+                    if len(parts) >= 3:
+                        middle = parts[1].lstrip('0') or '0'
+                        short_code = f"{middle}-{parts[2]}"
+
+                candidates = []
+                if o.id in activity_by_order_id:
+                    candidates.append(activity_by_order_id[o.id])
+                if order_code and order_code in activity_by_code:
+                    candidates.append(activity_by_code[order_code])
+                if short_code and short_code in activity_by_code:
+                    candidates.append(activity_by_code[short_code])
+
+                if not candidates and order_code:
+                    for c_key, c_dt in activity_by_code.items():
+                        if len(c_key) >= 4 and (c_key in order_code or order_code in c_key):
+                            candidates.append(c_dt)
+
+                last_dt = max(candidates) if candidates else None
+                order_has_data = bool(last_dt or (o.id in has_data_ids) or (order_code in has_inspection_codes))
                 
                 result_orders.append({
                     "id": o.id,
@@ -908,12 +955,16 @@ def get_plan_detail(
                     "priority_score": getattr(o, 'priority_score', 0),
                     "order_status": o.order_status or 0,
                     "has_data": order_has_data,
+                    "last_activity": last_dt.strftime("%Y-%m-%d %H:%M:%S") if last_dt else None,
+                    "last_activity_dt": last_dt,
                     "order_progress": 0.0,
                     "products": products_list
                 })
             
             # Nếu KHÔNG phân trang (tương thích ngược)
             if page is None:
+                for o in result_orders:
+                    o.pop("last_activity_dt", None)
                 return {
                     "id": plan_info.id,
                     "name": plan_info.name,
@@ -957,12 +1008,28 @@ def get_plan_detail(
                 result_orders.sort(key=lambda x: sum(p["quantity"] for p in x["products"]))
             elif sortBy == 'qty_desc':
                 result_orders.sort(key=lambda x: sum(p["quantity"] for p in x["products"]), reverse=True)
+            elif sortBy == 'oldest_data':
+                def sort_key_oldest(x):
+                    ts = x["last_activity_dt"].timestamp() if x.get("last_activity_dt") else 0.0
+                    has_act = 0 if ts > 0 else 1
+                    return (has_act, ts, -(x.get("id") or 0))
+                result_orders.sort(key=sort_key_oldest)
+            else:
+                # Mặc định ('none', 'latest_data', None):
+                # PO có dữ liệu hoạt động gần nhất xếp lên đầu (giảm dần theo thời gian)
+                def sort_key_latest(x):
+                    ts = x["last_activity_dt"].timestamp() if x.get("last_activity_dt") else 0.0
+                    has_act = 1 if ts > 0 else 0
+                    return (has_act, ts, x.get("id") or 0)
+                result_orders.sort(key=sort_key_latest, reverse=True)
 
             # Phân trang
             total_count = len(result_orders)
             start_idx = (page - 1) * pageSize
             end_idx = start_idx + pageSize
             paginated_orders = result_orders[start_idx:end_idx]
+            for o in paginated_orders:
+                o.pop("last_activity_dt", None)
 
             # Thống kê stats của tập kết quả khớp lọc trước khi cắt trang
             stats = {"all": 0, "has_data": 0, "no_data": 0}

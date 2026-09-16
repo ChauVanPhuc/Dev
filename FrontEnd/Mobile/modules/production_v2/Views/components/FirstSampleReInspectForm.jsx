@@ -67,8 +67,9 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
   const isSampleQtyDisabled = readOnly || !hasStage || !hasPo || !hasProduct
 
   const isComponentStage = stage && ['tạo phôi', 'phôi', 'định hình', 'lắp ráp'].some(s => stage.toLowerCase().includes(s))
-  const isFinishedStage = stage && ['sơn', 'đóng gói'].some(s => stage.toLowerCase().includes(s))
-  const itemLabel = isComponentStage ? 'Chi tiết' : (isFinishedStage ? 'Sản phẩm' : 'Chi tiết / Sản phẩm')
+  const isFinishedStage = stage && ['sơn', 'đóng gói', 'bao bì', 'lưu kho'].some(s => stage.toLowerCase().includes(s))
+  const isPackagingStage = stage && ['đóng gói', 'dong goi', 'bao bì', 'đóng thùng'].some(s => stage.toLowerCase().includes(s))
+  const itemLabel = isPackagingStage ? 'Sản phẩm (Tủ)' : (isComponentStage ? 'Chi tiết' : (isFinishedStage ? 'Sản phẩm' : 'Chi tiết / Sản phẩm'))
 
   const poPlaceholder = !hasStage ? 'Chọn công đoạn trước' : 'Nhập hoặc chọn PO...'
   const productPlaceholder = !hasStage ? 'Chọn công đoạn trước' : (!hasPo ? 'Chọn PO trước' : `Chọn ${itemLabel.toLowerCase()}...`)

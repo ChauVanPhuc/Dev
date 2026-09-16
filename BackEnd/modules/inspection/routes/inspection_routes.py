@@ -1771,20 +1771,24 @@ async def upload_inspection_image_file(
     file: Optional[UploadFile] = File(None),
 ):
     """
-    [POST] Tải 1 ảnh lên máy chủ và trả về đường dẫn.
+    [POST] Tải 1 ảnh kiểm tra chất lượng lên máy chủ và trả về đường dẫn.
     """
     upload_file = image or file
     if not upload_file:
-        raise HTTPException(status_code=400, detail="Không có file ảnh nào được gửi")
+        raise HTTPException(status_code=400, detail="Không tìm thấy tệp ảnh tải lên.")
     try:
-        ext = os.path.splitext(upload_file.filename)[1] or ".jpg"
+        upload_dir = get_upload_dir("inspections")
+        os.makedirs(upload_dir, exist_ok=True)
+        ext = os.path.splitext(upload_file.filename or "")[1] or ".jpg"
         filename = f"{uuid.uuid4()}{ext}"
-        filepath = os.path.join(UPLOAD_DIR, filename)
+        filepath = os.path.join(upload_dir, filename)
+        content = await upload_file.read()
         with open(filepath, "wb") as buffer:
-            buffer.write(await upload_file.read())
+            buffer.write(content)
         url = f"/static/uploads/inspections/{filename}"
-        return {"url": url, "path": url}
+        return {"url": url, "path": url, "success": True}
     except Exception as e:
+        logger.error(f"Lỗi tải ảnh inspection: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Lỗi tải ảnh: {str(e)}")
 
 
@@ -4010,33 +4014,7 @@ def cancel_inspection_return(id: int, reason: Optional[str] = Body(None, embed=T
         raise HTTPException(status_code=500, detail=f"Lỗi khi hủy trả hàng: {str(e)}")
 
 
-@router.post("/upload-image")
-@router.post("/upload-image/")
-async def upload_inspection_image(
-    image: Optional[UploadFile] = File(None),
-    file: Optional[UploadFile] = File(None)
-):
-    """
-    [POST] Tải lên hình ảnh kiểm tra chất lượng (QC inspection).
-    Lưu vào BackEnd/static/uploads/inspections/
-    """
-    upload_file = image or file
-    if not upload_file:
-        raise HTTPException(status_code=400, detail="Không tìm thấy tệp ảnh tải lên.")
 
-    upload_dir = get_upload_dir("inspections")
-
-    file_ext = os.path.splitext(upload_file.filename or "")[1]
-    if not file_ext:
-        file_ext = ".jpg"
-    new_filename = f"{uuid.uuid4()}{file_ext}"
-    file_path = os.path.join(upload_dir, new_filename)
-
-    with open(file_path, "wb") as buffer:
-        content = await upload_file.read()
-        buffer.write(content)
-
-    return {"url": f"/static/uploads/inspections/{new_filename}", "success": True}
 
 
 @router.get("/kpi-targets")

@@ -518,6 +518,9 @@ export const useInspectionReports = () => {
     if (filterPending24h) {
       const limitTime = new Date(Date.now() - 24 * 60 * 60 * 1000);
       result = result.filter(item => !item.is_confirmed && new Date(item.created_at || item.inspection_date) >= limitTime);
+    } else {
+      // Mặc định chỉ hiện phiếu đã xác nhận
+      result = result.filter(item => item.is_confirmed === true);
     }
 
     // Search filter (PO, SKU, Inspector, ID)
@@ -588,6 +591,9 @@ export const useInspectionReports = () => {
     if (filterPending24h) {
       const limitTime = new Date(Date.now() - 24 * 60 * 60 * 1000);
       result = result.filter(item => !item.is_confirmed && new Date(item.created_at || item.inspection_date) >= limitTime);
+    } else {
+      // Mặc định chỉ hiện phiếu đã xác nhận
+      result = result.filter(item => item.is_confirmed === true);
     }
 
     // Search filter (PO, SKU, Inspector, ID)
@@ -648,6 +654,9 @@ export const useInspectionReports = () => {
     if (filterPending24h) {
       const limitTime = new Date(Date.now() - 24 * 60 * 60 * 1000);
       result = result.filter(item => !item.is_confirmed && new Date(item.created_at || item.inspection_date) >= limitTime);
+    } else {
+      // Mặc định chỉ hiện phiếu đã xác nhận
+      result = result.filter(item => item.is_confirmed === true);
     }
 
     // Search filter (PO, SKU, Inspector, ID)
@@ -869,10 +878,13 @@ export const useInspectionReports = () => {
       });
     });
 
-    // 24h filter
+    // 24h filter / Confirmation filter
     if (filterPending24h) {
       const limitTime = new Date(Date.now() - 24 * 60 * 60 * 1000);
       list = list.filter(item => item.type !== 'daily' && !item.is_confirmed && new Date(item.created_at || item.inspection_date) >= limitTime);
+    } else {
+      // Mặc định chỉ hiện phiếu đã xác nhận (daily luôn is_confirmed=true nên không bị ảnh hưởng)
+      list = list.filter(item => item.is_confirmed === true);
     }
     
     // Search query
@@ -1986,8 +1998,14 @@ export const useInspectionReports = () => {
       const parsedImages = typeof item.images_json === 'string' ? JSON.parse(item.images_json || '{}') : (item.images_json || {});
       Object.values(parsedImages).forEach(val => {
         if (Array.isArray(val)) imagesList.push(...val);
+        else if (typeof val === 'string') imagesList.push(val);
       });
     } catch (e) {}
+    if (item.image_path_1) imagesList.push(item.image_path_1);
+    if (item.image_path_2) imagesList.push(item.image_path_2);
+    if (item.image_path_3) imagesList.push(item.image_path_3);
+    if (Array.isArray(parsed.images)) imagesList.push(...parsed.images);
+    else if (typeof parsed.images === 'string') imagesList.push(parsed.images);
 
     const uniqueImages = Array.from(new Set(imagesList)).filter(Boolean);
     if (uniqueImages.length > 0) {

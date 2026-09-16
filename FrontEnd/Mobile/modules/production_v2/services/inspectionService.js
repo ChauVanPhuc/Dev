@@ -1,4 +1,5 @@
 import apiClient from '@shared/services/api'
+import { compressImage } from '@shared/utils/imageCompressor'
 import { PAGE_SIZE } from '../constants'
 
 export const inspectionService = {
@@ -140,36 +141,6 @@ export const inspectionService = {
   },
 
   async create(payload) {
-    if (payload && (payload.mode === 'daily' || payload.mode === 'DAILY')) {
-      const defects = (payload.errors || [])
-        .filter(e => (e.defectId || e.defect_id || e.name || e.id) && Number(e.qty) > 0)
-        .map(e => {
-          const rawId = e.defectId || e.defect_id || e.id
-          const validId = rawId && !isNaN(Number(rawId)) && Number(rawId) < 100000000000 ? Number(rawId) : 1001
-          return {
-            defect_id: validId,
-            quantity: Number(e.qty) || 0
-          }
-        })
-      
-      const totalDefects = defects.reduce((sum, d) => sum + d.quantity, 0)
-      const totalProducts = Number(payload.sampleQty || payload.total_products || payload.requiredQty) || 100
-      const defectRate = totalProducts > 0 ? Number(((totalDefects / totalProducts) * 100).toFixed(2)) : 0
-
-      const dailyBody = {
-        inspection_date: new Date().toISOString().split('T')[0],
-        stage_name: payload.stage || payload.stage_name || 'Nhập Kho',
-        inspector_id: payload.inspector_id || payload.inspectorId || null,
-        batch_no: payload.po || payload.batch_no || null,
-        pallet_code: payload.palletCode || payload.pallet_code || null,
-        total_products: totalProducts,
-        total_defects: totalDefects,
-        defect_rate: defectRate,
-        defects: defects
-      }
-      const res = await apiClient.post('/inspections/daily', dailyBody)
-      return res.data
-    }
     const res = await apiClient.post('/inspections/', payload)
     return res.data
   },
@@ -180,17 +151,33 @@ export const inspectionService = {
   },
 
   async uploadImage(file) {
+    let uploadPayload = file
     try {
+      uploadPayload = await compressImage(file)
+    } catch (err) {
+      console.warn('[inspectionService] Nén ảnh thất bại, dùng file gốc:', err)
+    }
+
+    const doUpload = async () => {
       const form = new FormData()
-      form.append('image', file)
-      form.append('file', file)
+      form.append('image', uploadPayload)
+      form.append('file', uploadPayload)
       const res = await apiClient.post('/inspections/upload-image', form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 60000,
       })
       return res.data
+    }
+
+    try {
+      return await doUpload()
     } catch (e) {
-      console.warn('[inspectionService] Upload image to server failed, using local object URL fallback:', e)
-      return { url: URL.createObjectURL(file) }
+      console.warn('[inspectionService] Lần upload đầu thất bại, thử lại lần 2...', e)
+      try {
+        return await doUpload()
+      } catch (retryErr) {
+        console.error('[inspectionService] Upload image to server failed after retry:', retryErr)
+        throw retryErr
+      }
     }
   },
 

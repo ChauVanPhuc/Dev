@@ -1002,7 +1002,7 @@ const InspectionReportsView = ({ onlyDefects = false, isEmbedded = false } = {})
             }
           });
         }
-        // Add general images (images_json)
+        // Add general images (images_json, image_path_1..3, parsedData.images)
         let generalImages = [];
         try {
           const parsedImages = typeof item.images_json === 'string' ? JSON.parse(item.images_json || '{}') : (item.images_json || {});
@@ -1011,6 +1011,12 @@ const InspectionReportsView = ({ onlyDefects = false, isEmbedded = false } = {})
             else if (typeof val === 'string') generalImages.push(val);
           });
         } catch(e){}
+        if (item.image_path_1) generalImages.push(item.image_path_1);
+        if (item.image_path_2) generalImages.push(item.image_path_2);
+        if (item.image_path_3) generalImages.push(item.image_path_3);
+        if (Array.isArray(parsedData.images)) generalImages.push(...parsedData.images);
+        else if (typeof parsedData.images === 'string') generalImages.push(parsedData.images);
+
         const usedDetailImages = new Set(imagesList);
         const remainingModalImages = Array.from(new Set(generalImages)).filter(img => img && !usedDetailImages.has(img));
 

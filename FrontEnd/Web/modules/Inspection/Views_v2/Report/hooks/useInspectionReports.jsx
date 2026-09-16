@@ -571,6 +571,9 @@ export const useInspectionReports = ({ onlyDefects = false, isEmbedded = false }
     if (filterPending24h) {
       const limitTime = new Date(Date.now() - 24 * 60 * 60 * 1000);
       result = result.filter(item => !item.is_confirmed && new Date(item.created_at || item.inspection_date) >= limitTime);
+    } else {
+      // Mặc định chỉ hiện phiếu đã xác nhận
+      result = result.filter(item => item.is_confirmed === true);
     }
 
     // Search filter (PO, SKU, Inspector, ID)
@@ -641,6 +644,9 @@ export const useInspectionReports = ({ onlyDefects = false, isEmbedded = false }
     if (filterPending24h) {
       const limitTime = new Date(Date.now() - 24 * 60 * 60 * 1000);
       result = result.filter(item => !item.is_confirmed && new Date(item.created_at || item.inspection_date) >= limitTime);
+    } else {
+      // Mặc định chỉ hiện phiếu đã xác nhận
+      result = result.filter(item => item.is_confirmed === true);
     }
 
     // Search filter (PO, SKU, Inspector, ID)
@@ -701,6 +707,9 @@ export const useInspectionReports = ({ onlyDefects = false, isEmbedded = false }
     if (filterPending24h) {
       const limitTime = new Date(Date.now() - 24 * 60 * 60 * 1000);
       result = result.filter(item => !item.is_confirmed && new Date(item.created_at || item.inspection_date) >= limitTime);
+    } else {
+      // Mặc định chỉ hiện phiếu đã xác nhận
+      result = result.filter(item => item.is_confirmed === true);
     }
 
     // Search filter (PO, SKU, Inspector, ID)
@@ -903,10 +912,13 @@ export const useInspectionReports = ({ onlyDefects = false, isEmbedded = false }
       });
     });
 
-    // 24h filter
+    // 24h filter / Confirmation filter
     if (filterPending24h) {
       const limitTime = new Date(Date.now() - 24 * 60 * 60 * 1000);
       list = list.filter(item => item.type !== 'daily' && !item.is_confirmed && new Date(item.created_at || item.inspection_date) >= limitTime);
+    } else {
+      // Mặc định chỉ hiện phiếu đã xác nhận (daily luôn hiện vì không cần xác nhận)
+      list = list.filter(item => item.type === 'daily' || item.is_confirmed === true);
     }
     
     // Search query

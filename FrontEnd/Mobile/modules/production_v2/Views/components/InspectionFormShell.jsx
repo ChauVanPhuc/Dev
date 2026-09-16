@@ -60,7 +60,7 @@ const InspectionFormShell = ({ title, subTitle, formState, children, showLastRes
   )
 
   // Bước 2: Đã điền các trường chính của form chưa
-  const hasPoSelected = Boolean(formState.po || formState.paramPo)
+  const hasPoSelected = Boolean(formState.po || formState.paramPo || formState.palletCode)
   const hasProductSelected = Boolean(formState.product || formState.paramProduct || (formState.selectedProducts && formState.selectedProducts.length > 0))
   const hasQtySelected = Boolean(formState.sampleQty || formState.paramSample || formState.requiredQty)
 

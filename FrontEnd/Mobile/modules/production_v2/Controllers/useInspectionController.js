@@ -138,15 +138,16 @@ export const useInspectionDetail = (id) => {
     try {
       const result = await inspectionService.uploadImage(file)
       const serverUrl = result?.url || result?.path
-      if (serverUrl && tempUrl) {
+      if (serverUrl && tempUrl && !String(serverUrl).startsWith('blob:')) {
         setImages((prev) => prev.map((img) => (img === tempUrl ? serverUrl : img)))
       }
       return result
     } catch (err) {
-      console.warn('Lỗi khi tải ảnh lên server:', err)
+      console.error('Lỗi khi tải ảnh lên server:', err)
       if (tempUrl) {
         setImages((prev) => prev.filter((img) => img !== tempUrl))
       }
+      alert('Không thể tải ảnh lên máy chủ. Vui lòng thử lại!')
     }
   }
 

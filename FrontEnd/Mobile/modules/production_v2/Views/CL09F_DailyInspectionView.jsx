@@ -13,6 +13,9 @@ const CL09F_DailyInspectionView = () => {
   const {
     readOnly,
     stage,
+    setStage,
+    handleStageChange,
+    stageOptions,
     po,
     setPo,
     handlePoChange,
@@ -21,9 +24,11 @@ const CL09F_DailyInspectionView = () => {
     palletCode,
     setPalletCode,
     palletOptions,
+    handlePalletSelect,
     product,
     productOptions,
     selectedProducts,
+    selectedSpecs,
     handleMultiProductChange,
     sampleQty,
     setSampleQty,
@@ -41,9 +46,23 @@ const CL09F_DailyInspectionView = () => {
 
   const hasStage = Boolean(stage)
   const hasPo = Boolean(po)
+  const hasPallet = Boolean(palletCode)
+  const hasProduct = Boolean(product || (selectedProducts && selectedProducts.length > 0))
+
+  const isPoDisabled = readOnly || !hasStage
+  const isPalletDisabled = readOnly || !hasStage
+  const isProductDisabled = readOnly || !hasStage || (targetType === 'po' ? !hasPo : !hasPallet)
+  const isSampleDisabled = readOnly || !hasStage || (targetType === 'po' ? (!hasPo || !hasProduct) : (!hasPallet || !hasProduct))
 
   const poPlaceholder = !hasStage ? 'Chọn công đoạn trước' : 'Nhập hoặc chọn PO...'
-  const productPlaceholder = !hasStage ? 'Chọn công đoạn trước' : (!hasPo ? 'Chọn PO trước' : 'Chọn sản phẩm / chi tiết...')
+  const palletPlaceholder = !hasStage ? 'Chọn công đoạn trước' : 'Chọn hoặc nhập mã Pallet...'
+  const productPlaceholder = !hasStage 
+    ? 'Chọn công đoạn trước' 
+    : (targetType === 'po' 
+        ? (!hasPo ? 'Chọn PO trước' : 'Chọn sản phẩm / chi tiết...') 
+        : (!hasPallet ? 'Chọn Pallet trước' : 'Chọn sản phẩm / chi tiết...'))
+
+  const safeProductOptions = Array.isArray(productOptions) ? productOptions.filter((o) => Boolean(o && o.value)) : []
 
   // Tự động tính toán tổng số lỗi & tỷ lệ lỗi %
   const totalDefects = useMemo(() => {
@@ -104,7 +123,7 @@ const CL09F_DailyInspectionView = () => {
             </label>
           </div>
 
-          {/* Hàng 1: (Mã PO HOẶC Mã Pallet) + Công đoạn */}
+          {/* Hàng 1: (Mã PO HOẶC Mã Pallet) + Số lượng mẫu kiểm tra */}
           <div className="pv2-field-row pv2-field-row--2col">
             {targetType === 'po' ? (
               <div className="pv2-field">
@@ -113,8 +132,8 @@ const CL09F_DailyInspectionView = () => {
                   value={po}
                   options={poOptions || []}
                   onChange={handlePoChange || setPo}
-                  disabled={readOnly}
-                  placeholder="Chọn hoặc nhập mã PO..."
+                  disabled={isPoDisabled}
+                  placeholder={poPlaceholder}
                   allowCustomInput={true}
                   onSearch={handlePoSearch}
                 />
@@ -126,39 +145,12 @@ const CL09F_DailyInspectionView = () => {
                   value={palletCode}
                   options={palletOptions || []}
                   onChange={handlePalletSelect || setPalletCode}
-                  disabled={readOnly}
-                  placeholder="Chọn hoặc nhập mã Pallet..."
+                  disabled={isPalletDisabled}
+                  placeholder={palletPlaceholder}
                   allowCustomInput={true}
                 />
               </div>
             )}
-
-            <div className="pv2-field">
-              <label>Công đoạn <span className="pv2-req">*</span></label>
-              <CustomSelect
-                value={stage}
-                options={stageOptions || []}
-                onChange={handleStageChange || setStage}
-                disabled={readOnly}
-                placeholder="Chọn công đoạn..."
-              />
-            </div>
-          </div>
-
-          {/* Hàng 2: Chi tiết / Sản phẩm + Số lượng mẫu kiểm tra */}
-          <div className="pv2-field-row pv2-field-row--2col">
-            <div className="pv2-field">
-              <label>Chi tiết / Sản phẩm <span className="pv2-req">*</span></label>
-              <FormMultiSearchSelect
-                values={selectedProducts || []}
-                options={safeProductOptions}
-                onChange={handleMultiProductChange}
-                placeholder={productPlaceholder}
-                itemType="sản phẩm"
-                required
-                disabled={isProductDisabled}
-              />
-            </div>
 
             <div className="pv2-field">
               <label>SL mẫu kiểm tra <span className="pv2-req">*</span></label>
@@ -183,6 +175,20 @@ const CL09F_DailyInspectionView = () => {
                 }}
               />
             </div>
+          </div>
+
+          {/* Hàng 2: Chi tiết / Sản phẩm */}
+          <div className="pv2-field" style={{ marginTop: '8px' }}>
+            <label>Chi tiết / Sản phẩm <span className="pv2-req">*</span></label>
+            <FormMultiSearchSelect
+              values={selectedProducts || []}
+              options={safeProductOptions}
+              onChange={handleMultiProductChange}
+              placeholder={productPlaceholder}
+              itemType="sản phẩm"
+              required
+              disabled={isProductDisabled}
+            />
           </div>
 
           {/* Hàng 3: Quy cách (Nhiều quy cách nếu chọn nhiều chi tiết) */}

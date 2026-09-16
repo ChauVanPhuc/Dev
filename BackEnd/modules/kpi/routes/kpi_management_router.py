@@ -1009,9 +1009,12 @@ def calculate_dynamic_kpi_metric(db: Session, item, emp: Employee, month: int, y
         records_list = [t for t in t_plans if getattr(t, 'created_at', None) and t.created_at.month == month and t.created_at.year == year]
 
     elif ds == 'claim':
-        from modules.claim.models.claim_models import CustomerClaim
-        claims = db.query(CustomerClaim).all()
-        records_list = [c for c in claims if getattr(c, 'created_at', None) and c.created_at.month == month and c.created_at.year == year]
+        try:
+            from modules.claim.models import CustomerClaim
+            claims = db.query(CustomerClaim).all()
+            records_list = [c for c in claims if getattr(c, 'created_at', None) and c.created_at.month == month and c.created_at.year == year]
+        except Exception:
+            records_list = []
 
     # 2. TÍNH TOÁN THEO PHƯƠNG PHÁP (CALC METHOD)
     if records_list or cm == 'attendance_days':
@@ -1607,7 +1610,7 @@ def get_kpi_score_evidence(
     # --- CATEGORY F: Customer Claims ---
     elif category == 'F':
         try:
-            from modules.claim.models.claim_models import CustomerClaim
+            from modules.claim.models import CustomerClaim
             claims = db.query(CustomerClaim).all()
             filtered_c = [c for c in claims if getattr(c, 'created_at', None) and c.created_at.month == month and c.created_at.year == year]
             for c in filtered_c:

@@ -27,17 +27,21 @@ const parseDimensionStringFromText = (text) => {
   if (mBolt) return mBolt[1].replace(/\s*/g, '')
   const mCode = str.match(/(\b[A-Z0-9]{2,6}\s*[-–—]\s*\d{2,4}(?:mm|cm)?\b)/i)
   if (mCode) return mCode[1].replace(/\s*/g, '')
-  const mUnit = str.match(/(\b\d+(?:[.,]\d+)?\s*(?:mm|cm|m)\b)/i)
+  // 6. Single size with unit: e.g. 350mm, 50cm (chỉ chấp nhận mm hoặc cm, không match đơn vị 'm' để tránh nhầm các từ tiếng Việt như 'mặt', 'màu', 'mép')
+  const mUnit = str.match(/(?:^|[^\p{L}\d])(\d+(?:[.,]\d+)?\s*(?:mm|cm))(?:$|[^\p{L}\d])/iu)
   if (mUnit) return mUnit[1].replace(/\s*/g, '')
   return null
 }
 
 const getEffectiveSpec = (specRaw, partName) => {
-  const dimStr = parseDimensionStringFromText(partName)
-  if (dimStr && !isInvalidSpec(dimStr)) return dimStr
+  // 1. Ưu tiên hàng đầu: Lấy quy cách thực tế đã có trong CSDL (specRaw)
   if (specRaw && !isInvalidSpec(specRaw)) {
     return String(specRaw).trim()
   }
+  // 2. Dự phòng: Nếu CSDL không có hoặc invalid, mới trích xuất kích thước từ tên chi tiết (partName)
+  const dimStr = parseDimensionStringFromText(partName)
+  if (dimStr && !isInvalidSpec(dimStr)) return dimStr
+
   return 'Tiêu chuẩn'
 }
 

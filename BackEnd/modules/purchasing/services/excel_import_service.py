@@ -210,6 +210,8 @@ async def process_purchasing_excel(contents: bytes, db: Session, default_order_t
         created_po_count = 0
         updated_po_count = 0
         total_items_count = 0
+        newly_created_pr_ids = set()
+        cleared_pr_ids = set()
 
         # Đọc tất cả dòng dữ liệu
         all_rows = list(ws.iter_rows(min_row=data_start_row, values_only=True))
@@ -260,13 +262,20 @@ async def process_purchasing_excel(contents: bytes, db: Session, default_order_t
                 db.add(pr)
                 db.flush()
                 existing_prs[curr_po_code] = pr
+                newly_created_pr_ids.add(pr.id)
                 created_po_count += 1
             else:
                 pr.order_type = resolved_type
-                if curr_po_date and not pr.order_date: pr.order_date = curr_po_date
-                if curr_delivery_date and not pr.delivery_date: pr.delivery_date = curr_delivery_date
-                if curr_supp_code and not pr.supplier_code: pr.supplier_code = curr_supp_code
-                if curr_supp_name and not pr.supplier_name: pr.supplier_name = curr_supp_name
+                if curr_po_date: pr.order_date = curr_po_date
+                if curr_delivery_date: pr.delivery_date = curr_delivery_date
+                if curr_supp_code: pr.supplier_code = curr_supp_code
+                if curr_supp_name: pr.supplier_name = curr_supp_name
+
+                # [GHI ĐÈ THÔNG MINH] Xóa các dòng mặt hàng cũ của PO này đúng 1 lần trước khi nạp lại
+                if pr.id not in newly_created_pr_ids and pr.id not in cleared_pr_ids:
+                    db.query(PurchaseOrderItem).filter(PurchaseOrderItem.requisition_id == pr.id).delete(synchronize_session=False)
+                    cleared_pr_ids.add(pr.id)
+
                 updated_po_count += 1
 
             prs_to_update.add(pr.id)
@@ -346,19 +355,22 @@ async def process_purchasing_excel(contents: bytes, db: Session, default_order_t
                     else_=PurchaseOrderItem.subtotal_vnd
                 )
             )).filter(PurchaseOrderItem.requisition_id == pr_id).scalar()
-            if sum_val and sum_val > 0:
-                db.query(PurchaseRequisition).filter(PurchaseRequisition.id == pr_id).update(
-                    {PurchaseRequisition.total_amount: float(sum_val)}, synchronize_session=False
-                )
+            db.query(PurchaseRequisition).filter(PurchaseRequisition.id == pr_id).update(
+                {PurchaseRequisition.total_amount: float(sum_val or 0.0)}, synchronize_session=False
+            )
 
         db.commit()
         wb.close()
+
+        msg = f"Nạp dữ liệu thành công! Đã tạo mới {created_po_count} đơn hàng, cập nhật/ghi đè {len(cleared_pr_ids)} đơn hàng cũ và nạp {total_items_count} mặt hàng vào hệ thống."
+        if not cleared_pr_ids:
+            msg = f"Nạp dữ liệu thành công! Đã xử lý {len(prs_to_update)} đơn hàng và nạp {total_items_count} mặt hàng vào hệ thống."
 
         yield json.dumps({
             "status": "completed",
             "processed": total_rows,
             "total": total_rows,
-            "message": f"Nạp dữ liệu thành công! Đã xử lý {len(prs_to_update)} đơn hàng và nạp {total_items_count} mặt hàng vào hệ thống."
+            "message": msg
         }) + "\n"
 
     except Exception as e:

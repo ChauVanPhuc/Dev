@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, or_, and_, text
 from typing import List, Optional, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
+from pydantic import BaseModel
 import logging
 import re
 import json
@@ -146,12 +147,16 @@ def get_available_months(db: Session = Depends(get_db)):
 # 1. CL01: Dashboard thông tin cần chú ý (Real DB + Graceful Fallback)
 # ----------------------------------------------------------------------
 @router.get("/dashboard")
-def get_production_dashboard(db: Session = Depends(get_db)):
+def get_production_dashboard(
+    employee_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
     """
     TRUY VẤN CSDL THỰC: Trả về dữ liệu tổng quan cho trang Trang chủ (CL01: Thông tin cần chú ý)
     """
     try:
         # A. Hiển thị thông báo mới nhất (Ưu tiên lấy từ Tab 6 "Thiết lập cảnh báo" - target_stage='MOBILE_BANNER')
+        # [GIỮ NGUYÊN 100% LOGIC BANNER THEO YÊU CẦU NGƯỜI DÙNG]
         notifications_data = []
         banner_notis = db.query(NotificationModel).filter(
             or_(
@@ -198,55 +203,214 @@ def get_production_dashboard(db: Session = Depends(get_db)):
                 }
             ]
 
-        # B. KPI tháng 3
-        kpi_items = []
-        db_kpis = db.query(KPI).filter(KPI.period_name.like("%Tháng%")).all()
-        if db_kpis:
-            total_actual = 0
-            for k in db_kpis[:5]:
-                val = int(k.actual) if k.actual is not None else 50
-                total_actual += val
-                kpi_items.append({"name": k.content[:8] if k.content else f"KPI {k.id}", "value": min(100, max(0, val))})
-            kpi_score = int(total_actual / len(db_kpis)) if db_kpis else 100
-        else:
-            kpi_score = 100
-            kpi_items = [
-                {"name": "KPI 1", "value": 75},
-                {"name": "KPI 2", "value": 20},
-                {"name": "KPI 3", "value": 55},
-                {"name": "KPI 4", "value": 100},
-                {"name": "KPI 5", "value": 50}
-            ]
+        # B. KPI theo nhân sự từ /admin/kpi/quality-employees
+        # (Nếu nhân sự không có KPI thì để trống - kpi_month: None)
+        kpi_month = None
+        if employee_id and str(employee_id).strip():
+            emp_clean = str(employee_id).strip()
+            try:
+                from modules.kpi.models.kpi_management import KPIEmployeeItem
+                from modules.kpi.routes.kpi_management_router import calculate_employee_kpi_score
+                # Kiểm tra nhân sự có được giao KPI trong bảng kpi_employee_items không
+                has_kpi = db.query(KPIEmployeeItem).filter(KPIEmployeeItem.employee_id == emp_clean).first()
+                if has_kpi:
+                    now_dt = datetime.now()
+                    kpi_calc = calculate_employee_kpi_score(db, emp_clean, now_dt.month, now_dt.year)
+                    details = kpi_calc.get("details", [])
+                    if details and len(details) > 0:
+                        kpi_items = []
+                        for d in details[:5]:
+                            content_txt = d.get("content") or d.get("kpi_code") or "KPI"
+                            kpi_items.append({
+                                "name": d.get("kpi_code") or (content_txt[:12] if len(content_txt) > 12 else content_txt),
+                                "full_name": content_txt,
+                                "value": round(float(d.get("earned_percentage") or 0), 1),
+                                "actual": d.get("actual"),
+                                "target": d.get("target")
+                            })
+                        kpi_month = {
+                            "month": f"Tháng {now_dt.month}",
+                            "score": round(float(kpi_calc.get("total_score") or kpi_calc.get("kpi_score") or 0)),
+                            "items": kpi_items
+                        }
+                else:
+                    kpi_month = None
+            except Exception as err:
+                logger.warning(f"Error calculating employee KPI for {employee_id}: {err}")
+                kpi_month = None
 
-        # C. Các lỗi cần theo dõi (Stacked Bar Chart)
-        tracked_defects = [
-            {"category": "Nứt tét", "this_week": 40, "yesterday": 20},
-            {"category": "Hở", "this_week": 35, "yesterday": 15},
-            {"category": "Lõm", "this_week": 50, "yesterday": 30},
-            {"category": "Lệch màu", "this_week": 60, "yesterday": 40},
-            {"category": "Lỗi đinh", "this_week": 80, "yesterday": 50},
-            {"category": "Khác", "this_week": 25, "yesterday": 15}
-        ]
+        # C. Các lỗi cần theo dõi (Real Stacked Bar Chart từ CSDL xưởng)
+        today = date.today()
+        start_of_week = today - timedelta(days=today.weekday())
+        yesterday = today - timedelta(days=1)
 
-        # D. Công việc cần làm
-        action_items = [
-            {"stt": "01", "task_name": "Xác nhận hồ sơ kiểm tra", "status": "Chưa Làm", "notes": "", "status_color": "#dc2626"},
-            {"stt": "02", "task_name": "Kiểm tra độ ẩm gỗ xưởng 1", "status": "Đã Làm", "notes": "Đạt chuẩn 12%", "status_color": "#16a34a"}
-        ]
+        # Lấy top 5 loại lỗi phát sinh nhiều nhất 30 ngày gần đây
+        top_defects_query = db.execute(text("""
+            SELECT TOP 5 dt.id, dt.name, SUM(d.quantity) as total_qty
+            FROM defect_types dt
+            JOIN daily_inspection_defects d ON dt.id = d.defect_id
+            JOIN daily_inspection_records r ON d.record_id = r.id
+            WHERE r.inspection_date >= DATEADD(day, -30, GETDATE())
+            GROUP BY dt.id, dt.name
+            ORDER BY total_qty DESC
+        """)).fetchall()
+
+        top_defect_ids = [r[0] for r in top_defects_query]
+        top_defect_names = {r[0]: r[1] for r in top_defects_query}
+
+        week_sql = text("""
+            SELECT dt.id, dt.name, 
+                   SUM(CASE WHEN r.inspection_date >= :start_week THEN d.quantity ELSE 0 END) as this_week,
+                   SUM(CASE WHEN r.inspection_date = :yesterday THEN d.quantity ELSE 0 END) as yesterday
+            FROM daily_inspection_defects d
+            JOIN daily_inspection_records r ON d.record_id = r.id
+            JOIN defect_types dt ON d.defect_id = dt.id
+            WHERE r.inspection_date >= :start_week
+            GROUP BY dt.id, dt.name
+        """)
+        week_rows = db.execute(week_sql, {"start_week": start_of_week, "yesterday": yesterday}).fetchall()
+
+        tracked_defects = []
+        other_week = 0
+        other_yesterday = 0
+        matched_ids = set()
+
+        for r in week_rows:
+            def_id, def_name, w_qty, y_qty = r[0], r[1], int(r[2] or 0), int(r[3] or 0)
+            if def_id in top_defect_ids:
+                tracked_defects.append({
+                    "category": def_name,
+                    "this_week": w_qty,
+                    "yesterday": y_qty
+                })
+                matched_ids.add(def_id)
+            else:
+                other_week += w_qty
+                other_yesterday += y_qty
+
+        # Điền các loại lỗi trong top 5 nếu chưa có số liệu tuần này (với số 0)
+        for def_id in top_defect_ids:
+            if def_id not in matched_ids:
+                tracked_defects.append({
+                    "category": top_defect_names[def_id],
+                    "this_week": 0,
+                    "yesterday": 0
+                })
+
+        tracked_defects.append({
+            "category": "Khác",
+            "this_week": other_week,
+            "yesterday": other_yesterday
+        })
+
+        # D. Công việc cần làm (Checklist theo nhân sự từ /admin/kpi/quality-employees)
+        from modules.kpi.models.kpi_management import KPIChecklist
+        from modules.kpi.models.quality_employee import QualityEmployee
+
+        action_items = []
+        chk_query_items = []
+
+        if employee_id and str(employee_id).strip():
+            emp_clean = str(employee_id).strip()
+            # 1. Kiểm tra checklist trực tiếp theo employee_id
+            chk_query_items = db.query(KPIChecklist).filter(KPIChecklist.employee_id == emp_clean).all()
+
+            # 2. Nếu chưa có, map theo phòng ban/công đoạn trong quality_employees
+            if not chk_query_items:
+                q_emp = db.query(QualityEmployee).filter(
+                    (QualityEmployee.employee_id == emp_clean) |
+                    (QualityEmployee.id == (int(emp_clean) if emp_clean.isdigit() else -1))
+                ).first()
+                if q_emp:
+                    st = (q_emp.stage or '').lower()
+                    dept_code = "IQC"
+                    if any(k in st for k in ["trưởng", "giám đốc", "quản lý", "manager"]):
+                        dept_code = "MANAGER"
+                    elif any(k in st for k in ["qa", "đảm bảo"]):
+                        dept_code = "QA"
+                    elif any(k in st for k in ["tổ trưởng", "lead"]):
+                        dept_code = "QC_LEAD"
+                    elif any(k in st for k in ["sơn", "đóng gói"]):
+                        dept_code = "PQC2"
+                    elif any(k in st for k in ["định hình", "lắp ráp", "mộc"]):
+                        dept_code = "PQC1"
+                    elif any(k in st for k in ["fqc", "final", "xuất kho"]):
+                        dept_code = "FQC"
+
+                    chk_query_items = db.query(KPIChecklist).filter(
+                        or_(
+                            KPIChecklist.employee_id == f"NV_{dept_code}_001",
+                            KPIChecklist.department_code == dept_code
+                        )
+                    ).all()
+
+        # Fallback danh mục checklist chung nếu chưa lọc được
+        if not chk_query_items:
+            chk_query_items = db.query(KPIChecklist).order_by(KPIChecklist.id.asc()).limit(6).all()
+
+        for idx, c in enumerate(chk_query_items):
+            st_color = "#16a34a" if c.status_today == "Đã hoàn thành" else ("#ea580c" if c.status_today == "Đang thực hiện" else "#dc2626")
+            st_text = "Đã Làm" if c.status_today == "Đã hoàn thành" else ("Đang Làm" if c.status_today == "Đang thực hiện" else "Chưa Làm")
+            action_items.append({
+                "id": c.id,
+                "stt": f"{(idx+1):02d}",
+                "task_code": c.task_code or "",
+                "task_name": c.content,
+                "status": st_text,
+                "status_color": st_color,
+                "notes": c.result or ""
+            })
 
         return {
             "notifications": notifications_data,
-            "kpi_month": {
-                "month": "Tháng 3",
-                "score": kpi_score,
-                "items": kpi_items
-            },
+            "kpi_month": kpi_month,
             "tracked_defects": tracked_defects,
             "action_items": action_items
         }
     except Exception as e:
         logger.error(f"Lỗi khi lấy dữ liệu Dashboard: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class ChecklistUpdatePayload(BaseModel):
+    notes: Optional[str] = None
+    status: Optional[str] = None
+
+
+@router.put("/dashboard/checklist/{checklist_id}")
+def update_dashboard_checklist(
+    checklist_id: int,
+    payload: ChecklistUpdatePayload,
+    db: Session = Depends(get_db)
+):
+    """
+    [PUT] Cập nhật kết quả ghi chú hoặc trạng thái thực hiện của 1 mục checklist từ Mobile Dashboard.
+    """
+    from modules.kpi.models.kpi_management import KPIChecklist
+    chk = db.query(KPIChecklist).filter(KPIChecklist.id == checklist_id).first()
+    if not chk:
+        raise HTTPException(status_code=404, detail="Không tìm thấy mục checklist")
+
+    if payload.notes is not None:
+        chk.result = payload.notes
+    if payload.status is not None:
+        if payload.status in ["Đã Làm", "Đã hoàn thành"]:
+            chk.status_today = "Đã hoàn thành"
+        elif payload.status in ["Đang Làm", "Đang thực hiện"]:
+            chk.status_today = "Đang thực hiện"
+        elif payload.status in ["Chưa Làm", "Chưa làm"]:
+            chk.status_today = "Chưa làm"
+        else:
+            chk.status_today = payload.status
+
+    db.commit()
+    db.refresh(chk)
+    return {
+        "message": "Cập nhật thành công",
+        "id": chk.id,
+        "status_today": chk.status_today,
+        "result": chk.result
+    }
 
 # ----------------------------------------------------------------------
 # 2.1: Danh sách Cấu trúc Nhà máy từ CSDL (HRFactoryStructure)
@@ -334,8 +498,9 @@ def get_po_codes(
                 Order.partner_po.ilike(s),
                 Order.production_code.ilike(s)
             ))
-            
-        rows = query.order_by(Order.id.desc()).limit(limit).all()
+            rows = query.order_by(Order.order_code.asc(), Order.id.desc()).limit(limit).all()
+        else:
+            rows = query.order_by(Order.id.desc()).limit(limit).all()
         
         codes = []
         seen = set()
@@ -872,6 +1037,68 @@ def get_order_bom(
 
             selected_clean = clean_st(stage)
 
+            # ------------------------------------------------------------------
+            # ĐẶC BIỆT: Đối với công đoạn Đóng Gói (hoặc Lưu Kho, Thành Phẩm)
+            # Tại công đoạn này sản phẩm đã hoàn thiện thành TỦ, không còn là chi tiết gỗ rời.
+            # Trực tiếp trả về danh sách các sản phẩm Tủ trong PO (từ order.products).
+            # ------------------------------------------------------------------
+            is_packaging_or_fg_stage = any(
+                kw in selected_clean for kw in [
+                    "đóng gói", "dong goi", "bao bì", "bao bi", 
+                    "đóng thùng", "dong thung", "lưu kho", "luu kho", 
+                    "thành phẩm", "thanh pham"
+                ]
+            )
+
+            if is_packaging_or_fg_stage and order and order.products:
+                from modules.master.models.master_product import MasterProduct
+                parts_map = {}
+                for p in order.products:
+                    p_name = (p.name or p.sku or "Tủ").strip()
+                    p_sku = (p.sku or "").strip()
+                    p_label = f"{p_name} ({p_sku})" if (p_sku and p_sku.lower() != p_name.lower()) else p_name
+                    
+                    spec = (p.specification or "").strip()
+                    if is_invalid_spec(spec):
+                        if p.length and p.width and p.height and float(p.length) > 0 and float(p.width) > 0 and float(p.height) > 0:
+                            spec = f"{int(p.length)}*{int(p.width)}*{int(p.height)}"
+                        else:
+                            mp = db.query(MasterProduct).filter(MasterProduct.sku == p_sku).first() if p_sku else None
+                            if mp and mp.specification and not is_invalid_spec(mp.specification):
+                                spec = mp.specification.strip()
+                            elif mp and mp.length and mp.width and mp.height and float(mp.length) > 0 and float(mp.width) > 0 and float(mp.height) > 0:
+                                spec = f"{int(mp.length)}*{int(mp.width)}*{int(mp.height)}"
+                            else:
+                                spec = "Tiêu chuẩn"
+                    
+                    qty = int(float(p.order_qty or p.quantity or p.production_qty or 1))
+                    unit = p.unit or "Bộ"
+                    
+                    if p_name not in parts_map:
+                        parts_map[p_name] = {
+                            "part_name": p_name,
+                            "label": p_label,
+                            "sku": p_sku,
+                            "total_qty": 0,
+                            "unit": unit,
+                            "specs_map": {}
+                        }
+                    parts_map[p_name]["total_qty"] += qty
+                    parts_map[p_name]["specs_map"][spec] = parts_map[p_name]["specs_map"].get(spec, 0) + qty
+
+                return [
+                    {
+                        "part_name": data["part_name"],
+                        "label": data.get("label", data["part_name"]),
+                        "sku": data.get("sku", ""),
+                        "total_qty": data["total_qty"],
+                        "unit": data.get("unit", "Bộ"),
+                        "is_converted": False,
+                        "specs": [{"specification": k, "qty": v} for k, v in data["specs_map"].items()]
+                    }
+                    for _, data in parts_map.items()
+                ]
+
             def check_single_stage(item_clean: str) -> bool:
                 if not item_clean or item_clean in ["all", "chung", "tất cả"]:
                     return True
@@ -881,7 +1108,7 @@ def get_order_bom(
                     return True
                 if selected_clean == "định hình" and ("định hình" in item_clean or "dinh hinh" in item_clean):
                     return True
-                if selected_clean == "lắp ráp" and ("lắp ráp" in item_clean or "lap rap" in item_clean or "chà nhám" in item_clean):
+                if selected_clean == "lắp ráp" and ("lắp ráp" in item_clean or "lap rap" in item_clean or "chà nhám" in item_clean or "sơn" in item_clean or "son" in item_clean):
                     return True
                 if selected_clean == "sơn" and ("sơn" in item_clean or "son" in item_clean):
                     return True
@@ -901,7 +1128,10 @@ def get_order_bom(
                 if selected_clean == "định hình":
                     return "định hình" in out_st or (not out_st and "lắp ráp" in in_st)
                 if selected_clean == "lắp ráp":
-                    return "lắp ráp" in out_st or "chà nhám" in out_st or (not out_st and ("sơn" in in_st or "đóng gói" in in_st))
+                    # Lắp Ráp lấy luôn dữ liệu của Sơn: Khớp chi tiết của Lắp Ráp HOẶC của Sơn
+                    is_lr = "lắp ráp" in out_st or "chà nhám" in out_st or (not out_st and ("sơn" in in_st or "đóng gói" in in_st))
+                    is_son = "sơn" in out_st or (not out_st and "đóng gói" in in_st)
+                    return is_lr or is_son
                 if selected_clean == "sơn":
                     return "sơn" in out_st or (not out_st and "đóng gói" in in_st)
                 if selected_clean == "đóng gói":
@@ -1051,7 +1281,7 @@ def get_order_bom(
                                     if "định hình" in out_st or "dinh hinh" in out_st or (not out_st and ("lắp ráp" in in_st or "lap rap" in in_st)):
                                         filtered_boms.append(mb)
                                 elif "lắp ráp" in stage_str or "lap rap" in stage_str:
-                                    if "lắp ráp" in out_st or "lap rap" in out_st or "chà nhám" in out_st or (not out_st and ("sơn" in in_st or "son" in in_st or "đóng gói" in in_st or "dong goi" in in_st)):
+                                    if "lắp ráp" in out_st or "lap rap" in out_st or "chà nhám" in out_st or "sơn" in out_st or "son" in out_st or (not out_st and ("sơn" in in_st or "son" in in_st or "đóng gói" in in_st or "dong goi" in in_st)):
                                         filtered_boms.append(mb)
                                 elif "sơn" in stage_str or "son" in stage_str:
                                     if "sơn" in out_st or "son" in out_st or (not out_st and ("đóng gói" in in_st or "dong goi" in in_st)):
@@ -1138,6 +1368,8 @@ def get_order_bom(
         return [
             {
                 "part_name": data["part_name"],
+                "label": data.get("label", data["part_name"]),
+                "sku": data.get("sku", ""),
                 "total_qty": data["total_qty"],
                 "unit": data.get("unit", ""),
                 "is_converted": data.get("is_converted", False),
