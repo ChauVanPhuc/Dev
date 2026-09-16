@@ -105,7 +105,7 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
         ? `Chọn ${itemLabel.toLowerCase()} trước`
         : (!hasSpec
           ? 'Chọn quy cách trước...'
-          : (isIncoming ? 'Nhập SL giao đợt này...' : 'Nhập SL kiểm tra đợt này...'))))
+          : (isIncoming ? 'Nhập SL giao đợt này...' : 'SL kiểm tra theo AQL...'))))
 
   const hasSampleQty = Boolean(sampleQty || requiredQty)
   const isFormFilled = readOnly || (hasPo && hasProduct && hasSpec && hasSampleQty)
@@ -254,7 +254,7 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
             className={`pv2-input ${isSampleQtyDisabled ? 'pv2-input--disabled' : ''}`}
             value={sampleQty}
             onChange={(e) => setSampleQty(e.target.value)}
-            placeholder={!hasSpec ? '—' : (mode === INSPECT_MODES.FIRST_SAMPLE ? '5' : (samplingRule?.sample_size ? String(samplingRule.sample_size) : ''))}
+            placeholder={!hasSpec ? '—' : (samplingRule?.sample_size ? String(samplingRule.sample_size) : (requiredQty || '—'))}
             disabled={isSampleQtyDisabled}
           />
         </div>

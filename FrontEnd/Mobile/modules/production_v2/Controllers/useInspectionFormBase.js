@@ -18,6 +18,18 @@ import { extractRootPo, deduplicatePoCodes } from '../utils/poHelper'
 
 const initErrors = () => [{ id: 1, name: '', qty: 0 }]
 
+export const calculateAqlSampleSize = (lotSize) => {
+  const n = Number(lotSize) || 0
+  if (n <= 0) return 0
+  if (n <= 50) return Math.min(n, 5)
+  if (n <= 150) return 12
+  if (n <= 280) return 20
+  if (n <= 500) return 32
+  if (n <= 1200) return 65
+  if (n <= 3200) return 125
+  return 200
+}
+
 const isInvalidSpec = (spec) => {
   if (!spec) return true
   const str = String(spec).trim()
@@ -323,6 +335,16 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
   useEffect(() => {
     totalInspectedSoFarRef.current = totalInspectedSoFar
   }, [totalInspectedSoFar])
+
+  const isIncoming = useMemo(() => {
+    const s = (stage || paramStage || '').toLowerCase()
+    return Boolean(
+      s.includes('nhập kho') ||
+      s.includes('nhap kho') ||
+      s.includes('đầu vào') ||
+      s.includes('dau vao')
+    )
+  }, [stage, paramStage])
 
   const [guideVisible, setGuideVisible] = useState(true)
   const [palletCode, setPalletCode] = useState('')
@@ -1264,27 +1286,14 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     }
   }, [po, paramPo, stage, paramStage, isNew])
 
-  // Tự động tra cứu mốc lấy mẫu AQL từ Database theo tổng SL lô hàng N (requiredQty)
+  // Tự động tra cứu mốc lấy mẫu AQL từ Database theo tổng SL lô hàng N
   useEffect(() => {
-    const lotSize = Number(requiredQty)
+    if (!isNew) return
+
+    // Khi ở công đoạn sản xuất, tra cứu theo requiredQty nếu đã có, hoặc theo totalBatchQty
+    const lotSize = Number(isIncoming ? requiredQty : (requiredQty || totalBatchQty))
     if (!lotSize || lotSize <= 0) {
       setSamplingRule(null)
-      return
-    }
-
-    // Riêng phiếu Kiểm tra mẫu đầu (FIRST_SAMPLE): Số lượng mẫu mặc định luôn là 5
-    if (mode === INSPECT_MODES.FIRST_SAMPLE && isNew) {
-      const defaultFirstSample = String(Math.min(lotSize, 5))
-      setSampleQty(defaultFirstSample)
-      setParamSample(defaultFirstSample)
-      apiClient.get(`/inspections/qc-sampling/lookup?lot_size=${lotSize}`)
-        .then((res) => {
-          const resData = res.data || res
-          if (resData && resData.rule) {
-            setSamplingRule(resData.rule)
-          }
-        })
-        .catch(() => {})
       return
     }
 
@@ -1300,17 +1309,17 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
             return
           }
         }
-        const fallbackSample = String(Math.max(1, Math.min(lotSize, Math.ceil(lotSize * 0.05))))
+        const fallbackSample = String(calculateAqlSampleSize(lotSize))
         setSampleQty(fallbackSample)
         setParamSample(fallbackSample)
       })
       .catch((err) => {
-        console.warn('Lỗi tra cứu mốc lấy mẫu AQL, dùng fallback 5%:', err)
-        const fallbackSample = String(Math.max(1, Math.min(lotSize, Math.ceil(lotSize * 0.05))))
+        console.warn('Lỗi tra cứu mốc lấy mẫu AQL, dùng fallback:', err)
+        const fallbackSample = String(calculateAqlSampleSize(lotSize))
         setSampleQty(fallbackSample)
         setParamSample(fallbackSample)
       })
-  }, [requiredQty, mode, isNew])
+  }, [requiredQty, totalBatchQty, isIncoming, isNew])
 
   // Tự động tính SL đạt = SL mẫu - Tổng SL lỗi (SL không đạt) & Cập nhật Kết quả (Đạt/Không đạt)
   useEffect(() => {
@@ -1511,11 +1520,47 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       // Mặc định SL Cần Kiểm theo lượng còn lại chưa kiểm (Tổng - Đã kiểm)
       const prevInspected = Number(totalInspectedSoFarRef.current || totalInspectedSoFar || 0)
       const remaining = Math.max(0, sumQty - prevInspected)
-      const defaultReq = remaining > 0 ? remaining : sumQty
-      setRequiredQty(String(defaultReq))
-      const calcSample = (mode === INSPECT_MODES.FIRST_SAMPLE && isNew) ? Math.min(defaultReq, 5) : Math.max(1, Math.ceil(defaultReq * 0.05))
-      setSampleQty(String(calcSample))
-      setParamSample(String(calcSample))
+      const lotSize = remaining > 0 ? remaining : sumQty
+
+      if (isIncoming) {
+        // Đối với Nhập kho/Đầu vào: "SL Cần Kiểm" là số lượng giao đợt này (người dùng có thể sửa)
+        setRequiredQty(String(lotSize))
+        const aqlSample = calculateAqlSampleSize(lotSize)
+        setSampleQty(String(aqlSample))
+        setParamSample(String(aqlSample))
+        apiClient.get(`/inspections/qc-sampling/lookup?lot_size=${lotSize}`)
+          .then((res) => {
+            const resData = res.data || res
+            if (resData?.rule) {
+              setSamplingRule(resData.rule)
+              if (resData.rule.sample_size) {
+                setSampleQty(String(resData.rule.sample_size))
+                setParamSample(String(resData.rule.sample_size))
+              }
+            }
+          })
+          .catch(() => {})
+      } else {
+        // Đối với tất cả công đoạn sản xuất & kiểm tra mẫu đầu (FIRST_SAMPLE):
+        // "Số lượng kiểm tra" (SL Cần Kiểm) ăn theo AQL của lô sản xuất (lotSize)!
+        const aqlSample = calculateAqlSampleSize(lotSize)
+        setRequiredQty(String(aqlSample))
+        setSampleQty(String(aqlSample))
+        setParamSample(String(aqlSample))
+        apiClient.get(`/inspections/qc-sampling/lookup?lot_size=${lotSize}`)
+          .then((res) => {
+            const resData = res.data || res
+            if (resData?.rule) {
+              setSamplingRule(resData.rule)
+              if (resData.rule.sample_size) {
+                setRequiredQty(String(resData.rule.sample_size))
+                setSampleQty(String(resData.rule.sample_size))
+                setParamSample(String(resData.rule.sample_size))
+              }
+            }
+          })
+          .catch(() => {})
+      }
     } else {
       setTotalBatchQty('')
       totalBatchQtyRef.current = ''
@@ -1556,17 +1601,28 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       totalInspectedSoFarRef.current = sumPrev
       setTotalInspectedSoFar(sumPrev)
 
-      // Nếu đã chọn quy cách trước khi API tải xong lịch sử, tự động cập nhật SL Cần Kiểm theo lượng còn lại
+      // Nếu đã chọn quy cách trước khi API tải xong lịch sử, tự động cập nhật số lượng theo lượng còn lại
       if (sumPrev > 0 && totalBatchQtyRef.current) {
         const batchNum = Number(totalBatchQtyRef.current)
         if (batchNum > 0) {
-          setRequiredQty((prev) => {
-            if (!prev || Number(prev) === batchNum) {
-              const rem = Math.max(0, batchNum - sumPrev)
-              return rem > 0 ? String(rem) : prev
-            }
-            return prev
-          })
+          const rem = Math.max(0, batchNum - sumPrev)
+          const targetLot = rem > 0 ? rem : batchNum
+          if (isIncoming) {
+            setRequiredQty((prev) => {
+              if (!prev || Number(prev) === batchNum) {
+                return String(targetLot)
+              }
+              return prev
+            })
+            const aqlSample = calculateAqlSampleSize(targetLot)
+            setSampleQty(String(aqlSample))
+            setParamSample(String(aqlSample))
+          } else {
+            const aqlSample = calculateAqlSampleSize(targetLot)
+            setRequiredQty(String(aqlSample))
+            setSampleQty(String(aqlSample))
+            setParamSample(String(aqlSample))
+          }
         }
       }
     }).catch((err) => {
@@ -1580,12 +1636,16 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     return () => {
       isMounted = false
     }
-  }, [po, paramPo, product, paramProduct, ticket?.id])
+  }, [po, paramPo, product, paramProduct, ticket?.id, isIncoming])
 
   const handleRequiredQtyChange = (val) => {
     if (readOnly) return
     setIsDirty(true)
     setRequiredQty(val)
+    if (!isIncoming) {
+      setSampleQty(val)
+      setParamSample(val)
+    }
   }
 
   const handleLoadLastResult = async () => {
@@ -2244,6 +2304,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     setRequiredQty: handleRequiredQtyChange,
     totalBatchQty,
     setTotalBatchQty,
+    isIncomingStage: isIncoming,
     partHistoryTickets,
     isPartHistoryModalOpen,
     setIsPartHistoryModalOpen,
