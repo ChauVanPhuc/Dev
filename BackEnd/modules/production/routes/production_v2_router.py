@@ -469,6 +469,28 @@ def get_factories(db: Session = Depends(get_db)):
             {"id": 3, "code": "NM3", "name": "Furniture nhà máy 3", "category_key": "Furniture", "label": "Furniture (NM3)"}
         ]}
 
+def extract_root_po(code: str) -> str:
+    """
+    Trích xuất mã PO gốc từ mã lệnh phân đoạn hoặc mã có hậu tố đợt/lô sản xuất.
+    Ví dụ:
+      APT-0102-01 -> APT-0102
+      APT-0078-84 -> APT-0078
+      ADV-0406-01BS -> ADV-0406
+      APT-0048-49-01 -> APT-0048-49
+      ADV-0416-HATCH -> ADV-0416-HATCH (giữ nguyên)
+      FOL-0452 -> FOL-0452 (giữ nguyên)
+    """
+    if not code:
+        return ""
+    code_clean = str(code).strip()
+    m = re.match(r'^([A-Za-z0-9]+-\d+(?:-\d+)?)-(\d+[A-Za-z]*)$', code_clean)
+    if m:
+        return m.group(1)
+    m2 = re.match(r'^(.*?)-(\d+[A-Za-z]*)$', code_clean)
+    if m2 and len(m2.group(1).split('-')) >= 2:
+        return m2.group(1)
+    return code_clean
+
 # ----------------------------------------------------------------------
 # 1.5. Danh sách mã PO siêu nhanh cho Dropdown Lựa chọn (Inspection / Transfer)
 # ----------------------------------------------------------------------
@@ -481,7 +503,7 @@ def get_po_codes(
 ):
     """
     TRUY VẤN SIÊU TỐC (5-10ms): Chỉ query các cột mã PO (order_code, partner_po, production_code),
-    không join bảng delivery / không tính toán tiến độ giúp Mobile mở dropdown tức thì.
+    gôm nhóm mã PO gốc (khử trùng lặp số phân đoạn lô con) giúp Mobile mở dropdown tức thì và gọn gàng.
     """
     try:
         query = db.query(Order.order_code, Order.partner_po, Order.production_code, Order.id)
@@ -508,9 +530,10 @@ def get_po_codes(
             for val in [r.order_code, r.partner_po, r.production_code]:
                 if val:
                     code = val.strip()
-                    if code and code not in seen:
-                        seen.add(code)
-                        codes.append(code)
+                    root_code = extract_root_po(code)
+                    if root_code and root_code not in seen:
+                        seen.add(root_code)
+                        codes.append(root_code)
                         break
         return {"codes": codes, "total": len(codes)}
     except Exception as e:
@@ -966,29 +989,49 @@ def get_order_bom(
         if not clean_po:
             return []
 
-        # 1. Exact match first (fast index)
-        order = db.query(Order).options(joinedload(Order.products)).filter(
+        root_po = extract_root_po(clean_po)
+
+        # 1. Exact match / Root PO prefix match across all child orders
+        matching_orders = db.query(Order).options(joinedload(Order.products)).filter(
             or_(
                 Order.order_code == clean_po,
                 Order.partner_po == clean_po,
                 Order.production_code == clean_po,
-                Order.order_code == f"LSX-{clean_po}"
+                Order.order_code == f"LSX-{clean_po}",
+                Order.order_code == root_po,
+                Order.order_code.ilike(f"{root_po}-%"),
+                Order.partner_po == root_po,
+                Order.partner_po.ilike(f"{root_po}-%"),
+                Order.production_code == root_po,
+                Order.production_code.ilike(f"{root_po}-%"),
+                Order.order_code == f"LSX-{root_po}",
+                Order.order_code.ilike(f"LSX-{root_po}-%")
             )
-        ).first()
+        ).all()
 
         # 2. Fallback to ilike / ID if not found
-        if not order:
+        if not matching_orders:
             if clean_po.isdigit():
-                order = db.query(Order).options(joinedload(Order.products)).filter(Order.id == int(clean_po)).first()
-            if not order:
-                order = db.query(Order).options(joinedload(Order.products)).filter(
+                single = db.query(Order).options(joinedload(Order.products)).filter(Order.id == int(clean_po)).first()
+                if single:
+                    matching_orders = [single]
+            if not matching_orders:
+                matching_orders = db.query(Order).options(joinedload(Order.products)).filter(
                     or_(
                         Order.order_code.ilike(f"%{clean_po}%"),
                         Order.partner_po.ilike(f"%{clean_po}%")
                     )
-                ).first()
+                ).all()
 
-        product_ids = [p.id for p in order.products] if (order and order.products) else []
+        prod_order_map = {}
+        all_products = []
+        for o in matching_orders:
+            if o.products:
+                all_products.extend(o.products)
+                for p in o.products:
+                    prod_order_map[p.id] = o.order_code or clean_po
+
+        product_ids = [p.id for p in all_products if p.id]
         boms = db.query(BOMDetail).filter(BOMDetail.product_id.in_(product_ids)).all() if product_ids else []
 
         def is_invalid_spec(spec_str: str) -> bool:
@@ -1050,13 +1093,15 @@ def get_order_bom(
                 ]
             )
 
-            if is_packaging_or_fg_stage and order and order.products:
+            if is_packaging_or_fg_stage and all_products:
                 from modules.master.models.master_product import MasterProduct
                 parts_map = {}
-                for p in order.products:
+                for p in all_products:
                     p_name = (p.name or p.sku or "Tủ").strip()
                     p_sku = (p.sku or "").strip()
                     p_label = f"{p_name} ({p_sku})" if (p_sku and p_sku.lower() != p_name.lower()) else p_name
+                    o_code = prod_order_map.get(p.id, clean_po)
+                    p_badge = p_label
                     
                     spec = (p.specification or "").strip()
                     if is_invalid_spec(spec):
@@ -1084,7 +1129,21 @@ def get_order_bom(
                             "specs_map": {}
                         }
                     parts_map[p_name]["total_qty"] += qty
-                    parts_map[p_name]["specs_map"][spec] = parts_map[p_name]["specs_map"].get(spec, 0) + qty
+                    spec_key = f"{spec}__{p_sku or p_name}"
+                    if spec_key not in parts_map[p_name]["specs_map"]:
+                        parts_map[p_name]["specs_map"][spec_key] = {
+                            "id": spec_key,
+                            "specification": spec,
+                            "qty": 0,
+                            "order_code": o_code,
+                            "product_name": p_name,
+                            "product_sku": p_sku,
+                            "product_label": p_badge,
+                            "badge": p_badge,
+                            "products": set([p_label])
+                        }
+                    parts_map[p_name]["specs_map"][spec_key]["qty"] += qty
+                    parts_map[p_name]["specs_map"][spec_key]["products"].add(p_label)
 
                 return [
                     {
@@ -1094,7 +1153,20 @@ def get_order_bom(
                         "total_qty": data["total_qty"],
                         "unit": data.get("unit", "Bộ"),
                         "is_converted": False,
-                        "specs": [{"specification": k, "qty": v} for k, v in data["specs_map"].items()]
+                        "specs": [
+                            {
+                                "id": v.get("id", k) if isinstance(v, dict) else k,
+                                "specification": v["specification"] if isinstance(v, dict) and "specification" in v else k,
+                                "qty": v["qty"] if isinstance(v, dict) else v,
+                                "order_code": v.get("order_code", "") if isinstance(v, dict) else "",
+                                "product_name": v.get("product_name", "") if isinstance(v, dict) else "",
+                                "product_sku": v.get("product_sku", "") if isinstance(v, dict) else "",
+                                "product_label": v.get("product_label") or v.get("badge") or (", ".join(sorted(list(v.get("products", [])))) if isinstance(v, dict) and v.get("products") else (data.get("label") or data.get("sku") or "")),
+                                "badge": v.get("badge") or v.get("product_label") or (", ".join(sorted(list(v.get("products", [])))) if isinstance(v, dict) and v.get("products") else (data.get("label") or data.get("sku") or "")),
+                                "products": sorted(list(v["products"])) if isinstance(v, dict) and v.get("products") else ([data.get("label")] if data.get("label") else [])
+                            }
+                            for k, v in data["specs_map"].items()
+                        ]
                     }
                     for _, data in parts_map.items()
                 ]
@@ -1203,37 +1275,58 @@ def get_order_bom(
             return "Tiêu chuẩn"
 
         parts_map = {}
-        if boms and order:
-            for p in order.products:
-                prod_q = float(p.order_qty or p.quantity or 1.0)
-                for b in [b for b in boms if b.product_id == p.id]:
-                    qty = max(1, int(prod_q * float(b.quantity or 1.0)))
-                    name = b.name or b.sku or "Chi tiết"
-                    spec_raw = (b.specification or "").strip()
-                    if is_invalid_spec(spec_raw):
-                        spec = extract_spec_from_name_and_content(name, b.sku or "", p.specification or "")
-                    else:
-                        spec = spec_raw
+        if boms and all_products:
+            prod_map = {p.id: p for p in all_products}
+            for b in boms:
+                p = prod_map.get(b.product_id)
+                prod_q = float(p.order_qty or p.quantity or 1.0) if p else 1.0
+                qty = max(1, int(prod_q * float(b.quantity or 1.0)))
+                name = b.name or b.sku or "Chi tiết"
+                spec_raw = (b.specification or "").strip()
+                if is_invalid_spec(spec_raw):
+                    spec = extract_spec_from_name_and_content(name, b.sku or "", (p.specification if p else "") or "")
+                else:
+                    spec = spec_raw
 
-                    if name not in parts_map:
-                        parts_map[name] = {"part_name": name, "total_qty": 0, "specs_map": {}}
+                o_code = prod_order_map.get(b.product_id, clean_po)
+                p_name = p.name if p else ""
+                p_sku = p.sku if p else ""
+                p_label = f"{p.name} ({p.sku})" if (p and p.sku and p.name and p.sku.lower() != p.name.lower()) else (p.name if p and p.name else (p.sku if p and p.sku else ""))
+                p_badge = p_label
+                spec_key = f"{spec}__{p_sku or p_name}"
 
-                    parts_map[name]["total_qty"] += qty
-                    if spec not in parts_map[name]["specs_map"]:
-                        parts_map[name]["specs_map"][spec] = 0
-                    parts_map[name]["specs_map"][spec] += qty
+                if name not in parts_map:
+                    parts_map[name] = {"part_name": name, "total_qty": 0, "specs_map": {}}
+
+                parts_map[name]["total_qty"] += qty
+                if spec_key not in parts_map[name]["specs_map"]:
+                    parts_map[name]["specs_map"][spec_key] = {
+                        "id": spec_key,
+                        "specification": spec,
+                        "qty": 0,
+                        "order_code": o_code,
+                        "product_name": p_name,
+                        "product_sku": p_sku,
+                        "product_label": p_badge,
+                        "badge": p_badge,
+                        "products": set([p_label] if p_label else [])
+                    }
+                parts_map[name]["specs_map"][spec_key]["qty"] += qty
+                if p_label:
+                    parts_map[name]["specs_map"][spec_key]["products"].add(p_label)
 
         # Fallback handling if order has no BOM entries in bom_details table
-        if not parts_map and order and order.products:
+        if not parts_map and all_products:
             stage_str = (stage or "").lower().strip()
             is_component_stage = any(s in stage_str for s in ["phôi", "phoi", "định hình", "dinh hinh", "lắp ráp", "lap rap"])
 
             # Check master_bom_details for real manufacturing components
             from modules.master.models.master_product import MasterProduct
             from modules.master.models.master_bom_detail import MasterBOMDetail
-            for p in order.products:
+            for p in all_products:
                 prod_sku = p.sku or p.name or ""
                 p_qty = int(p.order_qty or p.quantity or 1)
+                o_code = prod_order_map.get(p.id, clean_po)
                 
                 # Step 1: Try exact SKU match first (fast B-Tree index lookup)
                 master_prods = []
@@ -1308,39 +1401,94 @@ def get_order_bom(
 
                                 b_qty = max(1, int(p_qty * float(mb.quantity or 1.0)))
 
+                                p_name = p.name if p else ""
+                                p_label = f"{p.name} ({p.sku})" if (p.sku and p.name and p.sku.lower() != p.name.lower()) else (p.name or p.sku or prod_sku)
+                                p_badge = p_label
+                                spec_key = f"{spec_n}__{prod_sku or p_name}"
+
                                 if part_n not in parts_map:
                                     parts_map[part_n] = {"part_name": part_n, "total_qty": 0, "specs_map": {}}
                                 parts_map[part_n]["total_qty"] += b_qty
-                                parts_map[part_n]["specs_map"][spec_n] = parts_map[part_n]["specs_map"].get(spec_n, 0) + b_qty
+                                if spec_key not in parts_map[part_n]["specs_map"]:
+                                    parts_map[part_n]["specs_map"][spec_key] = {
+                                        "id": spec_key,
+                                        "specification": spec_n,
+                                        "qty": 0,
+                                        "order_code": o_code,
+                                        "product_name": p_name,
+                                        "product_sku": prod_sku,
+                                        "product_label": p_badge,
+                                        "badge": p_badge,
+                                        "products": set([p_label] if p_label else [])
+                                    }
+                                parts_map[part_n]["specs_map"][spec_key]["qty"] += b_qty
+                                if p_label:
+                                    parts_map[part_n]["specs_map"][spec_key]["products"].add(p_label)
 
                 if not mb_found:
+                    p_name = p.name if p else ""
+                    p_label = f"{p.name} ({p.sku})" if (p.sku and p.name and p.sku.lower() != p.name.lower()) else (p.name or p.sku or prod_sku)
+                    p_badge = p_label
+
                     if is_component_stage:
                         # For component stages without BOM, generate component parts
                         st_prefix = "Chi tiết phôi" if ("phôi" in stage_str or "phoi" in stage_str) else ("Chi tiết định hình" if ("định hình" in stage_str or "dinh hinh" in stage_str) else "Cụm chi tiết lắp ráp")
                         part_n = f"{st_prefix} ({prod_sku})"
                         spec_n = extract_spec_from_name_and_content(part_n, prod_sku, p.specification, master_prod=first_mp)
+                        spec_key = f"{spec_n}__{prod_sku or p_name}"
 
                         if part_n not in parts_map:
                             parts_map[part_n] = {"part_name": part_n, "total_qty": 0, "specs_map": {}}
                         parts_map[part_n]["total_qty"] += p_qty
-                        parts_map[part_n]["specs_map"][spec_n] = parts_map[part_n]["specs_map"].get(spec_n, 0) + p_qty
+                        if spec_key not in parts_map[part_n]["specs_map"]:
+                            parts_map[part_n]["specs_map"][spec_key] = {
+                                "id": spec_key,
+                                "specification": spec_n,
+                                "qty": 0,
+                                "order_code": o_code,
+                                "product_name": p_name,
+                                "product_sku": prod_sku,
+                                "product_label": p_badge,
+                                "badge": p_badge,
+                                "products": set([p_label] if p_label else [])
+                            }
+                        parts_map[part_n]["specs_map"][spec_key]["qty"] += p_qty
+                        if p_label:
+                            parts_map[part_n]["specs_map"][spec_key]["products"].add(p_label)
                     else:
                         # For finished goods stages (Sơn, Đóng gói), return product SKU
                         part_n = prod_sku
                         spec_n = extract_spec_from_name_and_content(prod_sku, prod_sku, p.specification, master_prod=first_mp)
+                        spec_key = f"{spec_n}__{prod_sku or p_name}"
 
                         if part_n not in parts_map:
                             parts_map[part_n] = {"part_name": part_n, "total_qty": 0, "specs_map": {}}
                         parts_map[part_n]["total_qty"] += p_qty
-                        parts_map[part_n]["specs_map"][spec_n] = parts_map[part_n]["specs_map"].get(spec_n, 0) + p_qty
+                        if spec_key not in parts_map[part_n]["specs_map"]:
+                            parts_map[part_n]["specs_map"][spec_key] = {
+                                "id": spec_key,
+                                "specification": spec_n,
+                                "qty": 0,
+                                "order_code": o_code,
+                                "product_name": p_name,
+                                "product_sku": prod_sku,
+                                "product_label": p_badge,
+                                "badge": p_badge,
+                                "products": set([p_label] if p_label else [])
+                            }
+                        parts_map[part_n]["specs_map"][spec_key]["qty"] += p_qty
+                        if p_label:
+                            parts_map[part_n]["specs_map"][spec_key]["products"].add(p_label)
 
         # Fallback to PurchaseRequisition items if order not found in Order table
-        if not parts_map and not order:
+        if not parts_map and not matching_orders:
             from modules.purchasing.models.purchase_requisition import PurchaseRequisition
             pr = db.query(PurchaseRequisition).options(joinedload(PurchaseRequisition.items)).filter(
                 or_(
                     PurchaseRequisition.po_code == clean_po,
-                    PurchaseRequisition.po_code.ilike(f"%{clean_po}%")
+                    PurchaseRequisition.po_code.ilike(f"%{clean_po}%"),
+                    PurchaseRequisition.po_code == root_po,
+                    PurchaseRequisition.po_code.ilike(f"%{root_po}%")
                 )
             ).first()
             if pr and pr.items:
@@ -1364,7 +1512,6 @@ def get_order_bom(
                     parts_map[name]["total_qty"] += qty
                     parts_map[name]["specs_map"][spec] = parts_map[name]["specs_map"].get(spec, 0) + qty
 
-
         return [
             {
                 "part_name": data["part_name"],
@@ -1373,7 +1520,20 @@ def get_order_bom(
                 "total_qty": data["total_qty"],
                 "unit": data.get("unit", ""),
                 "is_converted": data.get("is_converted", False),
-                "specs": [{"specification": k, "qty": v} for k, v in data["specs_map"].items()]
+                "specs": [
+                    {
+                        "id": v.get("id", k) if isinstance(v, dict) else k,
+                        "specification": v["specification"] if isinstance(v, dict) and "specification" in v else k,
+                        "qty": v["qty"] if isinstance(v, dict) else v,
+                        "order_code": v.get("order_code", "") if isinstance(v, dict) else "",
+                        "product_name": v.get("product_name", "") if isinstance(v, dict) else "",
+                        "product_sku": v.get("product_sku", "") if isinstance(v, dict) else "",
+                        "product_label": v.get("product_label") or v.get("badge") or (", ".join(sorted(list(v.get("products", [])))) if isinstance(v, dict) and v.get("products") else (data.get("label") or data.get("sku") or "")),
+                        "badge": v.get("badge") or v.get("product_label") or (", ".join(sorted(list(v.get("products", [])))) if isinstance(v, dict) and v.get("products") else (data.get("label") or data.get("sku") or "")),
+                        "products": sorted(list(v["products"])) if isinstance(v, dict) and v.get("products") else ([data.get("label")] if data.get("label") else [])
+                    }
+                    for k, v in data["specs_map"].items()
+                ]
             }
             for _, data in parts_map.items()
         ]

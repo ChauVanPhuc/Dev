@@ -45,6 +45,13 @@ const getEffectiveSpec = (specRaw, partName) => {
   return 'Tiêu chuẩn'
 }
 
+const cleanCabinetTag = (tag, fallback = '') => {
+  if (!tag) return fallback
+  const str = String(tag).trim()
+  const cleaned = str.replace(/^[A-Za-z0-9]+-\d+(?:-[A-Za-z0-9]+)?\s*\|\s*/i, '').trim()
+  return cleaned || fallback
+}
+
 const FinishInspectionModal = ({ open, summary, palletCode, onConfirm, onClose, onCreatePallet, isReInspect = false }) => {
   const [confirmCheck, setConfirmCheck] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -500,7 +507,11 @@ const FinishInspectionModal = ({ open, summary, palletCode, onConfirm, onClose, 
             } else if (summary?.parts_details && Array.isArray(summary.parts_details) && summary.parts_details.length > 0) {
               rawList = summary.parts_details
             } else if (summary?.product && summary.product !== '—') {
-              rawList = [{ part_name: summary.product, specification: summary.spec }]
+              rawList = [{
+                part_name: summary.product,
+                specification: summary.spec,
+                cabinet: summary.cabinet || summary.product_label || summary.badge || ''
+              }]
             }
 
             const partsList = []
@@ -510,16 +521,19 @@ const FinishInspectionModal = ({ open, summary, palletCode, onConfirm, onClose, 
               if (!pName || pName === '—') return
 
               const matched = getEffectiveSpec(pSpec, pName)
+              const cab = cleanCabinetTag(item.cabinet || item.product_label || item.badge || item.product_sku || item.sku || summary?.cabinet || '')
               partsList.push({
                 name: pName,
-                spec: matched
+                spec: matched,
+                cabinet: cab
               })
             })
 
             if (partsList.length === 0) {
               const fallbackName = summary?.product || '—'
               const fallbackSpec = getEffectiveSpec(summary?.spec, fallbackName)
-              partsList.push({ name: fallbackName, spec: fallbackSpec })
+              const fallbackCab = cleanCabinetTag(summary?.cabinet || summary?.product_label || summary?.badge || '')
+              partsList.push({ name: fallbackName, spec: fallbackSpec, cabinet: fallbackCab })
             }
 
             return (
@@ -543,26 +557,52 @@ const FinishInspectionModal = ({ open, summary, palletCode, onConfirm, onClose, 
                   overflow: 'hidden',
                   backgroundColor: '#ffffff',
                   maxHeight: '170px',
-                  overflowY: 'auto'
+                  overflowY: 'auto',
+                  overflowX: 'auto',
+                  WebkitOverflowScrolling: 'touch'
                 }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                  <table style={{ width: '100%', minWidth: '380px', borderCollapse: 'collapse', fontSize: '13px' }}>
                     <thead>
                       <tr style={{ backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9' }}>
-                        <th style={{ padding: '7px 10px', textAlign: 'left', color: '#7B5233', fontWeight: '800', fontSize: '11.5px', width: '38px' }}>STT</th>
-                        <th style={{ padding: '7px 10px', textAlign: 'left', color: '#7B5233', fontWeight: '800', fontSize: '11.5px' }}>Tên Chi Tiết Linh Kiện</th>
-                        <th style={{ padding: '7px 10px', textAlign: 'right', color: '#7B5233', fontWeight: '800', fontSize: '11.5px' }}>Quy Cách (mm)</th>
+                        <th style={{ padding: '7px 8px', textAlign: 'center', color: '#7B5233', fontWeight: '800', fontSize: '11.5px', width: '32px' }}>STT</th>
+                        <th style={{ padding: '7px 8px', textAlign: 'left', color: '#7B5233', fontWeight: '800', fontSize: '11.5px' }}>Tên Chi Tiết Linh Kiện</th>
+                        <th style={{ padding: '7px 8px', textAlign: 'left', color: '#7B5233', fontWeight: '800', fontSize: '11.5px', whiteSpace: 'nowrap' }}>Tên tủ (SKU)</th>
+                        <th style={{ padding: '7px 8px', textAlign: 'right', color: '#7B5233', fontWeight: '800', fontSize: '11.5px', whiteSpace: 'nowrap' }}>Quy Cách (mm)</th>
                       </tr>
                     </thead>
                     <tbody>
                       {partsList.map((p, idx) => (
                         <tr key={idx} style={{ borderBottom: idx < partsList.length - 1 ? '1px solid #F3EBE1' : 'none' }}>
-                          <td style={{ padding: '8px 10px', color: '#8D6E63', fontWeight: '600', width: '38px', verticalAlign: 'middle' }}>
+                          <td style={{ padding: '8px 8px', color: '#8D6E63', fontWeight: '600', width: '32px', textAlign: 'center', verticalAlign: 'middle' }}>
                             {idx + 1}
                           </td>
-                          <td style={{ padding: '8px 10px', color: '#2D1A12', fontWeight: '700', verticalAlign: 'middle' }}>
+                          <td style={{ padding: '8px 8px', color: '#2D1A12', fontWeight: '700', verticalAlign: 'middle' }}>
                             {p.name}
                           </td>
-                          <td style={{ padding: '8px 10px', textAlign: 'right', verticalAlign: 'middle' }}>
+                          <td style={{ padding: '8px 8px', verticalAlign: 'middle' }}>
+                            {p.cabinet ? (
+                              <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                fontSize: '11px',
+                                padding: '2px 7px',
+                                borderRadius: '5px',
+                                backgroundColor: '#eff6ff',
+                                color: '#1d4ed8',
+                                fontWeight: '600',
+                                border: '1px solid #bfdbfe',
+                                whiteSpace: 'nowrap',
+                                maxWidth: '160px',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis'
+                              }} title={p.cabinet}>
+                                {p.cabinet}
+                              </span>
+                            ) : (
+                              <span style={{ color: '#9ca3af', fontSize: '12px' }}>—</span>
+                            )}
+                          </td>
+                          <td style={{ padding: '8px 8px', textAlign: 'right', verticalAlign: 'middle' }}>
                             <span style={{
                               backgroundColor: '#FAF6F0',
                               padding: '3px 8px',

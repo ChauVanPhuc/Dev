@@ -64,7 +64,10 @@ const FormMultiSearchSelect = ({
     const s = searchTerm.toLowerCase().trim()
     return options.filter(opt => 
       String(opt.label || '').toLowerCase().includes(s) || 
-      String(opt.value || '').toLowerCase().includes(s)
+      String(opt.value || '').toLowerCase().includes(s) ||
+      String(opt.badge || '').toLowerCase().includes(s) ||
+      String(opt.orderCode || opt.order_code || '').toLowerCase().includes(s) ||
+      String(opt.productLabel || opt.product_label || '').toLowerCase().includes(s)
     )
   }, [options, searchTerm])
 
@@ -234,10 +237,32 @@ const FormMultiSearchSelect = ({
                     onMouseEnter={(e) => { if (!isChecked) e.currentTarget.style.backgroundColor = '#f8fafc' }}
                     onMouseLeave={(e) => { if (!isChecked) e.currentTarget.style.backgroundColor = 'transparent' }}
                   >
-                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                        <span style={{ wordBreak: 'break-word', lineHeight: '1.35' }}>{opt.label}</span>
-                        {isLocked && (
+                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, gap: '4px' }}>
+                      <span style={{ wordBreak: 'break-word', lineHeight: '1.35', fontWeight: isChecked ? '700' : '600' }}>
+                        {opt.label}
+                      </span>
+                      {opt.badge ? (
+                        <div style={{ display: 'flex', alignItems: 'center' }}>
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            fontSize: '11px',
+                            padding: '2px 7px',
+                            borderRadius: '4px',
+                            backgroundColor: '#eff6ff',
+                            color: '#1d4ed8',
+                            fontWeight: '600',
+                            border: '1px solid #bfdbfe',
+                            whiteSpace: 'nowrap',
+                            maxWidth: '300px',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis'
+                          }} title={opt.badge}>
+                            {opt.badge}
+                          </span>
+                        </div>
+                      ) : isLocked ? (
+                        <div style={{ display: 'flex', alignItems: 'center' }}>
                           <span style={{
                             display: 'inline-flex',
                             alignItems: 'center',
@@ -253,9 +278,9 @@ const FormMultiSearchSelect = ({
                           }}>
                             <Lock size={10} /> Cố định
                           </span>
-                        )}
-                      </div>
-                      {isShowHint && (
+                        </div>
+                      ) : null}
+                      {isShowHint && !opt.badge && (
                         <span style={{ fontSize: '11px', color: '#b45309', marginTop: '3px', fontWeight: '600' }}>
                           {lockedMessage}
                         </span>

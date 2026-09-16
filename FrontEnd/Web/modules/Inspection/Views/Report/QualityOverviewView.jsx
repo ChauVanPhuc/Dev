@@ -118,44 +118,57 @@ const QualityOverviewView = () => {
   const totalPages = Math.ceil(filteredTasks.length / limit) || 1;
 
   // Tự động phân rã danh sách chi tiết / phôi kiểm tra thành List Table
+  const cleanCabinetTag = (tag) => {
+    if (!tag) return '';
+    return String(tag).replace(/^[A-Za-z0-9]+-\d+(?:-[A-Za-z0-9]+)?\s*\|\s*/i, '').trim();
+  };
+
   const partsList = useMemo(() => {
     if (!selectedTask) return [];
+
+    let parsedJson = null;
+    if (selectedTask.data_json) {
+      try {
+        parsedJson = typeof selectedTask.data_json === 'string' ? JSON.parse(selectedTask.data_json) : selectedTask.data_json;
+      } catch (e) {}
+    }
 
     // 1. Nếu có mảng details/items từ API hoặc data_json
     let rawItems = [];
     if (Array.isArray(selectedTask.details) && selectedTask.details.length > 0) {
       rawItems = selectedTask.details;
-    } else {
-      let parsedJson = null;
-      if (selectedTask.data_json) {
-        try {
-          parsedJson = typeof selectedTask.data_json === 'string' ? JSON.parse(selectedTask.data_json) : selectedTask.data_json;
-        } catch (e) {}
-      }
-      if (parsedJson?.partsDetails && Array.isArray(parsedJson.partsDetails) && parsedJson.partsDetails.length > 0) {
-        rawItems = parsedJson.partsDetails;
-      } else if (parsedJson?.parts_details && Array.isArray(parsedJson.parts_details) && parsedJson.parts_details.length > 0) {
-        rawItems = parsedJson.parts_details;
-      } else if (parsedJson?.items && Array.isArray(parsedJson.items) && parsedJson.items.length > 0) {
-        rawItems = parsedJson.items;
-      }
+    } else if (Array.isArray(selectedTask.parts_details) && selectedTask.parts_details.length > 0) {
+      rawItems = selectedTask.parts_details;
+    } else if (parsedJson?.partsDetails && Array.isArray(parsedJson.partsDetails) && parsedJson.partsDetails.length > 0) {
+      rawItems = parsedJson.partsDetails;
+    } else if (parsedJson?.parts_details && Array.isArray(parsedJson.parts_details) && parsedJson.parts_details.length > 0) {
+      rawItems = parsedJson.parts_details;
+    } else if (parsedJson?.items && Array.isArray(parsedJson.items) && parsedJson.items.length > 0) {
+      rawItems = parsedJson.items;
     }
 
     if (rawItems.length > 0) {
       return rawItems.map((it, idx) => ({
         stt: String(idx + 1).padStart(2, '0'),
         name: it.part_name || it.name || it.product || 'Chi tiết',
-        spec: it.specification || it.spec || selectedTask.specification || 'Tiêu chuẩn'
+        spec: it.specification || it.spec || selectedTask.specification || 'Tiêu chuẩn',
+        cabinet: cleanCabinetTag(it.cabinet || it.product_label || it.badge || it.product_name || it.product_sku || it.sku || ''),
+        qty: it.plan_qty || it.qty || ''
       }));
     }
 
     // 2. Phân rã từ chuỗi part_name (hỗ trợ phân tách bởi dấu phẩy, chấm phẩy hoặc xuống dòng)
     const rawPartName = (selectedTask.part_name || selectedTask.product_sku || '').trim();
+    const defaultCabinet = cleanCabinetTag(parsedJson?.cabinet || parsedJson?.product_label || parsedJson?.badge || '');
+    const defaultQty = selectedTask.required_qty || parsedJson?.requiredQty || '';
+
     if (!rawPartName || rawPartName === 'N/A') {
       return [{
         stt: '01',
         name: selectedTask.task_name || 'Chi tiết kiểm tra',
-        spec: selectedTask.specification || 'Tiêu chuẩn'
+        spec: selectedTask.specification || 'Tiêu chuẩn',
+        cabinet: defaultCabinet,
+        qty: defaultQty
       }];
     }
 
@@ -174,7 +187,9 @@ const QualityOverviewView = () => {
       return [{
         stt: '01',
         name: rawPartName,
-        spec: rawSpec || 'Tiêu chuẩn'
+        spec: rawSpec || 'Tiêu chuẩn',
+        cabinet: defaultCabinet,
+        qty: defaultQty
       }];
     }
 
@@ -183,7 +198,9 @@ const QualityOverviewView = () => {
       return {
         stt: String(idx + 1).padStart(2, '0'),
         name: pName,
-        spec: pSpec
+        spec: pSpec,
+        cabinet: defaultCabinet,
+        qty: defaultQty
       };
     });
   }, [selectedTask]);
@@ -1208,7 +1225,7 @@ const QualityOverviewView = () => {
               </div>
             ) : (
               <div style={{ padding: '20px 22px', maxHeight: 'calc(85vh - 140px)', overflowY: 'auto' }}>
-                {/* CARD THÔNG TIN TỔNG QUAN (2 DÒNG x 3 CỘT) */}
+                {/* CARD THÔNG TIN TỔNG QUAN (3 DÒNG x 3 CỘT) */}
                 <div style={{
                   backgroundColor: '#FCFBF9',
                   border: '1.5px solid #EADCC9',
@@ -1269,6 +1286,33 @@ const QualityOverviewView = () => {
                     </span>
                     <div>{renderActionBadge(selectedTask)}</div>
                   </div>
+
+                  <div>
+                    <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                      SL CẦN KIỂM (LÔ)
+                    </span>
+                    <strong style={{ color: '#059669', fontSize: '0.92rem' }}>
+                      {Number(selectedTask.required_qty || 0).toLocaleString()}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                      SL MẪU KIỂM TRA (AQL)
+                    </span>
+                    <strong style={{ color: '#1D4ED8', fontSize: '0.92rem' }}>
+                      {Number(selectedTask.sample_qty || 0).toLocaleString()}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                      SỐ LỖI PHÁT HIỆN
+                    </span>
+                    <strong style={{ color: (selectedTask.error_qty > 0) ? '#DC2626' : '#059669', fontSize: '0.92rem' }}>
+                      {Number(selectedTask.error_qty || 0).toLocaleString()}
+                    </strong>
+                  </div>
                 </div>
 
                 {/* BẢNG DANH SÁCH CHI TIẾT / PHÔI KIỂM TRA (LIST TABLE) */}
@@ -1293,7 +1337,7 @@ const QualityOverviewView = () => {
                     borderRadius: '10px',
                     overflow: 'hidden',
                     backgroundColor: '#ffffff',
-                    maxHeight: '200px',
+                    maxHeight: '260px',
                     overflowY: 'auto',
                     boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
                   }}>
@@ -1301,8 +1345,10 @@ const QualityOverviewView = () => {
                       <thead>
                         <tr style={{ backgroundColor: '#FAF6F0', borderBottom: '1.5px solid #EADCC9' }}>
                           <th style={{ padding: '8px 10px', textAlign: 'center', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem', width: '46px' }}>STT</th>
-                          <th style={{ padding: '8px 12px', textAlign: 'left', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem' }}>TÊN CHI TIẾT / PHÔI</th>
-                          <th style={{ padding: '8px 12px', textAlign: 'left', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem', width: '180px' }}>QUY CÁCH / THÔNG SỐ</th>
+                          <th style={{ padding: '8px 12px', textAlign: 'left', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem', minWidth: '130px' }}>TÊN CHI TIẾT / PHÔI</th>
+                          <th style={{ padding: '8px 12px', textAlign: 'left', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem', width: '140px' }}>QUY CÁCH / THÔNG SỐ</th>
+                          <th style={{ padding: '8px 12px', textAlign: 'left', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem', minWidth: '180px' }}>TÊN TỦ (SKU)</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'center', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem', width: '90px' }}>SL KẾ HOẠCH</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1332,13 +1378,46 @@ const QualityOverviewView = () => {
                                 border: '1px solid #EADCC9',
                                 fontSize: '0.78rem',
                                 fontWeight: 600,
-                                maxWidth: '190px',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
                                 whiteSpace: 'nowrap'
                               }}>
                                 {p.spec}
                               </span>
+                            </td>
+                            <td style={{ padding: '9px 12px', verticalAlign: 'middle' }}>
+                              {p.cabinet ? (
+                                <span style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  fontSize: '0.76rem',
+                                  padding: '2px 8px',
+                                  borderRadius: '5px',
+                                  backgroundColor: '#EFF6FF',
+                                  color: '#1D4ED8',
+                                  fontWeight: 600,
+                                  border: '1px solid #BFDBFE',
+                                  whiteSpace: 'nowrap'
+                                }} title={p.cabinet}>
+                                  {p.cabinet}
+                                </span>
+                              ) : (
+                                <span style={{ color: '#9CA3AF', fontSize: '0.8rem' }}>—</span>
+                              )}
+                            </td>
+                            <td style={{ padding: '9px 10px', textAlign: 'center', verticalAlign: 'middle', fontWeight: 700, color: '#4B5563' }}>
+                              {p.qty ? (
+                                <span style={{
+                                  display: 'inline-block',
+                                  padding: '2px 8px',
+                                  backgroundColor: '#F3F4F6',
+                                  borderRadius: '6px',
+                                  fontSize: '0.78rem',
+                                  color: '#374151'
+                                }}>
+                                  {Number(p.qty).toLocaleString()}
+                                </span>
+                              ) : (
+                                <span style={{ color: '#9CA3AF', fontSize: '0.8rem' }}>—</span>
+                              )}
                             </td>
                           </tr>
                         ))}

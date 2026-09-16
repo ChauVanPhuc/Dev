@@ -128,8 +128,6 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
             placeholder={specPlaceholder}
             itemType="quy cách"
             disabled={isSpecDisabled}
-            lockedValues={lockedSpecs}
-            lockedMessage="Quy cách duy nhất của chi tiết, không thể bỏ chọn"
           />
         </div>
       </div>

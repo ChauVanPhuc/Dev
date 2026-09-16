@@ -1610,8 +1610,16 @@ async def create_inspection(
             "paramFail": body.get("paramFail"),
             "answers": body.get("answers"),
             "steps": body.get("steps"),
+            "parts_details": body.get("parts_details") or body.get("partsDetails") or [],
             "created_by": creator
         }
+
+        req_qty_val = 0
+        if body.get("requiredQty"):
+            try:
+                req_qty_val = int(float(body.get("requiredQty")))
+            except (ValueError, TypeError):
+                req_qty_val = 0
 
         # Sinh mã ticket code DAxxx
         t_seq = db.query(func.max(InputInspection.id)).scalar() or 0
@@ -1627,6 +1635,7 @@ async def create_inspection(
             part_name       = product,
             specification   = spec,
             stage           = stage,
+            required_qty    = req_qty_val,
             sample_qty      = sample_qty,
             error_qty       = error_qty,
             inspector_name  = creator,
@@ -3878,9 +3887,9 @@ def get_pending_inspections(
             "notes": item.note or item.notes or "Chờ xác nhận kết quả kiểm tra",
             "part_name": item.part_name or item.product_sku or "",
             "specification": item.specification or "",
-            "required_qty": item.required_qty or 0,
-            "sample_qty": item.sample_qty or 0,
-            "error_qty": item.error_qty or 0,
+            "required_qty": item.required_qty or data_dict.get("requiredQty") or 0,
+            "sample_qty": item.sample_qty or data_dict.get("sampleQty") or 0,
+            "error_qty": item.error_qty or data_dict.get("errorQty") or 0,
             "batch_no": item.batch_no or "",
             "inspector_name": item.inspector_name or "QC",
             "result": item.result or item.conclusion or "pass",
@@ -3889,6 +3898,7 @@ def get_pending_inspections(
             "image_path_2": item.image_path_2,
             "image_path_3": item.image_path_3,
             "data_json": item.data_json or "",
+            "parts_details": data_dict.get("parts_details") or data_dict.get("partsDetails") or [],
             "is_confirmed": False
         })
         

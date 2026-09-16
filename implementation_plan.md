@@ -1,143 +1,119 @@
-# Kế hoạch Gôm nhóm Mã PO, Chi tiết (BOM) và Quy cách (QC) trong /production_v2/inspection/
-
-## 1. Bối cảnh & Mục tiêu
-
-Hiện tại trong hệ thống SmartFlow, các Lệnh sản xuất (Orders) được lưu theo từng lô / phân đoạn sản xuất nhỏ có hậu tố đính kèm số lô (ví dụ: `APT-0102-01`, `APT-0102-02`, ..., `APT-0102-26`, hoặc `APT-0092-05`, `APT-0092-06`, `APT-0092-07`, `ADV-0406-01`, `ADV-0406-02`).
-- **Thực trạng**: Khi người dùng vào màn hình tạo phiếu kiểm tra `/production_v2/inspection/` (các phiếu Mẫu đầu chuyền CL09A, Tái kiểm CL09B, Thông số CL09C, Công đoạn CL09D, QA CL09E, Lỗi hằng ngày CL09F), danh sách dropdown **"Chọn PO *"** hiển thị hàng chục mã con lặp lại cho cùng 1 đơn hàng gốc, gây rối mắt và khó chọn. Đồng thời, khi chọn một mã con thì dữ liệu Chi tiết và Quy cách chỉ lấy của riêng mã con đó, làm phân tán số lượng lô và danh mục quy cách.
-- **Mục tiêu**:
-  1. **Gôm nhóm mã PO**: Các mã con cùng thuộc một đơn hàng gốc (ví dụ: `APT-0102-01` đến `APT-0102-26`) sẽ được gôm lại thành một mã duy nhất: `APT-0102` trên danh sách lựa chọn.
-  2. **Gôm nhóm Chi tiết (BOM)**: Khi chọn mã PO gốc `APT-0102`, hệ thống tự động tổng hợp toàn bộ chi tiết linh kiện từ tất cả các lệnh con thuộc PO đó, cộng dồn tổng số lượng kế hoạch (`total_qty`).
-  3. **Gôm nhóm QC (Quy cách)**: Quy cách của từng chi tiết cũng được gôm nhóm và khử trùng lặp từ tất cả các lệnh con, giúp người dùng chọn quy cách kiểm tra chính xác, không bị sót hay trùng lặp.
+# Kế Hoạch Kỹ Thuật: Tách Danh Sách Quy Cách Theo Từng Tủ / Đơn Con (List Đơn Ra) Trong Mobile QC
 
 ---
 
-## 2. Giải pháp Kỹ thuật Chi tiết
+## 1. Bối Cảnh & Vấn Đề
 
-### A. Thuật toán Trích xuất Mã PO Gốc (`extract_root_po`)
-Qua khảo sát toàn bộ 1.101 đơn hàng thực tế trong Database:
-- Các mã có hậu tố phân đoạn thường có dạng: `APT-0102-01`, `APT-0102-26`, `ADV-0406-01BS`, `APT-0048-49-01`.
-- Các mã gốc đã chuẩn gồm 2 phần: `ADV-0409`, `FOL-0452`, `APT-0035`.
-- **Hàm chuẩn hóa Regex**:
-```python
-def extract_root_po(code: str) -> str:
-    if not code:
-        return ""
-    code_clean = code.strip()
-    # Nếu mã có từ 3 phần trở lên và kết thúc bằng số phân đoạn kèm chữ (vd: APT-0102-01, ADV-0406-01BS, APT-0048-49-01)
-    m = re.match(r'^([A-Za-z0-9]+-\d+(?:-\d+)?)-(\d+[A-Za-z]*)$', code_clean)
-    if m:
-        return m.group(1)
-    m2 = re.match(r'^(.*?)-(\d+[A-Za-z]*)$', code_clean)
-    if m2 and len(m2.group(1).split('-')) >= 2:
-        return m2.group(1)
-    return code_clean
+### 1.1. Hiện trạng
+Sau khi gôm nhóm PO gốc (ví dụ `APT-0092`), đơn hàng bao gồm **7 Lệnh con** (`APT-0092-01` đến `APT-0092-07`) với nhiều dòng tủ khác nhau (`1-36L-WOA`, `1-36R-WOA`, `1-42L-WOA`, `1-48-WOA`, `1-60-WOA`, `1-66D-WOA`, `1-72D-WOA`...).
+
+Khi chọn chi tiết **"Hông tủ"**:
+* Nhiều loại tủ cùng dùng chung kích thước quy cách `50*50*876`.
+* Hiện tại hệ thống đang gộp tất cả các tủ này vào **1 dòng duy nhất**:
+  * Dòng hiển thị: `50*50*876` kèm một badge dài ngoằng nối bằng dấu phẩy: `1-36L-WOA (APT1-36L-WOA), 1-36R-WOA (A...`
+* **Hậu quả**:
+  1. Nhãn bị cắt cụt (`...`), người dùng không xem được hết các tủ.
+  2. Nhân viên QC **không thể chọn kiểm tra riêng từng đơn con / từng loại tủ cụ thể** trong ca sản xuất, vì chỉ có 1 ô tích chọn duy nhất đại diện cho toàn bộ các đơn.
+  3. Số lượng cần kiểm (`requiredQty`) bị cộng dồn toàn bộ thay vì theo đúng đơn/tủ đang kiểm.
+
+### 1.2. Mục Tiêu Cần Đạt ("List đơn ra")
+1. **Tách riêng từng dòng** trong dropdown Quy cách theo từng **Đơn con (Order) + Loại tủ (SKU)**:
+   * Ví dụ:
+     * Dòng 1: `50*50*876` - Huy hiệu: `[APT-0092-01 | 1-36L-WOA (APT1-36L-WOA)]` (SL: 40)
+     * Dòng 2: `50*50*876` - Huy hiệu: `[APT-0092-01 | 1-36R-WOA (APT1-36R-WOA)]` (SL: 48)
+     * Dòng 3: `50*50*876` - Huy hiệu: `[APT-0092-01 | 1-42L-WOA (APT1-42L-WOA)]` (SL: 72)
+     * Dòng 4: `50*50*876` - Huy hiệu: `[APT-0092-02 | 1-48-WOA (APT1-48-WOA)]` (SL: 180)
+     * ...
+2. **Chọn lọc độc lập**: Cho phép QC tích chọn 1 hoặc nhiều đơn/tủ cần kiểm tra.
+3. **Tự động tính SL cần kiểm & Cỡ mẫu AQL**:
+   * Khi tích chọn dòng nào, hệ thống tính tổng số lượng (`requiredQty`) theo đúng các dòng được chọn.
+   * Cỡ mẫu kiểm tra AQL (`sampleQty`) tự động nhảy theo số lượng thực tế của các đơn/tủ đã chọn.
+4. **Tìm kiếm siêu nhanh**: Ô tìm kiếm trong dropdown hỗ trợ tìm theo kích thước (`50*50*876`), mã đơn (`01`, `0092-01`), hoặc tên tủ (`36L`).
+
+---
+
+## 2. Thiết Kế Kiến Trúc & Luồng Dữ Liệu
+
+```mermaid
+flowchart TD
+    subgraph DB [Database]
+        O1[Order: APT-0092-01, Product: 1-36L-WOA]
+        O2[Order: APT-0092-01, Product: 1-36R-WOA]
+        O3[Order: APT-0092-02, Product: 1-48-WOA]
+    end
+
+    subgraph Backend [FastAPI - production_v2_router.py]
+        API["GET /orders/{po_code}/bom"]
+        API --> MapOrder[Ánh xạ product_id -> order_code]
+        MapOrder --> SplitSpecs[Tách specs theo từng order_code & product]
+        SplitSpecs --> ReturnJSON["Trả về specs: [{specification, order_code, product_name, product_sku, product_label, badge, qty}]"]
+    end
+
+    subgraph Controller [Mobile - useInspectionFormBase.js]
+        ReturnJSON --> BuildOptions[Tạo specOptions với value duy nhất per row]
+        BuildOptions --> CalcLotSize[Tính requiredQty theo các dòng được chọn]
+        CalcLotSize --> AQLLookup[Tự động tra cứu cỡ mẫu AQL chính xác]
+    end
+
+    subgraph UI [FormMultiSearchSelect.jsx]
+        BuildOptions --> RenderRows[Hiển thị từng dòng với Badge Mã đơn | Tên tủ]
+        RenderRows --> SearchFilter[Lọc nhanh theo mã đơn / tên tủ / quy cách]
+    end
 ```
-*Kết quả kiểm nghiệm trên Database:*
-- `APT-0102-01` ... `APT-0102-26` $\rightarrow$ `APT-0102`
-- `APT-0092-05` ... `APT-0092-07` $\rightarrow$ `APT-0092`
-- `ADV-0406-01BS` $\rightarrow$ `ADV-0406`
-- `APT-0048-49-01` $\rightarrow$ `APT-0048-49`
-- `ADV-0409` $\rightarrow$ `ADV-0409` (giữ nguyên không bị cắt)
-- `FOL-0452` $\rightarrow$ `FOL-0452` (giữ nguyên)
 
 ---
 
-### B. Cập nhật Backend API `/production-v2/po-codes`
-- **File**: [`BackEnd/modules/production/routes/production_v2_router.py`](file:///d:/SmartFlow/SmartFlow_v2_Test/BackEnd/modules/production/routes/production_v2_router.py)
-- **Cơ chế**:
-  - Khi truy vấn `Order` theo tháng hoặc từ khóa tìm kiếm (`search`), hệ thống quét các cột `order_code`, `partner_po`, `production_code`.
-  - Áp dụng `extract_root_po(code)` để lấy mã PO gốc.
-  - Khử trùng lặp (`seen = set()`), trả về danh sách mã PO gốc sạch sẽ và gọn gàng.
-  - Khi tìm kiếm (ví dụ gõ `0102` hoặc `APT-0102-01`), API vẫn lọc trúng và trả về mã gốc `APT-0102`.
+## 3. Các Thay Đổi Cụ Thể
+
+### 3.1. Backend ([`production_v2_router.py`](file:///d:/SmartFlow_v2_Test/BackEnd/modules/production/routes/production_v2_router.py))
+* **Trong API `GET /orders/{po_code}/bom`**:
+  * Tạo map `prod_order_map: {p.id: order.order_code}` từ `matching_orders`.
+  * Thay vì gom tất cả sản phẩm cùng quy cách vào 1 key duy nhất trong `specs_map`, ta tách theo bộ khóa: `(specification, order_code, product_sku)`.
+  * Mỗi phần tử trong `specs` trả về:
+    * `specification`: Kích thước thuần (ví dụ `50*50*876`).
+    * `qty`: Số lượng chi tiết cho đơn/tủ đó.
+    * `order_code`: Mã đơn con (ví dụ `APT-0092-01`).
+    * `product_name`: Tên tủ (ví dụ `1-36L-WOA`).
+    * `product_sku`: SKU tủ (ví dụ `APT1-36L-WOA`).
+    * `product_label`: `APT-0092-01 | 1-36L-WOA (APT1-36L-WOA)` (hoặc chỉ tên tủ nếu đơn hàng đơn lẻ).
+    * `badge`: `APT-0092-01 | 1-36L-WOA (APT1-36L-WOA)`.
+  * Áp dụng nhất quán cho cả 3 tầng: Đóng gói (Thành phẩm Tủ), Công đoạn sản xuất (BOMDetail linh kiện), và MasterBOM fallback.
+
+### 3.2. Frontend Controller ([`useInspectionFormBase.js`](file:///d:/SmartFlow_v2_Test/FrontEnd/Mobile/modules/production_v2/Controllers/useInspectionFormBase.js))
+* **Tạo `specOptions` với `value` duy nhất**:
+  * Gán `value: ${s.specification}__${s.order_code || ''}__${s.product_sku || ''}`.
+  * Gán `label: s.specification`.
+  * Gán `rawSpec: s.specification`.
+  * Gán `badge: s.badge || s.product_label`.
+  * Gán `qty: s.qty`.
+* **Xử lý `handleMultiSpecChange`**:
+  * Lưu trữ danh sách key đã chọn trong `selectedSpecs`.
+  * Trích xuất các kích thước thuần (`rawSpec`) không trùng lặp đưa vào `spec` để lưu phiếu kiểm tra.
+  * Tự động cộng dồn `requiredQty` từ các dòng được chọn:
+    `requiredQty = sum(selectedOptions.map(opt => opt.qty))`
+  * Tự động kích hoạt tra cứu mốc lấy mẫu AQL (`sampleQty`) theo số lượng thực tế vừa tính.
+
+### 3.3. Frontend Component ([`FormMultiSearchSelect.jsx`](file:///d:/SmartFlow_v2_Test/FrontEnd/Mobile/Shared/Views/components/form/FormMultiSearchSelect.jsx))
+* **Cải tiến bộ lọc tìm kiếm (`filteredOptions`)**:
+  * Cho phép tìm kiếm cả trong `opt.badge` và `opt.order_code`. Khi người dùng gõ `01`, `36L`, hay `WOA`, các dòng tương ứng sẽ lọc ra ngay lập tức.
+* **Tối ưu hiển thị Badge**:
+  * Hiển thị badge xanh gọn gàng với `whiteSpace: 'nowrap'`, không bị cắt cụt.
 
 ---
 
-### C. Cập nhật Backend API Lấy BOM & QC `/production-v2/orders/{po_code}/bom`
-- **File**: [`BackEnd/modules/production/routes/production_v2_router.py`](file:///d:/SmartFlow/SmartFlow_v2_Test/BackEnd/modules/production/routes/production_v2_router.py)
-- **Cơ chế gom Chi tiết & QC**:
-  1. Trích xuất `root_po = extract_root_po(clean_po)`.
-  2. Truy vấn **toàn bộ các đơn hàng** thuộc mã gốc này:
-     ```python
-     matching_orders = db.query(Order).options(joinedload(Order.products)).filter(
-         or_(
-             Order.order_code == root_po,
-             Order.order_code.ilike(f"{root_po}-%"),
-             Order.partner_po == root_po,
-             Order.partner_po.ilike(f"{root_po}-%"),
-             Order.production_code == root_po,
-             Order.production_code.ilike(f"{root_po}-%"),
-             Order.order_code == f"LSX-{root_po}",
-             Order.order_code.ilike(f"LSX-{root_po}-%")
-         )
-     ).all()
-     ```
-  3. Gom Chi tiết và QC theo từng loại công đoạn:
-     - **Đối với công đoạn Đóng gói / Lưu kho / Thành phẩm**:
-       - Thu thập toàn bộ sản phẩm hoàn chỉnh (`products`) của tất cả các đơn hàng con.
-       - Gôm theo tên sản phẩm / SKU (ví dụ: tủ `1-60-BRO (APT1-60-BRO)`).
-       - Cộng dồn số lượng kế hoạch `total_qty` của sản phẩm đó qua tất cả các đợt.
-       - Gôm danh sách quy cách (`specs`) của sản phẩm thành danh mục quy cách duy nhất.
-     - **Đối với các công đoạn sản xuất linh kiện (Tạo phôi, Định hình, Lắp ráp, Sơn, v.v.)**:
-       - Lấy danh sách ID của tất cả sản phẩm thuộc các đơn hàng con.
-       - Truy vấn toàn bộ linh kiện trong bảng `BOMDetail` tương ứng với các sản phẩm này.
-       - Lọc linh kiện theo công đoạn đang kiểm tra (`is_matching_stage`).
-       - Gôm theo tên chi tiết `part_name`:
-         - Cộng dồn `total_qty` của chi tiết đó trên toàn bộ các đơn con.
-         - Gôm danh mục quy cách `specs_map` (sử dụng bộ trích xuất kích thước đa tầng chuẩn xác đã có).
-  4. Trả về mảng JSON các chi tiết đã gôm:
-     ```json
-     [
-       {
-         "part_name": "Chi tiết đố trước",
-         "label": "Chi tiết đố trước",
-         "total_qty": 350,
-         "specs": [
-           { "specification": "18*65*876", "qty": 200 },
-           { "specification": "18*65*1524", "qty": 150 }
-         ]
-       }
-     ]
-     ```
+## 4. Kế Hoạch Kiểm Thử (Verification Plan)
 
----
+### 4.1. Automated Tests
+* Chạy `python BackEnd/scripts/test_po_grouping_bom.py`:
+  * Xác minh endpoint `/orders/APT-0102/bom` và `/orders/APT-0092/bom` trả về danh sách `specs` được phân tách theo từng đơn con và loại tủ.
+  * Xác minh tất cả các trường `specification`, `qty`, `order_code`, `product_label` đều đầy đủ và chính xác.
+* Chạy `npm run build` trong `FrontEnd/Mobile`:
+  * Xác minh không có lỗi cú pháp hoặc typing trong React/Vite.
 
-### D. Cập nhật Mobile FrontEnd Controller (`useInspectionFormBase.js`)
-- **File**: [`FrontEnd/Mobile/modules/production_v2/Controllers/useInspectionFormBase.js`](file:///d:/SmartFlow/SmartFlow_v2_Test/FrontEnd/Mobile/modules/production_v2/Controllers/useInspectionFormBase.js)
-- **Tối ưu trải nghiệm**:
-  1. **Danh sách PO**: Dropdown PO nạp danh sách đã gôm nhóm từ API (và dự phòng hàm `extractRootPo` ở FE để đảm bảo không bao giờ xuất hiện mã con trùng lặp).
-  2. **Khi chọn PO (ví dụ chọn `APT-0102`)**:
-     - Nạp BOM đã gôm của `APT-0102` cho công đoạn hiện tại.
-     - Dropdown Chi tiết hiển thị các linh kiện duy nhất với số lượng tổng của toàn bộ PO.
-  3. **Khi chọn Chi tiết**:
-     - Dropdown Quy cách tự động hiển thị danh sách quy cách QC duy nhất của chi tiết đó.
-     - Ô Số lượng kế hoạch (`requiredQty`) hiển thị tổng số lượng thực tế.
-     - Tự động tính toán cỡ mẫu kiểm tra theo tiêu chuẩn AQL tương ứng với tổng số lượng lô hàng.
-  4. **Tương thích ngược với các phiếu cũ**:
-     - Khi mở xem lại phiếu đã tạo trước đây có gắn mã con (ví dụ phiếu ghi `APT-0102-04`), form vẫn hiển thị đúng mã con `APT-0102-04` của phiếu đó và nạp đúng BOM tương ứng mà không bị lỗi.
-
----
-
-## 3. Các File Cần Chỉnh Sửa
-
-| STT | File | Thay đổi chính |
-|---|---|---|
-| 1 | [`BackEnd/modules/production/routes/production_v2_router.py`](file:///d:/SmartFlow/SmartFlow_v2_Test/BackEnd/modules/production/routes/production_v2_router.py) | - Thêm hàm `extract_root_po`<br>- Cập nhật `/po-codes` để gôm nhóm mã gốc<br>- Cập nhật `get_order_bom` để truy vấn tất cả đơn hàng con của root PO và gôm nhóm Chi tiết + QC |
-| 2 | [`FrontEnd/Mobile/modules/production_v2/Controllers/useInspectionFormBase.js`](file:///d:/SmartFlow/SmartFlow_v2_Test/FrontEnd/Mobile/modules/production_v2/Controllers/useInspectionFormBase.js) | - Tích hợp chuẩn hóa mã PO gốc trên giao diện Mobile<br>- Đảm bảo cache và xử lý Chi tiết/Quy cách gôm nhóm mượt mà |
-
----
-
-## 4. Kế hoạch Kiểm thử & Xác minh (Verification Plan)
-
-### A. Kiểm thử Tự động & Backend Test
-1. Viết script test chạy trực tiếp với Database thực tế kiểm tra:
-   - `get_po_codes`: Xác nhận không còn mã lặp như `APT-0102-01`, `APT-0102-02` mà chỉ còn `APT-0102`.
-   - `get_order_bom` với `po_code='APT-0102'`: Xác nhận tổng số lượng chi tiết được cộng dồn chính xác từ cả 26 lệnh con, danh mục quy cách không bị trùng lặp.
-   - Kiểm tra với các công đoạn khác nhau: Đóng gói (Tủ hoàn thiện) và Tạo phôi/Định hình (Chi tiết gỗ rời).
-
-### B. Kiểm thử Giao diện Mobile & Build
-1. Chạy `npm run build` trong thư mục `FrontEnd/Mobile` để đảm bảo mã nguồn JavaScript không phát sinh lỗi cú pháp hay đóng gói.
-2. Kiểm tra giao diện `/production_v2/inspection/first-sample` (Mẫu đầu chuyền) và `/production_v2/inspection/daily` (Ghi nhận lỗi hằng ngày):
-   - Mở dropdown "Chọn PO *": Xác nhận danh sách hiển thị `APT-0102`, `APT-0092`, `ADV-0406`... không còn lặp `-xx`.
-   - Tìm kiếm `0102`: Chỉ xuất hiện `APT-0102`.
-   - Chọn `APT-0102`: Danh sách Chi tiết hiển thị đầy đủ linh kiện với tổng số lượng.
-   - Chọn Chi tiết: Danh sách Quy cách hiển thị gọn gàng, tự động điền số lượng kiểm tra.
+### 4.2. Manual Verification
+* Mở giao diện Mobile QC, chọn PO `APT-0092`, Chi tiết `Hông tủ`.
+* Mở dropdown `Quy cách *`:
+  * Xác nhận danh sách hiển thị từng dòng riêng biệt kèm huy hiệu `APT-0092-01 | 1-36L-WOA (APT1-36L-WOA)`.
+  * Tích chọn 1 dòng: `SL Cần Kiểm` hiển thị số lượng của dòng đó, `SL mẫu` tính đúng theo AQL.
+  * Tích chọn 2 dòng: `SL Cần Kiểm` cộng dồn số lượng của cả 2 dòng.
+  * Gõ từ khóa `36L` hoặc `01` vào ô tìm kiếm: chỉ lọc ra các dòng khớp.

@@ -14,6 +14,7 @@ import {
 import { stageService } from '../services/stageService'
 import { orderService } from '../services/orderService'
 import { inspectionService } from '../services/inspectionService'
+import { extractRootPo, deduplicatePoCodes } from '../utils/poHelper'
 
 const initErrors = () => [{ id: 1, name: '', qty: 0 }]
 
@@ -85,6 +86,13 @@ const parseDimensionStringFromText = (text) => {
   if (mUnit) return mUnit[1].replace(/\s*/g, '')
 
   return null
+}
+
+const cleanCabinetTag = (tag, fallback = '') => {
+  if (!tag) return fallback
+  // Bỏ tiền tố mã PO như "APT-0090-38 | ", "APT-0102-01 | ", chỉ giữ tên tủ (SKU)
+  const cleaned = String(tag).replace(/^[A-Za-z0-9]+-\d+(?:-[A-Za-z0-9]+)?\s*\|\s*/i, '').trim()
+  return cleaned || fallback
 }
 
 const getEffectiveSpec = (specRaw, partName) => {
@@ -933,7 +941,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       // Tìm kiếm Lệnh sản xuất Full siêu tốc (5-10ms)
       orderService.getPoCodes({ search: term, limit: 1000 })
         .then((codes) => {
-          const rawCodes = codes || []
+          const rawCodes = deduplicatePoCodes(codes || [])
           if (rawCodes.length === 0) {
             setPoOptions([{ value: '', label: 'Không tìm thấy PO phù hợp' }])
           } else {
@@ -967,7 +975,8 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       const currentMonth = new Date().getMonth() + 1
       orderService.getPoCodes({ month: currentMonth, limit: 1000 })
         .then((codes) => {
-          const opts = (codes || []).map((code) => ({ value: code, label: code }))
+          const cleanCodes = deduplicatePoCodes(codes || [])
+          const opts = cleanCodes.map((code) => ({ value: code, label: code }))
           monthPoCacheRef.current = opts
           setPoOptions([{ value: '', label: 'Nhập hoặc chọn PO...' }, ...opts])
         })
@@ -1144,15 +1153,25 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
           setParamProduct(combinedName)
           setSelectedProducts(partNames)
           
-          let allSpecs = []
+          let specOpts = []
           let totalQtySum = 0
           let isAnyConverted = false
           matchedParts.forEach(part => {
             if (Array.isArray(part.specs)) {
-              part.specs.forEach(s => {
-                allSpecs.push({
-                  specification: getEffectiveSpec(s.specification, part.part_name),
-                  partName: part.part_name
+              part.specs.forEach((s, idx) => {
+                const effSpec = getEffectiveSpec(s.specification, part.part_name)
+                const rawTag = s.badge || s.product_label || s.product_name || s.product_sku || (part.sku ? `${part.part_name} (${part.sku})` : '')
+                const cabinetTag = cleanCabinetTag(rawTag, part.label || part.part_name || 'Chi tiết')
+                const optKey = s.id || `${part.part_name}__${effSpec}__${s.order_code || ''}__${s.product_sku || s.product_name || idx}`
+                specOpts.push({
+                  value: optKey,
+                  label: effSpec,
+                  rawSpec: effSpec,
+                  badge: cabinetTag,
+                  productLabel: cabinetTag,
+                  partName: part.part_name,
+                  orderCode: s.order_code || '',
+                  qty: Number(s.qty) || 0
                 })
               })
             }
@@ -1163,20 +1182,14 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
             }
           })
           
-          const specOpts = allSpecs.map((s) => ({
-            value: s.specification,
-            label: s.specification
-          }))
-          const uniqueSpecOpts = Array.from(new Set(specOpts.map((s) => s.value))).map((val) => ({ value: val, label: val }))
-          setSpecOptions([{ value: '', label: 'Chọn quy cách' }, ...uniqueSpecOpts])
-          
-          if (totalQtySum > 0) {
-            setRequiredQty(String(totalQtySum))
-            setIsQtyConverted(isAnyConverted)
-            const initSample = Math.max(1, Math.min(totalQtySum, Math.ceil(totalQtySum * 0.05)))
-            setSampleQty(String(initSample))
-            setParamSample(String(initSample))
-          }
+          setSpecOptions([{ value: '', label: 'Chọn quy cách' }, ...specOpts])
+          // Mặc định không chọn trước quy cách nào
+          setSelectedSpecs([])
+          setSpec('')
+          setRequiredQty('')
+          setSampleQty('')
+          setParamSample('')
+          setIsQtyConverted(false)
         } else {
           // Mặc định không tự chọn chi tiết nào, để người dùng chủ động chọn
           setProduct('')
@@ -1331,29 +1344,38 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     const part = bomData.find((p) => p.part_name === partName)
     if (part) {
       const firstSpecs = part.specs || []
-      let specOpts = firstSpecs.map((s) => {
+      let specOpts = firstSpecs.map((s, idx) => {
         const val = getEffectiveSpec(s.specification, partName)
-        return { value: val, label: val }
+        const rawTag = s.badge || s.product_label || s.product_name || s.product_sku || (part.sku ? `${part.part_name} (${part.sku})` : '')
+        const cabinetTag = cleanCabinetTag(rawTag, part.label || part.part_name || 'Chi tiết')
+        const optKey = s.id || `${partName}__${val}__${s.order_code || ''}__${s.product_sku || s.product_name || idx}`
+        return {
+          value: optKey,
+          label: val,
+          rawSpec: val,
+          badge: cabinetTag,
+          productLabel: cabinetTag,
+          partName: partName,
+          orderCode: s.order_code || '',
+          qty: Number(s.qty) || 0
+        }
       })
       if (specOpts.length === 0) {
         const effSpec = getEffectiveSpec('', partName)
-        specOpts = [{ value: effSpec, label: effSpec }]
+        const cabinetTag = part.sku ? `${part.part_name} (${part.sku})` : ''
+        specOpts = [{ value: effSpec, label: effSpec, rawSpec: effSpec, badge: cabinetTag, productLabel: cabinetTag, qty: Number(part.total_qty) || 0 }]
       }
       setSpecOptions([{ value: '', label: 'Chọn quy cách' }, ...specOpts])
-      const sVal = specOpts[0]?.value || getEffectiveSpec('', partName)
-      setSpec(sVal)
-
-      if (part.total_qty) {
-        const cQty = convertQuantityToPiecesIfNeeded(part.part_name, part.total_qty, part.unit)
-        setRequiredQty(String(cQty))
-        const calcSample = Math.max(1, Math.ceil(Number(cQty) * 0.05))
-        setSampleQty(String(calcSample))
-      } else {
-        setRequiredQty('')
-      }
+      // Mặc định không chọn trước quy cách nào
+      setSelectedSpecs([])
+      setSpec('')
+      setRequiredQty('')
+      setSampleQty('')
+      setParamSample('')
     } else {
       setSpecOptions([{ value: '', label: 'Chọn quy cách' }])
       setSpec('')
+      setSelectedSpecs([])
       setRequiredQty('')
     }
   }
@@ -1367,33 +1389,30 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     setParamProduct(combinedStr)
 
     const selectedParts = bomData.filter((p) => partNamesArray.includes(p.part_name))
-    let specOptsMap = new Map()
+    let specOpts = []
     let totalQtySum = 0
-    let autoSelectedSpecs = []
 
     selectedParts.forEach((part) => {
       const partSpecs = (Array.isArray(part.specs) && part.specs.length > 0)
         ? part.specs
         : [{ specification: getEffectiveSpec('', part.part_name) }]
 
-      partSpecs.forEach((s) => {
+      partSpecs.forEach((s, idx) => {
         const effSpec = getEffectiveSpec(s.specification, part.part_name)
-        if (!specOptsMap.has(effSpec)) {
-          specOptsMap.set(effSpec, {
-            value: effSpec,
-            label: effSpec,
-            partName: part.part_name,
-            rawSpec: effSpec
-          })
-        }
+        const rawTag = s.badge || s.product_label || s.product_name || s.product_sku || (part.sku ? `${part.part_name} (${part.sku})` : '')
+        const cabinetTag = cleanCabinetTag(rawTag, part.label || part.part_name || 'Chi tiết')
+        const optKey = s.id || `${part.part_name}__${effSpec}__${s.order_code || ''}__${s.product_sku || s.product_name || idx}`
+        specOpts.push({
+          value: optKey,
+          label: effSpec,
+          rawSpec: effSpec,
+          badge: cabinetTag,
+          productLabel: cabinetTag,
+          partName: part.part_name,
+          orderCode: s.order_code || '',
+          qty: Number(s.qty) || 0
+        })
       })
-
-      if (partSpecs.length >= 1) {
-        const firstVal = getEffectiveSpec(partSpecs[0].specification, part.part_name)
-        if (!autoSelectedSpecs.includes(firstVal)) {
-          autoSelectedSpecs.push(firstVal)
-        }
-      }
 
       if (part.total_qty) {
         const cQty = convertQuantityToPiecesIfNeeded(part.part_name, part.total_qty, part.unit)
@@ -1401,53 +1420,44 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       }
     })
 
-    const specOpts = Array.from(specOptsMap.values())
     setSpecOptions(specOpts)
-    setSelectedSpecs(autoSelectedSpecs)
-    setSpec(autoSelectedSpecs.join(', '))
-
-    if (totalQtySum > 0) {
-      setRequiredQty(String(totalQtySum))
-      const calcSample = Math.max(1, Math.ceil(totalQtySum * 0.05))
-      setSampleQty(String(calcSample))
-    } else {
-      setRequiredQty('')
-    }
+    // Mặc định không chọn trước quy cách nào
+    setSelectedSpecs([])
+    setSpec('')
+    setRequiredQty('')
+    setSampleQty('')
+    setParamSample('')
   }
 
-  // Danh sách các quy cách không được phép bỏ chọn (khi chi tiết đã chọn chỉ có đúng 1 quy cách duy nhất)
+  // Bỏ gán cứng khóa quy cách để người dùng linh hoạt chọn/bỏ chọn theo từng dòng tủ
   const lockedSpecs = useMemo(() => {
-    const locked = new Set()
-    if (!Array.isArray(selectedProducts) || selectedProducts.length === 0 || !Array.isArray(bomData)) {
-      return []
-    }
-    selectedProducts.forEach((pName) => {
-      const part = bomData.find((p) => p.part_name === pName)
-      if (part) {
-        let rawSpecs = []
-        if (Array.isArray(part.specs) && part.specs.length > 0) {
-          rawSpecs = part.specs.map((s) => getEffectiveSpec(s.specification, pName)).filter(Boolean)
-        } else if (part.specification) {
-          rawSpecs = [getEffectiveSpec(part.specification, pName)]
-        } else {
-          rawSpecs = [getEffectiveSpec('', pName)]
-        }
-        const uniqueSpecs = Array.from(new Set(rawSpecs))
-        if (uniqueSpecs.length === 1 && uniqueSpecs[0]) {
-          locked.add(uniqueSpecs[0])
-        }
-      }
-    })
-    return Array.from(locked)
-  }, [selectedProducts, bomData])
+    return []
+  }, [])
 
   const handleMultiSpecChange = (specArray) => {
     if (readOnly) return
     setIsDirty(true)
-    const enforced = Array.from(new Set([...(specArray || []), ...lockedSpecs]))
-    setSelectedSpecs(enforced)
-    const combinedStr = enforced.join(', ')
+    const cleanKeys = Array.from(new Set(specArray || []))
+    setSelectedSpecs(cleanKeys)
+
+    // Trích xuất các kích thước thuần từ các dòng được chọn
+    const selectedOpts = specOptions.filter(o => cleanKeys.includes(o.value?.toString()))
+    const distinctRawSpecs = Array.from(new Set(selectedOpts.map(o => o.rawSpec || o.label))).filter(Boolean)
+    const combinedStr = distinctRawSpecs.join(', ')
     setSpec(combinedStr)
+
+    // Tự động tính lại tổng số lượng cần kiểm theo các dòng đã chọn
+    const sumQty = selectedOpts.reduce((sum, opt) => sum + (Number(opt.qty) || 0), 0)
+    if (sumQty > 0) {
+      setRequiredQty(String(sumQty))
+      const calcSample = Math.max(1, Math.ceil(sumQty * 0.05))
+      setSampleQty(String(calcSample))
+      setParamSample(String(calcSample))
+    } else if (cleanKeys.length === 0) {
+      setRequiredQty('')
+      setSampleQty('')
+      setParamSample('')
+    }
   }
 
   const handleLoadLastResult = async () => {
@@ -1719,31 +1729,70 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
   const isDone = ticket?.status === 'done' || ticket?.is_confirmed === true
 
   const currentPartsDetails = useMemo(() => {
+    // 1. Ưu tiên hàng đầu: Lấy chi tiết từ danh sách quy cách và loại tủ đã chọn (selectedSpecs)
+    if (selectedSpecs && selectedSpecs.length > 0) {
+      return selectedSpecs.map((specVal, idx) => {
+        const opt = (specOptions || []).find((o) => o.value?.toString() === specVal?.toString())
+        const pName = opt?.partName || selectedProducts[0] || product || 'Chi tiết'
+        const rawSpec = opt?.rawSpec || opt?.label || spec || 'Tiêu chuẩn'
+        const cab = cleanCabinetTag(opt?.badge || opt?.productLabel || '')
+        const effective = getEffectiveSpec(rawSpec, pName)
+        const itemQty = opt?.qty ? Number(opt.qty) : (Number(requiredQty) || 0)
+        return {
+          stt: String(idx + 1).padStart(2, '0'),
+          part_name: pName,
+          name: pName,
+          specification: effective,
+          spec: effective,
+          cabinet: cab,
+          product_label: cab,
+          badge: cab,
+          order_code: opt?.orderCode || '',
+          plan_qty: itemQty,
+          qty: itemQty
+        }
+      })
+    }
+
+    // 2. Nếu không có selectedSpecs riêng, lấy theo danh sách chi tiết được chọn
     if (selectedProducts && selectedProducts.length > 0) {
       return selectedProducts.map((pName, i) => {
         const partObj = (bomData || []).find((b) => b.part_name === pName)
         const matchedSpec = (selectedSpecs && selectedSpecs[i]) || (partObj?.specs?.[0]?.specification) || spec || 'Tiêu chuẩn'
         const effective = getEffectiveSpec(matchedSpec, pName)
+        const rawCab = partObj?.specs?.[0]?.badge || partObj?.specs?.[0]?.product_label || partObj?.specs?.[0]?.product_name || partObj?.product_name || (partObj?.sku ? `${partObj.part_name} (${partObj.sku})` : '')
+        const cab = cleanCabinetTag(rawCab)
         return {
+          stt: String(i + 1).padStart(2, '0'),
           part_name: pName,
           name: pName,
           specification: effective,
           spec: effective,
-          plan_qty: partObj?.total_qty ? convertQuantityToPiecesIfNeeded(pName, partObj.total_qty, partObj.unit) : 0
+          cabinet: cab,
+          product_label: cab,
+          badge: cab,
+          plan_qty: partObj?.total_qty ? convertQuantityToPiecesIfNeeded(pName, partObj.total_qty, partObj.unit) : 0,
+          qty: partObj?.total_qty ? convertQuantityToPiecesIfNeeded(pName, partObj.total_qty, partObj.unit) : 0
         }
       })
     }
 
     if (ticket?.parts_details && Array.isArray(ticket.parts_details) && ticket.parts_details.length > 0) {
-      return ticket.parts_details.map((item) => {
+      return ticket.parts_details.map((item, idx) => {
         const pName = (item.part_name || item.name || '').trim()
         const effective = getEffectiveSpec(item.specification || item.spec, pName)
+        const cab = cleanCabinetTag(item.cabinet || item.product_label || item.badge || item.product_sku || '')
         return {
+          stt: String(idx + 1).padStart(2, '0'),
           part_name: pName,
           name: pName,
           specification: effective,
           spec: effective,
-          plan_qty: item.plan_qty
+          cabinet: cab,
+          product_label: cab,
+          badge: cab,
+          plan_qty: item.plan_qty || item.qty || 0,
+          qty: item.plan_qty || item.qty || 0
         }
       }).filter((p) => p.name && p.name !== '—')
     }
