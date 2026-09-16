@@ -1052,6 +1052,24 @@ def get_order_bom(
                 return True
             return False
 
+        def format_product_label(p_name: str, p_sku: str, default: str = "") -> str:
+            name = (p_name or "").strip()
+            sku = (p_sku or "").strip()
+            if not name and not sku:
+                return default
+            if not sku:
+                return name
+            if not name:
+                return sku
+            if sku.lower() == name.lower():
+                return name
+            import re
+            clean_n = re.sub(r'^APT[-_]?', '', name, flags=re.IGNORECASE).strip().lower()
+            clean_s = re.sub(r'^APT[-_]?', '', sku, flags=re.IGNORECASE).strip().lower()
+            if clean_n == clean_s:
+                return name
+            return f"{name} ({sku})"
+
         # Build dictionary of valid specifications across ALL BOM items of this order
         valid_specs_by_name = {}
         valid_specs_by_sku = {}
@@ -1099,7 +1117,7 @@ def get_order_bom(
                 for p in all_products:
                     p_name = (p.name or p.sku or "Tủ").strip()
                     p_sku = (p.sku or "").strip()
-                    p_label = f"{p_name} ({p_sku})" if (p_sku and p_sku.lower() != p_name.lower()) else p_name
+                    p_label = format_product_label(p_name, p_sku, "Tủ")
                     o_code = prod_order_map.get(p.id, clean_po)
                     p_badge = p_label
                     
@@ -1178,7 +1196,7 @@ def get_order_bom(
                     return True
                 if selected_clean == "tạo phôi" and ("phôi" in item_clean or "cắt" in item_clean):
                     return True
-                if selected_clean == "định hình" and ("định hình" in item_clean or "dinh hinh" in item_clean):
+                if selected_clean == "định hình" and ("định hình" in item_clean or "dinh hinh" in item_clean or "phôi" in item_clean or "phoi" in item_clean or "cắt" in item_clean):
                     return True
                 if selected_clean == "lắp ráp" and ("lắp ráp" in item_clean or "lap rap" in item_clean or "chà nhám" in item_clean or "sơn" in item_clean or "son" in item_clean):
                     return True
@@ -1198,7 +1216,10 @@ def get_order_bom(
                 if selected_clean == "tạo phôi":
                     return "phôi" in out_st or "cắt" in out_st or "phôi" in in_st or (not out_st and "định hình" in in_st)
                 if selected_clean == "định hình":
-                    return "định hình" in out_st or (not out_st and "lắp ráp" in in_st)
+                    # Định Hình lấy luôn dữ liệu của Tạo Phôi: Khớp chi tiết của Định Hình HOẶC của Tạo Phôi (tương tự logic Lắp Ráp & Sơn)
+                    is_dh = "định hình" in out_st or "dinh hinh" in out_st or (not out_st and ("lắp ráp" in in_st or "lap rap" in in_st))
+                    is_phoi = "phôi" in out_st or "phoi" in out_st or "cắt" in out_st or "phôi" in in_st or "phoi" in in_st or (not out_st and ("định hình" in in_st or "dinh hinh" in in_st))
+                    return is_dh or is_phoi
                 if selected_clean == "lắp ráp":
                     # Lắp Ráp lấy luôn dữ liệu của Sơn: Khớp chi tiết của Lắp Ráp HOẶC của Sơn
                     is_lr = "lắp ráp" in out_st or "chà nhám" in out_st or (not out_st and ("sơn" in in_st or "đóng gói" in in_st))
@@ -1291,7 +1312,7 @@ def get_order_bom(
                 o_code = prod_order_map.get(b.product_id, clean_po)
                 p_name = p.name if p else ""
                 p_sku = p.sku if p else ""
-                p_label = f"{p.name} ({p.sku})" if (p and p.sku and p.name and p.sku.lower() != p.name.lower()) else (p.name if p and p.name else (p.sku if p and p.sku else ""))
+                p_label = format_product_label(p_name, p_sku, p_name or p_sku)
                 p_badge = p_label
                 spec_key = f"{spec}__{p_sku or p_name}"
 
@@ -1371,7 +1392,9 @@ def get_order_bom(
                                     if "phôi" in out_st or "phoi" in out_st or "cắt" in out_st or "phôi" in in_st or "phoi" in in_st or (not out_st and ("định hình" in in_st or "dinh hinh" in in_st)):
                                         filtered_boms.append(mb)
                                 elif "định hình" in stage_str or "dinh hinh" in stage_str:
-                                    if "định hình" in out_st or "dinh hinh" in out_st or (not out_st and ("lắp ráp" in in_st or "lap rap" in in_st)):
+                                    is_dh = "định hình" in out_st or "dinh hinh" in out_st or (not out_st and ("lắp ráp" in in_st or "lap rap" in in_st))
+                                    is_phoi = "phôi" in out_st or "phoi" in out_st or "cắt" in out_st or "phôi" in in_st or "phoi" in in_st or (not out_st and ("định hình" in in_st or "dinh hinh" in in_st))
+                                    if is_dh or is_phoi:
                                         filtered_boms.append(mb)
                                 elif "lắp ráp" in stage_str or "lap rap" in stage_str:
                                     if "lắp ráp" in out_st or "lap rap" in out_st or "chà nhám" in out_st or "sơn" in out_st or "son" in out_st or (not out_st and ("sơn" in in_st or "son" in in_st or "đóng gói" in in_st or "dong goi" in in_st)):
@@ -1402,7 +1425,7 @@ def get_order_bom(
                                 b_qty = max(1, int(p_qty * float(mb.quantity or 1.0)))
 
                                 p_name = p.name if p else ""
-                                p_label = f"{p.name} ({p.sku})" if (p.sku and p.name and p.sku.lower() != p.name.lower()) else (p.name or p.sku or prod_sku)
+                                p_label = format_product_label(p_name, prod_sku, p_name or prod_sku)
                                 p_badge = p_label
                                 spec_key = f"{spec_n}__{prod_sku or p_name}"
 
@@ -1427,7 +1450,7 @@ def get_order_bom(
 
                 if not mb_found:
                     p_name = p.name if p else ""
-                    p_label = f"{p.name} ({p.sku})" if (p.sku and p.name and p.sku.lower() != p.name.lower()) else (p.name or p.sku or prod_sku)
+                    p_label = format_product_label(p_name, prod_sku, p_name or prod_sku)
                     p_badge = p_label
 
                     if is_component_stage:
@@ -1480,9 +1503,15 @@ def get_order_bom(
                         if p_label:
                             parts_map[part_n]["specs_map"][spec_key]["products"].add(p_label)
 
-        # Fallback to PurchaseRequisition items if order not found in Order table
+        # Fallback to PurchaseRequisition / PurchaseOrderItem if order not found in Order table
         if not parts_map and not matching_orders:
             from modules.purchasing.models.purchase_requisition import PurchaseRequisition
+            from modules.purchasing.models.purchase_order_item import PurchaseOrderItem
+
+            poi_items = []
+            matched_po_code = clean_po
+
+            # 1. Try finding by PurchaseRequisition
             pr = db.query(PurchaseRequisition).options(joinedload(PurchaseRequisition.items)).filter(
                 or_(
                     PurchaseRequisition.po_code == clean_po,
@@ -1492,25 +1521,69 @@ def get_order_bom(
                 )
             ).first()
             if pr and pr.items:
-                for item in pr.items:
-                    name = item.item_name or item.item_code or "Mặt hàng"
-                    unit = item.unit or ""
-                    unit_clean = unit.lower().strip()
+                poi_items = list(pr.items)
+                matched_po_code = pr.po_code or clean_po
+            else:
+                # 2. Try finding directly in PurchaseOrderItem
+                poi_items = db.query(PurchaseOrderItem).filter(
+                    or_(
+                        PurchaseOrderItem.po_code == clean_po,
+                        PurchaseOrderItem.po_code.ilike(f"%{clean_po}%"),
+                        PurchaseOrderItem.order_code == clean_po,
+                        PurchaseOrderItem.order_code.ilike(f"%{clean_po}%"),
+                        PurchaseOrderItem.po_code == root_po,
+                        PurchaseOrderItem.po_code.ilike(f"%{root_po}%")
+                    )
+                ).all()
+                if poi_items and poi_items[0].po_code:
+                    matched_po_code = poi_items[0].po_code
+
+            if poi_items:
+                for item in poi_items:
+                    name = (item.item_name or item.item_code or "Mặt hàng").strip()
+                    sku = (item.item_code or "").strip()
+                    unit = (item.unit or "").strip()
+                    unit_clean = unit.lower()
                     is_m3 = "m3" in unit_clean or "mét khối" in unit_clean or "met khoi" in unit_clean
                     if is_m3:
-                        if item.converted_quantity and float(item.converted_quantity) > 0:
+                        if hasattr(item, 'converted_quantity') and item.converted_quantity and float(item.converted_quantity) > 0:
                             qty = float(item.converted_quantity)
                             unit = "cái"
                         else:
                             qty = float(item.quantity or 1)
                     else:
-                        qty = float(item.quantity) if (item.quantity and float(item.quantity) > 0) else float(item.converted_quantity or 1)
+                        qty = float(item.quantity) if (item.quantity and float(item.quantity) > 0) else float(getattr(item, 'converted_quantity', 1) or 1)
 
-                    spec = extract_spec_from_name_and_content(name, item.item_code or "", item.content or "")
+                    spec = extract_spec_from_name_and_content(name, sku, getattr(item, 'content', '') or '')
+                    label = f"{name} ({sku})" if (sku and sku.lower() != name.lower()) else name
+
                     if name not in parts_map:
-                        parts_map[name] = {"part_name": name, "total_qty": 0, "unit": unit, "is_converted": is_m3, "specs_map": {}}
+                        parts_map[name] = {
+                            "part_name": name,
+                            "label": label,
+                            "sku": sku,
+                            "total_qty": 0,
+                            "unit": unit or ("cái" if not is_m3 else "m3"),
+                            "is_converted": is_m3,
+                            "specs_map": {}
+                        }
                     parts_map[name]["total_qty"] += qty
-                    parts_map[name]["specs_map"][spec] = parts_map[name]["specs_map"].get(spec, 0) + qty
+
+                    spec_key = f"{spec}__{sku or name}"
+                    if spec_key not in parts_map[name]["specs_map"]:
+                        parts_map[name]["specs_map"][spec_key] = {
+                            "id": spec_key,
+                            "specification": spec,
+                            "qty": 0,
+                            "order_code": matched_po_code,
+                            "product_name": name,
+                            "product_sku": sku,
+                            "product_label": label,
+                            "badge": label,
+                            "products": set([label])
+                        }
+                    parts_map[name]["specs_map"][spec_key]["qty"] += qty
+                    parts_map[name]["specs_map"][spec_key]["products"].add(label)
 
         return [
             {
@@ -1523,13 +1596,13 @@ def get_order_bom(
                 "specs": [
                     {
                         "id": v.get("id", k) if isinstance(v, dict) else k,
-                        "specification": v["specification"] if isinstance(v, dict) and "specification" in v else k,
-                        "qty": v["qty"] if isinstance(v, dict) else v,
+                        "specification": v["specification"] if isinstance(v, dict) and "specification" in v else (k if not isinstance(v, dict) else v.get("specification", k)),
+                        "qty": v["qty"] if isinstance(v, dict) and "qty" in v else (v if isinstance(v, (int, float)) else 0),
                         "order_code": v.get("order_code", "") if isinstance(v, dict) else "",
                         "product_name": v.get("product_name", "") if isinstance(v, dict) else "",
                         "product_sku": v.get("product_sku", "") if isinstance(v, dict) else "",
-                        "product_label": v.get("product_label") or v.get("badge") or (", ".join(sorted(list(v.get("products", [])))) if isinstance(v, dict) and v.get("products") else (data.get("label") or data.get("sku") or "")),
-                        "badge": v.get("badge") or v.get("product_label") or (", ".join(sorted(list(v.get("products", [])))) if isinstance(v, dict) and v.get("products") else (data.get("label") or data.get("sku") or "")),
+                        "product_label": (v.get("product_label") or v.get("badge") or (", ".join(sorted(list(v.get("products", [])))) if v.get("products") else (data.get("label") or data.get("sku") or ""))) if isinstance(v, dict) else (data.get("label") or data.get("sku") or ""),
+                        "badge": (v.get("badge") or v.get("product_label") or (", ".join(sorted(list(v.get("products", [])))) if v.get("products") else (data.get("label") or data.get("sku") or ""))) if isinstance(v, dict) else (data.get("label") or data.get("sku") or ""),
                         "products": sorted(list(v["products"])) if isinstance(v, dict) and v.get("products") else ([data.get("label")] if data.get("label") else [])
                     }
                     for k, v in data["specs_map"].items()

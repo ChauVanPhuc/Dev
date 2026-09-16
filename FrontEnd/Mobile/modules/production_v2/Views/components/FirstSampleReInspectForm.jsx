@@ -1,8 +1,10 @@
-import { Plus, ClipboardCheck } from 'lucide-react'
+import React, { useMemo } from 'react'
+import { Plus, ClipboardCheck, History } from 'lucide-react'
 import CustomSelect from '@mobile/Shared/Views/components/form/CustomSelect'
 import FormMultiSearchSelect from '@mobile/Shared/Views/components/form/FormMultiSearchSelect'
 import InspectionStepsTable from './InspectionStepsTable'
 import ErrorTrendRow from './ErrorTrendRow'
+import RecentResultsModal from './RecentResultsModal'
 import { INSPECT_MODES } from '../../constants'
 
 const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
@@ -31,7 +33,9 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
     spec,
     setSpec,
     specOptions,
+    totalBatchQty,
     requiredQty,
+    setRequiredQty,
     displayRequiredQty,
     sampleQty,
     setSampleQty,
@@ -54,17 +58,23 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
     handleMultiProductChange,
     handleMultiSpecChange,
     samplingRule,
+    partHistoryTickets,
+    isPartHistoryModalOpen,
+    setIsPartHistoryModalOpen,
+    totalInspectedSoFar,
   } = formState
 
   const isReInspect = mode === INSPECT_MODES.RE_INSPECT
   const hasStage = Boolean(stage)
   const hasPo = Boolean(po)
   const hasProduct = Boolean(product || (selectedProducts && selectedProducts.length > 0))
+  const hasSpec = Boolean(spec || (selectedSpecs && selectedSpecs.length > 0))
 
   const isPoDisabled = readOnly || isReInspect || !hasStage
   const isProductDisabled = readOnly || isReInspect || !hasStage || !hasPo
   const isSpecDisabled = readOnly || isReInspect || !hasStage || !hasPo || !hasProduct
-  const isSampleQtyDisabled = readOnly || !hasStage || !hasPo || !hasProduct
+  const isQtyDisabled = readOnly || isReInspect || !hasStage || !hasPo || !hasProduct || !hasSpec
+  const isSampleQtyDisabled = readOnly || !hasStage || !hasPo || !hasProduct || !hasSpec
 
   const isComponentStage = stage && ['tạo phôi', 'phôi', 'định hình', 'lắp ráp'].some(s => stage.toLowerCase().includes(s))
   const isFinishedStage = stage && ['sơn', 'đóng gói', 'bao bì', 'lưu kho'].some(s => stage.toLowerCase().includes(s))
@@ -74,9 +84,24 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
   const poPlaceholder = !hasStage ? 'Chọn công đoạn trước' : 'Nhập hoặc chọn PO...'
   const productPlaceholder = !hasStage ? 'Chọn công đoạn trước' : (!hasPo ? 'Chọn PO trước' : `Chọn ${itemLabel.toLowerCase()}...`)
   const specPlaceholder = !hasStage ? 'Chọn công đoạn trước' : (!hasPo ? 'Chọn PO trước' : (!hasProduct ? `Chọn ${itemLabel.toLowerCase()} trước` : 'Chọn quy cách...'))
+  const requiredQtyPlaceholder = !hasStage
+    ? 'Chọn công đoạn trước'
+    : (!hasPo
+      ? 'Chọn PO trước'
+      : (!hasProduct
+        ? `Chọn ${itemLabel.toLowerCase()} trước`
+        : (!hasSpec
+          ? 'Chọn quy cách trước...'
+          : 'Nhập SL giao đợt này...')))
 
   const hasSampleQty = Boolean(sampleQty || requiredQty)
-  const isFormFilled = readOnly || (hasPo && hasProduct && hasSampleQty)
+  const isFormFilled = readOnly || (hasPo && hasProduct && hasSpec && hasSampleQty)
+
+  const totalBatchDisplay = useMemo(() => {
+    if (!hasSpec && !readOnly) return ''
+    if (!totalBatchQty) return readOnly ? (requiredQty || '') : ''
+    return `${totalInspectedSoFar || 0}/${totalBatchQty}`
+  }, [hasSpec, readOnly, totalBatchQty, totalInspectedSoFar, requiredQty])
 
   return (
     <>
@@ -132,11 +157,81 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
         </div>
       </div>
 
-      <div className="pv2-field-row pv2-field-row--3col">
-        <div className="pv2-field">
-          <label>SL Cần Kiểm</label>
-          <input type="text" className="pv2-input pv2-input--disabled" readOnly disabled value={displayRequiredQty || requiredQty || ''} placeholder="" />
+      {/* Lịch sử kiểm tra của chi tiết này nếu đã từng tạo phiếu */}
+      {hasProduct && partHistoryTickets && partHistoryTickets.length > 0 && (
+        <div
+          className="pv2-fade-in"
+          style={{
+            marginTop: 4,
+            marginBottom: 12,
+            padding: '10px 14px',
+            borderRadius: 8,
+            backgroundColor: '#FEF3C7',
+            border: '1px solid #FDE68A',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '12.5px', color: '#92400E' }}>
+            <History size={16} style={{ color: '#B45309', flexShrink: 0 }} />
+            <span>
+              Chi tiết này đã có <strong>{partHistoryTickets.length} phiếu</strong> kiểm tra
+              {totalInspectedSoFar > 0 && (
+                <> • Đã kiểm: <strong>{totalInspectedSoFar}</strong>{totalBatchQty ? ` / ${totalBatchQty}` : ''}</>
+              )}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsPartHistoryModalOpen(true)}
+            style={{
+              backgroundColor: '#B45309',
+              color: '#FFF',
+              border: 'none',
+              borderRadius: 6,
+              padding: '5px 10px',
+              fontSize: '11.5px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            Xem lịch sử
+          </button>
         </div>
+      )}
+
+      {/* Hàng 1: Tổng số lượng (hiển thị tỉ lệ Đã kiểm/Tổng SL khi chọn quy cách) & SL Cần Kiểm (người dùng tự do nhập theo đợt giao) */}
+      <div className="pv2-field-row pv2-field-row--2col">
+        <div className="pv2-field">
+          <label>Tổng số lượng</label>
+          <input
+            type="text"
+            className="pv2-input pv2-input--disabled"
+            value={totalBatchDisplay}
+            disabled
+            readOnly
+            placeholder="—"
+          />
+        </div>
+        <div className="pv2-field">
+          <label>SL Cần Kiểm <span className="pv2-req">*</span></label>
+          <input
+            type="number"
+            min="1"
+            className={`pv2-input ${isQtyDisabled ? 'pv2-input--disabled' : ''}`}
+            value={requiredQty}
+            onChange={(e) => setRequiredQty(e.target.value)}
+            placeholder={requiredQtyPlaceholder}
+            disabled={isQtyDisabled}
+          />
+        </div>
+      </div>
+
+      {/* Hàng 2: SL Mẫu (AQL tính toán theo SL Cần Kiểm) & Lỗi (nếu có) */}
+      <div className="pv2-field-row pv2-field-row--2col">
         <div className="pv2-field">
           <label>SL mẫu <span className="pv2-req">*</span></label>
           <input
@@ -146,7 +241,7 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
             className={`pv2-input ${isSampleQtyDisabled ? 'pv2-input--disabled' : ''}`}
             value={sampleQty}
             onChange={(e) => setSampleQty(e.target.value)}
-            placeholder={samplingRule?.sample_size ? String(samplingRule.sample_size) : ''}
+            placeholder={!hasSpec ? '—' : (mode === INSPECT_MODES.FIRST_SAMPLE ? '5' : (samplingRule?.sample_size ? String(samplingRule.sample_size) : ''))}
             disabled={isSampleQtyDisabled}
           />
         </div>
@@ -250,6 +345,17 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
           </div>
         </div>
       )}
+
+      {/* Modal Lịch sử kiểm tra của chi tiết */}
+      <RecentResultsModal
+        isOpen={isPartHistoryModalOpen}
+        onClose={() => setIsPartHistoryModalOpen(false)}
+        tickets={partHistoryTickets}
+        title={`Lịch sử kiểm tra: ${product || 'Chi tiết'}`}
+        emptyMessage="Chưa có phiếu kiểm tra nào trước đây cho chi tiết này"
+        maxItems={50}
+        showApply={false}
+      />
     </>
   )
 }

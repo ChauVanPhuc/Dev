@@ -32,11 +32,35 @@ const QualityOverviewView = () => {
   const [selectedTask, setSelectedTask] = useState(null);
   const [confirming, setConfirming] = useState(false);
   const [cancelingId, setCancelingId] = useState(null);
+  const [cancelingTask, setCancelingTask] = useState(false);
+  const [isCancelInspectionModalOpen, setIsCancelInspectionModalOpen] = useState(false);
   const [cancelConfirmModal, setCancelConfirmModal] = useState({
     isOpen: false,
     task: null
   });
   const [confirmSuccessMsg, setConfirmSuccessMsg] = useState('');
+
+  // Trạng thái chỉnh sửa trên Modal Chi tiết
+  const [modalResult, setModalResult] = useState('pass');
+  const [modalAction, setModalAction] = useState('chap-nhan');
+  const [handlingInfo, setHandlingInfo] = useState('');
+
+  // Đồng bộ trạng thái khi mở hoặc chuyển phiếu kiểm tra
+  useEffect(() => {
+    if (selectedTask) {
+      const isPass = selectedTask.result === 'Đạt' || selectedTask.result === 'pass';
+      setModalResult(isPass ? 'pass' : 'fail');
+      setModalAction(selectedTask.action || 'chap-nhan');
+
+      let parsedJson = null;
+      if (selectedTask.data_json) {
+        try {
+          parsedJson = typeof selectedTask.data_json === 'string' ? JSON.parse(selectedTask.data_json) : selectedTask.data_json;
+        } catch (e) {}
+      }
+      setHandlingInfo(selectedTask.handling_info || parsedJson?.handling_info || '');
+    }
+  }, [selectedTask]);
 
   // Phân trang
   const [currentPage, setCurrentPage] = useState(1);
@@ -116,6 +140,45 @@ const QualityOverviewView = () => {
   }, [filteredTasks, currentPage, limit]);
 
   const totalPages = Math.ceil(filteredTasks.length / limit) || 1;
+
+  // Vị trí của phiếu đang chọn trong danh sách lọc
+  const currentTaskIndex = useMemo(() => {
+    if (!selectedTask) return -1;
+    return filteredTasks.findIndex(t => t.id === selectedTask.id);
+  }, [selectedTask, filteredTasks]);
+
+  const goToPreviousTask = () => {
+    if (currentTaskIndex > 0) {
+      setSelectedTask(filteredTasks[currentTaskIndex - 1]);
+    }
+  };
+
+  const goToNextTask = () => {
+    if (currentTaskIndex < filteredTasks.length - 1) {
+      setSelectedTask(filteredTasks[currentTaskIndex + 1]);
+    }
+  };
+
+  // Lắng nghe phím mũi tên Trái / Phải để di chuyển phiếu
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (!selectedTask) return;
+      const activeTag = document.activeElement?.tagName?.toUpperCase();
+      if (activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT') {
+        return;
+      }
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        goToPreviousTask();
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        goToNextTask();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedTask, currentTaskIndex, filteredTasks]);
 
   // Tự động phân rã danh sách chi tiết / phôi kiểm tra thành List Table
   const cleanCabinetTag = (tag) => {
@@ -205,24 +268,66 @@ const QualityOverviewView = () => {
     });
   }, [selectedTask]);
 
-  // Xử lý xác nhận phiếu
+  // Xử lý xác nhận phiếu và tự động chuyển sang đơn tiếp theo
   const handleConfirmTask = async (task) => {
     if (!task) return;
     setConfirming(true);
     try {
       const taskType = task.type || 'input';
-      await api.post(`/inspections/confirm/${taskType}/${task.id}`, {});
-      setConfirmSuccessMsg(`Xác nhận thành công phiếu #${task.ticket_code || task.id}!`);
-      setTimeout(() => {
-        setConfirmSuccessMsg('');
+      await api.post(`/inspections/confirm/${taskType}/${task.id}`, {
+        result: modalResult,
+        action: modalAction,
+        handling_info: handlingInfo
+      });
+      toast('success', `Đã xác nhận thành công phiếu #${task.ticket_code || task.id}!`);
+
+      // Tự động chuyển sang phiếu tiếp theo
+      const remaining = filteredTasks.filter(t => t.id !== task.id);
+      setPendingTasks(prev => prev.filter(t => t.id !== task.id));
+      if (remaining.length > 0) {
+        const nextIdx = Math.min(Math.max(currentTaskIndex, 0), remaining.length - 1);
+        setSelectedTask(remaining[nextIdx]);
+      } else {
         setSelectedTask(null);
-        fetchPendingTasks();
-      }, 1000);
+        toast('success', 'Đã hoàn tất duyệt toàn bộ phiếu tồn đọng!');
+      }
+      fetchPendingTasks();
     } catch (error) {
       console.error('Error confirming inspection:', error);
       toast('error', 'Lỗi khi xác nhận phiếu kiểm tra: ' + (error.response?.data?.detail || error.message));
     } finally {
       setConfirming(false);
+    }
+  };
+
+  // Xác nhận hủy hồ sơ kiểm tra và tự động chuyển sang đơn tiếp theo
+  const handleExecuteCancelInspection = async () => {
+    if (!selectedTask) return;
+    setCancelingTask(true);
+    try {
+      const taskType = selectedTask.type || 'input';
+      await api.post(`/inspections/cancel-inspection/${taskType}/${selectedTask.id}`, {
+        handling_info: handlingInfo,
+        reason: 'Quản lý chất lượng hủy hồ sơ'
+      });
+      toast('success', `Đã hủy hồ sơ #${selectedTask.ticket_code || selectedTask.id} thành công!`);
+      setIsCancelInspectionModalOpen(false);
+
+      // Tự động chuyển sang phiếu tiếp theo
+      const remaining = filteredTasks.filter(t => t.id !== selectedTask.id);
+      setPendingTasks(prev => prev.filter(t => t.id !== selectedTask.id));
+      if (remaining.length > 0) {
+        const nextIdx = Math.min(Math.max(currentTaskIndex, 0), remaining.length - 1);
+        setSelectedTask(remaining[nextIdx]);
+      } else {
+        setSelectedTask(null);
+      }
+      fetchPendingTasks();
+    } catch (error) {
+      console.error('Error canceling inspection:', error);
+      toast('error', 'Lỗi khi hủy hồ sơ: ' + (error.response?.data?.detail || error.message));
+    } finally {
+      setCancelingTask(false);
     }
   };
 
@@ -477,6 +582,22 @@ const QualityOverviewView = () => {
       const month = String(d.getMonth() + 1).padStart(2, '0');
       const year = d.getFullYear();
       return `${day}/${month}/${year}`;
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const formatDateTime = (dateStr) => {
+    if (!dateStr) return 'N/A';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      const hours = String(d.getHours()).padStart(2, '0');
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      return `${hours}:${minutes} ${day}/${month}/${year}`;
     } catch {
       return dateStr;
     }
@@ -874,6 +995,66 @@ const QualityOverviewView = () => {
           z-index: 1000;
           backdrop-filter: blur(3px);
         }
+        .modal-flank-container {
+          position: relative;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 100%;
+          max-width: 860px;
+          padding: 0 14px;
+          box-sizing: border-box;
+        }
+        .modal-flank-btn {
+          width: 48px;
+          height: 48px;
+          border-radius: 50%;
+          background-color: #FAF6F0;
+          border: 1.5px solid #EADCC9;
+          color: #7B5233;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16), 0 2px 6px rgba(0, 0, 0, 0.08);
+          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+          flex-shrink: 0;
+          z-index: 1010;
+        }
+        .modal-flank-btn:hover:not(:disabled) {
+          background-color: #FFFFFF;
+          border-color: #7B5233;
+          color: #5D3E26;
+          transform: scale(1.12);
+          box-shadow: 0 8px 24px rgba(123, 82, 51, 0.28);
+        }
+        .modal-flank-btn:active:not(:disabled) {
+          transform: scale(0.94);
+        }
+        .modal-flank-btn:disabled {
+          opacity: 0.28;
+          cursor: not-allowed;
+          box-shadow: none;
+        }
+        @media (max-width: 880px) {
+          .modal-flank-container {
+            padding: 0 4px !important;
+          }
+          .modal-flank-btn {
+            position: absolute !important;
+            top: 50% !important;
+            transform: translateY(-50%) !important;
+            width: 40px !important;
+            height: 40px !important;
+            background-color: #FFFFFF !important;
+          }
+          .modal-flank-btn.prev {
+            left: 8px !important;
+          }
+          .modal-flank-btn.next {
+            right: 8px !important;
+          }
+        }
         .modal-content {
           background: #ffffff;
           border-radius: 16px;
@@ -952,11 +1133,11 @@ const QualityOverviewView = () => {
                       <th style={{ width: '60px', textAlign: 'center' }}>STT</th>
                       <th style={{ minWidth: '220px' }}>TÊN VIỆC</th>
                       <th style={{ width: '180px' }}>LOẠI KIỂM TRA</th>
+                      <th style={{ width: '140px' }}>NGƯỜI KIỂM TRA</th>
                       <th style={{ width: '110px', textAlign: 'center' }}>MỨC ĐỘ ƯU TIÊN</th>
                       <th style={{ width: '110px', textAlign: 'center' }}>TRẠNG THÁI</th>
                       <th style={{ width: '160px', textAlign: 'center' }}>HÀNH ĐỘNG XỬ LÝ</th>
-                      <th style={{ width: '130px', textAlign: 'center' }}>NGÀY GHI NHẬN</th>
-                      <th style={{ width: '130px', textAlign: 'center' }}>NGÀY HOÀN THÀNH</th>
+                      <th style={{ width: '155px', textAlign: 'center' }}>NGÀY GHI NHẬN</th>
                       <th>GHI CHÚ</th>
                       <th style={{ width: '160px', textAlign: 'center' }}>THAO TÁC</th>
                     </tr>
@@ -973,6 +1154,19 @@ const QualityOverviewView = () => {
                           <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#8D6E63' }}>{sttDisplay}</td>
                           <td style={{ fontWeight: '700', color: '#2D1A12' }}>{task.task_name}</td>
                           <td style={{ verticalAlign: 'middle' }}>{renderCategoryBadge(task)}</td>
+                          <td style={{ fontWeight: '600', color: '#2D1A12' }}>
+                            <span style={{
+                              display: 'inline-block',
+                              backgroundColor: '#F3F4F6',
+                              color: '#374151',
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              fontSize: '0.8rem',
+                              fontWeight: 600
+                            }}>
+                              {task.inspector_name || 'QC'}
+                            </span>
+                          </td>
                           <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#8D6E63' }}>{task.priority || 3}</td>
                           <td style={{ textAlign: 'center' }}>
                             <span className="badge-chualam">Chưa Làm</span>
@@ -980,11 +1174,8 @@ const QualityOverviewView = () => {
                           <td style={{ textAlign: 'center' }}>
                             {renderActionBadge(task)}
                           </td>
-                          <td style={{ textAlign: 'center', fontWeight: '600' }}>
-                            {formatDate(task.recorded_date)}
-                          </td>
-                          <td style={{ textAlign: 'center', fontWeight: '600' }}>
-                            {formatDate(task.completion_date)}
+                          <td style={{ textAlign: 'center', fontWeight: '600', color: '#374151', fontSize: '0.82rem' }}>
+                            {formatDateTime(task.recorded_date)}
                           </td>
                           <td style={{ color: '#6B7280', fontSize: '0.85rem' }}>{task.notes}</td>
                           <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
@@ -1107,115 +1298,176 @@ const QualityOverviewView = () => {
       {/* MODAL CHI TIẾT & XÁC NHẬN PHIẾU */}
       {selectedTask && (
         <div className="modal-overlay" onClick={() => setSelectedTask(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            {/* MODAL HEADER */}
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              padding: '16px 22px',
-              backgroundColor: '#FAF6F0',
-              borderBottom: '1.5px solid #EADCC9'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{
-                  width: '38px',
-                  height: '38px',
-                  borderRadius: '10px',
-                  backgroundColor: '#7B5233',
-                  color: '#FFFFFF',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow: '0 2px 5px rgba(123, 82, 51, 0.25)',
-                  flexShrink: 0
-                }}>
-                  <FileText size={20} />
-                </div>
-                <div>
-                  <h3 style={{ margin: 0, color: '#7B5233', fontSize: '1.18rem', fontWeight: 800, letterSpacing: '-0.2px' }}>
-                    Chi tiết phiếu kiểm tra
-                  </h3>
-                  <div style={{ fontSize: '0.8rem', color: '#8D6E63', fontWeight: 600, marginTop: '2px' }}>
-                    Mã phiếu: <strong style={{ color: '#2D1A12' }}>#{selectedTask.ticket_code || selectedTask.id}</strong>
-                  </div>
-                </div>
-              </div>
+          <div className="modal-flank-container" onClick={(e) => e.stopPropagation()}>
+            {/* NÚT ĐIỀU HƯỚNG BÊN HÔNG TRÁI (<) */}
+            <button
+              type="button"
+              className="modal-flank-btn prev"
+              onClick={goToPreviousTask}
+              disabled={currentTaskIndex <= 0}
+              title="Hồ sơ trước (Phím mũi tên ←)"
+              aria-label="Hồ sơ trước"
+              style={{ marginRight: '14px' }}
+            >
+              <ChevronLeft size={26} />
+            </button>
 
-              {/* LABEL KẾT QUẢ GẦN DẤU X & NÚT ĐÓNG */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '0.78rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.3px' }}>
-                    Kết quả:
-                  </span>
-                  {(selectedTask.result === 'Đạt' || selectedTask.result === 'pass') ? (
-                    <span style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '5px',
-                      backgroundColor: '#ECFDF5',
-                      color: '#059669',
-                      border: '1.5px solid #A7F3D0',
-                      padding: '4px 12px',
-                      borderRadius: '20px',
-                      fontWeight: 800,
-                      fontSize: '0.84rem',
-                      boxShadow: '0 1px 3px rgba(16, 185, 129, 0.15)'
-                    }}>
-                      <CheckCircle2 size={15} />
-                      Đạt
-                    </span>
-                  ) : (
-                    <span style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '5px',
-                      backgroundColor: '#FEF2F2',
-                      color: '#DC2626',
-                      border: '1.5px solid #FECACA',
-                      padding: '4px 12px',
-                      borderRadius: '20px',
-                      fontWeight: 800,
-                      fontSize: '0.84rem',
-                      boxShadow: '0 1px 3px rgba(239, 68, 68, 0.15)'
-                    }}>
-                      <XCircle size={15} />
-                      Không đạt
-                    </span>
-                  )}
-                </div>
-
-                <button 
-                  onClick={() => setSelectedTask(null)}
-                  style={{
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '8px',
-                    border: '1.5px solid #EADCC9',
-                    backgroundColor: '#FFFFFF',
-                    color: '#8D6E63',
-                    cursor: 'pointer',
+            {/* MODAL CONTENT */}
+            <div className="modal-content" style={{ flex: 1, maxWidth: '740px', margin: 0 }}>
+              {/* MODAL HEADER */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '16px 22px',
+                backgroundColor: '#FAF6F0',
+                borderBottom: '1.5px solid #EADCC9'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: '10px',
+                    backgroundColor: '#7B5233',
+                    color: '#FFFFFF',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    transition: 'all 0.15s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = '#FEE2E2';
-                    e.currentTarget.style.color = '#DC2626';
-                    e.currentTarget.style.borderColor = '#FCA5A5';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = '#FFFFFF';
-                    e.currentTarget.style.color = '#8D6E63';
-                    e.currentTarget.style.borderColor = '#EADCC9';
-                  }}
-                  title="Đóng (Esc)"
-                >
-                  <X size={18} />
-                </button>
+                    boxShadow: '0 2px 5px rgba(123, 82, 51, 0.25)',
+                    flexShrink: 0
+                  }}>
+                    <FileText size={20} />
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, color: '#7B5233', fontSize: '1.18rem', fontWeight: 800, letterSpacing: '-0.2px' }}>
+                      Chi tiết phiếu kiểm tra
+                    </h3>
+                    <div style={{ fontSize: '0.8rem', color: '#8D6E63', fontWeight: 600, marginTop: '2px' }}>
+                      Mã phiếu: <strong style={{ color: '#2D1A12' }}>#{selectedTask.ticket_code || selectedTask.id}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                {/* CHỈ SỐ HỒ SƠ, KẾT QUẢ & NÚT ĐÓNG */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  {/* CHỈ SỐ THỨ TỰ HỒ SƠ */}
+                  {filteredTasks.length > 0 && currentTaskIndex >= 0 && (
+                    <div
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        padding: '4px 10px',
+                        borderRadius: '8px',
+                        backgroundColor: '#FFFFFF',
+                        border: '1px solid #EADCC9',
+                        fontSize: '0.82rem',
+                        fontWeight: 800,
+                        color: '#7B5233',
+                        letterSpacing: '0.2px',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                      }}
+                      title={`Đang xem hồ sơ ${currentTaskIndex + 1} trên tổng số ${filteredTasks.length} hồ sơ`}
+                    >
+                      {currentTaskIndex + 1} / {filteredTasks.length}
+                    </div>
+                  )}
+
+                  {/* CHỈNH SỬA KẾT QUẢ ĐẠT / KHÔNG ĐẠT */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '0.76rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                      Kết quả:
+                    </span>
+                    <div style={{
+                      display: 'inline-flex',
+                      backgroundColor: '#F3F4F6',
+                      padding: '2px',
+                      borderRadius: '20px',
+                      border: '1px solid #E5E7EB',
+                      gap: '2px'
+                    }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setModalResult('pass');
+                          if (modalAction === 'tra-ve') setModalAction('chap-nhan');
+                        }}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '3px 10px',
+                          borderRadius: '16px',
+                          fontSize: '0.8rem',
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          border: modalResult === 'pass' ? '1.5px solid #A7F3D0' : '1.5px solid transparent',
+                          backgroundColor: modalResult === 'pass' ? '#ECFDF5' : 'transparent',
+                          color: modalResult === 'pass' ? '#059669' : '#6B7280',
+                          boxShadow: modalResult === 'pass' ? '0 1px 2px rgba(16, 185, 129, 0.2)' : 'none',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <CheckCircle2 size={14} />
+                        Đạt
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setModalResult('fail');
+                        }}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '3px 10px',
+                          borderRadius: '16px',
+                          fontSize: '0.8rem',
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          border: modalResult === 'fail' ? '1.5px solid #FECACA' : '1.5px solid transparent',
+                          backgroundColor: modalResult === 'fail' ? '#FEF2F2' : 'transparent',
+                          color: modalResult === 'fail' ? '#DC2626' : '#6B7280',
+                          boxShadow: modalResult === 'fail' ? '0 1px 2px rgba(239, 68, 68, 0.2)' : 'none',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <XCircle size={14} />
+                        Không đạt
+                      </button>
+                    </div>
+                  </div>
+
+                  <button 
+                    onClick={() => setSelectedTask(null)}
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '8px',
+                      border: '1.5px solid #EADCC9',
+                      backgroundColor: '#FFFFFF',
+                      color: '#8D6E63',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#FEE2E2';
+                      e.currentTarget.style.color = '#DC2626';
+                      e.currentTarget.style.borderColor = '#FCA5A5';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = '#FFFFFF';
+                      e.currentTarget.style.color = '#8D6E63';
+                      e.currentTarget.style.borderColor = '#EADCC9';
+                    }}
+                    title="Đóng (Esc)"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
               </div>
-            </div>
 
             {/* MODAL BODY */}
             {confirmSuccessMsg ? (
@@ -1267,7 +1519,7 @@ const QualityOverviewView = () => {
                       NGÀY GHI NHẬN
                     </span>
                     <span style={{ color: '#2D1A12', fontWeight: 600 }}>
-                      {formatDate(selectedTask.recorded_date)}
+                      {formatDateTime(selectedTask.recorded_date)}
                     </span>
                   </div>
 
@@ -1284,7 +1536,27 @@ const QualityOverviewView = () => {
                     <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
                       HÀNH ĐỘNG XỬ LÝ
                     </span>
-                    <div>{renderActionBadge(selectedTask)}</div>
+                    <select
+                      value={modalAction}
+                      onChange={(e) => setModalAction(e.target.value)}
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: '6px',
+                        border: '1.5px solid #EADCC9',
+                        fontSize: '0.82rem',
+                        fontWeight: '700',
+                        backgroundColor: '#FAF6F0',
+                        color: '#7B5233',
+                        cursor: 'pointer',
+                        outline: 'none',
+                        width: '100%',
+                        maxWidth: '180px'
+                      }}
+                    >
+                      <option value="chap-nhan">{modalResult === 'fail' ? 'Chấp nhận / Tự xử lý' : 'Chấp nhận'}</option>
+                      <option value="cach-ly">Cách ly</option>
+                      <option value="tra-ve">Trả hàng</option>
+                    </select>
                   </div>
 
                   <div>
@@ -1426,6 +1698,50 @@ const QualityOverviewView = () => {
                   </div>
                 </div>
 
+                {/* THÔNG TIN XỬ LÝ */}
+                <div style={{ marginBottom: '16px', fontSize: '0.88rem' }}>
+                  <label style={{
+                    fontSize: '0.76rem',
+                    color: '#7B5233',
+                    fontWeight: 800,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.3px',
+                    display: 'block',
+                    marginBottom: '6px'
+                  }}>
+                    Thông tin xử lý / Biện pháp khắc phục
+                  </label>
+                  <textarea
+                    value={handlingInfo}
+                    onChange={(e) => setHandlingInfo(e.target.value)}
+                    placeholder="Nhập phương án xử lý, biện pháp khắc phục sự cố, hướng dẫn tái kiểm tra..."
+                    rows={3}
+                    style={{
+                      width: '100%',
+                      boxSizing: 'border-box',
+                      padding: '10px 12px',
+                      borderRadius: '8px',
+                      border: '1.5px solid #EADCC9',
+                      backgroundColor: '#FFFFFF',
+                      color: '#2D1A12',
+                      fontSize: '0.86rem',
+                      lineHeight: '1.45',
+                      resize: 'vertical',
+                      outline: 'none',
+                      fontFamily: 'inherit',
+                      transition: 'border-color 0.15s ease, box-shadow 0.15s ease'
+                    }}
+                    onFocus={(e) => {
+                      e.target.style.borderColor = '#7B5233';
+                      e.target.style.boxShadow = '0 0 0 3px rgba(123, 82, 51, 0.1)';
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = '#EADCC9';
+                      e.target.style.boxShadow = 'none';
+                    }}
+                  />
+                </div>
+
                 {/* GHI CHÚ */}
                 <div style={{ marginBottom: '16px', fontSize: '0.88rem' }}>
                   <div style={{ fontSize: '0.76rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px' }}>
@@ -1485,12 +1801,48 @@ const QualityOverviewView = () => {
                 backgroundColor: '#FAF6F0',
                 borderTop: '1.5px solid #EADCC9'
               }}>
-                <div>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    onClick={() => setIsCancelInspectionModalOpen(true)}
+                    disabled={confirming || cancelingTask}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                      border: '1.5px solid #FCA5A5',
+                      backgroundColor: '#FEF2F2',
+                      color: '#DC2626',
+                      fontWeight: 700,
+                      fontSize: '0.85rem',
+                      cursor: (confirming || cancelingTask) ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!confirming && !cancelingTask) {
+                        e.currentTarget.style.backgroundColor = '#FEE2E2';
+                        e.currentTarget.style.borderColor = '#EF4444';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!confirming && !cancelingTask) {
+                        e.currentTarget.style.backgroundColor = '#FEF2F2';
+                        e.currentTarget.style.borderColor = '#FCA5A5';
+                      }
+                    }}
+                    title="Hủy hồ sơ này khỏi danh sách quản lý chất lượng"
+                  >
+                    <XCircle size={15} />
+                    {cancelingTask ? 'Đang hủy...' : 'Hủy hồ sơ'}
+                  </button>
+
                   {selectedTask.action === 'tra-ve' && (
                     <button
                       type="button"
                       onClick={() => handleCancelReturn(selectedTask)}
-                      disabled={confirming || cancelingId === selectedTask.id}
+                      disabled={confirming || cancelingId === selectedTask.id || cancelingTask}
                       style={{
                         display: 'inline-flex',
                         alignItems: 'center',
@@ -1502,7 +1854,7 @@ const QualityOverviewView = () => {
                         color: '#B45309',
                         fontWeight: 700,
                         fontSize: '0.85rem',
-                        cursor: 'pointer',
+                        cursor: (confirming || cancelingId === selectedTask.id || cancelingTask) ? 'not-allowed' : 'pointer',
                         transition: 'all 0.15s ease'
                       }}
                       onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FDE68A'}
@@ -1519,7 +1871,7 @@ const QualityOverviewView = () => {
                   <button
                     type="button"
                     onClick={() => setSelectedTask(null)}
-                    disabled={confirming}
+                    disabled={confirming || cancelingTask}
                     style={{
                       padding: '8px 18px',
                       borderRadius: '8px',
@@ -1528,7 +1880,7 @@ const QualityOverviewView = () => {
                       color: '#4B5563',
                       fontWeight: 700,
                       fontSize: '0.88rem',
-                      cursor: 'pointer',
+                      cursor: (confirming || cancelingTask) ? 'not-allowed' : 'pointer',
                       transition: 'all 0.15s ease'
                     }}
                     onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
@@ -1539,7 +1891,7 @@ const QualityOverviewView = () => {
                   <button
                     type="button"
                     onClick={() => handleConfirmTask(selectedTask)}
-                    disabled={confirming}
+                    disabled={confirming || cancelingTask}
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
@@ -1551,7 +1903,7 @@ const QualityOverviewView = () => {
                       color: '#FFFFFF',
                       fontWeight: 700,
                       fontSize: '0.88rem',
-                      cursor: 'pointer',
+                      cursor: (confirming || cancelingTask) ? 'not-allowed' : 'pointer',
                       boxShadow: '0 2px 4px rgba(5, 150, 105, 0.25)',
                       transition: 'all 0.15s ease'
                     }}
@@ -1564,9 +1916,35 @@ const QualityOverviewView = () => {
                 </div>
               </div>
             )}
+            </div>
+
+            {/* NÚT ĐIỀU HƯỚNG BÊN HÔNG PHẢI (>) */}
+            <button
+              type="button"
+              className="modal-flank-btn next"
+              onClick={goToNextTask}
+              disabled={currentTaskIndex >= filteredTasks.length - 1}
+              title="Hồ sơ sau (Phím mũi tên →)"
+              aria-label="Hồ sơ sau"
+              style={{ marginLeft: '14px' }}
+            >
+              <ChevronRight size={26} />
+            </button>
           </div>
         </div>
       )}
+      {/* POPUP XÁC NHẬN HỦY HỒ SƠ KIỂM TRA */}
+      <BeautifulConfirmModal
+        isOpen={isCancelInspectionModalOpen}
+        onClose={() => setIsCancelInspectionModalOpen(false)}
+        onConfirm={handleExecuteCancelInspection}
+        title="Xác nhận hủy hồ sơ kiểm tra"
+        message={`Bạn có chắc chắn muốn hủy hồ sơ kiểm tra #${selectedTask?.ticket_code || selectedTask?.id} không?\n\n• Phiếu này sẽ bị ẩn khỏi danh sách hồ sơ chất lượng (/admin/quality-records).\n• Thông tin vẫn được lưu trữ trong hệ thống với trạng thái đã hủy.`}
+        confirmText={cancelingTask ? 'Đang hủy...' : 'Đồng ý hủy hồ sơ'}
+        cancelText="Không hủy"
+        type="danger"
+      />
+
       {/* POPUP XÁC NHẬN HỦY TRẢ HÀNG CHUẨN DỰ ÁN */}
       <BeautifulConfirmModal
         isOpen={cancelConfirmModal.isOpen}

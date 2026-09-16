@@ -21,10 +21,6 @@ const CL09F_DailyInspectionView = () => {
     handlePoChange,
     poOptions,
     handlePoSearch,
-    palletCode,
-    setPalletCode,
-    palletOptions,
-    handlePalletSelect,
     product,
     productOptions,
     selectedProducts,
@@ -42,25 +38,18 @@ const CL09F_DailyInspectionView = () => {
     addErrorRow,
   } = formState
 
-  const [targetType, setTargetType] = useState('po') // 'po' | 'pallet'
-
   const hasStage = Boolean(stage)
   const hasPo = Boolean(po)
-  const hasPallet = Boolean(palletCode)
   const hasProduct = Boolean(product || (selectedProducts && selectedProducts.length > 0))
 
   const isPoDisabled = readOnly || !hasStage
-  const isPalletDisabled = readOnly || !hasStage
-  const isProductDisabled = readOnly || !hasStage || (targetType === 'po' ? !hasPo : !hasPallet)
-  const isSampleDisabled = readOnly || !hasStage || (targetType === 'po' ? (!hasPo || !hasProduct) : (!hasPallet || !hasProduct))
+  const isProductDisabled = readOnly || !hasStage || !hasPo
+  const isSampleDisabled = readOnly || !hasStage || !hasPo || !hasProduct
 
   const poPlaceholder = !hasStage ? 'Chọn công đoạn trước' : 'Nhập hoặc chọn PO...'
-  const palletPlaceholder = !hasStage ? 'Chọn công đoạn trước' : 'Chọn hoặc nhập mã Pallet...'
   const productPlaceholder = !hasStage 
     ? 'Chọn công đoạn trước' 
-    : (targetType === 'po' 
-        ? (!hasPo ? 'Chọn PO trước' : 'Chọn sản phẩm / chi tiết...') 
-        : (!hasPallet ? 'Chọn Pallet trước' : 'Chọn sản phẩm / chi tiết...'))
+    : (!hasPo ? 'Chọn PO trước' : 'Chọn sản phẩm / chi tiết...')
 
   const safeProductOptions = Array.isArray(productOptions) ? productOptions.filter((o) => Boolean(o && o.value)) : []
 
@@ -90,67 +79,20 @@ const CL09F_DailyInspectionView = () => {
     >
       {({ renderImageUploadArea, isFormFilled }) => (
         <>
-          {/* Lựa chọn 1 trong 2: Theo Mã PO hoặc Theo Mã Pallet */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '12px', padding: '4px 0' }}>
-            <span style={{ fontSize: '13px', fontWeight: '700', color: '#4a240e' }}>
-              Kiểm tra theo:
-            </span>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '13.5px', fontWeight: targetType === 'po' ? '700' : '500', color: targetType === 'po' ? '#7B5233' : '#64748b' }}>
-              <input
-                type="radio"
-                name="targetType"
-                checked={targetType === 'po'}
-                onChange={() => {
-                  setTargetType('po')
-                  setPalletCode('')
-                }}
-                disabled={readOnly}
-              />
-              Mã PO
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '13.5px', fontWeight: targetType === 'pallet' ? '700' : '500', color: targetType === 'pallet' ? '#7B5233' : '#64748b' }}>
-              <input
-                type="radio"
-                name="targetType"
-                checked={targetType === 'pallet'}
-                onChange={() => {
-                  setTargetType('pallet')
-                  setPo('')
-                }}
-                disabled={readOnly}
-              />
-              Mã Pallet
-            </label>
-          </div>
-
-          {/* Hàng 1: (Mã PO HOẶC Mã Pallet) + Số lượng mẫu kiểm tra */}
+          {/* Hàng 1: Mã PO + Số lượng mẫu kiểm tra */}
           <div className="pv2-field-row pv2-field-row--2col">
-            {targetType === 'po' ? (
-              <div className="pv2-field">
-                <label>Mã PO <span className="pv2-req">*</span></label>
-                <CustomSelect
-                  value={po}
-                  options={poOptions || []}
-                  onChange={handlePoChange || setPo}
-                  disabled={isPoDisabled}
-                  placeholder={poPlaceholder}
-                  allowCustomInput={true}
-                  onSearch={handlePoSearch}
-                />
-              </div>
-            ) : (
-              <div className="pv2-field">
-                <label>Mã Pallet <span className="pv2-req">*</span></label>
-                <CustomSelect
-                  value={palletCode}
-                  options={palletOptions || []}
-                  onChange={handlePalletSelect || setPalletCode}
-                  disabled={isPalletDisabled}
-                  placeholder={palletPlaceholder}
-                  allowCustomInput={true}
-                />
-              </div>
-            )}
+            <div className="pv2-field">
+              <label>Mã PO <span className="pv2-req">*</span></label>
+              <CustomSelect
+                value={po}
+                options={poOptions || []}
+                onChange={handlePoChange || setPo}
+                disabled={isPoDisabled}
+                placeholder={poPlaceholder}
+                allowCustomInput={true}
+                onSearch={handlePoSearch}
+              />
+            </div>
 
             <div className="pv2-field">
               <label>SL mẫu kiểm tra <span className="pv2-req">*</span></label>
@@ -254,7 +196,7 @@ const CL09F_DailyInspectionView = () => {
                   Bước 2: Điền thông tin ghi nhận lỗi
                 </span>
                 <span style={{ color: '#78716c' }}>
-                  Vui lòng chọn PO/Pallet, Công đoạn, Sản phẩm và Số lượng mẫu để bắt đầu ghi nhận lỗi.
+                  Vui lòng chọn PO, Công đoạn, Sản phẩm và Số lượng mẫu để bắt đầu ghi nhận lỗi.
                 </span>
               </div>
             </div>

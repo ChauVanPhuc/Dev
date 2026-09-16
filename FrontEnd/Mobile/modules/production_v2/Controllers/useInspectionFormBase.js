@@ -91,7 +91,19 @@ const parseDimensionStringFromText = (text) => {
 const cleanCabinetTag = (tag, fallback = '') => {
   if (!tag) return fallback
   // Bỏ tiền tố mã PO như "APT-0090-38 | ", "APT-0102-01 | ", chỉ giữ tên tủ (SKU)
-  const cleaned = String(tag).replace(/^[A-Za-z0-9]+-\d+(?:-[A-Za-z0-9]+)?\s*\|\s*/i, '').trim()
+  let cleaned = String(tag).replace(/^[A-Za-z0-9]+-\d+(?:-[A-Za-z0-9]+)?\s*\|\s*/i, '').trim()
+
+  // Bỏ phần mã trong ngoặc nếu trùng hoặc chỉ khác tiền tố APT (ví dụ: "2-48-GRY (APT2-48-GRY)" -> "2-48-GRY")
+  const m = cleaned.match(/^([^(]+?)\s*\(([^)]+)\)$/)
+  if (m) {
+    const namePart = m[1].trim()
+    const skuPart = m[2].trim()
+    const cleanName = namePart.replace(/^APT[-_]?/i, '').trim().toLowerCase()
+    const cleanSku = skuPart.replace(/^APT[-_]?/i, '').trim().toLowerCase()
+    if (cleanName === cleanSku) {
+      cleaned = namePart
+    }
+  }
   return cleaned || fallback
 }
 
@@ -215,13 +227,19 @@ const isStageMatching = (selectedStage, targetStage) => {
       (sNorm.includes('lắp ráp') || sNorm.includes('lap rap') || sRaw.includes('lắp ráp') || sRaw.includes('lap rap')) &&
       (stNorm.includes('sơn') || stNorm.includes('son') || stRaw.includes('sơn') || stRaw.includes('son'))
 
+    // Khi chọn công đoạn Định Hình, lấy kèm các tiêu chuẩn / danh mục lỗi của công đoạn Tạo Phôi (giống logic Lắp Ráp & Sơn)
+    const isShapingAndMolding =
+      (sNorm.includes('định hình') || sNorm.includes('dinh hinh') || sRaw.includes('định hình') || sRaw.includes('dinh hinh')) &&
+      (stNorm.includes('phôi') || stNorm.includes('phoi') || stRaw.includes('phôi') || stRaw.includes('phoi') || stNorm.includes('cắt') || stRaw.includes('cắt'))
+
     return (
       sRaw === stRaw ||
       sNorm === stNorm ||
       sRaw.includes(stRaw) ||
       stRaw.includes(sRaw) ||
       (sNorm && stNorm && (sNorm.includes(stNorm) || stNorm.includes(sNorm))) ||
-      isAssemblyAndPaint
+      isAssemblyAndPaint ||
+      isShapingAndMolding
     )
   })
 }
@@ -288,8 +306,23 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
   const [specOptions, setSpecOptions] = useState([{ value: '', label: 'Vui lòng chọn công đoạn trước' }])
   const [bomData, setBomData] = useState([])
   const [requiredQty, setRequiredQty] = useState('')
+  const [totalBatchQty, setTotalBatchQty] = useState('')
+  const totalBatchQtyRef = useRef('')
   const [isQtyConverted, setIsQtyConverted] = useState(false)
   const [samplingRule, setSamplingRule] = useState(null)
+
+  const [partHistoryTickets, setPartHistoryTickets] = useState([])
+  const [isPartHistoryModalOpen, setIsPartHistoryModalOpen] = useState(false)
+  const [totalInspectedSoFar, setTotalInspectedSoFar] = useState(0)
+  const totalInspectedSoFarRef = useRef(0)
+
+  useEffect(() => {
+    totalBatchQtyRef.current = totalBatchQty
+  }, [totalBatchQty])
+
+  useEffect(() => {
+    totalInspectedSoFarRef.current = totalInspectedSoFar
+  }, [totalInspectedSoFar])
 
   const [guideVisible, setGuideVisible] = useState(true)
   const [palletCode, setPalletCode] = useState('')
@@ -894,6 +927,8 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     setSelectedProducts([])
     setSpec('')
     setSelectedSpecs([])
+    setTotalBatchQty('')
+    totalBatchQtyRef.current = ''
     setRequiredQty('')
     setSampleQty('')
     setParamSample('')
@@ -1237,6 +1272,22 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       return
     }
 
+    // Riêng phiếu Kiểm tra mẫu đầu (FIRST_SAMPLE): Số lượng mẫu mặc định luôn là 5
+    if (mode === INSPECT_MODES.FIRST_SAMPLE && isNew) {
+      const defaultFirstSample = String(Math.min(lotSize, 5))
+      setSampleQty(defaultFirstSample)
+      setParamSample(defaultFirstSample)
+      apiClient.get(`/inspections/qc-sampling/lookup?lot_size=${lotSize}`)
+        .then((res) => {
+          const resData = res.data || res
+          if (resData && resData.rule) {
+            setSamplingRule(resData.rule)
+          }
+        })
+        .catch(() => {})
+      return
+    }
+
     apiClient.get(`/inspections/qc-sampling/lookup?lot_size=${lotSize}`)
       .then((res) => {
         const resData = res.data || res
@@ -1259,7 +1310,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
         setSampleQty(fallbackSample)
         setParamSample(fallbackSample)
       })
-  }, [requiredQty])
+  }, [requiredQty, mode, isNew])
 
   // Tự động tính SL đạt = SL mẫu - Tổng SL lỗi (SL không đạt) & Cập nhật Kết quả (Đạt/Không đạt)
   useEffect(() => {
@@ -1366,9 +1417,11 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
         specOpts = [{ value: effSpec, label: effSpec, rawSpec: effSpec, badge: cabinetTag, productLabel: cabinetTag, qty: Number(part.total_qty) || 0 }]
       }
       setSpecOptions([{ value: '', label: 'Chọn quy cách' }, ...specOpts])
-      // Mặc định không chọn trước quy cách nào
+      // Mặc định không chọn trước quy cách nào; chỉ hiện số lượng sau khi chọn quy cách
       setSelectedSpecs([])
       setSpec('')
+      setTotalBatchQty('')
+      totalBatchQtyRef.current = ''
       setRequiredQty('')
       setSampleQty('')
       setParamSample('')
@@ -1376,6 +1429,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       setSpecOptions([{ value: '', label: 'Chọn quy cách' }])
       setSpec('')
       setSelectedSpecs([])
+      setTotalBatchQty('')
       setRequiredQty('')
     }
   }
@@ -1421,9 +1475,11 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     })
 
     setSpecOptions(specOpts)
-    // Mặc định không chọn trước quy cách nào
+    // Mặc định không chọn trước quy cách nào; chỉ hiện số lượng sau khi người dùng chọn quy cách
     setSelectedSpecs([])
     setSpec('')
+    setTotalBatchQty('')
+    totalBatchQtyRef.current = ''
     setRequiredQty('')
     setSampleQty('')
     setParamSample('')
@@ -1446,18 +1502,88 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     const combinedStr = distinctRawSpecs.join(', ')
     setSpec(combinedStr)
 
-    // Tự động tính lại tổng số lượng cần kiểm theo các dòng đã chọn
+    // Tự động tính lại tổng số lượng và số lượng cần kiểm theo các dòng đã chọn
     const sumQty = selectedOpts.reduce((sum, opt) => sum + (Number(opt.qty) || 0), 0)
-    if (sumQty > 0) {
-      setRequiredQty(String(sumQty))
-      const calcSample = Math.max(1, Math.ceil(sumQty * 0.05))
+    if (sumQty > 0 && cleanKeys.length > 0) {
+      setTotalBatchQty(String(sumQty))
+      totalBatchQtyRef.current = String(sumQty)
+      // Mặc định SL Cần Kiểm theo lượng còn lại chưa kiểm (Tổng - Đã kiểm)
+      const prevInspected = Number(totalInspectedSoFarRef.current || totalInspectedSoFar || 0)
+      const remaining = Math.max(0, sumQty - prevInspected)
+      const defaultReq = remaining > 0 ? remaining : sumQty
+      setRequiredQty(String(defaultReq))
+      const calcSample = (mode === INSPECT_MODES.FIRST_SAMPLE && isNew) ? Math.min(defaultReq, 5) : Math.max(1, Math.ceil(defaultReq * 0.05))
       setSampleQty(String(calcSample))
       setParamSample(String(calcSample))
-    } else if (cleanKeys.length === 0) {
+    } else {
+      setTotalBatchQty('')
+      totalBatchQtyRef.current = ''
       setRequiredQty('')
       setSampleQty('')
       setParamSample('')
     }
+  }
+
+  // Tự động tải lịch sử các phiếu kiểm tra trước đây của chi tiết này theo PO
+  useEffect(() => {
+    const activePo = po || paramPo
+    const activeProduct = product || paramProduct
+    if (!activePo || !activeProduct) {
+      setPartHistoryTickets([])
+      setTotalInspectedSoFar(0)
+      return
+    }
+
+    let isMounted = true
+    inspectionService.getList({
+      poCode: activePo,
+      product: activeProduct,
+      tab: 'all',
+      limit: 50
+    }).then((res) => {
+      if (!isMounted) return
+      const items = res?.items || []
+      // Bỏ qua phiếu hiện tại nếu đang ở chế độ xem/sửa phiếu cũ
+      const filtered = ticket?.id ? items.filter(t => String(t.id) !== String(ticket.id)) : items
+      setPartHistoryTickets(filtered)
+
+      const sumPrev = filtered.reduce((acc, t) => {
+        const q = Number(t.requiredQty ?? t.required_qty ?? t.plan_qty ?? 0)
+        return acc + (isNaN(q) ? 0 : q)
+      }, 0)
+      totalInspectedSoFarRef.current = sumPrev
+      setTotalInspectedSoFar(sumPrev)
+
+      // Nếu đã chọn quy cách trước khi API tải xong lịch sử, tự động cập nhật SL Cần Kiểm theo lượng còn lại
+      if (sumPrev > 0 && totalBatchQtyRef.current) {
+        const batchNum = Number(totalBatchQtyRef.current)
+        if (batchNum > 0) {
+          setRequiredQty((prev) => {
+            if (!prev || Number(prev) === batchNum) {
+              const rem = Math.max(0, batchNum - sumPrev)
+              return rem > 0 ? String(rem) : prev
+            }
+            return prev
+          })
+        }
+      }
+    }).catch((err) => {
+      console.warn('[useInspectionFormBase] Lỗi tải lịch sử kiểm tra chi tiết:', err)
+      if (isMounted) {
+        setPartHistoryTickets([])
+        setTotalInspectedSoFar(0)
+      }
+    })
+
+    return () => {
+      isMounted = false
+    }
+  }, [po, paramPo, product, paramProduct, ticket?.id])
+
+  const handleRequiredQtyChange = (val) => {
+    if (readOnly) return
+    setIsDirty(true)
+    setRequiredQty(val)
   }
 
   const handleLoadLastResult = async () => {
@@ -1933,6 +2059,8 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     setSelectedProducts([])
     setSpec('')
     setSelectedSpecs([])
+    setTotalBatchQty('')
+    totalBatchQtyRef.current = ''
     setRequiredQty('')
     setSampleQty('')
     setParamSample('')
@@ -2111,6 +2239,13 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     specOptions,
     bomData,
     requiredQty,
+    setRequiredQty: handleRequiredQtyChange,
+    totalBatchQty,
+    setTotalBatchQty,
+    partHistoryTickets,
+    isPartHistoryModalOpen,
+    setIsPartHistoryModalOpen,
+    totalInspectedSoFar,
     isQtyConverted,
     displayRequiredQty: (isQtyConverted || getQuantityConversionDetails(product || spec, requiredQty).isConverted) && requiredQty ? `≈ ${requiredQty}` : (requiredQty || ''),
     samplingRule,

@@ -1,11 +1,19 @@
 import React from 'react'
 import { X, CheckCircle2, XCircle, Clock, Download, ArrowRight, History } from 'lucide-react'
 
-const RecentResultsModal = ({ isOpen, onClose, tickets = [], onApply }) => {
+const RecentResultsModal = ({
+  isOpen,
+  onClose,
+  tickets = [],
+  onApply,
+  title = 'Xuất kết quả gần nhất (Tối đa 3 lần)',
+  maxItems = null,
+  emptyMessage = 'Chưa có lịch sử kiểm tra cho mã này',
+  showApply = true
+}) => {
   if (!isOpen) return null
 
-  // Ensure maximum 3 recent items
-  const displayTickets = (tickets || []).slice(0, 3)
+  const displayTickets = maxItems ? (tickets || []).slice(0, maxItems) : (tickets || [])
 
   return (
     <div className="pv2-sop-modal-backdrop" onClick={onClose}>
@@ -15,7 +23,7 @@ const RecentResultsModal = ({ isOpen, onClose, tickets = [], onApply }) => {
           <div className="pv2-sop-modal-title-group">
             <History size={18} style={{ color: '#fed7aa' }} />
             <h3 className="pv2-sop-modal-title" style={{ color: '#ffffff', fontSize: '14px' }}>
-              Xuất kết quả gần nhất (Tối đa 3 lần)
+              {title}
             </h3>
           </div>
           <button
@@ -29,18 +37,18 @@ const RecentResultsModal = ({ isOpen, onClose, tickets = [], onApply }) => {
         </div>
 
         {/* Body */}
-        <div className="pv2-sop-modal-body" style={{ padding: '12px 14px', gap: '12px' }}>
+        <div className="pv2-sop-modal-body" style={{ padding: '12px 14px', gap: '12px', maxHeight: '70vh', overflowY: 'auto' }}>
           {displayTickets.length === 0 ? (
             <div style={{ padding: '24px 12px', textAlign: 'center', color: '#64748b' }}>
               <Clock size={32} style={{ margin: '0 auto 8px', color: '#94a3b8' }} />
-              <p style={{ margin: 0, fontSize: '13px', fontWeight: 600 }}>Chưa có lịch sử kiểm tra cho mã này</p>
-              <span style={{ fontSize: '12px', color: '#94a3b8' }}>Vui lòng chọn Mã Pallet hoặc PO đã có dữ liệu để xem kết quả gần nhất.</span>
+              <p style={{ margin: 0, fontSize: '13px', fontWeight: 600 }}>{emptyMessage}</p>
+              <span style={{ fontSize: '12px', color: '#94a3b8' }}>Vui lòng chọn PO và Chi tiết đã có dữ liệu để xem lịch sử.</span>
             </div>
           ) : (
             displayTickets.map((t, idx) => {
               const isPass = t.result === 'pass' || t.conclusion === 'pass'
-              const dateStr = t.created_at
-                ? new Date(t.created_at).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
+              const dateStr = t.created_at || t.time_str
+                ? (t.time_str || new Date(t.created_at).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' }))
                 : 'Mới đây'
 
               return (
@@ -106,11 +114,24 @@ const RecentResultsModal = ({ isOpen, onClose, tickets = [], onApply }) => {
                       <span style={{ color: '#94a3b8' }}>Người lập:</span> {t.creator || t.creatorName || '—'}
                     </div>
                     <div>
+                      <span style={{ color: '#94a3b8' }}>SL Cần Kiểm:</span> <strong style={{ color: '#1e293b' }}>{t.requiredQty ?? t.required_qty ?? t.plan_qty ?? '—'}</strong>
+                    </div>
+                    <div>
                       <span style={{ color: '#94a3b8' }}>SL Mẫu:</span> <strong>{t.sampleQty ?? t.sample_qty ?? '—'}</strong>
                     </div>
                     <div>
                       <span style={{ color: '#94a3b8' }}>SL Lỗi:</span> <strong style={{ color: Number(t.errorQty || t.error_qty) > 0 ? '#dc2626' : '#166534' }}>{t.errorQty ?? t.error_qty ?? 0}</strong>
                     </div>
+                    {Boolean(t.spec || t.specification) && (
+                      <div style={{ gridColumn: 'span 2' }}>
+                        <span style={{ color: '#94a3b8' }}>Quy cách:</span> <span>{t.spec || t.specification}</span>
+                      </div>
+                    )}
+                    {Boolean(t.note) && (
+                      <div style={{ gridColumn: 'span 2', fontStyle: 'italic', color: '#64748b' }}>
+                        <span style={{ color: '#94a3b8' }}>Ghi chú:</span> {t.note}
+                      </div>
+                    )}
                   </div>
 
                   {/* Error Breakdown if any */}
@@ -120,32 +141,34 @@ const RecentResultsModal = ({ isOpen, onClose, tickets = [], onApply }) => {
                     </div>
                   )}
 
-                  {/* Action Button */}
-                  <button
-                    type="button"
-                    style={{
-                      marginTop: '2px',
-                      padding: '6px 12px',
-                      background: '#faf6f1',
-                      border: '1px solid #d4c8bd',
-                      borderRadius: '6px',
-                      color: '#4a240e',
-                      fontSize: '12px',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '5px',
-                      transition: 'all 0.15s ease'
-                    }}
-                    onClick={() => {
-                      if (onApply) onApply(t)
-                      onClose()
-                    }}
-                  >
-                    <Download size={13} /> Tải dữ liệu phiếu này vào form hiện tại
-                  </button>
+                  {/* Action Button (optional) */}
+                  {showApply && onApply && (
+                    <button
+                      type="button"
+                      style={{
+                        marginTop: '2px',
+                        padding: '6px 12px',
+                        background: '#faf6f1',
+                        border: '1px solid #d4c8bd',
+                        borderRadius: '6px',
+                        color: '#4a240e',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '5px',
+                        transition: 'all 0.15s ease'
+                      }}
+                      onClick={() => {
+                        onApply(t)
+                        onClose()
+                      }}
+                    >
+                      <Download size={13} /> Tải dữ liệu phiếu này vào form hiện tại
+                    </button>
+                  )}
                 </div>
               )
             })
@@ -154,7 +177,9 @@ const RecentResultsModal = ({ isOpen, onClose, tickets = [], onApply }) => {
 
         {/* Footer */}
         <div className="pv2-sop-modal-footer">
-          <span style={{ fontSize: '11.5px', color: '#64748b' }}>* Hiển thị tối đa 3 kết quả kiểm tra mới nhất</span>
+          <span style={{ fontSize: '11.5px', color: '#64748b' }}>
+            * Hiển thị {displayTickets.length} phiếu kiểm tra
+          </span>
           <button type="button" className="pv2-sop-modal-btn-close" onClick={onClose}>
             Đóng
           </button>

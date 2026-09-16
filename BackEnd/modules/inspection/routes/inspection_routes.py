@@ -5,7 +5,7 @@ from datetime import timedelta
 import calendar
 import json
 from collections import defaultdict
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import app.models
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Body, Request, Query
 from sqlalchemy.orm import Session, joinedload
@@ -827,6 +827,10 @@ def get_all_inspections_by_po(
                 pj = json.loads(r.data_json) if isinstance(r.data_json, str) else r.data_json
             except Exception:
                 pass
+
+        # Bỏ qua các phiếu đã bị hủy hồ sơ (không hiển thị trên /admin/quality-records)
+        if (pj and (pj.get("is_cancelled") is True or pj.get("status") == "cancelled")) or (r.note and "[ĐÃ HỦY HỒ SƠ]" in str(r.note)):
+            continue
 
         # Xác định phân loại phiếu (type_label)
         itype = (r.inspection_type or pj.get("mode") or "").lower()
@@ -3870,7 +3874,13 @@ def get_pending_inspections(
                 data_dict = json.loads(item.data_json)
             except Exception:
                 data_dict = {}
+
+        # Bỏ qua phiếu đã bị hủy hồ sơ
+        if (data_dict and (data_dict.get("is_cancelled") is True or data_dict.get("status") == "cancelled")) or (item.note and "[ĐÃ HỦY HỒ SƠ]" in str(item.note)):
+            continue
+
         action_val = data_dict.get("action") or ("chap-nhan" if (item.result in ["pass", "Đạt"] or item.conclusion in ["pass", "Đạt"]) else "tra-ve")
+        insp_name = item.inspector_name or data_dict.get("staff") or data_dict.get("creator") or data_dict.get("inspector_name") or "QC"
 
         pending_tasks.append({
             "id": item.id,
@@ -3891,9 +3901,10 @@ def get_pending_inspections(
             "sample_qty": item.sample_qty or data_dict.get("sampleQty") or 0,
             "error_qty": item.error_qty or data_dict.get("errorQty") or 0,
             "batch_no": item.batch_no or "",
-            "inspector_name": item.inspector_name or "QC",
+            "inspector_name": insp_name,
             "result": item.result or item.conclusion or "pass",
             "action": action_val,
+            "handling_info": data_dict.get("handling_info") or data_dict.get("resolution_note") or "",
             "image_path_1": item.image_path_1,
             "image_path_2": item.image_path_2,
             "image_path_3": item.image_path_3,
@@ -3910,19 +3921,63 @@ def get_pending_inspections(
 
 
 @router.post("/confirm/{type}/{id}")
-def confirm_inspection(type: str, id: int, confirmed_by: Optional[int] = Body(None, embed=True), db: Session = Depends(get_db)):
+def confirm_inspection(
+    type: str, 
+    id: int, 
+    payload: Optional[Dict[str, Any]] = Body(None),
+    confirmed_by: Optional[int] = Body(None, embed=True), 
+    db: Session = Depends(get_db)
+):
     """
     [POST] Xác nhận phiếu kiểm tra.
     type: 'stage' hoặc 'input'.
+    Hỗ trợ cập nhật kết quả (result), hành động (action), và thông tin xử lý (handling_info).
     """
     record = db.query(InputInspection).filter(InputInspection.id == id).first()
     if not record:
         raise HTTPException(status_code=404, detail=f"Không tìm thấy phiếu kiểm tra có ID {id}")
         
+    now = datetime.datetime.now()
     record.is_confirmed = True
-    record.confirmed_at = datetime.datetime.now()
-    if confirmed_by:
-        record.confirmed_by = confirmed_by
+    record.confirmed_at = now
+    
+    body_data = payload or {}
+    c_by = body_data.get("confirmed_by") or confirmed_by
+    if c_by:
+        record.confirmed_by = c_by
+        
+    # Cập nhật kết quả nếu có chỉnh sửa từ giao diện
+    new_result = body_data.get("result")
+    if new_result:
+        record.result = new_result
+        record.conclusion = new_result
+        
+    # Cập nhật thông tin xử lý và action vào data_json
+    handling_info = (body_data.get("handling_info") or body_data.get("resolution_note") or "").strip()
+    new_action = body_data.get("action")
+    
+    data_dict = {}
+    if record.data_json:
+        try:
+            data_dict = json.loads(record.data_json) if isinstance(record.data_json, str) else dict(record.data_json)
+        except Exception:
+            data_dict = {}
+            
+    if new_action:
+        data_dict["action"] = new_action
+    if handling_info:
+        data_dict["handling_info"] = handling_info
+        data_dict["resolution_note"] = handling_info
+        if record.note:
+            if handling_info not in record.note:
+                record.note = f"{record.note} | [Xử lý: {handling_info}]"
+        else:
+            record.note = handling_info
+            
+    if new_result:
+        data_dict["result"] = new_result
+        
+    record.data_json = json.dumps(data_dict, ensure_ascii=False)
         
     try:
         db.commit()
@@ -3933,11 +3988,82 @@ def confirm_inspection(type: str, id: int, confirmed_by: Optional[int] = Body(No
             "id": id,
             "is_confirmed": record.is_confirmed,
             "confirmed_at": record.confirmed_at,
-            "confirmed_by": record.confirmed_by
+            "confirmed_by": record.confirmed_by,
+            "result": record.result,
+            "action": new_action or data_dict.get("action")
         }
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Lỗi khi lưu xác nhận: {str(e)}")
+
+
+@router.post("/cancel-inspection/{id}")
+@router.post("/cancel-inspection/{type}/{id}")
+def cancel_inspection(
+    id: int, 
+    type: Optional[str] = "input", 
+    payload: Optional[Dict[str, Any]] = Body(None), 
+    db: Session = Depends(get_db)
+):
+    """
+    [POST] Hủy hồ sơ kiểm tra.
+    Phiếu vẫn được lưu trữ ghi nhận trong hệ thống nhưng đánh dấu is_cancelled = True và bị ẩn khỏi /admin/quality-records.
+    """
+    record = db.query(InputInspection).filter(InputInspection.id == id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail=f"Không tìm thấy phiếu kiểm tra có ID {id}")
+
+    now = datetime.datetime.now()
+    body_data = payload or {}
+    cancelled_by = body_data.get("cancelled_by") or body_data.get("confirmed_by")
+    handling_info = (body_data.get("handling_info") or body_data.get("cancel_reason") or body_data.get("notes") or "").strip()
+
+    # Đánh dấu đã xác nhận xử lý để rời khỏi danh sách chờ /admin/quality
+    record.is_confirmed = True
+    record.confirmed_at = now
+    if cancelled_by:
+        record.confirmed_by = cancelled_by
+
+    # Cập nhật data_json đánh dấu trạng thái cancelled
+    data_dict = {}
+    if record.data_json:
+        try:
+            data_dict = json.loads(record.data_json) if isinstance(record.data_json, str) else dict(record.data_json)
+        except Exception:
+            data_dict = {}
+
+    data_dict["is_cancelled"] = True
+    data_dict["status"] = "cancelled"
+    data_dict["cancelled_at"] = now.isoformat()
+    if handling_info:
+        data_dict["handling_info"] = handling_info
+        data_dict["cancel_reason"] = handling_info
+        
+    record.data_json = json.dumps(data_dict, ensure_ascii=False)
+
+    cancel_tag = "[ĐÃ HỦY HỒ SƠ]"
+    if handling_info:
+        cancel_tag += f" - {handling_info}"
+        
+    if record.note:
+        if "[ĐÃ HỦY HỒ SƠ]" not in record.note:
+            record.note = f"{cancel_tag} | {record.note}"
+    else:
+        record.note = cancel_tag
+
+    try:
+        db.commit()
+        db.refresh(record)
+        return {
+            "success": True,
+            "message": "Đã hủy hồ sơ kiểm tra thành công",
+            "id": id,
+            "is_cancelled": True,
+            "is_confirmed": record.is_confirmed
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Lỗi khi hủy hồ sơ: {str(e)}")
 
 
 @router.post("/confirm-batch")

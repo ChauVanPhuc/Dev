@@ -3,10 +3,13 @@ import os
 import json
 from datetime import datetime
 from typing import List, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
+from jose import jwt
+from config.settings import settings
 from config.database import get_db
+from modules.auth.models.accounts import Account as AccountModel
 from modules.claim import schemas
 from modules.claim.services import claim_service as service, import_service, excel_export
 
@@ -404,3 +407,194 @@ def serve_claim_imports(sub_path: str):
         raise HTTPException(status_code=404, detail="File not found")
         
     return FileResponse(abs_file_path)
+
+
+def get_current_user(request: Request, db: Session = Depends(get_db)) -> AccountModel:
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Yêu cầu cần Token xác thực Bearer.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    token = auth_header.split(" ")[1]
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token không hợp lệ (không tìm thấy username).",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    except Exception as e:
+        import_service.logger.error(f"JWT Verification failed: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Token đã hết hạn hoặc không hợp lệ. Chi tiết: {str(e)}",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+        
+    user = db.query(AccountModel).filter(AccountModel.username == username).first()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Tài khoản không tồn tại.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return user
+
+
+@router.post("/chat")
+def chat_claim_assistant(
+    body: Dict[str, Any], 
+    db: Session = Depends(get_db), 
+    current_user: AccountModel = Depends(get_current_user)
+):
+    message = body.get("message")
+    context = body.get("context") or {}
+    history = body.get("history") or []
+    session_id = body.get("session_id") or "default"
+    if not message:
+        raise HTTPException(status_code=400, detail="Thiếu nội dung câu hỏi (message)")
+    try:
+        from modules.chatbot.controllers.chatbot_controller import handle_claim_chat
+        return handle_claim_chat(message, context, db, history, current_user=current_user, session_id=session_id)
+    except Exception as e:
+        import_service.logger.exception("Error in claim chatbot assistant:")
+        raise HTTPException(status_code=500, detail=f"Lỗi hệ thống: {str(e)}")
+
+
+@router.get("/chat/history")
+def get_chat_history(
+    session_id: str = "default",
+    db: Session = Depends(get_db), 
+    current_user: AccountModel = Depends(get_current_user)
+):
+    try:
+        from modules.chatbot.models.chatbot_history import ChatbotHistory
+        import json
+        
+        histories = db.query(ChatbotHistory).filter(
+            ChatbotHistory.account_id == current_user.id,
+            ChatbotHistory.session_id == session_id
+        ).order_by(ChatbotHistory.created_at.asc()).all()
+        
+        result = []
+        for h in histories:
+            items = []
+            if h.items_json:
+                try:
+                    items = json.loads(h.items_json)
+                except Exception:
+                    pass
+            
+            suggestions = []
+            if h.suggestions_json:
+                try:
+                    suggestions = json.loads(h.suggestions_json)
+                except Exception:
+                    pass
+            
+            result.append({
+                "role": h.role,
+                "content": h.content,
+                "items": items,
+                "suggestions": suggestions,
+                "created_at": h.created_at.isoformat() if h.created_at else None
+            })
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lỗi tải lịch sử chat: {str(e)}")
+
+
+@router.delete("/chat/history")
+def delete_chat_history(
+    session_id: str = "default",
+    db: Session = Depends(get_db), 
+    current_user: AccountModel = Depends(get_current_user)
+):
+    try:
+        from modules.chatbot.models.chatbot_history import ChatbotHistory
+        db.query(ChatbotHistory).filter(
+            ChatbotHistory.account_id == current_user.id,
+            ChatbotHistory.session_id == session_id
+        ).delete()
+        db.commit()
+        return {"message": "Đã xóa lịch sử chat thành công."}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Lỗi xóa lịch sử chat: {str(e)}")
+
+
+@router.get("/chat/sessions")
+def get_chat_sessions(
+    db: Session = Depends(get_db), 
+    current_user: AccountModel = Depends(get_current_user)
+):
+    try:
+        from modules.chatbot.models.chatbot_history import ChatbotHistory
+        from sqlalchemy import func
+        
+        # Subquery to find the latest created_at per session_id
+        subq = db.query(
+            ChatbotHistory.session_id,
+            func.max(ChatbotHistory.created_at).label("max_created_at")
+        ).filter(
+            ChatbotHistory.account_id == current_user.id
+        ).group_by(
+            ChatbotHistory.session_id
+        ).subquery()
+
+        # Query to join and get session details
+        sessions = db.query(
+            ChatbotHistory.session_id,
+            ChatbotHistory.session_title,
+            ChatbotHistory.created_at
+        ).join(
+            subq,
+            (ChatbotHistory.session_id == subq.c.session_id) & 
+            (ChatbotHistory.created_at == subq.c.max_created_at)
+        ).filter(
+            ChatbotHistory.account_id == current_user.id
+        ).order_by(
+            ChatbotHistory.created_at.desc()
+        ).all()
+
+        # Deduplicate results just in case of identical timestamps
+        seen = set()
+        result = []
+        for s in sessions:
+            sid = s.session_id or "default"
+            if sid in seen:
+                continue
+            seen.add(sid)
+            result.append({
+                "session_id": sid,
+                "session_title": s.session_title or "Cuộc trò chuyện mới",
+                "updated_at": s.created_at.isoformat() if s.created_at else None
+            })
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lỗi tải danh sách phiên chat: {str(e)}")
+
+
+@router.delete("/chat/sessions/{session_id}")
+def delete_chat_session(
+    session_id: str,
+    db: Session = Depends(get_db), 
+    current_user: AccountModel = Depends(get_current_user)
+):
+    try:
+        from modules.chatbot.models.chatbot_history import ChatbotHistory
+        db.query(ChatbotHistory).filter(
+            ChatbotHistory.account_id == current_user.id,
+            ChatbotHistory.session_id == session_id
+        ).delete()
+        db.commit()
+        return {"message": "Đã xóa phiên chat thành công."}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Lỗi xóa phiên chat: {str(e)}")
+

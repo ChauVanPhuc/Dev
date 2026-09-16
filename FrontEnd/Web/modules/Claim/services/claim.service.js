@@ -211,6 +211,54 @@ export const claimService = {
     return await api.post('/claims/claims/export-excel', claimsData, {
       responseType: 'blob'
     });
+  },
+
+  getClaimChatHistory: async (sessionId = 'default') => {
+    try {
+      const response = await api.get('/claims/chat/history', { params: { session_id: sessionId } });
+      return response;
+    } catch (err) {
+      console.error('[Claim AI] get history error', err);
+      throw err;
+    }
+  },
+
+  clearClaimChatHistory: async (sessionId = 'default') => {
+    try {
+      const response = await api.delete('/claims/chat/history', { params: { session_id: sessionId } });
+      return response;
+    } catch (err) {
+      console.error('[Claim AI] clear history error', err);
+      throw err;
+    }
+  },
+
+  sendClaimChatMessage: async (message, context = {}, history = [], sessionId = 'default') => {
+    try {
+      const response = await api.post('/claims/chat', { message, context, history, session_id: sessionId });
+      return response;
+    } catch (err) {
+      console.error('[Claim AI] error', err);
+      throw err;
+    }
+  },
+
+  getChatSessions: async () => {
+    try {
+      return await api.get('/claims/chat/sessions');
+    } catch (err) {
+      console.error('[Claim AI] get sessions error', err);
+      throw err;
+    }
+  },
+
+  deleteChatSession: async (sessionId) => {
+    try {
+      return await api.delete(`/claims/chat/sessions/${sessionId}`);
+    } catch (err) {
+      console.error('[Claim AI] delete session error', err);
+      throw err;
+    }
   }
 };
 
