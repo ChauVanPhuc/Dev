@@ -218,17 +218,14 @@ const CL09D_ProcessView = () => {
 
                 {renderImageUploadArea()}
 
-                <div className="pv2-field" style={{ marginTop: 12 }}>
-                  <label>Ghi chú</label>
-                  <textarea
-                    className={`pv2-textarea ${readOnly ? 'pv2-input--disabled' : ''}`}
-                    rows={3}
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    disabled={readOnly}
-                    placeholder="Nhập ghi chú quy trình..."
-                  />
-                </div>
+                {readOnly && note ? (
+                  <div className="pv2-field" style={{ marginTop: 12 }}>
+                    <label>Ghi chú</label>
+                    <div style={{ padding: '8px 12px', background: '#f8fafc', borderRadius: 6, border: '1px solid #e2e8f0', color: '#334155', fontSize: '13.5px', whiteSpace: 'pre-wrap' }}>
+                      {note}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             )}
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
-import { Search, Filter, Edit, FileText, ChevronLeft, ChevronRight, CheckCircle2, X, Eye, RotateCcw, XCircle, Layers, Package, CheckCheck } from 'lucide-react';
+import { Search, Filter, Edit, FileText, ChevronLeft, ChevronRight, CheckCircle2, X, Eye, RotateCcw, XCircle, Layers, Package, CheckCheck, MoreVertical, Info, Image as ImageIcon, ClipboardList, AlertTriangle } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
@@ -39,11 +39,23 @@ const QualityOverviewView = () => {
     task: null
   });
   const [confirmSuccessMsg, setConfirmSuccessMsg] = useState('');
+  const [actionMenuId, setActionMenuId] = useState(null);
+
+  // Đóng Action Menu khi click ra ngoài
+  useEffect(() => {
+    const handleOutsideClick = () => {
+      setActionMenuId(null);
+    };
+    window.addEventListener('click', handleOutsideClick);
+    return () => window.removeEventListener('click', handleOutsideClick);
+  }, []);
 
   // Trạng thái chỉnh sửa trên Modal Chi tiết
   const [modalResult, setModalResult] = useState('pass');
   const [modalAction, setModalAction] = useState('chap-nhan');
   const [handlingInfo, setHandlingInfo] = useState('');
+  const [modalTab, setModalTab] = useState('info'); // 'info' | 'details'
+  const [previewImgUrl, setPreviewImgUrl] = useState(null);
 
   // Đồng bộ trạng thái khi mở hoặc chuyển phiếu kiểm tra
   useEffect(() => {
@@ -59,8 +71,71 @@ const QualityOverviewView = () => {
         } catch (e) {}
       }
       setHandlingInfo(selectedTask.handling_info || parsedJson?.handling_info || '');
+      setModalTab('info');
+      setPreviewImgUrl(null);
     }
   }, [selectedTask]);
+
+  // Trích xuất dữ liệu chi tiết của phiếu từ data_json
+  const parsedTaskData = useMemo(() => {
+    if (!selectedTask?.data_json) return {};
+    try {
+      return typeof selectedTask.data_json === 'string' ? JSON.parse(selectedTask.data_json) : selectedTask.data_json;
+    } catch (e) {
+      return {};
+    }
+  }, [selectedTask]);
+
+  // Danh sách hình ảnh minh chứng đầy đủ
+  const taskImages = useMemo(() => {
+    if (!selectedTask) return [];
+    const list = [];
+    [selectedTask.image_path_1, selectedTask.image_path_2, selectedTask.image_path_3].filter(Boolean).forEach(img => {
+      if (!list.includes(img)) list.push(img);
+    });
+    if (selectedTask.images_json) {
+      try {
+        const pImg = typeof selectedTask.images_json === 'string' ? JSON.parse(selectedTask.images_json) : selectedTask.images_json;
+        if (Array.isArray(pImg)) {
+          pImg.forEach(img => { if (img && !list.includes(img)) list.push(img); });
+        } else if (pImg?.images && Array.isArray(pImg.images)) {
+          pImg.images.forEach(img => { if (img && !list.includes(img)) list.push(img); });
+        }
+      } catch (e) {}
+    }
+    if (parsedTaskData?.images && Array.isArray(parsedTaskData.images)) {
+      parsedTaskData.images.forEach(img => { if (img && !list.includes(img)) list.push(img); });
+    }
+    return list;
+  }, [selectedTask, parsedTaskData]);
+
+  // Danh sách các bước kiểm tra SOP (Hướng dẫn kiểm tra)
+  const taskSteps = useMemo(() => {
+    const rawSteps = parsedTaskData?.steps || selectedTask?.steps;
+    if (!rawSteps) return [];
+    if (Array.isArray(rawSteps)) return rawSteps;
+    if (typeof rawSteps === 'object') {
+      return Object.entries(rawSteps).map(([k, val], idx) => ({
+        step_no: idx + 1,
+        title: val.title || val.name || val.description || k,
+        standard: val.standard || val.content || val.value || '',
+        result: val.result || (val.status === 'FAIL' ? 'fail' : 'pass'),
+        note: val.note || ''
+      }));
+    }
+    return [];
+  }, [parsedTaskData, selectedTask]);
+
+  // Danh sách lỗi phát hiện nếu có
+  const taskErrors = useMemo(() => {
+    const rawErrors = parsedTaskData?.errors || selectedTask?.errors;
+    if (!Array.isArray(rawErrors)) return [];
+    return rawErrors.filter(e => {
+      const q = Number(e.qty || e.quantity || 0);
+      const name = (e.name || e.defect_name || e.label || '').trim();
+      return q > 0 || name;
+    });
+  }, [parsedTaskData, selectedTask]);
 
   // Phân trang
   const [currentPage, setCurrentPage] = useState(1);
@@ -1139,7 +1214,7 @@ const QualityOverviewView = () => {
                       <th style={{ width: '160px', textAlign: 'center' }}>HÀNH ĐỘNG XỬ LÝ</th>
                       <th style={{ width: '155px', textAlign: 'center' }}>NGÀY GHI NHẬN</th>
                       <th>GHI CHÚ</th>
-                      <th style={{ width: '160px', textAlign: 'center' }}>THAO TÁC</th>
+                      <th style={{ width: '100px', textAlign: 'center' }}>THAO TÁC</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1149,7 +1224,12 @@ const QualityOverviewView = () => {
                         <tr 
                           key={task.id || idx} 
                           onClick={() => setSelectedTask(task)}
-                          style={{ cursor: 'pointer', transition: 'background-color 0.2s' }}
+                          style={{ 
+                            cursor: 'pointer', 
+                            transition: 'background-color 0.2s',
+                            position: actionMenuId === task.id ? 'relative' : 'static',
+                            zIndex: actionMenuId === task.id ? 45 : 1
+                          }}
                         >
                           <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#8D6E63' }}>{sttDisplay}</td>
                           <td style={{ fontWeight: '700', color: '#2D1A12' }}>{task.task_name}</td>
@@ -1178,79 +1258,132 @@ const QualityOverviewView = () => {
                             {formatDateTime(task.recorded_date)}
                           </td>
                           <td style={{ color: '#6B7280', fontSize: '0.85rem' }}>{task.notes}</td>
-                          <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px' }}>
-                              {isEligibleForQuickConfirm(task) && (
+                          <td 
+                            style={{ 
+                              position: 'relative', 
+                              textAlign: 'center', 
+                              zIndex: actionMenuId === task.id ? 100 : 1 
+                            }} 
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <button
+                              type="button"
+                              className="action-btn"
+                              title="Thao tác"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActionMenuId(actionMenuId === task.id ? null : task.id);
+                              }}
+                              style={{
+                                backgroundColor: actionMenuId === task.id ? '#FAF6F0' : 'transparent',
+                                color: actionMenuId === task.id ? '#7B5233' : '#9CA3AF'
+                              }}
+                            >
+                              <MoreVertical size={16} />
+                            </button>
+
+                            {actionMenuId === task.id && (
+                              <div 
+                                className="action-menu" 
+                                style={{ 
+                                  right: '4px', 
+                                  left: 'auto',
+                                  transform: 'none', 
+                                  top: (idx >= paginatedTasks.length - 2 && paginatedTasks.length > 2) ? 'auto' : 'calc(100% + 2px)',
+                                  bottom: (idx >= paginatedTasks.length - 2 && paginatedTasks.length > 2) ? 'calc(100% + 2px)' : 'auto',
+                                  minWidth: '145px',
+                                  width: 'max-content',
+                                  padding: '5px',
+                                  background: '#FFFFFF',
+                                  border: '1px solid #EADCC9',
+                                  borderRadius: '10px',
+                                  boxShadow: '0 10px 25px -3px rgba(45, 26, 18, 0.12), 0 4px 10px -2px rgba(45, 26, 18, 0.06)',
+                                  zIndex: 1000
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                              >
                                 <button
                                   type="button"
-                                  className="btn-quick-confirm-table"
-                                  title="Xác nhận nhanh hồ sơ ĐẠT"
-                                  onClick={() => handleOpenQuickConfirmSingle(task)}
-                                  disabled={quickConfirming}
-                                  style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '4px',
-                                    padding: '3px 8px',
-                                    backgroundColor: '#ECFDF5',
-                                    color: '#059669',
-                                    border: '1px solid #A7F3D0',
+                                  className="action-menu-item"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActionMenuId(null);
+                                    setSelectedTask(task);
+                                  }}
+                                  style={{ 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    gap: '8px', 
+                                    padding: '7px 12px',
+                                    fontSize: '0.8rem',
+                                    fontWeight: '600',
+                                    color: '#4B5563',
                                     borderRadius: '6px',
-                                    fontSize: '0.75rem',
-                                    fontWeight: '700',
-                                    cursor: quickConfirming ? 'not-allowed' : 'pointer',
-                                    transition: 'all 0.15s ease',
-                                    whiteSpace: 'nowrap'
-                                  }}
-                                  onMouseEnter={(e) => {
-                                    e.currentTarget.style.backgroundColor = '#059669';
-                                    e.currentTarget.style.color = '#FFFFFF';
-                                    e.currentTarget.style.borderColor = '#059669';
-                                  }}
-                                  onMouseLeave={(e) => {
-                                    e.currentTarget.style.backgroundColor = '#ECFDF5';
-                                    e.currentTarget.style.color = '#059669';
-                                    e.currentTarget.style.borderColor = '#A7F3D0';
+                                    whiteSpace: 'nowrap',
+                                    width: '100%'
                                   }}
                                 >
-                                  <CheckCircle2 size={13} />
-                                  <span>Duyệt nhanh</span>
+                                  <Eye size={14} color="#7B5233" />
+                                  <span>Xem chi tiết</span>
                                 </button>
-                              )}
-                              {task.action === 'tra-ve' && (
-                                <button
-                                  type="button"
-                                  className="btn-cancel-return-table"
-                                  title="Hủy trả hàng"
-                                  onClick={() => handleCancelReturn(task)}
-                                  disabled={cancelingId === task.id}
-                                  style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '4px',
-                                    padding: '3px 8px',
-                                    backgroundColor: '#FFFBEB',
-                                    color: '#D97706',
-                                    border: '1px solid #FCD34D',
-                                    borderRadius: '6px',
-                                    fontSize: '0.75rem',
-                                    fontWeight: '700',
-                                    cursor: cancelingId === task.id ? 'not-allowed' : 'pointer',
-                                    transition: 'all 0.2s',
-                                    whiteSpace: 'nowrap'
-                                  }}
-                                >
-                                  <RotateCcw size={12} className={cancelingId === task.id ? 'animate-spin' : ''} />
-                                  <span>{cancelingId === task.id ? 'Đang hủy...' : 'Hủy trả'}</span>
-                                </button>
-                              )}
-                              <Edit 
-                                size={16} 
-                                className="edit-action-btn"
-                                title="Xem chi tiết & Xác nhận"
-                                onClick={() => setSelectedTask(task)}
-                              />
-                            </div>
+
+                                {isEligibleForQuickConfirm(task) && (
+                                  <button
+                                    type="button"
+                                    className="action-menu-item"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setActionMenuId(null);
+                                      handleOpenQuickConfirmSingle(task);
+                                    }}
+                                    disabled={quickConfirming}
+                                    style={{ 
+                                      display: 'flex', 
+                                      alignItems: 'center', 
+                                      gap: '8px', 
+                                      padding: '7px 12px',
+                                      fontSize: '0.8rem',
+                                      fontWeight: '600',
+                                      color: '#059669',
+                                      borderRadius: '6px',
+                                      whiteSpace: 'nowrap',
+                                      width: '100%'
+                                    }}
+                                  >
+                                    <CheckCircle2 size={14} color="#059669" />
+                                    <span>Duyệt nhanh</span>
+                                  </button>
+                                )}
+
+                                {task.action === 'tra-ve' && (
+                                  <button
+                                    type="button"
+                                    className="action-menu-item warn"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setActionMenuId(null);
+                                      handleCancelReturn(task);
+                                    }}
+                                    disabled={cancelingId === task.id}
+                                    style={{ 
+                                      display: 'flex', 
+                                      alignItems: 'center', 
+                                      gap: '8px', 
+                                      padding: '7px 12px',
+                                      fontSize: '0.8rem',
+                                      fontWeight: '600',
+                                      color: '#D97706',
+                                      borderRadius: '6px',
+                                      whiteSpace: 'nowrap',
+                                      width: '100%'
+                                    }}
+                                  >
+                                    <RotateCcw size={14} color="#D97706" />
+                                    <span>Hủy trả hàng</span>
+                                  </button>
+                                )}
+                              </div>
+                            )}
                           </td>
                         </tr>
                       );
@@ -1469,6 +1602,85 @@ const QualityOverviewView = () => {
                 </div>
               </div>
 
+              {/* TAB NAVIGATION */}
+              {!confirmSuccessMsg && (
+                <div style={{
+                  display: 'flex',
+                  borderBottom: '1.5px solid #EADCC9',
+                  backgroundColor: '#FAF6F0',
+                  padding: '0 22px',
+                  gap: '6px'
+                }}>
+                  <button
+                    type="button"
+                    onClick={() => setModalTab('info')}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '11px 18px',
+                      border: 'none',
+                      borderBottom: modalTab === 'info' ? '3px solid #7B5233' : '3px solid transparent',
+                      backgroundColor: 'transparent',
+                      color: modalTab === 'info' ? '#7B5233' : '#8D6E63',
+                      fontWeight: modalTab === 'info' ? 800 : 600,
+                      fontSize: '0.88rem',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <Info size={16} />
+                    <span>Thông tin</span>
+                    {taskImages.length > 0 && (
+                      <span style={{
+                        fontSize: '0.72rem',
+                        padding: '1px 7px',
+                        borderRadius: '10px',
+                        backgroundColor: modalTab === 'info' ? '#EADCC9' : '#F3EBE1',
+                        color: '#7B5233',
+                        fontWeight: 700
+                      }}>
+                        {taskImages.length} ảnh
+                      </span>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setModalTab('details')}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '11px 18px',
+                      border: 'none',
+                      borderBottom: modalTab === 'details' ? '3px solid #7B5233' : '3px solid transparent',
+                      backgroundColor: 'transparent',
+                      color: modalTab === 'details' ? '#7B5233' : '#8D6E63',
+                      fontWeight: modalTab === 'details' ? 800 : 600,
+                      fontSize: '0.88rem',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <Layers size={16} />
+                    <span>Chi tiết</span>
+                    {partsList.length > 0 && (
+                      <span style={{
+                        fontSize: '0.72rem',
+                        padding: '1px 7px',
+                        borderRadius: '10px',
+                        backgroundColor: modalTab === 'details' ? '#7B5233' : '#EADCC9',
+                        color: modalTab === 'details' ? '#FFFFFF' : '#7B5233',
+                        fontWeight: 700
+                      }}>
+                        {partsList.length}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              )}
+
             {/* MODAL BODY */}
             {confirmSuccessMsg ? (
               <div style={{ padding: '36px 24px', textAlign: 'center', color: '#059669', fontWeight: 600 }}>
@@ -1477,316 +1689,533 @@ const QualityOverviewView = () => {
               </div>
             ) : (
               <div style={{ padding: '20px 22px', maxHeight: 'calc(85vh - 140px)', overflowY: 'auto' }}>
-                {/* CARD THÔNG TIN TỔNG QUAN (3 DÒNG x 3 CỘT) */}
-                <div style={{
-                  backgroundColor: '#FCFBF9',
-                  border: '1.5px solid #EADCC9',
-                  borderRadius: '12px',
-                  padding: '14px 16px',
-                  marginBottom: '16px',
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(3, 1fr)',
-                  gap: '12px 16px',
-                  fontSize: '0.88rem'
-                }}>
-                  <div>
-                    <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
-                      MÃ LÔ / PO
-                    </span>
-                    <strong style={{ color: '#7B5233', fontSize: '0.92rem' }}>
-                      {selectedTask.batch_no || 'N/A'}
-                    </strong>
-                  </div>
-
-                  <div>
-                    <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
-                      LOẠI KIỂM TRA
-                    </span>
-                    <div>{renderCategoryBadge(selectedTask)}</div>
-                  </div>
-
-                  <div>
-                    <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
-                      NGƯỜI KIỂM TRA QC
-                    </span>
-                    <strong style={{ color: '#2D1A12' }}>
-                      {selectedTask.inspector_name || 'QC'}
-                    </strong>
-                  </div>
-
-                  <div>
-                    <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
-                      NGÀY GHI NHẬN
-                    </span>
-                    <span style={{ color: '#2D1A12', fontWeight: 600 }}>
-                      {formatDateTime(selectedTask.recorded_date)}
-                    </span>
-                  </div>
-
-                  <div>
-                    <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
-                      TRẠNG THÁI
-                    </span>
-                    <div>
-                      <span className="badge-chualam">Chưa Làm</span>
-                    </div>
-                  </div>
-
-                  <div>
-                    <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
-                      HÀNH ĐỘNG XỬ LÝ
-                    </span>
-                    <select
-                      value={modalAction}
-                      onChange={(e) => setModalAction(e.target.value)}
-                      style={{
-                        padding: '4px 8px',
-                        borderRadius: '6px',
-                        border: '1.5px solid #EADCC9',
-                        fontSize: '0.82rem',
-                        fontWeight: '700',
-                        backgroundColor: '#FAF6F0',
-                        color: '#7B5233',
-                        cursor: 'pointer',
-                        outline: 'none',
-                        width: '100%',
-                        maxWidth: '180px'
-                      }}
-                    >
-                      <option value="chap-nhan">{modalResult === 'fail' ? 'Chấp nhận / Tự xử lý' : 'Chấp nhận'}</option>
-                      <option value="cach-ly">Cách ly</option>
-                      <option value="tra-ve">Trả hàng</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
-                      SL CẦN KIỂM (LÔ)
-                    </span>
-                    <strong style={{ color: '#059669', fontSize: '0.92rem' }}>
-                      {Number(selectedTask.required_qty || 0).toLocaleString()}
-                    </strong>
-                  </div>
-
-                  <div>
-                    <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
-                      SL MẪU KIỂM TRA (AQL)
-                    </span>
-                    <strong style={{ color: '#1D4ED8', fontSize: '0.92rem' }}>
-                      {Number(selectedTask.sample_qty || 0).toLocaleString()}
-                    </strong>
-                  </div>
-
-                  <div>
-                    <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
-                      SỐ LỖI PHÁT HIỆN
-                    </span>
-                    <strong style={{ color: (selectedTask.error_qty > 0) ? '#DC2626' : '#059669', fontSize: '0.92rem' }}>
-                      {Number(selectedTask.error_qty || 0).toLocaleString()}
-                    </strong>
-                  </div>
-                </div>
-
-                {/* BẢNG DANH SÁCH CHI TIẾT / PHÔI KIỂM TRA (LIST TABLE) */}
-                <div style={{ marginBottom: '16px' }}>
-                  <div style={{
-                    fontSize: '0.82rem',
-                    color: '#7B5233',
-                    fontWeight: 800,
-                    marginBottom: '8px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.4px'
-                  }}>
-                    <Layers size={15} color="#7B5233" />
-                    <span>Danh sách chi tiết / phôi kiểm tra ({partsList.length})</span>
-                  </div>
-
-                  <div style={{
-                    border: '1.5px solid #EADCC9',
-                    borderRadius: '10px',
-                    overflow: 'hidden',
-                    backgroundColor: '#ffffff',
-                    maxHeight: '260px',
-                    overflowY: 'auto',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
-                  }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                      <thead>
-                        <tr style={{ backgroundColor: '#FAF6F0', borderBottom: '1.5px solid #EADCC9' }}>
-                          <th style={{ padding: '8px 10px', textAlign: 'center', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem', width: '46px' }}>STT</th>
-                          <th style={{ padding: '8px 12px', textAlign: 'left', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem', minWidth: '130px' }}>TÊN CHI TIẾT / PHÔI</th>
-                          <th style={{ padding: '8px 12px', textAlign: 'left', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem', width: '140px' }}>QUY CÁCH / THÔNG SỐ</th>
-                          <th style={{ padding: '8px 12px', textAlign: 'left', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem', minWidth: '180px' }}>TÊN TỦ (SKU)</th>
-                          <th style={{ padding: '8px 10px', textAlign: 'center', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem', width: '90px' }}>SL KẾ HOẠCH</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {partsList.map((p, idx) => (
-                          <tr 
-                            key={idx} 
-                            style={{ 
-                              borderBottom: idx < partsList.length - 1 ? '1px solid #F3EBE1' : 'none',
-                              transition: 'background-color 0.15s ease'
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FCF9F6'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
-                          >
-                            <td style={{ padding: '9px 10px', color: '#8D6E63', fontWeight: 700, textAlign: 'center', verticalAlign: 'middle' }}>
-                              {p.stt}
-                            </td>
-                            <td style={{ padding: '9px 12px', color: '#2D1A12', fontWeight: 700, verticalAlign: 'middle', lineHeight: 1.4 }}>
-                              {p.name}
-                            </td>
-                            <td style={{ padding: '9px 12px', verticalAlign: 'middle' }}>
-                              <span style={{
-                                display: 'inline-block',
-                                backgroundColor: '#FAF6F0',
-                                color: '#7B5233',
-                                padding: '3px 8px',
-                                borderRadius: '6px',
-                                border: '1px solid #EADCC9',
-                                fontSize: '0.78rem',
-                                fontWeight: 600,
-                                whiteSpace: 'nowrap'
-                              }}>
-                                {p.spec}
-                              </span>
-                            </td>
-                            <td style={{ padding: '9px 12px', verticalAlign: 'middle' }}>
-                              {p.cabinet ? (
-                                <span style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  fontSize: '0.76rem',
-                                  padding: '2px 8px',
-                                  borderRadius: '5px',
-                                  backgroundColor: '#EFF6FF',
-                                  color: '#1D4ED8',
-                                  fontWeight: 600,
-                                  border: '1px solid #BFDBFE',
-                                  whiteSpace: 'nowrap'
-                                }} title={p.cabinet}>
-                                  {p.cabinet}
-                                </span>
-                              ) : (
-                                <span style={{ color: '#9CA3AF', fontSize: '0.8rem' }}>—</span>
-                              )}
-                            </td>
-                            <td style={{ padding: '9px 10px', textAlign: 'center', verticalAlign: 'middle', fontWeight: 700, color: '#4B5563' }}>
-                              {p.qty ? (
-                                <span style={{
-                                  display: 'inline-block',
-                                  padding: '2px 8px',
-                                  backgroundColor: '#F3F4F6',
-                                  borderRadius: '6px',
-                                  fontSize: '0.78rem',
-                                  color: '#374151'
-                                }}>
-                                  {Number(p.qty).toLocaleString()}
-                                </span>
-                              ) : (
-                                <span style={{ color: '#9CA3AF', fontSize: '0.8rem' }}>—</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {/* THÔNG TIN XỬ LÝ */}
-                <div style={{ marginBottom: '16px', fontSize: '0.88rem' }}>
-                  <label style={{
-                    fontSize: '0.76rem',
-                    color: '#7B5233',
-                    fontWeight: 800,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.3px',
-                    display: 'block',
-                    marginBottom: '6px'
-                  }}>
-                    Thông tin xử lý / Biện pháp khắc phục
-                  </label>
-                  <textarea
-                    value={handlingInfo}
-                    onChange={(e) => setHandlingInfo(e.target.value)}
-                    placeholder="Nhập phương án xử lý, biện pháp khắc phục sự cố, hướng dẫn tái kiểm tra..."
-                    rows={3}
-                    style={{
-                      width: '100%',
-                      boxSizing: 'border-box',
-                      padding: '10px 12px',
-                      borderRadius: '8px',
+                {modalTab === 'info' ? (
+                  <>
+                    {/* CARD THÔNG TIN TỔNG QUAN (3 DÒNG x 3 CỘT) */}
+                    <div style={{
+                      backgroundColor: '#FCFBF9',
                       border: '1.5px solid #EADCC9',
-                      backgroundColor: '#FFFFFF',
-                      color: '#2D1A12',
-                      fontSize: '0.86rem',
-                      lineHeight: '1.45',
-                      resize: 'vertical',
-                      outline: 'none',
-                      fontFamily: 'inherit',
-                      transition: 'border-color 0.15s ease, box-shadow 0.15s ease'
-                    }}
-                    onFocus={(e) => {
-                      e.target.style.borderColor = '#7B5233';
-                      e.target.style.boxShadow = '0 0 0 3px rgba(123, 82, 51, 0.1)';
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = '#EADCC9';
-                      e.target.style.boxShadow = 'none';
-                    }}
-                  />
-                </div>
+                      borderRadius: '12px',
+                      padding: '14px 16px',
+                      marginBottom: '16px',
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(3, 1fr)',
+                      gap: '12px 16px',
+                      fontSize: '0.88rem'
+                    }}>
+                      <div>
+                        <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                          MÃ LÔ / PO
+                        </span>
+                        <strong style={{ color: '#7B5233', fontSize: '0.92rem' }}>
+                          {selectedTask.batch_no || 'N/A'}
+                        </strong>
+                      </div>
 
-                {/* GHI CHÚ */}
-                <div style={{ marginBottom: '16px', fontSize: '0.88rem' }}>
-                  <div style={{ fontSize: '0.76rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px' }}>
-                    Ghi chú
-                  </div>
-                  <div style={{
-                    background: '#FAF6F0',
-                    padding: '10px 14px',
-                    borderRadius: '8px',
-                    border: '1px solid #EADCC9',
-                    color: '#4B5563',
-                    lineHeight: 1.4
-                  }}>
-                    {selectedTask.notes || 'Không có ghi chú thêm.'}
-                  </div>
-                </div>
+                      <div>
+                        <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                          LOẠI KIỂM TRA
+                        </span>
+                        <div>{renderCategoryBadge(selectedTask)}</div>
+                      </div>
 
-                {/* HÌNH ẢNH MINH CHỨNG NẾU CÓ */}
-                {(selectedTask.image_path_1 || selectedTask.image_path_2 || selectedTask.image_path_3) && (
-                  <div style={{ marginBottom: '8px' }}>
-                    <div style={{ fontSize: '0.76rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', marginBottom: '6px' }}>
-                      Hình ảnh minh chứng
+                      <div>
+                        <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                          NGƯỜI KIỂM TRA QC
+                        </span>
+                        <strong style={{ color: '#2D1A12' }}>
+                          {selectedTask.inspector_name || 'QC'}
+                        </strong>
+                      </div>
+
+                      <div>
+                        <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                          NGÀY GHI NHẬN
+                        </span>
+                        <span style={{ color: '#2D1A12', fontWeight: 600 }}>
+                          {formatDateTime(selectedTask.recorded_date)}
+                        </span>
+                      </div>
+
+                      <div>
+                        <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                          TRẠNG THÁI
+                        </span>
+                        <div>
+                          <span className="badge-chualam">Chưa Làm</span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                          HÀNH ĐỘNG XỬ LÝ
+                        </span>
+                        <select
+                          value={modalAction}
+                          onChange={(e) => setModalAction(e.target.value)}
+                          style={{
+                            padding: '4px 8px',
+                            borderRadius: '6px',
+                            border: '1.5px solid #EADCC9',
+                            fontSize: '0.82rem',
+                            fontWeight: '700',
+                            backgroundColor: '#FAF6F0',
+                            color: '#7B5233',
+                            cursor: 'pointer',
+                            outline: 'none',
+                            width: '100%',
+                            maxWidth: '180px'
+                          }}
+                        >
+                          <option value="chap-nhan">{modalResult === 'fail' ? 'Chấp nhận / Tự xử lý' : 'Chấp nhận'}</option>
+                          <option value="cach-ly">Cách ly</option>
+                          <option value="tra-ve">Trả hàng</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                          SL CẦN KIỂM (LÔ)
+                        </span>
+                        <strong style={{ color: '#059669', fontSize: '0.92rem' }}>
+                          {Number(selectedTask.required_qty || 0).toLocaleString()}
+                        </strong>
+                      </div>
+
+                      <div>
+                        <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                          SL MẪU KIỂM TRA (AQL)
+                        </span>
+                        <strong style={{ color: '#1D4ED8', fontSize: '0.92rem' }}>
+                          {Number(selectedTask.sample_qty || 0).toLocaleString()}
+                        </strong>
+                      </div>
+
+                      <div>
+                        <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                          SỐ LỖI PHÁT HIỆN
+                        </span>
+                        <strong style={{ color: (selectedTask.error_qty > 0) ? '#DC2626' : '#059669', fontSize: '0.92rem' }}>
+                          {Number(selectedTask.error_qty || 0).toLocaleString()}
+                        </strong>
+                      </div>
                     </div>
-                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                      {[selectedTask.image_path_1, selectedTask.image_path_2, selectedTask.image_path_3].filter(Boolean).map((img, idx) => {
-                        const imgUrl = getImageUrl(img);
-                        return (
-                          <a 
-                            key={idx} 
-                            href={imgUrl}
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                          >
-                            <img 
-                              src={imgUrl}
-                              alt="Minh chứng"
-                              style={{ width: '84px', height: '84px', objectFit: 'cover', borderRadius: '8px', border: '1.5px solid #EADCC9', cursor: 'pointer', transition: 'transform 0.15s' }}
-                              onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-                              onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                            />
-                          </a>
-                        );
-                      })}
+
+                    {/* THÔNG TIN XỬ LÝ */}
+                    <div style={{ marginBottom: '16px', fontSize: '0.88rem' }}>
+                      <label style={{
+                        fontSize: '0.76rem',
+                        color: '#7B5233',
+                        fontWeight: 800,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.3px',
+                        display: 'block',
+                        marginBottom: '6px'
+                      }}>
+                        Thông tin xử lý / Biện pháp khắc phục
+                      </label>
+                      <textarea
+                        value={handlingInfo}
+                        onChange={(e) => setHandlingInfo(e.target.value)}
+                        placeholder="Nhập phương án xử lý, biện pháp khắc phục sự cố, hướng dẫn tái kiểm tra..."
+                        rows={3}
+                        style={{
+                          width: '100%',
+                          boxSizing: 'border-box',
+                          padding: '10px 12px',
+                          borderRadius: '8px',
+                          border: '1.5px solid #EADCC9',
+                          backgroundColor: '#FFFFFF',
+                          color: '#2D1A12',
+                          fontSize: '0.86rem',
+                          lineHeight: '1.45',
+                          resize: 'vertical',
+                          outline: 'none',
+                          fontFamily: 'inherit',
+                          transition: 'border-color 0.15s ease, box-shadow 0.15s ease'
+                        }}
+                        onFocus={(e) => {
+                          e.target.style.borderColor = '#7B5233';
+                          e.target.style.boxShadow = '0 0 0 3px rgba(123, 82, 51, 0.1)';
+                        }}
+                        onBlur={(e) => {
+                          e.target.style.borderColor = '#EADCC9';
+                          e.target.style.boxShadow = 'none';
+                        }}
+                      />
                     </div>
-                  </div>
+
+                    {/* GHI CHÚ */}
+                    <div style={{ marginBottom: '16px', fontSize: '0.88rem' }}>
+                      <div style={{ fontSize: '0.76rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px' }}>
+                        Ghi chú
+                      </div>
+                      <div style={{
+                        background: '#FAF6F0',
+                        padding: '10px 14px',
+                        borderRadius: '8px',
+                        border: '1px solid #EADCC9',
+                        color: '#4B5563',
+                        lineHeight: 1.4,
+                        whiteSpace: 'pre-wrap'
+                      }}>
+                        {selectedTask.notes || parsedTaskData?.note || 'Không có ghi chú thêm.'}
+                      </div>
+                    </div>
+
+                    {/* HÌNH ẢNH MINH CHỨNG (PHẢI CÓ LUN PHẦN ẢNH) */}
+                    <div style={{ marginBottom: '8px' }}>
+                      <div style={{
+                        fontSize: '0.76rem',
+                        color: '#7B5233',
+                        fontWeight: 800,
+                        textTransform: 'uppercase',
+                        marginBottom: '8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}>
+                        <ImageIcon size={14} />
+                        <span>Hình ảnh minh chứng ({taskImages.length})</span>
+                      </div>
+                      {taskImages.length > 0 ? (
+                        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                          {taskImages.map((img, idx) => {
+                            const imgUrl = getImageUrl(img);
+                            return (
+                              <div
+                                key={idx}
+                                style={{
+                                  position: 'relative',
+                                  borderRadius: '8px',
+                                  overflow: 'hidden',
+                                  border: '1.5px solid #EADCC9',
+                                  backgroundColor: '#FAF6F0',
+                                  cursor: 'pointer',
+                                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                                  transition: 'transform 0.15s, box-shadow 0.15s'
+                                }}
+                                onClick={() => setPreviewImgUrl(imgUrl)}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.transform = 'scale(1.04)';
+                                  e.currentTarget.style.boxShadow = '0 4px 10px rgba(123,82,51,0.15)';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.transform = 'scale(1)';
+                                  e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)';
+                                }}
+                                title="Nhấp để xem ảnh lớn"
+                              >
+                                <img
+                                  src={imgUrl}
+                                  alt={`Minh chứng ${idx + 1}`}
+                                  style={{ width: '92px', height: '92px', objectFit: 'cover', display: 'block' }}
+                                />
+                                <div style={{
+                                  position: 'absolute',
+                                  bottom: 0,
+                                  left: 0,
+                                  right: 0,
+                                  backgroundColor: 'rgba(45, 26, 18, 0.65)',
+                                  color: '#FFFFFF',
+                                  fontSize: '0.68rem',
+                                  fontWeight: 700,
+                                  textAlign: 'center',
+                                  padding: '2px 0'
+                                }}>
+                                  Ảnh {idx + 1}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div style={{
+                          padding: '12px 14px',
+                          backgroundColor: '#FAF6F0',
+                          borderRadius: '8px',
+                          border: '1px dashed #EADCC9',
+                          color: '#9CA3AF',
+                          fontSize: '0.82rem',
+                          fontStyle: 'italic'
+                        }}>
+                          Không có hình ảnh đính kèm cho phiếu này.
+                        </div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* TAB CHI TIẾT */}
+                    {/* BẢNG DANH SÁCH CHI TIẾT / PHÔI KIỂM TRA (LIST TABLE) */}
+                    <div style={{ marginBottom: '16px' }}>
+                      <div style={{
+                        fontSize: '0.82rem',
+                        color: '#7B5233',
+                        fontWeight: 800,
+                        marginBottom: '8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.4px'
+                      }}>
+                        <Layers size={15} color="#7B5233" />
+                        <span>Danh sách chi tiết / phôi kiểm tra ({partsList.length})</span>
+                      </div>
+
+                      <div style={{
+                        border: '1.5px solid #EADCC9',
+                        borderRadius: '10px',
+                        overflow: 'hidden',
+                        backgroundColor: '#ffffff',
+                        maxHeight: '260px',
+                        overflowY: 'auto',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+                      }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                          <thead>
+                            <tr style={{ backgroundColor: '#FAF6F0', borderBottom: '1.5px solid #EADCC9' }}>
+                              <th style={{ padding: '8px 10px', textAlign: 'center', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem', width: '46px' }}>STT</th>
+                              <th style={{ padding: '8px 12px', textAlign: 'left', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem', minWidth: '130px' }}>TÊN CHI TIẾT / PHÔI</th>
+                              <th style={{ padding: '8px 12px', textAlign: 'left', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem', width: '140px' }}>QUY CÁCH / THÔNG SỐ</th>
+                              <th style={{ padding: '8px 12px', textAlign: 'left', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem', minWidth: '180px' }}>TÊN TỦ (SKU)</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'center', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem', width: '90px' }}>SL KẾ HOẠCH</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {partsList.map((p, idx) => (
+                              <tr 
+                                key={idx} 
+                                style={{ 
+                                  borderBottom: idx < partsList.length - 1 ? '1px solid #F3EBE1' : 'none',
+                                  transition: 'background-color 0.15s ease'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FCF9F6'}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+                              >
+                                <td style={{ padding: '9px 10px', color: '#8D6E63', fontWeight: 700, textAlign: 'center', verticalAlign: 'middle' }}>
+                                  {p.stt}
+                                </td>
+                                <td style={{ padding: '9px 12px', color: '#2D1A12', fontWeight: 700, verticalAlign: 'middle', lineHeight: 1.4 }}>
+                                  {p.name}
+                                </td>
+                                <td style={{ padding: '9px 12px', verticalAlign: 'middle' }}>
+                                  <span style={{
+                                    display: 'inline-block',
+                                    backgroundColor: '#FAF6F0',
+                                    color: '#7B5233',
+                                    padding: '3px 8px',
+                                    borderRadius: '6px',
+                                    border: '1px solid #EADCC9',
+                                    fontSize: '0.78rem',
+                                    fontWeight: 600,
+                                    whiteSpace: 'nowrap'
+                                  }}>
+                                    {p.spec}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '9px 12px', verticalAlign: 'middle' }}>
+                                  {p.cabinet ? (
+                                    <span style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      fontSize: '0.76rem',
+                                      padding: '2px 8px',
+                                      borderRadius: '5px',
+                                      backgroundColor: '#EFF6FF',
+                                      color: '#1D4ED8',
+                                      fontWeight: 600,
+                                      border: '1px solid #BFDBFE',
+                                      whiteSpace: 'nowrap'
+                                    }} title={p.cabinet}>
+                                      {p.cabinet}
+                                    </span>
+                                  ) : (
+                                    <span style={{ color: '#9CA3AF', fontSize: '0.8rem' }}>—</span>
+                                  )}
+                                </td>
+                                <td style={{ padding: '9px 10px', textAlign: 'center', verticalAlign: 'middle', fontWeight: 700, color: '#4B5563' }}>
+                                  {p.qty ? (
+                                    <span style={{
+                                      display: 'inline-block',
+                                      padding: '2px 8px',
+                                      backgroundColor: '#F3F4F6',
+                                      borderRadius: '6px',
+                                      fontSize: '0.78rem',
+                                      color: '#374151'
+                                    }}>
+                                      {Number(p.qty).toLocaleString()}
+                                    </span>
+                                  ) : (
+                                    <span style={{ color: '#9CA3AF', fontSize: '0.8rem' }}>—</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* HƯỚNG DẪN KIỂM TRA (CÁC BƯỚC KIỂM TRA SOP) */}
+                    <div style={{ marginTop: '16px', marginBottom: '16px' }}>
+                      <div style={{
+                        fontSize: '0.82rem',
+                        color: '#7B5233',
+                        fontWeight: 800,
+                        marginBottom: '8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.4px'
+                      }}>
+                        <ClipboardList size={15} color="#7B5233" />
+                        <span>Hướng dẫn kiểm tra SOP {taskSteps.length > 0 ? `(${taskSteps.length} bước)` : ''}</span>
+                      </div>
+
+                      {taskSteps.length > 0 ? (
+                        <div style={{
+                          border: '1.5px solid #EADCC9',
+                          borderRadius: '10px',
+                          overflow: 'hidden',
+                          backgroundColor: '#ffffff',
+                          maxHeight: '260px',
+                          overflowY: 'auto',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+                        }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                            <thead>
+                              <tr style={{ backgroundColor: '#FAF6F0', borderBottom: '1.5px solid #EADCC9' }}>
+                                <th style={{ padding: '8px 10px', textAlign: 'center', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem', width: '50px' }}>BƯỚC</th>
+                                <th style={{ padding: '8px 12px', textAlign: 'left', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem', minWidth: '150px' }}>HẠNG MỤC / MÔ TẢ</th>
+                                <th style={{ padding: '8px 12px', textAlign: 'left', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem' }}>TIÊU CHUẨN KỸ THUẬT</th>
+                                <th style={{ padding: '8px 10px', textAlign: 'center', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem', width: '95px' }}>KẾT QUẢ</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {taskSteps.map((st, idx) => {
+                                const stepNo = st.step_no || st.step || idx + 1;
+                                const title = st.title || st.name || st.description || `Bước ${stepNo}`;
+                                const standard = st.standard || st.content || st.note || 'Theo quy định';
+                                const isFail = st.result === 'fail' || st.result === 'Lỗi' || st.status === 'FAIL';
+                                return (
+                                  <tr
+                                    key={idx}
+                                    style={{
+                                      borderBottom: idx < taskSteps.length - 1 ? '1px solid #F3EBE1' : 'none',
+                                      backgroundColor: isFail ? '#FEF2F2' : (idx % 2 === 0 ? '#FFFFFF' : '#FCFBF9'),
+                                      transition: 'background-color 0.15s ease'
+                                    }}
+                                  >
+                                    <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 800, color: isFail ? '#DC2626' : '#7B5233' }}>
+                                      {stepNo}
+                                    </td>
+                                    <td style={{ padding: '8px 12px', fontWeight: 700, color: isFail ? '#991B1B' : '#2D1A12' }}>
+                                      {title}
+                                    </td>
+                                    <td style={{ padding: '8px 12px', color: '#4B5563', fontSize: '0.82rem', lineHeight: 1.4 }}>
+                                      {standard}
+                                    </td>
+                                    <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                      <span style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        padding: '3px 8px',
+                                        borderRadius: '12px',
+                                        fontSize: '0.76rem',
+                                        fontWeight: 800,
+                                        backgroundColor: isFail ? '#FEE2E2' : '#DCFCE7',
+                                        color: isFail ? '#DC2626' : '#15803D',
+                                        border: `1px solid ${isFail ? '#FCA5A5' : '#86EFAC'}`
+                                      }}>
+                                        {isFail ? 'Không đạt' : 'Đạt'}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div style={{
+                          padding: '12px 14px',
+                          backgroundColor: '#FAF6F0',
+                          borderRadius: '8px',
+                          border: '1px dashed #EADCC9',
+                          color: '#8D6E63',
+                          fontSize: '0.82rem'
+                        }}>
+                          Phiếu kiểm tra này không có danh sách các bước SOP chi tiết.
+                        </div>
+                      )}
+                    </div>
+
+                    {/* DANH SÁCH LỖI PHÁT HIỆN NẾU CÓ */}
+                    {taskErrors.length > 0 && (
+                      <div style={{ marginTop: '16px' }}>
+                        <div style={{
+                          fontSize: '0.82rem',
+                          color: '#DC2626',
+                          fontWeight: 800,
+                          marginBottom: '8px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.4px'
+                        }}>
+                          <AlertTriangle size={15} color="#DC2626" />
+                          <span>Danh sách lỗi phát hiện ({taskErrors.length})</span>
+                        </div>
+                        <div style={{
+                          border: '1.5px solid #FCA5A5',
+                          borderRadius: '10px',
+                          overflow: 'hidden',
+                          backgroundColor: '#FFFFFF',
+                          boxShadow: '0 1px 3px rgba(220,38,38,0.05)'
+                        }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                            <thead>
+                              <tr style={{ backgroundColor: '#FEF2F2', borderBottom: '1.5px solid #FCA5A5' }}>
+                                <th style={{ padding: '8px 10px', textAlign: 'center', color: '#991B1B', fontWeight: 800, fontSize: '0.76rem', width: '50px' }}>STT</th>
+                                <th style={{ padding: '8px 12px', textAlign: 'left', color: '#991B1B', fontWeight: 800, fontSize: '0.76rem' }}>TÊN LỖI</th>
+                                <th style={{ padding: '8px 12px', textAlign: 'center', color: '#991B1B', fontWeight: 800, fontSize: '0.76rem', width: '110px' }}>SL GHI NHẬN</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {taskErrors.map((err, idx) => (
+                                <tr key={idx} style={{ borderBottom: idx < taskErrors.length - 1 ? '1px solid #FEE2E2' : 'none' }}>
+                                  <td style={{ padding: '8px 10px', textAlign: 'center', color: '#DC2626', fontWeight: 700 }}>
+                                    {String(idx + 1).padStart(2, '0')}
+                                  </td>
+                                  <td style={{ padding: '8px 12px', color: '#2D1A12', fontWeight: 700 }}>
+                                    {err.name || err.defect_name || err.code || 'Lỗi'}
+                                  </td>
+                                  <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                                    <span style={{
+                                      display: 'inline-block',
+                                      padding: '2px 8px',
+                                      borderRadius: '6px',
+                                      backgroundColor: '#FEE2E2',
+                                      color: '#DC2626',
+                                      fontWeight: 800,
+                                      fontSize: '0.8rem'
+                                    }}>
+                                      {err.qty || err.quantity || 1}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -1930,6 +2359,53 @@ const QualityOverviewView = () => {
             >
               <ChevronRight size={26} />
             </button>
+
+            {/* LIGHTBOX XEM ẢNH PHÓNG TO */}
+            {previewImgUrl && (
+              <div
+                style={{
+                  position: 'fixed',
+                  inset: 0,
+                  backgroundColor: 'rgba(0, 0, 0, 0.85)',
+                  zIndex: 10000,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '20px'
+                }}
+                onClick={() => setPreviewImgUrl(null)}
+              >
+                <div style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }} onClick={(e) => e.stopPropagation()}>
+                  <img
+                    src={previewImgUrl}
+                    alt="Xem ảnh lớn"
+                    style={{ maxWidth: '100%', maxHeight: '85vh', borderRadius: '8px', objectFit: 'contain', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPreviewImgUrl(null)}
+                    style={{
+                      position: 'absolute',
+                      top: '-12px',
+                      right: '-12px',
+                      backgroundColor: '#FFFFFF',
+                      border: 'none',
+                      borderRadius: '50%',
+                      width: '32px',
+                      height: '32px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                      color: '#1F2937'
+                    }}
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

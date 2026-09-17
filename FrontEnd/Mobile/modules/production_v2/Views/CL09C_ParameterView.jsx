@@ -288,17 +288,14 @@ const CL09C_ParameterView = () => {
                 </div>
               </div>
 
-              <div className="pv2-field">
-                <label>Ghi chú</label>
-                <textarea
-                  className={`pv2-textarea ${readOnly ? 'pv2-input--disabled' : ''}`}
-                  rows={2}
-                  value={note || ''}
-                  onChange={(e) => setNote(e.target.value)}
-                  disabled={readOnly}
-                  placeholder="Nhập ghi chú kết quả đo thông số..."
-                />
-              </div>
+              {readOnly && note ? (
+                <div className="pv2-field">
+                  <label>Ghi chú</label>
+                  <div style={{ padding: '8px 12px', background: '#f8fafc', borderRadius: 6, border: '1px solid #e2e8f0', color: '#334155', fontSize: '13.5px', whiteSpace: 'pre-wrap' }}>
+                    {note}
+                  </div>
+                </div>
+              ) : null}
 
               <div className="pv2-error-section" style={{ marginTop: '12px' }}>
                 <div className="pv2-section-title">Theo dõi xu hướng lỗi</div>

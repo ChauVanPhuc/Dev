@@ -451,63 +451,6 @@ const FinishInspectionModal = ({ open, summary, palletCode, onConfirm, onClose, 
                 Trả hàng
               </button>
             </div>
-
-            {/* Nếu chọn Chấp nhận khi phiếu có lỗi: hiển thị ô nhập phương án tự xử lý (tùy chọn) */}
-            {selectedAction === 'chap-nhan' && isTicketFailed && (
-              <div style={{ marginTop: '10px' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#047857', marginBottom: '4px' }}>
-                  Phương án tự xử lý / Ghi chú
-                </label>
-                <input
-                  type="text"
-                  value={modalNote}
-                  onChange={(e) => setModalNote(e.target.value)}
-                  placeholder="Nhập phương án xử lý lỗi tại chỗ (nếu có)..."
-                  style={{
-                    width: '100%',
-                    padding: '8px 10px',
-                    borderRadius: '8px',
-                    border: '1px solid #10b981',
-                    fontSize: '13px',
-                    boxSizing: 'border-box',
-                    outline: 'none',
-                    backgroundColor: '#ffffff'
-                  }}
-                />
-              </div>
-            )}
-
-            {/* Nếu chọn Cách Ly: hiển thị ô nhập lý do */}
-            {selectedAction === 'cach-ly' && (
-              <div style={{ marginTop: '10px' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#b45309', marginBottom: '4px' }}>
-                  Lý do cách ly <span style={{ color: '#dc2626' }}>*</span>
-                </label>
-                <input
-                  type="text"
-                  value={modalNote}
-                  onChange={(e) => {
-                    setModalNote(e.target.value)
-                    if (e.target.value.trim()) setActionError('')
-                  }}
-                  placeholder="Nhập lý do cách ly, vị trí lưu kho tạm..."
-                  style={{
-                    width: '100%',
-                    padding: '8px 10px',
-                    borderRadius: '8px',
-                    border: actionError ? '1.5px solid #ef4444' : '1px solid #f59e0b',
-                    fontSize: '13px',
-                    boxSizing: 'border-box',
-                    outline: 'none'
-                  }}
-                />
-                {actionError && (
-                  <div style={{ color: '#ef4444', fontSize: '11.5px', fontWeight: '600', marginTop: '3px' }}>
-                    {actionError}
-                  </div>
-                )}
-              </div>
-            )}
           </div>
 
           {/* Row 2: Bảng Chi Tiết Linh Kiện & Quy Cách Kiểm Tra */}
@@ -713,6 +656,63 @@ const FinishInspectionModal = ({ open, summary, palletCode, onConfirm, onClose, 
                 {summary?.errorQty ?? '0'}
               </div>
             </div>
+          </div>
+
+          {/* Khối Ghi chú kiểm tra */}
+          <div style={{ marginTop: '12px', width: '100%', boxSizing: 'border-box' }}>
+            <label style={{
+              display: 'block',
+              fontSize: '13px',
+              fontWeight: '700',
+              color: selectedAction === 'cach-ly' ? '#b45309' : (selectedAction === 'chap-nhan' && isTicketFailed ? '#047857' : '#1e293b'),
+              marginBottom: '4px'
+            }}>
+              {selectedAction === 'cach-ly' ? (
+                <>Lý do cách ly / Ghi chú <span style={{ color: '#dc2626' }}>*</span></>
+              ) : (selectedAction === 'chap-nhan' && isTicketFailed ? (
+                'Phương án tự xử lý / Ghi chú'
+              ) : (
+                'Ghi chú'
+              ))}
+            </label>
+            <textarea
+              rows={2}
+              value={modalNote}
+              onChange={(e) => {
+                setModalNote(e.target.value)
+                if (e.target.value.trim()) setActionError('')
+              }}
+              placeholder={
+                selectedAction === 'cach-ly'
+                  ? 'Nhập lý do cách ly, vị trí lưu kho tạm hoặc ghi chú...'
+                  : (selectedAction === 'chap-nhan' && isTicketFailed
+                      ? 'Nhập phương án xử lý lỗi tại chỗ hoặc ghi chú kiểm tra...'
+                      : 'Nhập ghi chú kiểm tra (nếu có)...')
+              }
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                borderRadius: '8px',
+                border: actionError
+                  ? '1.5px solid #ef4444'
+                  : (selectedAction === 'cach-ly'
+                      ? '1.5px solid #f59e0b'
+                      : (selectedAction === 'chap-nhan' && isTicketFailed
+                          ? '1.5px solid #10b981'
+                          : '1px solid #D6C7B8')),
+                fontSize: '13px',
+                fontFamily: 'inherit',
+                boxSizing: 'border-box',
+                resize: 'vertical',
+                outline: 'none',
+                backgroundColor: '#ffffff'
+              }}
+            />
+            {actionError && (
+              <div style={{ color: '#ef4444', fontSize: '11.5px', fontWeight: '600', marginTop: '3px' }}>
+                {actionError}
+              </div>
+            )}
           </div>
 
           {/* Pallet Confirmation Section (Chỉ hiển thị khi Kiểm tra lần đầu) */}

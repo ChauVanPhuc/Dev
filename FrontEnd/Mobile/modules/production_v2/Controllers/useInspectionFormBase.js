@@ -1807,6 +1807,9 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
 
       setResult(finalResult)
       setAction(finalAction)
+      if (modalData && modalData.note !== undefined) {
+        setNote(modalData.note)
+      }
 
       // Chuẩn hóa danh sách lỗi khi lưu:
       // 1. Lọc bỏ các dòng hoàn toàn trống (qty === 0 và không có tên/mã)
@@ -1856,7 +1859,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
         area,
         staff,
         answers: mode === INSPECT_MODES.QA ? answers : null,
-        steps: mode === INSPECT_MODES.PROCESS ? steps : null,
+        steps: (Array.isArray(steps) && steps.length > 0) ? steps : null,
       })
 
       showMessage(
@@ -2035,6 +2038,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     })(),
     sampleQty: (mode === INSPECT_MODES.PARAMETER ? paramSample : (sampleQty || ticket?.sample_qty || ticket?.sampleQty)) || '—',
     errorQty: (mode === INSPECT_MODES.PARAMETER ? paramFail : (errorQty || ticket?.error_qty || ticket?.errorQty)) || '0',
+    note: note || ticket?.note || '',
   }), [
     mode,
     paramPo,
@@ -2052,7 +2056,8 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     isQtyConverted,
     paramSample,
     paramFail,
-    errorQty
+    errorQty,
+    note
   ])
 
   const handleModeChange = (newMode) => {

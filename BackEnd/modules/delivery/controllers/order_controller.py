@@ -386,6 +386,10 @@ def update_order(db: Session, order_id: int, order: OrderUpdate):
             setattr(db_order, key, value)
         
         if order.products_details is not None:
+            from modules.production.models.bom_detail import BOMDetail
+            for p in db_order.products:
+                db.query(BOMDetail).filter(BOMDetail.product_id == p.id).update({BOMDetail.parent_id: None}, synchronize_session=False)
+            db.flush()
             for p in db_order.products:
                 db.delete(p)
             db.flush()
@@ -451,6 +455,9 @@ def update_order(db: Session, order_id: int, order: OrderUpdate):
                     create_bom_detail_recursive(b_data)
 
         db.commit()
+        db.refresh(db_order)
+        return db_order
+    return None
 def delete_order(db: Session, order_id: int):
     db_order = db.query(Order).filter(Order.id == order_id).first()
     if not db_order:

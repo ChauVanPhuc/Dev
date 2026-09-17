@@ -49,15 +49,16 @@ const extractDefects = (item) => {
 
   // Check steps for failed steps
   if (parsed.steps) {
-    Object.entries(parsed.steps).forEach(([stepName, val]) => {
+    Object.entries(parsed.steps).forEach(([stepKey, val]) => {
       if (val && (val.result === 'fail' || val.result === 'Lỗi' || val.status === 'FAIL')) {
+        const stepName = val.title || val.name || val.description || (isNaN(Number(stepKey)) ? stepKey : `Bước ${val.step_no || Number(stepKey) + 1}`);
         if (!defects.some(d => d.name.toLowerCase().includes(stepName.toLowerCase()))) {
           defects.push({
-            id: `step_${stepName}`,
+            id: `step_${val.id || val.step_no || stepKey}`,
             name: stepName,
             quantity: 1,
             severity: 'Không đạt tiêu chuẩn',
-            note: val.value ? `Giá trị đo: ${val.value}` : (val.note || ''),
+            note: val.note || val.standard || val.content || (val.value ? `Giá trị đo: ${val.value}` : ''),
             isFailedStep: true
           });
         }
@@ -335,13 +336,17 @@ const InspectionDetailView = () => {
               </tr>
             </thead>
             <tbody>
-              ${Object.entries(parsed.steps).map(([k, val]) => `
+              ${Object.entries(parsed.steps).map(([k, val]) => {
+                const label = val?.title || val?.name || val?.description || (isNaN(Number(k)) ? k : `Bước ${val?.step_no || Number(k) + 1}`);
+                const measurement = val?.standard || val?.content || val?.value || '—';
+                const isPass = val?.result === 'pass' || val?.result === 'Đạt' || val?.status === 'PASS';
+                return `
                 <tr>
-                  <td style="padding:8px; border:1px solid #ddd;">${k}</td>
-                  <td style="padding:8px; border:1px solid #ddd;">${val.value || 'N/A'}</td>
-                  <td style="padding:8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:${val.result === 'pass' ? '#16a34a' : '#dc2626'}">${val.result === 'pass' ? 'Đạt' : 'Lỗi'}</td>
+                  <td style="padding:8px; border:1px solid #ddd;">${label}</td>
+                  <td style="padding:8px; border:1px solid #ddd;">${measurement}</td>
+                  <td style="padding:8px; border:1px solid #ddd; text-align:center; font-weight:bold; color:${isPass ? '#16a34a' : '#dc2626'}">${isPass ? 'Đạt' : 'Lỗi'}</td>
                 </tr>
-              `).join('')}
+              `}).join('')}
             </tbody>
           </table>
         `;
@@ -984,17 +989,22 @@ const InspectionDetailView = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {Object.entries(parsed.steps).map(([k, val]) => (
-                          <tr key={k}>
-                            <td style={{ fontWeight: '600' }}>{k}</td>
-                            <td>{val.value || 'N/A'}</td>
-                            <td style={{ textAlign: 'center' }}>
-                              <span className={`status-badge ${val.result === 'pass' ? 'pass' : 'fail'}`}>
-                                {val.result === 'pass' ? 'Đạt' : 'Lỗi'}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
+                        {Object.entries(parsed.steps).map(([k, val]) => {
+                          const label = val?.title || val?.name || val?.description || (isNaN(Number(k)) ? k : `Bước ${val?.step_no || Number(k) + 1}`);
+                          const measurement = val?.standard || val?.content || val?.value || '—';
+                          const isPass = val?.result === 'pass' || val?.result === 'Đạt' || val?.status === 'PASS';
+                          return (
+                            <tr key={k}>
+                              <td style={{ fontWeight: '600' }}>{label}</td>
+                              <td>{measurement}</td>
+                              <td style={{ textAlign: 'center' }}>
+                                <span className={`status-badge ${isPass ? 'pass' : 'fail'}`}>
+                                  {isPass ? 'Đạt' : 'Lỗi'}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

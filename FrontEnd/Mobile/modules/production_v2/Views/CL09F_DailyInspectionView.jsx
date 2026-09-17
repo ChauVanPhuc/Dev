@@ -334,27 +334,16 @@ const CL09F_DailyInspectionView = () => {
               </div>
 
               {/* Ghi chú */}
-              <div style={{ marginTop: '14px' }}>
-                <label style={{ fontSize: '13px', fontWeight: '700', color: '#4a240e', marginBottom: '4px', display: 'block' }}>
-                  Ghi chú
-                </label>
-                <textarea
-                  rows={2}
-                  value={note || ''}
-                  onChange={(e) => setNote(e.target.value)}
-                  disabled={readOnly}
-                  placeholder="Nhập ghi chú thêm về nguyên nhân lỗi hoặc lưu ý quy trình..."
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #D6C7B8',
-                    fontFamily: 'inherit',
-                    fontSize: '13.5px',
-                    boxSizing: 'border-box'
-                  }}
-                />
-              </div>
+              {readOnly && note ? (
+                <div style={{ marginTop: '14px' }}>
+                  <label style={{ fontSize: '13px', fontWeight: '700', color: '#4a240e', marginBottom: '4px', display: 'block' }}>
+                    Ghi chú
+                  </label>
+                  <div style={{ padding: '8px 12px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0', color: '#334155', fontSize: '13.5px', whiteSpace: 'pre-wrap' }}>
+                    {note}
+                  </div>
+                </div>
+              ) : null}
 
               <div style={{ marginTop: '14px' }}>
                 {renderImageUploadArea()}
