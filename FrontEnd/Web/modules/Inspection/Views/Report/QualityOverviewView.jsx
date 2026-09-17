@@ -1342,37 +1342,26 @@ const QualityOverviewView = () => {
           align-items: center;
           justify-content: center;
           font-family: inherit;
-          padding: 2px 6px;
-          font-size: 0.7rem;
-          font-weight: 800;
+          padding: 2px 5px;
+          font-size: 0.68rem;
+          font-weight: 700;
           line-height: 1;
           border-radius: 4px;
           margin-left: 6px;
-          box-shadow: 0 1px 1px rgba(0,0,0,0.1);
+          background-color: #F1F5F9;
+          color: #64748B;
+          border: 1px solid #CBD5E1;
+          box-shadow: 0 1px 0 rgba(0,0,0,0.06);
           user-select: none;
-          letter-spacing: 0.3px;
+          letter-spacing: 0.2px;
           white-space: nowrap;
           flex-shrink: 0;
         }
-        .kbd-shortcut-green {
-          background-color: rgba(255, 255, 255, 0.22);
+        .kbd-shortcut-primary {
+          background-color: rgba(255, 255, 255, 0.2);
           color: #FFFFFF;
-          border: 1px solid rgba(255, 255, 255, 0.38);
-        }
-        .kbd-shortcut-red {
-          background-color: #FFFFFF;
-          color: #BE123C;
-          border: 1px solid #FECDD3;
-        }
-        .kbd-shortcut-gray {
-          background-color: #F1F5F9;
-          color: #475569;
-          border: 1px solid #CBD5E1;
-        }
-        .kbd-shortcut-amber {
-          background-color: #FFFFFF;
-          color: #92400E;
-          border: 1px solid #FDE68A;
+          border: 1px solid rgba(255, 255, 255, 0.32);
+          box-shadow: none;
         }
         .btn-toolbar-custom {
           display: flex;
@@ -1425,7 +1414,7 @@ const QualityOverviewView = () => {
           align-items: center;
           justify-content: center;
           width: 100%;
-          max-width: 860px;
+          max-width: 960px;
           padding: 0 14px;
           box-sizing: border-box;
         }
@@ -1912,13 +1901,13 @@ const QualityOverviewView = () => {
                         <>
                           <CheckCircle2 size={15} />
                           <span>Đạt</span>
-                          <kbd className="kbd-shortcut kbd-shortcut-green" style={{ fontSize: '0.72rem', padding: '1px 5px', marginLeft: '2px' }}>F3</kbd>
+                          <kbd className="kbd-shortcut" style={{ fontSize: '0.72rem', padding: '1px 5px', marginLeft: '4px' }}>F3</kbd>
                         </>
                       ) : (
                         <>
                           <XCircle size={15} />
                           <span>Không đạt</span>
-                          <kbd className="kbd-shortcut kbd-shortcut-red" style={{ fontSize: '0.72rem', padding: '1px 5px', marginLeft: '2px' }}>F3</kbd>
+                          <kbd className="kbd-shortcut" style={{ fontSize: '0.72rem', padding: '1px 5px', marginLeft: '4px' }}>F3</kbd>
                         </>
                       )}
                     </button>
@@ -2588,10 +2577,9 @@ const QualityOverviewView = () => {
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 padding: '12px 20px',
-                backgroundColor: '#FAF6F0',
-                borderTop: '1.5px solid #EADCC9',
-                gap: '12px',
-                flexWrap: 'wrap'
+                backgroundColor: '#FFFFFF',
+                borderTop: '1px solid #E2E8F0',
+                gap: '12px'
               }}>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'nowrap' }}>
                   <button
@@ -2606,11 +2594,11 @@ const QualityOverviewView = () => {
                       height: '38px',
                       padding: '0 14px',
                       borderRadius: '8px',
-                      border: '1.5px solid #FECDD3',
-                      backgroundColor: '#FFF5F5',
-                      color: '#E11D48',
-                      fontWeight: 700,
-                      fontSize: '0.82rem',
+                      border: '1px solid #CBD5E1',
+                      backgroundColor: '#FFFFFF',
+                      color: '#475569',
+                      fontWeight: 600,
+                      fontSize: '0.84rem',
                       cursor: (confirming || cancelingTask) ? 'not-allowed' : 'pointer',
                       transition: 'all 0.15s ease',
                       whiteSpace: 'nowrap',
@@ -2618,27 +2606,23 @@ const QualityOverviewView = () => {
                     }}
                     onMouseEnter={(e) => {
                       if (!confirming && !cancelingTask) {
-                        e.currentTarget.style.backgroundColor = '#FEE2E2';
-                        e.currentTarget.style.borderColor = '#FDA4AF';
-                        e.currentTarget.style.color = '#BE123C';
-                        e.currentTarget.style.transform = 'translateY(-1px)';
-                        e.currentTarget.style.boxShadow = '0 2px 5px rgba(225, 29, 72, 0.12)';
+                        e.currentTarget.style.backgroundColor = '#FEF2F2';
+                        e.currentTarget.style.borderColor = '#FECDD3';
+                        e.currentTarget.style.color = '#DC2626';
                       }
                     }}
                     onMouseLeave={(e) => {
                       if (!confirming && !cancelingTask) {
-                        e.currentTarget.style.backgroundColor = '#FFF5F5';
-                        e.currentTarget.style.borderColor = '#FECDD3';
-                        e.currentTarget.style.color = '#E11D48';
-                        e.currentTarget.style.transform = 'none';
-                        e.currentTarget.style.boxShadow = 'none';
+                        e.currentTarget.style.backgroundColor = '#FFFFFF';
+                        e.currentTarget.style.borderColor = '#CBD5E1';
+                        e.currentTarget.style.color = '#475569';
                       }
                     }}
-                    title="Hủy hồ sơ này khỏi danh sách quản lý chất lượng"
+                    title="Hủy hồ sơ này khỏi danh sách quản lý chất lượng (F2)"
                   >
-                    <XCircle size={15} style={{ flexShrink: 0 }} />
+                    <XCircle size={15} style={{ flexShrink: 0, opacity: 0.75 }} />
                     <span style={{ whiteSpace: 'nowrap' }}>{cancelingTask ? 'Đang hủy...' : 'Hủy hồ sơ'}</span>
-                    <kbd className="kbd-shortcut kbd-shortcut-red">F2</kbd>
+                    <kbd className="kbd-shortcut">F2</kbd>
                   </button>
 
                   {selectedTask.action === 'tra-ve' && (
@@ -2654,11 +2638,11 @@ const QualityOverviewView = () => {
                         height: '38px',
                         padding: '0 14px',
                         borderRadius: '8px',
-                        backgroundColor: '#FFFBEB',
-                        border: '1.5px solid #FDE68A',
-                        color: '#B45309',
-                        fontWeight: 700,
-                        fontSize: '0.82rem',
+                        backgroundColor: '#FFFFFF',
+                        border: '1px solid #CBD5E1',
+                        color: '#475569',
+                        fontWeight: 600,
+                        fontSize: '0.84rem',
                         cursor: (confirming || cancelingId === selectedTask.id || cancelingTask) ? 'not-allowed' : 'pointer',
                         transition: 'all 0.15s ease',
                         whiteSpace: 'nowrap',
@@ -2666,27 +2650,23 @@ const QualityOverviewView = () => {
                       }}
                       onMouseEnter={(e) => {
                         if (!confirming && cancelingId !== selectedTask.id && !cancelingTask) {
-                          e.currentTarget.style.backgroundColor = '#FEF3C7';
-                          e.currentTarget.style.borderColor = '#FCD34D';
-                          e.currentTarget.style.color = '#92400E';
-                          e.currentTarget.style.transform = 'translateY(-1px)';
-                          e.currentTarget.style.boxShadow = '0 2px 5px rgba(180, 83, 9, 0.12)';
+                          e.currentTarget.style.backgroundColor = '#FFFBEB';
+                          e.currentTarget.style.borderColor = '#FDE68A';
+                          e.currentTarget.style.color = '#D97706';
                         }
                       }}
                       onMouseLeave={(e) => {
                         if (!confirming && cancelingId !== selectedTask.id && !cancelingTask) {
-                          e.currentTarget.style.backgroundColor = '#FFFBEB';
-                          e.currentTarget.style.borderColor = '#FDE68A';
-                          e.currentTarget.style.color = '#B45309';
-                          e.currentTarget.style.transform = 'none';
-                          e.currentTarget.style.boxShadow = 'none';
+                          e.currentTarget.style.backgroundColor = '#FFFFFF';
+                          e.currentTarget.style.borderColor = '#CBD5E1';
+                          e.currentTarget.style.color = '#475569';
                         }
                       }}
-                      title="Hủy trả hàng và chuyển sang Chấp nhận / Tự xử lý"
+                      title="Hủy trả hàng và chuyển sang Chấp nhận / Tự xử lý (F4)"
                     >
-                      <RotateCcw size={15} style={{ flexShrink: 0 }} className={cancelingId === selectedTask.id ? 'animate-spin' : ''} />
+                      <RotateCcw size={15} style={{ flexShrink: 0, opacity: 0.75 }} className={cancelingId === selectedTask.id ? 'animate-spin' : ''} />
                       <span style={{ whiteSpace: 'nowrap' }}>{cancelingId === selectedTask.id ? 'Đang hủy...' : 'Hủy trả hàng'}</span>
-                      <kbd className="kbd-shortcut kbd-shortcut-amber">F4</kbd>
+                      <kbd className="kbd-shortcut">F4</kbd>
                     </button>
                   )}
                 </div>
@@ -2704,24 +2684,21 @@ const QualityOverviewView = () => {
                       height: '38px',
                       padding: '0 16px',
                       borderRadius: '8px',
-                      border: '1.5px solid #CBD5E1',
+                      border: '1px solid #CBD5E1',
                       backgroundColor: '#FFFFFF',
                       color: '#475569',
-                      fontWeight: 700,
+                      fontWeight: 600,
                       fontSize: '0.84rem',
                       cursor: (confirming || cancelingTask) ? 'not-allowed' : 'pointer',
                       transition: 'all 0.15s ease',
                       whiteSpace: 'nowrap',
-                      flexShrink: 0,
-                      boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                      flexShrink: 0
                     }}
                     onMouseEnter={(e) => {
                       if (!confirming && !cancelingTask) {
                         e.currentTarget.style.backgroundColor = '#F8FAFC';
                         e.currentTarget.style.borderColor = '#94A3B8';
-                        e.currentTarget.style.color = '#1E293B';
-                        e.currentTarget.style.transform = 'translateY(-1px)';
-                        e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.06)';
+                        e.currentTarget.style.color = '#0F172A';
                       }
                     }}
                     onMouseLeave={(e) => {
@@ -2729,13 +2706,11 @@ const QualityOverviewView = () => {
                         e.currentTarget.style.backgroundColor = '#FFFFFF';
                         e.currentTarget.style.borderColor = '#CBD5E1';
                         e.currentTarget.style.color = '#475569';
-                        e.currentTarget.style.transform = 'none';
-                        e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.03)';
                       }
                     }}
                   >
                     <span style={{ whiteSpace: 'nowrap' }}>Đóng</span>
-                    <kbd className="kbd-shortcut kbd-shortcut-gray">Esc</kbd>
+                    <kbd className="kbd-shortcut">Esc</kbd>
                   </button>
 
                   <button
@@ -2750,35 +2725,35 @@ const QualityOverviewView = () => {
                       height: '38px',
                       padding: '0 18px',
                       borderRadius: '8px',
-                      border: '1.5px solid #047857',
-                      background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                      border: '1px solid #059669',
+                      backgroundColor: '#059669',
                       color: '#FFFFFF',
                       fontWeight: 700,
                       fontSize: '0.84rem',
                       cursor: (confirming || cancelingTask) ? 'not-allowed' : 'pointer',
-                      boxShadow: '0 2px 6px rgba(5, 150, 105, 0.28)',
+                      boxShadow: '0 1px 3px rgba(5, 150, 105, 0.25)',
                       transition: 'all 0.15s ease',
                       whiteSpace: 'nowrap',
                       flexShrink: 0
                     }}
                     onMouseEnter={(e) => {
                       if (!confirming && !cancelingTask) {
-                        e.currentTarget.style.background = 'linear-gradient(135deg, #047857 0%, #065F46 100%)';
-                        e.currentTarget.style.transform = 'translateY(-1px)';
-                        e.currentTarget.style.boxShadow = '0 4px 10px rgba(5, 150, 105, 0.38)';
+                        e.currentTarget.style.backgroundColor = '#047857';
+                        e.currentTarget.style.borderColor = '#047857';
+                        e.currentTarget.style.boxShadow = '0 2px 5px rgba(5, 150, 105, 0.35)';
                       }
                     }}
                     onMouseLeave={(e) => {
                       if (!confirming && !cancelingTask) {
-                        e.currentTarget.style.background = 'linear-gradient(135deg, #059669 0%, #047857 100%)';
-                        e.currentTarget.style.transform = 'none';
-                        e.currentTarget.style.boxShadow = '0 2px 6px rgba(5, 150, 105, 0.28)';
+                        e.currentTarget.style.backgroundColor = '#059669';
+                        e.currentTarget.style.borderColor = '#059669';
+                        e.currentTarget.style.boxShadow = '0 1px 3px rgba(5, 150, 105, 0.25)';
                       }
                     }}
                   >
                     <CheckCircle2 size={16} style={{ flexShrink: 0 }} />
                     <span style={{ whiteSpace: 'nowrap' }}>{confirming ? 'Đang xác nhận...' : 'Xác nhận hồ sơ'}</span>
-                    <kbd className="kbd-shortcut kbd-shortcut-green">F1</kbd>
+                    <kbd className="kbd-shortcut kbd-shortcut-primary">F1</kbd>
                   </button>
                 </div>
               </div>
