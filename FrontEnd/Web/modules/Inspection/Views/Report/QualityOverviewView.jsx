@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
-import { Search, Filter, Edit, FileText, ChevronLeft, ChevronRight, CheckCircle2, X, Eye, RotateCcw, XCircle, Layers, Package, CheckCheck, MoreVertical, Info, Image as ImageIcon, ClipboardList, AlertTriangle } from 'lucide-react';
+import { Search, Filter, Edit, FileText, ChevronLeft, ChevronRight, CheckCircle2, X, Eye, RotateCcw, XCircle, Layers, Package, CheckCheck, MoreVertical, Info, Image as ImageIcon, ClipboardList, AlertTriangle, Keyboard, HelpCircle } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
@@ -40,6 +40,8 @@ const QualityOverviewView = () => {
   });
   const [confirmSuccessMsg, setConfirmSuccessMsg] = useState('');
   const [actionMenuId, setActionMenuId] = useState(null);
+  const [showShortcutsModal, setShowShortcutsModal] = useState(false);
+  const [focusedRowIndex, setFocusedRowIndex] = useState(0);
 
   // Đóng Action Menu khi click ra ngoài
   useEffect(() => {
@@ -233,27 +235,6 @@ const QualityOverviewView = () => {
       setSelectedTask(filteredTasks[currentTaskIndex + 1]);
     }
   };
-
-  // Lắng nghe phím mũi tên Trái / Phải để di chuyển phiếu
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (!selectedTask) return;
-      const activeTag = document.activeElement?.tagName?.toUpperCase();
-      if (activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT') {
-        return;
-      }
-      if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        goToPreviousTask();
-      } else if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        goToNextTask();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedTask, currentTaskIndex, filteredTasks]);
 
   // Tự động phân rã danh sách chi tiết / phôi kiểm tra thành List Table
   const cleanCabinetTag = (tag) => {
@@ -648,6 +629,230 @@ const QualityOverviewView = () => {
     }
   };
 
+  // ─── HỆ THỐNG PHÍM TẮT THAO TÁC NHANH TOÀN CỤC (F1, F2, F3, F4, F5, ESC, ENTER, ARROWS) ───
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      const activeTag = document.activeElement?.tagName?.toUpperCase();
+      const isInputFocused = activeTag === 'INPUT' || activeTag === 'TEXTAREA';
+
+      // 1. Phím chức năng F1..F5 luôn chặn hành vi mặc định của trình duyệt (Help, Search, Refresh, etc.)
+      if (['F1', 'F2', 'F3', 'F4', 'F5'].includes(e.key)) {
+        e.preventDefault();
+      }
+
+      // TRƯỜNG HỢP A: ĐANG MỞ LIGHTBOX XEM ẢNH PHÓNG TO
+      if (previewImgUrl) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          setPreviewImgUrl(null);
+        }
+        return;
+      }
+
+      // TRƯỜNG HỢP B: ĐANG MỞ POPUP XÁC NHẬN HỦY HỒ SƠ
+      if (isCancelInspectionModalOpen) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          setIsCancelInspectionModalOpen(false);
+        } else if (e.key === 'Enter' || e.key === 'F1') {
+          e.preventDefault();
+          if (!cancelingTask) {
+            handleExecuteCancelInspection();
+          }
+        }
+        return;
+      }
+
+      // TRƯỜNG HỢP C: ĐANG MỞ POPUP XÁC NHẬN HỦY TRẢ HÀNG
+      if (cancelConfirmModal.isOpen) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          setCancelConfirmModal({ isOpen: false, task: null });
+        } else if (e.key === 'Enter' || e.key === 'F1') {
+          e.preventDefault();
+          if (!cancelingId) {
+            handleConfirmCancelReturn();
+          }
+        }
+        return;
+      }
+
+      // TRƯỜNG HỢP D: ĐANG MỞ POPUP DUYỆT HÀNG LOẠT (BATCH QUICK MODAL)
+      if (isBatchQuickModalOpen) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          setIsBatchQuickModalOpen(false);
+        } else if (e.key === 'Enter' || e.key === 'F1') {
+          e.preventDefault();
+          if (!batchConfirming && selectedBatchIds.size > 0) {
+            handleExecuteBatchConfirm();
+          }
+        }
+        return;
+      }
+
+      // TRƯỜNG HỢP E: ĐANG MỞ POPUP HƯỚNG DẪN PHÍM TẮT
+      if (showShortcutsModal) {
+        if (e.key === 'Escape' || e.key === '?' || e.key === 'F1') {
+          e.preventDefault();
+          setShowShortcutsModal(false);
+        }
+        return;
+      }
+
+      // TRƯỜNG HỢP F: ĐANG MỞ POPUP CHI TIẾT HỒ SƠ KIỂM TRA (SELECTED TASK)
+      if (selectedTask) {
+        // Nếu người dùng đang gõ ghi chú trong textarea, cho phép bấm Enter để xuống dòng
+        if (isInputFocused && e.key === 'Enter' && activeTag === 'TEXTAREA') {
+          return;
+        }
+
+        // F1 hoặc Enter: Xác nhận hồ sơ (Duyệt)
+        if (e.key === 'F1' || (e.key === 'Enter' && !isInputFocused)) {
+          e.preventDefault();
+          if (!confirming && !cancelingTask) {
+            handleConfirmTask(selectedTask);
+          }
+          return;
+        }
+
+        // F2: Mở popup hủy hồ sơ
+        if (e.key === 'F2') {
+          e.preventDefault();
+          if (!confirming && !cancelingTask) {
+            setIsCancelInspectionModalOpen(true);
+          }
+          return;
+        }
+
+        // F3: Đổi nhanh Đạt <-> Không đạt (Toggle Pass/Fail)
+        if (e.key === 'F3') {
+          e.preventDefault();
+          setModalResult(prev => {
+            const nextResult = prev === 'pass' ? 'fail' : 'pass';
+            if (nextResult === 'pass' && modalAction === 'tra-ve') {
+              setModalAction('chap-nhan');
+            }
+            return nextResult;
+          });
+          return;
+        }
+
+        // F4: Hủy trả hàng (nếu hồ sơ có hành động trả về)
+        if (e.key === 'F4') {
+          e.preventDefault();
+          if (selectedTask.action === 'tra-ve' && !confirming && !cancelingId && !cancelingTask) {
+            handleCancelReturn(selectedTask);
+          }
+          return;
+        }
+
+        // Escape: Đóng modal chi tiết
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          if (!confirming && !cancelingTask) {
+            setSelectedTask(null);
+          }
+          return;
+        }
+
+        // ArrowLeft: Hồ sơ trước đó
+        if (e.key === 'ArrowLeft' && !isInputFocused) {
+          e.preventDefault();
+          goToPreviousTask();
+          return;
+        }
+
+        // ArrowRight: Hồ sơ tiếp theo
+        if (e.key === 'ArrowRight' && !isInputFocused) {
+          e.preventDefault();
+          goToNextTask();
+          return;
+        }
+
+        // Tab: Chuyển giữa 2 tab Thông tin và Chi tiết
+        if (e.key === 'Tab' && !isInputFocused) {
+          e.preventDefault();
+          setModalTab(prev => prev === 'info' ? 'details' : 'info');
+          return;
+        }
+
+        return;
+      }
+
+      // TRƯỜNG HỢP G: MÀN HÌNH DANH SÁCH CHÍNH (CHƯA MỞ POPUP)
+      // F1: Mở popup duyệt nhanh hàng loạt phiếu ĐẠT
+      if (e.key === 'F1') {
+        e.preventDefault();
+        handleOpenBatchQuickModal();
+        return;
+      }
+
+      // F2 hoặc /: Focus nhanh vào ô tìm kiếm
+      if (e.key === 'F2' || (e.key === '/' && !isInputFocused)) {
+        e.preventDefault();
+        const searchInput = document.querySelector('.page-toolbar__search-input');
+        if (searchInput) {
+          searchInput.focus();
+          searchInput.select();
+        }
+        return;
+      }
+
+      // Mũi tên xuống: Di chuyển chọn dòng kế tiếp trong bảng
+      if (e.key === 'ArrowDown' && !isInputFocused) {
+        e.preventDefault();
+        setFocusedRowIndex(prev => Math.min(prev + 1, Math.max(paginatedTasks.length - 1, 0)));
+        return;
+      }
+
+      // Mũi tên lên: Di chuyển chọn dòng trước đó trong bảng
+      if (e.key === 'ArrowUp' && !isInputFocused) {
+        e.preventDefault();
+        setFocusedRowIndex(prev => Math.max(prev - 1, 0));
+        return;
+      }
+
+      // Enter: Mở xem chi tiết hồ sơ đang được chọn
+      if (e.key === 'Enter' && !isInputFocused) {
+        if (focusedRowIndex >= 0 && focusedRowIndex < paginatedTasks.length) {
+          e.preventDefault();
+          setSelectedTask(paginatedTasks[focusedRowIndex]);
+          return;
+        }
+      }
+
+      // F5: Tải lại danh sách phiếu chưa xác nhận
+      if (e.key === 'F5') {
+        e.preventDefault();
+        fetchPendingTasks();
+        toast('info', 'Đang làm mới danh sách hồ sơ kiểm tra...');
+        return;
+      }
+
+      // ?: Mở bảng phím tắt trợ giúp
+      if (e.key === '?' && !isInputFocused) {
+        e.preventDefault();
+        setShowShortcutsModal(true);
+        return;
+      }
+
+      // Escape khi đang focus ô tìm kiếm: blur ra ngoài
+      if (e.key === 'Escape' && isInputFocused) {
+        document.activeElement?.blur();
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [
+    selectedTask, confirming, cancelingTask, cancelingId, modalResult, modalAction,
+    previewImgUrl, isCancelInspectionModalOpen, cancelConfirmModal, isBatchQuickModalOpen,
+    batchConfirming, showShortcutsModal, currentTaskIndex, filteredTasks, selectedBatchIds,
+    focusedRowIndex, paginatedTasks
+  ]);
+
   const formatDate = (dateStr) => {
     if (!dateStr) return 'N/A';
     try {
@@ -1025,6 +1230,41 @@ const QualityOverviewView = () => {
           font-size: 0.75rem;
           display: inline-block;
         }
+        .kbd-shortcut {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-family: inherit;
+          padding: 1px 6px;
+          font-size: 0.72rem;
+          font-weight: 800;
+          line-height: 1.2;
+          border-radius: 4px;
+          margin-left: 6px;
+          box-shadow: 0 1px 0 rgba(0,0,0,0.18);
+          user-select: none;
+          letter-spacing: 0.3px;
+        }
+        .kbd-shortcut-green {
+          background-color: #A7F3D0;
+          color: #065F46;
+          border: 1px solid #6EE7B7;
+        }
+        .kbd-shortcut-red {
+          background-color: #FECACA;
+          color: #991B1B;
+          border: 1px solid #FCA5A5;
+        }
+        .kbd-shortcut-gray {
+          background-color: #F3F4F6;
+          color: #4B5563;
+          border: 1px solid #D1D5DB;
+        }
+        .kbd-shortcut-amber {
+          background-color: #FDE68A;
+          color: #92400E;
+          border: 1px solid #FCD34D;
+        }
         .btn-toolbar-custom {
           display: flex;
           align-items: center;
@@ -1166,10 +1406,15 @@ const QualityOverviewView = () => {
           extraActions={[
             {
               icon: <CheckCircle2 size={16} color="#059669" />,
-              label: 'Xác nhận nhanh phiếu ĐẠT',
+              label: 'Xác nhận nhanh phiếu ĐẠT (F1)',
               badge: eligibleQuickPassTasks.length,
               badgeColor: '#10B981',
               onClick: handleOpenBatchQuickModal
+            },
+            {
+              icon: <Keyboard size={16} color="#7B5233" />,
+              label: 'Phím tắt (?)',
+              onClick: () => setShowShortcutsModal(true)
             }
           ]}
           importActions={[
@@ -1220,15 +1465,22 @@ const QualityOverviewView = () => {
                   <tbody>
                     {paginatedTasks.map((task, idx) => {
                       const sttDisplay = String((currentPage - 1) * limit + idx + 1).padStart(2, '0');
+                      const isRowFocused = focusedRowIndex === idx;
                       return (
                         <tr 
                           key={task.id || idx} 
-                          onClick={() => setSelectedTask(task)}
+                          onClick={() => {
+                            setFocusedRowIndex(idx);
+                            setSelectedTask(task);
+                          }}
+                          onMouseEnter={() => setFocusedRowIndex(idx)}
                           style={{ 
                             cursor: 'pointer', 
-                            transition: 'background-color 0.2s',
+                            transition: 'all 0.15s ease',
                             position: actionMenuId === task.id ? 'relative' : 'static',
-                            zIndex: actionMenuId === task.id ? 45 : 1
+                            zIndex: actionMenuId === task.id ? 45 : 1,
+                            backgroundColor: isRowFocused ? '#FAF4EE' : undefined,
+                            boxShadow: isRowFocused ? 'inset 3px 0 0 #7B5233' : undefined
                           }}
                         >
                           <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#8D6E63' }}>{sttDisplay}</td>
@@ -1505,69 +1757,62 @@ const QualityOverviewView = () => {
                     </div>
                   )}
 
-                  {/* CHỈNH SỬA KẾT QUẢ ĐẠT / KHÔNG ĐẠT */}
+                  {/* CHỈNH SỬA KẾT QUẢ ĐẠT / KHÔNG ĐẠT (1 NÚT DUY NHẤT CLICK ĐỔI TRẠNG THÁI) */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span style={{ fontSize: '0.76rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.3px' }}>
                       Kết quả:
                     </span>
-                    <div style={{
-                      display: 'inline-flex',
-                      backgroundColor: '#F3F4F6',
-                      padding: '2px',
-                      borderRadius: '20px',
-                      border: '1px solid #E5E7EB',
-                      gap: '2px'
-                    }}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setModalResult('pass');
-                          if (modalAction === 'tra-ve') setModalAction('chap-nhan');
-                        }}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          padding: '3px 10px',
-                          borderRadius: '16px',
-                          fontSize: '0.8rem',
-                          fontWeight: 800,
-                          cursor: 'pointer',
-                          border: modalResult === 'pass' ? '1.5px solid #A7F3D0' : '1.5px solid transparent',
-                          backgroundColor: modalResult === 'pass' ? '#ECFDF5' : 'transparent',
-                          color: modalResult === 'pass' ? '#059669' : '#6B7280',
-                          boxShadow: modalResult === 'pass' ? '0 1px 2px rgba(16, 185, 129, 0.2)' : 'none',
-                          transition: 'all 0.15s ease'
-                        }}
-                      >
-                        <CheckCircle2 size={14} />
-                        Đạt
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setModalResult('fail');
-                        }}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          padding: '3px 10px',
-                          borderRadius: '16px',
-                          fontSize: '0.8rem',
-                          fontWeight: 800,
-                          cursor: 'pointer',
-                          border: modalResult === 'fail' ? '1.5px solid #FECACA' : '1.5px solid transparent',
-                          backgroundColor: modalResult === 'fail' ? '#FEF2F2' : 'transparent',
-                          color: modalResult === 'fail' ? '#DC2626' : '#6B7280',
-                          boxShadow: modalResult === 'fail' ? '0 1px 2px rgba(239, 68, 68, 0.2)' : 'none',
-                          transition: 'all 0.15s ease'
-                        }}
-                      >
-                        <XCircle size={14} />
-                        Không đạt
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModalResult(prev => {
+                          const nextResult = prev === 'pass' ? 'fail' : 'pass';
+                          if (nextResult === 'pass' && modalAction === 'tra-ve') {
+                            setModalAction('chap-nhan');
+                          }
+                          return nextResult;
+                        });
+                      }}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '4px 12px',
+                        borderRadius: '20px',
+                        fontSize: '0.82rem',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        border: modalResult === 'pass' ? '1.5px solid #A7F3D0' : '1.5px solid #FECACA',
+                        backgroundColor: modalResult === 'pass' ? '#ECFDF5' : '#FEF2F2',
+                        color: modalResult === 'pass' ? '#059669' : '#DC2626',
+                        boxShadow: modalResult === 'pass' ? '0 1px 2px rgba(16, 185, 129, 0.2)' : '0 1px 2px rgba(239, 68, 68, 0.2)',
+                        transition: 'all 0.15s ease',
+                        userSelect: 'none'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = modalResult === 'pass' ? '#D1FAE5' : '#FEE2E2';
+                        e.currentTarget.style.borderColor = modalResult === 'pass' ? '#6EE7B7' : '#FCA5A5';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = modalResult === 'pass' ? '#ECFDF5' : '#FEF2F2';
+                        e.currentTarget.style.borderColor = modalResult === 'pass' ? '#A7F3D0' : '#FECACA';
+                      }}
+                      title={`Bấm để chuyển sang ${modalResult === 'pass' ? 'Không đạt' : 'Đạt'} (Phím tắt F3)`}
+                    >
+                      {modalResult === 'pass' ? (
+                        <>
+                          <CheckCircle2 size={15} />
+                          <span>Đạt</span>
+                          <kbd className="kbd-shortcut kbd-shortcut-green" style={{ fontSize: '0.72rem', padding: '1px 5px', marginLeft: '2px' }}>F3</kbd>
+                        </>
+                      ) : (
+                        <>
+                          <XCircle size={15} />
+                          <span>Không đạt</span>
+                          <kbd className="kbd-shortcut kbd-shortcut-red" style={{ fontSize: '0.72rem', padding: '1px 5px', marginLeft: '2px' }}>F3</kbd>
+                        </>
+                      )}
+                    </button>
                   </div>
 
                   <button 
@@ -2264,7 +2509,8 @@ const QualityOverviewView = () => {
                     title="Hủy hồ sơ này khỏi danh sách quản lý chất lượng"
                   >
                     <XCircle size={15} />
-                    {cancelingTask ? 'Đang hủy...' : 'Hủy hồ sơ'}
+                    <span>{cancelingTask ? 'Đang hủy...' : 'Hủy hồ sơ'}</span>
+                    <kbd className="kbd-shortcut kbd-shortcut-red">F2</kbd>
                   </button>
 
                   {selectedTask.action === 'tra-ve' && (
@@ -2291,7 +2537,8 @@ const QualityOverviewView = () => {
                       title="Hủy trả hàng và chuyển sang Chấp nhận / Tự xử lý"
                     >
                       <RotateCcw size={15} className={cancelingId === selectedTask.id ? 'animate-spin' : ''} />
-                      {cancelingId === selectedTask.id ? 'Đang hủy...' : 'Hủy trả hàng'}
+                      <span>{cancelingId === selectedTask.id ? 'Đang hủy...' : 'Hủy trả hàng'}</span>
+                      <kbd className="kbd-shortcut kbd-shortcut-amber">F4</kbd>
                     </button>
                   )}
                 </div>
@@ -2302,6 +2549,9 @@ const QualityOverviewView = () => {
                     onClick={() => setSelectedTask(null)}
                     disabled={confirming || cancelingTask}
                     style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
                       padding: '8px 18px',
                       borderRadius: '8px',
                       border: '1.5px solid #D1D5DB',
@@ -2315,7 +2565,8 @@ const QualityOverviewView = () => {
                     onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F3F4F6'}
                     onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
                   >
-                    Đóng
+                    <span>Đóng</span>
+                    <kbd className="kbd-shortcut kbd-shortcut-gray">Esc</kbd>
                   </button>
                   <button
                     type="button"
@@ -2340,7 +2591,8 @@ const QualityOverviewView = () => {
                     onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#059669'}
                   >
                     <CheckCircle2 size={16} />
-                    {confirming ? 'Đang xác nhận...' : 'Xác nhận hồ sơ'}
+                    <span>{confirming ? 'Đang xác nhận...' : 'Xác nhận hồ sơ'}</span>
+                    <kbd className="kbd-shortcut kbd-shortcut-green">F1</kbd>
                   </button>
                 </div>
               </div>
@@ -2868,6 +3120,135 @@ const QualityOverviewView = () => {
                   <span>{batchConfirming ? 'Đang duyệt...' : `Xác nhận duyệt (${selectedBatchIds.size} phiếu)`}</span>
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* POPUP HƯỚNG DẪN PHÍM TẮT NHANH (CHEAT SHEET) */}
+      {showShortcutsModal && (
+        <div className="modal-overlay" onClick={() => setShowShortcutsModal(false)}>
+          <div
+            className="modal-content"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '580px', width: '92%', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }}
+          >
+            {/* HEADER */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '16px 20px',
+              backgroundColor: '#FAF6F0',
+              borderBottom: '1.5px solid #EADCC9'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '8px',
+                  backgroundColor: '#7B5233',
+                  color: '#FFFFFF',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <Keyboard size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#2D1A12' }}>
+                    Phím tắt thao tác nhanh
+                  </h3>
+                  <span style={{ fontSize: '0.78rem', color: '#8D6E63', fontWeight: 600 }}>
+                    Trang Quản lý chất lượng (/admin/quality)
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowShortcutsModal(false)}
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  backgroundColor: '#FFFFFF',
+                  color: '#6B7280',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* BODY */}
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '18px', maxHeight: '75vh', overflowY: 'auto' }}>
+              {/* SECTION 1 */}
+              <div>
+                <h4 style={{ margin: '0 0 10px 0', fontSize: '0.88rem', fontWeight: 800, color: '#047857', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <CheckCircle2 size={16} /> Trong Popup Chi tiết hồ sơ
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                  {[
+                    { key: 'F1 hoặc Enter', desc: 'Xác nhận duyệt hồ sơ (tự động chuyển sang hồ sơ tiếp theo)', color: 'green' },
+                    { key: 'F2', desc: 'Hủy hồ sơ kiểm tra này', color: 'red' },
+                    { key: 'F3', desc: 'Chuyển đổi nhanh kết quả Đạt ↔ Không đạt', color: 'gray' },
+                    { key: 'F4', desc: 'Hủy trạng thái trả hàng (nếu đang là trả hàng)', color: 'amber' },
+                    { key: '← / →', desc: 'Xem hồ sơ trước đó / hồ sơ tiếp theo', color: 'gray' },
+                    { key: 'Tab', desc: 'Chuyển đổi giữa 2 tab: Thông tin chung ↔ Chi tiết', color: 'gray' },
+                    { key: 'Esc', desc: 'Đóng popup chi tiết', color: 'gray' }
+                  ].map((s, idx) => (
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 10px', backgroundColor: '#FAF8F5', borderRadius: '6px', border: '1px solid #EFE6DC' }}>
+                      <span style={{ fontSize: '0.82rem', color: '#374151', fontWeight: 600 }}>{s.desc}</span>
+                      <kbd className={`kbd-shortcut kbd-shortcut-${s.color}`} style={{ fontSize: '0.75rem', padding: '2px 8px' }}>{s.key}</kbd>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* SECTION 2 */}
+              <div>
+                <h4 style={{ margin: '0 0 10px 0', fontSize: '0.88rem', fontWeight: 800, color: '#7B5233', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Layers size={16} /> Màn hình Danh sách chính
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                  {[
+                    { key: 'F1', desc: 'Mở popup duyệt nhanh hàng loạt hồ sơ ĐẠT', color: 'green' },
+                    { key: 'F2 hoặc /', desc: 'Focus nhanh vào ô tìm kiếm hồ sơ', color: 'gray' },
+                    { key: '↑ / ↓', desc: 'Di chuyển chọn dòng trong danh sách', color: 'gray' },
+                    { key: 'Enter', desc: 'Mở xem chi tiết hồ sơ đang chọn', color: 'gray' },
+                    { key: 'F5', desc: 'Tải lại / Làm mới danh sách phiếu tồn đọng', color: 'gray' },
+                    { key: '?', desc: 'Mở bảng trợ giúp phím tắt này', color: 'gray' }
+                  ].map((s, idx) => (
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 10px', backgroundColor: '#FAF8F5', borderRadius: '6px', border: '1px solid #EFE6DC' }}>
+                      <span style={{ fontSize: '0.82rem', color: '#374151', fontWeight: 600 }}>{s.desc}</span>
+                      <kbd className={`kbd-shortcut kbd-shortcut-${s.color}`} style={{ fontSize: '0.75rem', padding: '2px 8px' }}>{s.key}</kbd>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* FOOTER */}
+            <div style={{ padding: '12px 20px', backgroundColor: '#FAF6F0', borderTop: '1.5px solid #EADCC9', display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => setShowShortcutsModal(false)}
+                style={{
+                  padding: '7px 18px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  backgroundColor: '#7B5233',
+                  color: '#FFFFFF',
+                  fontSize: '0.85rem',
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                Đã hiểu (Esc)
+              </button>
             </div>
           </div>
         </div>

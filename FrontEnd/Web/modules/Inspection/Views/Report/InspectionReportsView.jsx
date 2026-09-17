@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { 
   Search, 
@@ -20,8 +20,14 @@ import {
   FileSpreadsheet,
   Printer,
   MoreVertical,
-  Trash2
+  Trash2,
+  Layers,
+  Info,
+  ClipboardList,
+  Package,
+  Camera
 } from 'lucide-react';
+import api from '@webShared/Services/api.service';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
@@ -255,6 +261,467 @@ const InspectionReportsView = () => {
     return <span style={{ color: '#9CA3AF', fontSize: '0.85rem' }}>---</span>;
   };
 
+  // ─── STATE & HELPERS CHO MODAL XEM CHI TIẾT 2 TAB (CHẾ ĐỘ READ-ONLY) ───
+  const [selectedReportItem, setSelectedReportItem] = useState(null);
+  const [modalTab, setModalTab] = useState('info'); // 'info' | 'details'
+  const [lightboxImgUrl, setLightboxImgUrl] = useState(null);
+
+  // Đồng bộ khi có trigger từ menu ngoài (selectedInspection, selectedInbound, selectedDaily)
+  useEffect(() => {
+    if (selectedInspection) {
+      setSelectedReportItem({ ...selectedInspection, _reportType: 'stage' });
+      setModalTab('info');
+    } else if (selectedInbound) {
+      setSelectedReportItem({ ...selectedInbound, _reportType: 'input' });
+      setModalTab('info');
+    } else if (selectedDaily) {
+      setSelectedReportItem({ ...selectedDaily, _reportType: 'daily' });
+      setModalTab('info');
+    }
+  }, [selectedInspection, selectedInbound, selectedDaily]);
+
+  // Hồ sơ hiện tại đang được xem chi tiết
+  const activeReportItem = useMemo(() => {
+    return selectedReportItem || selectedInspection || selectedInbound || selectedDaily || null;
+  }, [selectedReportItem, selectedInspection, selectedInbound, selectedDaily]);
+
+  // Vị trí thứ tự của hồ sơ đang xem trong bảng hiện tại
+  const currentReportIndex = useMemo(() => {
+    if (!activeReportItem) return -1;
+    return paginatedUnifiedList.findIndex(it => 
+      String(it.id) === String(activeReportItem.id) &&
+      (it.type === activeReportItem._reportType || it.type === activeReportItem.type || it.type === activeReportItem.inspection_type)
+    );
+  }, [activeReportItem, paginatedUnifiedList]);
+
+  const goToPreviousReport = () => {
+    if (currentReportIndex > 0) {
+      const prevItem = paginatedUnifiedList[currentReportIndex - 1];
+      setSelectedReportItem({
+        ...prevItem.raw_item,
+        _unifiedItem: prevItem,
+        _reportType: prevItem.type,
+        category: prevItem.category,
+        batch_no: prevItem.batch_no,
+        stage: prevItem.stage,
+        inspector_name: prevItem.inspector_name,
+        conclusion: prevItem.conclusion,
+        action: prevItem.action,
+        is_confirmed: prevItem.is_confirmed
+      });
+      setModalTab('info');
+    }
+  };
+
+  const goToNextReport = () => {
+    if (currentReportIndex >= 0 && currentReportIndex < paginatedUnifiedList.length - 1) {
+      const nextItem = paginatedUnifiedList[currentReportIndex + 1];
+      setSelectedReportItem({
+        ...nextItem.raw_item,
+        _unifiedItem: nextItem,
+        _reportType: nextItem.type,
+        category: nextItem.category,
+        batch_no: nextItem.batch_no,
+        stage: nextItem.stage,
+        inspector_name: nextItem.inspector_name,
+        conclusion: nextItem.conclusion,
+        action: nextItem.action,
+        is_confirmed: nextItem.is_confirmed
+      });
+      setModalTab('info');
+    }
+  };
+
+  const handleCloseModal = () => {
+    setSelectedReportItem(null);
+    setSelectedInspection(null);
+    setSelectedInbound(null);
+    setSelectedDaily(null);
+    setLightboxImgUrl(null);
+  };
+
+  const getSafeImageUrl = (path) => {
+    if (!path) return '';
+    if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('blob:') || path.startsWith('data:')) {
+      return path;
+    }
+    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    const baseApi = (api.defaults?.baseURL || '').replace(/\/api\/v1\/?$/, '').replace(/\/+$/, '');
+    const origin = baseApi || window.location.origin;
+    return `${origin}${cleanPath}`;
+  };
+
+  const cleanCabinetTag = (tag) => {
+    if (!tag) return '';
+    return String(tag).replace(/^[A-Za-z0-9]+-\d+(?:-[A-Za-z0-9]+)?\s*\|\s*/i, '').trim();
+  };
+
+  // Trích xuất dữ liệu chi tiết của phiếu từ data_json
+  const parsedReportData = useMemo(() => {
+    if (!activeReportItem?.data_json) return {};
+    try {
+      return typeof activeReportItem.data_json === 'string'
+        ? JSON.parse(activeReportItem.data_json)
+        : activeReportItem.data_json;
+    } catch (e) {
+      return {};
+    }
+  }, [activeReportItem]);
+
+  // Tổng hợp toàn bộ hình ảnh minh chứng của phiếu
+  const reportImages = useMemo(() => {
+    if (!activeReportItem) return [];
+    const list = [];
+    const add = (img) => {
+      if (img && typeof img === 'string' && !list.includes(img)) {
+        list.push(img);
+      }
+    };
+
+    [activeReportItem.image_path_1, activeReportItem.image_path_2, activeReportItem.image_path_3].forEach(add);
+
+    if (activeReportItem.images_json) {
+      try {
+        const p = typeof activeReportItem.images_json === 'string' ? JSON.parse(activeReportItem.images_json) : activeReportItem.images_json;
+        if (Array.isArray(p)) p.forEach(add);
+        else if (p && typeof p === 'object') {
+          Object.values(p).forEach(v => {
+            if (Array.isArray(v)) v.forEach(add);
+            else add(v);
+          });
+        }
+      } catch (e) {}
+    }
+
+    if (Array.isArray(parsedReportData?.images)) {
+      parsedReportData.images.forEach(add);
+    }
+
+    if (parsedReportData?.steps) {
+      Object.values(parsedReportData.steps).forEach(st => {
+        if (st?.photo) add(st.photo);
+        if (Array.isArray(st?.images)) st.images.forEach(add);
+      });
+    }
+
+    if (Array.isArray(parsedReportData?.detailsList)) {
+      parsedReportData.detailsList.forEach(det => {
+        if (det?.image) add(det.image);
+      });
+    }
+
+    if (Array.isArray(parsedReportData?.samples)) {
+      parsedReportData.samples.forEach(s => {
+        if (s?.moisture?.photo) add(s.moisture.photo);
+        if (s?.size?.photo) add(s.size.photo);
+      });
+    }
+
+    if (Array.isArray(parsedReportData?.checklist_results)) {
+      parsedReportData.checklist_results.forEach(res => {
+        if (Array.isArray(res?.images)) res.images.forEach(add);
+        if (Array.isArray(res?.steps)) {
+          res.steps.forEach(st => {
+            if (Array.isArray(st?.images)) st.images.forEach(add);
+          });
+        }
+      });
+    }
+
+    if (Array.isArray(activeReportItem.photos)) {
+      activeReportItem.photos.forEach(add);
+    }
+
+    return list;
+  }, [activeReportItem, parsedReportData]);
+
+  // Danh sách các bước kiểm tra SOP (Hướng dẫn kiểm tra)
+  const reportSteps = useMemo(() => {
+    const rawSteps = parsedReportData?.steps || activeReportItem?.steps;
+    if (!rawSteps) return [];
+    if (Array.isArray(rawSteps)) return rawSteps;
+    if (typeof rawSteps === 'object') {
+      return Object.entries(rawSteps).map(([k, val], idx) => ({
+        step_no: idx + 1,
+        title: val.title || val.name || val.description || k,
+        standard: val.standard || val.content || val.value || '',
+        result: val.result || (val.status === 'FAIL' ? 'fail' : 'pass'),
+        note: val.note || ''
+      }));
+    }
+    return [];
+  }, [parsedReportData, activeReportItem]);
+
+  // Phân rã danh sách chi tiết / phôi kiểm tra
+  const reportPartsList = useMemo(() => {
+    if (!activeReportItem) return [];
+
+    let rawItems = [];
+    if (Array.isArray(activeReportItem.details) && activeReportItem.details.length > 0) {
+      rawItems = activeReportItem.details;
+    } else if (Array.isArray(activeReportItem.parts_details) && activeReportItem.parts_details.length > 0) {
+      rawItems = activeReportItem.parts_details;
+    } else if (parsedReportData?.partsDetails && Array.isArray(parsedReportData.partsDetails) && parsedReportData.partsDetails.length > 0) {
+      rawItems = parsedReportData.partsDetails;
+    } else if (parsedReportData?.parts_details && Array.isArray(parsedReportData.parts_details) && parsedReportData.parts_details.length > 0) {
+      rawItems = parsedReportData.parts_details;
+    } else if (parsedReportData?.items && Array.isArray(parsedReportData.items) && parsedReportData.items.length > 0) {
+      rawItems = parsedReportData.items;
+    }
+
+    if (rawItems.length > 0) {
+      return rawItems.map((it, idx) => ({
+        stt: String(idx + 1).padStart(2, '0'),
+        name: it.part_name || it.name || it.product || 'Chi tiết',
+        spec: it.specification || it.spec || activeReportItem.specification || 'Tiêu chuẩn',
+        cabinet: cleanCabinetTag(it.cabinet || it.product_label || it.badge || it.product_name || it.product_sku || it.sku || ''),
+        qty: it.plan_qty || it.qty || ''
+      }));
+    }
+
+    const rawPartName = (activeReportItem.part_name || activeReportItem.product_sku || '').trim();
+    const defaultCabinet = cleanCabinetTag(parsedReportData?.cabinet || parsedReportData?.product_label || parsedReportData?.badge || '');
+    const defaultQty = activeReportItem.required_qty || parsedReportData?.requiredQty || activeReportItem.total_products || '';
+
+    if (!rawPartName || rawPartName === 'N/A') {
+      return [{
+        stt: '01',
+        name: activeReportItem.task_name || activeReportItem.stage || 'Chi tiết kiểm tra',
+        spec: activeReportItem.specification || 'Tiêu chuẩn',
+        cabinet: defaultCabinet,
+        qty: defaultQty
+      }];
+    }
+
+    const names = rawPartName
+      .split(/[\n\r;]|,\s*(?=[A-ZÀ-Ỹa-z0-9])/)
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    const rawSpec = (activeReportItem.specification || '').trim();
+    const specs = rawSpec.includes(',') 
+      ? rawSpec.split(',').map(s => s.trim()).filter(Boolean) 
+      : [];
+
+    if (names.length === 0) {
+      return [{
+        stt: '01',
+        name: rawPartName,
+        spec: rawSpec || 'Tiêu chuẩn',
+        cabinet: defaultCabinet,
+        qty: defaultQty
+      }];
+    }
+
+    return names.map((pName, idx) => {
+      const pSpec = specs[idx] || (specs.length === 1 ? specs[0] : (rawSpec || 'Tiêu chuẩn'));
+      return {
+        stt: String(idx + 1).padStart(2, '0'),
+        name: pName,
+        spec: pSpec,
+        cabinet: defaultCabinet,
+        qty: defaultQty
+      };
+    });
+  }, [activeReportItem, parsedReportData]);
+
+  // Danh sách lỗi phát hiện
+  const reportErrors = useMemo(() => {
+    if (!activeReportItem) return [];
+    let rawErrors = parsedReportData?.errors || parsedReportData?.defects || activeReportItem?.errors || activeReportItem?.defects;
+    
+    if (Array.isArray(rawErrors) && rawErrors.length > 0) {
+      return rawErrors.map((e, idx) => ({
+        stt: String(idx + 1).padStart(2, '0'),
+        name: e.defect_name || e.name || e.label || `Lỗi #${idx + 1}`,
+        code: e.defect_code || e.code || '',
+        severity: e.severity || (e.isCTQ ? 'CTQ' : (e.isHeavy ? 'Nặng' : 'Tiêu chuẩn')),
+        qty: Number(e.qty || e.quantity || 1),
+        note: e.note || e.description || ''
+      }));
+    }
+
+    const errorQty = Number(activeReportItem.error_qty || activeReportItem.total_defects || 0);
+    if (errorQty > 0) {
+      const noteText = activeReportItem.notes || activeReportItem.note || '';
+      return [{
+        stt: '01',
+        name: noteText ? `Lỗi ghi nhận: ${noteText}` : 'Lỗi không đạt tiêu chuẩn kỹ thuật',
+        code: 'DEF-GEN',
+        severity: 'Cần lưu ý',
+        qty: errorQty,
+        note: noteText || 'Đã ghi nhận trong quá trình kiểm tra'
+      }];
+    }
+
+    return [];
+  }, [activeReportItem, parsedReportData]);
+
+  // Phím tắt bàn phím khi đang mở modal xem báo cáo
+  useEffect(() => {
+    if (!activeReportItem) return;
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (lightboxImgUrl) {
+          setLightboxImgUrl(null);
+        } else {
+          handleCloseModal();
+        }
+        return;
+      }
+
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        setModalTab(prev => prev === 'info' ? 'details' : 'info');
+        return;
+      }
+
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        goToPreviousReport();
+        return;
+      }
+
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        goToNextReport();
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeReportItem, lightboxImgUrl, currentReportIndex, paginatedUnifiedList]);
+
+  // Render badge phân loại
+  const renderReportCategoryBadge = (item) => {
+    if (!item) return null;
+    const cat = item.category || getInspectionTypeLabel(item.inspection_type || item.type);
+    const catLower = (cat || '').toLowerCase();
+    
+    let bg = '#FAF6F0';
+    let color = '#7B5233';
+    let border = '#EADCC9';
+
+    if (catLower.includes('mẫu đầu') || catLower.includes('fqc')) {
+      bg = '#EFF6FF'; color = '#1D4ED8'; border = '#BFDBFE';
+    } else if (catLower.includes('đầu vào') || catLower.includes('iqc') || catLower.includes('nhập')) {
+      bg = '#ECFDF5'; color = '#047857'; border = '#A7F3D0';
+    } else if (catLower.includes('lại') || catLower.includes('tái')) {
+      bg = '#FFFBEB'; color = '#B45309'; border = '#FDE68A';
+    } else if (catLower.includes('quy trình')) {
+      bg = '#F0F9FF'; color = '#0369A1'; border = '#BAE6FD';
+    } else if (catLower.includes('độ ẩm')) {
+      bg = '#FDF4FF'; color = '#A21CAF'; border = '#F5D0FE';
+    } else if (catLower.includes('hàng ngày') || catLower.includes('daily')) {
+      bg = '#F8FAFC'; color = '#475569'; border = '#CBD5E1';
+    }
+
+    return (
+      <span style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        padding: '3px 9px',
+        borderRadius: '6px',
+        fontSize: '0.78rem',
+        fontWeight: 700,
+        backgroundColor: bg,
+        color: color,
+        border: `1px solid ${border}`,
+        whiteSpace: 'nowrap'
+      }}>
+        {cat}
+      </span>
+    );
+  };
+
+  // Render badge hành động xử lý (Read-only)
+  const renderReportActionBadge = (item) => {
+    if (!item) return <span style={{ color: '#9CA3AF', fontSize: '0.82rem' }}>—</span>;
+    const isPass = item.conclusion === 'pass' || item.result === 'Đạt' || item.result === 'pass' || item.result === 'ĐẠT';
+    const action = item.action || (isPass ? 'chap-nhan' : 'tra-ve');
+
+    if (action === 'cach-ly') {
+      return (
+        <span style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '5px',
+          padding: '2px 8px',
+          borderRadius: '6px',
+          fontSize: '0.78rem',
+          fontWeight: 700,
+          backgroundColor: '#FEF3C7',
+          color: '#D97706',
+          border: '1px solid #FDE68A'
+        }}>
+          <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#F59E0B' }}></span>
+          <span>Cách ly</span>
+        </span>
+      );
+    }
+    if (action === 'tra-ve') {
+      return (
+        <span style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '5px',
+          padding: '2px 8px',
+          borderRadius: '6px',
+          fontSize: '0.78rem',
+          fontWeight: 700,
+          backgroundColor: '#FEF2F2',
+          color: '#DC2626',
+          border: '1px solid #FECACA'
+        }}>
+          <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#EF4444' }}></span>
+          <span>Trả hàng</span>
+        </span>
+      );
+    }
+    if (action === 'chap-nhan') {
+      if (!isPass) {
+        return (
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '5px',
+            padding: '2px 8px',
+            borderRadius: '6px',
+            fontSize: '0.78rem',
+            fontWeight: 700,
+            backgroundColor: '#EFF6FF',
+            color: '#1D4ED8',
+            border: '1px solid #BFDBFE'
+          }}>
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#3B82F6' }}></span>
+            <span>Chấp nhận / Tự xử lý</span>
+          </span>
+        );
+      }
+      return (
+        <span style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '5px',
+          padding: '2px 8px',
+          borderRadius: '6px',
+          fontSize: '0.78rem',
+          fontWeight: 700,
+          backgroundColor: '#ECFDF5',
+          color: '#059669',
+          border: '1px solid #A7F3D0'
+        }}>
+          <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10B981' }}></span>
+          <span>Chấp nhận</span>
+        </span>
+      );
+    }
+    return <span style={{ color: '#9CA3AF', fontSize: '0.82rem' }}>—</span>;
+  };
+
   return (
     <div className="gold-layout">
       <style dangerouslySetInnerHTML={{ __html: `
@@ -418,6 +885,109 @@ const InspectionReportsView = () => {
           transform: none !important;
           background-color: #FAF6F0 !important;
           box-shadow: 0 2px 8px rgba(123, 82, 51, 0.08) !important;
+        }
+        .kbd-shortcut {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+          font-size: 0.72rem;
+          font-weight: 800;
+          padding: 1px 6px;
+          border-radius: 4px;
+          line-height: 1.2;
+          user-select: none;
+          letter-spacing: 0.3px;
+        }
+        .kbd-shortcut-green {
+          background-color: #A7F3D0;
+          color: #065F46;
+          border: 1px solid #6EE7B7;
+        }
+        .kbd-shortcut-red {
+          background-color: #FECACA;
+          color: #991B1B;
+          border: 1px solid #FCA5A5;
+        }
+        .kbd-shortcut-gray {
+          background-color: #F3F4F6;
+          color: #4B5563;
+          border: 1px solid #D1D5DB;
+        }
+        .kbd-shortcut-amber {
+          background-color: #FDE68A;
+          color: #92400E;
+          border: 1px solid #FCD34D;
+        }
+        .modal-flank-container {
+          position: relative;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 100%;
+          max-width: 860px;
+          padding: 0 14px;
+          box-sizing: border-box;
+        }
+        .modal-flank-btn {
+          width: 48px;
+          height: 48px;
+          border-radius: 50%;
+          background-color: #FAF6F0;
+          border: 1.5px solid #EADCC9;
+          color: #7B5233;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16), 0 2px 6px rgba(0, 0, 0, 0.08);
+          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+          flex-shrink: 0;
+          z-index: 1010;
+        }
+        .modal-flank-btn:hover:not(:disabled) {
+          background-color: #FFFFFF;
+          border-color: #7B5233;
+          color: #5D3E26;
+          transform: scale(1.12);
+          box-shadow: 0 8px 24px rgba(123, 82, 51, 0.28);
+        }
+        .modal-flank-btn:active:not(:disabled) {
+          transform: scale(0.94);
+        }
+        .modal-flank-btn:disabled {
+          opacity: 0.28;
+          cursor: not-allowed;
+          box-shadow: none;
+        }
+        .modal-content-custom, .modal-content {
+          background-color: white;
+          border-radius: 16px;
+          width: 92%;
+          max-width: 740px;
+          padding: 0;
+          overflow: hidden;
+          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+          position: relative;
+        }
+        @media (max-width: 880px) {
+          .modal-flank-container {
+            padding: 0 4px !important;
+          }
+          .modal-flank-btn {
+            position: absolute !important;
+            top: 50% !important;
+            transform: translateY(-50%) !important;
+            width: 40px !important;
+            height: 40px !important;
+            background-color: #FFFFFF !important;
+          }
+          .modal-flank-btn.prev {
+            left: 8px !important;
+          }
+          .modal-flank-btn.next {
+            right: 8px !important;
+          }
         }
       `}} />
 
@@ -661,13 +1231,19 @@ const InspectionReportsView = () => {
                       const isPass = item.conclusion === 'pass';
                       
                       const handleRowClick = () => {
-                        if (item.type === 'daily') {
-                          setSelectedDaily(item.raw_item);
-                        } else if (item.type === 'input') {
-                          setSelectedInbound(item.raw_item);
-                        } else {
-                          setSelectedInspection(item.raw_item);
-                        }
+                        setSelectedReportItem({
+                          ...item.raw_item,
+                          _unifiedItem: item,
+                          _reportType: item.type,
+                          category: item.category,
+                          batch_no: item.batch_no,
+                          stage: item.stage,
+                          inspector_name: item.inspector_name,
+                          conclusion: item.conclusion,
+                          action: item.action,
+                          is_confirmed: item.is_confirmed
+                        });
+                        setModalTab('info');
                       };
 
                       const hasDefect = (item.defect_rate > 0) || (!isDaily && !isPass);
@@ -762,13 +1338,19 @@ const InspectionReportsView = () => {
                   const hasDefect = (item.defect_rate > 0) || (!isDaily && !isPass);
                   
                   const handleRowClick = () => {
-                    if (item.type === 'daily') {
-                      setSelectedDaily(item.raw_item);
-                    } else if (item.type === 'input') {
-                      setSelectedInbound(item.raw_item);
-                    } else {
-                      setSelectedInspection(item.raw_item);
-                    }
+                    setSelectedReportItem({
+                      ...item.raw_item,
+                      _unifiedItem: item,
+                      _reportType: item.type,
+                      category: item.category,
+                      batch_no: item.batch_no,
+                      stage: item.stage,
+                      inspector_name: item.inspector_name,
+                      conclusion: item.conclusion,
+                      action: item.action,
+                      is_confirmed: item.is_confirmed
+                    });
+                    setModalTab('info');
                   };
 
                   return (
@@ -1023,1017 +1605,971 @@ const InspectionReportsView = () => {
         </div>
       )}
 
-      {/* MODAL 1: STAGE INSPECTION DETAIL POPUP */}
-      {selectedInspection && (() => {
-        const item = selectedInspection;
-        let parsedData = {};
-        try {
-          parsedData = typeof item.data_json === 'string' ? JSON.parse(item.data_json || '{}') : (item.data_json || {});
-        } catch (e) {
-          console.error('Failed to parse details data_json', e);
-        }
+         {/* ── UNIFIED READ-ONLY INSPECTION DETAIL MODAL (2 TABS) ── */}
+      {activeReportItem && (
+        <div 
+          className="modal-overlay"
+          onClick={handleCloseModal}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            width: '100vw',
+            height: '100vh',
+            backgroundColor: 'rgba(0, 0, 0, 0.55)',
+            backdropFilter: 'blur(3px)',
+            zIndex: 2500,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+            boxSizing: 'border-box'
+          }}
+        >
+          <div 
+            className="modal-flank-container"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Flank navigation Left */}
+            <button
+              type="button"
+              className="modal-flank-btn prev"
+              disabled={currentReportIndex <= 0}
+              onClick={goToPreviousReport}
+              title="Hồ sơ trước (Phím mũi tên ←)"
+              aria-label="Hồ sơ trước"
+              style={{ marginRight: '14px', flexShrink: 0 }}
+            >
+              <ChevronLeft size={26} />
+            </button>
 
-        // Aggregate all image URLs
-        const imagesList = [];
-        // Add step images (quy-trinh)
-        if (parsedData.steps) {
-          Object.values(parsedData.steps).forEach(st => {
-            if (st.photo) imagesList.push(st.photo);
-          });
-        }
-        // Add detail detailsList images (bam-dinh)
-        if (Array.isArray(parsedData.detailsList)) {
-          parsedData.detailsList.forEach(det => {
-            if (det.image) imagesList.push(det.image);
-          });
-        }
-        // Add samples images (do-am)
-        if (Array.isArray(parsedData.samples)) {
-          parsedData.samples.forEach(s => {
-            if (s.moisture?.photo) imagesList.push(s.moisture.photo);
-            if (s.size?.photo) imagesList.push(s.size.photo);
-          });
-        }
-        // Add checklist images (mau-dau-tien)
-        if (Array.isArray(parsedData.checklist_results)) {
-          parsedData.checklist_results.forEach(res => {
-            if (Array.isArray(res.images)) imagesList.push(...res.images);
-            if (Array.isArray(res.steps)) {
-              res.steps.forEach(st => {
-                if (Array.isArray(st.images)) imagesList.push(...st.images);
-              });
-            }
-          });
-        }
-        // Add general images (images_json, image_path_1..3, parsedData.images)
-        let generalImages = [];
-        try {
-          const parsedImages = typeof item.images_json === 'string' ? JSON.parse(item.images_json || '{}') : (item.images_json || {});
-          Object.values(parsedImages).forEach(val => {
-            if (Array.isArray(val)) generalImages.push(...val);
-            else if (typeof val === 'string') generalImages.push(val);
-          });
-        } catch(e) {}
-        if (item.image_path_1) generalImages.push(item.image_path_1);
-        if (item.image_path_2) generalImages.push(item.image_path_2);
-        if (item.image_path_3) generalImages.push(item.image_path_3);
-        if (Array.isArray(parsedData.images)) generalImages.push(...parsedData.images);
-        else if (typeof parsedData.images === 'string') generalImages.push(parsedData.images);
-
-        const usedDetailImages = new Set(imagesList);
-        const remainingModalImages = Array.from(new Set(generalImages)).filter(img => img && !usedDetailImages.has(img));
-
-        // Bóc tách danh sách chi tiết & quy cách kiểm tra
-        let inspectedPartsList = [];
-        if (Array.isArray(parsedData.parts_details) && parsedData.parts_details.length > 0) {
-          inspectedPartsList = parsedData.parts_details.map(p => ({
-            name: p.part_name || p.name || '',
-            spec: p.specification || p.spec || '',
-            qty: p.plan_qty || p.qty || ''
-          }));
-        } else if (Array.isArray(parsedData.parts_with_specs) && parsedData.parts_with_specs.length > 0) {
-          inspectedPartsList = parsedData.parts_with_specs.map(p => ({
-            name: p.part_name || p.name || '',
-            spec: p.specification || p.spec || '',
-            qty: p.plan_qty || p.qty || ''
-          }));
-        } else if (Array.isArray(item.parts_details) && item.parts_details.length > 0) {
-          inspectedPartsList = item.parts_details.map(p => ({
-            name: p.part_name || p.name || '',
-            spec: p.specification || p.spec || '',
-            qty: p.plan_qty || p.qty || ''
-          }));
-        } else {
-          const rawProd = (item.product_sku || item.part_name || parsedData.product || '').trim();
-          const rawSpec = (item.specification || parsedData.spec || '').trim();
-          if (rawProd) {
-            const prodItems = rawProd.split(/,\s*(?=[^,]+)/).map(s => s.trim()).filter(Boolean);
-            const specItems = rawSpec ? rawSpec.split(/,\s*(?=[^,]+)/).map(s => s.trim()).filter(Boolean) : [];
-            inspectedPartsList = prodItems.map((prodName, idx) => {
-              let assignedSpec = specItems[idx] || (specItems.length === 1 ? specItems[0] : '');
-              const dimMatch = prodName.match(/(\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?(?:\s*[*xX×]\s*\d+(?:[.,]\d+)?)?(?:\s*mm|\s*cm)?)/i);
-              let cleanName = prodName;
-              if (dimMatch) {
-                if (!assignedSpec || assignedSpec === 'Tiêu chuẩn' || assignedSpec === '—') {
-                  assignedSpec = dimMatch[1].replace(/\s*/g, '');
-                }
-                cleanName = prodName.replace(dimMatch[0], '').replace(/\s*[-–—:]\s*$/, '').replace(/\s*,\s*$/, '').trim() || prodName;
-              }
-              return { name: cleanName, spec: assignedSpec, qty: '' };
-            });
-          }
-        }
-        inspectedPartsList = inspectedPartsList.filter(p => p.name || p.spec);
-        const hasMultipleParts = inspectedPartsList.length > 1;
-
-        return (
-          <div className="modal-overlay">
-            <div className="modal-container" style={{ maxWidth: '850px' }}>
-              {/* Close Button */}
-              <button 
-                onClick={() => setSelectedInspection(null)} 
-                style={{ position: 'absolute', top: '16px', right: '16px', border: 'none', background: '#F1F5F9', cursor: 'pointer', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}
-              >
-                <X size={18} />
-              </button>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingRight: '40px', flexWrap: 'wrap', gap: '10px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                  <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#7B5233', margin: 0 }}>
-                    {`Phiếu ${getInspectionTypeLabel(item.inspection_type)}`}
-                  </h3>
-                  <span style={{ fontSize: '0.82rem', fontWeight: 'bold', color: '#8D6E63', backgroundColor: '#FAF6F0', padding: '2px 8px', borderRadius: '6px', border: '1px solid #EADCC9' }}>
-                    #{item.ticket_code || `INS-${item.id}`}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button 
-                    onClick={() => handleExportSingleExcel(item, 'stage')}
-                    style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', backgroundColor: '#F0FDF4', color: '#16A34A', border: '1px solid #BBF7D0', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer' }}
-                  >
-                    <FileSpreadsheet size={15} /> Excel
-                  </button>
-                  <button 
-                    onClick={() => handleExportSinglePDF(item, 'stage')}
-                    style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', backgroundColor: '#F0F9FF', color: '#0284C7', border: '1px solid #BAE6FD', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer' }}
-                  >
-                    <Printer size={15} /> PDF / In
-                  </button>
-                </div>
-              </div>
-
-              {/* General details grid */}
-              <div className="detail-grid-info">
-                <div>
-                  <div className="detail-row-item">
-                    <span>Mã PO/Batch:</span>
-                    <span>{item.batch_no || 'N/A'}</span>
-                  </div>
-                  <div className="detail-row-item" style={{ marginTop: '8px' }}>
-                    <span>Sản phẩm / Công đoạn:</span>
-                    <span>
-                      {hasMultipleParts ? (
-                        <span style={{
-                          backgroundColor: '#F3E9DD',
-                          color: '#7B5233',
-                          padding: '2px 8px',
-                          borderRadius: '12px',
-                          fontSize: '0.8rem',
-                          fontWeight: '800',
-                          border: '1px solid #EADCC9',
-                          whiteSpace: 'nowrap'
-                        }}>
-                          {inspectedPartsList.length} chi tiết
-                        </span>
-                      ) : (
-                        item.product_sku || 'N/A'
-                      )}
-                    </span>
-                  </div>
-                  <div className="detail-row-item" style={{ marginTop: '8px' }}>
-                    <span>Loại công đoạn:</span>
-                    <span>{getInspectionTypeLabel(item.inspection_type)}</span>
-                  </div>
-                </div>
-                <div>
-                  <div className="detail-row-item">
-                    <span>QC thực hiện:</span>
-                    <span>{item.inspector_name || 'N/A'}</span>
-                  </div>
-                  <div className="detail-row-item" style={{ marginTop: '8px' }}>
-                    <span>Ngày kiểm tra:</span>
-                    <span>{formatDisplayDateTime(item.inspection_date)}</span>
-                  </div>
-                  <div className="detail-row-item" style={{ marginTop: '8px' }}>
-                    <span>Kết luận chung:</span>
-                    <span style={{ color: item.conclusion === 'pass' ? '#10B981' : '#EF4444' }}>
-                      {item.conclusion === 'pass' ? 'ĐẠT' : 'KHÔNG ĐẠT'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* BẢNG CHI TIẾT & QUY CÁCH (Hiển thị khi có từ 2 chi tiết trở lên hoặc có danh sách chi tiết) */}
-              {hasMultipleParts && (
+            {/* Modal Content Dialog */}
+            <div
+              className="modal-content"
+              style={{
+                flex: 1,
+                maxWidth: '740px',
+                maxHeight: '90vh',
+                margin: 0,
+                backgroundColor: '#ffffff',
+                borderRadius: '16px',
+                overflow: 'hidden',
+                boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+                display: 'flex',
+                flexDirection: 'column',
+                position: 'relative',
+                animation: 'modalSlideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
+              }}
+            >
+            {/* MODAL HEADER */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '16px 22px',
+              backgroundColor: '#FAF6F0',
+              borderBottom: '1.5px solid #EADCC9'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{
-                  marginTop: '16px',
-                  marginBottom: '16px',
-                  backgroundColor: '#FAF6F0',
+                  width: '38px',
+                  height: '38px',
                   borderRadius: '10px',
-                  border: '1.5px solid #EADCC9',
-                  overflow: 'hidden'
+                  backgroundColor: '#7B5233',
+                  color: '#FFFFFF',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 2px 5px rgba(123, 82, 51, 0.25)',
+                  flexShrink: 0
                 }}>
-                  <div style={{
-                    padding: '10px 14px',
-                    backgroundColor: '#F3E9DD',
-                    borderBottom: '1px solid #EADCC9',
+                  <FileText size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, color: '#7B5233', fontSize: '1.18rem', fontWeight: 800, letterSpacing: '-0.2px' }}>
+                    Chi tiết phiếu kiểm tra
+                  </h3>
+                  <div style={{ fontSize: '0.8rem', color: '#8D6E63', fontWeight: 600, marginTop: '2px' }}>
+                    Mã phiếu: <strong style={{ color: '#2D1A12' }}>#{activeReportItem.batch_no || activeReportItem.ticket_code || activeReportItem.code || activeReportItem.id}</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* Header Right: Counter pill + Result Badge + Close Button (Clean & Không bị trùng lặp) */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                {/* Counter Pill */}
+                {paginatedUnifiedList.length > 0 && currentReportIndex >= 0 && (
+                  <div
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      padding: '4px 10px',
+                      borderRadius: '8px',
+                      backgroundColor: '#FFFFFF',
+                      border: '1px solid #EADCC9',
+                      fontSize: '0.82rem',
+                      fontWeight: 800,
+                      color: '#7B5233',
+                      letterSpacing: '0.2px',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                    }}
+                    title={`Đang xem phiếu ${currentReportIndex + 1} trên tổng số ${paginatedUnifiedList.length} phiếu`}
+                  >
+                    {currentReportIndex + 1} / {paginatedUnifiedList.length}
+                  </div>
+                )}
+
+                {/* Read-Only Result Badge */}
+                {(() => {
+                  const isPass = activeReportItem.conclusion === 'pass' || 
+                                 activeReportItem.result === 'Đạt' || 
+                                 activeReportItem.result === 'pass' || 
+                                 activeReportItem.result === 'ĐẠT';
+                  return isPass ? (
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      padding: '5px 12px',
+                      borderRadius: '20px',
+                      fontSize: '0.82rem',
+                      fontWeight: 800,
+                      backgroundColor: '#ECFDF5',
+                      color: '#059669',
+                      border: '1.5px solid #A7F3D0',
+                      boxShadow: '0 1px 2px rgba(16, 185, 129, 0.15)'
+                    }}>
+                      <CheckCircle2 size={15} /> ĐẠT
+                    </span>
+                  ) : (
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      padding: '5px 12px',
+                      borderRadius: '20px',
+                      fontSize: '0.82rem',
+                      fontWeight: 800,
+                      backgroundColor: '#FEF2F2',
+                      color: '#DC2626',
+                      border: '1.5px solid #FECACA',
+                      boxShadow: '0 1px 2px rgba(239, 68, 68, 0.15)'
+                    }}>
+                      <AlertTriangle size={15} /> KHÔNG ĐẠT
+                    </span>
+                  );
+                })()}
+
+                {/* Close Button */}
+                <button
+                  type="button"
+                  onClick={handleCloseModal}
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
+                    border: '1.5px solid #EADCC9',
+                    backgroundColor: '#FFFFFF',
+                    color: '#8D6E63',
+                    cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'space-between'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.88rem', fontWeight: '800', color: '#7B5233' }}>
-                      <span>📋 Danh sách chi tiết & Quy cách kiểm tra</span>
-                      <span style={{
-                        backgroundColor: '#7B5233',
-                        color: '#ffffff',
-                        padding: '2px 8px',
-                        borderRadius: '999px',
-                        fontSize: '0.75rem',
-                        fontWeight: '700'
-                      }}>
-                        {inspectedPartsList.length} chi tiết
-                      </span>
-                    </div>
-                  </div>
-                  <div style={{
-                    maxHeight: '240px',
-                    overflowY: 'auto',
-                    overflowX: 'auto',
-                    borderTop: '1px solid #EADCC9'
-                  }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                      <thead style={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#FDFBF7' }}>
-                        <tr style={{ backgroundColor: '#FDFBF7', borderBottom: '1px solid #EADCC9', textAlign: 'left', color: '#8D6E63' }}>
-                          <th style={{ padding: '8px 12px', width: '45px', textAlign: 'center', backgroundColor: '#FDFBF7' }}>#</th>
-                          <th style={{ padding: '8px 12px', fontWeight: '700', backgroundColor: '#FDFBF7' }}>Tên chi tiết / Bán thành phẩm</th>
-                          <th style={{ padding: '8px 12px', fontWeight: '700', width: '220px', backgroundColor: '#FDFBF7' }}>Quy cách (Dày x Rộng x Dài)</th>
-                          {inspectedPartsList.some(p => p.qty) && (
-                            <th style={{ padding: '8px 12px', fontWeight: '700', width: '90px', textAlign: 'center', backgroundColor: '#FDFBF7' }}>Số lượng</th>
-                          )}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {inspectedPartsList.map((part, pIdx) => (
-                          <tr key={pIdx} style={{
-                            borderBottom: pIdx < inspectedPartsList.length - 1 ? '1px solid #F0E6D8' : 'none',
-                            backgroundColor: pIdx % 2 === 0 ? '#FFFFFF' : '#FAF6F0'
-                          }}>
-                            <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: '700', color: '#A89F91' }}>
-                              {pIdx + 1}
-                            </td>
-                            <td style={{ padding: '8px 12px', fontWeight: '600', color: '#2D1A12' }}>
-                              {part.name || '—'}
-                            </td>
-                            <td style={{ padding: '8px 12px' }}>
-                              {part.spec ? (
-                                <span style={{
-                                  display: 'inline-block',
-                                  padding: '2px 8px',
-                                  backgroundColor: '#FEF3C7',
-                                  color: '#92400E',
-                                  borderRadius: '6px',
-                                  fontWeight: '700',
-                                  fontSize: '0.8rem',
-                                  fontFamily: 'monospace',
-                                  border: '1px solid #FDE68A'
-                                }}>
-                                  {part.spec}
-                                </span>
-                              ) : (
-                                <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>Theo tiêu chuẩn</span>
-                              )}
-                            </td>
-                            {inspectedPartsList.some(p => p.qty) && (
-                              <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: '600', color: '#7B5233' }}>
-                                {part.qty || '—'}
-                              </td>
-                            )}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
+                    justifyContent: 'center',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#FEE2E2';
+                    e.currentTarget.style.color = '#DC2626';
+                    e.currentTarget.style.borderColor = '#FCA5A5';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '#FFFFFF';
+                    e.currentTarget.style.color = '#8D6E63';
+                    e.currentTarget.style.borderColor = '#EADCC9';
+                  }}
+                  title="Đóng (Esc)"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
 
-              {/* 3 KPI SUMMARY CARDS */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', textAlign: 'center', marginBottom: '16px' }}>
-                <div style={{ background: '#fff', padding: '10px', borderRadius: '8px', border: '1px solid #EADCC9' }}>
-                  <div style={{ fontSize: '0.75rem', color: '#8D6E63', fontWeight: 'bold' }}>TỔNG SẢN PHẨM LÔ</div>
-                  <div style={{ fontSize: '1.15rem', fontWeight: '800', color: '#2D1A12', marginTop: '2px' }}>
-                    {(item.required_qty || parsedData.required_qty || 200).toLocaleString()} <span style={{ fontSize: '0.75rem', fontWeight: 'normal', color: '#64748b' }}>cái</span>
-                  </div>
-                </div>
-                <div style={{ background: '#fff', padding: '10px', borderRadius: '8px', border: '1px solid #EADCC9' }}>
-                  <div style={{ fontSize: '0.75rem', color: '#8D6E63', fontWeight: 'bold' }}>SỐ LƯỢNG MẪU KIỂM</div>
-                  <div style={{ fontSize: '1.15rem', fontWeight: '800', color: '#2D1A12', marginTop: '2px' }}>
-                    {(item.sample_qty || parsedData.sample_qty || 35).toLocaleString()} <span style={{ fontSize: '0.75rem', fontWeight: 'normal', color: '#64748b' }}>mẫu</span>
-                  </div>
-                </div>
-                <div style={{ background: '#fff', padding: '10px', borderRadius: '8px', border: '1px solid #EADCC9' }}>
-                  <div style={{ fontSize: '0.75rem', color: '#8D6E63', fontWeight: 'bold' }}>SỐ LƯỢNG LỖI</div>
-                  <div style={{ fontSize: '1.15rem', fontWeight: '800', color: (item.error_qty || parsedData.error_qty) > 0 ? '#EF4444' : '#10B981', marginTop: '2px' }}>
-                    {item.error_qty || parsedData.error_qty || 0} <span style={{ fontSize: '0.75rem', fontWeight: 'normal', color: '#64748b' }}>lỗi</span>
-                  </div>
-                </div>
+            {/* TAB NAVIGATION */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              borderBottom: '1.5px solid #EADCC9',
+              backgroundColor: '#FAF6F0',
+              padding: '0 22px'
+            }}>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => setModalTab('info')}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '11px 18px',
+                    border: 'none',
+                    borderBottom: modalTab === 'info' ? '3px solid #7B5233' : '3px solid transparent',
+                    backgroundColor: 'transparent',
+                    color: modalTab === 'info' ? '#7B5233' : '#8D6E63',
+                    fontWeight: modalTab === 'info' ? 800 : 600,
+                    fontSize: '0.88rem',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <Info size={16} />
+                  <span>Thông tin</span>
+                  {reportImages.length > 0 && (
+                    <span style={{
+                      fontSize: '0.72rem',
+                      padding: '1px 7px',
+                      borderRadius: '10px',
+                      backgroundColor: modalTab === 'info' ? '#EADCC9' : '#F3EBE1',
+                      color: '#7B5233',
+                      fontWeight: 700
+                    }}>
+                      {reportImages.length} ảnh
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setModalTab('details')}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '11px 18px',
+                    border: 'none',
+                    borderBottom: modalTab === 'details' ? '3px solid #7B5233' : '3px solid transparent',
+                    backgroundColor: 'transparent',
+                    color: modalTab === 'details' ? '#7B5233' : '#8D6E63',
+                    fontWeight: modalTab === 'details' ? 800 : 600,
+                    fontSize: '0.88rem',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <Layers size={16} />
+                  <span>Chi tiết</span>
+                  {reportPartsList.length > 0 && (
+                    <span style={{
+                      fontSize: '0.72rem',
+                      padding: '1px 7px',
+                      borderRadius: '10px',
+                      backgroundColor: modalTab === 'details' ? '#7B5233' : '#EADCC9',
+                      color: modalTab === 'details' ? '#FFFFFF' : '#7B5233',
+                      fontWeight: 700
+                    }}>
+                      {reportPartsList.length}
+                    </span>
+                  )}
+                </button>
               </div>
 
-              {/* Notes */}
-              {item.notes && (
-                <div style={{ backgroundColor: '#FAF6F0', borderRadius: '8px', padding: '12px', border: '1px solid #EADCC9', fontSize: '0.85rem', marginBottom: '16px' }}>
-                  <strong style={{ color: '#7B5233', display: 'block', marginBottom: '4px' }}>Ghi chú chung:</strong>
-                  <span style={{ color: '#2D1A12' }}>{item.notes}</span>
-                </div>
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.74rem', color: '#8D6E63', fontWeight: 600 }}>
+                <span>Phím tắt:</span>
+                <span className="kbd-shortcut-pill">Tab</span>
+                <span>đổi tab</span>
+                <span style={{ margin: '0 2px' }}>•</span>
+                <span className="kbd-shortcut-pill">←</span>
+                <span className="kbd-shortcut-pill">→</span>
+                <span>đổi phiếu</span>
+              </div>
+            </div>
 
-              {/* DEFECT LIST & STATS SECTION */}
-              {(() => {
-                let displayDefects = [];
-                if (Array.isArray(parsedData.defects) && parsedData.defects.length > 0) {
-                  displayDefects = parsedData.defects;
-                } else if ((item.error_qty > 0) || (item.conclusion === 'fail') || parsedData.error_qty > 0) {
-                  const notesText = item.notes || item.note || '';
-                  const match = notesText.match(/gồm:?\s*([^\.]+)/i) || notesText.match(/lỗi\s*\(([^)]+)\)/i);
-                  if (match && match[1]) {
-                    const defectNames = match[1].split(/,|\band\b|\bvà\b/).map(s => s.trim()).filter(Boolean);
-                    let rem = item.error_qty || parsedData.error_qty || defectNames.length || 2;
-                    displayDefects = defectNames.map((dName, idx) => {
-                      const cleanName = dName.replace(/\(\d+\s*cái\)/gi, '').trim();
-                      const q = idx === defectNames.length - 1 ? Math.max(1, rem) : Math.max(1, Math.floor(rem / (defectNames.length - idx)));
-                      rem -= q;
-                      let code = 'APP-006';
-                      if (cleanName.toLowerCase().includes('đồng màu')) code = 'APP-009';
-                      else if (cleanName.toLowerCase().includes('nứt')) code = 'APP-001';
-                      else if (cleanName.toLowerCase().includes('lệch màu')) code = 'APP-017';
-                      else if (cleanName.toLowerCase().includes('cong')) code = 'STR-001';
-                      else if (cleanName.toLowerCase().includes('bụi')) code = 'APP-004';
-                      return {
-                        defect_name: cleanName,
-                        defect_code: code,
-                        quantity: q
-                      };
-                    });
-                  }
-                }
+            {/* MODAL BODY */}
+            <div style={{ padding: '20px 22px', maxHeight: 'calc(85vh - 140px)', overflowY: 'auto' }}>
+              {modalTab === 'info' ? (
+                <>
+                  {/* CARD THÔNG TIN TỔNG QUAN (3 DÒNG x 3 CỘT) */}
+                  <div style={{
+                    backgroundColor: '#FCFBF9',
+                    border: '1.5px solid #EADCC9',
+                    borderRadius: '12px',
+                    padding: '14px 16px',
+                    marginBottom: '16px',
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(3, 1fr)',
+                    gap: '12px 16px',
+                    fontSize: '0.88rem'
+                  }}>
+                    <div>
+                      <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                        MÃ LÔ / PO
+                      </span>
+                      <strong style={{ color: '#7B5233', fontSize: '0.92rem' }}>
+                        {activeReportItem.batch_no || activeReportItem.po_code || activeReportItem.production_order_code || '---'}
+                      </strong>
+                    </div>
 
-                if (displayDefects.length === 0 && !(item.error_qty > 0) && item.conclusion === 'pass') {
-                  return null;
-                }
+                    <div>
+                      <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                        LOẠI KIỂM TRA
+                      </span>
+                      <div>{renderReportCategoryBadge(activeReportItem)}</div>
+                    </div>
 
-                const sQty = item.sample_qty || parsedData.sample_qty || 35;
-                const eQty = item.error_qty || parsedData.error_qty || (displayDefects.reduce((acc, d) => acc + (d.quantity || 0), 0)) || 0;
-                const dRate = sQty > 0 ? (eQty / sQty) * 100 : 0;
+                    <div>
+                      <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                        NGƯỜI KIỂM TRA QC
+                      </span>
+                      <strong style={{ color: '#2D1A12' }}>
+                        {getDisplayInspector(activeReportItem) || activeReportItem.inspector_name || 'QC Inspector'}
+                      </strong>
+                    </div>
 
-                return (
-                  <div className="detail-sub-section" style={{ marginTop: '0px', marginBottom: '16px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                      <h4 className="detail-sub-title" style={{ margin: 0, color: '#EF4444', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        Danh sách chi tiết các lỗi ghi nhận ({eQty} lỗi)
-                      </h4>
-                      <span style={{ 
-                        fontWeight: 'bold', 
-                        fontSize: '0.8rem', 
-                        color: '#D97706', 
-                        backgroundColor: '#FEF3C7', 
-                        padding: '3px 8px', 
-                        borderRadius: '8px', 
-                        border: '1px solid #FDE68A' 
-                      }}>
-                        Tỷ lệ lỗi: {dRate.toFixed(2)}%
+                    <div>
+                      <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                        NGÀY GHI NHẬN
+                      </span>
+                      <span style={{ color: '#2D1A12', fontWeight: 600 }}>
+                        {formatDisplayDateTime(activeReportItem.inspection_date || activeReportItem.created_at)}
                       </span>
                     </div>
 
-                    {displayDefects.length > 0 ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {displayDefects.map((def, idx) => (
-                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', backgroundColor: '#fff', border: '1px solid #EADCC9', borderRadius: '8px', fontSize: '0.85rem' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <span style={{ fontWeight: 'bold', color: '#7B5233' }}>
-                                {def.defect_name || def.name || `Mã lỗi #${def.defect_id}`}
-                              </span>
-                              {def.defect_code && (
-                                <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#8D6E63', backgroundColor: '#F1F5F9', padding: '1px 6px', borderRadius: '4px' }}>
-                                  {def.defect_code}
-                                </span>
-                              )}
+                    <div>
+                      <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                        TRẠNG THÁI XÁC NHẬN
+                      </span>
+                      <div>
+                        {activeReportItem.is_confirmed || activeReportItem.status === 'confirmed' || activeReportItem.status === 'Đã xác nhận' ? (
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            padding: '3px 10px',
+                            borderRadius: '6px',
+                            fontSize: '0.8rem',
+                            fontWeight: 700,
+                            backgroundColor: '#ECFDF5',
+                            color: '#059669',
+                            border: '1px solid #A7F3D0'
+                          }}>
+                            <CheckCircle2 size={13} /> Đã xác nhận
+                          </span>
+                        ) : (
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            padding: '3px 10px',
+                            borderRadius: '6px',
+                            fontSize: '0.8rem',
+                            fontWeight: 700,
+                            backgroundColor: '#F3F4F6',
+                            color: '#4B5563',
+                            border: '1px solid #E5E7EB'
+                          }}>
+                            {activeReportItem.status || 'Đã hoàn thành'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                        HÀNH ĐỘNG XỬ LÝ
+                      </span>
+                      <div>{renderReportActionBadge(activeReportItem)}</div>
+                    </div>
+
+                    <div>
+                      <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                        SL CẦN KIỂM (LÔ)
+                      </span>
+                      <strong style={{ color: '#059669', fontSize: '0.92rem' }}>
+                        {Number(activeReportItem.required_qty || parsedReportData?.requiredQty || activeReportItem.total_products || 0).toLocaleString()}
+                      </strong>
+                    </div>
+
+                    <div>
+                      <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                        {activeReportItem.sample_qty ? 'SL MẪU KIỂM (AQL)' : 'SL ĐẠT'}
+                      </span>
+                      <strong style={{ color: '#1D4ED8', fontSize: '0.92rem' }}>
+                        {Number(
+                          activeReportItem.sample_qty ||
+                          (Number(activeReportItem.passed_qty) > 0 ? activeReportItem.passed_qty : null) ||
+                          activeReportItem.total_passed_qty ||
+                          (activeReportItem.required_qty ? Math.max(Number(activeReportItem.required_qty) - Number(activeReportItem.error_qty || 0), 0) : 0)
+                        ).toLocaleString()}
+                      </strong>
+                    </div>
+
+                    <div>
+                      <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                        SỐ LỖI PHÁT HIỆN
+                      </span>
+                      <strong style={{
+                        color: Number(activeReportItem.error_qty || activeReportItem.total_defects || 0) > 0 ? '#DC2626' : '#059669',
+                        fontSize: '0.92rem'
+                      }}>
+                        {Number(activeReportItem.error_qty || activeReportItem.total_defects || 0).toLocaleString()}
+                      </strong>
+                    </div>
+                  </div>
+
+                  {/* THÔNG TIN XỬ LÝ (READ-ONLY) */}
+                  <div style={{ marginBottom: '16px', fontSize: '0.88rem' }}>
+                    <div style={{
+                      fontSize: '0.76rem',
+                      color: '#7B5233',
+                      fontWeight: 800,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.3px',
+                      marginBottom: '6px'
+                    }}>
+                      Thông tin xử lý / Biện pháp khắc phục
+                    </div>
+                    <div style={{
+                      background: '#FFFFFF',
+                      padding: '10px 14px',
+                      borderRadius: '8px',
+                      border: '1.5px solid #EADCC9',
+                      color: '#2D1A12',
+                      fontSize: '0.86rem',
+                      lineHeight: '1.45'
+                    }}>
+                      {(() => {
+                        const customInfo = activeReportItem.handling_info || parsedReportData?.handling_info || activeReportItem.action_note;
+                        if (customInfo && customInfo.trim()) return customInfo;
+
+                        const action = activeReportItem.action || activeReportItem.handling_action;
+                        const isFail = activeReportItem.conclusion === 'fail' || activeReportItem.result === 'Không đạt' || activeReportItem.result === 'fail';
+
+                        if (action === 'tra-ve' || (isFail && action !== 'cach-ly')) {
+                          return 'Lô hàng không đạt tiêu chuẩn kỹ thuật: Yêu cầu trả hàng / xử lý lại hoặc loại bỏ theo quy định QC.';
+                        }
+                        if (action === 'cach-ly') {
+                          return 'Lô hàng phát hiện bất thường: Cách ly và lưu kho riêng chờ thẩm định chuyên sâu từ ban chất lượng.';
+                        }
+                        return 'Sản phẩm đạt yêu cầu kiểm tra: Chấp nhận nhập kho và lưu trữ hồ sơ theo quy trình chuẩn.';
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* GHI CHÚ (READ-ONLY) */}
+                  <div style={{ marginBottom: '16px', fontSize: '0.88rem' }}>
+                    <div style={{ fontSize: '0.76rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px' }}>
+                      Ghi chú kiểm tra
+                    </div>
+                    <div style={{
+                      background: '#FAF6F0',
+                      padding: '10px 14px',
+                      borderRadius: '8px',
+                      border: '1px solid #EADCC9',
+                      color: (activeReportItem.notes || activeReportItem.note || parsedReportData?.notes || parsedReportData?.note) ? '#2D1A12' : '#9CA3AF',
+                      fontStyle: (activeReportItem.notes || activeReportItem.note || parsedReportData?.notes || parsedReportData?.note) ? 'normal' : 'italic',
+                      lineHeight: 1.4,
+                      whiteSpace: 'pre-wrap'
+                    }}>
+                      {activeReportItem.notes || activeReportItem.note || parsedReportData?.notes || parsedReportData?.note || 'Chưa ghi nhận thêm ghi chú cho phiếu này.'}
+                    </div>
+                  </div>
+
+                  {/* HÌNH ẢNH MINH CHỨNG */}
+                  <div style={{ marginBottom: '8px' }}>
+                    <div style={{
+                      fontSize: '0.76rem',
+                      color: '#7B5233',
+                      fontWeight: 800,
+                      textTransform: 'uppercase',
+                      marginBottom: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}>
+                      <Camera size={14} />
+                      <span>Hình ảnh minh chứng ({reportImages.length})</span>
+                    </div>
+                    {reportImages.length > 0 ? (
+                      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                        {reportImages.map((img, idx) => {
+                          const imgUrl = getSafeImageUrl(img);
+                          return (
+                            <div
+                              key={idx}
+                              style={{
+                                position: 'relative',
+                                borderRadius: '8px',
+                                overflow: 'hidden',
+                                border: '1.5px solid #EADCC9',
+                                backgroundColor: '#FAF6F0',
+                                cursor: 'pointer',
+                                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                                transition: 'transform 0.15s, box-shadow 0.15s'
+                              }}
+                              onClick={() => setLightboxImgUrl(img)}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.transform = 'scale(1.04)';
+                                e.currentTarget.style.boxShadow = '0 4px 10px rgba(123,82,51,0.15)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.transform = 'scale(1)';
+                                e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)';
+                              }}
+                              title="Nhấp để xem ảnh lớn"
+                            >
+                              <img
+                                src={imgUrl}
+                                alt={`Minh chứng ${idx + 1}`}
+                                onError={handleImageError}
+                                style={{ width: '92px', height: '92px', objectFit: 'cover', display: 'block' }}
+                              />
+                              <div style={{
+                                position: 'absolute',
+                                bottom: 0,
+                                left: 0,
+                                right: 0,
+                                backgroundColor: 'rgba(45, 26, 18, 0.65)',
+                                color: '#FFFFFF',
+                                fontSize: '0.68rem',
+                                fontWeight: 700,
+                                textAlign: 'center',
+                                padding: '2px 0'
+                              }}>
+                                Ảnh {idx + 1}
+                              </div>
                             </div>
-                            <span style={{ color: '#EF4444', fontWeight: 'bold' }}>
-                              Số lượng: {def.quantity} cái
-                            </span>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     ) : (
-                      <div style={{ padding: '10px 12px', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '8px', color: '#991B1B', fontSize: '0.85rem', fontWeight: '600' }}>
-                        Ghi nhận {eQty} chi tiết chưa đạt quy cách (Chi tiết lỗi mô tả trong phần ghi chú).
+                      <div style={{
+                        padding: '12px 14px',
+                        backgroundColor: '#FAF6F0',
+                        borderRadius: '8px',
+                        border: '1px dashed #EADCC9',
+                        color: '#9CA3AF',
+                        fontSize: '0.82rem',
+                        fontStyle: 'italic'
+                      }}>
+                        Chưa đính kèm hình ảnh minh chứng cho phiếu này.
                       </div>
                     )}
                   </div>
-                );
-              })()}
-
-              {/* DYNAMIC DETAIL PARSING BY INSPECTION TYPE */}
-              {/* Type 1: bám dính */}
-              {item.inspection_type === 'bam-dinh' && Array.isArray(parsedData.detailsList) && (
-                <div className="detail-sub-section">
-                  <h4 className="detail-sub-title">Kết quả bám dính chi tiết</h4>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid #EADCC9', color: '#8D6E63', textAlign: 'left', fontWeight: 'bold' }}>
-                        <th style={{ padding: '8px 0' }}>Tên linh kiện/phụ kiện</th>
-                        <th style={{ padding: '8px 0', textAlign: 'center', width: '80px' }}>Kết quả</th>
-                        <th style={{ padding: '8px 0', textAlign: 'center', width: '100px' }}>Minh chứng</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {parsedData.detailsList.map((det, index) => (
-                        <tr key={index} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                          <td style={{ padding: '8px 0', fontWeight: 'bold' }}>{det.name}</td>
-                          <td style={{ padding: '8px 0', textAlign: 'center' }}>
-                            <span style={{ color: det.conclusion === 'pass' ? '#10B981' : '#EF4444', fontWeight: 'bold' }}>
-                              {det.conclusion === 'pass' ? 'Đạt' : 'Lỗi'}
-                            </span>
-                          </td>
-                          <td style={{ padding: '8px 0', textAlign: 'center' }}>
-                            {det.image ? (
-                              <img 
-                                src={getImageUrl(det.image)} 
-                                alt="Evidence" 
-                                className="gallery-thumb"
-                                style={{ width: '36px', height: '36px', borderRadius: '4px', margin: 0 }}
-                                onClick={() => setLightboxImage(det.image)}
-                                onError={handleImageError}
-                              />
-                            ) : '-'}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {parsedData.action && (
-                    <div style={{ marginTop: '12px', fontSize: '0.85rem', fontWeight: 'bold', color: '#7B5233' }}>
-                      Phương án xử lý: <span style={{ color: '#2D1A12' }}>{parsedData.action === 'luu-kho' ? 'Lưu kho thành phẩm' : parsedData.action === 'tra-ve' ? 'Trả về xưởng' : 'Cách ly'}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Type 2: quy trình / tần suất */}
-              {item.inspection_type === 'quy-trinh' && parsedData.steps && (
-                <div className="detail-sub-section">
-                  <h4 className="detail-sub-title">Kết quả các bước quy trình kiểm soát</h4>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {Object.entries(parsedData.steps).map(([stepKey, val]) => (
-                      <div key={stepKey} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#fff', borderRadius: '8px', border: '1px solid #EADCC9' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <strong style={{ fontSize: '0.85rem', color: '#2D1A12' }}>
-                            Bước: {stepKey.split('_').slice(1, -1).join(' ') || stepKey}
-                          </strong>
-                          {val.value && <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Giá trị đo: {val.value}</span>}
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <span style={{ fontWeight: 'bold', fontSize: '0.85rem', color: val.result === 'pass' ? '#10B981' : '#EF4444' }}>
-                            {val.result === 'pass' ? 'Đạt' : 'Lỗi'}
-                          </span>
-                          {val.photo && (
-                            <img 
-                              src={getImageUrl(val.photo)} 
-                              alt="Step" 
-                              className="gallery-thumb"
-                              style={{ width: '36px', height: '36px', borderRadius: '4px', margin: 0 }}
-                              onClick={() => setLightboxImage(val.photo)}
-                              onError={handleImageError}
-                            />
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  {parsedData.general_notes && (
-                    <div style={{ marginTop: '12px', fontSize: '0.85rem', color: '#64748b' }}>
-                      Ghi chú quy trình: {parsedData.general_notes}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Type 6: Kiểm tra mẫu đầu tiên (mau-dau-tien) */}
-              {item.inspection_type === 'mau-dau-tien' && (
-                <div className="detail-sub-section">
-                  <h4 className="detail-sub-title">Kết quả kiểm tra mẫu đầu tiên</h4>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', textAlign: 'center', marginBottom: '16px' }}>
-                    <div style={{ background: '#fff', padding: '10px', borderRadius: '8px', border: '1px solid #EADCC9' }}>
-                      <div style={{ fontSize: '0.75rem', color: '#8D6E63', fontWeight: 'bold' }}>SL SẢN XUẤT</div>
-                      <div style={{ fontSize: '1.1rem', fontWeight: '800', color: '#2D1A12', marginTop: '4px' }}>{parsedData.quantity_produced || 0}</div>
-                    </div>
-                    <div style={{ background: '#fff', padding: '10px', borderRadius: '8px', border: '1px solid #EADCC9' }}>
-                      <div style={{ fontSize: '0.75rem', color: '#8D6E63', fontWeight: 'bold' }}>SL KIỂM MẪU</div>
-                      <div style={{ fontSize: '1.1rem', fontWeight: '800', color: '#2D1A12', marginTop: '4px' }}>{parsedData.quantity_sampled || 0}</div>
-                    </div>
-                    <div style={{ background: '#fff', padding: '10px', borderRadius: '8px', border: '1px solid #EADCC9' }}>
-                      <div style={{ fontSize: '0.75rem', color: '#8D6E63', fontWeight: 'bold' }}>SL LỖI/HỦY</div>
-                      <div style={{ fontSize: '1.1rem', fontWeight: '800', color: '#EF4444', marginTop: '4px' }}>{parsedData.quantity_rejected || 0}</div>
-                    </div>
-                  </div>
-
-                  {parsedData.machine_name && (
-                    <div style={{ fontSize: '0.85rem', marginBottom: '12px', color: '#2D1A12' }}>
-                      Máy thực hiện: <b>{parsedData.machine_name} ({parsedData.machine_code})</b>
-                    </div>
-                  )}
-
-                  {Array.isArray(parsedData.checklist_results) && parsedData.checklist_results.length > 0 && (
-                    <div>
-                      <strong style={{ fontSize: '0.85rem', color: '#7B5233', display: 'block', marginBottom: '8px' }}>Kết quả kiểm tra checklist:</strong>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {parsedData.checklist_results.map((res, i) => (
-                          <div key={i} style={{ padding: '10px', background: '#fff', border: '1px solid #EADCC9', borderRadius: '8px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                              <strong style={{ fontSize: '0.85rem', color: '#2D1A12' }}>Mẫu #{res.sampleNum}: {res.title}</strong>
-                              <span style={{ fontWeight: 'bold', fontSize: '0.85rem', color: res.status === 'pass' ? '#10B981' : '#EF4444' }}>
-                                {res.status === 'pass' ? 'Đạt' : 'Lỗi'}
-                              </span>
-                            </div>
-                            {res.note && <div style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '4px' }}>Ghi chú: {res.note}</div>}
-                            
-                            {/* Steps under checklist */}
-                            {Array.isArray(res.steps) && res.steps.length > 0 && (
-                              <div style={{ marginLeft: '12px', borderLeft: '2px solid #EADCC9', paddingLeft: '8px', marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                {res.steps.map((s, idx) => (
-                                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#4A5568' }}>
-                                    <span>{s.step}: {s.title}</span>
-                                    <span style={{ fontWeight: '600', color: s.status === 'pass' ? '#10B981' : '#EF4444' }}>{s.status === 'pass' ? 'Đạt' : 'Lỗi'}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Defects list */}
-                  {Array.isArray(parsedData.defects) && parsedData.defects.length > 0 && (
-                    <div style={{ marginTop: '16px' }}>
-                      <strong style={{ fontSize: '0.85rem', color: '#7B5233', display: 'block', marginBottom: '8px' }}>Danh sách lỗi ghi nhận:</strong>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        {parsedData.defects.map((def, idx) => (
-                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 12px', background: '#fff', border: '1px solid #EADCC9', borderRadius: '6px', fontSize: '0.8rem' }}>
-                            <span>{def.defect_name} (Mã #{def.defect_id})</span>
-                            <span style={{ color: '#EF4444', fontWeight: 'bold' }}>Số lượng: {def.quantity}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Type 3: độ ẩm / kích thước */}
-              {item.inspection_type === 'do-am' && Array.isArray(parsedData.samples) && (
-                <div className="detail-sub-section">
-                  <h4 className="detail-sub-title">Kết quả đo mẫu gỗ (Độ ẩm & Kích thước)</h4>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid #EADCC9', color: '#8D6E63', textAlign: 'left', fontWeight: 'bold' }}>
-                        <th style={{ padding: '8px 0', textAlign: 'center', width: '50px' }}>Mẫu</th>
-                        <th style={{ padding: '8px 0' }}>Kết quả đo độ ẩm (%)</th>
-                        <th style={{ padding: '8px 0', textAlign: 'center' }}>Kích thước (Dày x Rộng x Dài mm)</th>
-                        <th style={{ padding: '8px 0', textAlign: 'center', width: '80px' }}>Kết quả</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {parsedData.samples.map((s) => (
-                        <tr key={s.stt} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                          <td style={{ padding: '8px 0', textAlign: 'center', fontWeight: 'bold' }}>#{s.stt}</td>
-                          <td style={{ padding: '8px 0' }}>
-                            {s.moisture?.values && s.moisture.values.length > 0 ? (
-                              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                                {s.moisture.values.map((v, i) => (
-                                  <span key={i} style={{ padding: '2px 6px', background: '#F1F5F9', borderRadius: '4px', fontWeight: '600' }}>{v}%</span>
-                                ))}
-                              </div>
-                            ) : 'Chưa đo'}
-                          </td>
-                          <td style={{ padding: '8px 0', textAlign: 'center', fontWeight: '600' }}>
-                            {s.size?.thickness ? `${s.size.thickness} x ${s.size.width} x ${s.size.length} mm` : 'Chưa đo'}
-                          </td>
-                          <td style={{ padding: '8px 0', textAlign: 'center' }}>
-                            <span style={{ color: s.result === 'pass' ? '#10B981' : s.result === 'fail' ? '#EF4444' : '#94A3B8', fontWeight: 'bold' }}>
-                              {s.result === 'pass' ? 'Đạt' : s.result === 'fail' ? 'Lỗi' : 'Chưa đo'}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '16px', fontSize: '0.85rem' }}>
-                    <span>Tổng số lượng kiểm: <b>{parsedData.inspected_qty || 0}</b></span>
-                    <span style={{ color: '#EF4444' }}>Số lượng lỗi: <b>{parsedData.failed_qty || 0}</b></span>
-                    <span>Phương án xử lý: <b>{parsedData.action === 'luu-kho' ? 'Lưu kho' : 'Trả về/Cách ly'}</b></span>
-                  </div>
-                </div>
-              )}
-
-              {/* Type 4 & 5: sau-dong-goi, phu-kien */}
-              {(item.inspection_type === 'sau-dong-goi' || item.inspection_type === 'phu-kien') && (
-                <div className="detail-sub-section">
-                  <h4 className="detail-sub-title">Kết quả kiểm tra chi tiết</h4>
-                  {parsedData.check_type && (
-                    <div style={{ fontSize: '0.85rem', marginBottom: '8px' }}>
-                      Hình thức kiểm: <b>{parsedData.check_type}</b>
-                    </div>
-                  )}
-                  {parsedData.intended_use && (
-                    <div style={{ fontSize: '0.85rem', marginBottom: '8px' }}>
-                      Mục đích sử dụng: <b>{parsedData.intended_use}</b>
-                    </div>
-                  )}
-                  {Array.isArray(parsedData.checklist) && parsedData.checklist.length > 0 && (
-                    <div style={{ marginTop: '10px' }}>
-                      <strong style={{ fontSize: '0.85rem', color: '#7B5233', display: 'block', marginBottom: '8px' }}>Danh sách tiêu chí đánh giá:</strong>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        {parsedData.checklist.map((c, i) => (
-                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 12px', background: '#fff', border: '1px solid #EADCC9', borderRadius: '6px', fontSize: '0.85rem' }}>
-                            <span>{c.name || c.criterion}</span>
-                            <span style={{ fontWeight: 'bold', color: c.status === 'pass' || c.result === 'pass' ? '#10B981' : '#EF4444' }}>
-                              {c.status === 'pass' || c.result === 'pass' ? 'Đạt' : 'Lỗi'}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* IMAGE GALLERY */}
-              {remainingModalImages.length > 0 && (
-                <div style={{ marginTop: '20px' }}>
-                  <h4 style={{ fontSize: '0.95rem', fontWeight: '800', color: '#7B5233', margin: '0 0 10px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <ImageIcon size={18} /> Thư viện hình ảnh bổ sung ({remainingModalImages.length} ảnh)
-                  </h4>
-                  <div className="grid-gallery">
-                    {remainingModalImages.map((img, index) => (
-                      <img 
-                        key={index}
-                        src={getImageUrl(img)} 
-                        alt="Inspection Attachment"
-                        className="gallery-thumb"
-                        onClick={() => setLightboxImage(img)}
-                        onError={handleImageError}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* MODAL 2: DAILY DEFECT DETAIL POPUP */}
-      {selectedDaily && (() => {
-        const item = selectedDaily;
-        return (
-          <div className="modal-overlay">
-            <div className="modal-container" style={{ maxWidth: '500px' }}>
-              <button 
-                onClick={() => setSelectedDaily(null)} 
-                style={{ position: 'absolute', top: '16px', right: '16px', border: 'none', background: '#F1F5F9', cursor: 'pointer', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}
-              >
-                <X size={18} />
-              </button>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingRight: '40px', flexWrap: 'wrap', gap: '10px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                  <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#7B5233', margin: 0 }}>
-                    Phiếu ghi nhận lỗi hàng ngày
-                  </h3>
-                  <span style={{ fontSize: '0.82rem', fontWeight: 'bold', color: '#8D6E63', backgroundColor: '#FAF6F0', padding: '2px 8px', borderRadius: '6px', border: '1px solid #EADCC9' }}>
-                    #{item.id}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button
-                    onClick={() => handleExportSingleExcel(item, 'daily')}
-                    style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', backgroundColor: '#F0FDF4', color: '#16A34A', border: '1px solid #BBF7D0', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer' }}
-                  >
-                    <FileSpreadsheet size={15} /> Excel
-                  </button>
-                  <button
-                    onClick={() => handleExportSinglePDF(item, 'daily')}
-                    style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', backgroundColor: '#F0F9FF', color: '#0284C7', border: '1px solid #BAE6FD', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer' }}
-                  >
-                    <Printer size={15} /> PDF / In
-                  </button>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
-                <div className="detail-row-item">
-                  <span>Ngày ghi nhận:</span>
-                  <span>{formatDisplayDate(item.inspection_date)}</span>
-                </div>
-                <div className="detail-row-item">
-                  <span>Tên công đoạn:</span>
-                  <span>{item.stage_name || 'N/A'}</span>
-                </div>
-                <div className="detail-row-item">
-                  <span>QC ghi nhận:</span>
-                  <span>{item.inspector_name || 'N/A'}</span>
-                </div>
-                <div className="detail-row-item">
-                  <span>Tổng sản phẩm đã kiểm:</span>
-                  <span>{item.total_products?.toLocaleString() || 0}</span>
-                </div>
-                <div className="detail-row-item">
-                  <span>Tổng số lượng lỗi:</span>
-                  <span style={{ color: '#EF4444' }}>{item.total_defects || 0} lỗi</span>
-                </div>
-                <div className="detail-row-item">
-                  <span>Tỉ lệ lỗi (%):</span>
-                  <span style={{ color: item.defect_rate > 0 ? '#F59E0B' : '#10B981' }}>{item.defect_rate?.toFixed(2) || '0.00'}%</span>
-                </div>
-              </div>
-
-              {/* Renders list of defects if populated */}
-              {Array.isArray(item.defects) && item.defects.length > 0 ? (
-                <div className="detail-sub-section" style={{ marginTop: 0 }}>
-                  <h4 className="detail-sub-title">Danh sách chi tiết các lỗi</h4>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {item.defects.map((def, idx) => (
-                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: '#fff', border: '1px solid #EADCC9', borderRadius: '8px', fontSize: '0.85rem' }}>
-                        <span style={{ fontWeight: 'bold', color: '#7B5233' }}>
-                          {def.defect_name || def.name || defectTypesMap[def.defect_id] || (def.defect_code ? `${def.defect_code} (Mã #${def.defect_id})` : `Mã lỗi #${def.defect_id}`)}
-                        </span>
-                        <span style={{ color: '#EF4444', fontWeight: 'bold' }}>Số lượng: {def.quantity}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                </>
               ) : (
-                <div style={{ padding: '12px', border: '1px dashed #EADCC9', borderRadius: '8px', textAlign: 'center', color: '#8D6E63', fontSize: '0.85rem' }}>
-                  <AlertTriangle size={16} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'middle' }} />
-                  Không có danh sách chi tiết lỗi đính kèm.
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* MODAL 3: INCOMING/INPUT INSPECTION DETAIL POPUP */}
-      {selectedInbound && (() => {
-        const item = selectedInbound;
-        const imagesList = [item.image_path_1, item.image_path_2, item.image_path_3].filter(Boolean);
-        const isPass = item.result === 'Đạt';
-
-        let inboundPartsList = [];
-        const rawInboundProd = (item.part_name || '').trim();
-        const rawInboundSpec = (item.specification || '').trim();
-        if (rawInboundProd) {
-          const prodItems = rawInboundProd.split(/,\s*(?=[^,]+)/).map(s => s.trim()).filter(Boolean);
-          const specItems = rawInboundSpec ? rawInboundSpec.split(/,\s*(?=[^,]+)/).map(s => s.trim()).filter(Boolean) : [];
-          inboundPartsList = prodItems.map((prodName, idx) => {
-            let assignedSpec = specItems[idx] || (specItems.length === 1 ? specItems[0] : '');
-            const dimMatch = prodName.match(/(\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?(?:\s*[*xX×]\s*\d+(?:[.,]\d+)?)?(?:\s*mm|\s*cm)?)/i);
-            let cleanName = prodName;
-            if (dimMatch) {
-              if (!assignedSpec || assignedSpec === 'Tiêu chuẩn' || assignedSpec === '—') {
-                assignedSpec = dimMatch[1].replace(/\s*/g, '');
-              }
-              cleanName = prodName.replace(dimMatch[0], '').replace(/\s*[-–—:]\s*$/, '').replace(/\s*,\s*$/, '').trim() || prodName;
-            }
-            return { name: cleanName, spec: assignedSpec, qty: '' };
-          });
-        }
-        inboundPartsList = inboundPartsList.filter(p => p.name || p.spec);
-        const hasMultipleInboundParts = inboundPartsList.length > 1;
-
-        return (
-          <div className="modal-overlay">
-            <div className="modal-container" style={{ maxWidth: '850px' }}>
-              {/* Close Button */}
-              <button 
-                onClick={() => setSelectedInbound(null)} 
-                style={{ position: 'absolute', top: '16px', right: '16px', border: 'none', background: '#F1F5F9', cursor: 'pointer', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}
-              >
-                <X size={18} />
-              </button>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingRight: '40px', flexWrap: 'wrap', gap: '10px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                  <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#7B5233', margin: 0 }}>
-                    Phiếu kiểm tra đầu vào (IQC)
-                  </h3>
-                  <span style={{ fontSize: '0.82rem', fontWeight: 'bold', color: '#8D6E63', backgroundColor: '#FAF6F0', padding: '2px 8px', borderRadius: '6px', border: '1px solid #EADCC9' }}>
-                    #{item.ticket_code || `INS-${item.id}`}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button
-                    onClick={() => handleExportSingleExcel(item, 'input')}
-                    style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', backgroundColor: '#F0FDF4', color: '#16A34A', border: '1px solid #BBF7D0', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer' }}
-                  >
-                    <FileSpreadsheet size={15} /> Excel
-                  </button>
-                  <button
-                    onClick={() => handleExportSinglePDF(item, 'input')}
-                    style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', backgroundColor: '#F0F9FF', color: '#0284C7', border: '1px solid #BAE6FD', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer' }}
-                  >
-                    <Printer size={15} /> PDF / In
-                  </button>
-                </div>
-              </div>
-
-              {/* General details grid */}
-              <div className="detail-grid-info">
-                <div>
-                  <div className="detail-row-item">
-                    <span>Tên chi tiết / Linh kiện:</span>
-                    <span>
-                      {hasMultipleInboundParts ? (
-                        <span style={{
-                          backgroundColor: '#F3E9DD',
-                          color: '#7B5233',
-                          padding: '2px 8px',
-                          borderRadius: '12px',
-                          fontSize: '0.8rem',
-                          fontWeight: '800',
-                          border: '1px solid #EADCC9',
-                          whiteSpace: 'nowrap'
-                        }}>
-                          {inboundPartsList.length} chi tiết
-                        </span>
-                      ) : (
-                        item.part_name || 'N/A'
-                      )}
-                    </span>
-                  </div>
-                  {!hasMultipleInboundParts && (
-                    <div className="detail-row-item" style={{ marginTop: '8px' }}>
-                      <span>Quy cách linh kiện:</span>
-                      <span>{item.specification || 'N/A'}</span>
+                <>
+                  {/* TAB CHI TIẾT */}
+                  {/* BẢNG DANH SÁCH CHI TIẾT / PHÔI KIỂM TRA */}
+                  <div style={{ marginBottom: '16px' }}>
+                    <div style={{
+                      fontSize: '0.82rem',
+                      color: '#7B5233',
+                      fontWeight: 800,
+                      marginBottom: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.4px'
+                    }}>
+                      <Package size={15} color="#7B5233" />
+                      <span>Danh sách chi tiết / phôi kiểm tra ({reportPartsList.length})</span>
                     </div>
-                  )}
-                  <div className="detail-row-item" style={{ marginTop: '8px' }}>
-                    <span>Container / PO:</span>
-                    <span>{item.cont_name || 'N/A'}</span>
-                  </div>
-                </div>
-                <div>
-                  <div className="detail-row-item">
-                    <span>QC thực hiện:</span>
-                    <span>{item.inspector_name || 'N/A'}</span>
-                  </div>
-                  <div className="detail-row-item" style={{ marginTop: '8px' }}>
-                    <span>Ngày kiểm tra:</span>
-                    <span>{formatDisplayDateTime(item.inspected_at)}</span>
-                  </div>
-                  <div className="detail-row-item" style={{ marginTop: '8px' }}>
-                    <span>Kết luận chung:</span>
-                    <span style={{ color: isPass ? '#10B981' : '#EF4444' }}>
-                      {isPass ? 'ĐẠT' : 'KHÔNG ĐẠT'}
-                    </span>
-                  </div>
-                </div>
-              </div>
 
-              {/* BẢNG CHI TIẾT & QUY CÁCH (Hiển thị khi có từ 2 chi tiết trở lên) */}
-              {hasMultipleInboundParts && (
-                <div style={{
-                  marginTop: '16px',
-                  marginBottom: '16px',
-                  backgroundColor: '#FAF6F0',
-                  borderRadius: '10px',
-                  border: '1.5px solid #EADCC9',
-                  overflow: 'hidden'
-                }}>
-                  <div style={{
-                    padding: '10px 14px',
-                    backgroundColor: '#F3E9DD',
-                    borderBottom: '1px solid #EADCC9',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.88rem', fontWeight: '800', color: '#7B5233' }}>
-                      <span>📋 Danh sách chi tiết & Quy cách kiểm tra</span>
-                      <span style={{
-                        backgroundColor: '#7B5233',
-                        color: '#ffffff',
-                        padding: '2px 8px',
-                        borderRadius: '999px',
-                        fontSize: '0.75rem',
-                        fontWeight: '700'
-                      }}>
-                        {inboundPartsList.length} chi tiết
-                      </span>
-                    </div>
-                  </div>
-                  <div style={{
-                    maxHeight: '240px',
-                    overflowY: 'auto',
-                    overflowX: 'auto',
-                    borderTop: '1px solid #EADCC9'
-                  }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                      <thead style={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#FDFBF7' }}>
-                        <tr style={{ backgroundColor: '#FDFBF7', borderBottom: '1px solid #EADCC9', textAlign: 'left', color: '#8D6E63' }}>
-                          <th style={{ padding: '8px 12px', width: '45px', textAlign: 'center', backgroundColor: '#FDFBF7' }}>#</th>
-                          <th style={{ padding: '8px 12px', fontWeight: '700', backgroundColor: '#FDFBF7' }}>Tên chi tiết / Bán thành phẩm</th>
-                          <th style={{ padding: '8px 12px', fontWeight: '700', width: '220px', backgroundColor: '#FDFBF7' }}>Quy cách (Dày x Rộng x Dài)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {inboundPartsList.map((part, pIdx) => (
-                          <tr key={pIdx} style={{
-                            borderBottom: pIdx < inboundPartsList.length - 1 ? '1px solid #F0E6D8' : 'none',
-                            backgroundColor: pIdx % 2 === 0 ? '#FFFFFF' : '#FAF6F0'
-                          }}>
-                            <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: '700', color: '#A89F91' }}>
-                              {pIdx + 1}
-                            </td>
-                            <td style={{ padding: '8px 12px', fontWeight: '600', color: '#2D1A12' }}>
-                              {part.name || '—'}
-                            </td>
-                            <td style={{ padding: '8px 12px' }}>
-                              {part.spec ? (
+                    <div style={{
+                      border: '1.5px solid #EADCC9',
+                      borderRadius: '10px',
+                      overflow: 'hidden',
+                      backgroundColor: '#ffffff',
+                      maxHeight: '260px',
+                      overflowY: 'auto',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+                    }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                        <thead>
+                          <tr style={{ backgroundColor: '#FAF6F0', borderBottom: '1.5px solid #EADCC9' }}>
+                            <th style={{ padding: '8px 10px', textAlign: 'center', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem', width: '46px' }}>STT</th>
+                            <th style={{ padding: '8px 12px', textAlign: 'left', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem', minWidth: '130px' }}>TÊN CHI TIẾT / PHÔI</th>
+                            <th style={{ padding: '8px 12px', textAlign: 'left', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem', width: '140px' }}>QUY CÁCH / THÔNG SỐ</th>
+                            <th style={{ padding: '8px 12px', textAlign: 'left', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem', minWidth: '180px' }}>TÊN TỦ (SKU)</th>
+                            <th style={{ padding: '8px 10px', textAlign: 'center', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem', width: '90px' }}>SL KẾ HOẠCH</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {reportPartsList.map((p, idx) => (
+                            <tr 
+                              key={idx} 
+                              style={{ 
+                                borderBottom: idx < reportPartsList.length - 1 ? '1px solid #F3EBE1' : 'none',
+                                transition: 'background-color 0.15s ease'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FCF9F6'}
+                              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+                            >
+                              <td style={{ padding: '9px 10px', color: '#8D6E63', fontWeight: 700, textAlign: 'center', verticalAlign: 'middle' }}>
+                                {p.stt}
+                              </td>
+                              <td style={{ padding: '9px 12px', color: '#2D1A12', fontWeight: 700, verticalAlign: 'middle', lineHeight: 1.4 }}>
+                                {p.name}
+                              </td>
+                              <td style={{ padding: '9px 12px', verticalAlign: 'middle' }}>
                                 <span style={{
                                   display: 'inline-block',
-                                  padding: '2px 8px',
-                                  backgroundColor: '#FEF3C7',
-                                  color: '#92400E',
+                                  backgroundColor: '#FAF6F0',
+                                  color: '#7B5233',
+                                  padding: '3px 8px',
                                   borderRadius: '6px',
-                                  fontWeight: '700',
-                                  fontSize: '0.8rem',
-                                  fontFamily: 'monospace',
-                                  border: '1px solid #FDE68A'
+                                  border: '1px solid #EADCC9',
+                                  fontSize: '0.78rem',
+                                  fontWeight: 600,
+                                  whiteSpace: 'nowrap'
                                 }}>
-                                  {part.spec}
+                                  {p.spec}
                                 </span>
-                              ) : (
-                                <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>Theo tiêu chuẩn</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                              </td>
+                              <td style={{ padding: '9px 12px', verticalAlign: 'middle' }}>
+                                {p.cabinet ? (
+                                  <span style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    fontSize: '0.76rem',
+                                    padding: '2px 8px',
+                                    borderRadius: '5px',
+                                    backgroundColor: '#EFF6FF',
+                                    color: '#1D4ED8',
+                                    fontWeight: 600,
+                                    border: '1px solid #BFDBFE',
+                                    whiteSpace: 'nowrap'
+                                  }} title={p.cabinet}>
+                                    {p.cabinet}
+                                  </span>
+                                ) : (
+                                  <span style={{ color: '#9CA3AF', fontSize: '0.8rem' }}>—</span>
+                                )}
+                              </td>
+                              <td style={{ padding: '9px 10px', textAlign: 'center', verticalAlign: 'middle', fontWeight: 700, color: '#4B5563' }}>
+                                {p.qty ? (
+                                  <span style={{
+                                    display: 'inline-block',
+                                    padding: '2px 8px',
+                                    backgroundColor: '#F3F4F6',
+                                    borderRadius: '6px',
+                                    fontSize: '0.78rem',
+                                    color: '#374151'
+                                  }}>
+                                    {Number(p.qty).toLocaleString()}
+                                  </span>
+                                ) : (
+                                  <span style={{ color: '#9CA3AF', fontSize: '0.8rem' }}>—</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </div>
+
+                  {/* HƯỚNG DẪN KIỂM TRA (CÁC BƯỚC KIỂM TRA SOP) */}
+                  <div style={{ marginTop: '16px', marginBottom: '16px' }}>
+                    <div style={{
+                      fontSize: '0.82rem',
+                      color: '#7B5233',
+                      fontWeight: 800,
+                      marginBottom: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.4px'
+                    }}>
+                      <ClipboardList size={15} color="#7B5233" />
+                      <span>Hướng dẫn kiểm tra SOP {reportSteps.length > 0 ? `(${reportSteps.length} bước)` : ''}</span>
+                    </div>
+
+                    {reportSteps.length > 0 ? (
+                      <div style={{
+                        border: '1.5px solid #EADCC9',
+                        borderRadius: '10px',
+                        overflow: 'hidden',
+                        backgroundColor: '#ffffff',
+                        maxHeight: '260px',
+                        overflowY: 'auto',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+                      }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                          <thead>
+                            <tr style={{ backgroundColor: '#FAF6F0', borderBottom: '1.5px solid #EADCC9' }}>
+                              <th style={{ padding: '8px 10px', textAlign: 'center', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem', width: '50px' }}>BƯỚC</th>
+                              <th style={{ padding: '8px 12px', textAlign: 'left', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem', minWidth: '150px' }}>HẠNG MỤC / MÔ TẢ</th>
+                              <th style={{ padding: '8px 12px', textAlign: 'left', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem' }}>TIÊU CHUẨN KỸ THUẬT</th>
+                              <th style={{ padding: '8px 10px', textAlign: 'center', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem', width: '95px' }}>KẾT QUẢ</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {reportSteps.map((st, idx) => {
+                              const stepNo = st.step_no || st.step || idx + 1;
+                              const title = st.title || st.name || st.description || `Bước ${stepNo}`;
+                              const standard = st.standard || st.content || st.note || 'Theo quy định';
+                              const isFail = st.result === 'fail' || st.result === 'Lỗi' || st.status === 'FAIL';
+                              return (
+                                <tr
+                                  key={idx}
+                                  style={{
+                                    borderBottom: idx < reportSteps.length - 1 ? '1px solid #F3EBE1' : 'none',
+                                    backgroundColor: isFail ? '#FEF2F2' : (idx % 2 === 0 ? '#FFFFFF' : '#FCFBF9'),
+                                    transition: 'background-color 0.15s ease'
+                                  }}
+                                >
+                                  <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 800, color: isFail ? '#DC2626' : '#7B5233' }}>
+                                    {stepNo}
+                                  </td>
+                                  <td style={{ padding: '8px 12px', fontWeight: 700, color: isFail ? '#991B1B' : '#2D1A12' }}>
+                                    {title}
+                                  </td>
+                                  <td style={{ padding: '8px 12px', color: '#4B5563', fontSize: '0.82rem', lineHeight: 1.4 }}>
+                                    {standard}
+                                  </td>
+                                  <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                    <span style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      padding: '3px 8px',
+                                      borderRadius: '12px',
+                                      fontSize: '0.76rem',
+                                      fontWeight: 800,
+                                      backgroundColor: isFail ? '#FEE2E2' : '#DCFCE7',
+                                      color: isFail ? '#DC2626' : '#15803D',
+                                      border: `1px solid ${isFail ? '#FCA5A5' : '#86EFAC'}`
+                                    }}>
+                                      {isFail ? 'Không đạt' : 'Đạt'}
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div style={{
+                        padding: '12px 14px',
+                        backgroundColor: '#FAF6F0',
+                        borderRadius: '8px',
+                        border: '1px dashed #EADCC9',
+                        color: '#8D6E63',
+                        fontSize: '0.82rem'
+                      }}>
+                        Phiếu kiểm tra này không có danh sách các bước SOP chi tiết.
+                      </div>
+                    )}
+                  </div>
+
+                  {/* DANH SÁCH LỖI PHÁT HIỆN */}
+                  {reportErrors.length > 0 ? (
+                    <div style={{ marginTop: '16px' }}>
+                      <div style={{
+                        fontSize: '0.82rem',
+                        color: '#DC2626',
+                        fontWeight: 800,
+                        marginBottom: '8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.4px'
+                      }}>
+                        <AlertTriangle size={15} color="#DC2626" />
+                        <span>Danh sách lỗi phát hiện ({reportErrors.length})</span>
+                      </div>
+                      <div style={{
+                        border: '1.5px solid #FCA5A5',
+                        borderRadius: '10px',
+                        overflow: 'hidden',
+                        backgroundColor: '#FFFFFF',
+                        boxShadow: '0 1px 3px rgba(220,38,38,0.05)'
+                      }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                          <thead>
+                            <tr style={{ backgroundColor: '#FEF2F2', borderBottom: '1.5px solid #FCA5A5' }}>
+                              <th style={{ padding: '8px 10px', textAlign: 'center', color: '#991B1B', fontWeight: 800, fontSize: '0.76rem', width: '50px' }}>STT</th>
+                              <th style={{ padding: '8px 12px', textAlign: 'left', color: '#991B1B', fontWeight: 800, fontSize: '0.76rem' }}>TÊN LỖI GHI NHẬN</th>
+                              <th style={{ padding: '8px 12px', textAlign: 'center', color: '#991B1B', fontWeight: 800, fontSize: '0.76rem', width: '110px' }}>SL LỖI</th>
+                              <th style={{ padding: '8px 12px', textAlign: 'left', color: '#991B1B', fontWeight: 800, fontSize: '0.76rem' }}>GHI CHÚ CHI TIẾT</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {reportErrors.map((err, idx) => (
+                              <tr key={idx} style={{ borderBottom: idx < reportErrors.length - 1 ? '1px solid #FEE2E2' : 'none' }}>
+                                <td style={{ padding: '8px 10px', textAlign: 'center', color: '#DC2626', fontWeight: 700 }}>
+                                  {err.stt || String(idx + 1).padStart(2, '0')}
+                                </td>
+                                <td style={{ padding: '8px 12px', color: '#2D1A12', fontWeight: 700 }}>
+                                  {err.name}
+                                </td>
+                                <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                                  <span style={{
+                                    display: 'inline-block',
+                                    padding: '2px 8px',
+                                    borderRadius: '6px',
+                                    backgroundColor: '#FEE2E2',
+                                    color: '#DC2626',
+                                    fontWeight: 800,
+                                    fontSize: '0.8rem'
+                                  }}>
+                                    {err.qty}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '8px 12px', color: '#6B7280', fontSize: '0.82rem' }}>
+                                  {err.note || '---'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{
+                      marginTop: '16px',
+                      padding: '14px 16px',
+                      backgroundColor: '#ECFDF5',
+                      borderRadius: '10px',
+                      border: '1.5px solid #A7F3D0',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      color: '#065F46'
+                    }}>
+                      <CheckCircle2 size={20} color="#10B981" />
+                      <span style={{ fontSize: '0.86rem', fontWeight: 600 }}>
+                        Không ghi nhận lỗi nào trong quá trình kiểm tra. Sản phẩm / lô hàng đạt chuẩn kỹ thuật.
+                      </span>
+                    </div>
+                  )}
+                </>
               )}
-
-              {/* Notes */}
-              {item.note && (
-                <div style={{ backgroundColor: '#FAF6F0', borderRadius: '8px', padding: '12px', border: '1px solid #EADCC9', fontSize: '0.85rem', marginBottom: '16px' }}>
-                  <strong style={{ color: '#7B5233', display: 'block', marginBottom: '4px' }}>Ghi chú kiểm tra:</strong>
-                  <span style={{ color: '#2D1A12' }}>{item.note}</span>
-                </div>
-              )}
-
-              {/* Dimensions Section */}
-              <div className="detail-sub-section" style={{ marginTop: 0 }}>
-                <h4 className="detail-sub-title">Kết quả đo kích thước chi tiết (mm)</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', textAlign: 'center' }}>
-                  <div style={{ background: '#fff', padding: '10px', borderRadius: '8px', border: '1px solid #EADCC9' }}>
-                    <div style={{ fontSize: '0.75rem', color: '#8D6E63', fontWeight: 'bold' }}>CHIỀU DÀI</div>
-                    <div style={{ fontSize: '1.1rem', fontWeight: '800', color: '#2D1A12', marginTop: '4px' }}>{item.measured_length != null ? `${item.measured_length} mm` : '---'}</div>
-                  </div>
-                  <div style={{ background: '#fff', padding: '10px', borderRadius: '8px', border: '1px solid #EADCC9' }}>
-                    <div style={{ fontSize: '0.75rem', color: '#8D6E63', fontWeight: 'bold' }}>CHIỀU RỘNG</div>
-                    <div style={{ fontSize: '1.1rem', fontWeight: '800', color: '#2D1A12', marginTop: '4px' }}>{item.measured_width != null ? `${item.measured_width} mm` : '---'}</div>
-                  </div>
-                  <div style={{ background: '#fff', padding: '10px', borderRadius: '8px', border: '1px solid #EADCC9' }}>
-                    <div style={{ fontSize: '0.75rem', color: '#8D6E63', fontWeight: 'bold' }}>CHIỀU DÀY</div>
-                    <div style={{ fontSize: '1.1rem', fontWeight: '800', color: '#2D1A12', marginTop: '4px' }}>{item.measured_height != null ? `${item.measured_height} mm` : '---'}</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* IMAGE GALLERY */}
-              {imagesList.length > 0 && (
-                <div style={{ marginTop: '20px' }}>
-                  <h4 style={{ fontSize: '0.95rem', fontWeight: '800', color: '#7B5233', margin: '0 0 10px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <ImageIcon size={18} /> Thư viện hình ảnh minh chứng ({imagesList.length} ảnh)
-                  </h4>
-                  <div className="grid-gallery">
-                    {imagesList.map((img, index) => (
-                      <img 
-                        key={index}
-                        src={getImageUrl(img)} 
-                        alt="IQC Evidence"
-                        className="gallery-thumb"
-                        onClick={() => setLightboxImage(img)}
-                        onError={handleImageError}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-
             </div>
+
+            {/* MODAL FOOTER (READ-ONLY) */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              alignItems: 'center',
+              padding: '14px 22px',
+              backgroundColor: '#FAF6F0',
+              borderTop: '1.5px solid #EADCC9'
+            }}>
+              {/* Quick Exports + Close button */}
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const t = activeReportItem._reportType === 'daily' || activeReportItem.type === 'daily'
+                      ? 'daily'
+                      : (activeReportItem._reportType === 'input' || activeReportItem.type === 'input' || activeReportItem.inspection_type === 'input'
+                          ? 'input'
+                          : 'stage');
+                    handleExportSingleExcel(activeReportItem, t);
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 14px',
+                    borderRadius: '8px',
+                    border: '1.5px solid #A7F3D0',
+                    backgroundColor: '#ECFDF5',
+                    color: '#047857',
+                    fontWeight: 700,
+                    fontSize: '0.84rem',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                  title="Xuất phiếu này ra file Excel"
+                >
+                  <FileSpreadsheet size={15} />
+                  <span>Xuất Excel</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const t = activeReportItem._reportType === 'daily' || activeReportItem.type === 'daily'
+                      ? 'daily'
+                      : (activeReportItem._reportType === 'input' || activeReportItem.type === 'input' || activeReportItem.inspection_type === 'input'
+                          ? 'input'
+                          : 'stage');
+                    handleExportSinglePDF(activeReportItem, t);
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 14px',
+                    borderRadius: '8px',
+                    border: '1.5px solid #BAE6FD',
+                    backgroundColor: '#F0F9FF',
+                    color: '#0369A1',
+                    fontWeight: 700,
+                    fontSize: '0.84rem',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                  title="In hoặc lưu phiếu kiểm tra thành file PDF"
+                >
+                  <Printer size={15} />
+                  <span>In / PDF</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleCloseModal}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    border: '1.5px solid #CBD5E1',
+                    backgroundColor: '#FFFFFF',
+                    color: '#475569',
+                    fontWeight: 700,
+                    fontSize: '0.84rem',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <span>Đóng</span>
+                  <span className="kbd-shortcut-pill">Esc</span>
+                </button>
+              </div>
+            </div>
+            </div>
+
+            {/* Flank navigation Right */}
+            <button
+              type="button"
+              className="modal-flank-btn next"
+              disabled={currentReportIndex < 0 || currentReportIndex >= paginatedUnifiedList.length - 1}
+              onClick={goToNextReport}
+              title="Hồ sơ sau (Phím mũi tên →)"
+              aria-label="Hồ sơ sau"
+              style={{ marginLeft: '14px', flexShrink: 0 }}
+            >
+              <ChevronRight size={26} />
+            </button>
           </div>
-        );
-      })()}
+        </div>
+      )}
 
       {/* LIGHTBOX / FULL IMAGE VIEW */}
-      {lightboxImage && (
+      {(lightboxImage || lightboxImgUrl) && (
         <div 
-          onClick={() => setLightboxImage(null)}
+          onClick={() => { setLightboxImage(null); setLightboxImgUrl(null); }}
           style={{
             position: 'fixed',
             top: 0, left: 0, right: 0, bottom: 0,
@@ -2046,7 +2582,7 @@ const InspectionReportsView = () => {
           }}
         >
           <img 
-            src={getImageUrl(lightboxImage)} 
+            src={lightboxImgUrl ? getSafeImageUrl(lightboxImgUrl) : getImageUrl(lightboxImage)} 
             alt="Full Preview"
             onError={handleImageError}
             style={{
