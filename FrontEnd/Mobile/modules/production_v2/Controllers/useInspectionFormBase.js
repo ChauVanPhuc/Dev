@@ -1931,7 +1931,8 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
                 result: 'pass',
                 note: ''
               }))
-            : null),
+            : null)
+      })
 
       // Ghi log phiếu kiểm tra gần nhất của cá nhân người kiểm tra
       if (user) {
