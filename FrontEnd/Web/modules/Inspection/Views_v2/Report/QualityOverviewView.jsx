@@ -25,7 +25,7 @@ const QualityOverviewView = () => {
   
   // Phân trang
   const [currentPage, setCurrentPage] = useState(1);
-  const [limit, setLimit] = useState(10);
+  const [limit, setLimit] = useState(30);
 
   // Fetch dữ liệu công việc tồn đọng từ Backend (chỉ phiếu chưa xác nhận trong 24h)
   const fetchPendingTasks = async () => {

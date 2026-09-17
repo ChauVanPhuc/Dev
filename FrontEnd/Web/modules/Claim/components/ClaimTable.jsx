@@ -8,7 +8,7 @@ export const ClaimTable = ({
   totalFilteredCount = 0,
   currentPage = 1,
   totalPages = 1,
-  rowsPerPage = 15,
+  rowsPerPage = 30,
   onPageChange,
   loading = false,
   hasWritePermission = true,

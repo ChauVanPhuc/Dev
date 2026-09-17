@@ -291,7 +291,7 @@ const DefectManagement = () => {
 
   // ─── Phân trang ─────────────────────────────────────────────
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(15);
+  const [pageSize, setPageSize] = useState(30);
 
   // ─── Quản lý Modals / Trạng thái Form ────────────────────────
   const [isFormOpen, setIsFormOpen] = useState(false);

@@ -214,6 +214,7 @@ const InspectionFormShell = ({ title, subTitle, formState, children, showLastRes
   const content = (
     <>
       <div className="pv2-page pv2-page--form" style={embedded ? { paddingTop: 4 } : {}}>
+
         {/* Step Indicator — Chỉ hiển thị khi tạo mới để hướng dẫn người dùng nhập liệu từng bước */}
         {!readOnly && formState.mode !== INSPECT_MODES.PROCESS && (
           <div style={{

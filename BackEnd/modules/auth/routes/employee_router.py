@@ -34,7 +34,7 @@ def resolve_employee_names_and_kpis(db: Session, emp: Employee) -> EmployeeRespo
 @router.get("/", response_model=PaginatedEmployeeResponse)
 def get_employees(
     page: int = 1,
-    size: int = 10,
+    size: int = 30,
     search: Optional[str] = None,
     role_id: Optional[int] = None,
     permission_id: Optional[int] = None,

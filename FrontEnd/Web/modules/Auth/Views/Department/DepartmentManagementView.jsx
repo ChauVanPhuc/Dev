@@ -49,7 +49,7 @@ const DepartmentManagement = () => {
 
   // States đồng bộ phân trang & bộ lọc
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(15);
+  const [pageSize, setPageSize] = useState(30);
   const [statusFilter, setStatusFilter] = useState('all');
   const [isExporting, setIsExporting] = useState(false);
   const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);

@@ -1,7 +1,7 @@
 import api from '@webShared/Services/api.service';
 
 export const qualityService = {
-    getPlanDetails: async (planId, page = null, pageSize = 15, search = '', statusFilter = 'all', filterProduct = 'all', sortBy = 'none') => {
+    getPlanDetails: async (planId, page = null, pageSize = 30, search = '', statusFilter = 'all', filterProduct = 'all', sortBy = 'none') => {
         if (page === null) {
             return await api.get(`/plans/${planId}?simple=true`);
         }

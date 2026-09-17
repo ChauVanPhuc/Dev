@@ -52,7 +52,7 @@ def update_fcm_token(data: FCMTokenUpdate, db: Session = Depends(get_db)):
 @router.get("/", response_model=PaginatedAccountResponse)
 def list_accounts(
     page: int = 1, 
-    size: int = 10,
+    size: int = 30,
     search: str = None,
     status: str = None,
     sort_by: str = "id",

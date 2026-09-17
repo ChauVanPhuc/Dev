@@ -133,7 +133,7 @@ const PurchaseRequisitionListView = () => {
   const [importOrderType, setImportOrderType] = useState('Đơn mua hàng');
 
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(15);
+  const [itemsPerPage, setItemsPerPage] = useState(30);
   const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
 
   const fetchData = async () => {

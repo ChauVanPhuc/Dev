@@ -14,9 +14,20 @@ import {
 import { stageService } from '../services/stageService'
 import { orderService } from '../services/orderService'
 import { inspectionService } from '../services/inspectionService'
+import { userActivityService } from '../services/userActivityService'
 import { extractRootPo, deduplicatePoCodes } from '../utils/poHelper'
 
 const initErrors = () => [{ id: 1, name: '', qty: 0 }]
+
+const getCleanString = (val) => {
+  if (!val) return ''
+  if (typeof val === 'string') return val.trim()
+  if (typeof val === 'number') return String(val).trim()
+  if (typeof val === 'object') {
+    return String(val.name || val.code || val.stage || val.po || val.label || val.value || '').trim()
+  }
+  return ''
+}
 
 export const calculateAqlSampleSize = (lotSize) => {
   const n = Number(lotSize) || 0
@@ -360,6 +371,17 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
   const [ctqGuides, setCtqGuides] = useState([])
   const [previewImage, setPreviewImage] = useState(null)
   const [isDirty, setIsDirty] = useState(false)
+  const [userActivity, setUserActivity] = useState(() => userActivityService.getUserActivity(user))
+
+  useEffect(() => {
+    if (user) {
+      const initial = userActivityService.getUserActivity(user)
+      setUserActivity(initial)
+      userActivityService.fetchRecentActivityFromBackend(user).then((synced) => {
+        if (synced) setUserActivity(synced)
+      })
+    }
+  }, [user])
 
   useEffect(() => {
     const handleBeforeUnload = (e) => {
@@ -938,11 +960,39 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
   // Cache kết quả BOM để khi chọn PO mở chi tiết tức thì (0ms)
   const bomCacheRef = useRef({})
 
-  const handlePoChange = useCallback((newPo) => {
+  const handlePoChange = useCallback((newPo, forcedStage = null) => {
     if (readOnly) return
+    const cleanPo = getCleanString(newPo)
     setIsDirty(true)
-    setPo(newPo)
-    setParamPo(newPo)
+    setPo(cleanPo)
+    setParamPo(cleanPo)
+
+    // Nếu chọn PO mà chưa có Công đoạn -> tự động chọn Công đoạn theo PO hoặc gần nhất
+    const curStage = getCleanString(forcedStage || stage || paramStage)
+    if (cleanPo && !curStage) {
+      const autoStage = getCleanString(userActivity?.lastPo?.stage || userActivity?.lastStage?.name || userActivity?.lastStage)
+      if (autoStage) {
+        setStage(autoStage)
+        setParamStage(autoStage)
+        setArea(autoStage)
+      }
+    }
+
+    if (cleanPo) {
+      setPoOptions((prev) => {
+        const safePrev = Array.isArray(prev) ? prev : []
+        if (!safePrev.some((o) => o.value === cleanPo)) {
+          return [{ value: cleanPo, label: cleanPo }, ...safePrev.filter((o) => o.value !== '')]
+        }
+        return safePrev
+      })
+    }
+
+    if (cleanPo && user) {
+      const activeStage = getCleanString(forcedStage || stage || paramStage || userActivity?.lastPo?.stage || userActivity?.lastStage?.name)
+      const updated = userActivityService.recordPo(user, cleanPo, activeStage)
+      setUserActivity(updated)
+    }
 
     setProduct('')
     setParamProduct('')
@@ -958,13 +1008,13 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     setParamPass('')
     setParamFail('')
 
-    if (!newPo) {
-      const activeStage = stage || paramStage
+    if (!cleanPo) {
+      const activeStage = getCleanString(stage || paramStage)
       setProductOptions([{ value: '', label: !activeStage ? 'Vui lòng chọn công đoạn trước' : 'Vui lòng chọn PO trước' }])
       setSpecOptions([{ value: '', label: !activeStage ? 'Vui lòng chọn công đoạn trước' : 'Vui lòng chọn PO trước' }])
       setBomData([])
     }
-  }, [readOnly, stage, paramStage])
+  }, [readOnly, stage, paramStage, user])
 
   // Hàm tìm kiếm PO full trên Server khi người dùng nhập từ khóa
   const handlePoSearch = useCallback((searchTerm) => {
@@ -1022,6 +1072,10 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
         .then((poCodes) => {
           const opts = (poCodes || []).map((code) => ({ value: code, label: code }))
           monthPoCacheRef.current = opts
+          const curPo = po || paramPo
+          if (curPo && !opts.some((o) => o.value === curPo)) {
+            opts.unshift({ value: curPo, label: curPo })
+          }
           setPoOptions([{ value: '', label: 'Nhập hoặc chọn PO...' }, ...opts])
         })
         .catch(() => {
@@ -1035,6 +1089,10 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
           const cleanCodes = deduplicatePoCodes(codes || [])
           const opts = cleanCodes.map((code) => ({ value: code, label: code }))
           monthPoCacheRef.current = opts
+          const curPo = po || paramPo
+          if (curPo && !opts.some((o) => o.value === curPo)) {
+            opts.unshift({ value: curPo, label: curPo })
+          }
           setPoOptions([{ value: '', label: 'Nhập hoặc chọn PO...' }, ...opts])
         })
         .catch(() => {
@@ -1834,7 +1892,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
           return e
         })
 
-      await createTicket({
+      const createdResult = await createTicket({
         mode,
         stage: activeStage,
         po: activePo,
@@ -1849,6 +1907,8 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
         errors: sanitizedErrors,
         images: (images || []).filter((img) => img && !String(img).startsWith('blob:')),
         creator: creatorName,
+        userId: user?.id,
+        inspector_id: user?.id,
         palletCode: finalPalletCode || backupQrCode || '',
         backup_qr: backupQrCode || null,
         backupQrCode: backupQrCode || null,
@@ -1858,9 +1918,41 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
         process,
         area,
         staff,
-        answers: mode === INSPECT_MODES.QA ? answers : null,
-        steps: (Array.isArray(steps) && steps.length > 0) ? steps : null,
-      })
+        steps: (Array.isArray(steps) && steps.length > 0)
+          ? steps
+          : (Array.isArray(currentGuide?.steps) && currentGuide.steps.length > 0
+            ? currentGuide.steps.map((st, idx) => ({
+                id: st.id,
+                step_no: st.step_no || (idx + 1),
+                step: st.step_no || (idx + 1),
+                title: st.title || `Bước ${idx + 1}`,
+                standard: st.standard || st.content || '',
+                content: st.content || st.standard || '',
+                result: 'pass',
+                note: ''
+              }))
+            : null),
+
+      // Ghi log phiếu kiểm tra gần nhất của cá nhân người kiểm tra
+      if (user) {
+        const recordedTicketData = {
+          id: createdResult?.id || autoTicketCode,
+          code: createdResult?.code || (createdResult?.id ? `KT${createdResult.id}` : autoTicketCode),
+          mode,
+          stage: activeStage,
+          po: activePo,
+          product: activeProduct,
+          spec: compactSpec(spec),
+          sampleQty: activeSampleQty,
+          errorQty: activeErrorQty,
+          result: finalResult,
+          action: finalAction,
+          palletCode: finalPalletCode || backupQrCode || '',
+          created_at: createdResult?.created_at || new Date().toISOString()
+        }
+        const updated = userActivityService.recordTicket(user, recordedTicketData)
+        setUserActivity(updated)
+      }
 
       showMessage(
         'Hoàn thành kiểm tra',
@@ -2113,11 +2205,17 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
 
   const handleStageChange = (newStage) => {
     if (readOnly) return
+    const cleanStage = getCleanString(newStage)
     setIsDirty(true)
-    setStage(newStage)
-    setParamStage(newStage)
-    setArea(newStage)
+    setStage(cleanStage)
+    setParamStage(cleanStage)
+    setArea(cleanStage)
     setProcess('')
+
+    if (cleanStage && user) {
+      const updated = userActivityService.recordStage(user, cleanStage)
+      setUserActivity(updated)
+    }
 
     setPo('')
     setParamPo('')
@@ -2136,7 +2234,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     setParamFail('')
     setBomData([])
 
-    if (!newStage) {
+    if (!cleanStage) {
       setPoOptions([{ value: '', label: 'Vui lòng chọn công đoạn trước' }])
       setProductOptions([{ value: '', label: 'Vui lòng chọn công đoạn trước' }])
       setSpecOptions([{ value: '', label: 'Vui lòng chọn công đoạn trước' }])
@@ -2215,6 +2313,81 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
   const setStaffWithDirty = (val) => { setStaff(val); setIsDirty(true); }
   const setAnswersWithDirty = (val) => { setAnswers(val); setIsDirty(true); }
   const setQaResultWithDirty = (val) => { setQaResult(val); setIsDirty(true); }
+
+  const applyLastStage = useCallback((targetStage) => {
+    const st = getCleanString(targetStage || userActivity?.lastStage?.name || userActivity?.lastStage)
+    if (st) {
+      handleStageChange(st)
+    }
+  }, [userActivity, handleStageChange])
+
+  const applyLastPo = useCallback((targetPo, targetStage) => {
+    const p = getCleanString(targetPo || userActivity?.lastPo?.code || userActivity?.lastPo)
+    const st = getCleanString(targetStage || userActivity?.lastPo?.stage || userActivity?.lastStage?.name || userActivity?.lastStage)
+    if (!p) return
+
+    const currentStage = getCleanString(stage || paramStage)
+    // Mặc định tự động chọn Công đoạn khi chọn PO nếu chưa chọn hoặc khác công đoạn
+    if (st && (!currentStage || currentStage !== st)) {
+      handleStageChange(st)
+      setTimeout(() => {
+        handlePoChange(p, st)
+      }, 150)
+    } else {
+      handlePoChange(p, currentStage || st)
+    }
+  }, [userActivity, stage, paramStage, handleStageChange, handlePoChange])
+
+  const applyLastStageAndPo = useCallback((targetStage, targetPo) => {
+    const st = getCleanString(targetStage || userActivity?.lastPo?.stage || userActivity?.lastStage?.name || userActivity?.lastStage)
+    const p = getCleanString(targetPo || userActivity?.lastPo?.code || userActivity?.lastPo)
+    if (st) {
+      handleStageChange(st)
+      if (p) {
+        setTimeout(() => {
+          handlePoChange(p, st)
+        }, 150)
+      }
+    } else if (p) {
+      handlePoChange(p)
+    }
+  }, [userActivity, handleStageChange, handlePoChange])
+
+  // Tự động áp dụng dữ liệu gần nhất (Công đoạn & PO) khi mở form mới cho 3 chế độ:
+  // Kiểm tra lần đầu (first_sample), Thông số (parameter), Hằng ngày (daily)
+  const hasAutoAppliedRef = useRef(false)
+  useEffect(() => {
+    if (hasAutoAppliedRef.current) return
+    if (!isNew || readOnly) return
+    if (scannedPalletFromNav) return
+    if (![INSPECT_MODES.FIRST_SAMPLE, INSPECT_MODES.PARAMETER, INSPECT_MODES.DAILY].includes(mode)) return
+
+    const currentStage = getCleanString(stage || paramStage)
+    const currentPo = getCleanString(po || paramPo)
+    // Nếu form đã có công đoạn hoặc PO (từ scan QR hoặc route param) thì không ghi đè
+    if (currentStage || currentPo) return
+
+    const targetStage = getCleanString(userActivity?.lastPo?.stage || userActivity?.lastStage?.name || userActivity?.lastStage)
+    const targetPo = getCleanString(userActivity?.lastPo?.code || userActivity?.lastPo)
+
+    if (targetStage || targetPo) {
+      hasAutoAppliedRef.current = true
+      if (targetStage) {
+        handleStageChange(targetStage)
+        if (targetPo) {
+          setTimeout(() => {
+            handlePoChange(targetPo, targetStage)
+            setIsDirty(false)
+          }, 150)
+        } else {
+          setIsDirty(false)
+        }
+      } else if (targetPo) {
+        handlePoChange(targetPo)
+        setIsDirty(false)
+      }
+    }
+  }, [isNew, readOnly, mode, stage, paramStage, po, paramPo, scannedPalletFromNav, userActivity, handleStageChange, handlePoChange])
 
   return {
     id,
@@ -2370,5 +2543,9 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     summary,
     currentGuide,
     setSteps,
+    userActivity,
+    applyLastStage,
+    applyLastPo,
+    applyLastStageAndPo,
   }
 }

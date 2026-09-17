@@ -48,7 +48,7 @@ async def upload_employee_avatar(file: UploadFile = File(...)):
 @router.get("/employees", response_model=hr_schemas.PaginatedEmployeeResponse)
 def list_employees(
     page: int = 1,
-    size: int = 10,
+    size: int = 30,
     search: Optional[str] = None,
     department_id: Optional[int] = None,
     position_id: Optional[int] = None,

@@ -64,7 +64,7 @@ const ProductDetailsManagementView = ({ isEmbedded = false }) => {
   const [materialFilter, setMaterialFilter] = useState('');
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(15);
+  const [pageSize, setPageSize] = useState(30);
 
   // Count active filters
   const activeFiltersCount = (selectedProductId ? 1 : 0) + (inputStageFilter ? 1 : 0) + (outputStageFilter ? 1 : 0) + (materialFilter ? 1 : 0);

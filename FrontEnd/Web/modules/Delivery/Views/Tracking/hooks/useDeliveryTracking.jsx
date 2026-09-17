@@ -28,7 +28,7 @@ export const useDeliveryTracking = () => {
         error: 0
     });
     const [currentPage, setCurrentPage] = useState(1);
-    const [itemsPerPage, setItemsPerPage] = useState(15);
+    const [itemsPerPage, setItemsPerPage] = useState(30);
     const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
 
     // Year and Month selection states (default to current year and month)

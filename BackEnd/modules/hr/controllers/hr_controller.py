@@ -17,7 +17,7 @@ from modules.production.models.bom_detail import BOMDetail
 from modules.master.models.master_bom_detail import MasterBOMDetail
 
 # --- EMPLOYEES CONTROLLER ---
-def get_employees(db: Session, page: int = 1, size: int = 10, search: str = None, 
+def get_employees(db: Session, page: int = 1, size: int = 30, search: str = None, 
                   department_id: int = None, position_id: int = None, section_id: int = None):
     skip = (page - 1) * size
     query = db.query(HREmployee)

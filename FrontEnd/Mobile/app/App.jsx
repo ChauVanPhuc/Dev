@@ -19,6 +19,7 @@ import StaffEvaluation from '@modules/kpi/Views/StaffEvaluationView'
 import QualityInspectionDetail from '@modules/inspection/Views/QualityInspectionDetailView'
 import ProtectedRoute from '@mobile/Shared/Views/components/layout/ProtectedRoute'
 import AppUpdateModal from '@mobile/Shared/Views/components/feedback/AppUpdateModal'
+import ErrorBoundary from '@mobile/Shared/Views/components/feedback/ErrorBoundary'
 import InputInspection from '@modules/inspection/Views/InputInspectionView'
 import EquipmentList from '@modules/equipment/Views/EquipmentListView'
 import KPIStaffList from '@modules/kpi/Views/KPIStaffListView'
@@ -88,9 +89,10 @@ const BackButtonHandler = ({ children }) => {
 
 function App() {
   return (
-    <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <BackButtonHandler>
-        <AppUpdateModal />
+    <ErrorBoundary>
+      <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <BackButtonHandler>
+          <AppUpdateModal />
         <Routes>
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="/login" element={<Login />} />
@@ -197,6 +199,7 @@ function App() {
         </Routes>
       </BackButtonHandler>
     </Router>
+  </ErrorBoundary>
   )
 }
 

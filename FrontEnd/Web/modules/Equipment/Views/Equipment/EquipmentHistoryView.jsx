@@ -20,7 +20,7 @@ const EquipmentHistoryView = () => {
 
   // Pagination state
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(15);
+  const [pageSize, setPageSize] = useState(30);
   const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
 
   const fetchInspections = async () => {

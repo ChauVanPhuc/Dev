@@ -75,7 +75,7 @@ const QualityEmployeeListView = () => {
   const [employees, setEmployees] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [size, setSize] = useState(15);
+  const [size, setSize] = useState(30);
   const [pages, setPages] = useState(1);
   const [search, setSearch] = useState('');
   

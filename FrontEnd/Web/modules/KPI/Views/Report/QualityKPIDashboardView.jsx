@@ -264,25 +264,25 @@ const QualityKPIDashboardView = () => {
 
   // Pagination States for all 7 tabs
   const [targetPage, setTargetPage] = useState(1);
-  const [targetPageSize, setTargetPageSize] = useState(15);
+  const [targetPageSize, setTargetPageSize] = useState(30);
 
   const [indicatorPage, setIndicatorPage] = useState(1);
-  const [indicatorPageSize, setIndicatorPageSize] = useState(15);
+  const [indicatorPageSize, setIndicatorPageSize] = useState(30);
 
   const [checklistPage, setChecklistPage] = useState(1);
-  const [checklistPageSize, setChecklistPageSize] = useState(15);
+  const [checklistPageSize, setChecklistPageSize] = useState(30);
 
   const [violationPage, setViolationPage] = useState(1);
-  const [violationPageSize, setViolationPageSize] = useState(15);
+  const [violationPageSize, setViolationPageSize] = useState(30);
 
   const [trainingPage, setTrainingPage] = useState(1);
-  const [trainingPageSize, setTrainingPageSize] = useState(15);
+  const [trainingPageSize, setTrainingPageSize] = useState(30);
 
   const [reportPage, setReportPage] = useState(1);
-  const [reportPageSize, setReportPageSize] = useState(15);
+  const [reportPageSize, setReportPageSize] = useState(30);
 
   const [alertPage, setAlertPage] = useState(1);
-  const [alertPageSize, setAlertPageSize] = useState(15);
+  const [alertPageSize, setAlertPageSize] = useState(30);
 
   // Multi-option Excel Export Modal States
   const [showExportModal, setShowExportModal] = useState(false);

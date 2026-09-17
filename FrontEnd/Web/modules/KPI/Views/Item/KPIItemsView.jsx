@@ -32,7 +32,7 @@ const KPIItemsView = () => {
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [itemsPerPage, setItemsPerPage] = useState(30);
   
   // Loaders & Alerts
   const [loadingPool, setLoadingPool] = useState(false);

@@ -17,7 +17,7 @@ const KPIRulesView = () => {
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [itemsPerPage, setItemsPerPage] = useState(30);
   
   // Loaders & Alerts
   const [loadingRules, setLoadingRules] = useState(false);

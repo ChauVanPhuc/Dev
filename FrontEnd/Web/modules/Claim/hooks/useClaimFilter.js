@@ -4,7 +4,7 @@ import { parseDate, normalizePenaltyValue, getMonthYear, getMonthNumber, calcula
 export const useClaimFilter = (claims = []) => {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(15);
+  const [rowsPerPage, setRowsPerPage] = useState(30);
 
   // Quick search & sort & status filter
   const [quickSearch, setQuickSearch] = useState('');

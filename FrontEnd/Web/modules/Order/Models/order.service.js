@@ -6,7 +6,7 @@ export const orderService = {
 
   // Lấy danh sách đơn hàng
 
-  getAll: async (page = null, pageSize = 15, search = '', status = 'all', customer = 'all', deadline = 'all', sortDirection = 'desc') => {
+  getAll: async (page = null, pageSize = 30, search = '', status = 'all', customer = 'all', deadline = 'all', sortDirection = 'desc') => {
     if (page === null) {
       return await api.get('/orders/');
     }

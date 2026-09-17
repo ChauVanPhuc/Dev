@@ -32,7 +32,7 @@ const ExceptionDeliveries = () => {
     
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
-    const [itemsPerPage, setItemsPerPage] = useState(15);
+    const [itemsPerPage, setItemsPerPage] = useState(30);
     const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
 
     // Stats

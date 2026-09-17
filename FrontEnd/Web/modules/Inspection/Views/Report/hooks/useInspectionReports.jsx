@@ -199,14 +199,14 @@ export const useInspectionReports = () => {
 
   // Pagination states
   const [stagePage, setStagePage] = useState(1);
-  const [stageLimit, setStageLimit] = useState(15);
+  const [stageLimit, setStageLimit] = useState(30);
   const [inboundPage, setInboundPage] = useState(1);
-  const [inboundLimit, setInboundLimit] = useState(15);
+  const [inboundLimit, setInboundLimit] = useState(30);
   const [dailyPage, setDailyPage] = useState(1);
-  const [dailyLimit, setDailyLimit] = useState(15);
+  const [dailyLimit, setDailyLimit] = useState(30);
 
   const [unifiedPage, setUnifiedPage] = useState(1);
-  const [unifiedLimit, setUnifiedLimit] = useState(15);
+  const [unifiedLimit, setUnifiedLimit] = useState(30);
 
   const handleResetFilters = () => {
     setStageSearch('');

@@ -47,7 +47,7 @@ const ProductionOrdersView = () => {
   const [total, setTotal] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(15);
+  const [pageSize, setPageSize] = useState(30);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -394,7 +394,7 @@ const ProductionOrdersView = () => {
                   style={{ width: '100%', padding: '8px 12px', border: '1.5px solid #D1D5DB', borderRadius: '8px', fontSize: '0.88rem', color: '#1F2937', outline: 'none', backgroundColor: '#FFFFFF' }}
                 >
                   <option value={15}>15</option>
-                  <option value={25}>25</option>
+                  <option value={30}>30</option>
                   <option value={50}>50</option>
                   <option value={100}>100</option>
                 </select>

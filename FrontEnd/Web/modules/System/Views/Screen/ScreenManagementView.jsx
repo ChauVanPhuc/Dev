@@ -136,7 +136,7 @@ const ScreenManagement = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [platformFilter, setPlatformFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(15);
+  const [pageSize, setPageSize] = useState(30);
 
   const [selectedScreenId, setSelectedScreenId] = useState(null);
   const [expandedBugId, setExpandedBugId] = useState(null);

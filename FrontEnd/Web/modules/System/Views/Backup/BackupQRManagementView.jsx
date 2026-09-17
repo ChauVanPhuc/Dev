@@ -16,7 +16,7 @@ const BackupQRManagement = () => {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [page, setPage] = useState(1);
-    const [pageSize, setPageSize] = useState(15);
+    const [pageSize, setPageSize] = useState(30);
     const [selectedIds, setSelectedIds] = useState([]);
     const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
     const [statusFilter, setStatusFilter] = useState('all');
@@ -57,7 +57,7 @@ const BackupQRManagement = () => {
 
     const [showPrintModal, setShowPrintModal] = useState(false);
     const [printItems, setPrintItems] = useState([]);
-    const [cardsPerPage, setCardsPerPage] = useState(10); // 10 hoặc 8 hoặc 4
+    const [cardsPerPage, setCardsPerPage] = useState(30); // 10 hoặc 8 hoặc 4
 
     const openPrintDialog = (items = qrCodes) => {
         if (items.length === 0) return toast('warning', 'Không có mã nào để in.');

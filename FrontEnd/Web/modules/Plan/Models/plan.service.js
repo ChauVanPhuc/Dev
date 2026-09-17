@@ -4,7 +4,7 @@ import api from '@webShared/Services/api.service';
 
 export const planService = {
 
-    getPlans: async (page = null, pageSize = 20, search = '', status = 'all', sortDirection = 'desc') => {
+    getPlans: async (page = null, pageSize = 30, search = '', status = 'all', sortDirection = 'desc') => {
         if (page === null) {
             return await api.get('/plans/');
         }
@@ -13,7 +13,7 @@ export const planService = {
 
 
 
-    getPlanById: async (id, skip = 0, limit = 15, q = '') => {
+    getPlanById: async (id, skip = 0, limit = 30, q = '') => {
 
         return await api.get(`/plans/${id}?skip=${skip}&limit=${limit}&q=${q}`);
 

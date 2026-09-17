@@ -2,7 +2,7 @@ import api from '@webShared/Services/api.service';
 
 export const hrService = {
   // --- EMPLOYEES ---
-  getEmployees: async ({ page = 1, size = 10, search = '', departmentId = null, positionId = null, sectionId = null } = {}) => {
+  getEmployees: async ({ page = 1, size = 30, search = '', departmentId = null, positionId = null, sectionId = null } = {}) => {
     let url = `/hr/employees?page=${page}&size=${size}`;
     if (search) url += `&search=${encodeURIComponent(search)}`;
     if (departmentId) url += `&department_id=${departmentId}`;

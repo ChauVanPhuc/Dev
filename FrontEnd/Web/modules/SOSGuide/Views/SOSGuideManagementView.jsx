@@ -75,7 +75,7 @@ const SOSGuideManagementView = () => {
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(30);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -364,7 +364,7 @@ const SOSGuideManagementView = () => {
           >
             <option value={10}>10 dòng / trang</option>
             <option value={15}>15 dòng / trang</option>
-            <option value={25}>25 dòng / trang</option>
+            <option value={30}>30 dòng / trang</option>
             <option value={50}>50 dòng / trang</option>
           </select>
         </div>

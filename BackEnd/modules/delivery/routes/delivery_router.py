@@ -171,7 +171,7 @@ def get_delivery_history(
     ticket_type: Optional[str] = None,
     sort_order: str = "desc",
     skip: int = 0,
-    limit: int = 20,
+    limit: int = 30,
     db: Session = Depends(get_db)
 ):
     """

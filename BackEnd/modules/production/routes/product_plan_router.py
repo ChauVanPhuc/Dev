@@ -168,7 +168,7 @@ def get_daily_plans(
 @_plans_swr_cache
 def get_plans(
     page: Optional[int] = None,
-    pageSize: Optional[int] = 20,
+    pageSize: Optional[int] = 30,
     search: Optional[str] = None,
     status: Optional[str] = None,
     user_stage: Optional[str] = None,
@@ -749,7 +749,7 @@ def get_plan_detail(
     id: str, 
     stage: Optional[str] = None, 
     skip: int = 0, 
-    limit: int = 15, 
+    limit: int = 30, 
     q: Optional[str] = None,
     prefix: Optional[str] = None,
     status: Optional[str] = 'ALL',

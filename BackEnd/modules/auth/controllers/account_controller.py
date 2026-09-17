@@ -10,7 +10,7 @@ from modules.production.models.stages import Stage
 from modules.auth.schemas.accounts import AccountCreate, AccountUpdate
 from config.security import get_password_hash
 
-def get_accounts(db: Session, skip: int = 0, limit: int = 10, search: str = None,
+def get_accounts(db: Session, skip: int = 0, limit: int = 30, search: str = None,
                  status: str = None, sort_by: str = "id", sort_dir: str = "desc"):
     """
     Lấy danh sách tài khoản người dùng kèm theo thông tin Vai trò (Role) và Công đoạn (Stage).

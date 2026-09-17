@@ -19,7 +19,7 @@ const ProductionPlansView = () => {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(30);
   const [loading, setLoading] = useState(true);
 
   const [plans, setPlans] = useState([]);

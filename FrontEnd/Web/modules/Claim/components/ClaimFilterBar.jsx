@@ -5,7 +5,7 @@ export const ClaimFilterBar = ({
   isFilterBarOpen = false,
   activeDropdown = null,
   setActiveDropdown = () => {},
-  rowsPerPage = 15,
+  rowsPerPage = 30,
   setRowsPerPage = () => {},
   setCurrentPage = () => {},
   editYear = '',

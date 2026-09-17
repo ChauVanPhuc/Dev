@@ -1543,6 +1543,97 @@ def generate_unique_pallet_code(
     return {"palletCode": candidate, "success": True}
 
 
+@router.get("/my-recent-activity")
+@router.get("/my-recent-activity/")
+def get_my_recent_activity(
+    inspector_name: Optional[str] = Query(None),
+    inspector_id: Optional[int] = Query(None),
+    limit: int = Query(10),
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Lấy lịch sử hoạt động gần nhất của cá nhân người kiểm tra:
+    - Phiếu kiểm tra gần nhất (last_ticket)
+    - Công đoạn gần nhất (last_stage)
+    - PO gần nhất (last_po)
+    - Danh sách 5-10 phiếu gần nhất (recent_tickets)
+    """
+    import json
+    if not inspector_name and not inspector_id:
+        return {
+            "last_ticket": None,
+            "last_stage": None,
+            "last_po": None,
+            "recent_tickets": []
+        }
+
+    query = db.query(InputInspection)
+    if inspector_id:
+        query = query.filter(InputInspection.inspector_id == inspector_id)
+    elif inspector_name:
+        clean_name = inspector_name.strip()
+        query = query.filter(
+            (InputInspection.inspector_name == clean_name) |
+            (InputInspection.inspector_name.ilike(f"%{clean_name}%"))
+        )
+
+    records = query.order_by(InputInspection.id.desc()).limit(min(limit, 20)).all()
+
+    if not records:
+        return {
+            "last_ticket": None,
+            "last_stage": None,
+            "last_po": None,
+            "recent_tickets": []
+        }
+
+    formatted_tickets = []
+    last_stage_name = None
+    last_po_code = None
+
+    for idx, r in enumerate(records):
+        t_id = r.id
+        t_code = r.ticket_code or f"KT{r.id:03d}"
+        t_mode = r.inspection_type or "first_sample"
+        t_stage = r.stage or ""
+        t_po = r.batch_no or ""
+        t_product = r.product_sku or r.part_name or ""
+        t_result = "pass" if (r.conclusion in ["pass", "Đạt"] or r.result in ["pass", "Đạt"]) else "fail"
+        t_time = (r.inspected_at or r.created_at).isoformat() if (r.inspected_at or r.created_at) else ""
+        t_time_str = (r.inspected_at or r.created_at).strftime("%H:%M %d/%m/%Y") if (r.inspected_at or r.created_at) else ""
+
+        if not last_stage_name and t_stage:
+            last_stage_name = t_stage
+        if not last_po_code and t_po:
+            last_po_code = t_po
+
+        formatted_tickets.append({
+            "id": t_id,
+            "code": t_code,
+            "mode": t_mode,
+            "stage": t_stage,
+            "po": t_po,
+            "product": t_product,
+            "spec": r.specification or "",
+            "sample_qty": r.sample_qty or 0,
+            "error_qty": r.error_qty or 0,
+            "pallet_code": r.pallet_code or "",
+            "result": t_result,
+            "created_at": t_time,
+            "time_str": t_time_str,
+            "status": "done" if r.is_confirmed else "pending"
+        })
+
+    last_ticket = formatted_tickets[0] if formatted_tickets else None
+
+    return {
+        "last_ticket": last_ticket,
+        "last_stage": {"name": last_stage_name} if last_stage_name else None,
+        "last_po": {"code": last_po_code, "stage": last_stage_name} if last_po_code else None,
+        "recent_tickets": formatted_tickets
+    }
+
+
 @router.post("/")
 async def create_inspection(
     request: Request,
@@ -1629,6 +1720,12 @@ async def create_inspection(
         t_seq = db.query(func.max(InputInspection.id)).scalar() or 0
         t_code = f"DA{t_seq + 1:03d}"
 
+        inspector_id_val = body.get("inspector_id") or body.get("userId") or body.get("user_id")
+        try:
+            inspector_id_val = int(inspector_id_val) if inspector_id_val else None
+        except (ValueError, TypeError):
+            inspector_id_val = None
+
         new_stage = InputInspection(
             ticket_code     = t_code,
             pallet_code     = pallet_code_val,
@@ -1642,6 +1739,7 @@ async def create_inspection(
             required_qty    = req_qty_val,
             sample_qty      = sample_qty,
             error_qty       = error_qty,
+            inspector_id    = inspector_id_val,
             inspector_name  = creator,
             conclusion      = result,
             result          = "Đạt" if result in ["pass", "Đạt"] else "Không đạt",

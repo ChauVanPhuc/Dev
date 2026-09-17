@@ -75,7 +75,7 @@ const CapaHistoryView = ({ isEmbedded = false } = {}) => {
   // Filters & Pagination
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(15);
+  const [pageSize, setPageSize] = useState(30);
   const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
   const [urgencyFilter, setUrgencyFilter] = useState('all');
 

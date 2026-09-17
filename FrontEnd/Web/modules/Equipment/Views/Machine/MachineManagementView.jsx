@@ -39,7 +39,7 @@ const MachineManagementView = () => {
     }
   };
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(15);
+  const [pageSize, setPageSize] = useState(30);
 
   // Sorting & Filtering States
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);

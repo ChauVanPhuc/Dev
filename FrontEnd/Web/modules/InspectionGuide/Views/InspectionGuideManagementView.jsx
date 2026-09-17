@@ -237,7 +237,7 @@ const InspectionGuideManagementView = ({ docType }) => {
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(30);
 
   // Filtered list
   const filteredGuides = useMemo(() => {
@@ -588,7 +588,7 @@ const InspectionGuideManagementView = ({ docType }) => {
             >
               <option value={10}>10 dòng</option>
               <option value={15}>15 dòng</option>
-              <option value={25}>25 dòng</option>
+              <option value={30}>30 dòng</option>
               <option value={50}>50 dòng</option>
             </select>
           </div>

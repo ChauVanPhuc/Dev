@@ -72,7 +72,7 @@ const OrgChartView = ({ diagramDropdown }) => {
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(15);
+  const [pageSize, setPageSize] = useState(30);
 
   useEffect(() => {
     setCurrentPage(1);

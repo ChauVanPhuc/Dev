@@ -67,7 +67,7 @@ const MaterialBOMsView = ({ isEmbedded = false }) => {
   const [supplierFilter, setSupplierFilter] = useState('');
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(15);
+  const [pageSize, setPageSize] = useState(30);
 
   // Active filters count
   const activeFiltersCount = (selectedProductId ? 1 : 0) + (groupFilter ? 1 : 0) + (supplierFilter ? 1 : 0);

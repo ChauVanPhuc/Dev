@@ -340,7 +340,7 @@ const PriceListView = () => {
     });
   };
 
-  const rowsPerPage = 13;
+  const rowsPerPage = 30;
 
   // Reset page when data, search, or filters change
   useEffect(() => {

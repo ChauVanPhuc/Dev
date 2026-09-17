@@ -37,7 +37,7 @@ const QualityRecordsListView = () => {
 
     // State cho phân trang
     const [currentPage, setCurrentPage] = useState(1);
-    const [itemsPerPage, setItemsPerPage] = useState(15);
+    const [itemsPerPage, setItemsPerPage] = useState(30);
     const [totalCount, setTotalCount] = useState(0);
     const [statsData, setStatsData] = useState({ all: 0, has_data: 0, no_data: 0 });
     const [uniqueProductNames, setUniqueProductNames] = useState([]);

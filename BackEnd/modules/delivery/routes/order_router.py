@@ -13,7 +13,7 @@ router = APIRouter()
 @router.get("/")
 def read_orders(
     page: Optional[int] = None,
-    pageSize: Optional[int] = 15,
+    pageSize: Optional[int] = 30,
     search: Optional[str] = None,
     status: Optional[str] = None,
     customer: Optional[str] = None,

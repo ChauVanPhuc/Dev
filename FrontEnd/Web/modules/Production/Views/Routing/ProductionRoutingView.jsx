@@ -147,7 +147,7 @@ const ProductionRoutingView = () => {
   const [selectedProductSkus, setSelectedProductSkus] = useState([]);
   const [openActionMenuSku, setOpenActionMenuSku] = useState(null);
   const [productPage, setProductPage] = useState(0);
-  const [productRowsPerPage, setProductRowsPerPage] = useState(15);
+  const [productRowsPerPage, setProductRowsPerPage] = useState(30);
 
   useEffect(() => {
     const handleWindowClick = () => {

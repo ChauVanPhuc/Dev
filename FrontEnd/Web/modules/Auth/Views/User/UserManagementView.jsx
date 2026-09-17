@@ -93,7 +93,7 @@ const UserManagement = () => {
   const [users, setUsers] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(15);
+  const [pageSize, setPageSize] = useState(30);
   const [loading, setLoading] = useState(false);
 
   // ─── State tìm kiếm & lọc ────────────────────────────────────────────────────

@@ -49,7 +49,7 @@ const ProjectProgressView = () => {
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(15);
+  const [pageSize, setPageSize] = useState(30);
   const [actionMenuId, setActionMenuId] = useState(null);
 
   const fileInputRef = useRef(null);

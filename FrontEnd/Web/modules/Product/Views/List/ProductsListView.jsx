@@ -33,7 +33,7 @@ const ManufactureProducts = () => {
   const [page, setPage] = useState(0);
   const [total, setTotal] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
-  const [limit, setLimit] = useState(15);
+  const [limit, setLimit] = useState(30);
   const [actionMenuId, setActionMenuId] = useState(null);
   const [filterType, setFilterType] = useState('all');
   const [woodFilter, setWoodFilter] = useState('');

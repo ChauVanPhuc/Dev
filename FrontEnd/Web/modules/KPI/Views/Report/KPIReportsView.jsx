@@ -38,7 +38,7 @@ const KPIReportsView = () => {
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [itemsPerPage, setItemsPerPage] = useState(30);
   
   // Loaders
   const [loadingEmp, setLoadingEmp] = useState(false);

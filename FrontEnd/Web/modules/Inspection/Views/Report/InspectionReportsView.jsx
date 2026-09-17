@@ -25,14 +25,15 @@ import {
   Info,
   ClipboardList,
   Package,
-  Camera
+  Camera,
+  Loader2
 } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 
-// Import custom hook
 import { useInspectionReports, getInspectionTypeLabel } from './hooks/useInspectionReports';
+import SopStepsTable from './components/SopStepsTable';
 
 import '@styles/components.css';
 
@@ -435,22 +436,129 @@ const InspectionReportsView = () => {
     return list;
   }, [activeReportItem, parsedReportData]);
 
+  const [fallbackReportSteps, setFallbackReportSteps] = useState([]);
+  const [loadingReportSteps, setLoadingReportSteps] = useState(false);
+
+  // Tự động nạp quy trình SOP theo công đoạn nếu báo cáo chưa lưu danh sách bước
+  useEffect(() => {
+    if (!activeReportItem) {
+      setFallbackReportSteps([]);
+      setLoadingReportSteps(false);
+      return;
+    }
+
+    const rawSteps = parsedReportData?.steps || activeReportItem?.steps;
+    if (rawSteps && ((Array.isArray(rawSteps) && rawSteps.length > 0) || (typeof rawSteps === 'object' && Object.keys(rawSteps).length > 0))) {
+      setFallbackReportSteps([]);
+      setLoadingReportSteps(false);
+      return;
+    }
+
+    let isMounted = true;
+    setLoadingReportSteps(true);
+
+    const fetchFallbackGuide = async () => {
+      try {
+        const stageName = activeReportItem.stage || parsedReportData?.stage || '';
+        const stageIdMap = {
+          'nhập kho/đầu vào': 1,
+          'nhap kho/dau vao': 1,
+          'nhập kho': 1,
+          'đầu vào': 1,
+          'tạo phôi': 2,
+          'tao phoi': 2,
+          'định hình': 3,
+          'dinh hinh': 3,
+          'lắp ráp': 4,
+          'lap rap': 4,
+          'sơn': 5,
+          'son': 5,
+          'đóng gói': 6,
+          'dong goi': 6,
+          'lưu kho': 7,
+          'luu kho': 7
+        };
+        const normalizedStage = (stageName || '').trim().toLowerCase();
+        let targetStageId = activeReportItem.stage_id || parsedReportData?.stage_id || stageIdMap[normalizedStage] || null;
+
+        if (!targetStageId && stageName) {
+          try {
+            const stagesRes = await api.get('/stages');
+            const stagesList = Array.isArray(stagesRes?.data) ? stagesRes.data : (Array.isArray(stagesRes) ? stagesRes : []);
+            const found = stagesList.find(s => s.name?.toLowerCase() === normalizedStage || s.code?.toLowerCase() === normalizedStage);
+            if (found) targetStageId = found.id;
+          } catch (err) {}
+        }
+
+        const mode = activeReportItem.inspection_type || activeReportItem._reportType || parsedReportData?.mode || 'first_sample';
+        let guideData = null;
+
+        if (targetStageId) {
+          try {
+            const res = await api.get(`/inspection-guides/mobile/${mode}?stage_id=${targetStageId}`);
+            guideData = res?.data !== undefined ? res.data : res;
+          } catch (e) {}
+        }
+
+        if (!guideData || !guideData.steps || guideData.steps.length === 0) {
+          try {
+            const allGuidesRes = await api.get('/inspection-guides?doc_type=HDKT&limit=50');
+            const allGuides = Array.isArray(allGuidesRes?.data) ? allGuidesRes.data : (Array.isArray(allGuidesRes) ? allGuidesRes : (allGuidesRes?.items || []));
+            const matchedGuide = allGuides.find(g => {
+              const gName = (g.name || '').toLowerCase();
+              return normalizedStage && (gName.includes(normalizedStage) || normalizedStage.includes(gName));
+            });
+            if (matchedGuide) {
+              const singleRes = await api.get(`/inspection-guides/${matchedGuide.id}`);
+              guideData = singleRes?.data !== undefined ? singleRes.data : singleRes;
+            }
+          } catch (e) {}
+        }
+
+        if (isMounted && guideData && Array.isArray(guideData.steps) && guideData.steps.length > 0) {
+          const isPass = activeReportItem.conclusion === 'pass' || activeReportItem.result === 'Đạt' || activeReportItem.result === 'pass' || activeReportItem.result === 'ĐẠT';
+          const formatted = guideData.steps.map((st, idx) => ({
+            step_no: st.step_no || idx + 1,
+            title: st.title || `Bước ${idx + 1}`,
+            standard: st.standard || st.content || '',
+            result: isPass ? 'pass' : (st.result || 'pass'),
+            note: st.note || ''
+          }));
+          setFallbackReportSteps(formatted);
+        } else if (isMounted) {
+          setFallbackReportSteps([]);
+        }
+      } catch (err) {
+        if (isMounted) setFallbackReportSteps([]);
+      } finally {
+        if (isMounted) setLoadingReportSteps(false);
+      }
+    };
+
+    fetchFallbackGuide();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeReportItem, parsedReportData]);
+
   // Danh sách các bước kiểm tra SOP (Hướng dẫn kiểm tra)
   const reportSteps = useMemo(() => {
     const rawSteps = parsedReportData?.steps || activeReportItem?.steps;
-    if (!rawSteps) return [];
-    if (Array.isArray(rawSteps)) return rawSteps;
-    if (typeof rawSteps === 'object') {
-      return Object.entries(rawSteps).map(([k, val], idx) => ({
-        step_no: idx + 1,
-        title: val.title || val.name || val.description || k,
-        standard: val.standard || val.content || val.value || '',
-        result: val.result || (val.status === 'FAIL' ? 'fail' : 'pass'),
-        note: val.note || ''
-      }));
+    if (rawSteps) {
+      if (Array.isArray(rawSteps) && rawSteps.length > 0) return rawSteps;
+      if (typeof rawSteps === 'object' && Object.keys(rawSteps).length > 0) {
+        return Object.entries(rawSteps).map(([k, val], idx) => ({
+          step_no: idx + 1,
+          title: val.title || val.name || val.description || k,
+          standard: val.standard || val.content || val.value || '',
+          result: val.result || (val.status === 'FAIL' ? 'fail' : 'pass'),
+          note: val.note || ''
+        }));
+      }
     }
-    return [];
-  }, [parsedReportData, activeReportItem]);
+    return fallbackReportSteps;
+  }, [parsedReportData, activeReportItem, fallbackReportSteps]);
 
   // Phân rã danh sách chi tiết / phôi kiểm tra
   const reportPartsList = useMemo(() => {
@@ -2273,158 +2381,119 @@ const InspectionReportsView = () => {
                   </div>
 
                   {/* HƯỚNG DẪN KIỂM TRA (CÁC BƯỚC KIỂM TRA SOP) */}
-                  <div style={{ marginTop: '16px', marginBottom: '16px' }}>
-                    <div style={{
-                      fontSize: '0.82rem',
-                      color: '#7B5233',
-                      fontWeight: 800,
-                      marginBottom: '8px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.4px'
-                    }}>
-                      <ClipboardList size={15} color="#7B5233" />
-                      <span>Hướng dẫn kiểm tra SOP {reportSteps.length > 0 ? `(${reportSteps.length} bước)` : ''}</span>
-                    </div>
-
-                    {reportSteps.length > 0 ? (
-                      <div style={{
-                        border: '1.5px solid #EADCC9',
-                        borderRadius: '10px',
-                        overflow: 'hidden',
-                        backgroundColor: '#ffffff',
-                        maxHeight: '260px',
-                        overflowY: 'auto',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
-                      }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                          <thead>
-                            <tr style={{ backgroundColor: '#FAF6F0', borderBottom: '1.5px solid #EADCC9' }}>
-                              <th style={{ padding: '8px 10px', textAlign: 'center', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem', width: '50px' }}>BƯỚC</th>
-                              <th style={{ padding: '8px 12px', textAlign: 'left', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem', minWidth: '150px' }}>HẠNG MỤC / MÔ TẢ</th>
-                              <th style={{ padding: '8px 12px', textAlign: 'left', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem' }}>TIÊU CHUẨN KỸ THUẬT</th>
-                              <th style={{ padding: '8px 10px', textAlign: 'center', color: '#7B5233', fontWeight: 800, fontSize: '0.76rem', width: '95px' }}>KẾT QUẢ</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {reportSteps.map((st, idx) => {
-                              const stepNo = st.step_no || st.step || idx + 1;
-                              const title = st.title || st.name || st.description || `Bước ${stepNo}`;
-                              const standard = st.standard || st.content || st.note || 'Theo quy định';
-                              const isFail = st.result === 'fail' || st.result === 'Lỗi' || st.status === 'FAIL';
-                              return (
-                                <tr
-                                  key={idx}
-                                  style={{
-                                    borderBottom: idx < reportSteps.length - 1 ? '1px solid #F3EBE1' : 'none',
-                                    backgroundColor: isFail ? '#FEF2F2' : (idx % 2 === 0 ? '#FFFFFF' : '#FCFBF9'),
-                                    transition: 'background-color 0.15s ease'
-                                  }}
-                                >
-                                  <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 800, color: isFail ? '#DC2626' : '#7B5233' }}>
-                                    {stepNo}
-                                  </td>
-                                  <td style={{ padding: '8px 12px', fontWeight: 700, color: isFail ? '#991B1B' : '#2D1A12' }}>
-                                    {title}
-                                  </td>
-                                  <td style={{ padding: '8px 12px', color: '#4B5563', fontSize: '0.82rem', lineHeight: 1.4 }}>
-                                    {standard}
-                                  </td>
-                                  <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                                    <span style={{
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: '4px',
-                                      padding: '3px 8px',
-                                      borderRadius: '12px',
-                                      fontSize: '0.76rem',
-                                      fontWeight: 800,
-                                      backgroundColor: isFail ? '#FEE2E2' : '#DCFCE7',
-                                      color: isFail ? '#DC2626' : '#15803D',
-                                      border: `1px solid ${isFail ? '#FCA5A5' : '#86EFAC'}`
-                                    }}>
-                                      {isFail ? 'Không đạt' : 'Đạt'}
-                                    </span>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    ) : (
-                      <div style={{
-                        padding: '12px 14px',
-                        backgroundColor: '#FAF6F0',
-                        borderRadius: '8px',
-                        border: '1px dashed #EADCC9',
-                        color: '#8D6E63',
-                        fontSize: '0.82rem'
-                      }}>
-                        Phiếu kiểm tra này không có danh sách các bước SOP chi tiết.
-                      </div>
-                    )}
-                  </div>
+                  <SopStepsTable
+                    steps={reportSteps}
+                    loading={loadingReportSteps}
+                  />
 
                   {/* DANH SÁCH LỖI PHÁT HIỆN */}
                   {reportErrors.length > 0 ? (
                     <div style={{ marginTop: '16px' }}>
                       <div style={{
                         fontSize: '0.82rem',
-                        color: '#DC2626',
+                        color: '#991B1B',
                         fontWeight: 800,
-                        marginBottom: '8px',
+                        marginBottom: '10px',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '6px',
+                        gap: '8px',
                         textTransform: 'uppercase',
-                        letterSpacing: '0.4px'
+                        letterSpacing: '0.5px'
                       }}>
-                        <AlertTriangle size={15} color="#DC2626" />
-                        <span>Danh sách lỗi phát hiện ({reportErrors.length})</span>
+                        <div style={{
+                          width: '24px',
+                          height: '24px',
+                          borderRadius: '6px',
+                          backgroundColor: '#FEE2E2',
+                          border: '1px solid #FECDD3',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+                        }}>
+                          <AlertTriangle size={14} color="#DC2626" />
+                        </div>
+                        <span>Danh sách lỗi phát hiện</span>
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          padding: '2px 8px',
+                          borderRadius: '9999px',
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                          backgroundColor: '#FEE2E2',
+                          color: '#B91C1C',
+                          border: '1px solid #FCA5A5'
+                        }}>
+                          {reportErrors.length} lỗi
+                        </span>
                       </div>
-                      <div style={{
-                        border: '1.5px solid #FCA5A5',
-                        borderRadius: '10px',
+                      <div className="sop-standard-scroll" style={{
+                        border: '1px solid #FECDD3',
+                        borderRadius: '12px',
                         overflow: 'hidden',
                         backgroundColor: '#FFFFFF',
-                        boxShadow: '0 1px 3px rgba(220,38,38,0.05)'
+                        maxHeight: '260px',
+                        overflowY: 'auto',
+                        boxShadow: '0 2px 8px -2px rgba(220,38,38,0.06)'
                       }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                           <thead>
-                            <tr style={{ backgroundColor: '#FEF2F2', borderBottom: '1.5px solid #FCA5A5' }}>
-                              <th style={{ padding: '8px 10px', textAlign: 'center', color: '#991B1B', fontWeight: 800, fontSize: '0.76rem', width: '50px' }}>STT</th>
-                              <th style={{ padding: '8px 12px', textAlign: 'left', color: '#991B1B', fontWeight: 800, fontSize: '0.76rem' }}>TÊN LỖI GHI NHẬN</th>
-                              <th style={{ padding: '8px 12px', textAlign: 'center', color: '#991B1B', fontWeight: 800, fontSize: '0.76rem', width: '110px' }}>SL LỖI</th>
-                              <th style={{ padding: '8px 12px', textAlign: 'left', color: '#991B1B', fontWeight: 800, fontSize: '0.76rem' }}>GHI CHÚ CHI TIẾT</th>
+                            <tr style={{ backgroundColor: '#FFF5F5', borderBottom: '1.5px solid #FECDD3' }}>
+                              <th style={{ padding: '10px 8px', textAlign: 'center', color: '#991B1B', fontWeight: 800, fontSize: '0.74rem', width: '56px', letterSpacing: '0.4px' }}>STT</th>
+                              <th style={{ padding: '10px 14px', textAlign: 'left', color: '#991B1B', fontWeight: 800, fontSize: '0.74rem', letterSpacing: '0.4px' }}>TÊN LỖI GHI NHẬN</th>
+                              <th style={{ padding: '10px 12px', textAlign: 'center', color: '#991B1B', fontWeight: 800, fontSize: '0.74rem', width: '115px', letterSpacing: '0.4px' }}>SL LỖI</th>
+                              <th style={{ padding: '10px 14px', textAlign: 'left', color: '#991B1B', fontWeight: 800, fontSize: '0.74rem', letterSpacing: '0.4px' }}>GHI CHÚ CHI TIẾT</th>
                             </tr>
                           </thead>
                           <tbody>
                             {reportErrors.map((err, idx) => (
-                              <tr key={idx} style={{ borderBottom: idx < reportErrors.length - 1 ? '1px solid #FEE2E2' : 'none' }}>
-                                <td style={{ padding: '8px 10px', textAlign: 'center', color: '#DC2626', fontWeight: 700 }}>
-                                  {err.stt || String(idx + 1).padStart(2, '0')}
-                                </td>
-                                <td style={{ padding: '8px 12px', color: '#2D1A12', fontWeight: 700 }}>
-                                  {err.name}
-                                </td>
-                                <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                              <tr 
+                                key={idx} 
+                                style={{ 
+                                  borderBottom: idx < reportErrors.length - 1 ? '1px solid #FEE2E2' : 'none',
+                                  backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FFFBFB',
+                                  transition: 'background-color 0.15s ease'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FEE2E2'}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = idx % 2 === 0 ? '#FFFFFF' : '#FFFBFB'}
+                              >
+                                <td style={{ padding: '9px 8px', textAlign: 'center', verticalAlign: 'middle' }}>
                                   <span style={{
-                                    display: 'inline-block',
-                                    padding: '2px 8px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    width: '24px',
+                                    height: '24px',
                                     borderRadius: '6px',
                                     backgroundColor: '#FEE2E2',
                                     color: '#DC2626',
                                     fontWeight: 800,
-                                    fontSize: '0.8rem'
+                                    fontSize: '0.75rem',
+                                    border: '1px solid #FECDD3'
+                                  }}>
+                                    {err.stt || String(idx + 1).padStart(2, '0')}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '9px 14px', color: '#1E293B', fontWeight: 700, verticalAlign: 'middle' }}>
+                                  {err.name}
+                                </td>
+                                <td style={{ padding: '9px 12px', textAlign: 'center', verticalAlign: 'middle' }}>
+                                  <span style={{
+                                    display: 'inline-block',
+                                    padding: '3px 10px',
+                                    borderRadius: '9999px',
+                                    backgroundColor: '#FEE2E2',
+                                    color: '#DC2626',
+                                    fontWeight: 800,
+                                    fontSize: '0.78rem',
+                                    border: '1px solid #FCA5A5'
                                   }}>
                                     {err.qty}
                                   </span>
                                 </td>
-                                <td style={{ padding: '8px 12px', color: '#6B7280', fontSize: '0.82rem' }}>
-                                  {err.note || '---'}
+                                <td style={{ padding: '9px 14px', color: '#64748B', fontSize: '0.82rem', verticalAlign: 'middle' }}>
+                                  {err.note || '—'}
                                 </td>
                               </tr>
                             ))}

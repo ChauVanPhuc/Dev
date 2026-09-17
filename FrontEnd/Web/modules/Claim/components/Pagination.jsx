@@ -10,7 +10,7 @@ export const Pagination = ({
   startIndex: startIndexProp,
   endIndex: endIndexProp,
   totalItems = 0,
-  rowsPerPage = 15,
+  rowsPerPage = 30,
   onPageChange
 }) => {
   const safeTotal = typeof totalItems === 'number' && !isNaN(totalItems) ? totalItems : 0;

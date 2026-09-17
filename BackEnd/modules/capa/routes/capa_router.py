@@ -114,7 +114,7 @@ def seed_capas_if_empty(db: Session):
 @router.get("/", response_model=dict)
 def get_capas(
     skip: int = 0,
-    limit: int = 20,
+    limit: int = 30,
     search: Optional[str] = None,
     tab_status: Optional[str] = Query(None, description="tracking hoặc history"),
     month: Optional[str] = Query(None, description="Lọc theo tháng e.g. 07 hoặc Tháng 7"),

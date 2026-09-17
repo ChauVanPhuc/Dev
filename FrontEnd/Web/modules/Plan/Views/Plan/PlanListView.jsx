@@ -46,7 +46,7 @@ const ManufacturePlan = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [currentTime, setCurrentTime] = useState(new Date());
     const [currentPage, setCurrentPage] = useState(1);
-    const [itemsPerPage, setItemsPerPage] = useState(15);
+    const [itemsPerPage, setItemsPerPage] = useState(30);
     const [totalCount, setTotalCount] = useState(0);
     const [sortDirection, setSortDirection] = useState('desc');
     const [statsData, setStatsData] = useState({ all: 0, production: 0, completed: 0, overdue: 0 });

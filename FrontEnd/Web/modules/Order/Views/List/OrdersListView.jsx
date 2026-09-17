@@ -45,7 +45,7 @@ const Orders = () => {
 
     // State cho phân trang
     const [currentPage, setCurrentPage] = useState(1);
-    const [itemsPerPage, setItemsPerPage] = useState(15);
+    const [itemsPerPage, setItemsPerPage] = useState(30);
     const [totalCount, setTotalCount] = useState(0);
     const [statsData, setStatsData] = useState({ all: 0, production: 0, completed: 0, overdue: 0 });
     const [uniqueCustomers, setUniqueCustomers] = useState([]);

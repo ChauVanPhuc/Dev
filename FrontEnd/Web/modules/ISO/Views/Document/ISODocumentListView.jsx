@@ -146,7 +146,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
   });
 
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(15);
+  const [pageSize, setPageSize] = useState(30);
   const [isFilterBarOpen, setIsFilterBarOpen] = useState(false);
   const [filterFolder, setFilterFolder] = useState('');
   const [filterOwner, setFilterOwner] = useState('');
