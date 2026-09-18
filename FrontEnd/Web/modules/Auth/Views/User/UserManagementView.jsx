@@ -111,6 +111,7 @@ const UserManagement = () => {
 
   // ─── State menu thao tác ─────────────────────────────────────────────────────
   const [actionMenuId, setActionMenuId] = useState(null); // ID user đang mở menu
+  const [actionMenuPlacement, setActionMenuPlacement] = useState('top'); // 'top' (nằm trên) | 'bottom' (nằm dưới)
   const [showExtraMenu, setShowExtraMenu] = useState(false); // Dropdown "Khác"
   const { toast } = useToast();
   const [confirmDeleteModal, setConfirmDeleteModal] = useState({ show: false, user: null });
@@ -158,7 +159,7 @@ const UserManagement = () => {
   const viewModeRef = useRef(null);
   const extraMenuRef = useRef(null);
 
-  // Đóng dropdown khi click ra ngoài
+  // Đóng dropdown khi click ra ngoài hoặc khi cuộn bảng
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (filterRef.current && !filterRef.current.contains(e.target)) setShowFilterPanel(false);
@@ -175,9 +176,21 @@ const UserManagement = () => {
         setActionMenuId(null);
       }
     };
+
+    const handleScrollCapture = (e) => {
+      if (actionMenuId && !e.target.closest('.action-menu')) {
+        setActionMenuId(null);
+      }
+    };
+
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    window.addEventListener('scroll', handleScrollCapture, { capture: true, passive: true });
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('scroll', handleScrollCapture, { capture: true });
+    };
+  }, [actionMenuId]);
 
   // Debounce tìm kiếm 500ms
   useEffect(() => {
@@ -683,10 +696,237 @@ const UserManagement = () => {
     if (action === 'reset_password') toast('info', `Tính năng "Reset mật khẩu" cho ${user.full_name} đang được phát triển.`);
   };
 
+  const handleToggleActionMenu = (e, userId, userIdx) => {
+    e.stopPropagation();
+    if (actionMenuId === userId) {
+      setActionMenuId(null);
+    } else {
+      const btn = e.currentTarget;
+      const btnRect = btn.getBoundingClientRect();
+      const scrollContainer = btn.closest('.admin-table-scroll') || btn.closest('.table-responsive');
+
+      let shouldDropUp = false;
+      if (scrollContainer) {
+        const containerRect = scrollContainer.getBoundingClientRect();
+        const spaceBelow = containerRect.bottom - btnRect.bottom;
+        const spaceAbove = btnRect.top - containerRect.top;
+
+        // Menu cao khoảng 140px.
+        // Hàng trên đỉnh (userIdx < 3 hoặc không đủ 145px phía trên): BẮT BUỘC MỞ XUỐNG DƯỚI để không bao giờ bị cắt đỉnh bảng!
+        if (userIdx !== undefined && userIdx < 3) {
+          shouldDropUp = false;
+        } else if (spaceAbove < 145) {
+          shouldDropUp = false;
+        } 
+        // Hàng dưới đáy (spaceBelow < 145 hoặc userIdx >= users.length - 3): BẮT BUỘC MỞ LÊN TRÊN để không bị cấn đáy/nút AI!
+        else if (spaceBelow < 145 || (userIdx !== undefined && userIdx >= users.length - 3)) {
+          shouldDropUp = true;
+        } 
+        // Hàng ở giữa: căn cứ theo vị trí màn hình (nửa dưới viewport thì mở lên trên)
+        else {
+          shouldDropUp = btnRect.top > window.innerHeight * 0.52;
+        }
+      } else {
+        // Fallback mobile card
+        const spaceBelowWindow = window.innerHeight - btnRect.bottom;
+        shouldDropUp = spaceBelowWindow < 160 && btnRect.top > 160;
+      }
+
+      setActionMenuPlacement(shouldDropUp ? 'top' : 'bottom');
+      setActionMenuId(userId);
+    }
+  };
+
+  const renderUserActionMenu = (user) => {
+    const isUp = actionMenuPlacement === 'top';
+    return (
+      <div 
+        className={`action-menu modern-action-menu ${isUp ? 'drop-up' : 'drop-down'}`}
+        style={{
+          position: 'absolute',
+          right: 0,
+          ...(isUp ? { bottom: 'calc(100% + 8px)', top: 'auto' } : { top: 'calc(100% + 6px)', bottom: 'auto' }),
+          zIndex: 1000
+        }}
+      >
+        {/* Ô 1: Chỉnh sửa */}
+        <button 
+          type="button"
+          className="user-action-item user-action-edit" 
+          onClick={() => handleAction('edit', user)}
+          title="Chỉnh sửa tài khoản"
+        >
+          <span className="action-item-label">Chỉnh sửa</span>
+        </button>
+
+        {/* Ô 2: Khóa / Mở khóa tài khoản */}
+        <button 
+          type="button"
+          className={`user-action-item ${user.status === 'Dừng hoạt động' ? 'user-action-unlock' : 'user-action-lock'}`} 
+          onClick={() => handleAction('lock', user)}
+          title={user.status === 'Dừng hoạt động' ? 'Kích hoạt lại tài khoản' : 'Khóa tài khoản'}
+        >
+          <span className="action-item-label">
+            {user.status === 'Dừng hoạt động' ? 'Mở khóa' : 'Khóa tài khoản'}
+          </span>
+        </button>
+
+        <div className="action-item-divider" />
+
+        {/* Ô 3: Reset mật khẩu */}
+        <button 
+          type="button"
+          className="user-action-item user-action-danger" 
+          onClick={() => handleAction('reset_password', user)}
+          title="Thiết lập lại mật khẩu cho tài khoản"
+        >
+          <span className="action-item-label">Reset mật khẩu</span>
+        </button>
+      </div>
+    );
+  };
+
   const totalPages = Math.ceil(total / pageSize);
 
   return (
     <div className="gold-layout">
+      {/* CSS Scoped cho Menu 3 Ô Thao Tác Hiện Đại & Tiện Lợi (Nằm Trên) */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        .modern-action-menu {
+          background: #FFFFFF !important;
+          border: 1.5px solid #EADCC9 !important;
+          border-radius: 10px !important;
+          box-shadow: 0 10px 24px -4px rgba(123, 82, 51, 0.18), 0 4px 10px rgba(0, 0, 0, 0.06) !important;
+          min-width: 140px !important;
+          padding: 5px !important;
+          display: flex !important;
+          flex-direction: column !important;
+          gap: 2px !important;
+        }
+
+        .modern-action-menu.drop-up {
+          transform-origin: bottom right;
+          animation: dropupFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+        }
+
+        .modern-action-menu.drop-down {
+          transform-origin: top right;
+          animation: dropdownFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+        }
+
+        .modern-action-menu.drop-up::after {
+          content: '';
+          position: absolute;
+          bottom: -6px;
+          right: 12px;
+          width: 10px;
+          height: 10px;
+          background: #FFFFFF;
+          border-right: 1.5px solid #EADCC9;
+          border-bottom: 1.5px solid #EADCC9;
+          transform: rotate(45deg);
+          border-radius: 0 0 2px 0;
+        }
+
+        .modern-action-menu.drop-down::after {
+          content: '';
+          position: absolute;
+          top: -6px;
+          right: 12px;
+          width: 10px;
+          height: 10px;
+          background: #FFFFFF;
+          border-left: 1.5px solid #EADCC9;
+          border-top: 1.5px solid #EADCC9;
+          transform: rotate(45deg);
+          border-radius: 2px 0 0 0;
+        }
+
+        .user-action-item {
+          display: flex !important;
+          align-items: center !important;
+          width: 100% !important;
+          padding: 8px 12px !important;
+          border: 1px solid transparent !important;
+          border-radius: 6px !important;
+          background: transparent !important;
+          cursor: pointer !important;
+          text-align: left !important;
+          transition: all 0.15s ease !important;
+          box-sizing: border-box !important;
+        }
+
+        .user-action-item .action-item-label {
+          font-size: 0.85rem !important;
+          font-weight: 600 !important;
+          white-space: nowrap !important;
+        }
+
+        /* Ô 1: Chỉnh sửa */
+        .user-action-edit .action-item-label {
+          color: #374151 !important;
+        }
+        .user-action-edit:hover {
+          background: #FAF6F0 !important;
+          border-color: #EADCC9 !important;
+        }
+        .user-action-edit:hover .action-item-label {
+          color: #7B5233 !important;
+        }
+
+        /* Ô 2: Khóa tài khoản */
+        .user-action-lock .action-item-label {
+          color: #D97706 !important;
+        }
+        .user-action-lock:hover {
+          background: #FFFBEB !important;
+          border-color: #FDE68A !important;
+        }
+        .user-action-lock:hover .action-item-label {
+          color: #B45309 !important;
+        }
+
+        /* Mở khóa tài khoản */
+        .user-action-unlock .action-item-label {
+          color: #059669 !important;
+        }
+        .user-action-unlock:hover {
+          background: #ECFDF5 !important;
+          border-color: #A7F3D0 !important;
+        }
+        .user-action-unlock:hover .action-item-label {
+          color: #047857 !important;
+        }
+
+        /* Ô 3: Reset mật khẩu */
+        .user-action-danger .action-item-label {
+          color: #DC2626 !important;
+        }
+        .user-action-danger:hover {
+          background: #FEF2F2 !important;
+          border-color: #FCA5A5 !important;
+        }
+        .user-action-danger:hover .action-item-label {
+          color: #B91C1C !important;
+        }
+
+        .action-item-divider {
+          height: 1px;
+          background: #F3E8DF;
+          margin: 3px 4px;
+        }
+
+        @keyframes dropupFadeIn {
+          from {
+            opacity: 0;
+            transform: translateY(6px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}} />
 
       {/* ── STICKY TOP ZONE ── */}
       <div className="sticky-top-zone">
@@ -882,13 +1122,13 @@ const UserManagement = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {users.map((user) => (
+                      {users.map((user, userIdx) => (
                         <tr
                           key={user.id}
                           className="animate-card-entrance"
                           style={{
                             position: 'relative',
-                            zIndex: actionMenuId === user.id ? 30 : 1
+                            zIndex: actionMenuId === user.id ? 60 : 1
                           }}
                         >
                           <td>{user.employee_id}</td>
@@ -954,18 +1194,18 @@ const UserManagement = () => {
                                 </span>
                               </td>
                               {hasWritePermission && (
-                                <td style={{ position: 'relative', zIndex: actionMenuId === user.id ? 40 : 1 }}>
+                                <td style={{ position: 'relative', zIndex: actionMenuId === user.id ? 70 : 1 }}>
                                   <button
-                                    className="action-btn"
-                                    onClick={() => setActionMenuId(actionMenuId === user.id ? null : user.id)}
-                                  ><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
-                                  {actionMenuId === user.id && (
-                                    <div className="action-menu">
-                                      <button className="action-menu-item" onClick={() => handleAction('edit', user)}>Chỉnh sửa</button>
-                                      <button className="action-menu-item warn" onClick={() => handleAction('lock', user)}>Khóa tài khoản</button>
-                                      <button className="action-menu-item danger" onClick={() => handleAction('reset_password', user)}>Reset mật khẩu</button>
-                                    </div>
-                                  )}
+                                    className={`action-btn ${actionMenuId === user.id ? 'active' : ''}`}
+                                    onClick={(e) => handleToggleActionMenu(e, user.id, userIdx)}
+                                    title="Thao tác"
+                                    style={actionMenuId === user.id ? { backgroundColor: '#7B5233', color: '#FFFFFF' } : {}}
+                                  >
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                      <circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/>
+                                    </svg>
+                                  </button>
+                                  {actionMenuId === user.id && renderUserActionMenu(user)}
                                 </td>
                               )}
                             </>
@@ -1002,18 +1242,18 @@ const UserManagement = () => {
                                 );
                               })}
                               {hasWritePermission && (
-                                <td style={{ position: 'relative', zIndex: actionMenuId === user.id ? 40 : 1, textAlign: 'center' }}>
+                                <td style={{ position: 'relative', zIndex: actionMenuId === user.id ? 70 : 1, textAlign: 'center' }}>
                                   <button
-                                    className="action-btn"
-                                    onClick={() => setActionMenuId(actionMenuId === user.id ? null : user.id)}
-                                  ><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
-                                  {actionMenuId === user.id && (
-                                    <div className="action-menu">
-                                      <button className="action-menu-item" onClick={() => handleAction('edit', user)}>Chỉnh sửa</button>
-                                      <button className="action-menu-item warn" onClick={() => handleAction('lock', user)}>Khóa tài khoản</button>
-                                      <button className="action-menu-item danger" onClick={() => handleAction('reset_password', user)}>Reset mật khẩu</button>
-                                    </div>
-                                  )}
+                                    className={`action-btn ${actionMenuId === user.id ? 'active' : ''}`}
+                                    onClick={(e) => handleToggleActionMenu(e, user.id, userIdx)}
+                                    title="Thao tác"
+                                    style={actionMenuId === user.id ? { backgroundColor: '#7B5233', color: '#FFFFFF' } : {}}
+                                  >
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                      <circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/>
+                                    </svg>
+                                  </button>
+                                  {actionMenuId === user.id && renderUserActionMenu(user)}
                                 </td>
                               )}
                             </>
@@ -1034,7 +1274,7 @@ const UserManagement = () => {
                 {/* Thẻ Mobile */}
                 <div className="mobile-only mgmt-cards-container">
                   {users.length === 0 && !loading && <div className="no-data-text-mobile">Không tìm thấy dữ liệu</div>}
-                  {users.map((user) => (
+                  {users.map((user, userIdx) => (
                     <div key={user.id} className="mgmt-card animate-card-entrance" style={{ zIndex: actionMenuId === user.id ? 100 : 1 }}>
                       {viewMode === 'account_info' ? (
                         <>
@@ -1061,18 +1301,18 @@ const UserManagement = () => {
                               </div>
                             </div>
                             {hasWritePermission && (
-                              <div className="mgmt-card-actions">
+                              <div className="mgmt-card-actions" style={{ position: 'relative', zIndex: actionMenuId === user.id ? 110 : 2 }}>
                                 <button
-                                  className="action-btn"
-                                  onClick={() => setActionMenuId(actionMenuId === user.id ? null : user.id)}
-                                ><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
-                                {actionMenuId === user.id && (
-                                  <div className="action-menu">
-                                    <button className="action-menu-item" onClick={() => handleAction('edit', user)}>Chỉnh sửa</button>
-                                    <button className="action-menu-item warn" onClick={() => handleAction('lock', user)}>Khóa tài khoản</button>
-                                    <button className="action-menu-item danger" onClick={() => handleAction('reset_password', user)}>Reset mật khẩu</button>
-                                  </div>
-                                )}
+                                  className={`action-btn ${actionMenuId === user.id ? 'active' : ''}`}
+                                  onClick={(e) => handleToggleActionMenu(e, user.id, userIdx)}
+                                  title="Thao tác"
+                                  style={actionMenuId === user.id ? { backgroundColor: '#7B5233', color: '#FFFFFF' } : {}}
+                                >
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                    <circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/>
+                                  </svg>
+                                </button>
+                                {actionMenuId === user.id && renderUserActionMenu(user)}
                               </div>
                             )}
                           </div>
@@ -1094,16 +1334,16 @@ const UserManagement = () => {
                             {hasWritePermission && (
                               <div className="mgmt-card-actions" style={{ position: 'relative', zIndex: actionMenuId === user.id ? 110 : 2 }}>
                                 <button
-                                  className="action-btn"
-                                  onClick={() => setActionMenuId(actionMenuId === user.id ? null : user.id)}
-                                ><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
-                                {actionMenuId === user.id && (
-                                  <div className="action-menu" style={{ right: 0, top: '100%' }}>
-                                    <button className="action-menu-item" onClick={() => handleAction('edit', user)}>Chỉnh sửa</button>
-                                    <button className="action-menu-item warn" onClick={() => handleAction('lock', user)}>Khóa tài khoản</button>
-                                    <button className="action-menu-item danger" onClick={() => handleAction('reset_password', user)}>Reset mật khẩu</button>
-                                  </div>
-                                )}
+                                  className={`action-btn ${actionMenuId === user.id ? 'active' : ''}`}
+                                  onClick={(e) => handleToggleActionMenu(e, user.id, userIdx)}
+                                  title="Thao tác"
+                                  style={actionMenuId === user.id ? { backgroundColor: '#7B5233', color: '#FFFFFF' } : {}}
+                                >
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                    <circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/>
+                                  </svg>
+                                </button>
+                                {actionMenuId === user.id && renderUserActionMenu(user)}
                               </div>
                             )}
                           </div>

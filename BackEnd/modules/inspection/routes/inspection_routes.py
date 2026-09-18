@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, and_, or_, Date, cast, case, text
 from config.database import get_db
 from config.settings import get_upload_dir
+from shared.utils.timezone import get_vietnam_time
 from modules.inspection.models.input_inspection import InputInspection
 from modules.inspection.models.daily_inspection import DailyInspectionRecord, DailyInspectionDefect
 from modules.inspection.schemas.input_inspection import InputInspection as InspectionSchema, InputInspectionRead
@@ -4009,8 +4010,13 @@ def get_pending_inspections(
             "image_path_1": item.image_path_1,
             "image_path_2": item.image_path_2,
             "image_path_3": item.image_path_3,
+            "images": (
+                [img for img in [item.image_path_1, item.image_path_2, item.image_path_3] if img]
+                or (data_dict.get("images") if isinstance(data_dict.get("images"), list) else [])
+            ),
             "data_json": item.data_json or "",
             "parts_details": data_dict.get("parts_details") or data_dict.get("partsDetails") or [],
+            "edit_history": data_dict.get("edit_history") or [],
             "is_confirmed": False
         })
         
@@ -4019,6 +4025,199 @@ def get_pending_inspections(
         task["stt"] = i + 1
         
     return pending_tasks
+
+
+def _normalize_result_label(val: Optional[str]) -> str:
+    if not val:
+        return "Đạt"
+    v = str(val).strip().lower()
+    if v in ["pass", "đạt", "dat", "true", "1"]:
+        return "Đạt"
+    return "Không đạt"
+
+
+def _normalize_action_label(val: Optional[str]) -> str:
+    if not val:
+        return "Chấp nhận"
+    v = str(val).strip().lower()
+    if v in ["chap-nhan", "accept", "chấp nhận", "chap nhan"]:
+        return "Chấp nhận"
+    if v in ["tra-ve", "return", "trả hàng", "tra hang", "trả về", "tra ve"]:
+        return "Trả hàng"
+    if v in ["cach-ly", "quarantine", "cách ly", "cach ly"]:
+        return "Cách ly"
+    if v in ["tai-che", "rework", "tái chế", "tai che", "sửa chữa", "sua chua"]:
+        return "Tái chế / Sửa chữa"
+    if v in ["cho-xu-ly", "pending", "chờ xử lý", "cho xu ly"]:
+        return "Chờ xử lý"
+    return str(val)
+
+
+def _normalize_type_label(val: Optional[str]) -> str:
+    if not val:
+        return "Chưa phân loại"
+    v = str(val).strip().lower()
+    if v in ["first_sample", "mau_dau", "mẫu đầu"]:
+        return "Kiểm tra mẫu đầu (First Article)"
+    if v in ["daily_defect", "mass_production", "hang_ngay", "hằng ngày"]:
+        return "Ghi nhận lỗi sản xuất"
+    if v in ["inbound", "dau_vao", "đầu vào"]:
+        return "Kiểm tra đầu vào (IQC)"
+    if v in ["patrol", "tuan_tra", "tuần tra"]:
+        return "Kiểm tra tuần tra (IPQC)"
+    return str(val)
+
+
+def _build_inspection_diff(
+    record: InputInspection,
+    data_dict: Dict[str, Any],
+    body_data: Dict[str, Any]
+) -> List[Dict[str, str]]:
+    changes = []
+    
+    # 1. Kết quả kiểm tra (result)
+    new_result = body_data.get("result")
+    if new_result is not None:
+        old_res_label = _normalize_result_label(record.result or record.conclusion or data_dict.get("result"))
+        new_res_label = _normalize_result_label(new_result)
+        if old_res_label != new_res_label:
+            changes.append({
+                "field": "result",
+                "label": "Kết quả kiểm tra",
+                "old_val": old_res_label,
+                "new_val": new_res_label
+            })
+            
+    # 2. Hành động xử lý (action)
+    new_action = body_data.get("action")
+    if new_action is not None:
+        old_action_label = _normalize_action_label(data_dict.get("action"))
+        new_action_label = _normalize_action_label(new_action)
+        if old_action_label != new_action_label:
+            changes.append({
+                "field": "action",
+                "label": "Hành động xử lý",
+                "old_val": old_action_label,
+                "new_val": new_action_label
+            })
+
+    # 3. Công đoạn kiểm tra (stage)
+    if "stage" in body_data:
+        new_stage = (body_data.get("stage") or "").strip()
+        old_stage = (record.stage or data_dict.get("stage") or "").strip()
+        if new_stage and old_stage.lower() != new_stage.lower():
+            changes.append({
+                "field": "stage",
+                "label": "Công đoạn kiểm tra",
+                "old_val": old_stage or "(Chưa xác định)",
+                "new_val": new_stage
+            })
+
+    # 4. Loại phiếu (inspection_type)
+    if "inspection_type" in body_data and body_data.get("inspection_type"):
+        new_type = body_data.get("inspection_type")
+        old_type = record.inspection_type or data_dict.get("inspection_type") or ""
+        if old_type != new_type:
+            changes.append({
+                "field": "inspection_type",
+                "label": "Loại phiếu kiểm tra",
+                "old_val": _normalize_type_label(old_type),
+                "new_val": _normalize_type_label(new_type)
+            })
+
+    # 5. Trạng thái (status)
+    if "status" in body_data and body_data.get("status"):
+        new_status = str(body_data.get("status")).strip()
+        old_status = str(data_dict.get("status") or ("Đã xong" if record.is_confirmed else "Chưa Làm")).strip()
+        if old_status != new_status:
+            changes.append({
+                "field": "status",
+                "label": "Trạng thái hồ sơ",
+                "old_val": old_status,
+                "new_val": new_status
+            })
+
+    # 6. Biện pháp xử lý / Khắc phục (handling_info)
+    if "handling_info" in body_data or "resolution_note" in body_data:
+        new_handling = (body_data.get("handling_info") or body_data.get("resolution_note") or "").strip()
+        old_handling = (data_dict.get("handling_info") or data_dict.get("resolution_note") or "").strip()
+        if old_handling != new_handling:
+            changes.append({
+                "field": "handling_info",
+                "label": "Biện pháp xử lý",
+                "old_val": old_handling or "(Trống)",
+                "new_val": new_handling or "(Đã xóa)"
+            })
+
+    # 7. Hình ảnh minh chứng (images)
+    if "images" in body_data and isinstance(body_data.get("images"), list):
+        cur_images = [img for img in [record.image_path_1, record.image_path_2, record.image_path_3] if img]
+        if not cur_images and isinstance(data_dict.get("images"), list):
+            cur_images = [str(x).strip() for x in data_dict.get("images") if x]
+        new_images = [str(x).strip() for x in body_data.get("images") if x]
+        
+        if cur_images != new_images:
+            diff_count = len(new_images) - len(cur_images)
+            if diff_count > 0:
+                change_desc = f"{len(new_images)} ảnh (+{diff_count} ảnh mới)"
+            elif diff_count < 0:
+                change_desc = f"{len(new_images)} ảnh (-{abs(diff_count)} ảnh đã gỡ)"
+            else:
+                change_desc = f"{len(new_images)} ảnh (thay đổi tệp ảnh)"
+                
+            changes.append({
+                "field": "images",
+                "label": "Hình ảnh minh chứng",
+                "old_val": f"{len(cur_images)} ảnh" if len(cur_images) > 0 else "0 ảnh",
+                "new_val": change_desc
+            })
+
+    # 8. Ghi chú (note / notes)
+    if "notes" in body_data or "note" in body_data:
+        new_note = (body_data.get("notes") or body_data.get("note") or "").strip()
+        old_note = (record.note or "").strip()
+        if new_note and old_note != new_note:
+            changes.append({
+                "field": "note",
+                "label": "Ghi chú phiếu",
+                "old_val": old_note or "(Trống)",
+                "new_val": new_note
+            })
+
+    return changes
+
+
+def _record_inspection_history(
+    data_dict: Dict[str, Any],
+    action_type: str,
+    action_label: str,
+    changes: List[Dict[str, str]],
+    user_name: str = "QC Administrator",
+    user_role: str = "QC",
+    note: str = ""
+) -> Dict[str, Any]:
+    now_vn = get_vietnam_time()
+    timestamp_str = now_vn.isoformat() if hasattr(now_vn, 'isoformat') else str(now_vn)
+    hist_id = f"hist_{now_vn.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+    
+    entry = {
+        "id": hist_id,
+        "timestamp": timestamp_str,
+        "user_name": user_name,
+        "user_role": user_role,
+        "action_type": action_type,
+        "action_label": action_label,
+        "changes": changes,
+        "note": note
+    }
+    
+    if "edit_history" not in data_dict or not isinstance(data_dict["edit_history"], list):
+        data_dict["edit_history"] = []
+        
+    data_dict["edit_history"].insert(0, entry)
+    # Giới hạn tối đa 50 bản ghi gần nhất để tối ưu kích thước lưu trữ
+    data_dict["edit_history"] = data_dict["edit_history"][:50]
+    return entry
 
 
 @router.post("/confirm/{type}/{id}")
@@ -4033,6 +4232,7 @@ def confirm_inspection(
     [POST] Xác nhận phiếu kiểm tra.
     type: 'stage' hoặc 'input'.
     Hỗ trợ cập nhật kết quả (result), hành động (action), thông tin xử lý (handling_info), loại phiếu (inspection_type), công đoạn (stage) và trạng thái (status).
+    Tự động ghi nhận lịch sử duyệt hồ sơ (Audit Trail).
     """
     record = db.query(InputInspection).filter(InputInspection.id == id).first()
     if not record:
@@ -4072,6 +4272,22 @@ def confirm_inspection(
             data_dict = json.loads(record.data_json) if isinstance(record.data_json, str) else dict(record.data_json)
         except Exception:
             data_dict = {}
+
+    # Ghi nhận Audit Trail lịch sử xác nhận / chỉnh sửa
+    changes = _build_inspection_diff(record, data_dict, body_data)
+    user_name = body_data.get("updated_by") or body_data.get("confirmed_by_name") or body_data.get("user_name") or "QC Administrator"
+    user_role = body_data.get("user_role") or "Quản lý QC"
+    history_note = body_data.get("history_note") or handling_info or ""
+
+    _record_inspection_history(
+        data_dict=data_dict,
+        action_type="confirm",
+        action_label="Xác nhận duyệt hồ sơ",
+        changes=changes,
+        user_name=user_name,
+        user_role=user_role,
+        note=history_note
+    )
             
     data_dict["status"] = new_status
     if new_stage is not None:
@@ -4092,6 +4308,17 @@ def confirm_inspection(
     if new_result:
         data_dict["result"] = new_result
         
+    # Cập nhật danh sách hình ảnh minh chứng nếu có
+    if "images" in body_data:
+        images_list = body_data["images"]
+        if isinstance(images_list, list):
+            clean_images = [str(x).strip() for x in images_list if x]
+            record.image_path_1 = clean_images[0] if len(clean_images) > 0 else None
+            record.image_path_2 = clean_images[1] if len(clean_images) > 1 else None
+            record.image_path_3 = clean_images[2] if len(clean_images) > 2 else None
+            record.images_json = json.dumps(clean_images, ensure_ascii=False)
+            data_dict["images"] = clean_images
+
     record.data_json = json.dumps(data_dict, ensure_ascii=False)
         
     try:
@@ -4108,7 +4335,8 @@ def confirm_inspection(
             "action": new_action or data_dict.get("action"),
             "status": new_status,
             "inspection_type": record.inspection_type,
-            "stage": record.stage
+            "stage": record.stage,
+            "edit_history": data_dict.get("edit_history") or []
         }
     except Exception as e:
         db.rollback()
@@ -4125,12 +4353,38 @@ def update_inspection_record(
     """
     [POST] Cập nhật thông tin phiếu kiểm tra (loại phiếu, công đoạn, trạng thái, kết quả, hành động xử lý)
     mà không bắt buộc phải hoàn tất xác nhận hồ sơ.
+    Tự động ghi nhận lịch sử thay đổi (Audit Trail).
     """
     record = db.query(InputInspection).filter(InputInspection.id == id).first()
     if not record:
         raise HTTPException(status_code=404, detail=f"Không tìm thấy phiếu kiểm tra có ID {id}")
         
     body_data = payload or {}
+
+    # Trích xuất data_dict từ data_json hiện tại
+    data_dict = {}
+    if record.data_json:
+        try:
+            data_dict = json.loads(record.data_json) if isinstance(record.data_json, str) else dict(record.data_json)
+        except Exception:
+            data_dict = {}
+
+    # Ghi nhận Audit Diff chi tiết
+    changes = _build_inspection_diff(record, data_dict, body_data)
+    user_name = body_data.get("updated_by") or body_data.get("user_name") or "QC Administrator"
+    user_role = body_data.get("user_role") or "Quản lý QC"
+    history_note = body_data.get("history_note") or ""
+
+    if changes:
+        _record_inspection_history(
+            data_dict=data_dict,
+            action_type="update",
+            action_label="Chỉnh sửa thông tin phiếu",
+            changes=changes,
+            user_name=user_name,
+            user_role=user_role,
+            note=history_note
+        )
     
     # 1. Loại phiếu & Công đoạn
     if "inspection_type" in body_data and body_data["inspection_type"]:
@@ -4143,14 +4397,6 @@ def update_inspection_record(
     if new_result:
         record.result = new_result
         record.conclusion = new_result
-        
-    # 3. Data JSON (Status, Action, Handling Info, Stage, Type)
-    data_dict = {}
-    if record.data_json:
-        try:
-            data_dict = json.loads(record.data_json) if isinstance(record.data_json, str) else dict(record.data_json)
-        except Exception:
-            data_dict = {}
 
     if "stage" in body_data:
         data_dict["stage"] = body_data["stage"]
@@ -4178,6 +4424,17 @@ def update_inspection_record(
     if new_result:
         data_dict["result"] = new_result
         
+    # Cập nhật danh sách hình ảnh minh chứng nếu có
+    if "images" in body_data:
+        images_list = body_data["images"]
+        if isinstance(images_list, list):
+            clean_images = [str(x).strip() for x in images_list if x]
+            record.image_path_1 = clean_images[0] if len(clean_images) > 0 else None
+            record.image_path_2 = clean_images[1] if len(clean_images) > 1 else None
+            record.image_path_3 = clean_images[2] if len(clean_images) > 2 else None
+            record.images_json = json.dumps(clean_images, ensure_ascii=False)
+            data_dict["images"] = clean_images
+
     record.data_json = json.dumps(data_dict, ensure_ascii=False)
     
     try:
@@ -4192,7 +4449,8 @@ def update_inspection_record(
             "result": record.result,
             "status": data_dict.get("status"),
             "action": data_dict.get("action"),
-            "handling_info": data_dict.get("handling_info")
+            "handling_info": data_dict.get("handling_info"),
+            "edit_history": data_dict.get("edit_history") or []
         }
     except Exception as e:
         db.rollback()
@@ -4210,6 +4468,7 @@ def cancel_inspection(
     """
     [POST] Hủy hồ sơ kiểm tra.
     Phiếu vẫn được lưu trữ ghi nhận trong hệ thống nhưng đánh dấu is_cancelled = True và bị ẩn khỏi /admin/quality-records.
+    Tự động ghi nhận lịch sử hủy hồ sơ (Audit Trail).
     """
     record = db.query(InputInspection).filter(InputInspection.id == id).first()
     if not record:
@@ -4233,6 +4492,25 @@ def cancel_inspection(
             data_dict = json.loads(record.data_json) if isinstance(record.data_json, str) else dict(record.data_json)
         except Exception:
             data_dict = {}
+
+    cancel_user = body_data.get("updated_by") or body_data.get("cancelled_by_name") or "Quản lý QC"
+    cancel_role = body_data.get("user_role") or "Quản lý QC"
+    cancel_reason = handling_info or body_data.get("reason") or "Hủy hồ sơ kiểm tra"
+
+    _record_inspection_history(
+        data_dict=data_dict,
+        action_type="cancel",
+        action_label="Hủy hồ sơ kiểm tra",
+        changes=[{
+            "field": "status",
+            "label": "Trạng thái hồ sơ",
+            "old_val": str(data_dict.get("status") or "Chưa Làm"),
+            "new_val": "Đã hủy"
+        }],
+        user_name=cancel_user,
+        user_role=cancel_role,
+        note=cancel_reason
+    )
 
     data_dict["is_cancelled"] = True
     data_dict["status"] = "cancelled"
@@ -4261,11 +4539,42 @@ def cancel_inspection(
             "message": "Đã hủy hồ sơ kiểm tra thành công",
             "id": id,
             "is_cancelled": True,
-            "is_confirmed": record.is_confirmed
+            "is_confirmed": record.is_confirmed,
+            "edit_history": data_dict.get("edit_history") or []
         }
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Lỗi khi hủy hồ sơ: {str(e)}")
+
+
+@router.get("/record-history/{type}/{id}")
+@router.get("/{type}/{id}/history")
+def get_inspection_history(
+    type: str,
+    id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Lấy toàn bộ lịch sử chỉnh sửa (Audit Trail) của phiếu kiểm tra theo thứ tự mới nhất lên đầu.
+    """
+    record = db.query(InputInspection).filter(InputInspection.id == id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail=f"Không tìm thấy phiếu kiểm tra có ID {id}")
+        
+    data_dict = {}
+    if record.data_json:
+        try:
+            data_dict = json.loads(record.data_json) if isinstance(record.data_json, str) else dict(record.data_json)
+        except Exception:
+            data_dict = {}
+            
+    history = data_dict.get("edit_history") or []
+    return {
+        "id": id,
+        "ticket_code": record.ticket_code or f"KT{record.id:03d}",
+        "edit_history": history,
+        "total_edits": len(history)
+    }
 
 
 @router.post("/confirm-batch")

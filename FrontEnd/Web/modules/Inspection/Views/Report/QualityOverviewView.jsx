@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
-import { Search, Filter, Edit, FileText, ChevronLeft, ChevronRight, CheckCircle2, X, Eye, RotateCcw, XCircle, Layers, Package, CheckCheck, MoreVertical, Info, Image as ImageIcon, ClipboardList, AlertTriangle, Keyboard, HelpCircle, Loader2, Save } from 'lucide-react';
+import { Search, Filter, Edit, FileText, ChevronLeft, ChevronRight, CheckCircle2, X, Eye, RotateCcw, XCircle, Layers, Package, CheckCheck, MoreVertical, Info, Image as ImageIcon, ClipboardList, AlertTriangle, Keyboard, HelpCircle, Loader2, Save, UploadCloud, Plus, History, Clock, ArrowRight, User } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
@@ -63,6 +63,18 @@ const QualityOverviewView = () => {
   const [sortOption, setSortOption] = useState('date_desc');
   
   const { toast } = useToast();
+
+  // Trích xuất thông tin tài khoản đăng nhập hiện tại để ghi nhận Audit Trail
+  const currentUser = useMemo(() => {
+    try {
+      const raw = localStorage.getItem('smartflow_user');
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      return {};
+    }
+  }, []);
+  const currentEditorName = currentUser.full_name || currentUser.name || currentUser.username || 'QC Administrator';
+  const currentEditorRole = currentUser.role_name || currentUser.role || 'Quản lý QC';
   
   // Modal Chi tiết / Xác nhận
   const [selectedTask, setSelectedTask] = useState(null);
@@ -96,10 +108,16 @@ const QualityOverviewView = () => {
   const [modalStatus, setModalStatus] = useState('Chưa Làm');
   const [savingTask, setSavingTask] = useState(false);
   const [handlingInfo, setHandlingInfo] = useState('');
-  const [modalTab, setModalTab] = useState('info'); // 'info' | 'details'
+  const [modalTab, setModalTab] = useState('info'); // 'info' | 'details' | 'history'
+  const [modalHistory, setModalHistory] = useState([]); // Lịch sử chỉnh sửa phiếu (Audit Trail)
   const [previewImgUrl, setPreviewImgUrl] = useState(null);
   const [fallbackSteps, setFallbackSteps] = useState([]);
   const [loadingSteps, setLoadingSteps] = useState(false);
+
+  const [modalImages, setModalImages] = useState([]);
+  const [isUploadingImages, setIsUploadingImages] = useState(false);
+  const [isDraggingImages, setIsDraggingImages] = useState(false);
+  const fileInputRef = useRef(null);
 
   // Đồng bộ trạng thái khi mở hoặc chuyển phiếu kiểm tra
   useEffect(() => {
@@ -125,6 +143,30 @@ const QualityOverviewView = () => {
       setModalTab('info');
       setPreviewImgUrl(null);
       setFallbackSteps([]);
+
+      // Khởi tạo lịch sử chỉnh sửa (Audit Trail)
+      const hist = selectedTask.edit_history || parsedJson?.edit_history || [];
+      setModalHistory(Array.isArray(hist) ? hist : []);
+
+      // Khởi tạo danh sách ảnh minh chứng từ selectedTask
+      const initImgs = [];
+      [selectedTask.image_path_1, selectedTask.image_path_2, selectedTask.image_path_3].filter(Boolean).forEach(img => {
+        if (!initImgs.includes(img)) initImgs.push(img);
+      });
+      if (selectedTask.images_json) {
+        try {
+          const pImg = typeof selectedTask.images_json === 'string' ? JSON.parse(selectedTask.images_json) : selectedTask.images_json;
+          if (Array.isArray(pImg)) {
+            pImg.forEach(img => { if (img && !initImgs.includes(img)) initImgs.push(img); });
+          } else if (pImg?.images && Array.isArray(pImg.images)) {
+            pImg.images.forEach(img => { if (img && !initImgs.includes(img)) initImgs.push(img); });
+          }
+        } catch (e) {}
+      }
+      if (parsedJson?.images && Array.isArray(parsedJson.images)) {
+        parsedJson.images.forEach(img => { if (img && !initImgs.includes(img)) initImgs.push(img); });
+      }
+      setModalImages(initImgs);
     }
   }, [selectedTask]);
 
@@ -242,27 +284,7 @@ const QualityOverviewView = () => {
   }, [selectedTask, parsedTaskData]);
 
   // Danh sách hình ảnh minh chứng đầy đủ
-  const taskImages = useMemo(() => {
-    if (!selectedTask) return [];
-    const list = [];
-    [selectedTask.image_path_1, selectedTask.image_path_2, selectedTask.image_path_3].filter(Boolean).forEach(img => {
-      if (!list.includes(img)) list.push(img);
-    });
-    if (selectedTask.images_json) {
-      try {
-        const pImg = typeof selectedTask.images_json === 'string' ? JSON.parse(selectedTask.images_json) : selectedTask.images_json;
-        if (Array.isArray(pImg)) {
-          pImg.forEach(img => { if (img && !list.includes(img)) list.push(img); });
-        } else if (pImg?.images && Array.isArray(pImg.images)) {
-          pImg.images.forEach(img => { if (img && !list.includes(img)) list.push(img); });
-        }
-      } catch (e) {}
-    }
-    if (parsedTaskData?.images && Array.isArray(parsedTaskData.images)) {
-      parsedTaskData.images.forEach(img => { if (img && !list.includes(img)) list.push(img); });
-    }
-    return list;
-  }, [selectedTask, parsedTaskData]);
+  const taskImages = modalImages;
 
   // Danh sách các bước kiểm tra SOP (Hướng dẫn kiểm tra)
   const taskSteps = useMemo(() => {
@@ -477,21 +499,160 @@ const QualityOverviewView = () => {
     });
   }, [selectedTask]);
 
+  // Upload hình ảnh minh chứng lên máy chủ
+  const handleImageFiles = async (files) => {
+    if (!files || files.length === 0) return;
+    const fileList = Array.from(files).filter(f => f.type.startsWith('image/'));
+    if (fileList.length === 0) {
+      toast('error', 'Vui lòng chỉ chọn tệp hình ảnh (JPEG, PNG, WEBP, v.v.)');
+      return;
+    }
+
+    for (const file of fileList) {
+      if (file.size > 10 * 1024 * 1024) {
+        toast('error', `Tệp "${file.name}" vượt quá dung lượng cho phép (10MB).`);
+        return;
+      }
+    }
+
+    setIsUploadingImages(true);
+    try {
+      const formData = new FormData();
+      fileList.forEach(file => {
+        formData.append('files', file);
+      });
+
+      const response = await api.post('/inspections/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+
+      if (response && response.paths && Array.isArray(response.paths)) {
+        setModalImages(prev => {
+          const next = [...prev];
+          response.paths.forEach(p => {
+            if (!next.includes(p)) next.push(p);
+          });
+          return next;
+        });
+        toast('success', `Đã tải lên ${response.paths.length} ảnh minh chứng thành công!`);
+      } else if (response && response.path) {
+        setModalImages(prev => [...prev, response.path]);
+        toast('success', 'Đã tải lên ảnh minh chứng thành công!');
+      } else {
+        toast('warning', 'Không nhận được đường dẫn ảnh từ máy chủ.');
+      }
+    } catch (error) {
+      console.error('Error uploading inspection images:', error);
+      toast('error', 'Lỗi khi tải ảnh lên máy chủ: ' + (error.response?.data?.detail || error.message));
+    } finally {
+      setIsUploadingImages(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleRemoveImage = (indexToRemove) => {
+    setModalImages(prev => prev.filter((_, idx) => idx !== indexToRemove));
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingImages(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingImages(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingImages(false);
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleImageFiles(e.dataTransfer.files);
+    }
+  };
+
+  // Lắng nghe sự kiện Paste (Ctrl+V) từ Clipboard để dán ảnh trực tiếp khi modal mở
+  useEffect(() => {
+    if (!selectedTask) return;
+
+    const handlePaste = (e) => {
+      const clipboardData = e.clipboardData || window.clipboardData;
+      if (!clipboardData) return;
+
+      const items = clipboardData.items;
+      const files = [];
+
+      if (items && items.length > 0) {
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          if (item.type && item.type.indexOf('image') !== -1) {
+            const blob = item.getAsFile();
+            if (blob) {
+              const ext = (blob.type && blob.type.split('/')[1]) || 'png';
+              const fileName = `paste_${Date.now()}_${i + 1}.${ext}`;
+              const file = new File([blob], fileName, { type: blob.type || 'image/png' });
+              files.push(file);
+            }
+          }
+        }
+      } else if (clipboardData.files && clipboardData.files.length > 0) {
+        for (let i = 0; i < clipboardData.files.length; i++) {
+          const f = clipboardData.files[i];
+          if (f.type && f.type.startsWith('image/')) {
+            files.push(f);
+          }
+        }
+      }
+
+      // Nếu có tệp hình ảnh từ clipboard thì upload ngay
+      if (files.length > 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (isUploadingImages) {
+          toast('warning', 'Đang tải ảnh trước đó lên máy chủ, vui lòng đợi giây lát...');
+          return;
+        }
+        handleImageFiles(files);
+      }
+    };
+
+    window.addEventListener('paste', handlePaste);
+    return () => {
+      window.removeEventListener('paste', handlePaste);
+    };
+  }, [selectedTask, isUploadingImages]);
+
   // Lưu thay đổi thông tin phiếu kiểm tra (loại phiếu, công đoạn, trạng thái, kết quả, xử lý)
   const handleSaveTask = async (task) => {
     if (!task) return;
     setSavingTask(true);
     try {
       const taskType = task.type || 'input';
-      await api.post(`/inspections/update-record/${taskType}/${task.id}`, {
+      const response = await api.post(`/inspections/update-record/${taskType}/${task.id}`, {
         inspection_type: modalInspectionType,
         stage: modalStage,
         status: modalStatus,
         result: modalResult,
         action: modalAction,
-        handling_info: handlingInfo
+        handling_info: handlingInfo,
+        images: modalImages,
+        updated_by: currentEditorName,
+        user_role: currentEditorRole
       });
       toast('success', `Đã lưu cập nhật phiếu #${task.ticket_code || task.id} thành công!`);
+
+      const updatedHistory = response?.edit_history || (Array.isArray(response?.data?.edit_history) ? response.data.edit_history : null);
+      if (updatedHistory) {
+        setModalHistory(updatedHistory);
+      }
 
       // Cập nhật selectedTask
       setSelectedTask(prev => prev ? {
@@ -502,6 +663,12 @@ const QualityOverviewView = () => {
         result: modalResult,
         action: modalAction,
         handling_info: handlingInfo,
+        image_path_1: modalImages[0] || null,
+        image_path_2: modalImages[1] || null,
+        image_path_3: modalImages[2] || null,
+        images: modalImages,
+        images_json: JSON.stringify(modalImages),
+        edit_history: updatedHistory || prev.edit_history,
         category: getCategoryBadgeInfo(null, modalStage, modalInspectionType)?.label || prev.category
       } : null);
 
@@ -516,6 +683,12 @@ const QualityOverviewView = () => {
             result: modalResult,
             action: modalAction,
             handling_info: handlingInfo,
+            image_path_1: modalImages[0] || null,
+            image_path_2: modalImages[1] || null,
+            image_path_3: modalImages[2] || null,
+            images: modalImages,
+            images_json: JSON.stringify(modalImages),
+            edit_history: updatedHistory || t.edit_history,
             category: getCategoryBadgeInfo(null, modalStage, modalInspectionType)?.label || t.category
           };
         }
@@ -541,7 +714,11 @@ const QualityOverviewView = () => {
         handling_info: handlingInfo,
         inspection_type: modalInspectionType,
         stage: modalStage,
-        status: modalStatus === 'Chưa Làm' ? 'Đã xong' : modalStatus
+        status: modalStatus === 'Chưa Làm' ? 'Đã xong' : modalStatus,
+        images: modalImages,
+        updated_by: currentEditorName,
+        confirmed_by_name: currentEditorName,
+        user_role: currentEditorRole
       });
       toast('success', `Đã xác nhận thành công phiếu #${task.ticket_code || task.id}!`);
 
@@ -572,7 +749,10 @@ const QualityOverviewView = () => {
       const taskType = selectedTask.type || 'input';
       await api.post(`/inspections/cancel-inspection/${taskType}/${selectedTask.id}`, {
         handling_info: handlingInfo,
-        reason: 'Quản lý chất lượng hủy hồ sơ'
+        reason: 'Quản lý chất lượng hủy hồ sơ',
+        updated_by: currentEditorName,
+        cancelled_by_name: currentEditorName,
+        user_role: currentEditorRole
       });
       toast('success', `Đã hủy hồ sơ #${selectedTask.ticket_code || selectedTask.id} thành công!`);
       setIsCancelInspectionModalOpen(false);
@@ -946,6 +1126,15 @@ const QualityOverviewView = () => {
           return;
         }
 
+        // Ctrl+S hoặc F8: Lưu thay đổi thông tin phiếu kiểm tra
+        if (((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) || e.key === 'F8') {
+          e.preventDefault();
+          if (!savingTask && !confirming && !cancelingTask) {
+            handleSaveTask(selectedTask);
+          }
+          return;
+        }
+
         // F4: Hủy trả hàng (nếu hồ sơ có hành động trả về)
         if (e.key === 'F4') {
           e.preventDefault();
@@ -978,10 +1167,14 @@ const QualityOverviewView = () => {
           return;
         }
 
-        // Tab: Chuyển giữa 2 tab Thông tin và Chi tiết
+        // Tab: Chuyển tuần tự giữa 3 tab Thông tin -> Chi tiết -> Lịch sử -> Thông tin
         if (e.key === 'Tab' && !isInputFocused) {
           e.preventDefault();
-          setModalTab(prev => prev === 'info' ? 'details' : 'info');
+          setModalTab(prev => {
+            if (prev === 'info') return 'details';
+            if (prev === 'details') return 'history';
+            return 'info';
+          });
           return;
         }
 
@@ -1055,7 +1248,7 @@ const QualityOverviewView = () => {
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [
-    selectedTask, confirming, cancelingTask, cancelingId, modalResult, modalAction,
+    selectedTask, savingTask, confirming, cancelingTask, cancelingId, modalResult, modalAction,
     previewImgUrl, isCancelInspectionModalOpen, cancelConfirmModal, isBatchQuickModalOpen,
     batchConfirming, showShortcutsModal, currentTaskIndex, filteredTasks, selectedBatchIds,
     focusedRowIndex, paginatedTasks
@@ -1571,7 +1764,7 @@ const QualityOverviewView = () => {
           align-items: center;
           justify-content: center;
           width: 100%;
-          max-width: 960px;
+          max-width: 1240px;
           padding: 0 14px;
           box-sizing: border-box;
         }
@@ -1960,7 +2153,7 @@ const QualityOverviewView = () => {
             </button>
 
             {/* MODAL CONTENT */}
-            <div className="modal-content" style={{ flex: 1, maxWidth: '820px', margin: 0 }}>
+            <div className="modal-content" style={{ flex: 1, maxWidth: '1080px', margin: 0 }}>
               {/* MODAL HEADER */}
               <div style={{
                 display: 'flex',
@@ -2185,6 +2378,41 @@ const QualityOverviewView = () => {
                       </span>
                     )}
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setModalTab('history')}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '11px 16px',
+                      border: 'none',
+                      borderBottom: modalTab === 'history' ? '2.5px solid #8B5E3C' : '2.5px solid transparent',
+                      backgroundColor: 'transparent',
+                      color: modalTab === 'history' ? '#5D4037' : '#8D7B6F',
+                      fontWeight: modalTab === 'history' ? 700 : 500,
+                      fontSize: '0.88rem',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <History size={16} />
+                    <span>Lịch sử</span>
+                    {modalHistory.length > 0 && (
+                      <span style={{
+                        fontSize: '0.72rem',
+                        padding: '1px 7px',
+                        borderRadius: '10px',
+                        backgroundColor: modalTab === 'history' ? '#8B5E3C' : '#EFEAE3',
+                        color: modalTab === 'history' ? '#FFFFFF' : '#5D4037',
+                        border: '1px solid #D8CCC0',
+                        fontWeight: 700
+                      }}>
+                        {modalHistory.length}
+                      </span>
+                    )}
+                  </button>
                 </div>
               )}
 
@@ -2195,8 +2423,8 @@ const QualityOverviewView = () => {
                 <div style={{ fontSize: '1.1rem', fontWeight: 700 }}>{confirmSuccessMsg}</div>
               </div>
             ) : (
-              <div style={{ padding: '20px 22px', maxHeight: 'calc(85vh - 140px)', overflowY: 'auto' }}>
-                {modalTab === 'info' ? (
+              <div style={{ padding: '22px 26px', maxHeight: 'calc(88vh - 130px)', overflowY: 'auto' }}>
+                {modalTab === 'info' && (
                   <>
                     {/* CARD THÔNG TIN TỔNG QUAN (3 DÒNG x 3 CỘT) */}
                     <div style={{
@@ -2441,23 +2669,97 @@ const QualityOverviewView = () => {
                     </div>
 
                     {/* HÌNH ẢNH MINH CHỨNG */}
-                    <div style={{ marginBottom: '8px' }}>
+                    <div style={{ marginBottom: '16px' }}>
                       <div style={{
                         fontSize: '0.76rem',
                         color: '#6D4C41',
                         fontWeight: 700,
                         textTransform: 'uppercase',
-                        marginBottom: '8px',
+                        marginBottom: '10px',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '6px'
+                        justifyContent: 'space-between'
                       }}>
-                        <ImageIcon size={14} color="#8B5E3C" />
-                        <span>Hình ảnh minh chứng ({taskImages.length})</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <ImageIcon size={14} color="#8B5E3C" />
+                          <span>Hình ảnh minh chứng ({modalImages.length})</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            color: '#8D7B6F',
+                            fontSize: '0.74rem',
+                            fontWeight: 600
+                          }}>
+                            <span>Dán ảnh:</span>
+                            <kbd className="kbd-shortcut" style={{ fontSize: '0.68rem', padding: '1px 5px' }}>Ctrl + V</kbd>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={isUploadingImages}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              padding: '4px 10px',
+                              borderRadius: '6px',
+                              border: '1px solid #D8CCC0',
+                              backgroundColor: '#FFFFFF',
+                              color: '#6D4C41',
+                              fontSize: '0.78rem',
+                              fontWeight: 600,
+                              cursor: isUploadingImages ? 'not-allowed' : 'pointer',
+                              transition: 'all 0.15s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!isUploadingImages) {
+                                e.currentTarget.style.backgroundColor = '#FAF7F2';
+                                e.currentTarget.style.borderColor = '#8B5E3C';
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!isUploadingImages) {
+                                e.currentTarget.style.backgroundColor = '#FFFFFF';
+                                e.currentTarget.style.borderColor = '#D8CCC0';
+                              }
+                            }}
+                            title="Tải thêm hình ảnh minh chứng"
+                          >
+                            {isUploadingImages ? (
+                              <>
+                                <Loader2 size={13} className="animate-spin" />
+                                <span>Đang tải...</span>
+                              </>
+                            ) : (
+                              <>
+                                <UploadCloud size={13} color="#8B5E3C" />
+                                <span>+ Thêm ảnh</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
                       </div>
-                      {taskImages.length > 0 ? (
-                        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                          {taskImages.map((img, idx) => {
+
+                      {/* Input ẩn để chọn tệp */}
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        multiple
+                        accept="image/*"
+                        style={{ display: 'none' }}
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files.length > 0) {
+                            handleImageFiles(e.target.files);
+                          }
+                        }}
+                      />
+
+                      {modalImages.length > 0 ? (
+                        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+                          {modalImages.map((img, idx) => {
                             const imgUrl = getImageUrl(img);
                             return (
                               <div
@@ -2468,26 +2770,60 @@ const QualityOverviewView = () => {
                                   overflow: 'hidden',
                                   border: '1px solid #E0D6CB',
                                   backgroundColor: '#FAF7F2',
-                                  cursor: 'pointer',
                                   boxShadow: '0 1px 3px rgba(93,64,55,0.06)',
                                   transition: 'transform 0.15s, box-shadow 0.15s'
                                 }}
-                                onClick={() => setPreviewImgUrl(imgUrl)}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.transform = 'scale(1.04)';
-                                  e.currentTarget.style.boxShadow = '0 4px 10px rgba(93,64,55,0.14)';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.transform = 'scale(1)';
-                                  e.currentTarget.style.boxShadow = '0 1px 3px rgba(93,64,55,0.06)';
-                                }}
-                                title="Nhấp để xem ảnh lớn"
                               >
                                 <img
                                   src={imgUrl}
                                   alt={`Minh chứng ${idx + 1}`}
-                                  style={{ width: '92px', height: '92px', objectFit: 'cover', display: 'block' }}
+                                  style={{ width: '92px', height: '92px', objectFit: 'cover', display: 'block', cursor: 'pointer' }}
+                                  onClick={() => setPreviewImgUrl(imgUrl)}
+                                  title="Nhấp để xem ảnh lớn"
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.parentElement.style.transform = 'scale(1.03)';
+                                    e.currentTarget.parentElement.style.boxShadow = '0 4px 10px rgba(93,64,55,0.14)';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.parentElement.style.transform = 'scale(1)';
+                                    e.currentTarget.parentElement.style.boxShadow = '0 1px 3px rgba(93,64,55,0.06)';
+                                  }}
                                 />
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRemoveImage(idx);
+                                  }}
+                                  style={{
+                                    position: 'absolute',
+                                    top: '4px',
+                                    right: '4px',
+                                    width: '22px',
+                                    height: '22px',
+                                    borderRadius: '50%',
+                                    backgroundColor: 'rgba(239, 68, 68, 0.92)',
+                                    color: '#FFFFFF',
+                                    border: 'none',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    cursor: 'pointer',
+                                    boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
+                                    transition: 'background-color 0.15s, transform 0.15s'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.backgroundColor = '#DC2626';
+                                    e.currentTarget.style.transform = 'scale(1.1)';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.92)';
+                                    e.currentTarget.style.transform = 'scale(1)';
+                                  }}
+                                  title="Xóa ảnh này"
+                                >
+                                  <X size={13} />
+                                </button>
                                 <div style={{
                                   position: 'absolute',
                                   bottom: 0,
@@ -2498,30 +2834,149 @@ const QualityOverviewView = () => {
                                   fontSize: '0.68rem',
                                   fontWeight: 600,
                                   textAlign: 'center',
-                                  padding: '2px 0'
+                                  padding: '2px 0',
+                                  pointerEvents: 'none'
                                 }}>
                                   Ảnh {idx + 1}
                                 </div>
                               </div>
                             );
                           })}
+
+                          {/* Ô thêm ảnh dạng Thumbnail slot */}
+                          <div
+                            onClick={() => !isUploadingImages && fileInputRef.current?.click()}
+                            onDragOver={handleDragOver}
+                            onDragLeave={handleDragLeave}
+                            onDrop={handleDrop}
+                            style={{
+                              width: '92px',
+                              height: '92px',
+                              borderRadius: '8px',
+                              border: isDraggingImages ? '2px dashed #8B5E3C' : '1.5px dashed #D8CCC0',
+                              backgroundColor: isDraggingImages ? '#F5EFE8' : '#FAF7F2',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: isUploadingImages ? 'not-allowed' : 'pointer',
+                              color: '#8D7B6F',
+                              transition: 'all 0.15s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!isUploadingImages) {
+                                e.currentTarget.style.borderColor = '#8B5E3C';
+                                e.currentTarget.style.backgroundColor = '#F5EFE8';
+                                e.currentTarget.style.color = '#5D4037';
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!isUploadingImages) {
+                                e.currentTarget.style.borderColor = '#D8CCC0';
+                                e.currentTarget.style.backgroundColor = '#FAF7F2';
+                                e.currentTarget.style.color = '#8D7B6F';
+                              }
+                            }}
+                            title="Thêm ảnh, kéo thả hoặc bấm Ctrl+V để dán ảnh"
+                          >
+                            {isUploadingImages ? (
+                              <Loader2 size={20} className="animate-spin" color="#8B5E3C" />
+                            ) : (
+                              <>
+                                <Plus size={20} />
+                                <span style={{ fontSize: '0.72rem', fontWeight: 600, marginTop: '4px' }}>Thêm ảnh</span>
+                                <span style={{ fontSize: '0.62rem', color: '#A89F91', marginTop: '1px' }}>Ctrl+V</span>
+                              </>
+                            )}
+                          </div>
                         </div>
                       ) : (
-                        <div style={{
-                          padding: '12px 14px',
-                          backgroundColor: '#FAF7F2',
-                          borderRadius: '8px',
-                          border: '1px dashed #D8CCC0',
-                          color: '#8D7B6F',
-                          fontSize: '0.82rem',
-                          fontStyle: 'italic'
-                        }}>
-                          Không có hình ảnh đính kèm cho phiếu này.
+                        /* Dropzone khi chưa có ảnh nào */
+                        <div
+                          onClick={() => !isUploadingImages && fileInputRef.current?.click()}
+                          onDragOver={handleDragOver}
+                          onDragLeave={handleDragLeave}
+                          onDrop={handleDrop}
+                          style={{
+                            padding: '24px 16px',
+                            backgroundColor: isDraggingImages ? '#F5EFE8' : '#FAF7F2',
+                            borderRadius: '10px',
+                            border: isDraggingImages ? '2px dashed #8B5E3C' : '1.5px dashed #D8CCC0',
+                            textAlign: 'center',
+                            cursor: isUploadingImages ? 'not-allowed' : 'pointer',
+                            transition: 'all 0.2s ease',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '8px'
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isUploadingImages) {
+                              e.currentTarget.style.borderColor = '#8B5E3C';
+                              e.currentTarget.style.backgroundColor = '#F8F3ED';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isUploadingImages) {
+                              e.currentTarget.style.borderColor = '#D8CCC0';
+                              e.currentTarget.style.backgroundColor = '#FAF7F2';
+                            }
+                          }}
+                        >
+                          {isUploadingImages ? (
+                            <>
+                              <Loader2 size={28} className="animate-spin" color="#8B5E3C" />
+                              <div style={{ color: '#6D4C41', fontSize: '0.84rem', fontWeight: 600 }}>
+                                Đang tải ảnh lên máy chủ...
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div style={{
+                                width: '40px',
+                                height: '40px',
+                                borderRadius: '50%',
+                                backgroundColor: '#EFEAE3',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: '#8B5E3C'
+                              }}>
+                                <UploadCloud size={22} />
+                              </div>
+                              <div style={{ color: '#5D4037', fontSize: '0.86rem', fontWeight: 600 }}>
+                                Bấm để chọn ảnh, kéo thả hoặc dán ảnh (Ctrl + V)
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                                <span style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '2px 8px',
+                                  borderRadius: '6px',
+                                  backgroundColor: '#EFEAE3',
+                                  border: '1px solid #D8CCC0',
+                                  color: '#6D4C41',
+                                  fontSize: '0.72rem',
+                                  fontWeight: 700
+                                }}>
+                                  <span>Dán nhanh:</span>
+                                  <kbd className="kbd-shortcut" style={{ fontSize: '0.68rem', padding: '1px 4px' }}>Ctrl + V</kbd>
+                                </span>
+                                <span style={{ color: '#A89F91', fontSize: '0.74rem' }}>
+                                  Hỗ trợ PNG, JPG, JPEG, WEBP (tối đa 10MB/ảnh)
+                                </span>
+                              </div>
+                            </>
+                          )}
                         </div>
                       )}
                     </div>
                   </>
-                ) : (
+                )}
+
+                {modalTab === 'details' && (
                   <>
                     {/* TAB CHI TIẾT */}
                     {/* BẢNG DANH SÁCH CHI TIẾT / PHÔI KIỂM TRA (LIST TABLE) */}
@@ -2800,6 +3255,312 @@ const QualityOverviewView = () => {
                     )}
                   </>
                 )}
+
+                {modalTab === 'history' && (
+                  <div style={{ padding: '4px 0 16px 0' }}>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      marginBottom: '18px',
+                      paddingBottom: '12px',
+                      borderBottom: '1px solid #E8DFD5'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{
+                          width: '28px',
+                          height: '28px',
+                          borderRadius: '8px',
+                          backgroundColor: '#EFEAE3',
+                          border: '1px solid #D8CCC0',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}>
+                          <History size={16} color="#8B5E3C" />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#4A3319' }}>
+                            Nhật ký chỉnh sửa & kiểm tra (Audit Trail)
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: '#8D7B6F' }}>
+                            Tự động lưu vết lịch sử thay đổi thông tin phiếu kiểm tra
+                          </div>
+                        </div>
+                      </div>
+
+                      <span style={{
+                        fontSize: '0.75rem',
+                        padding: '3px 10px',
+                        borderRadius: '9999px',
+                        backgroundColor: '#F5EFE8',
+                        color: '#6D4C41',
+                        border: '1px solid #D8CCC0',
+                        fontWeight: 600
+                      }}>
+                        {modalHistory.length} lần cập nhật
+                      </span>
+                    </div>
+
+                    {modalHistory.length === 0 ? (
+                      <div style={{
+                        textAlign: 'center',
+                        padding: '48px 24px',
+                        backgroundColor: '#FAF7F2',
+                        borderRadius: '12px',
+                        border: '1px dashed #D8CCC0',
+                        color: '#8D7B6F'
+                      }}>
+                        <Clock size={36} style={{ margin: '0 auto 10px auto', display: 'block', opacity: 0.4 }} />
+                        <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#5D4037' }}>
+                          Chưa có lịch sử chỉnh sửa
+                        </div>
+                        <div style={{ fontSize: '0.78rem', marginTop: '4px' }}>
+                          Mọi thay đổi về kết quả, công đoạn, hành động, hình ảnh hoặc trạng thái khi lưu sẽ được tự động ghi lại tại đây.
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ position: 'relative', paddingLeft: '24px' }}>
+                        {/* Continuous vertical timeline line */}
+                        <div style={{
+                          position: 'absolute',
+                          top: '12px',
+                          bottom: '24px',
+                          left: '11px',
+                          width: '2px',
+                          backgroundColor: '#E5DDD3'
+                        }} />
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                          {modalHistory.map((item, idx) => {
+                            const isConfirm = item.action_type === 'confirm';
+                            const isCancel = item.action_type === 'cancel';
+                            const badgeColor = isConfirm ? '#059669' : (isCancel ? '#DC2626' : '#8B5E3C');
+                            const badgeBg = isConfirm ? '#ECFDF5' : (isCancel ? '#FEF2F2' : '#F5EFE8');
+                            const badgeBorder = isConfirm ? '#A7F3D0' : (isCancel ? '#FECDD3' : '#D8CCC0');
+
+                            // Format date
+                            let formattedTime = item.timestamp || '';
+                            let relativeTime = '';
+                            try {
+                              if (item.timestamp) {
+                                const dateObj = new Date(item.timestamp);
+                                const day = String(dateObj.getDate()).padStart(2, '0');
+                                const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+                                const year = dateObj.getFullYear();
+                                const hours = String(dateObj.getHours()).padStart(2, '0');
+                                const minutes = String(dateObj.getMinutes()).padStart(2, '0');
+                                formattedTime = `${hours}:${minutes} ${day}/${month}/${year}`;
+
+                                const diffMs = Date.now() - dateObj.getTime();
+                                const diffMins = Math.floor(diffMs / 60000);
+                                if (diffMins < 1) relativeTime = 'Vừa xong';
+                                else if (diffMins < 60) relativeTime = `${diffMins} phút trước`;
+                                else {
+                                  const diffHours = Math.floor(diffMins / 60);
+                                  if (diffHours < 24) relativeTime = `${diffHours} giờ trước`;
+                                  else {
+                                    const diffDays = Math.floor(diffHours / 24);
+                                    relativeTime = `${diffDays} ngày trước`;
+                                  }
+                                }
+                              }
+                            } catch (e) {}
+
+                            return (
+                              <div key={item.id || idx} style={{ position: 'relative' }}>
+                                {/* Timeline Dot Icon */}
+                                <div style={{
+                                  position: 'absolute',
+                                  left: '-24px',
+                                  top: '12px',
+                                  transform: 'translate(-50%, 0)',
+                                  width: '24px',
+                                  height: '24px',
+                                  borderRadius: '50%',
+                                  backgroundColor: badgeBg,
+                                  border: `2px solid ${badgeColor}`,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  boxShadow: '0 2px 4px rgba(0,0,0,0.06)',
+                                  zIndex: 2
+                                }}>
+                                  {isConfirm ? (
+                                    <CheckCircle2 size={12} color="#059669" />
+                                  ) : isCancel ? (
+                                    <XCircle size={12} color="#DC2626" />
+                                  ) : (
+                                    <Edit size={11} color="#8B5E3C" />
+                                  )}
+                                </div>
+
+                                {/* Timeline Card Content */}
+                                <div style={{
+                                  backgroundColor: '#FFFFFF',
+                                  border: '1px solid #E8DFD5',
+                                  borderRadius: '12px',
+                                  padding: '14px 16px',
+                                  boxShadow: '0 1px 4px rgba(93,64,55,0.04)',
+                                  transition: 'all 0.15s ease'
+                                }}>
+                                  {/* Card Header */}
+                                  <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    flexWrap: 'wrap',
+                                    gap: '8px',
+                                    marginBottom: '10px'
+                                  }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                      <span style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '5px',
+                                        fontWeight: 700,
+                                        color: '#3E2723',
+                                        fontSize: '0.86rem'
+                                      }}>
+                                        <User size={14} color="#8B5E3C" />
+                                        {item.user_name || 'QC Administrator'}
+                                      </span>
+
+                                      {item.user_role && (
+                                        <span style={{
+                                          fontSize: '0.72rem',
+                                          padding: '1px 6px',
+                                          borderRadius: '4px',
+                                          backgroundColor: '#F5EFE8',
+                                          color: '#6D4C41',
+                                          border: '1px solid #E0D6CB',
+                                          fontWeight: 600
+                                        }}>
+                                          {item.user_role}
+                                        </span>
+                                      )}
+
+                                      <span style={{
+                                        fontSize: '0.76rem',
+                                        padding: '2px 8px',
+                                        borderRadius: '6px',
+                                        backgroundColor: badgeBg,
+                                        color: badgeColor,
+                                        border: `1px solid ${badgeBorder}`,
+                                        fontWeight: 700
+                                      }}>
+                                        {item.action_label || (isConfirm ? 'Xác nhận duyệt' : isCancel ? 'Hủy hồ sơ' : 'Chỉnh sửa')}
+                                      </span>
+                                    </div>
+
+                                    <div style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '8px',
+                                      fontSize: '0.76rem',
+                                      color: '#8D7B6F'
+                                    }}>
+                                      {relativeTime && (
+                                        <span style={{
+                                          backgroundColor: '#FAF7F2',
+                                          padding: '2px 6px',
+                                          borderRadius: '4px',
+                                          border: '1px solid #E8DFD5',
+                                          fontWeight: 600
+                                        }}>
+                                          {relativeTime}
+                                        </span>
+                                      )}
+                                      <span>{formattedTime}</span>
+                                    </div>
+                                  </div>
+
+                                  {/* Changes Diff List */}
+                                  {Array.isArray(item.changes) && item.changes.length > 0 ? (
+                                    <div style={{
+                                      backgroundColor: '#FAF7F2',
+                                      border: '1px solid #EAE2D8',
+                                      borderRadius: '8px',
+                                      padding: '8px 12px',
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      gap: '6px'
+                                    }}>
+                                      {item.changes.map((ch, cIdx) => (
+                                        <div key={cIdx} style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '8px',
+                                          fontSize: '0.8rem',
+                                          lineHeight: 1.4,
+                                          flexWrap: 'wrap'
+                                        }}>
+                                          <span style={{
+                                            fontWeight: 700,
+                                            color: '#5D4037',
+                                            minWidth: '130px'
+                                          }}>
+                                            {ch.label || ch.field}:
+                                          </span>
+
+                                          <span style={{
+                                            color: '#991B1B',
+                                            backgroundColor: '#FEE2E2',
+                                            border: '1px solid #FECDD3',
+                                            padding: '1px 7px',
+                                            borderRadius: '5px',
+                                            fontSize: '0.76rem',
+                                            textDecoration: 'line-through',
+                                            fontWeight: 500
+                                          }}>
+                                            {ch.old_val || '(Trống)'}
+                                          </span>
+
+                                          <ArrowRight size={12} color="#8D7B6F" style={{ flexShrink: 0 }} />
+
+                                          <span style={{
+                                            color: '#065F46',
+                                            backgroundColor: '#D1FAE5',
+                                            border: '1px solid #A7F3D0',
+                                            padding: '1px 7px',
+                                            borderRadius: '5px',
+                                            fontSize: '0.76rem',
+                                            fontWeight: 700
+                                          }}>
+                                            {ch.new_val}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div style={{ fontSize: '0.78rem', color: '#8D7B6F', fontStyle: 'italic' }}>
+                                      {isConfirm ? 'Đã xác nhận đạt và hoàn tất hồ sơ kiểm tra.' : (item.note || 'Không có ghi chú thay đổi chi tiết.')}
+                                    </div>
+                                  )}
+
+                                  {/* Note / Handling note if present */}
+                                  {item.note && item.changes && item.changes.length > 0 && (
+                                    <div style={{
+                                      marginTop: '8px',
+                                      fontSize: '0.76rem',
+                                      color: '#6D4C41',
+                                      backgroundColor: '#FFFFFF',
+                                      padding: '4px 8px',
+                                      borderRadius: '4px',
+                                      border: '1px dashed #E0D6CB'
+                                    }}>
+                                      <strong>Ghi chú:</strong> {item.note}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -2980,10 +3741,11 @@ const QualityOverviewView = () => {
                         e.currentTarget.style.borderColor = '#D8CCC0';
                       }
                     }}
-                    title="Lưu các thay đổi mà không duyệt hoàn tất hồ sơ"
+                    title="Lưu các thay đổi mà không duyệt hoàn tất hồ sơ (Ctrl+S hoặc F8)"
                   >
                     <Save size={16} style={{ flexShrink: 0 }} />
                     <span style={{ whiteSpace: 'nowrap' }}>{savingTask ? 'Đang lưu...' : 'Lưu thay đổi'}</span>
+                    <kbd className="kbd-shortcut" style={{ marginLeft: '4px' }}>Ctrl+S</kbd>
                   </button>
 
                   <button
@@ -3628,9 +4390,11 @@ const QualityOverviewView = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
                   {[
                     { key: 'F1 hoặc Enter', desc: 'Xác nhận duyệt hồ sơ (tự động chuyển sang hồ sơ tiếp theo)', color: 'green' },
+                    { key: 'Ctrl+S hoặc F8', desc: 'Lưu các thay đổi hồ sơ (không duyệt hoàn tất)', color: 'amber' },
                     { key: 'F2', desc: 'Hủy hồ sơ kiểm tra này', color: 'red' },
                     { key: 'F3', desc: 'Chuyển đổi nhanh kết quả Đạt ↔ Không đạt', color: 'gray' },
                     { key: 'F4', desc: 'Hủy trạng thái trả hàng (nếu đang là trả hàng)', color: 'amber' },
+                    { key: 'Ctrl+V', desc: 'Dán ảnh chụp màn hình từ Clipboard vào hồ sơ', color: 'gray' },
                     { key: '← / →', desc: 'Xem hồ sơ trước đó / hồ sơ tiếp theo', color: 'gray' },
                     { key: 'Tab', desc: 'Chuyển đổi giữa 2 tab: Thông tin chung ↔ Chi tiết', color: 'gray' },
                     { key: 'Esc', desc: 'Đóng popup chi tiết', color: 'gray' }
