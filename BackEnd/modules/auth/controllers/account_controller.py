@@ -228,10 +228,21 @@ def create_account(db: Session, account: AccountCreate):
                     position_id=db_account.permission_id
                 )
                 db.add(hr_emp)
-                db.commit()
+            else:
+                # Nếu nhân viên đã tồn tại, đồng bộ các thông tin phòng ban / chức vụ nếu cần
+                if db_account.full_name and not hr_emp.full_name:
+                    hr_emp.full_name = db_account.full_name
+                if db_account.phone and not hr_emp.phone:
+                    hr_emp.phone = db_account.phone
+                if db_account.department_id:
+                    hr_emp.department_id = db_account.department_id
+                if db_account.permission_id:
+                    hr_emp.position_id = db_account.permission_id
         except Exception as e:
             print(f"[CẢNH BÁO] Lỗi đồng bộ tự động HREmployee: {e}")
 
+    # Commit toàn bộ transaction bao gồm tài khoản, phân quyền phòng ban và nhân sự
+    db.commit()
     # Cập nhật lại đối tượng từ DB (để lấy các trường mặc định như created_at)
     db.refresh(db_account)
     return db_account

@@ -860,7 +860,10 @@ const UserCreate = () => {
       
       // 1. Tạo tài khoản (POST)
       const newAccount = await api.post('/accounts/', dataToSend);
-      const newId = newAccount.id;
+      const newId = newAccount?.id || newAccount?.data?.id;
+      if (!newId) {
+        throw new Error('Không nhận được mã định danh tài khoản sau khi tạo');
+      }
 
       // 2. Chuẩn bị bảng phân quyền chi tiết (Chỉ lưu các override thực tế so với mặc định)
       const permissionsToSave = {};
