@@ -33,10 +33,10 @@ export const SopStepsTable = ({
     return (
       <div style={{
         padding: '12px 16px',
-        backgroundColor: '#FFFBEB',
-        borderRadius: '10px',
-        border: '1px dashed #FDE68A',
-        color: '#92400E',
+        backgroundColor: '#F8FAFC',
+        borderRadius: '8px',
+        border: '1px dashed #CBD5E1',
+        color: '#64748B',
         fontSize: '0.8rem',
         display: 'flex',
         alignItems: 'center',
@@ -44,7 +44,7 @@ export const SopStepsTable = ({
         marginTop: '12px',
         marginBottom: '12px'
       }}>
-        <Loader2 size={16} className="animate-spin" color="#B45309" />
+        <Loader2 size={16} className="animate-spin" color="#64748B" />
         <span style={{ fontWeight: 600 }}>Đang nạp danh sách các bước kiểm tra SOP...</span>
       </div>
     );
@@ -262,17 +262,17 @@ export const SopStepsTable = ({
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: '10px 14px',
-          backgroundColor: isExpanded ? '#FEF3C7' : '#FFFBEB',
+          backgroundColor: isExpanded ? '#F5EFE8' : '#FAF7F2',
           borderRadius: isExpanded ? '10px 10px 0 0' : '10px',
-          border: '1px solid #FDE68A',
-          borderBottom: isExpanded ? '1.5px solid #FCD34D' : '1px solid #FDE68A',
+          border: '1px solid #E5DDD3',
+          borderBottom: isExpanded ? '1px solid #E5DDD3' : '1px solid #E5DDD3',
           cursor: 'pointer',
           userSelect: 'none',
           transition: 'all 0.15s ease',
-          boxShadow: isExpanded ? 'none' : '0 1px 3px rgba(180, 83, 9, 0.05)'
+          boxShadow: '0 1px 2px rgba(93, 64, 55, 0.04)'
         }}
-        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FEF3C7'}
-        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = isExpanded ? '#FEF3C7' : '#FFFBEB'}
+        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F5EFE8'}
+        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = isExpanded ? '#F5EFE8' : '#FAF7F2'}
         title={isExpanded ? 'Nhấn để thu gọn bảng bước kiểm tra SOP' : 'Nhấn để xem chi tiết các bước kiểm tra SOP'}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -280,21 +280,20 @@ export const SopStepsTable = ({
             width: '26px',
             height: '26px',
             borderRadius: '6px',
-            backgroundColor: '#FDE68A',
-            border: '1px solid #FCD34D',
+            backgroundColor: '#EFEAE3',
+            border: '1px solid #D8CCC0',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
             flexShrink: 0
           }}>
-            <ClipboardList size={15} color="#92400E" />
+            <ClipboardList size={15} color="#8B5E3C" />
           </div>
 
           <span style={{
             fontSize: '0.82rem',
-            color: '#78350F',
-            fontWeight: 800,
+            color: '#5D4037',
+            fontWeight: 700,
             textTransform: 'uppercase',
             letterSpacing: '0.4px'
           }}>
@@ -307,10 +306,10 @@ export const SopStepsTable = ({
             padding: '2px 8px',
             borderRadius: '9999px',
             fontSize: '0.72rem',
-            fontWeight: 700,
-            backgroundColor: '#FFFFFF',
-            color: '#92400E',
-            border: '1px solid #FDE68A'
+            fontWeight: 600,
+            backgroundColor: '#EFEAE3',
+            color: '#5D4037',
+            border: '1px solid #D8CCC0'
           }}>
             {steps.length} bước
           </span>
@@ -324,7 +323,7 @@ export const SopStepsTable = ({
               padding: '2px 8px',
               borderRadius: '9999px',
               fontSize: '0.72rem',
-              fontWeight: 700,
+              fontWeight: 600,
               backgroundColor: '#ECFDF5',
               color: '#059669',
               border: '1px solid #A7F3D0'
@@ -340,10 +339,10 @@ export const SopStepsTable = ({
               padding: '2px 8px',
               borderRadius: '9999px',
               fontSize: '0.72rem',
-              fontWeight: 700,
-              backgroundColor: '#FFF1F2',
-              color: '#E11D48',
-              border: '1px solid #FECDD3'
+              fontWeight: 600,
+              backgroundColor: '#FEF2F2',
+              color: '#DC2626',
+              border: '1px solid #FECACA'
             }}>
               <AlertCircle size={12} strokeWidth={2.5} />
               <span>{failedSteps.length} bước không đạt</span>
@@ -367,12 +366,11 @@ export const SopStepsTable = ({
                 padding: '4px 8px',
                 borderRadius: '6px',
                 backgroundColor: '#FFFFFF',
-                color: '#78350F',
-                border: '1px solid #FDE68A',
+                color: '#5D4037',
+                border: '1px solid #D8CCC0',
                 fontSize: '0.74rem',
                 fontWeight: 600,
-                cursor: 'pointer',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                cursor: 'pointer'
               }}
               title="Mở toàn màn hình trong cửa sổ riêng"
             >
@@ -393,13 +391,12 @@ export const SopStepsTable = ({
               gap: '5px',
               padding: '5px 12px',
               borderRadius: '6px',
-              backgroundColor: isExpanded ? '#FDE68A' : '#FFFFFF',
-              color: '#78350F',
-              border: '1px solid #FCD34D',
+              backgroundColor: '#FFFFFF',
+              color: '#5D4037',
+              border: '1px solid #D8CCC0',
               fontSize: '0.76rem',
-              fontWeight: 700,
+              fontWeight: 600,
               cursor: 'pointer',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
               transition: 'all 0.15s ease'
             }}
           >
@@ -410,7 +407,7 @@ export const SopStepsTable = ({
               </>
             ) : (
               <>
-                <Eye size={14} color="#B45309" />
+                <Eye size={14} color="#8B5E3C" />
                 <span>Xem chi tiết</span>
                 <ChevronDown size={14} />
               </>
@@ -453,7 +450,7 @@ export const SopStepsTable = ({
                 padding: '3px 8px',
                 borderRadius: '4px',
                 backgroundColor: '#FFFFFF',
-                color: '#78350F',
+                color: '#475569',
                 border: '1px solid #CBD5E1',
                 fontSize: '0.72rem',
                 fontWeight: 600,
@@ -507,26 +504,27 @@ export const SopStepsTable = ({
               alignItems: 'center',
               justifyContent: 'space-between',
               padding: '14px 20px',
-              backgroundColor: '#FFFBEB',
-              borderBottom: '1.5px solid #FDE68A'
+              backgroundColor: '#FFFFFF',
+              borderBottom: '1px solid #E2E8F0'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <div style={{
                   width: '32px',
                   height: '32px',
                   borderRadius: '8px',
-                  backgroundColor: '#FDE68A',
+                  backgroundColor: '#F1F5F9',
+                  border: '1px solid #E2E8F0',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center'
                 }}>
-                  <ClipboardList size={18} color="#92400E" />
+                  <ClipboardList size={18} color="#475569" />
                 </div>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: '#78350F', textTransform: 'uppercase' }}>
+                  <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#0F172A', textTransform: 'uppercase' }}>
                     Chi tiết các bước kiểm tra SOP ({steps.length} bước)
                   </h3>
-                  <div style={{ fontSize: '0.76rem', color: '#B45309', marginTop: '2px' }}>
+                  <div style={{ fontSize: '0.76rem', color: '#64748B', marginTop: '2px' }}>
                     Tiêu chuẩn kỹ thuật chi tiết theo công đoạn kiểm định
                   </div>
                 </div>
@@ -539,12 +537,12 @@ export const SopStepsTable = ({
                   height: '32px',
                   borderRadius: '8px',
                   backgroundColor: '#FFFFFF',
-                  border: '1px solid #FCD34D',
+                  border: '1px solid #CBD5E1',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   cursor: 'pointer',
-                  color: '#78350F'
+                  color: '#64748B'
                 }}
               >
                 <X size={16} />
@@ -573,11 +571,11 @@ export const SopStepsTable = ({
                 style={{
                   padding: '7px 18px',
                   borderRadius: '8px',
-                  backgroundColor: '#78350F',
+                  backgroundColor: '#0F172A',
                   color: '#FFFFFF',
                   border: 'none',
                   fontSize: '0.82rem',
-                  fontWeight: 700,
+                  fontWeight: 600,
                   cursor: 'pointer'
                 }}
               >

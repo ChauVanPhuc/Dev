@@ -177,7 +177,7 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
           style={{
             marginTop: 4,
             marginBottom: 12,
-            padding: '10px 14px',
+            padding: '10px 12px',
             borderRadius: 8,
             backgroundColor: '#FEF3C7',
             border: '1px solid #FDE68A',
@@ -185,6 +185,7 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
             alignItems: 'center',
             justifyContent: 'space-between',
             gap: 8,
+            flexWrap: 'wrap',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '12.5px', color: '#92400E' }}>

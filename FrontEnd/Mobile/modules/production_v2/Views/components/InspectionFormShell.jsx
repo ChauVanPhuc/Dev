@@ -509,13 +509,17 @@ const InspectionFormShell = ({ title, subTitle, formState, children, showLastRes
       {/* Cố định neo cuối màn hình (Fixed Bottom Action Bar) */}
       <div className="pv2-fixed-bottom-actions">
         {readOnly ? (
-          <div style={{ display: 'flex', gap: 12, width: '100%' }}>
+          <>
             <button
               type="button"
               className="pv2-btn-cancel"
               onClick={() => navigate(ROUTES.INSPECTION_LIST)}
             >
-              <ArrowLeft size={17} /> Quay lại danh sách
+              <ArrowLeft size={17} />
+              <span className="pv2-btn-label">
+                <span className="pv2-btn-text-full">Quay lại danh sách</span>
+                <span className="pv2-btn-text-short">Quay lại</span>
+              </span>
             </button>
             {!isDone && (
               <button
@@ -524,14 +528,18 @@ const InspectionFormShell = ({ title, subTitle, formState, children, showLastRes
                 onClick={handleConfirmTicketClick}
                 disabled={submitting}
               >
-                <CheckCircle2 size={17} /> {submitting ? 'Đang duyệt...' : 'Xác nhận duyệt'}
+                <CheckCircle2 size={17} />
+                <span className="pv2-btn-label">
+                  {submitting ? 'Đang duyệt...' : 'Xác nhận duyệt'}
+                </span>
               </button>
             )}
-          </div>
+          </>
         ) : (
           <>
             <button type="button" className="pv2-btn-cancel" onClick={() => formState.handleCancelOrBack()}>
-              <X size={17} /> Hủy bỏ
+              <X size={17} />
+              <span className="pv2-btn-label">Hủy bỏ</span>
             </button>
             {isStageReady && (
               <button
@@ -544,7 +552,10 @@ const InspectionFormShell = ({ title, subTitle, formState, children, showLastRes
                   cursor: !isFormFilled ? 'not-allowed' : 'pointer'
                 }}
               >
-                <CheckCircle2 size={17} /> {submitting ? 'Đang lưu...' : 'Xác nhận'}
+                <CheckCircle2 size={17} />
+                <span className="pv2-btn-label">
+                  {submitting ? 'Đang lưu...' : 'Xác nhận'}
+                </span>
               </button>
             )}
           </>

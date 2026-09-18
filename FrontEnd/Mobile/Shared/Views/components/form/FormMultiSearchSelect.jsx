@@ -131,7 +131,7 @@ const FormMultiSearchSelect = ({
         style={{
           height: '42px',
           minHeight: '42px',
-          padding: '0 10px',
+          padding: '0 8px',
           borderRadius: '10px',
           border: `1.5px solid ${isOpen ? '#4a240e' : '#a3998e'}`,
           backgroundColor: disabled ? '#e2ded9' : '#ffffff',
@@ -146,7 +146,7 @@ const FormMultiSearchSelect = ({
         }}
       >
         <span style={{ 
-          fontSize: '13px', 
+          fontSize: '12.5px', 
           color: values.length > 0 ? '#1e293b' : '#94a3b8', 
           fontWeight: '600',
           whiteSpace: 'nowrap', 
@@ -154,12 +154,12 @@ const FormMultiSearchSelect = ({
           textOverflow: 'ellipsis',
           flex: 1,
           minWidth: 0,
-          marginRight: '6px',
+          marginRight: '4px',
           lineHeight: '1.2'
         }}>
           {selectedLabel}
         </span>
-        <ChevronDown size={16} color="#64748b" style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', flexShrink: 0 }} />
+        <ChevronDown size={15} color="#64748b" style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', flexShrink: 0 }} />
       </div>
 
       {/* Dropdown Menu */}

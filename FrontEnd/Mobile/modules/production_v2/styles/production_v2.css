@@ -1824,25 +1824,28 @@
   border-top: 1.5px solid #e8ded4 !important;
   border-top-left-radius: 16px !important;
   border-top-right-radius: 16px !important;
-  padding: 12px 16px calc(14px + env(safe-area-inset-bottom, 0px)) 16px !important;
+  padding: 10px 14px calc(12px + env(safe-area-inset-bottom, 0px)) 14px !important;
   box-shadow: 0 -6px 20px rgba(74, 36, 14, 0.08) !important;
   box-sizing: border-box !important;
   display: flex !important;
   flex-direction: row !important;
-  gap: 12px !important;
+  gap: 10px !important;
   align-items: center !important;
   z-index: 50 !important;
 }
 
 .pv2-btn-cancel {
-  flex: 1 !important;
-  height: 46px !important;
-  line-height: 44px !important;
+  flex: 1 1 0% !important;
+  min-width: 0 !important;
+  min-height: 44px !important;
+  height: auto !important;
+  line-height: 1.25 !important;
+  padding: 8px 10px !important;
   background: #ffffff !important;
   color: #633617 !important;
   border: 1.5px solid #d4c5b5 !important;
   border-radius: 10px !important;
-  font-size: 15px !important;
+  font-size: clamp(12.5px, 3.6vw, 15px) !important;
   font-weight: 700 !important;
   cursor: pointer !important;
   text-align: center !important;
@@ -1850,7 +1853,8 @@
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
-  gap: 8px !important;
+  gap: 6px !important;
+  white-space: nowrap !important;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
 }
@@ -1869,14 +1873,17 @@
 }
 
 .pv2-btn-submit {
-  flex: 1 !important;
-  height: 46px !important;
-  line-height: 46px !important;
+  flex: 1 1 0% !important;
+  min-width: 0 !important;
+  min-height: 44px !important;
+  height: auto !important;
+  line-height: 1.25 !important;
+  padding: 8px 10px !important;
   background: linear-gradient(135deg, #57290f 0%, #3a1908 100%) !important;
   color: #ffffff !important;
   border: none !important;
   border-radius: 10px !important;
-  font-size: 15px !important;
+  font-size: clamp(12.5px, 3.6vw, 15px) !important;
   font-weight: 700 !important;
   cursor: pointer !important;
   text-align: center !important;
@@ -1884,7 +1891,8 @@
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
-  gap: 8px !important;
+  gap: 6px !important;
+  white-space: nowrap !important;
   box-shadow: 0 4px 14px rgba(74, 36, 14, 0.28) !important;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
@@ -1906,6 +1914,25 @@
   cursor: not-allowed !important;
   transform: none !important;
   box-shadow: none !important;
+}
+
+.pv2-btn-cancel svg,
+.pv2-btn-submit svg {
+  flex-shrink: 0 !important;
+}
+
+.pv2-btn-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.pv2-btn-text-short {
+  display: none;
 }
 
 /* ── Mode selector cards (CL09 hub) ─────────────────────── */
@@ -1992,9 +2019,10 @@
   border: 1.5px solid #a3998e;
   border-radius: 12px;
   padding: 10px 12px;
-  margin: 12px 14px 12px;
+  margin: 10px 12px 10px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
   flex-shrink: 0;
+  box-sizing: border-box;
 }
 
 .pv2-plan-filter-label {
@@ -2009,10 +2037,13 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .pv2-plan-select-wrap {
   flex: 1;
+  min-width: 0;
 }
 
 .pv2-plan-select-wrap .pv2-input {
@@ -2025,6 +2056,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-shrink: 0;
 }
 
 .pv2-btn-icon-square {
@@ -2038,6 +2070,8 @@
   justify-content: center;
   color: #333333;
   cursor: pointer;
+  flex-shrink: 0;
+  box-sizing: border-box;
 }
 
 .pv2-btn-icon-square:hover {
@@ -2058,6 +2092,9 @@
   align-items: center;
   gap: 4px;
   white-space: nowrap;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  min-width: 0;
 }
 
 .pv2-btn-add-primary:hover {
@@ -2315,4 +2352,211 @@
 
 .pv2-fade-in {
   animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ============================================================
+   RESPONSIVE DESIGN CHO MÀN HÌNH ĐIỆN THOẠI NHỎ (<= 380px)
+   Hỗ trợ hoàn hảo Samsung Galaxy A/M, Redmi, Oppo A, iPhone SE...
+   ============================================================ */
+@media (max-width: 380px) {
+  /* Tự động chuyển đổi nhãn nút dài sang ngắn */
+  .pv2-btn-text-full {
+    display: none !important;
+  }
+  .pv2-btn-text-short {
+    display: inline !important;
+  }
+
+  /* Thu gọn lề thanh neo đáy */
+  .pv2-fixed-bottom-actions {
+    padding: 8px 10px calc(10px + env(safe-area-inset-bottom, 0px)) 10px !important;
+    gap: 8px !important;
+  }
+
+  .pv2-btn-cancel,
+  .pv2-btn-submit {
+    min-height: 42px !important;
+    padding: 6px 8px !important;
+    font-size: 13px !important;
+    gap: 5px !important;
+  }
+
+  /* Thu gọn đệm trang & card để tăng không gian hiển thị */
+  .pv2-page--form {
+    padding: 10px 6px 16px !important;
+  }
+
+  .pv2-form-card {
+    padding: 12px 8px !important;
+    border-radius: 10px !important;
+    margin-bottom: 20px !important;
+  }
+
+  /* Tối ưu khoảng cách và kích thước trường nhập 2 cột */
+  .pv2-field-row,
+  .pv2-field-row--2col,
+  .pv2-field-row--3col {
+    gap: 6px !important;
+  }
+
+  .pv2-field>label {
+    font-size: 11.5px !important;
+  }
+
+  .pv2-input {
+    height: 38px !important;
+    padding: 0 8px !important;
+    font-size: 13px !important;
+  }
+
+  .pv2-input-unit-wrap {
+    height: 38px !important;
+  }
+
+  .pv2-input-unit-wrap .pv2-input {
+    font-size: 13px !important;
+    padding: 0 4px 0 6px !important;
+  }
+
+  .pv2-radio-group {
+    gap: 8px !important;
+    padding: 6px 0 !important;
+  }
+
+  .pv2-radio-label {
+    font-size: 13px !important;
+    gap: 4px !important;
+  }
+
+  /* Modal trên màn hình nhỏ */
+  .pv2-modal-overlay {
+    padding: 10px !important;
+  }
+
+  .pv2-modal-header {
+    padding: 10px 12px !important;
+  }
+
+  .pv2-modal-body {
+    padding: 10px 12px !important;
+  }
+
+  .pv2-modal-footer {
+    padding: 10px 12px !important;
+    gap: 8px !important;
+  }
+
+  /* Thẻ kế hoạch & bộ lọc trang danh sách (CL06, CL08) */
+  .pv2-plan-filter-card {
+    margin: 8px 8px 8px !important;
+    padding: 8px 8px !important;
+    border-radius: 10px !important;
+  }
+
+  .pv2-plan-filter-row {
+    gap: 6px !important;
+  }
+
+  .pv2-plan-actions-right {
+    gap: 4px !important;
+  }
+
+  .pv2-btn-icon-square {
+    width: 34px !important;
+    height: 34px !important;
+    min-width: 34px !important;
+  }
+
+  .pv2-btn-add-primary {
+    height: 34px !important;
+    padding: 0 10px !important;
+    font-size: 12px !important;
+    gap: 4px !important;
+  }
+
+  /* Tabs danh sách */
+  .pv2-custom-tabs-container {
+    padding: 0 8px !important;
+    margin-bottom: 8px !important;
+  }
+
+  .pv2-custom-tab {
+    font-size: 13px !important;
+    padding: 8px 2px !important;
+    gap: 4px !important;
+  }
+
+  .pv2-badge-red {
+    padding: 1px 5px !important;
+    font-size: 10.5px !important;
+  }
+
+  /* Thẻ danh sách (CL06, CL08) */
+  .pv2-list {
+    padding: 6px 8px 90px !important;
+    gap: 6px !important;
+  }
+
+  .pv2-card {
+    margin: 0 0 8px 0 !important;
+    padding: 10px 10px !important;
+  }
+
+  .pv2-ticket-code {
+    font-size: 16px !important;
+  }
+
+  /* Bảng & SOP Table */
+  .pv2-table th,
+  .pv2-table td {
+    padding: 6px 4px !important;
+    font-size: 11.5px !important;
+  }
+
+  /* Panel bộ lọc trượt */
+  .pv2-filter-panel {
+    width: min(300px, 88vw) !important;
+  }
+
+  .pv2-date-range {
+    gap: 4px !important;
+  }
+
+  .pv2-date-input {
+    padding: 6px 4px !important;
+    font-size: 12px !important;
+  }
+}
+
+@media (max-width: 340px) {
+  .pv2-btn-cancel,
+  .pv2-btn-submit {
+    font-size: 12px !important;
+    padding: 6px 4px !important;
+  }
+
+  .pv2-field>label {
+    font-size: 11px !important;
+  }
+
+  .pv2-input {
+    font-size: 12px !important;
+    padding: 0 6px !important;
+  }
+
+  .pv2-btn-icon-square {
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+  }
+
+  .pv2-btn-add-primary {
+    height: 32px !important;
+    padding: 0 8px !important;
+    font-size: 11.5px !important;
+  }
+
+  .pv2-custom-tab {
+    font-size: 12px !important;
+  }
 }

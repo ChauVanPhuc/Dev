@@ -306,6 +306,7 @@ const CL06_TransferListView = () => {
                 value={String(filters.month || new Date().getMonth() + 1)}
                 options={monthOptions}
                 onChange={(v) => setFilters({ month: String(v), page: 1 })}
+                style={{ height: '36px', minHeight: '36px' }}
               />
             </div>
             <div className="pv2-plan-actions-right">
@@ -315,7 +316,7 @@ const CL06_TransferListView = () => {
                 onClick={toggleSort}
                 title={isAscending ? 'Sắp xếp cũ nhất trước' : 'Sắp xếp mới nhất trước'}
               >
-                {isAscending ? <ArrowUpAZ size={18} /> : <ArrowDownAZ size={18} />}
+                {isAscending ? <ArrowUpAZ size={17} /> : <ArrowDownAZ size={17} />}
               </button>
               <button
                 type="button"
@@ -323,14 +324,18 @@ const CL06_TransferListView = () => {
                 onClick={() => setFilterOpen(true)}
                 title="Bộ lọc chi tiết"
               >
-                <Filter size={18} />
+                <Filter size={17} />
               </button>
               <button
                 type="button"
                 className="pv2-btn-add-primary"
                 onClick={() => navigate(`${ROUTES.TRANSFER_CREATE}/NEW`)}
               >
-                <Plus size={16} /> Thêm mới
+                <Plus size={15} />
+                <span className="pv2-btn-label">
+                  <span className="pv2-btn-text-full">Thêm mới</span>
+                  <span className="pv2-btn-text-short">Thêm</span>
+                </span>
               </button>
             </div>
           </div>

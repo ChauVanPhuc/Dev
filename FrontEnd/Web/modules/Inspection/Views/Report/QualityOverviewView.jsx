@@ -1257,7 +1257,15 @@ const QualityOverviewView = () => {
     );
   };
 
-  // Tối ưu hiển thị Chi tiết / Phôi kiểm tra gọn gàng, loại bỏ trùng lặp và phân tách các chi tiết rõ ràng
+  // Trích xuất mã phiếu từ ticket_code hoặc parse từ task_name
+  const getTicketCode = (t) => {
+    if (t.ticket_code) return t.ticket_code;
+    const rawTaskName = (t.task_name || '').trim();
+    const tcMatch = rawTaskName.match(/#([A-Za-z0-9_\-]+)/);
+    return tcMatch ? tcMatch[1] : '';
+  };
+
+  // Tối ưu hiển thị Nội dung gọn gàng: "Xác nhận phiếu kiểm tra" + chi tiết thực tế
   const renderCleanBatchTaskName = (t) => {
     const rawTaskName = (t.task_name || '').trim();
     const rawPartName = (t.part_name || '').trim();
@@ -1268,13 +1276,11 @@ const QualityOverviewView = () => {
     // Xác định danh sách các chi tiết thực tế
     let parts = [];
     if (rawPartName && rawPartName !== 'N/A') {
-      // Phân tách chi tiết nếu có dấu phẩy hoặc xuống dòng
       parts = rawPartName
         .split(/[\n\r;]|,\s*(?=[A-ZÀ-Ỹa-z0-9])/)
         .map(s => s.trim())
         .filter(Boolean);
     } else if (isBoilerplate) {
-      // Nếu part_name rỗng nhưng task_name có dạng "Xác nhận hồ sơ kiểm tra #DA123 (Tên chi tiết)"
       const match = rawTaskName.match(/\((.*?)\)/);
       if (match && match[1]) {
         parts = match[1]
@@ -1284,28 +1290,34 @@ const QualityOverviewView = () => {
       }
     }
 
-    // Nếu không tách được gì, dùng rawTaskName hoặc rawPartName sạch
+    // Label chính: "Xác nhận phiếu kiểm tra" cho boilerplate, hoặc tên việc gốc
+    const mainLabel = isBoilerplate ? 'Xác nhận phiếu kiểm tra' : rawTaskName;
+
+    // Nếu không tách được chi tiết
     if (parts.length === 0) {
       const fallbackText = isBoilerplate 
-        ? rawTaskName.replace(/^xác nhận hồ sơ kiểm tra\s*#?[a-zA-Z0-9_\-]*\s*/i, '').replace(/^\(|\)$/g, '').trim() || rawTaskName
-        : rawTaskName;
+        ? rawTaskName.replace(/^xác nhận hồ sơ kiểm tra\s*#?[a-zA-Z0-9_\-]*\s*/i, '').replace(/^\(|\)$/g, '').trim()
+        : '';
       return (
-        <div style={{ fontWeight: 600, color: '#2D1A12', fontSize: '0.83rem', lineHeight: 1.35 }}>
-          {fallbackText || 'Chi tiết kiểm tra'}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          <span style={{ fontSize: '0.72rem', color: '#8D7B6F', fontWeight: 600 }}>{mainLabel}</span>
+          {fallbackText && (
+            <div style={{ fontWeight: 600, color: '#2D1A12', fontSize: '0.83rem', lineHeight: 1.35 }}>
+              {fallbackText}
+            </div>
+          )}
         </div>
       );
     }
 
-    // Nếu là tên việc có ý nghĩa riêng biệt (không phải boilerplate Xác nhận hồ sơ...)
+    // Nếu là tên việc có ý nghĩa riêng biệt (không phải boilerplate)
     const customTaskTitle = (!isBoilerplate && rawTaskName && rawTaskName !== rawPartName) ? rawTaskName : null;
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-        {customTaskTitle && (
-          <div style={{ fontWeight: 700, color: '#7B5233', fontSize: '0.83rem', marginBottom: '2px' }}>
-            {customTaskTitle}
-          </div>
-        )}
+        <span style={{ fontSize: '0.72rem', color: '#8D7B6F', fontWeight: 600 }}>
+          {isBoilerplate ? 'Xác nhận phiếu kiểm tra' : (customTaskTitle || '')}
+        </span>
         {parts.length === 1 ? (
           <div style={{ fontWeight: 600, color: '#2D1A12', fontSize: '0.83rem', lineHeight: 1.35 }}>
             {parts[0]}
@@ -1348,10 +1360,10 @@ const QualityOverviewView = () => {
           line-height: 1;
           border-radius: 4px;
           margin-left: 6px;
-          background-color: #F1F5F9;
-          color: #64748B;
-          border: 1px solid #CBD5E1;
-          box-shadow: 0 1px 0 rgba(0,0,0,0.06);
+          background-color: #EFEAE3;
+          color: #5D4037;
+          border: 1px solid #D8CCC0;
+          box-shadow: 0 1px 0 rgba(93, 64, 55, 0.06);
           user-select: none;
           letter-spacing: 0.2px;
           white-space: nowrap;
@@ -1422,24 +1434,24 @@ const QualityOverviewView = () => {
           width: 48px;
           height: 48px;
           border-radius: 50%;
-          background-color: #FAF6F0;
-          border: 1.5px solid #EADCC9;
+          background-color: #FAF7F2;
+          border: 1px solid #E0D6CB;
           color: #7B5233;
           display: flex;
           align-items: center;
           justify-content: center;
           cursor: pointer;
-          box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16), 0 2px 6px rgba(0, 0, 0, 0.08);
+          box-shadow: 0 4px 12px rgba(93, 64, 55, 0.08);
           transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
           flex-shrink: 0;
           z-index: 1010;
         }
         .modal-flank-btn:hover:not(:disabled) {
           background-color: #FFFFFF;
-          border-color: #7B5233;
-          color: #5D3E26;
-          transform: scale(1.12);
-          box-shadow: 0 8px 24px rgba(123, 82, 51, 0.28);
+          border-color: #8B5E3C;
+          color: #5D4037;
+          transform: scale(1.08);
+          box-shadow: 0 6px 16px rgba(93, 64, 55, 0.14);
         }
         .modal-flank-btn:active:not(:disabled) {
           transform: scale(0.94);
@@ -1549,8 +1561,9 @@ const QualityOverviewView = () => {
                   <thead>
                     <tr>
                       <th style={{ width: '60px', textAlign: 'center' }}>STT</th>
-                      <th style={{ minWidth: '220px' }}>TÊN VIỆC</th>
-                      <th style={{ width: '180px' }}>LOẠI KIỂM TRA</th>
+                      <th style={{ width: '120px' }}>PO</th>
+                      <th style={{ minWidth: '220px' }}>NỘI DUNG</th>
+                      <th style={{ width: '180px' }}>PHIẾU KIỂM TRA</th>
                       <th style={{ width: '140px' }}>NGƯỜI KIỂM TRA</th>
                       <th style={{ width: '110px', textAlign: 'center' }}>MỨC ĐỘ ƯU TIÊN</th>
                       <th style={{ width: '110px', textAlign: 'center' }}>TRẠNG THÁI</th>
@@ -1582,7 +1595,13 @@ const QualityOverviewView = () => {
                           }}
                         >
                           <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#8D6E63' }}>{sttDisplay}</td>
-                          <td style={{ fontWeight: '700', color: '#2D1A12' }}>{task.task_name}</td>
+                          <td style={{ verticalAlign: 'top' }}>
+                            <div style={{ fontWeight: '600', color: '#3E2723', fontSize: '0.84rem' }}>{task.batch_no || '—'}</div>
+                            {getTicketCode(task) && (
+                              <div style={{ fontSize: '0.72rem', color: '#8D7B6F', fontWeight: 600, marginTop: '2px' }}>#{getTicketCode(task)}</div>
+                            )}
+                          </td>
+                          <td style={{ fontWeight: '700', color: '#2D1A12' }}>{renderCleanBatchTaskName(task)}</td>
                           <td style={{ verticalAlign: 'middle' }}>{renderCategoryBadge(task)}</td>
                           <td style={{ fontWeight: '600', color: '#2D1A12' }}>
                             <span style={{
@@ -1607,7 +1626,7 @@ const QualityOverviewView = () => {
                           <td style={{ textAlign: 'center', fontWeight: '600', color: '#374151', fontSize: '0.82rem' }}>
                             {formatDateTime(task.recorded_date)}
                           </td>
-                          <td style={{ color: '#6B7280', fontSize: '0.85rem' }}>{task.notes}</td>
+                          <td style={{ color: '#6B7280', fontSize: '0.85rem' }}>{(() => { const n = (task.notes || '').trim(); return /^ch[ờo]\s*x[áa]c\s*nh[ậa]n/i.test(n) ? '' : n; })()}</td>
                           <td 
                             style={{ 
                               position: 'relative', 
@@ -1803,36 +1822,36 @@ const QualityOverviewView = () => {
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 padding: '16px 22px',
-                backgroundColor: '#FAF6F0',
-                borderBottom: '1.5px solid #EADCC9'
+                backgroundColor: '#FAF7F2',
+                borderBottom: '1px solid #E8DFD5'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <div style={{
                     width: '38px',
                     height: '38px',
                     borderRadius: '10px',
-                    backgroundColor: '#7B5233',
+                    backgroundColor: '#8B5E3C',
                     color: '#FFFFFF',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    boxShadow: '0 2px 5px rgba(123, 82, 51, 0.25)',
+                    boxShadow: '0 2px 6px rgba(139, 94, 60, 0.22)',
                     flexShrink: 0
                   }}>
                     <FileText size={20} />
                   </div>
                   <div>
-                    <h3 style={{ margin: 0, color: '#7B5233', fontSize: '1.18rem', fontWeight: 800, letterSpacing: '-0.2px' }}>
+                    <h3 style={{ margin: 0, color: '#5D4037', fontSize: '1.18rem', fontWeight: 700, letterSpacing: '-0.2px' }}>
                       Chi tiết phiếu kiểm tra
                     </h3>
-                    <div style={{ fontSize: '0.8rem', color: '#8D6E63', fontWeight: 600, marginTop: '2px' }}>
-                      Mã phiếu: <strong style={{ color: '#2D1A12' }}>#{selectedTask.ticket_code || selectedTask.id}</strong>
+                    <div style={{ fontSize: '0.8rem', color: '#8D7B6F', fontWeight: 500, marginTop: '2px' }}>
+                      Mã phiếu: <strong style={{ color: '#3E2723' }}>#{selectedTask.ticket_code || selectedTask.id}</strong>
                     </div>
                   </div>
                 </div>
 
                 {/* CHỈ SỐ HỒ SƠ, KẾT QUẢ & NÚT ĐÓNG */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   {/* CHỈ SỐ THỨ TỰ HỒ SƠ */}
                   {filteredTasks.length > 0 && currentTaskIndex >= 0 && (
                     <div
@@ -1842,12 +1861,11 @@ const QualityOverviewView = () => {
                         padding: '4px 10px',
                         borderRadius: '8px',
                         backgroundColor: '#FFFFFF',
-                        border: '1px solid #EADCC9',
+                        border: '1px solid #E0D6CB',
                         fontSize: '0.82rem',
-                        fontWeight: 800,
-                        color: '#7B5233',
-                        letterSpacing: '0.2px',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                        fontWeight: 700,
+                        color: '#6D4C41',
+                        letterSpacing: '0.2px'
                       }}
                       title={`Đang xem hồ sơ ${currentTaskIndex + 1} trên tổng số ${filteredTasks.length} hồ sơ`}
                     >
@@ -1857,7 +1875,7 @@ const QualityOverviewView = () => {
 
                   {/* CHỈNH SỬA KẾT QUẢ ĐẠT / KHÔNG ĐẠT (1 NÚT DUY NHẤT CLICK ĐỔI TRẠNG THÁI) */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ fontSize: '0.76rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                    <span style={{ fontSize: '0.76rem', color: '#8D7B6F', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.3px' }}>
                       Kết quả:
                     </span>
                     <button
@@ -1878,12 +1896,11 @@ const QualityOverviewView = () => {
                         padding: '4px 12px',
                         borderRadius: '20px',
                         fontSize: '0.82rem',
-                        fontWeight: 800,
+                        fontWeight: 700,
                         cursor: 'pointer',
-                        border: modalResult === 'pass' ? '1.5px solid #A7F3D0' : '1.5px solid #FECACA',
+                        border: modalResult === 'pass' ? '1px solid #A7F3D0' : '1px solid #FECACA',
                         backgroundColor: modalResult === 'pass' ? '#ECFDF5' : '#FEF2F2',
                         color: modalResult === 'pass' ? '#059669' : '#DC2626',
-                        boxShadow: modalResult === 'pass' ? '0 1px 2px rgba(16, 185, 129, 0.2)' : '0 1px 2px rgba(239, 68, 68, 0.2)',
                         transition: 'all 0.15s ease',
                         userSelect: 'none'
                       }}
@@ -1919,9 +1936,9 @@ const QualityOverviewView = () => {
                       width: '32px',
                       height: '32px',
                       borderRadius: '8px',
-                      border: '1.5px solid #EADCC9',
+                      border: '1px solid #E0D6CB',
                       backgroundColor: '#FFFFFF',
-                      color: '#8D6E63',
+                      color: '#8D7B6F',
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
@@ -1929,14 +1946,14 @@ const QualityOverviewView = () => {
                       transition: 'all 0.15s ease'
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = '#FEE2E2';
-                      e.currentTarget.style.color = '#DC2626';
-                      e.currentTarget.style.borderColor = '#FCA5A5';
+                      e.currentTarget.style.backgroundColor = '#F5EFE8';
+                      e.currentTarget.style.color = '#3E2723';
+                      e.currentTarget.style.borderColor = '#8B5E3C';
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.backgroundColor = '#FFFFFF';
-                      e.currentTarget.style.color = '#8D6E63';
-                      e.currentTarget.style.borderColor = '#EADCC9';
+                      e.currentTarget.style.color = '#8D7B6F';
+                      e.currentTarget.style.borderColor = '#E0D6CB';
                     }}
                     title="Đóng (Esc)"
                   >
@@ -1949,8 +1966,8 @@ const QualityOverviewView = () => {
               {!confirmSuccessMsg && (
                 <div style={{
                   display: 'flex',
-                  borderBottom: '1.5px solid #EADCC9',
-                  backgroundColor: '#FAF6F0',
+                  borderBottom: '1px solid #E8DFD5',
+                  backgroundColor: '#FAF7F2',
                   padding: '0 22px',
                   gap: '6px'
                 }}>
@@ -1961,12 +1978,12 @@ const QualityOverviewView = () => {
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: '8px',
-                      padding: '11px 18px',
+                      padding: '11px 16px',
                       border: 'none',
-                      borderBottom: modalTab === 'info' ? '3px solid #7B5233' : '3px solid transparent',
+                      borderBottom: modalTab === 'info' ? '2.5px solid #8B5E3C' : '2.5px solid transparent',
                       backgroundColor: 'transparent',
-                      color: modalTab === 'info' ? '#7B5233' : '#8D6E63',
-                      fontWeight: modalTab === 'info' ? 800 : 600,
+                      color: modalTab === 'info' ? '#5D4037' : '#8D7B6F',
+                      fontWeight: modalTab === 'info' ? 700 : 500,
                       fontSize: '0.88rem',
                       cursor: 'pointer',
                       transition: 'all 0.15s ease'
@@ -1979,9 +1996,10 @@ const QualityOverviewView = () => {
                         fontSize: '0.72rem',
                         padding: '1px 7px',
                         borderRadius: '10px',
-                        backgroundColor: modalTab === 'info' ? '#EADCC9' : '#F3EBE1',
-                        color: '#7B5233',
-                        fontWeight: 700
+                        backgroundColor: '#EFEAE3',
+                        color: '#5D4037',
+                        border: '1px solid #D8CCC0',
+                        fontWeight: 600
                       }}>
                         {taskImages.length} ảnh
                       </span>
@@ -1995,12 +2013,12 @@ const QualityOverviewView = () => {
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: '8px',
-                      padding: '11px 18px',
+                      padding: '11px 16px',
                       border: 'none',
-                      borderBottom: modalTab === 'details' ? '3px solid #7B5233' : '3px solid transparent',
+                      borderBottom: modalTab === 'details' ? '2.5px solid #8B5E3C' : '2.5px solid transparent',
                       backgroundColor: 'transparent',
-                      color: modalTab === 'details' ? '#7B5233' : '#8D6E63',
-                      fontWeight: modalTab === 'details' ? 800 : 600,
+                      color: modalTab === 'details' ? '#5D4037' : '#8D7B6F',
+                      fontWeight: modalTab === 'details' ? 700 : 500,
                       fontSize: '0.88rem',
                       cursor: 'pointer',
                       transition: 'all 0.15s ease'
@@ -2013,9 +2031,10 @@ const QualityOverviewView = () => {
                         fontSize: '0.72rem',
                         padding: '1px 7px',
                         borderRadius: '10px',
-                        backgroundColor: modalTab === 'details' ? '#7B5233' : '#EADCC9',
-                        color: modalTab === 'details' ? '#FFFFFF' : '#7B5233',
-                        fontWeight: 700
+                        backgroundColor: '#EFEAE3',
+                        color: '#5D4037',
+                        border: '1px solid #D8CCC0',
+                        fontWeight: 600
                       }}>
                         {partsList.length}
                       </span>
@@ -2036,8 +2055,8 @@ const QualityOverviewView = () => {
                   <>
                     {/* CARD THÔNG TIN TỔNG QUAN (3 DÒNG x 3 CỘT) */}
                     <div style={{
-                      backgroundColor: '#FCFBF9',
-                      border: '1.5px solid #EADCC9',
+                      backgroundColor: '#FAF7F2',
+                      border: '1px solid #E8DFD5',
                       borderRadius: '12px',
                       padding: '14px 16px',
                       marginBottom: '16px',
@@ -2047,41 +2066,41 @@ const QualityOverviewView = () => {
                       fontSize: '0.88rem'
                     }}>
                       <div>
-                        <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                        <span style={{ fontSize: '0.74rem', color: '#8D7B6F', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
                           MÃ LÔ / PO
                         </span>
-                        <strong style={{ color: '#7B5233', fontSize: '0.92rem' }}>
+                        <strong style={{ color: '#3E2723', fontSize: '0.92rem' }}>
                           {selectedTask.batch_no || 'N/A'}
                         </strong>
                       </div>
 
                       <div>
-                        <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
-                          LOẠI KIỂM TRA
+                        <span style={{ fontSize: '0.74rem', color: '#8D7B6F', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                          PHIẾU KIỂM TRA
                         </span>
                         <div>{renderCategoryBadge(selectedTask)}</div>
                       </div>
 
                       <div>
-                        <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                        <span style={{ fontSize: '0.74rem', color: '#8D7B6F', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
                           NGƯỜI KIỂM TRA QC
                         </span>
-                        <strong style={{ color: '#2D1A12' }}>
+                        <strong style={{ color: '#3E2723' }}>
                           {selectedTask.inspector_name || 'QC'}
                         </strong>
                       </div>
 
                       <div>
-                        <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                        <span style={{ fontSize: '0.74rem', color: '#8D7B6F', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
                           NGÀY GHI NHẬN
                         </span>
-                        <span style={{ color: '#2D1A12', fontWeight: 600 }}>
+                        <span style={{ color: '#3E2723', fontWeight: 600 }}>
                           {formatDateTime(selectedTask.recorded_date)}
                         </span>
                       </div>
 
                       <div>
-                        <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                        <span style={{ fontSize: '0.74rem', color: '#8D7B6F', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
                           TRẠNG THÁI
                         </span>
                         <div>
@@ -2090,7 +2109,7 @@ const QualityOverviewView = () => {
                       </div>
 
                       <div>
-                        <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                        <span style={{ fontSize: '0.74rem', color: '#8D7B6F', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
                           HÀNH ĐỘNG XỬ LÝ
                         </span>
                         <select
@@ -2099,11 +2118,11 @@ const QualityOverviewView = () => {
                           style={{
                             padding: '4px 8px',
                             borderRadius: '6px',
-                            border: '1.5px solid #EADCC9',
+                            border: '1px solid #D8CCC0',
                             fontSize: '0.82rem',
-                            fontWeight: '700',
-                            backgroundColor: '#FAF6F0',
-                            color: '#7B5233',
+                            fontWeight: '600',
+                            backgroundColor: '#FFFFFF',
+                            color: '#5D4037',
                             cursor: 'pointer',
                             outline: 'none',
                             width: '100%',
@@ -2117,7 +2136,7 @@ const QualityOverviewView = () => {
                       </div>
 
                       <div>
-                        <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                        <span style={{ fontSize: '0.74rem', color: '#8D7B6F', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
                           SL CẦN KIỂM (LÔ)
                         </span>
                         <strong style={{ color: '#059669', fontSize: '0.92rem' }}>
@@ -2126,16 +2145,16 @@ const QualityOverviewView = () => {
                       </div>
 
                       <div>
-                        <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                        <span style={{ fontSize: '0.74rem', color: '#8D7B6F', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
                           SL MẪU KIỂM TRA (AQL)
                         </span>
-                        <strong style={{ color: '#1D4ED8', fontSize: '0.92rem' }}>
+                        <strong style={{ color: '#2563EB', fontSize: '0.92rem' }}>
                           {Number(selectedTask.sample_qty || 0).toLocaleString()}
                         </strong>
                       </div>
 
                       <div>
-                        <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                        <span style={{ fontSize: '0.74rem', color: '#8D7B6F', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
                           SỐ LỖI PHÁT HIỆN
                         </span>
                         <strong style={{ color: (selectedTask.error_qty > 0) ? '#DC2626' : '#059669', fontSize: '0.92rem' }}>
@@ -2148,8 +2167,8 @@ const QualityOverviewView = () => {
                     <div style={{ marginBottom: '16px', fontSize: '0.88rem' }}>
                       <label style={{
                         fontSize: '0.76rem',
-                        color: '#7B5233',
-                        fontWeight: 800,
+                        color: '#6D4C41',
+                        fontWeight: 700,
                         textTransform: 'uppercase',
                         letterSpacing: '0.3px',
                         display: 'block',
@@ -2167,9 +2186,9 @@ const QualityOverviewView = () => {
                           boxSizing: 'border-box',
                           padding: '10px 12px',
                           borderRadius: '8px',
-                          border: '1.5px solid #EADCC9',
+                          border: '1px solid #D8CCC0',
                           backgroundColor: '#FFFFFF',
-                          color: '#2D1A12',
+                          color: '#3E2723',
                           fontSize: '0.86rem',
                           lineHeight: '1.45',
                           resize: 'vertical',
@@ -2178,11 +2197,11 @@ const QualityOverviewView = () => {
                           transition: 'border-color 0.15s ease, box-shadow 0.15s ease'
                         }}
                         onFocus={(e) => {
-                          e.target.style.borderColor = '#7B5233';
-                          e.target.style.boxShadow = '0 0 0 3px rgba(123, 82, 51, 0.1)';
+                          e.target.style.borderColor = '#8B5E3C';
+                          e.target.style.boxShadow = '0 0 0 3px rgba(139, 94, 60, 0.12)';
                         }}
                         onBlur={(e) => {
-                          e.target.style.borderColor = '#EADCC9';
+                          e.target.style.borderColor = '#D8CCC0';
                           e.target.style.boxShadow = 'none';
                         }}
                       />
@@ -2190,15 +2209,15 @@ const QualityOverviewView = () => {
 
                     {/* GHI CHÚ */}
                     <div style={{ marginBottom: '16px', fontSize: '0.88rem' }}>
-                      <div style={{ fontSize: '0.76rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px' }}>
+                      <div style={{ fontSize: '0.76rem', color: '#8D7B6F', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px' }}>
                         Ghi chú
                       </div>
                       <div style={{
-                        background: '#FAF6F0',
+                        background: '#FAF7F2',
                         padding: '10px 14px',
                         borderRadius: '8px',
-                        border: '1px solid #EADCC9',
-                        color: '#4B5563',
+                        border: '1px solid #E8DFD5',
+                        color: '#5D4037',
                         lineHeight: 1.4,
                         whiteSpace: 'pre-wrap'
                       }}>
@@ -2206,19 +2225,19 @@ const QualityOverviewView = () => {
                       </div>
                     </div>
 
-                    {/* HÌNH ẢNH MINH CHỨNG (PHẢI CÓ LUN PHẦN ẢNH) */}
+                    {/* HÌNH ẢNH MINH CHỨNG */}
                     <div style={{ marginBottom: '8px' }}>
                       <div style={{
                         fontSize: '0.76rem',
-                        color: '#7B5233',
-                        fontWeight: 800,
+                        color: '#6D4C41',
+                        fontWeight: 700,
                         textTransform: 'uppercase',
                         marginBottom: '8px',
                         display: 'flex',
                         alignItems: 'center',
                         gap: '6px'
                       }}>
-                        <ImageIcon size={14} />
+                        <ImageIcon size={14} color="#8B5E3C" />
                         <span>Hình ảnh minh chứng ({taskImages.length})</span>
                       </div>
                       {taskImages.length > 0 ? (
@@ -2232,20 +2251,20 @@ const QualityOverviewView = () => {
                                   position: 'relative',
                                   borderRadius: '8px',
                                   overflow: 'hidden',
-                                  border: '1.5px solid #EADCC9',
-                                  backgroundColor: '#FAF6F0',
+                                  border: '1px solid #E0D6CB',
+                                  backgroundColor: '#FAF7F2',
                                   cursor: 'pointer',
-                                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                                  boxShadow: '0 1px 3px rgba(93,64,55,0.06)',
                                   transition: 'transform 0.15s, box-shadow 0.15s'
                                 }}
                                 onClick={() => setPreviewImgUrl(imgUrl)}
                                 onMouseEnter={(e) => {
                                   e.currentTarget.style.transform = 'scale(1.04)';
-                                  e.currentTarget.style.boxShadow = '0 4px 10px rgba(123,82,51,0.15)';
+                                  e.currentTarget.style.boxShadow = '0 4px 10px rgba(93,64,55,0.14)';
                                 }}
                                 onMouseLeave={(e) => {
                                   e.currentTarget.style.transform = 'scale(1)';
-                                  e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)';
+                                  e.currentTarget.style.boxShadow = '0 1px 3px rgba(93,64,55,0.06)';
                                 }}
                                 title="Nhấp để xem ảnh lớn"
                               >
@@ -2259,10 +2278,10 @@ const QualityOverviewView = () => {
                                   bottom: 0,
                                   left: 0,
                                   right: 0,
-                                  backgroundColor: 'rgba(45, 26, 18, 0.65)',
+                                  backgroundColor: 'rgba(62, 39, 35, 0.75)',
                                   color: '#FFFFFF',
                                   fontSize: '0.68rem',
-                                  fontWeight: 700,
+                                  fontWeight: 600,
                                   textAlign: 'center',
                                   padding: '2px 0'
                                 }}>
@@ -2275,10 +2294,10 @@ const QualityOverviewView = () => {
                       ) : (
                         <div style={{
                           padding: '12px 14px',
-                          backgroundColor: '#FAF6F0',
+                          backgroundColor: '#FAF7F2',
                           borderRadius: '8px',
-                          border: '1px dashed #EADCC9',
-                          color: '#9CA3AF',
+                          border: '1px dashed #D8CCC0',
+                          color: '#8D7B6F',
                           fontSize: '0.82rem',
                           fontStyle: 'italic'
                         }}>
@@ -2294,8 +2313,8 @@ const QualityOverviewView = () => {
                     <div style={{ marginBottom: '16px' }}>
                       <div style={{
                         fontSize: '0.82rem',
-                        color: '#78350F',
-                        fontWeight: 800,
+                        color: '#5D4037',
+                        fontWeight: 700,
                         marginBottom: '10px',
                         display: 'flex',
                         alignItems: 'center',
@@ -2307,14 +2326,13 @@ const QualityOverviewView = () => {
                           width: '24px',
                           height: '24px',
                           borderRadius: '6px',
-                          backgroundColor: '#FEF3C7',
-                          border: '1px solid #FDE68A',
+                          backgroundColor: '#EFEAE3',
+                          border: '1px solid #D8CCC0',
                           display: 'flex',
                           alignItems: 'center',
-                          justifyContent: 'center',
-                          boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+                          justifyContent: 'center'
                         }}>
-                          <Layers size={14} color="#B45309" />
+                          <Layers size={14} color="#8B5E3C" />
                         </div>
                         <span>Danh sách chi tiết / phôi kiểm tra</span>
                         <span style={{
@@ -2323,32 +2341,32 @@ const QualityOverviewView = () => {
                           padding: '2px 8px',
                           borderRadius: '9999px',
                           fontSize: '0.72rem',
-                          fontWeight: 700,
-                          backgroundColor: '#FEF3C7',
-                          color: '#92400E',
-                          border: '1px solid #FDE68A'
+                          fontWeight: 600,
+                          backgroundColor: '#EFEAE3',
+                          color: '#5D4037',
+                          border: '1px solid #D8CCC0'
                         }}>
                           {partsList.length} chi tiết
                         </span>
                       </div>
 
                       <div className="sop-standard-scroll" style={{
-                        border: '1px solid #E2E8F0',
+                        border: '1px solid #E8DFD5',
                         borderRadius: '12px',
                         overflow: 'hidden',
                         backgroundColor: '#FFFFFF',
                         maxHeight: '280px',
                         overflowY: 'auto',
-                        boxShadow: '0 2px 8px -2px rgba(0,0,0,0.05), 0 1px 4px -1px rgba(0,0,0,0.03)'
+                        boxShadow: '0 2px 8px -2px rgba(93,64,55,0.05), 0 1px 4px -1px rgba(93,64,55,0.03)'
                       }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                           <thead>
-                            <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1.5px solid #E2E8F0' }}>
-                              <th style={{ padding: '10px 8px', textAlign: 'center', color: '#475569', fontWeight: 800, fontSize: '0.74rem', width: '56px', letterSpacing: '0.4px' }}>STT</th>
-                              <th style={{ padding: '10px 12px', textAlign: 'left', color: '#475569', fontWeight: 800, fontSize: '0.74rem', minWidth: '130px', letterSpacing: '0.4px' }}>TÊN CHI TIẾT / PHÔI</th>
-                              <th style={{ padding: '10px 12px', textAlign: 'left', color: '#475569', fontWeight: 800, fontSize: '0.74rem', width: '140px', letterSpacing: '0.4px' }}>QUY CÁCH / THÔNG SỐ</th>
-                              <th style={{ padding: '10px 12px', textAlign: 'left', color: '#475569', fontWeight: 800, fontSize: '0.74rem', minWidth: '180px', letterSpacing: '0.4px' }}>TÊN TỦ (SKU)</th>
-                              <th style={{ padding: '10px 10px', textAlign: 'center', color: '#475569', fontWeight: 800, fontSize: '0.74rem', width: '100px', letterSpacing: '0.4px' }}>SL KẾ HOẠCH</th>
+                            <tr style={{ backgroundColor: '#FAF7F2', borderBottom: '1.5px solid #E8DFD5' }}>
+                              <th style={{ padding: '10px 8px', textAlign: 'center', color: '#6D4C41', fontWeight: 700, fontSize: '0.74rem', width: '56px', letterSpacing: '0.4px' }}>STT</th>
+                              <th style={{ padding: '10px 12px', textAlign: 'left', color: '#6D4C41', fontWeight: 700, fontSize: '0.74rem', minWidth: '130px', letterSpacing: '0.4px' }}>TÊN CHI TIẾT / PHÔI</th>
+                              <th style={{ padding: '10px 12px', textAlign: 'left', color: '#6D4C41', fontWeight: 700, fontSize: '0.74rem', width: '140px', letterSpacing: '0.4px' }}>QUY CÁCH / THÔNG SỐ</th>
+                              <th style={{ padding: '10px 12px', textAlign: 'left', color: '#6D4C41', fontWeight: 700, fontSize: '0.74rem', minWidth: '180px', letterSpacing: '0.4px' }}>TÊN TỦ (SKU)</th>
+                              <th style={{ padding: '10px 10px', textAlign: 'center', color: '#6D4C41', fontWeight: 700, fontSize: '0.74rem', width: '100px', letterSpacing: '0.4px' }}>SL KẾ HOẠCH</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -2356,12 +2374,12 @@ const QualityOverviewView = () => {
                               <tr 
                                 key={idx} 
                                 style={{ 
-                                  borderBottom: idx < partsList.length - 1 ? '1px solid #F1F5F9' : 'none',
-                                  backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAFBFD',
+                                  borderBottom: idx < partsList.length - 1 ? '1px solid #F5EFE8' : 'none',
+                                  backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FDFCF9',
                                   transition: 'background-color 0.15s ease'
                                 }}
-                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F1F5F9'}
-                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = idx % 2 === 0 ? '#FFFFFF' : '#FAFBFD'}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F7F3EE'}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = idx % 2 === 0 ? '#FFFFFF' : '#FDFCF9'}
                               >
                                 <td style={{ padding: '9px 8px', textAlign: 'center', verticalAlign: 'middle' }}>
                                   <span style={{
@@ -2371,26 +2389,26 @@ const QualityOverviewView = () => {
                                     width: '24px',
                                     height: '24px',
                                     borderRadius: '6px',
-                                    backgroundColor: '#F1F5F9',
-                                    color: '#475569',
-                                    fontWeight: 800,
+                                    backgroundColor: '#EFEAE3',
+                                    color: '#5D4037',
+                                    fontWeight: 700,
                                     fontSize: '0.75rem',
-                                    border: '1px solid #E2E8F0'
+                                    border: '1px solid #D8CCC0'
                                   }}>
                                     {p.stt}
                                   </span>
                                 </td>
-                                <td style={{ padding: '9px 12px', color: '#0F172A', fontWeight: 700, verticalAlign: 'middle', lineHeight: 1.4 }}>
+                                <td style={{ padding: '9px 12px', color: '#3E2723', fontWeight: 700, verticalAlign: 'middle', lineHeight: 1.4 }}>
                                   {p.name}
                                 </td>
                                 <td style={{ padding: '9px 12px', verticalAlign: 'middle' }}>
                                   <span style={{
                                     display: 'inline-block',
-                                    backgroundColor: '#F8FAFC',
-                                    color: '#334155',
+                                    backgroundColor: '#FAF7F2',
+                                    color: '#5D4037',
                                     padding: '3px 8px',
                                     borderRadius: '6px',
-                                    border: '1px solid #E2E8F0',
+                                    border: '1px solid #E5DDD3',
                                     fontSize: '0.78rem',
                                     fontWeight: 600,
                                     whiteSpace: 'nowrap'
@@ -2406,33 +2424,33 @@ const QualityOverviewView = () => {
                                       fontSize: '0.76rem',
                                       padding: '2px 8px',
                                       borderRadius: '5px',
-                                      backgroundColor: '#EFF6FF',
-                                      color: '#1D4ED8',
+                                      backgroundColor: '#F5EFE8',
+                                      color: '#5D4037',
                                       fontWeight: 600,
-                                      border: '1px solid #BFDBFE',
+                                      border: '1px solid #D8CCC0',
                                       whiteSpace: 'nowrap'
                                     }} title={p.cabinet}>
                                       {p.cabinet}
                                     </span>
                                   ) : (
-                                    <span style={{ color: '#9CA3AF', fontSize: '0.8rem' }}>—</span>
+                                    <span style={{ color: '#A8998D', fontSize: '0.8rem' }}>—</span>
                                   )}
                                 </td>
-                                <td style={{ padding: '9px 10px', textAlign: 'center', verticalAlign: 'middle', fontWeight: 700, color: '#4B5563' }}>
+                                <td style={{ padding: '9px 10px', textAlign: 'center', verticalAlign: 'middle', fontWeight: 700, color: '#5D4037' }}>
                                   {p.qty ? (
                                     <span style={{
                                       display: 'inline-block',
                                       padding: '2px 8px',
-                                      backgroundColor: '#F1F5F9',
+                                      backgroundColor: '#EFEAE3',
                                       borderRadius: '6px',
                                       fontSize: '0.78rem',
-                                      color: '#334155',
-                                      border: '1px solid #E2E8F0'
+                                      color: '#5D4037',
+                                      border: '1px solid #D8CCC0'
                                     }}>
                                       {Number(p.qty).toLocaleString()}
                                     </span>
                                   ) : (
-                                    <span style={{ color: '#9CA3AF', fontSize: '0.8rem' }}>—</span>
+                                    <span style={{ color: '#A8998D', fontSize: '0.8rem' }}>—</span>
                                   )}
                                 </td>
                               </tr>
@@ -2577,8 +2595,8 @@ const QualityOverviewView = () => {
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 padding: '12px 20px',
-                backgroundColor: '#FFFFFF',
-                borderTop: '1px solid #E2E8F0',
+                backgroundColor: '#FAF7F2',
+                borderTop: '1px solid #E8DFD5',
                 gap: '12px'
               }}>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'nowrap' }}>
@@ -2594,9 +2612,9 @@ const QualityOverviewView = () => {
                       height: '38px',
                       padding: '0 14px',
                       borderRadius: '8px',
-                      border: '1px solid #CBD5E1',
+                      border: '1px solid #D8CCC0',
                       backgroundColor: '#FFFFFF',
-                      color: '#475569',
+                      color: '#5D4037',
                       fontWeight: 600,
                       fontSize: '0.84rem',
                       cursor: (confirming || cancelingTask) ? 'not-allowed' : 'pointer',
@@ -2614,8 +2632,8 @@ const QualityOverviewView = () => {
                     onMouseLeave={(e) => {
                       if (!confirming && !cancelingTask) {
                         e.currentTarget.style.backgroundColor = '#FFFFFF';
-                        e.currentTarget.style.borderColor = '#CBD5E1';
-                        e.currentTarget.style.color = '#475569';
+                        e.currentTarget.style.borderColor = '#D8CCC0';
+                        e.currentTarget.style.color = '#5D4037';
                       }
                     }}
                     title="Hủy hồ sơ này khỏi danh sách quản lý chất lượng (F2)"
@@ -2639,8 +2657,8 @@ const QualityOverviewView = () => {
                         padding: '0 14px',
                         borderRadius: '8px',
                         backgroundColor: '#FFFFFF',
-                        border: '1px solid #CBD5E1',
-                        color: '#475569',
+                        border: '1px solid #D8CCC0',
+                        color: '#5D4037',
                         fontWeight: 600,
                         fontSize: '0.84rem',
                         cursor: (confirming || cancelingId === selectedTask.id || cancelingTask) ? 'not-allowed' : 'pointer',
@@ -2658,8 +2676,8 @@ const QualityOverviewView = () => {
                       onMouseLeave={(e) => {
                         if (!confirming && cancelingId !== selectedTask.id && !cancelingTask) {
                           e.currentTarget.style.backgroundColor = '#FFFFFF';
-                          e.currentTarget.style.borderColor = '#CBD5E1';
-                          e.currentTarget.style.color = '#475569';
+                          e.currentTarget.style.borderColor = '#D8CCC0';
+                          e.currentTarget.style.color = '#5D4037';
                         }
                       }}
                       title="Hủy trả hàng và chuyển sang Chấp nhận / Tự xử lý (F4)"
@@ -2684,9 +2702,9 @@ const QualityOverviewView = () => {
                       height: '38px',
                       padding: '0 16px',
                       borderRadius: '8px',
-                      border: '1px solid #CBD5E1',
+                      border: '1px solid #D8CCC0',
                       backgroundColor: '#FFFFFF',
-                      color: '#475569',
+                      color: '#5D4037',
                       fontWeight: 600,
                       fontSize: '0.84rem',
                       cursor: (confirming || cancelingTask) ? 'not-allowed' : 'pointer',
@@ -2696,16 +2714,16 @@ const QualityOverviewView = () => {
                     }}
                     onMouseEnter={(e) => {
                       if (!confirming && !cancelingTask) {
-                        e.currentTarget.style.backgroundColor = '#F8FAFC';
-                        e.currentTarget.style.borderColor = '#94A3B8';
-                        e.currentTarget.style.color = '#0F172A';
+                        e.currentTarget.style.backgroundColor = '#F5EFE8';
+                        e.currentTarget.style.borderColor = '#8B5E3C';
+                        e.currentTarget.style.color = '#3E2723';
                       }
                     }}
                     onMouseLeave={(e) => {
                       if (!confirming && !cancelingTask) {
                         e.currentTarget.style.backgroundColor = '#FFFFFF';
-                        e.currentTarget.style.borderColor = '#CBD5E1';
-                        e.currentTarget.style.color = '#475569';
+                        e.currentTarget.style.borderColor = '#D8CCC0';
+                        e.currentTarget.style.color = '#5D4037';
                       }
                     }}
                   >
@@ -2725,7 +2743,7 @@ const QualityOverviewView = () => {
                       height: '38px',
                       padding: '0 18px',
                       borderRadius: '8px',
-                      border: '1px solid #059669',
+                      border: '1px solid #047857',
                       backgroundColor: '#059669',
                       color: '#FFFFFF',
                       fontWeight: 700,
@@ -2872,8 +2890,8 @@ const QualityOverviewView = () => {
               justifyContent: 'space-between',
               alignItems: 'center',
               padding: '16px 24px',
-              backgroundColor: '#FAF6F0',
-              borderBottom: '1.5px solid #EADCC9'
+              backgroundColor: '#FFFFFF',
+              borderBottom: '1px solid #E2E8F0'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{
@@ -2881,21 +2899,21 @@ const QualityOverviewView = () => {
                   height: '38px',
                   borderRadius: '10px',
                   backgroundColor: '#ECFDF5',
-                  border: '1.5px solid #A7F3D0',
+                  border: '1px solid #A7F3D0',
                   color: '#059669',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  boxShadow: '0 2px 5px rgba(16, 185, 129, 0.15)',
+                  boxShadow: '0 1px 3px rgba(16, 185, 129, 0.15)',
                   flexShrink: 0
                 }}>
                   <CheckCheck size={22} color="#059669" />
                 </div>
                 <div>
-                  <h3 style={{ margin: 0, color: '#7B5233', fontSize: '1.18rem', fontWeight: 800, letterSpacing: '-0.2px' }}>
+                  <h3 style={{ margin: 0, color: '#0F172A', fontSize: '1.18rem', fontWeight: 700, letterSpacing: '-0.2px' }}>
                     Xác nhận nhanh hồ sơ kiểm tra ĐẠT
                   </h3>
-                  <div style={{ fontSize: '0.8rem', color: '#8D6E63', fontWeight: 600, marginTop: '2px' }}>
+                  <div style={{ fontSize: '0.8rem', color: '#64748B', fontWeight: 500, marginTop: '2px' }}>
                     Danh sách các phiếu có kết quả ĐẠT và không trả hàng để duyệt đồng loạt
                   </div>
                 </div>
@@ -3125,7 +3143,7 @@ const QualityOverviewView = () => {
                       <th style={{ width: '48px', padding: '10px 6px', textAlign: 'center', color: '#7B5233', fontWeight: 800, fontSize: '0.78rem' }}>STT</th>
                       <th style={{ width: '110px', padding: '10px 12px', textAlign: 'left', color: '#7B5233', fontWeight: 800, fontSize: '0.78rem' }}>MÃ PHIẾU</th>
                       <th style={{ minWidth: '360px', padding: '10px 12px', textAlign: 'left', color: '#7B5233', fontWeight: 800, fontSize: '0.78rem' }}>CHI TIẾT / PHÔI KIỂM TRA</th>
-                      <th style={{ width: '165px', padding: '10px 12px', textAlign: 'left', color: '#7B5233', fontWeight: 800, fontSize: '0.78rem' }}>LOẠI KIỂM TRA</th>
+                      <th style={{ width: '165px', padding: '10px 12px', textAlign: 'left', color: '#7B5233', fontWeight: 800, fontSize: '0.78rem' }}>PHIẾU KIỂM TRA</th>
                       <th style={{ width: '95px', padding: '10px 10px', textAlign: 'center', color: '#7B5233', fontWeight: 800, fontSize: '0.78rem' }}>KẾT QUẢ</th>
                       <th style={{ width: '125px', padding: '10px 10px', textAlign: 'center', color: '#7B5233', fontWeight: 800, fontSize: '0.78rem' }}>HÀNH ĐỘNG</th>
                     </tr>
@@ -3225,11 +3243,11 @@ const QualityOverviewView = () => {
               justifyContent: 'space-between',
               alignItems: 'center',
               padding: '14px 22px',
-              backgroundColor: '#FAF6F0',
-              borderTop: '1.5px solid #EADCC9'
+              backgroundColor: '#FFFFFF',
+              borderTop: '1px solid #E2E8F0'
             }}>
-              <div style={{ fontSize: '0.84rem', color: '#7B5233', fontWeight: 600 }}>
-                Đã chọn: <strong style={{ color: '#047857', fontSize: '0.95rem' }}>{selectedBatchIds.size}</strong> / {isBatchFilterActive ? `${filteredBatchTasks.length} phiếu đang lọc` : `${eligibleQuickPassTasks.length} phiếu`}
+              <div style={{ fontSize: '0.84rem', color: '#64748B', fontWeight: 500 }}>
+                Đã chọn: <strong style={{ color: '#059669', fontSize: '0.95rem' }}>{selectedBatchIds.size}</strong> / {isBatchFilterActive ? `${filteredBatchTasks.length} phiếu đang lọc` : `${eligibleQuickPassTasks.length} phiếu`}
               </div>
 
               <div style={{ display: 'flex', gap: '10px' }}>
@@ -3299,16 +3317,17 @@ const QualityOverviewView = () => {
               justifyContent: 'space-between',
               alignItems: 'center',
               padding: '16px 20px',
-              backgroundColor: '#FAF6F0',
-              borderBottom: '1.5px solid #EADCC9'
+              backgroundColor: '#FFFFFF',
+              borderBottom: '1px solid #E2E8F0'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <div style={{
                   width: '36px',
                   height: '36px',
                   borderRadius: '8px',
-                  backgroundColor: '#7B5233',
-                  color: '#FFFFFF',
+                  backgroundColor: '#F1F5F9',
+                  color: '#0F172A',
+                  border: '1px solid #E2E8F0',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center'
@@ -3316,10 +3335,10 @@ const QualityOverviewView = () => {
                   <Keyboard size={20} />
                 </div>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#2D1A12' }}>
+                  <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#0F172A' }}>
                     Phím tắt thao tác nhanh
                   </h3>
-                  <span style={{ fontSize: '0.78rem', color: '#8D6E63', fontWeight: 600 }}>
+                  <span style={{ fontSize: '0.78rem', color: '#64748B', fontWeight: 500 }}>
                     Trang Quản lý chất lượng (/admin/quality)
                   </span>
                 </div>
@@ -3393,7 +3412,7 @@ const QualityOverviewView = () => {
             </div>
 
             {/* FOOTER */}
-            <div style={{ padding: '12px 20px', backgroundColor: '#FAF6F0', borderTop: '1.5px solid #EADCC9', display: 'flex', justifyContent: 'flex-end' }}>
+            <div style={{ padding: '12px 20px', backgroundColor: '#FFFFFF', borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'flex-end' }}>
               <button
                 type="button"
                 onClick={() => setShowShortcutsModal(false)}
@@ -3401,10 +3420,10 @@ const QualityOverviewView = () => {
                   padding: '7px 18px',
                   borderRadius: '6px',
                   border: 'none',
-                  backgroundColor: '#7B5233',
+                  backgroundColor: '#0F172A',
                   color: '#FFFFFF',
                   fontSize: '0.85rem',
-                  fontWeight: 700,
+                  fontWeight: 600,
                   cursor: 'pointer'
                 }}
               >

@@ -521,7 +521,7 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef, onBackClick 
 
         color: '#fff',
 
-        padding: '6px 12px',
+        padding: '6px clamp(8px, 2.5vw, 12px)',
 
         display: 'flex',
 
@@ -551,7 +551,7 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef, onBackClick 
 
     >
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 0, overflow: 'hidden' }}>
 
         {/* Nút điều hướng: Menu, User icon, hoặc Quay lại (Back) */}
 
@@ -577,9 +577,9 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef, onBackClick 
 
             padding: '4px',
 
-            width: '32px',
+            width: '30px',
 
-            height: '32px',
+            height: '30px',
 
             borderRadius: '8px',
 
@@ -599,7 +599,7 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef, onBackClick 
 
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, overflow: 'hidden' }}>
 
-          <span style={{ fontWeight: '700', fontSize: '0.9rem', lineHeight: '1.2', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</span>
+          <span style={{ fontWeight: '700', fontSize: 'clamp(0.82rem, 3.4vw, 0.92rem)', lineHeight: '1.2', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</span>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '1px', overflow: 'hidden' }}>
 
@@ -613,7 +613,7 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef, onBackClick 
 
               return displaySub && (
 
-                <div style={{ fontSize: '0.7rem', opacity: 0.85, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 'clamp(0.65rem, 2.8vw, 0.72rem)', opacity: 0.85, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
 
                   {displaySub}
 
@@ -673,7 +673,7 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef, onBackClick 
 
                   flexShrink: 0,
 
-                  maxWidth: '120px',
+                  maxWidth: 'clamp(95px, 28vw, 120px)',
 
                   textOverflow: 'ellipsis',
 
@@ -715,7 +715,7 @@ const PageHeader = ({ title, subTitle, showBack = false, headerRef, onBackClick 
 
 
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'clamp(6px, 2vw, 10px)', flexShrink: 0 }}>
 
         {hasTour && (
 
