@@ -888,6 +888,7 @@ def get_plan_detail(
                 SELECT cont_name, batch_no, MAX(COALESCE(inspected_at, created_at)) as last_dt
                 FROM input_inspections WITH (NOLOCK)
                 WHERE (cont_name IS NOT NULL OR batch_no IS NOT NULL)
+                  AND is_confirmed = 1
                   AND (data_json NOT LIKE '%"is_cancelled": true%' AND data_json NOT LIKE '%"status": "cancelled"%' OR data_json IS NULL)
                   AND (note NOT LIKE '%[ĐÃ HỦY HỒ SƠ]%' OR note IS NULL)
                 GROUP BY cont_name, batch_no

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
-import { Search, Filter, Edit, FileText, ChevronLeft, ChevronRight, CheckCircle2, X, Eye, RotateCcw, XCircle, Layers, Package, CheckCheck, MoreVertical, Info, Image as ImageIcon, ClipboardList, AlertTriangle, Keyboard, HelpCircle, Loader2 } from 'lucide-react';
+import { Search, Filter, Edit, FileText, ChevronLeft, ChevronRight, CheckCircle2, X, Eye, RotateCcw, XCircle, Layers, Package, CheckCheck, MoreVertical, Info, Image as ImageIcon, ClipboardList, AlertTriangle, Keyboard, HelpCircle, Loader2, Save } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
@@ -8,6 +8,41 @@ import BeautifulConfirmModal from '@webShared/Views/components/feedback/Beautifu
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import SopStepsTable from './components/SopStepsTable';
 import '@styles/components.css';
+
+const AVAILABLE_STAGES = [
+  'Định hình',
+  'Tạo phôi',
+  'Lắp ráp',
+  'Sơn',
+  'Đóng gói',
+  'Nhập kho/Đầu vào',
+  'Lưu kho'
+];
+
+const normalizeStage = (val) => {
+  if (!val) return '';
+  const clean = String(val).trim();
+  const lower = clean.toLowerCase();
+  if (lower === 'nhập kho' || lower === 'đầu vào' || lower === 'nhap kho' || lower === 'dau vao' || lower.includes('nhập kho/đầu vào')) {
+    return 'Nhập kho/Đầu vào';
+  }
+  const found = AVAILABLE_STAGES.find(s => s.toLowerCase() === lower);
+  return found || clean;
+};
+
+const normalizeInspectionType = (typeKey, category) => {
+  const k = (typeKey || category || '').toLowerCase().trim();
+  if (k.includes('first_sample') || k.includes('mẫu đầu') || k.includes('mau-dau') || k.includes('mẫu-đầu')) return 'first_sample';
+  if (k.includes('daily') || k.includes('hang-ngay') || k.includes('hằng ngày')) return 'daily';
+  if (k.includes('re_inspect') || k.includes('tai-kiem') || k.includes('tái kiểm') || k.includes('reinspect')) return 're_inspect';
+  if (k.includes('quy-trinh') || k.includes('quy trình') || k.includes('process')) return 'process';
+  if (k.includes('nhap-kho') || k.includes('nhập kho') || k.includes('dau-vao') || k.includes('đầu vào') || k.includes('input')) return 'input';
+  if (k.includes('do-am') || k.includes('độ ẩm')) return 'do-am';
+  if (k.includes('kich-thuoc') || k.includes('kích thước')) return 'kich-thuoc';
+  if (k.includes('ngoai-quan') || k.includes('ngoại quan')) return 'ngoai-quan';
+  if (k.includes('stage') || k.includes('công đoạn')) return 'stage';
+  return 'first_sample';
+};
 
 const QualityOverviewView = () => {
   const navigate = useNavigate();
@@ -56,6 +91,10 @@ const QualityOverviewView = () => {
   // Trạng thái chỉnh sửa trên Modal Chi tiết
   const [modalResult, setModalResult] = useState('pass');
   const [modalAction, setModalAction] = useState('chap-nhan');
+  const [modalInspectionType, setModalInspectionType] = useState('first_sample');
+  const [modalStage, setModalStage] = useState('');
+  const [modalStatus, setModalStatus] = useState('Chưa Làm');
+  const [savingTask, setSavingTask] = useState(false);
   const [handlingInfo, setHandlingInfo] = useState('');
   const [modalTab, setModalTab] = useState('info'); // 'info' | 'details'
   const [previewImgUrl, setPreviewImgUrl] = useState(null);
@@ -75,6 +114,13 @@ const QualityOverviewView = () => {
           parsedJson = typeof selectedTask.data_json === 'string' ? JSON.parse(selectedTask.data_json) : selectedTask.data_json;
         } catch (e) {}
       }
+      const rawType = selectedTask.inspection_type || parsedJson?.inspection_type || '';
+      setModalInspectionType(normalizeInspectionType(rawType, selectedTask.category));
+
+      const rawStage = selectedTask.stage || selectedTask.stage_name || parsedJson?.stage || parsedJson?.stage_name || parsedJson?.step_name || '';
+      setModalStage(normalizeStage(rawStage));
+
+      setModalStatus(selectedTask.status || parsedJson?.status || 'Chưa Làm');
       setHandlingInfo(selectedTask.handling_info || parsedJson?.handling_info || '');
       setModalTab('info');
       setPreviewImgUrl(null);
@@ -431,6 +477,58 @@ const QualityOverviewView = () => {
     });
   }, [selectedTask]);
 
+  // Lưu thay đổi thông tin phiếu kiểm tra (loại phiếu, công đoạn, trạng thái, kết quả, xử lý)
+  const handleSaveTask = async (task) => {
+    if (!task) return;
+    setSavingTask(true);
+    try {
+      const taskType = task.type || 'input';
+      await api.post(`/inspections/update-record/${taskType}/${task.id}`, {
+        inspection_type: modalInspectionType,
+        stage: modalStage,
+        status: modalStatus,
+        result: modalResult,
+        action: modalAction,
+        handling_info: handlingInfo
+      });
+      toast('success', `Đã lưu cập nhật phiếu #${task.ticket_code || task.id} thành công!`);
+
+      // Cập nhật selectedTask
+      setSelectedTask(prev => prev ? {
+        ...prev,
+        inspection_type: modalInspectionType,
+        stage: modalStage,
+        status: modalStatus,
+        result: modalResult,
+        action: modalAction,
+        handling_info: handlingInfo,
+        category: getCategoryBadgeInfo(null, modalStage, modalInspectionType)?.label || prev.category
+      } : null);
+
+      // Cập nhật danh sách pendingTasks
+      setPendingTasks(prev => prev.map(t => {
+        if (t.id === task.id) {
+          return {
+            ...t,
+            inspection_type: modalInspectionType,
+            stage: modalStage,
+            status: modalStatus,
+            result: modalResult,
+            action: modalAction,
+            handling_info: handlingInfo,
+            category: getCategoryBadgeInfo(null, modalStage, modalInspectionType)?.label || t.category
+          };
+        }
+        return t;
+      }));
+    } catch (error) {
+      console.error('Error saving inspection task:', error);
+      toast('error', 'Lỗi khi lưu phiếu kiểm tra: ' + (error.response?.data?.detail || error.message));
+    } finally {
+      setSavingTask(false);
+    }
+  };
+
   // Xử lý xác nhận phiếu và tự động chuyển sang đơn tiếp theo
   const handleConfirmTask = async (task) => {
     if (!task) return;
@@ -440,7 +538,10 @@ const QualityOverviewView = () => {
       await api.post(`/inspections/confirm/${taskType}/${task.id}`, {
         result: modalResult,
         action: modalAction,
-        handling_info: handlingInfo
+        handling_info: handlingInfo,
+        inspection_type: modalInspectionType,
+        stage: modalStage,
+        status: modalStatus === 'Chưa Làm' ? 'Đã xong' : modalStatus
       });
       toast('success', `Đã xác nhận thành công phiếu #${task.ticket_code || task.id}!`);
 
@@ -1336,6 +1437,20 @@ const QualityOverviewView = () => {
     );
   };
 
+  const renderStatusBadge = (status) => {
+    const s = (status || 'Chưa Làm').trim();
+    if (s === 'Đang Làm') {
+      return <span className="badge-danglam">Đang Làm</span>;
+    }
+    if (s === 'Đã xong' || s === 'Hoàn thành') {
+      return <span className="badge-daxong">{s}</span>;
+    }
+    if (s === 'Chờ xác nhận') {
+      return <span className="badge-choxacnhan">Chờ xác nhận</span>;
+    }
+    return <span className="badge-chualam">{s}</span>;
+  };
+
   return (
     <div className="gold-layout" style={{ fontFamily: "'Outfit', 'Inter', sans-serif" }}>
       <style dangerouslySetInnerHTML={{ __html: `
@@ -1343,6 +1458,36 @@ const QualityOverviewView = () => {
           background-color: #FEF2F2;
           color: #EF4444;
           border: 1px solid #FCA5A5;
+          padding: 4px 12px;
+          border-radius: 12px;
+          font-weight: 700;
+          font-size: 0.75rem;
+          display: inline-block;
+        }
+        .badge-danglam {
+          background-color: #FFFBEB;
+          color: #D97706;
+          border: 1px solid #FDE68A;
+          padding: 4px 12px;
+          border-radius: 12px;
+          font-weight: 700;
+          font-size: 0.75rem;
+          display: inline-block;
+        }
+        .badge-daxong {
+          background-color: #ECFDF5;
+          color: #059669;
+          border: 1px solid #A7F3D0;
+          padding: 4px 12px;
+          border-radius: 12px;
+          font-weight: 700;
+          font-size: 0.75rem;
+          display: inline-block;
+        }
+        .badge-choxacnhan {
+          background-color: #EFF6FF;
+          color: #2563EB;
+          border: 1px solid #BFDBFE;
           padding: 4px 12px;
           border-radius: 12px;
           font-weight: 700;
@@ -1618,7 +1763,7 @@ const QualityOverviewView = () => {
                           </td>
                           <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#8D6E63' }}>{task.priority || 3}</td>
                           <td style={{ textAlign: 'center' }}>
-                            <span className="badge-chualam">Chưa Làm</span>
+                            {renderStatusBadge(task.status)}
                           </td>
                           <td style={{ textAlign: 'center' }}>
                             {renderActionBadge(task)}
@@ -2075,10 +2220,61 @@ const QualityOverviewView = () => {
                       </div>
 
                       <div>
-                        <span style={{ fontSize: '0.74rem', color: '#8D7B6F', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                        <span style={{ fontSize: '0.74rem', color: '#8D7B6F', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>
                           PHIẾU KIỂM TRA
                         </span>
-                        <div>{renderCategoryBadge(selectedTask)}</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <select
+                            value={modalInspectionType}
+                            onChange={(e) => setModalInspectionType(e.target.value)}
+                            style={{
+                              padding: '4px 8px',
+                              borderRadius: '6px',
+                              border: '1px solid #D8CCC0',
+                              fontSize: '0.82rem',
+                              fontWeight: '600',
+                              backgroundColor: '#FFFFFF',
+                              color: '#5D4037',
+                              cursor: 'pointer',
+                              outline: 'none',
+                              width: '100%'
+                            }}
+                          >
+                            <option value="first_sample">Kiểm tra mẫu đầu</option>
+                            <option value="daily">Ghi nhận lỗi hằng ngày</option>
+                            <option value="re_inspect">Tái kiểm tra</option>
+                            <option value="process">Kiểm tra quy trình</option>
+                            <option value="input">Kiểm tra nhập kho</option>
+                            <option value="do-am">Đo độ ẩm</option>
+                            <option value="kich-thuoc">Đo kích thước</option>
+                            <option value="ngoai-quan">Kiểm tra ngoại quan</option>
+                            <option value="stage">Kiểm tra công đoạn</option>
+                          </select>
+                          <select
+                            value={normalizeStage(modalStage)}
+                            onChange={(e) => setModalStage(e.target.value)}
+                            style={{
+                              padding: '3px 8px',
+                              borderRadius: '6px',
+                              border: '1px solid #E0D6CB',
+                              fontSize: '0.78rem',
+                              fontWeight: '500',
+                              backgroundColor: '#FAF7F2',
+                              color: '#6D4C41',
+                              cursor: 'pointer',
+                              outline: 'none',
+                              width: '100%'
+                            }}
+                          >
+                            <option value="">↳ Không gắn CĐ</option>
+                            {AVAILABLE_STAGES.map(st => (
+                              <option key={st} value={st}>↳ {st}</option>
+                            ))}
+                            {modalStage && !AVAILABLE_STAGES.some(st => st.toLowerCase() === modalStage.toLowerCase()) && (
+                              <option value={modalStage}>↳ {modalStage}</option>
+                            )}
+                          </select>
+                        </div>
                       </div>
 
                       <div>
@@ -2100,12 +2296,31 @@ const QualityOverviewView = () => {
                       </div>
 
                       <div>
-                        <span style={{ fontSize: '0.74rem', color: '#8D7B6F', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+                        <span style={{ fontSize: '0.74rem', color: '#8D7B6F', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>
                           TRẠNG THÁI
                         </span>
-                        <div>
-                          <span className="badge-chualam">Chưa Làm</span>
-                        </div>
+                        <select
+                          value={modalStatus}
+                          onChange={(e) => setModalStatus(e.target.value)}
+                          style={{
+                            padding: '4px 8px',
+                            borderRadius: '6px',
+                            border: '1px solid #D8CCC0',
+                            fontSize: '0.82rem',
+                            fontWeight: '700',
+                            backgroundColor: modalStatus === 'Chưa Làm' ? '#FEF2F2' : modalStatus === 'Đang Làm' ? '#FFFBEB' : modalStatus === 'Đã xong' ? '#ECFDF5' : '#EFF6FF',
+                            color: modalStatus === 'Chưa Làm' ? '#EF4444' : modalStatus === 'Đang Làm' ? '#D97706' : modalStatus === 'Đã xong' ? '#059669' : '#2563EB',
+                            cursor: 'pointer',
+                            outline: 'none',
+                            width: '100%',
+                            maxWidth: '180px'
+                          }}
+                        >
+                          <option value="Chưa Làm">Chưa Làm</option>
+                          <option value="Đang Làm">Đang Làm</option>
+                          <option value="Đã xong">Đã xong</option>
+                          <option value="Chờ xác nhận">Chờ xác nhận</option>
+                        </select>
                       </div>
 
                       <div>
@@ -2146,7 +2361,7 @@ const QualityOverviewView = () => {
 
                       <div>
                         <span style={{ fontSize: '0.74rem', color: '#8D7B6F', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
-                          SL MẪU KIỂM TRA (AQL)
+                          SL MẪU KIỂM TRA
                         </span>
                         <strong style={{ color: '#2563EB', fontSize: '0.92rem' }}>
                           {Number(selectedTask.sample_qty || 0).toLocaleString()}
@@ -2729,6 +2944,46 @@ const QualityOverviewView = () => {
                   >
                     <span style={{ whiteSpace: 'nowrap' }}>Đóng</span>
                     <kbd className="kbd-shortcut">Esc</kbd>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSaveTask(selectedTask)}
+                    disabled={savingTask || confirming || cancelingTask}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      height: '38px',
+                      padding: '0 16px',
+                      borderRadius: '8px',
+                      border: '1px solid #D8CCC0',
+                      backgroundColor: '#FFFFFF',
+                      color: '#5D4037',
+                      fontWeight: 700,
+                      fontSize: '0.84rem',
+                      cursor: (savingTask || confirming || cancelingTask) ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.15s ease',
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!savingTask && !confirming && !cancelingTask) {
+                        e.currentTarget.style.backgroundColor = '#FAF7F2';
+                        e.currentTarget.style.borderColor = '#8B5E3C';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!savingTask && !confirming && !cancelingTask) {
+                        e.currentTarget.style.backgroundColor = '#FFFFFF';
+                        e.currentTarget.style.borderColor = '#D8CCC0';
+                      }
+                    }}
+                    title="Lưu các thay đổi mà không duyệt hoàn tất hồ sơ"
+                  >
+                    <Save size={16} style={{ flexShrink: 0 }} />
+                    <span style={{ whiteSpace: 'nowrap' }}>{savingTask ? 'Đang lưu...' : 'Lưu thay đổi'}</span>
                   </button>
 
                   <button

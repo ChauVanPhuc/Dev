@@ -803,6 +803,7 @@ def get_all_inspections_by_po(
         return []
 
     records = db.query(InputInspection).filter(
+        InputInspection.is_confirmed == True,
         or_(
             InputInspection.batch_no == po_clean,
             InputInspection.batch_no.ilike(f"%{po_clean}%"),
@@ -918,6 +919,7 @@ def get_inbound_inspections_by_po(
         return []
 
     records = db.query(InputInspection).filter(
+        InputInspection.is_confirmed == True,
         or_(
             InputInspection.batch_no == po_clean,
             InputInspection.batch_no.ilike(f"%{po_clean}%"),
@@ -3977,6 +3979,7 @@ def get_pending_inspections(
         if (data_dict and (data_dict.get("is_cancelled") is True or data_dict.get("status") == "cancelled")) or (item.note and "[ĐÃ HỦY HỒ SƠ]" in str(item.note)):
             continue
 
+        status_val = data_dict.get("status") or ("Đã xong" if item.is_confirmed else "Chưa Làm")
         action_val = data_dict.get("action") or ("chap-nhan" if (item.result in ["pass", "Đạt"] or item.conclusion in ["pass", "Đạt"]) else "tra-ve")
         insp_name = item.inspector_name or data_dict.get("staff") or data_dict.get("creator") or data_dict.get("inspector_name") or "QC"
 
@@ -3989,7 +3992,7 @@ def get_pending_inspections(
             "task_name": f"Xác nhận hồ sơ kiểm tra #{ticket_str} ({part_str})" if ticket_str else f"Xác nhận hồ sơ kiểm tra - {part_str}",
             "category": type_label,
             "priority": 3,
-            "status": "Chưa Làm",
+            "status": status_val,
             "recorded_date": rec_date.isoformat() if hasattr(rec_date, 'isoformat') else str(rec_date),
             "completion_date": rec_date.isoformat() if hasattr(rec_date, 'isoformat') else str(rec_date),
             "notes": item.note or item.notes or "Chờ xác nhận kết quả kiểm tra",
@@ -4013,7 +4016,7 @@ def get_pending_inspections(
         
     # Thêm số thứ tự STT sau khi sắp xếp
     for i, task in enumerate(pending_tasks):
-        task["stt"] = f"{(i+1):02d}"
+        task["stt"] = i + 1
         
     return pending_tasks
 
@@ -4029,7 +4032,7 @@ def confirm_inspection(
     """
     [POST] Xác nhận phiếu kiểm tra.
     type: 'stage' hoặc 'input'.
-    Hỗ trợ cập nhật kết quả (result), hành động (action), và thông tin xử lý (handling_info).
+    Hỗ trợ cập nhật kết quả (result), hành động (action), thông tin xử lý (handling_info), loại phiếu (inspection_type), công đoạn (stage) và trạng thái (status).
     """
     record = db.query(InputInspection).filter(InputInspection.id == id).first()
     if not record:
@@ -4043,6 +4046,14 @@ def confirm_inspection(
     c_by = body_data.get("confirmed_by") or confirmed_by
     if c_by:
         record.confirmed_by = c_by
+
+    # Cập nhật loại phiếu và công đoạn nếu có
+    new_type = body_data.get("inspection_type")
+    if new_type:
+        record.inspection_type = new_type
+    new_stage = body_data.get("stage")
+    if new_stage is not None:
+        record.stage = new_stage
         
     # Cập nhật kết quả nếu có chỉnh sửa từ giao diện
     new_result = body_data.get("result")
@@ -4050,9 +4061,10 @@ def confirm_inspection(
         record.result = new_result
         record.conclusion = new_result
         
-    # Cập nhật thông tin xử lý và action vào data_json
+    # Cập nhật thông tin xử lý, action, status vào data_json
     handling_info = (body_data.get("handling_info") or body_data.get("resolution_note") or "").strip()
     new_action = body_data.get("action")
+    new_status = body_data.get("status") or "Đã xong"
     
     data_dict = {}
     if record.data_json:
@@ -4061,6 +4073,11 @@ def confirm_inspection(
         except Exception:
             data_dict = {}
             
+    data_dict["status"] = new_status
+    if new_stage is not None:
+        data_dict["stage"] = new_stage
+    if new_type:
+        data_dict["inspection_type"] = new_type
     if new_action:
         data_dict["action"] = new_action
     if handling_info:
@@ -4088,11 +4105,98 @@ def confirm_inspection(
             "confirmed_at": record.confirmed_at,
             "confirmed_by": record.confirmed_by,
             "result": record.result,
-            "action": new_action or data_dict.get("action")
+            "action": new_action or data_dict.get("action"),
+            "status": new_status,
+            "inspection_type": record.inspection_type,
+            "stage": record.stage
         }
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Lỗi khi lưu xác nhận: {str(e)}")
+
+
+@router.post("/update-record/{type}/{id}")
+def update_inspection_record(
+    type: str,
+    id: int,
+    payload: Optional[Dict[str, Any]] = Body(None),
+    db: Session = Depends(get_db)
+):
+    """
+    [POST] Cập nhật thông tin phiếu kiểm tra (loại phiếu, công đoạn, trạng thái, kết quả, hành động xử lý)
+    mà không bắt buộc phải hoàn tất xác nhận hồ sơ.
+    """
+    record = db.query(InputInspection).filter(InputInspection.id == id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail=f"Không tìm thấy phiếu kiểm tra có ID {id}")
+        
+    body_data = payload or {}
+    
+    # 1. Loại phiếu & Công đoạn
+    if "inspection_type" in body_data and body_data["inspection_type"]:
+        record.inspection_type = body_data["inspection_type"]
+    if "stage" in body_data:
+        record.stage = body_data["stage"]
+        
+    # 2. Kết quả & Kết luận
+    new_result = body_data.get("result")
+    if new_result:
+        record.result = new_result
+        record.conclusion = new_result
+        
+    # 3. Data JSON (Status, Action, Handling Info, Stage, Type)
+    data_dict = {}
+    if record.data_json:
+        try:
+            data_dict = json.loads(record.data_json) if isinstance(record.data_json, str) else dict(record.data_json)
+        except Exception:
+            data_dict = {}
+
+    if "stage" in body_data:
+        data_dict["stage"] = body_data["stage"]
+    if "inspection_type" in body_data and body_data["inspection_type"]:
+        data_dict["inspection_type"] = body_data["inspection_type"]
+            
+    if "status" in body_data and body_data["status"]:
+        data_dict["status"] = body_data["status"]
+        if body_data["status"] == "Đã xong":
+            record.is_confirmed = True
+            if not record.confirmed_at:
+                record.confirmed_at = datetime.datetime.now()
+        elif body_data["status"] in ["Chưa Làm", "Đang Làm", "Chờ xác nhận"]:
+            record.is_confirmed = False
+            
+    new_action = body_data.get("action")
+    if new_action:
+        data_dict["action"] = new_action
+        
+    handling_info = (body_data.get("handling_info") or body_data.get("resolution_note") or "").strip()
+    if handling_info:
+        data_dict["handling_info"] = handling_info
+        data_dict["resolution_note"] = handling_info
+        
+    if new_result:
+        data_dict["result"] = new_result
+        
+    record.data_json = json.dumps(data_dict, ensure_ascii=False)
+    
+    try:
+        db.commit()
+        db.refresh(record)
+        return {
+            "message": "Cập nhật phiếu kiểm tra thành công",
+            "type": type,
+            "id": id,
+            "inspection_type": record.inspection_type,
+            "stage": record.stage,
+            "result": record.result,
+            "status": data_dict.get("status"),
+            "action": data_dict.get("action"),
+            "handling_info": data_dict.get("handling_info")
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Lỗi khi cập nhật phiếu kiểm tra: {str(e)}")
 
 
 @router.post("/cancel-inspection/{id}")
