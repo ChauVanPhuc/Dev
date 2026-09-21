@@ -105,12 +105,27 @@ if not exist node_modules (
 start "Mobile - ERP G7" cmd /k "cd /d %~dp0FrontEnd\Mobile && npm run dev -- --port 3000 --host 0.0.0.0"
 
 :: --- 4. GEMINI WEB2API AI SERVER ---
-echo [4/4] Starting Gemini Web2API AI Server...
+echo [4/5] Starting Gemini Web2API AI Server...
 start "Gemini Web2API - AI Server" cmd /k "cd /d %~dp0AI\gemini-web2api && call run.bat"
+
+:: --- 5. FEEDBACK PORTAL (Port 3001) ---
+echo [5/5] Processing Feedback Portal (Port 3001)...
+cd /d %~dp0Feedback\FrontEnd
+if not exist node_modules (
+    echo [!] node_modules missing in Feedback. Running 'npm install'...
+    call npm install
+) else (
+    echo [OK] Feedback dependencies are already satisfied.
+)
+start "Feedback Portal - ERP G7 (Port 3001)" cmd /k "cd /d %~dp0Feedback\FrontEnd && npm run dev"
 
 echo.
 echo ======================================================
 echo  SUCCESS: All systems have been signaled to start.
+echo  - Backend:  http://localhost:8000
+echo  - Web ERP:  http://localhost:5173
+echo  - Mobile:   http://localhost:3000
+echo  - Feedback: http://localhost:3001
 echo  Check the individual windows for status and logs.
 echo ======================================================
 pause

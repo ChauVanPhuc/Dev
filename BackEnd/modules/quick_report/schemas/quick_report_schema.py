@@ -14,6 +14,7 @@ class QuickReportCreate(BaseModel):
     main_content: str
     solution_recommendation: Optional[str] = None
     images: Optional[str] = "[]"
+    audio_url: Optional[str] = None
     status: Optional[str] = "Chờ xử lý"
 
 class QuickReportUpdate(BaseModel):
@@ -27,6 +28,7 @@ class QuickReportUpdate(BaseModel):
     main_content: Optional[str] = None
     solution_recommendation: Optional[str] = None
     images: Optional[str] = None
+    audio_url: Optional[str] = None
     status: Optional[str] = None
     handler_name: Optional[str] = None
     handler_response: Optional[str] = None

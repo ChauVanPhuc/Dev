@@ -43,6 +43,7 @@ const ViolationForm = lazy(() => import('@modules/KPI/Views/Violation/ViolationF
 const CapaHistory = lazy(() => import('@modules/CAPA/Views/Improvement/CapaHistoryView'));
 const CapaForm = lazy(() => import('@modules/CAPA/Views/Improvement/CapaFormView'));
 const Improvements = lazy(() => import('@modules/CAPA/Views/Improvement/ImprovementsView'));
+const FeedbackManagement = lazy(() => import('@modules/Feedback/Views/FeedbackManagementView'));
 const Hotspots = lazy(() => import('@modules/System/Views/Monitor/HotspotsView'));
 const DataPackaging = lazy(() => import('@modules/System/Views/Data/DataPackagingView'));
 const BackupQRManagement = lazy(() => import('@modules/System/Views/Backup/BackupQRManagementView'));
@@ -703,7 +704,8 @@ function App() {
                 <Route path="capa" element={<ProtectedRoute permissionKey="capa"><CapaHistory /></ProtectedRoute>} />
                 <Route path="capa/create" element={<ProtectedRoute permissionKey="capa"><CapaForm /></ProtectedRoute>} />
                 <Route path="capa/edit/:id" element={<ProtectedRoute permissionKey="capa"><CapaForm /></ProtectedRoute>} />
-                <Route path="feedback" element={<ProtectedRoute permissionKey="feedback"><Improvements /></ProtectedRoute>} />
+                <Route path="feedback" element={<ProtectedRoute permissionKey={["feedback", "quality-records", "screens"]}><FeedbackManagement /></ProtectedRoute>} />
+                <Route path="quick-reports" element={<ProtectedRoute permissionKey={["feedback", "quality-records", "screens"]}><FeedbackManagement /></ProtectedRoute>} />
                 <Route path="hotspots" element={<ProtectedRoute permissionKey="hotspots"><Hotspots /></ProtectedRoute>} />
                 <Route path="data" element={<ProtectedRoute permissionKey="data"><DataPackaging /></ProtectedRoute>} />
                 <Route path="screens" element={<ProtectedRoute permissionKey="screens"><ScreenManagement /></ProtectedRoute>} />

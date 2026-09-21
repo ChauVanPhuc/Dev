@@ -25,6 +25,7 @@ class QuickReport(Base):
     main_content = Column(NVARCHAR(4000), nullable=False) # Nội dung chính (Vấn đề)
     solution_recommendation = Column(NVARCHAR(4000), nullable=True) # Kết luận (Giải pháp) hoặc Kiến nghị
     images = Column(NVARCHAR(4000), default="[]") # JSON list of image URLs
+    audio_url = Column(NVARCHAR(1000), nullable=True) # URL file âm thanh ghi âm
     
     status = Column(NVARCHAR(50), default="Chờ xử lý") # "Chờ xử lý", "Đã tiếp nhận", "Đã xong", "Từ chối"
     handler_name = Column(NVARCHAR(252), nullable=True)
@@ -47,6 +48,7 @@ class QuickReport(Base):
             "main_content": self.main_content,
             "solution_recommendation": self.solution_recommendation,
             "images": self.images,
+            "audio_url": self.audio_url,
             "status": self.status,
             "handler_name": self.handler_name,
             "handler_response": self.handler_response,
