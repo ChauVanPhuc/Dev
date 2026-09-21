@@ -81,6 +81,7 @@ export const SopStepsTable = ({
   const renderTableContent = (customMaxHeight = maxHeight) => (
     <div className="sop-standard-scroll" style={{
       overflowX: 'auto',
+      WebkitOverflowScrolling: 'touch',
       maxHeight: customMaxHeight,
       overflowY: 'auto',
       backgroundColor: '#FFFFFF'
@@ -252,8 +253,154 @@ export const SopStepsTable = ({
     </div>
   );
 
+  // Component render dạng danh sách thẻ tối ưu cho Mobile (dễ nhìn, dễ đọc)
+  const renderMobileCards = () => (
+    <div style={{ padding: '10px 10px 4px 10px', display: 'flex', flexDirection: 'column', gap: '8px', backgroundColor: '#FAF8F5' }}>
+      {steps.map((st, idx) => {
+        const stepNo = st.step_no || st.step || idx + 1;
+        const rawTitle = st.title || st.name || st.description || `Bước ${stepNo}`;
+        const cleanTitle = getCleanStepTitle(rawTitle, stepNo);
+        const standard = st.standard || st.content || '';
+        const isFail = st.result === 'fail' || st.result === 'Lỗi' || st.status === 'FAIL';
+        const cleanNote = getCleanStepNote(st.note, standard, st.content, rawTitle);
+
+        return (
+          <div
+            key={idx}
+            style={{
+              backgroundColor: '#FFFFFF',
+              border: `1px solid ${isFail ? '#FECDD3' : '#EADCC9'}`,
+              borderRadius: '10px',
+              padding: '10px 12px',
+              boxShadow: '0 1px 3px rgba(45, 26, 18, 0.04)'
+            }}
+          >
+            {/* Header: Số thứ tự + Hạng mục + Kết quả Đạt/Không đạt */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '8px',
+              marginBottom: standard ? '8px' : '0'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                <span style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '6px',
+                  backgroundColor: isFail ? '#FEE2E2' : '#F5EFE8',
+                  color: isFail ? '#DC2626' : '#5D4037',
+                  fontWeight: 800,
+                  fontSize: '0.74rem',
+                  border: `1px solid ${isFail ? '#FECDD3' : '#D8CCC0'}`,
+                  flexShrink: 0
+                }}>
+                  {String(stepNo).padStart(2, '0')}
+                </span>
+                <span style={{
+                  fontWeight: 700,
+                  color: isFail ? '#991B1B' : '#2D1A12',
+                  fontSize: '0.86rem'
+                }}>
+                  {cleanTitle}
+                </span>
+              </div>
+
+              <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '2px 8px',
+                borderRadius: '9999px',
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                backgroundColor: isFail ? '#FFF1F2' : '#ECFDF5',
+                color: isFail ? '#E11D48' : '#059669',
+                border: `1px solid ${isFail ? '#FECDD3' : '#A7F3D0'}`,
+                whiteSpace: 'nowrap',
+                flexShrink: 0
+              }}>
+                {isFail ? (
+                  <>
+                    <XCircle size={12} strokeWidth={2.5} color="#E11D48" />
+                    <span>Không đạt</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 size={12} strokeWidth={2.5} color="#059669" />
+                    <span>Đạt</span>
+                  </>
+                )}
+              </span>
+            </div>
+
+            {/* Khối Tiêu chuẩn kỹ thuật: Trải rộng 100% chiều ngang màn hình, không bị bóp chữ */}
+            {standard && (
+              <div style={{
+                backgroundColor: isFail ? '#FEF2F2' : '#FAF7F2',
+                border: `1px solid ${isFail ? '#FEE2E2' : '#EFEAE3'}`,
+                borderRadius: '8px',
+                padding: '8px 10px',
+                fontSize: '0.82rem',
+                lineHeight: 1.55,
+                color: isFail ? '#7F1D1D' : '#3E2723'
+              }}>
+                <div style={{
+                  fontSize: '0.68rem',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  color: isFail ? '#DC2626' : '#8D7B6F',
+                  marginBottom: '4px',
+                  letterSpacing: '0.3px'
+                }}>
+                  Tiêu chuẩn kỹ thuật:
+                </div>
+                <SopStandardRenderer standard={standard} />
+              </div>
+            )}
+
+            {/* Ghi chú bước (nếu có) */}
+            {cleanNote && (
+              <div style={{
+                marginTop: '6px',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '5px',
+                padding: '5px 8px',
+                backgroundColor: '#FFFDF7',
+                borderRadius: '6px',
+                fontSize: '0.74rem',
+                color: '#B45309',
+                border: '1px solid #FDE68A',
+                lineHeight: 1.4
+              }}>
+                <FileText size={12} color="#D97706" style={{ marginTop: '2px', flexShrink: 0 }} />
+                <span>{cleanNote}</span>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+
   return (
     <div style={{ marginTop: '14px', marginBottom: '14px' }}>
+      {/* Scoped Responsive Style đảm bảo trên thiết bị di động luôn hiển thị dạng thẻ đẹp mắt, không bị ép chữ */}
+      <style>{`
+        @media (max-width: 768px) {
+          .sop-table-desktop { display: none !important; }
+          .sop-cards-mobile { display: flex !important; flex-direction: column !important; }
+        }
+        @media (min-width: 769px) {
+          .sop-table-desktop { display: block !important; }
+          .sop-cards-mobile { display: none !important; }
+        }
+      `}</style>
+
       {/* KHỐI BANNER HEADER THU GỌN / MỞ RỘNG */}
       <div 
         onClick={() => setIsExpanded(prev => !prev)}
@@ -426,7 +573,15 @@ export const SopStepsTable = ({
           backgroundColor: '#FFFFFF',
           boxShadow: '0 2px 4px rgba(0,0,0,0.03)'
         }}>
-          {renderTableContent(maxHeight)}
+          {/* Desktop: Bảng 4 cột chuẩn máy tính */}
+          <div className="sop-table-desktop desktop-only">
+            {renderTableContent(maxHeight)}
+          </div>
+
+          {/* Mobile: Danh sách thẻ hiển thị tiêu chuẩn full-width, cực kỳ dễ đọc */}
+          <div className="sop-cards-mobile mobile-only">
+            {renderMobileCards()}
+          </div>
 
           {/* FOOTER THANH DƯỚI CÙNG KHI MỞ BẢNG */}
           <div style={{
@@ -550,9 +705,12 @@ export const SopStepsTable = ({
             </div>
 
             {/* Nội dung bảng trong Modal */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
-              <div style={{ border: '1px solid #E2E8F0', borderRadius: '10px', overflow: 'hidden' }}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '14px', WebkitOverflowScrolling: 'touch' }}>
+              <div className="sop-table-desktop desktop-only" style={{ border: '1px solid #E2E8F0', borderRadius: '10px', overflow: 'hidden' }}>
                 {renderTableContent('60vh')}
+              </div>
+              <div className="sop-cards-mobile mobile-only">
+                {renderMobileCards()}
               </div>
             </div>
 

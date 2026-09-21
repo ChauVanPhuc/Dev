@@ -16,6 +16,7 @@
     "@fortune-sheet/react": "^0.19.1",
     "@xyflow/react": "^12.11.1",
     "axios": "^1.15.0",
+    "bootstrap": "^5.3.3",
     "exceljs": "^4.4.0",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",

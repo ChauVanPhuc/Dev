@@ -425,6 +425,36 @@ async def create_stage_inspection(
         db.add(new_record)
         db.flush()
         new_record.ticket_code = f"DA{new_record.id:03d}"
+
+        # Tự động ghi nhận mốc khởi tạo phiếu vào edit_history
+        create_dict = {}
+        if new_record.data_json:
+            try:
+                create_dict = json.loads(new_record.data_json) if isinstance(new_record.data_json, str) else dict(new_record.data_json)
+            except Exception:
+                create_dict = {}
+        if "edit_history" not in create_dict or not isinstance(create_dict["edit_history"], list) or len(create_dict["edit_history"]) == 0:
+            now_vn = get_vietnam_time()
+            create_entry = {
+                "id": f"hist_{now_vn.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}",
+                "timestamp": now_vn.isoformat(),
+                "user_name": final_inspector_name or "QC Inspector",
+                "user_role": "Nhân viên Kiểm tra Chất lượng (QC)",
+                "department": "Phòng Quản lý Chất lượng (QC)",
+                "action_type": "create",
+                "action_label": "Khởi tạo phiếu kiểm tra",
+                "changes": [
+                    {"field": "Kết quả ban đầu", "field_name": "result", "old_val": None, "new_val": conclusion or "pass"},
+                    {"field": "Mã phiếu", "field_name": "ticket_code", "old_val": None, "new_val": new_record.ticket_code},
+                    {"field": "Mã PO", "field_name": "batch_no", "old_val": None, "new_val": batch_no},
+                    {"field": "Công đoạn", "field_name": "stage", "old_val": None, "new_val": extracted_stage},
+                    {"field": "SL Lô / Mẫu", "field_name": "sample_qty", "old_val": None, "new_val": f"Lô: {extracted_req_qty or 0} / Mẫu: {extracted_sample_qty or 0}"},
+                    {"field": "Số lỗi", "field_name": "error_qty", "old_val": None, "new_val": extracted_error_qty or 0}
+                ],
+                "note": notes or "Khởi tạo từ ứng dụng Mobile QC tại xưởng."
+            }
+            create_dict["edit_history"] = [create_entry]
+            new_record.data_json = json.dumps(create_dict, ensure_ascii=False)
         
         # Đồng bộ lỗi nếu có defects trong data_json
         if data_json:
@@ -4014,6 +4044,7 @@ def get_pending_inspections(
                 [img for img in [item.image_path_1, item.image_path_2, item.image_path_3] if img]
                 or (data_dict.get("images") if isinstance(data_dict.get("images"), list) else [])
             ),
+            "parameter": data_dict.get("parameter") or "",
             "data_json": item.data_json or "",
             "parts_details": data_dict.get("parts_details") or data_dict.get("partsDetails") or [],
             "edit_history": data_dict.get("edit_history") or [],
@@ -4304,6 +4335,11 @@ def confirm_inspection(
                 record.note = f"{record.note} | [Xử lý: {handling_info}]"
         else:
             record.note = handling_info
+
+    if "handling_images" in body_data:
+        h_images = body_data["handling_images"]
+        if isinstance(h_images, list):
+            data_dict["handling_images"] = [str(x).strip() for x in h_images if x]
             
     if new_result:
         data_dict["result"] = new_result
@@ -4319,6 +4355,10 @@ def confirm_inspection(
             record.images_json = json.dumps(clean_images, ensure_ascii=False)
             data_dict["images"] = clean_images
 
+    new_param = body_data.get("parameter")
+    if new_param:
+        data_dict["parameter"] = new_param
+        
     record.data_json = json.dumps(data_dict, ensure_ascii=False)
         
     try:
@@ -4336,7 +4376,10 @@ def confirm_inspection(
             "status": new_status,
             "inspection_type": record.inspection_type,
             "stage": record.stage,
-            "edit_history": data_dict.get("edit_history") or []
+            "handling_info": data_dict.get("handling_info"),
+            "handling_images": data_dict.get("handling_images") or [],
+            "edit_history": data_dict.get("edit_history") or [],
+            "parameter": data_dict.get("parameter")
         }
     except Exception as e:
         db.rollback()
@@ -4420,6 +4463,11 @@ def update_inspection_record(
     if handling_info:
         data_dict["handling_info"] = handling_info
         data_dict["resolution_note"] = handling_info
+
+    if "handling_images" in body_data:
+        h_images = body_data["handling_images"]
+        if isinstance(h_images, list):
+            data_dict["handling_images"] = [str(x).strip() for x in h_images if x]
         
     if new_result:
         data_dict["result"] = new_result
@@ -4435,6 +4483,9 @@ def update_inspection_record(
             record.images_json = json.dumps(clean_images, ensure_ascii=False)
             data_dict["images"] = clean_images
 
+    if "parameter" in body_data:
+        data_dict["parameter"] = body_data["parameter"]
+        
     record.data_json = json.dumps(data_dict, ensure_ascii=False)
     
     try:
@@ -4450,7 +4501,9 @@ def update_inspection_record(
             "status": data_dict.get("status"),
             "action": data_dict.get("action"),
             "handling_info": data_dict.get("handling_info"),
-            "edit_history": data_dict.get("edit_history") or []
+            "handling_images": data_dict.get("handling_images") or [],
+            "edit_history": data_dict.get("edit_history") or [],
+            "parameter": data_dict.get("parameter")
         }
     except Exception as e:
         db.rollback()
