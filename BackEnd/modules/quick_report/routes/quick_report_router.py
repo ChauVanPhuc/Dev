@@ -8,6 +8,8 @@ import json
 import logging
 import os
 import uuid
+import app.models
+from modules.auth.models.accounts import Account
 
 from config.database import get_db, engine
 from config.settings import get_upload_dir
@@ -35,8 +37,23 @@ except Exception as _m_err:
     logger.warning(f"QuickReport auto migration warning: {_m_err}")
 
 def generate_next_code(db: Session) -> str:
-    count = db.query(QuickReport).count()
-    return f"BC-{count + 1:02d}"
+    import re
+    reports = db.query(QuickReport.code).all()
+    max_num = 0
+    for r in reports:
+        if r.code:
+            nums = re.findall(r'\d+', r.code)
+            if nums:
+                try:
+                    val = int(nums[-1])
+                    if val > max_num:
+                        max_num = val
+                except ValueError:
+                    pass
+    next_num = max_num + 1
+    while db.query(QuickReport.id).filter(QuickReport.code == f"BC-{next_num:02d}").first():
+        next_num += 1
+    return f"BC-{next_num:02d}"
 
 @router.get("/next-code", response_model=dict)
 def get_next_quick_report_code(db: Session = Depends(get_db)):
@@ -51,6 +68,7 @@ async def upload_quick_report_audio(file: UploadFile = File(...)):
     """
     try:
         audio_dir = get_upload_dir("quick_reports/audio")
+        os.makedirs(audio_dir, exist_ok=True)
         original_name = file.filename or "recording.webm"
         ext = os.path.splitext(original_name)[1] or ".webm"
         unique_name = f"rec_{uuid.uuid4().hex[:10]}_{datetime.now().strftime('%Y%m%d%H%M%S')}{ext}"
@@ -73,6 +91,7 @@ async def upload_quick_report_image(file: UploadFile = File(...)):
     """
     try:
         img_dir = get_upload_dir("quick_reports/images")
+        os.makedirs(img_dir, exist_ok=True)
         original_name = file.filename or "image.jpg"
         ext = os.path.splitext(original_name)[1] or ".jpg"
         unique_name = f"img_{uuid.uuid4().hex[:10]}_{datetime.now().strftime('%Y%m%d%H%M%S')}{ext}"
@@ -124,9 +143,14 @@ def create_quick_report(payload: QuickReportCreate, db: Session = Depends(get_db
             noti_title = f"🔔 [Báo Cáo Nhanh] {report.code}"
             noti_body = f"{report.report_type} từ {author_text}: {report.main_content[:60]}..."
             
+            # Tìm tài khoản admin hợp lệ làm người gửi thông báo (tránh lỗi khóa ngoại)
+            from modules.auth.models.accounts import Account
+            admin_user = db.query(Account.id).filter(Account.username == "admin").first()
+            valid_announcer_id = admin_user[0] if admin_user else None
+
             noti = NotificationModel(
                 content=f"🔔 [SmartFlow Báo Cáo Nhanh] Mã phiếu {report.code} ({report.report_type}) vừa được khởi tạo bởi {author_text}.",
-                announcer_id=1,
+                announcer_id=valid_announcer_id,
                 target_group="Quản lý",
                 priority_status="Chờ xử lý"
             )
@@ -134,15 +158,19 @@ def create_quick_report(payload: QuickReportCreate, db: Session = Depends(get_db
             db.commit()
 
             # Gửi Push Notification với Deep-link đến danh sách báo cáo
-            from shared.services.notification_service import send_push_to_group
-            send_push_to_group(
-                db=db,
-                target_group="BGD",
-                title=noti_title,
-                body=noti_body,
-                route_path=f"/quick-report-list?id={report.id}"
-            )
+            try:
+                from shared.services.notification_service import send_push_to_group
+                send_push_to_group(
+                    db=db,
+                    target_group="BGD",
+                    title=noti_title,
+                    body=noti_body,
+                    route_path=f"/quick-report-list?id={report.id}"
+                )
+            except Exception as push_err:
+                logger.warning(f"Push notification error: {push_err}")
         except Exception as n_err:
+            db.rollback()
             logger.warning(f"Không thể tạo thông báo báo cáo nhanh: {n_err}")
 
         return {"message": "Tạo báo cáo nhanh thành công", "data": report.to_dict()}

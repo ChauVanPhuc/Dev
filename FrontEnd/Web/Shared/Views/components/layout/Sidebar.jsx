@@ -52,7 +52,41 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
     const fetchSidebar = async () => {
       try {
         const data = await api.get('/system/sidebar?platform=Web');
-        setMenuList(data);
+        let list = Array.isArray(data) ? [...data] : [];
+        
+        // Đảm bảo "Quản Lý Góp Ý" luôn xuất hiện ở cấp cao nhất (ngang cấp Quản lý hệ thống)
+        const hasFeedbackRoot = list.some(item => (!item.parent_id || item.parent_id === null) && (item.route_path === '/admin/feedback' || item.title === 'Quản Lý Góp Ý'));
+        if (!hasFeedbackRoot) {
+          const sysIdx = list.findIndex(item => item.title === 'Quản lý hệ thống');
+          const feedbackItem = {
+            id: 7,
+            parent_id: null,
+            title: 'Quản Lý Góp Ý',
+            route_path: '/admin/feedback',
+            icon: 'MessageSquare',
+            sort_order: 3,
+            is_active: true,
+            children: []
+          };
+          if (sysIdx !== -1) {
+            list.splice(sysIdx + 1, 0, feedbackItem);
+          } else {
+            list.push(feedbackItem);
+          }
+        }
+
+        // Loại bỏ bất kỳ Quản Lý Góp Ý nào còn sót trong danh sách con của các nhóm (ví dụ Quản lý hệ thống hay Quản lý chất lượng)
+        list = list.map(item => {
+          if (item.children && item.children.length > 0) {
+            return {
+              ...item,
+              children: item.children.filter(c => c.route_path !== '/admin/feedback' && c.route_path !== '/admin/quick-reports')
+            };
+          }
+          return item;
+        });
+
+        setMenuList(list);
       } catch (err) {
         console.error('Failed to fetch sidebar menus:', err);
       } finally {
@@ -76,6 +110,12 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
     if (item.route_path === '/admin/kpi/dashboard' || item.permission_key === 'kpi') {
       const kpiPerm = activePermissions['/admin/kpi/dashboard'] || activePermissions['kpi'];
       if (kpiPerm !== 'none') return false;
+    }
+
+    // Cho phép hiển thị Quản Lý Góp Ý
+    if (item.route_path === '/admin/feedback' || item.permission_key === 'feedback') {
+      const fbPerm = activePermissions['/admin/feedback'] || activePermissions['feedback'];
+      if (fbPerm !== 'none') return false;
     }
 
     // 1. Kiểm tra chặn rõ ràng (Explicit block)
@@ -204,12 +244,17 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
         list = list.map(item => item.route_path === '/admin/kpi/quality-employees' ? { ...item, title: 'Danh sách nhân sự' } : item);
       }
     }
+    // Đảm bảo không có Quản Lý Góp Ý nằm bên trong bất kỳ group nào (vì đã chuyển lên cấp cao nhất)
+    list = list.filter(item => item.route_path !== '/admin/feedback' && item.route_path !== '/admin/quick-reports');
     return list;
   };
 
   // Helper check xem group co child nao dang active ko (bao gom ca sub-children)
   const hasActiveChild = (group) => {
-    if (group.title === 'Quản lý hệ thống' && (location.pathname === '/admin/monitor' || location.pathname === '/admin/monitor/')) {
+    if (group.title === 'Quản lý hệ thống' && (
+      location.pathname === '/admin/monitor' || 
+      location.pathname === '/admin/monitor/'
+    )) {
       return true;
     }
     if ((group.title === 'Quản lý chất lượng' || group.title === 'Quản lý Chất Lượng') && (
