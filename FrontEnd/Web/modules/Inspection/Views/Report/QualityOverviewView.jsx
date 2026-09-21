@@ -171,6 +171,37 @@ const QualityOverviewView = () => {
     };
   }, []);
 
+  // Tải danh mục loại phiếu kiểm tra và thông số đo từ Database
+  useEffect(() => {
+    let isMounted = true;
+    // 1. Tải danh mục loại phiếu kiểm tra
+    api.get('/inspection-form-types')
+      .then((res) => {
+        const data = res?.data !== undefined ? res.data : res;
+        if (isMounted && Array.isArray(data) && data.length > 0) {
+          const activeTypes = data.filter(t => t.is_active !== false);
+          if (activeTypes.length > 0) {
+            setFormTypes(activeTypes);
+          }
+        }
+      })
+      .catch((err) => console.warn('Không thể tải /inspection-form-types:', err));
+
+    // 2. Tải danh mục thông số kiểm tra
+    api.get('/inspection-parameters')
+      .then((res) => {
+        const data = res?.data !== undefined ? res.data : res;
+        if (isMounted && Array.isArray(data) && data.length > 0) {
+          setParameterOptions(data);
+        }
+      })
+      .catch((err) => console.warn('Không thể tải /inspection-parameters:', err));
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Đồng bộ trạng thái khi mở hoặc chuyển phiếu kiểm tra
   useEffect(() => {
     if (selectedTask) {
@@ -221,6 +252,19 @@ const QualityOverviewView = () => {
 
       // Khởi tạo danh sách ảnh minh chứng từ selectedTask
       const initImgs = [];
+      if (Array.isArray(selectedTask.images)) {
+        selectedTask.images.filter(Boolean).forEach(img => {
+          if (!initImgs.includes(img)) initImgs.push(img);
+        });
+      } else if (typeof selectedTask.images === 'string') {
+        try {
+          const parsed = JSON.parse(selectedTask.images);
+          if (Array.isArray(parsed)) {
+            parsed.filter(Boolean).forEach(img => { if (!initImgs.includes(img)) initImgs.push(img); });
+          }
+        } catch (e) {}
+      }
+
       [selectedTask.image_path_1, selectedTask.image_path_2, selectedTask.image_path_3].filter(Boolean).forEach(img => {
         if (!initImgs.includes(img)) initImgs.push(img);
       });

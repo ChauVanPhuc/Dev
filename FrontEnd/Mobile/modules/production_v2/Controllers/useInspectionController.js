@@ -78,7 +78,18 @@ export const useInspectionDetail = (id) => {
     inspectionService.getById(id).then((data) => {
       setTicket(data)
       if (Array.isArray(data.images) && data.images.length > 0) {
-        setImages(data.images)
+        setImages(data.images.map((img, idx) => {
+          if (typeof img === 'object' && img !== null) return img
+          return {
+            id: `server_img_${idx}`,
+            url: img,
+            serverUrl: img,
+            file: null,
+            status: 'success',
+            progress: 100,
+            errorMsg: null,
+          }
+        }))
       }
       if (Array.isArray(data.steps) && data.steps.length > 0) {
         setSteps(data.steps)
@@ -100,20 +111,12 @@ export const useInspectionDetail = (id) => {
         const formattedSteps = guideData.steps.map((st) => ({
           id: st.id,
           step_no: st.step_no,
-          step: st.step_no,
           title: st.title || `Bước ${st.step_no}`,
-          description: st.title || `Bước ${st.step_no}`,
+          content: st.content || '',
           standard: st.standard || st.content || '',
-          content: st.content || st.standard || '',
-          note: st.note || '',
-          role: st.role || st.assignee_role || '',
-          assignee_role: st.assignee_role || st.role || '',
-          sub_steps: Array.isArray(st.sub_steps) ? st.sub_steps : [],
-          images: Array.isArray(st.images) ? st.images : [],
-          qty: 1,
           result: 'pass',
-          guide_name: guideData.name,
-          guide_code: guideData.code
+          note: '',
+          images: Array.isArray(st.images) ? st.images : []
         }))
         setSteps(formattedSteps)
         return { guide: guideData, steps: formattedSteps }
@@ -131,31 +134,83 @@ export const useInspectionDetail = (id) => {
 
   const addImage = async (file) => {
     if (!file) return
+    const id = `img_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`
     const tempUrl = (file instanceof File || file instanceof Blob) ? URL.createObjectURL(file) : null
-    if (tempUrl) {
-      setImages((prev) => [...prev, tempUrl])
+
+    const newImageObj = {
+      id,
+      url: tempUrl || '',
+      serverUrl: null,
+      file,
+      status: 'uploading',
+      progress: 0,
+      errorMsg: null,
     }
+
+    setImages((prev) => [...prev, newImageObj])
+
     try {
-      const result = await inspectionService.uploadImage(file)
+      const result = await inspectionService.uploadImage(file, {
+        onProgress: (percent) => {
+          setImages((prev) => prev.map((img) => (img?.id === id ? { ...img, progress: percent } : img)))
+        },
+      })
       const serverUrl = result?.url || result?.path
-      if (serverUrl && tempUrl && !String(serverUrl).startsWith('blob:')) {
-        setImages((prev) => prev.map((img) => (img === tempUrl ? serverUrl : img)))
+      if (serverUrl) {
+        setImages((prev) => prev.map((img) => (img?.id === id ? { ...img, status: 'success', serverUrl, url: serverUrl, progress: 100 } : img)))
       }
       return result
     } catch (err) {
-      console.error('Lỗi khi tải ảnh lên server:', err)
-      if (tempUrl) {
-        setImages((prev) => prev.filter((img) => img !== tempUrl))
-      }
-      alert('Không thể tải ảnh lên máy chủ. Vui lòng thử lại!')
+      console.warn('[useInspectionController] Upload ảnh lên server thất bại, lưu trạng thái lỗi để thử lại:', err)
+      setImages((prev) => prev.map((img) => (img?.id === id ? { ...img, status: 'error', errorMsg: 'Mạng yếu, chưa tải lên được' } : img)))
     }
   }
 
-  const removeImage = (idx) => setImages((prev) => prev.filter((_, i) => i !== idx))
+  const retryImage = async (idOrIndex) => {
+    let targetImg = null
+    setImages((prev) => {
+      targetImg = prev.find((img, idx) => img?.id === idOrIndex || idx === idOrIndex)
+      return prev.map((img, idx) => {
+        if (img?.id === idOrIndex || idx === idOrIndex) {
+          return { ...img, status: 'uploading', progress: 0, errorMsg: null }
+        }
+        return img
+      })
+    })
+
+    if (!targetImg || !targetImg.file) return
+
+    const id = targetImg.id || idOrIndex
+    try {
+      const result = await inspectionService.uploadImage(targetImg.file, {
+        onProgress: (percent) => {
+          setImages((prev) => prev.map((img) => (img?.id === id ? { ...img, progress: percent } : img)))
+        },
+      })
+      const serverUrl = result?.url || result?.path
+      if (serverUrl) {
+        setImages((prev) => prev.map((img) => (img?.id === id ? { ...img, status: 'success', serverUrl, url: serverUrl, progress: 100 } : img)))
+      }
+      return result
+    } catch (err) {
+      console.warn('[useInspectionController] Thử lại tải ảnh vẫn thất bại:', err)
+      setImages((prev) => prev.map((img) => (img?.id === id ? { ...img, status: 'error', errorMsg: 'Mạng yếu, thử lại thất bại' } : img)))
+    }
+  }
+
+  const removeImage = (idOrIndex) => {
+    setImages((prev) => {
+      const target = prev.find((img, idx) => img?.id === idOrIndex || idx === idOrIndex)
+      if (target?.url && String(target.url).startsWith('blob:')) {
+        try { URL.revokeObjectURL(target.url) } catch (_) {}
+      }
+      return prev.filter((img, idx) => img?.id !== idOrIndex && idx !== idOrIndex)
+    })
+  }
 
   const getLastResult = async (mode, productId, poCode) => {
     return await inspectionService.getLastResult(mode, productId, poCode)
   }
 
-  return { ticket, loading, error, steps, setSteps, images, setImages, addImage, removeImage, loadGuide, getLastResult, currentGuide }
+  return { ticket, loading, error, steps, setSteps, images, setImages, addImage, retryImage, removeImage, loadGuide, getLastResult, currentGuide }
 }

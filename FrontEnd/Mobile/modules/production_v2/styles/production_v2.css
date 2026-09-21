@@ -2560,3 +2560,12 @@
     font-size: 12px !important;
   }
 }
+
+/* ── Animation cho Spinner Loading Ảnh ────────────────── */
+@keyframes pv2-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.pv2-spin {
+  animation: pv2-spin 1s linear infinite !important;
+}

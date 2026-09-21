@@ -281,7 +281,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
   const user = useAuthStore((state) => state.user)
   const creatorName = user?.full_name || user?.username || ''
   const { createTicket, confirmTicket } = useInspectionController()
-  const { ticket, loading, steps, setSteps, images, setImages, addImage, removeImage, loadGuide, getLastResult, currentGuide } =
+  const { ticket, loading, steps, setSteps, images, setImages, addImage, retryImage, removeImage, loadGuide, getLastResult, currentGuide } =
     useInspectionDetail(isNew ? null : id)
 
   const [mode, setMode] = useState(fixedMode)
@@ -1892,6 +1892,40 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
           return e
         })
 
+      // Đợi các ảnh đang upload hoàn tất nếu có
+      const isUploading = (images || []).some((img) => img && typeof img === 'object' && img.status === 'uploading')
+      if (isUploading) {
+        let waitCount = 0
+        while (waitCount < 5) {
+          await new Promise((r) => setTimeout(r, 800))
+          waitCount++
+          const stillUploading = (images || []).some((img) => img && typeof img === 'object' && img.status === 'uploading')
+          if (!stillUploading) break
+        }
+      }
+
+      // Chuẩn bị danh sách ảnh gửi lên máy chủ (ưu tiên URL máy chủ, fallback sang Base64 nén nếu upload riêng lẻ lỗi)
+      const finalImages = []
+      for (const item of (images || [])) {
+        if (!item) continue
+        if (typeof item === 'string') {
+          if (!item.startsWith('blob:')) finalImages.push(item)
+          continue
+        }
+        if (item.serverUrl && !String(item.serverUrl).startsWith('blob:')) {
+          finalImages.push(item.serverUrl)
+        } else if (item.file) {
+          try {
+            const b64 = await inspectionService.imageToBase64(item.file)
+            if (b64) finalImages.push(b64)
+          } catch (b64Err) {
+            console.warn('[useInspectionFormBase] Lỗi convert base64 fallback:', b64Err)
+          }
+        } else if (item.url && !String(item.url).startsWith('blob:')) {
+          finalImages.push(item.url)
+        }
+      }
+
       const createdResult = await createTicket({
         mode,
         stage: activeStage,
@@ -1905,7 +1939,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
         errorQty: activeErrorQty,
         note: finalNote,
         errors: sanitizedErrors,
-        images: (images || []).filter((img) => img && !String(img).startsWith('blob:')),
+        images: finalImages,
         creator: creatorName,
         userId: user?.id,
         inspector_id: user?.id,
@@ -2407,6 +2441,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     images,
     setImages,
     addImage,
+    retryImage,
     removeImage,
     mode,
     setMode,

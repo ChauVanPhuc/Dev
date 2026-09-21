@@ -1,5 +1,5 @@
 import apiClient from '@shared/services/api'
-import { compressImage } from '@shared/utils/imageCompressor'
+import { compressImage, blobToBase64 } from '@shared/utils/imageCompressor'
 import { PAGE_SIZE } from '../constants'
 
 export const inspectionService = {
@@ -150,7 +150,7 @@ export const inspectionService = {
     return res.data
   },
 
-  async uploadImage(file) {
+  async uploadImage(file, { onProgress, maxRetries = 2 } = {}) {
     let uploadPayload = file
     try {
       uploadPayload = await compressImage(file)
@@ -163,21 +163,40 @@ export const inspectionService = {
       form.append('image', uploadPayload)
       form.append('file', uploadPayload)
       const res = await apiClient.post('/inspections/upload-image', form, {
-        timeout: 60000,
+        timeout: 25000,
+        onUploadProgress: (evt) => {
+          if (onProgress && evt.total) {
+            const percent = Math.round((evt.loaded * 100) / evt.total)
+            onProgress(percent)
+          }
+        },
       })
       return res.data
     }
 
-    try {
-      return await doUpload()
-    } catch (e) {
-      console.warn('[inspectionService] Lần upload đầu thất bại, thử lại lần 2...', e)
+    let lastError = null
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
+        if (attempt > 0) {
+          console.warn(`[inspectionService] Đang thử upload lại lần ${attempt}...`)
+          await new Promise((r) => setTimeout(r, 800 * attempt))
+        }
         return await doUpload()
-      } catch (retryErr) {
-        console.error('[inspectionService] Upload image to server failed after retry:', retryErr)
-        throw retryErr
+      } catch (err) {
+        lastError = err
       }
+    }
+
+    console.error('[inspectionService] Upload ảnh thất bại sau các lần thử:', lastError)
+    throw lastError
+  },
+
+  async imageToBase64(file) {
+    try {
+      const compressed = await compressImage(file)
+      return await blobToBase64(compressed)
+    } catch (err) {
+      return await blobToBase64(file)
     }
   },
 

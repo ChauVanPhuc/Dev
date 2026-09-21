@@ -1,5 +1,5 @@
 import React from 'react'
-import { X, ArrowLeft, CheckCircle2, Download, ImagePlus, CheckSquare, Layers, ClipboardCheck, Camera, Plus } from 'lucide-react'
+import { X, ArrowLeft, CheckCircle2, Download, ImagePlus, CheckSquare, Layers, ClipboardCheck, Camera, Plus, RotateCcw, Loader2 } from 'lucide-react'
 import Layout from '@mobile/Shared/Views/components/layout/MobileLayout'
 import PageHeader from '@mobile/Shared/Views/components/layout/MobilePageHeader'
 import CustomSelect from '@mobile/Shared/Views/components/form/CustomSelect'
@@ -24,6 +24,7 @@ const InspectionFormShell = ({ title, subTitle, formState, children, showLastRes
     handleConfirmTicketClick,
     handleSubmit,
     images,
+    retryImage,
     removeImage,
     handleImagePick,
     fileRef,
@@ -90,16 +91,30 @@ const InspectionFormShell = ({ title, subTitle, formState, children, showLastRes
           </span>
         </div>
         {images.length > 0 && (
-          <span style={{
-            fontSize: 11,
-            fontWeight: 700,
-            color: '#15803D',
-            backgroundColor: '#DCFCE7',
-            padding: '2px 8px',
-            borderRadius: '12px'
-          }}>
-            ✓ Đã chọn {images.length} ảnh
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            {images.some((img) => img && typeof img === 'object' && img.status === 'error') && (
+              <span style={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: '#DC2626',
+                backgroundColor: '#FEE2E2',
+                padding: '2px 8px',
+                borderRadius: '12px'
+              }}>
+                ⚠ Lỗi mạng tải ảnh (chạm ảnh để thử lại)
+              </span>
+            )}
+            <span style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: '#15803D',
+              backgroundColor: '#DCFCE7',
+              padding: '2px 8px',
+              borderRadius: '12px'
+            }}>
+              ✓ Đã chọn {images.length} ảnh
+            </span>
+          </div>
         )}
       </div>
 
@@ -109,61 +124,146 @@ const InspectionFormShell = ({ title, subTitle, formState, children, showLastRes
 
       {/* Grid hiển thị ảnh và nút thêm ảnh */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-        {images.map((src, i) => (
-          <div
-            key={i}
-            style={{
-              position: 'relative',
-              width: 64,
-              height: 64,
-              borderRadius: 8,
-              overflow: 'hidden',
-              border: '1.5px solid #EADBCE',
-              boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
-              cursor: 'pointer',
-              flexShrink: 0
-            }}
-            onClick={() => setPreviewImage(getFullImageUrl(src))}
-          >
-            <img
-              src={getFullImageUrl(src)}
-              alt="Ảnh kiểm tra"
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              onError={(e) => {
-                e.target.onerror = null
-                e.target.style.display = 'none'
-                if (e.target.parentElement) {
-                  e.target.parentElement.style.display = 'none'
+        {images.map((item, i) => {
+          const isObj = item && typeof item === 'object'
+          const src = isObj ? (item.url || item.serverUrl) : item
+          const status = isObj ? (item.status || 'success') : 'success'
+          const imgId = isObj ? (item.id || i) : i
+          const progress = isObj ? (item.progress || 0) : 100
+
+          return (
+            <div
+              key={imgId}
+              style={{
+                position: 'relative',
+                width: 64,
+                height: 64,
+                borderRadius: 8,
+                overflow: 'hidden',
+                border: status === 'error' ? '2px solid #EF4444' : '1.5px solid #EADBCE',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
+                cursor: 'pointer',
+                flexShrink: 0
+              }}
+              onClick={() => {
+                if (status === 'error' && retryImage) {
+                  retryImage(imgId)
+                } else {
+                  setPreviewImage(getFullImageUrl(src))
                 }
               }}
-            />
-            {!readOnly && (
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); removeImage(i) }}
-                title="Xóa ảnh"
+            >
+              <img
+                src={getFullImageUrl(src)}
+                alt="Ảnh kiểm tra"
                 style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  opacity: status === 'uploading' ? 0.6 : (status === 'error' ? 0.45 : 1)
+                }}
+                onError={(e) => {
+                  e.target.onerror = null
+                  e.target.style.display = 'none'
+                  if (e.target.parentElement) {
+                    e.target.parentElement.style.display = 'none'
+                  }
+                }}
+              />
+
+              {/* Overlay trạng thái: Đang tải lên */}
+              {status === 'uploading' && (
+                <div style={{
                   position: 'absolute',
-                  top: 2,
-                  right: 2,
-                  width: 18,
-                  height: 18,
-                  borderRadius: '50%',
-                  backgroundColor: 'rgba(0,0,0,0.65)',
+                  inset: 0,
+                  backgroundColor: 'rgba(0,0,0,0.45)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                   color: '#fff',
-                  border: 'none',
+                  gap: 2
+                }}>
+                  <Loader2 size={16} className="pv2-spin" color="#FFF" />
+                  <span style={{ fontSize: 9, fontWeight: 700 }}>
+                    {progress > 0 ? `${progress}%` : 'Tải lên...'}
+                  </span>
+                </div>
+              )}
+
+              {/* Overlay trạng thái: Lỗi mạng (chạm để thử lại) */}
+              {status === 'error' && (
+                <div
+                  title="Tải lỗi do mạng yếu. Chạm để thử lại"
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    backgroundColor: 'rgba(239, 68, 68, 0.55)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#fff',
+                    gap: 2,
+                    padding: 2
+                  }}
+                >
+                  <RotateCcw size={16} strokeWidth={2.5} color="#FFF" />
+                  <span style={{ fontSize: 8.5, fontWeight: 800, textAlign: 'center', lineHeight: 1.1 }}>
+                    Thử lại
+                  </span>
+                </div>
+              )}
+
+              {/* Badge thành công góc dưới */}
+              {status === 'success' && !readOnly && (
+                <div style={{
+                  position: 'absolute',
+                  bottom: 2,
+                  left: 2,
+                  width: 14,
+                  height: 14,
+                  borderRadius: '50%',
+                  backgroundColor: '#16A34A',
+                  color: '#fff',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  cursor: 'pointer',
-                  padding: 0
-                }}
-              >
-                <X size={11} strokeWidth={2.5} />
-              </button>
-            )}
-          </div>
-        ))}
+                  fontSize: 8.5,
+                  fontWeight: 900
+                }}>
+                  ✓
+                </div>
+              )}
+
+              {!readOnly && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); removeImage(imgId) }}
+                  title="Xóa ảnh"
+                  style={{
+                    position: 'absolute',
+                    top: 2,
+                    right: 2,
+                    width: 18,
+                    height: 18,
+                    borderRadius: '50%',
+                    backgroundColor: 'rgba(0,0,0,0.65)',
+                    color: '#fff',
+                    border: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    padding: 0
+                  }}
+                >
+                  <X size={11} strokeWidth={2.5} />
+                </button>
+              )}
+            </div>
+          )
+        })}
 
         {!readOnly && (
           <button

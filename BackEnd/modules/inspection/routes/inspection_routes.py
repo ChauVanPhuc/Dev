@@ -35,6 +35,49 @@ from modules.inspection.schemas.stage_inspection import StageInspectionCreate, S
 from modules.auth.models.accounts import Account
 from modules.auth.models.departments import Department
 from shared.utils.string_cleaner import clean_and_standardize_name
+import logging
+
+logger = logging.getLogger(__name__)
+
+def save_base64_image(base64_data: str, folder: str = "inspections") -> Optional[str]:
+    """Giải mã chuỗi Base64 data URL và lưu thành file tĩnh vật lý, trả về đường dẫn URL."""
+    if not base64_data or not isinstance(base64_data, str) or not base64_data.startswith("data:image/"):
+        return None
+    try:
+        import base64
+        header, encoded = base64_data.split(",", 1) if "," in base64_data else ("", base64_data)
+        ext = ".jpg"
+        if "image/png" in header:
+            ext = ".png"
+        elif "image/webp" in header:
+            ext = ".webp"
+        upload_dir = get_upload_dir(folder)
+        os.makedirs(upload_dir, exist_ok=True)
+        filename = f"{uuid.uuid4()}{ext}"
+        filepath = os.path.join(upload_dir, filename)
+        with open(filepath, "wb") as f_out:
+            f_out.write(base64.b64decode(encoded))
+        return f"/static/uploads/{folder}/{filename}"
+    except Exception as e:
+        logger.warning(f"Lỗi giải mã base64 image: {e}")
+        return None
+
+def process_images_list(images: list, folder: str = "inspections") -> list:
+    """Xử lý danh sách ảnh: giải mã base64 thành file nếu có, bỏ blob, giữ lại URL hợp lệ."""
+    if not images or not isinstance(images, list):
+        return []
+    result = []
+    for item in images:
+        if not item or not isinstance(item, str):
+            continue
+        item = item.strip()
+        if item.startswith("data:image/"):
+            saved = save_base64_image(item, folder)
+            if saved:
+                result.append(saved)
+        elif not item.startswith("blob:"):
+            result.append(item)
+    return result
 
 router = APIRouter()
 
@@ -1696,7 +1739,8 @@ async def create_inspection(
         error_qty = int(body.get("errorQty") or 0)
         note = body.get("note") or ""
         errors = body.get("errors") or []
-        images = body.get("images") or []
+        raw_images = body.get("images") or []
+        images = process_images_list(raw_images, "inspections")
         creator = body.get("creator") or "QC Hệ thống"
         backup_qr = (body.get("backup_qr") or body.get("backupQrCode") or "").strip()
 
@@ -1715,6 +1759,7 @@ async def create_inspection(
             "stage": stage,
             "po": po,
             "product": product,
+            "images": images,
             "spec": spec,
             "action": action,
             "requiredQty": body.get("requiredQty"),
@@ -4348,7 +4393,7 @@ def confirm_inspection(
     if "images" in body_data:
         images_list = body_data["images"]
         if isinstance(images_list, list):
-            clean_images = [str(x).strip() for x in images_list if x]
+            clean_images = process_images_list(images_list, "inspections")
             record.image_path_1 = clean_images[0] if len(clean_images) > 0 else None
             record.image_path_2 = clean_images[1] if len(clean_images) > 1 else None
             record.image_path_3 = clean_images[2] if len(clean_images) > 2 else None
@@ -4476,7 +4521,7 @@ def update_inspection_record(
     if "images" in body_data:
         images_list = body_data["images"]
         if isinstance(images_list, list):
-            clean_images = [str(x).strip() for x in images_list if x]
+            clean_images = process_images_list(images_list, "inspections")
             record.image_path_1 = clean_images[0] if len(clean_images) > 0 else None
             record.image_path_2 = clean_images[1] if len(clean_images) > 1 else None
             record.image_path_3 = clean_images[2] if len(clean_images) > 2 else None
