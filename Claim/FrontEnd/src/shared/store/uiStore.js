@@ -16,6 +16,11 @@ const useUiStore = create((set) => ({
   toggleNotification: () => set((state) => ({ isNotificationOpen: !state.isNotificationOpen })),
   setNotificationOpen: (isOpen) => set({ isNotificationOpen: isOpen }),
 
+  // Trạng thái Popup Dashboard LPN Crawler Toàn thời gian
+  isLpnDashboardOpen: false,
+  setLpnDashboardOpen: (isOpen) => set({ isLpnDashboardOpen: isOpen }),
+  toggleLpnDashboard: () => set((state) => ({ isLpnDashboardOpen: !state.isLpnDashboardOpen })),
+
 
 
   // --- Trạng thái Xử lý PDF Khiếu nại nền (Global Background) ---

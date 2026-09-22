@@ -43,6 +43,7 @@ export const useClaimForm = ({
   const [addGiaTriPhat, setAddGiaTriPhat] = useState('');
   const [addHeSoPhat, setAddHeSoPhat] = useState(2);
   const [addMaLoi, setAddMaLoi] = useState('');
+  const [addTenLoiKH, setAddTenLoiKH] = useState('');
   const [addMaLoiCty, setAddMaLoiCty] = useState('');
   const [addTenLoiG7, setAddTenLoiG7] = useState('');
   const [showAddG7CodeSuggestions, setShowAddG7CodeSuggestions] = useState(false);
@@ -59,6 +60,7 @@ export const useClaimForm = ({
   const [editingAddImageIndex, setEditingAddImageIndex] = useState(null);
   const [showAddSuggestions, setShowAddSuggestions] = useState(false);
   const [showAddDefectSuggestions, setShowAddDefectSuggestions] = useState(false);
+  const [showAddTenLoiKHSuggestions, setShowAddTenLoiKHSuggestions] = useState(false);
 
   // Modal 1: Process / Detail Claim state variables
   const [processDongHang, setProcessDongHang] = useState('');
@@ -69,8 +71,11 @@ export const useClaimForm = ({
   const [processGiaTriPhat, setProcessGiaTriPhat] = useState('');
   const [processHeSoPhat, setProcessHeSoPhat] = useState(1);
   const [processMaLoi, setProcessMaLoi] = useState('');
+  const [processTenLoiKH, setProcessTenLoiKH] = useState('');
   const [processMaLoiCty, setProcessMaLoiCty] = useState('');
   const [processTenLoiG7, setProcessTenLoiG7] = useState('');
+  const [showProcessDefectCodeSuggestions, setShowProcessDefectCodeSuggestions] = useState(false);
+  const [showProcessTenLoiKHSuggestions, setShowProcessTenLoiKHSuggestions] = useState(false);
   const [showProcessG7CodeSuggestions, setShowProcessG7CodeSuggestions] = useState(false);
   const [showProcessG7NameSuggestions, setShowProcessG7NameSuggestions] = useState(false);
   const [processLpn, setProcessLpn] = useState('');
@@ -122,7 +127,8 @@ export const useClaimForm = ({
       setProcessNgayXuat(formattedDate);
       setProcessTrangThaiXuLy(activeDetailClaim.status === 'Đã xử lý' || activeDetailClaim.status === 'Chấp nhận' ? 'Đã xử lý' : activeDetailClaim.status === 'Đang xem xét' ? 'Đang xem xét' : 'Mới');
       setProcessLinkCapa(activeDetailClaim.capa_link || activeDetailClaim.link_capa || '');
-      setProcessGhiChu(activeDetailClaim.claim_description || activeDetailClaim.description || '');
+      setProcessTenLoiKH(activeDetailClaim.claim_description || activeDetailClaim.description || '');
+      setProcessGhiChu(activeDetailClaim.note || activeDetailClaim.ghi_chu || '');
     }
   }, [activeDetailClaim, defectCatalog, g7DefectTypes]);
 
@@ -135,28 +141,104 @@ export const useClaimForm = ({
     return resolveG7ErrorName(g7Code, custCode, g7DefectTypes, defectCatalog);
   };
 
+  const handleSelectDefectCode = (code, isProcess = false) => {
+    const cleanCode = (code || '').trim().toLowerCase();
+    const match = (defectCatalog || []).find(d => 
+      (d.code || d.client_defect_code || d.defect_code || '').trim().toLowerCase() === cleanCode
+    );
+    const claimMatch = (claims || []).find(c => 
+      (c.order_code || c.defect_code || '').trim().toLowerCase() === cleanCode && 
+      (c.claim_description || c.description)
+    );
+    const defectName = (match && (match.name || match.name_en)) || (claimMatch && (claimMatch.claim_description || claimMatch.description)) || '';
+    const g7Code = (match && match.g7_code) || resolveG7ErrorCode(code, defectCatalog);
+    const g7Name = resolveG7ErrorName(g7Code, code, g7DefectTypes, defectCatalog);
+
+    if (isProcess) {
+      setProcessMaLoi(code);
+      if (defectName) setProcessTenLoiKH(defectName);
+      if (g7Code) setProcessMaLoiCty(g7Code);
+      if (g7Name) setProcessTenLoiG7(g7Name);
+      setShowProcessDefectCodeSuggestions(false);
+    } else {
+      setAddMaLoi(code);
+      if (defectName) setAddTenLoiKH(defectName);
+      if (g7Code) setAddMaLoiCty(g7Code);
+      if (g7Name) setAddTenLoiG7(g7Name);
+      setShowAddDefectSuggestions(false);
+    }
+  };
+
+  const handleSelectCustomerDefectName = (name, isProcess = false) => {
+    const cleanName = (name || '').trim().toLowerCase();
+    const match = (defectCatalog || []).find(d => 
+      (d.name || '').trim().toLowerCase() === cleanName || 
+      (d.name_en || '').trim().toLowerCase() === cleanName
+    );
+    const claimMatch = (claims || []).find(c => 
+      (c.claim_description || c.description || '').trim().toLowerCase() === cleanName
+    );
+    const matchedCode = (match && (match.code || match.client_defect_code || match.defect_code)) || 
+                        (claimMatch && (claimMatch.order_code || claimMatch.defect_code)) || '';
+    const g7Code = (match && match.g7_code) || (matchedCode ? resolveG7ErrorCode(matchedCode, defectCatalog) : '');
+    const g7Name = resolveG7ErrorName(g7Code, matchedCode, g7DefectTypes, defectCatalog);
+
+    if (isProcess) {
+      setProcessTenLoiKH(name);
+      if (matchedCode) setProcessMaLoi(matchedCode);
+      if (g7Code) setProcessMaLoiCty(g7Code);
+      if (g7Name) setProcessTenLoiG7(g7Name);
+      setShowProcessTenLoiKHSuggestions(false);
+    } else {
+      setAddTenLoiKH(name);
+      if (matchedCode) setAddMaLoi(matchedCode);
+      if (g7Code) setAddMaLoiCty(g7Code);
+      if (g7Name) setAddTenLoiG7(g7Name);
+      setShowAddTenLoiKHSuggestions(false);
+    }
+  };
+
   const handleSelectG7Code = (code, isProcess = false) => {
     const name = resolveG7ErrorName(code, null, g7DefectTypes, defectCatalog);
+    const clientMatch = (defectCatalog || []).find(cd => (cd.g7_code || '').trim().toLowerCase() === (code || '').trim().toLowerCase());
     if (isProcess) {
       setProcessMaLoiCty(code);
       if (name) setProcessTenLoiG7(name);
+      if (clientMatch && !processMaLoi) {
+        setProcessMaLoi(clientMatch.code || clientMatch.client_defect_code || clientMatch.defect_code || '');
+        if (clientMatch.name || clientMatch.name_en) setProcessTenLoiKH(clientMatch.name || clientMatch.name_en);
+      }
       setShowProcessG7CodeSuggestions(false);
     } else {
       setAddMaLoiCty(code);
       if (name) setAddTenLoiG7(name);
+      if (clientMatch && !addMaLoi) {
+        setAddMaLoi(clientMatch.code || clientMatch.client_defect_code || clientMatch.defect_code || '');
+        if (clientMatch.name || clientMatch.name_en) setAddTenLoiKH(clientMatch.name || clientMatch.name_en);
+      }
       setShowAddG7CodeSuggestions(false);
     }
   };
 
   const handleSelectG7Name = (name, isProcess = false) => {
     const match = (g7DefectTypes || []).find(gt => (gt.name || gt.short_description || '') === name);
+    const g7Code = match ? match.code : '';
+    const clientMatch = g7Code ? (defectCatalog || []).find(cd => (cd.g7_code || '').trim().toLowerCase() === g7Code.trim().toLowerCase()) : null;
     if (isProcess) {
       setProcessTenLoiG7(name);
-      if (match && match.code) setProcessMaLoiCty(match.code);
+      if (g7Code) setProcessMaLoiCty(g7Code);
+      if (clientMatch && !processMaLoi) {
+        setProcessMaLoi(clientMatch.code || clientMatch.client_defect_code || clientMatch.defect_code || '');
+        if (clientMatch.name || clientMatch.name_en) setProcessTenLoiKH(clientMatch.name || clientMatch.name_en);
+      }
       setShowProcessG7NameSuggestions(false);
     } else {
       setAddTenLoiG7(name);
-      if (match && match.code) setAddMaLoiCty(match.code);
+      if (g7Code) setAddMaLoiCty(g7Code);
+      if (clientMatch && !addMaLoi) {
+        setAddMaLoi(clientMatch.code || clientMatch.client_defect_code || clientMatch.defect_code || '');
+        if (clientMatch.name || clientMatch.name_en) setAddTenLoiKH(clientMatch.name || clientMatch.name_en);
+      }
       setShowAddG7NameSuggestions(false);
     }
   };
@@ -279,6 +361,7 @@ export const useClaimForm = ({
     setAddGiaTriPhat('');
     setAddHeSoPhat(2);
     setAddMaLoi('');
+    setAddTenLoiKH('');
     setAddMaLoiCty('');
     setAddTenLoiG7('');
     setAddLpn('');
@@ -335,7 +418,7 @@ export const useClaimForm = ({
         order_code: addMaLoi,
         company_error_code: addMaLoiCty,
         company_error_name: addTenLoiG7,
-        description: addGhiChu,
+        description: addTenLoiKH || addGhiChu || '',
         severity: addMucPhat === 'Hủy đơn' ? 'High' : addMucPhat === 'Phạt tiền' ? 'Medium' : 'Low',
         status: backendStatus
       };
@@ -493,7 +576,7 @@ export const useClaimForm = ({
         order_code: processMaLoi,
         company_error_code: processMaLoiCty,
         company_error_name: processTenLoiG7,
-        description: processGhiChu,
+        description: processTenLoiKH || '',
         severity: processMucPhat === 'Hủy đơn' ? 'High' : processMucPhat === 'Phạt tiền' ? 'Medium' : 'Low',
         status: backendStatus,
         action: processGiaTriPhat,
@@ -582,6 +665,7 @@ export const useClaimForm = ({
     addGiaTriPhat, setAddGiaTriPhat,
     addHeSoPhat, setAddHeSoPhat,
     addMaLoi, setAddMaLoi,
+    addTenLoiKH, setAddTenLoiKH,
     addMaLoiCty, setAddMaLoiCty,
     addTenLoiG7, setAddTenLoiG7,
     showAddG7CodeSuggestions, setShowAddG7CodeSuggestions,
@@ -597,6 +681,7 @@ export const useClaimForm = ({
     addModalError, setAddModalError,
     showAddSuggestions, setShowAddSuggestions,
     showAddDefectSuggestions, setShowAddDefectSuggestions,
+    showAddTenLoiKHSuggestions, setShowAddTenLoiKHSuggestions,
     handleOpenAddNewClaim,
     handleSaveNewClaim,
     getAddTotalPenaltyPreview,
@@ -614,8 +699,11 @@ export const useClaimForm = ({
     processGiaTriPhat, setProcessGiaTriPhat,
     processHeSoPhat, setProcessHeSoPhat,
     processMaLoi, setProcessMaLoi,
+    processTenLoiKH, setProcessTenLoiKH,
     processMaLoiCty, setProcessMaLoiCty,
     processTenLoiG7, setProcessTenLoiG7,
+    showProcessDefectCodeSuggestions, setShowProcessDefectCodeSuggestions,
+    showProcessTenLoiKHSuggestions, setShowProcessTenLoiKHSuggestions,
     showProcessG7CodeSuggestions, setShowProcessG7CodeSuggestions,
     showProcessG7NameSuggestions, setShowProcessG7NameSuggestions,
     processLpn, setProcessLpn,
@@ -638,6 +726,8 @@ export const useClaimForm = ({
     // Mapping & Selection
     mapCustomerDefectsToCompany,
     mapCustomerDefectsToG7Name,
+    handleSelectDefectCode,
+    handleSelectCustomerDefectName,
     handleSelectG7Code,
     handleSelectG7Name
   };

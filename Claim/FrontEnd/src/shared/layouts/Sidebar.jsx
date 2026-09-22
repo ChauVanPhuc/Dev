@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import "@assets/sidebar.css";
+import "@styles/sidebar.css";
 import amandaPhoto from '@assets/Logo remove bg.png';
 
 /**

@@ -17,7 +17,13 @@ export const ClaimAddModal = ({
   uniquePenaltyOptions = [],
   getAddTotalPenaltyPreview,
   addMaLoi, setAddMaLoi,
+  addTenLoiKH, setAddTenLoiKH,
   showAddDefectSuggestions, setShowAddDefectSuggestions,
+  showAddTenLoiKHSuggestions, setShowAddTenLoiKHSuggestions,
+  uniqueCustomerDefectCodeOptions = [],
+  uniqueCustomerDefectNameOptions = [],
+  handleSelectDefectCode,
+  handleSelectCustomerDefectName,
   defectCatalog = [],
   addMaLoiCty, setAddMaLoiCty,
   showAddG7CodeSuggestions, setShowAddG7CodeSuggestions,
@@ -222,33 +228,37 @@ export const ClaimAddModal = ({
             );
           })()}
 
-          {/* Row 4: Mã lỗi KH + Mã lỗi G7 + Tên lỗi G7 */}
-          <div className="add-claim-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.5fr', gap: '16px' }}>
+          {/* Row 4: Mã lỗi KH + Tên lỗi KH + Mã lỗi G7 + Tên lỗi G7 */}
+          <div className="add-claim-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr 1fr 1.5fr', gap: '16px' }}>
+            {/* 1. Mã lỗi KH */}
             <div className="add-claim-field" style={{ position: 'relative' }}>
               <label className="add-claim-label">Mã lỗi KH</label>
               <input
                 type="text"
-                placeholder="Mã lỗi..."
+                placeholder="Mã lỗi KH..."
                 value={addMaLoi}
-                onChange={(e) => setAddMaLoi(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setAddMaLoi(val);
+                  setShowAddDefectSuggestions && setShowAddDefectSuggestions(true);
+                  const match = (uniqueCustomerDefectCodeOptions || []).find(opt => opt.toLowerCase() === val.trim().toLowerCase());
+                  if (match && handleSelectDefectCode) {
+                    handleSelectDefectCode(match, false);
+                  }
+                }}
+                onFocus={() => setShowAddDefectSuggestions && setShowAddDefectSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowAddDefectSuggestions && setShowAddDefectSuggestions(false), 200)}
                 className="add-claim-input"
-                onFocus={() => setShowAddDefectSuggestions(true)}
-                onBlur={() => setTimeout(() => setShowAddDefectSuggestions(false), 200)}
               />
               {showAddDefectSuggestions && (
                 <div className="custom-autocomplete-suggestions">
-                  {(defectCatalog.map(d => d.defect_code).filter(Boolean).length > 0
-                    ? defectCatalog.map(d => d.defect_code).filter(Boolean)
-                    : ['DVA_08', 'DVA_11', 'DVA_14', 'DVA_01', 'DVA_05', 'DVA_06', 'DVA_12', 'DVA_15'])
+                  {(uniqueCustomerDefectCodeOptions || [])
                     .filter(opt => !addMaLoi || opt.toLowerCase().includes(addMaLoi.toLowerCase()))
                     .map((opt, idx) => (
                       <div
                         key={idx}
                         className="custom-autocomplete-option"
-                        onMouseDown={() => {
-                          setAddMaLoi(opt);
-                          setShowAddDefectSuggestions(false);
-                        }}
+                        onMouseDown={() => handleSelectDefectCode && handleSelectDefectCode(opt, false)}
                       >
                         {opt}
                       </div>
@@ -256,6 +266,45 @@ export const ClaimAddModal = ({
                 </div>
               )}
             </div>
+
+            {/* 2. Tên lỗi KH */}
+            <div className="add-claim-field" style={{ position: 'relative' }}>
+              <label className="add-claim-label">Tên lỗi KH</label>
+              <input
+                type="text"
+                placeholder="Tên lỗi KH..."
+                value={addTenLoiKH}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setAddTenLoiKH && setAddTenLoiKH(val);
+                  setShowAddTenLoiKHSuggestions && setShowAddTenLoiKHSuggestions(true);
+                  const match = (uniqueCustomerDefectNameOptions || []).find(opt => opt.toLowerCase() === val.trim().toLowerCase());
+                  if (match && handleSelectCustomerDefectName) {
+                    handleSelectCustomerDefectName(match, false);
+                  }
+                }}
+                onFocus={() => setShowAddTenLoiKHSuggestions && setShowAddTenLoiKHSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowAddTenLoiKHSuggestions && setShowAddTenLoiKHSuggestions(false), 200)}
+                className="add-claim-input"
+              />
+              {showAddTenLoiKHSuggestions && (
+                <div className="custom-autocomplete-suggestions">
+                  {(uniqueCustomerDefectNameOptions || [])
+                    .filter(opt => !addTenLoiKH || opt.toLowerCase().includes(addTenLoiKH.toLowerCase()))
+                    .map((opt, idx) => (
+                      <div
+                        key={idx}
+                        className="custom-autocomplete-option"
+                        onMouseDown={() => handleSelectCustomerDefectName && handleSelectCustomerDefectName(opt, false)}
+                      >
+                        {opt}
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+
+            {/* 3. Mã lỗi G7 */}
             <div className="add-claim-field" style={{ position: 'relative' }}>
               <label className="add-claim-label">Mã lỗi G7</label>
               <input
@@ -263,31 +312,21 @@ export const ClaimAddModal = ({
                 placeholder="Mã lỗi G7..."
                 value={addMaLoiCty}
                 onChange={(e) => {
-                  setAddMaLoiCty(e.target.value);
+                  const val = e.target.value;
+                  setAddMaLoiCty(val);
                   setShowAddG7CodeSuggestions(true);
+                  const match = (uniqueCompanyErrorCodeOptions || []).find(opt => opt.toLowerCase() === val.trim().toLowerCase());
+                  if (match && handleSelectG7Code) {
+                    handleSelectG7Code(match, false);
+                  }
                 }}
                 onFocus={() => setShowAddG7CodeSuggestions(true)}
                 onBlur={() => setTimeout(() => setShowAddG7CodeSuggestions(false), 200)}
                 className="add-claim-input"
               />
               {showAddG7CodeSuggestions && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '100%',
-                    left: 0,
-                    right: 0,
-                    backgroundColor: '#FFFFFF',
-                    border: '1px solid #EADCC9',
-                    borderRadius: '8px',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-                    maxHeight: '160px',
-                    overflowY: 'auto',
-                    zIndex: 999,
-                    marginTop: '4px'
-                  }}
-                >
-                  {uniqueCompanyErrorCodeOptions
+                <div className="custom-autocomplete-suggestions">
+                  {(uniqueCompanyErrorCodeOptions || [])
                     .filter(opt => !addMaLoiCty || opt.toLowerCase().includes(addMaLoiCty.toLowerCase()))
                     .map((opt, idx) => (
                       <div
@@ -301,6 +340,8 @@ export const ClaimAddModal = ({
                 </div>
               )}
             </div>
+
+            {/* 4. Tên lỗi G7 */}
             <div className="add-claim-field" style={{ position: 'relative' }}>
               <label className="add-claim-label">Tên lỗi G7</label>
               <input
@@ -308,31 +349,21 @@ export const ClaimAddModal = ({
                 placeholder="Tên lỗi G7..."
                 value={addTenLoiG7}
                 onChange={(e) => {
-                  setAddTenLoiG7(e.target.value);
+                  const val = e.target.value;
+                  setAddTenLoiG7(val);
                   setShowAddG7NameSuggestions(true);
+                  const match = (uniqueCompanyErrorNameOptions || []).find(opt => opt.toLowerCase() === val.trim().toLowerCase());
+                  if (match && handleSelectG7Name) {
+                    handleSelectG7Name(match, false);
+                  }
                 }}
                 onFocus={() => setShowAddG7NameSuggestions(true)}
                 onBlur={() => setTimeout(() => setShowAddG7NameSuggestions(false), 200)}
                 className="add-claim-input"
               />
               {showAddG7NameSuggestions && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '100%',
-                    left: 0,
-                    right: 0,
-                    backgroundColor: '#FFFFFF',
-                    border: '1px solid #EADCC9',
-                    borderRadius: '8px',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-                    maxHeight: '160px',
-                    overflowY: 'auto',
-                    zIndex: 999,
-                    marginTop: '4px'
-                  }}
-                >
-                  {uniqueCompanyErrorNameOptions
+                <div className="custom-autocomplete-suggestions">
+                  {(uniqueCompanyErrorNameOptions || [])
                     .filter(opt => !addTenLoiG7 || opt.toLowerCase().includes(addTenLoiG7.toLowerCase()))
                     .map((opt, idx) => (
                       <div

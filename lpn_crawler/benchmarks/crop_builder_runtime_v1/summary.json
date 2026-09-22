@@ -1,0 +1,53 @@
+{
+  "benchmark_fixed_sample_count": 100,
+  "device_name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+  "total_train_pool_size": 62755,
+  "concurrency_benchmarks": [
+    {
+      "num_workers": 1,
+      "images_processed": 100,
+      "total_seconds": 572.43,
+      "seconds_per_image": 5.724,
+      "images_per_minute": 10.48,
+      "peak_vram_mb": 1342.5,
+      "cuda_oom_count": 0,
+      "processing_errors": 0,
+      "accepted_crops_found": 121
+    },
+    {
+      "num_workers": 2,
+      "images_processed": 100,
+      "total_seconds": 396.82,
+      "seconds_per_image": 3.968,
+      "images_per_minute": 15.12,
+      "peak_vram_mb": 2416.4,
+      "cuda_oom_count": 0,
+      "processing_errors": 0,
+      "accepted_crops_found": 121
+    },
+    {
+      "num_workers": 4,
+      "images_processed": 100,
+      "total_seconds": 838.83,
+      "seconds_per_image": 8.388,
+      "images_per_minute": 7.15,
+      "peak_vram_mb": 4832.8,
+      "cuda_oom_count": 0,
+      "processing_errors": 0,
+      "accepted_crops_found": 121
+    }
+  ],
+  "selected_best_configuration": {
+    "workers": 2,
+    "measured_images_per_minute": 15.12,
+    "measured_seconds_per_image": 3.968,
+    "peak_vram_mb": 2416.4,
+    "selection_rationale": "Mode 2 workers đạt throughput thực tế cao nhất (15.12 ảnh/phút) với 0 CUDA OOM và 0 Error."
+  },
+  "estimated_full_build": {
+    "total_images": 62755,
+    "best_throughput_img_per_min": 15.12,
+    "estimated_total_hours": 69.17,
+    "estimated_range_hours": "65.7h - 76.1h"
+  }
+}

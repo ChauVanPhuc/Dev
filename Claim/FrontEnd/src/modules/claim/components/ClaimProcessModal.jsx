@@ -24,6 +24,13 @@ export const ClaimProcessModal = ({
   processHeSoPhat, setProcessHeSoPhat,
   getProcessTotalPenaltyPreview,
   processMaLoi, setProcessMaLoi,
+  showProcessDefectCodeSuggestions, setShowProcessDefectCodeSuggestions,
+  uniqueCustomerDefectCodeOptions = [],
+  handleSelectDefectCode,
+  processTenLoiKH, setProcessTenLoiKH,
+  showProcessTenLoiKHSuggestions, setShowProcessTenLoiKHSuggestions,
+  uniqueCustomerDefectNameOptions = [],
+  handleSelectCustomerDefectName,
   processMaLoiCty, setProcessMaLoiCty,
   showProcessG7CodeSuggestions, setShowProcessG7CodeSuggestions,
   uniqueCompanyErrorCodeOptions = [],
@@ -449,20 +456,87 @@ export const ClaimProcessModal = ({
             );
           })()}
 
-          {/* Row 4: Mã lỗi KH + Mã lỗi G7 + Tên lỗi G7 */}
-          <div className="add-claim-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.5fr', gap: '16px' }}>
+          {/* Row 4: Mã lỗi KH + Tên lỗi KH + Mã lỗi G7 + Tên lỗi G7 */}
+          <div className="add-claim-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr 1fr 1.5fr', gap: '16px' }}>
+            {/* 1. Mã lỗi KH */}
             <div className="add-claim-field" style={{ position: 'relative' }}>
               <label className="add-claim-label">Mã lỗi KH</label>
               <input
                 type="text"
                 placeholder="Mã lỗi KH..."
                 value={processMaLoi}
-                onChange={(e) => setProcessMaLoi(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setProcessMaLoi(val);
+                  setShowProcessDefectCodeSuggestions && setShowProcessDefectCodeSuggestions(true);
+                  const match = (uniqueCustomerDefectCodeOptions || []).find(opt => opt.toLowerCase() === val.trim().toLowerCase());
+                  if (match && handleSelectDefectCode) {
+                    handleSelectDefectCode(match, true);
+                  }
+                }}
+                onFocus={() => setShowProcessDefectCodeSuggestions && setShowProcessDefectCodeSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowProcessDefectCodeSuggestions && setShowProcessDefectCodeSuggestions(false), 200)}
                 className="add-claim-input"
-                disabled
-                style={disabledFieldStyle}
+                disabled={modalMode !== 'edit'}
+                style={modalMode !== 'edit' ? disabledFieldStyle : {}}
               />
+              {modalMode === 'edit' && showProcessDefectCodeSuggestions && (
+                <div className="custom-autocomplete-suggestions">
+                  {(uniqueCustomerDefectCodeOptions || [])
+                    .filter(opt => !processMaLoi || opt.toLowerCase().includes(processMaLoi.toLowerCase()))
+                    .map((opt, idx) => (
+                      <div
+                        key={idx}
+                        className="custom-autocomplete-option"
+                        onMouseDown={() => handleSelectDefectCode && handleSelectDefectCode(opt, true)}
+                      >
+                        {opt}
+                      </div>
+                    ))}
+                </div>
+              )}
             </div>
+
+            {/* 2. Tên lỗi KH */}
+            <div className="add-claim-field" style={{ position: 'relative' }}>
+              <label className="add-claim-label">Tên lỗi KH</label>
+              <input
+                type="text"
+                placeholder="Tên lỗi KH..."
+                value={processTenLoiKH}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setProcessTenLoiKH && setProcessTenLoiKH(val);
+                  setShowProcessTenLoiKHSuggestions && setShowProcessTenLoiKHSuggestions(true);
+                  const match = (uniqueCustomerDefectNameOptions || []).find(opt => opt.toLowerCase() === val.trim().toLowerCase());
+                  if (match && handleSelectCustomerDefectName) {
+                    handleSelectCustomerDefectName(match, true);
+                  }
+                }}
+                onFocus={() => setShowProcessTenLoiKHSuggestions && setShowProcessTenLoiKHSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowProcessTenLoiKHSuggestions && setShowProcessTenLoiKHSuggestions(false), 200)}
+                className="add-claim-input"
+                disabled={modalMode !== 'edit'}
+                style={modalMode !== 'edit' ? disabledFieldStyle : {}}
+              />
+              {modalMode === 'edit' && showProcessTenLoiKHSuggestions && (
+                <div className="custom-autocomplete-suggestions">
+                  {(uniqueCustomerDefectNameOptions || [])
+                    .filter(opt => !processTenLoiKH || opt.toLowerCase().includes(processTenLoiKH.toLowerCase()))
+                    .map((opt, idx) => (
+                      <div
+                        key={idx}
+                        className="custom-autocomplete-option"
+                        onMouseDown={() => handleSelectCustomerDefectName && handleSelectCustomerDefectName(opt, true)}
+                      >
+                        {opt}
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+
+            {/* 3. Mã lỗi G7 */}
             <div className="add-claim-field" style={{ position: 'relative' }}>
               <label className="add-claim-label">Mã lỗi G7</label>
               <input
@@ -470,8 +544,13 @@ export const ClaimProcessModal = ({
                 placeholder="Mã lỗi G7..."
                 value={processMaLoiCty}
                 onChange={(e) => {
-                  setProcessMaLoiCty(e.target.value);
+                  const val = e.target.value;
+                  setProcessMaLoiCty(val);
                   setShowProcessG7CodeSuggestions(true);
+                  const match = (uniqueCompanyErrorCodeOptions || []).find(opt => opt.toLowerCase() === val.trim().toLowerCase());
+                  if (match && handleSelectG7Code) {
+                    handleSelectG7Code(match, true);
+                  }
                 }}
                 onFocus={() => setShowProcessG7CodeSuggestions(true)}
                 onBlur={() => setTimeout(() => setShowProcessG7CodeSuggestions(false), 200)}
@@ -480,23 +559,8 @@ export const ClaimProcessModal = ({
                 style={modalMode !== 'edit' ? disabledFieldStyle : {}}
               />
               {modalMode === 'edit' && showProcessG7CodeSuggestions && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '100%',
-                    left: 0,
-                    right: 0,
-                    backgroundColor: '#FFFFFF',
-                    border: '1px solid #EADCC9',
-                    borderRadius: '8px',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-                    maxHeight: '160px',
-                    overflowY: 'auto',
-                    zIndex: 999,
-                    marginTop: '4px'
-                  }}
-                >
-                  {uniqueCompanyErrorCodeOptions
+                <div className="custom-autocomplete-suggestions">
+                  {(uniqueCompanyErrorCodeOptions || [])
                     .filter(opt => !processMaLoiCty || opt.toLowerCase().includes(processMaLoiCty.toLowerCase()))
                     .map((opt, idx) => (
                       <div
@@ -510,6 +574,8 @@ export const ClaimProcessModal = ({
                 </div>
               )}
             </div>
+
+            {/* 4. Tên lỗi G7 */}
             <div className="add-claim-field" style={{ position: 'relative' }}>
               <label className="add-claim-label">Tên lỗi G7</label>
               <input
@@ -517,8 +583,13 @@ export const ClaimProcessModal = ({
                 placeholder="Tên lỗi G7..."
                 value={processTenLoiG7}
                 onChange={(e) => {
-                  setProcessTenLoiG7(e.target.value);
+                  const val = e.target.value;
+                  setProcessTenLoiG7(val);
                   setShowProcessG7NameSuggestions(true);
+                  const match = (uniqueCompanyErrorNameOptions || []).find(opt => opt.toLowerCase() === val.trim().toLowerCase());
+                  if (match && handleSelectG7Name) {
+                    handleSelectG7Name(match, true);
+                  }
                 }}
                 onFocus={() => setShowProcessG7NameSuggestions(true)}
                 onBlur={() => setTimeout(() => setShowProcessG7NameSuggestions(false), 200)}
@@ -527,23 +598,8 @@ export const ClaimProcessModal = ({
                 style={modalMode !== 'edit' ? disabledFieldStyle : {}}
               />
               {modalMode === 'edit' && showProcessG7NameSuggestions && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '100%',
-                    left: 0,
-                    right: 0,
-                    backgroundColor: '#FFFFFF',
-                    border: '1px solid #EADCC9',
-                    borderRadius: '8px',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-                    maxHeight: '160px',
-                    overflowY: 'auto',
-                    zIndex: 999,
-                    marginTop: '4px'
-                  }}
-                >
-                  {uniqueCompanyErrorNameOptions
+                <div className="custom-autocomplete-suggestions">
+                  {(uniqueCompanyErrorNameOptions || [])
                     .filter(opt => !processTenLoiG7 || opt.toLowerCase().includes(processTenLoiG7.toLowerCase()))
                     .map((opt, idx) => (
                       <div

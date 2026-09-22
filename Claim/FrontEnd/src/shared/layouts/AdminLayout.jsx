@@ -19,6 +19,7 @@ const AdminLayout = () => {
   const [customSubtitle, setCustomSubtitle] = useState(null);
   const [customScreenCode, setCustomScreenCode] = useState(null);
   const [headerExtra, setHeaderExtra] = useState(null);
+  const [headerRightExtra, setHeaderRightExtra] = useState(null);
   const [modalConfig, setModalConfig] = useState({ visible: false, title: '', message: '', type: 'info' });
 
   const {
@@ -54,6 +55,7 @@ const AdminLayout = () => {
     setCustomSubtitle(null);
     setCustomScreenCode(null);
     setHeaderExtra(null);
+    setHeaderRightExtra(null);
   }, [location.pathname]);
 
   const handleToggleSidebar = () => {
@@ -69,6 +71,7 @@ const AdminLayout = () => {
     setCustomSubtitle,
     setCustomScreenCode,
     setHeaderExtra,
+    setHeaderRightExtra,
     showModal,
     startGlobalUpload: () => {},
     activeUploads: 0
@@ -92,6 +95,7 @@ const AdminLayout = () => {
           customTitle={customTitle}
           customSubtitle={customSubtitle}
           headerExtra={headerExtra}
+          headerRightExtra={headerRightExtra}
         />
 
         <main className="dashboard-content">

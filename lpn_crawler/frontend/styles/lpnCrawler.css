@@ -1,0 +1,500 @@
+/* Stylesheet Module LPN Crawler - Đồng bộ 100% Visual Design System với Claim Web */
+
+.lpn-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  box-sizing: border-box;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+
+/* Metric Cards Row - Sync with Claim summary-card */
+.lpn-metrics-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.lpn-summary-card {
+  background: #FFFFFF;
+  border: 1px solid #EADCC9;
+  border-radius: 10px;
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 2px 6px rgba(123, 82, 51, 0.04);
+  transition: transform 0.2s ease;
+}
+
+.lpn-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lpn-card-label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #7B5233;
+}
+
+.lpn-card-subtext {
+  font-size: 0.72rem;
+  color: #8D6E63;
+  font-style: italic;
+}
+
+.lpn-card-number {
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: #2D1A12;
+}
+
+/* Progress Panel - Compact Status Banner */
+.lpn-progress-banner {
+  background: #FAF6F0;
+  border: 1px solid #EADCC9;
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.lpn-progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.82rem;
+}
+
+.lpn-status-badge {
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.status-running { background: #FEF3C7; color: #92400E; border: 1px solid #FCD34D; }
+.status-completed { background: #D1FAE5; color: #065F46; border: 1px solid #6EE7B7; }
+.status-failed { background: #FEE2E2; color: #991B1B; border: 1px solid #FCA5A5; }
+.status-cancelled { background: #F3F4F6; color: #4B5563; border: 1px solid #D1D5DB; }
+.status-idle { background: #E0F2FE; color: #0369A1; border: 1px solid #7DD3FC; }
+.status-auth { background: #EDE9FE; color: #5B21B6; border: 1px solid #C4B5FD; }
+
+.lpn-progress-bar-bg {
+  height: 6px;
+  background: #EADCC9;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.lpn-progress-bar-fill {
+  height: 100%;
+  background: #7B5233;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+/* Claim-Style Toolbar */
+.lpn-toolbar {
+  background: #FFFFFF;
+  border: 1px solid #EADCC9;
+  border-radius: 10px;
+  padding: 6px 14px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.lpn-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+
+.lpn-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Claim Button Styles */
+.btn-claim-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 0.82rem;
+  cursor: pointer;
+  background-color: #4A2E1B;
+  color: #FFFFFF;
+  border: none;
+  transition: background-color 0.2s ease;
+  white-space: nowrap;
+}
+
+.btn-claim-action:hover:not(:disabled) {
+  background-color: #382214;
+}
+
+.btn-claim-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-claim-action.btn-claim-danger {
+  background-color: #DC2626 !important;
+  color: #FFFFFF !important;
+}
+
+.btn-claim-action.btn-claim-danger:hover {
+  background-color: #B91C1C !important;
+}
+
+.btn-claim-secondary {
+  background-color: #FAF6F0;
+  color: #7B5233;
+  border: 1px solid #EADCC9;
+}
+
+.btn-claim-secondary:hover {
+  background-color: #F3E9DD;
+}
+
+/* Input Fields */
+.lpn-search-input {
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid #EADCC9;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  outline: none;
+  background: #FFFFFF;
+  color: #2D1A12;
+  transition: border-color 0.2s;
+}
+
+.lpn-search-input:focus {
+  border-color: #7B5233;
+}
+
+/* Claim Table Style */
+.lpn-table-container {
+  background: #FFFFFF;
+  border: 1px solid #EADCC9;
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.lpn-table-scroll {
+  overflow: auto;
+  flex: 1;
+}
+
+.lpn-table-claim {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+}
+
+.lpn-table-claim th {
+  background-color: #FAF6F0;
+  color: #7B5233;
+  font-weight: 700;
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid #EADCC9;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.lpn-table-claim td {
+  padding: 10px 14px;
+  border-bottom: 1px solid #F0E6D8;
+  color: #2D1A12;
+  vertical-align: middle;
+}
+
+.lpn-table-claim tbody tr:hover {
+  background-color: #FAF6F0;
+  cursor: pointer;
+}
+
+/* Pagination - Claim Style */
+.lpn-pagination-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background-color: #FFFFFF;
+  border-top: 1px solid #EADCC9;
+  flex-shrink: 0;
+  font-size: 0.82rem;
+}
+
+.lpn-page-btn {
+  padding: 5px 9px;
+  border-radius: 6px;
+  border: 1px solid #EADCC9;
+  background-color: #FAF6F0;
+  color: #7B5233;
+  font-weight: 700;
+  font-size: 0.8rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lpn-page-btn.active {
+  background-color: #7B5233;
+  color: #FFFFFF;
+}
+
+.lpn-page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Row clickable — hover giống Claim DataTable */
+.lpn-table-claim tbody tr.claim-row-clickable {
+  transition: background-color 0.15s ease;
+}
+
+.lpn-table-claim tbody tr.claim-row-clickable:hover {
+  background-color: #FFF8F3;
+}
+
+/* Modal animation — sync với Claim */
+@keyframes modalScaleUp {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* =========================================================
+   ACTION MENU — giống hệt Claim components.css
+   Dùng cho cột "Thao Tác" trong DataTable LPN
+   ========================================================= */
+
+.action-btn {
+  background: none;
+  border: none;
+  outline: none;
+  cursor: pointer;
+  color: #9CA3AF;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+}
+
+.action-btn:focus {
+  outline: none;
+}
+
+.action-btn:hover {
+  color: #7B5233;
+  background: #FAF6F0;
+}
+
+.action-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  background: white;
+  border: 1px solid #EADCC9;
+  border-radius: 10px;
+  box-shadow: 0 10px 25px -5px rgba(0,0,0,0.12), 0 4px 10px rgba(0,0,0,0.06);
+  min-width: 160px;
+  z-index: 1000;
+  padding: 6px 0;
+  opacity: 0;
+  transform: translateY(-4px);
+  animation: lpnDropdownFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.action-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 10px 16px;
+  font-size: 0.88rem;
+  cursor: pointer;
+  color: #4B5563;
+  transition: all 0.2s ease;
+}
+
+.action-menu-item:hover {
+  background: #FAF6F0;
+  color: #7B5233;
+}
+
+@keyframes lpnDropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Gallery trong Item Detail Modal */
+.lpn-gallery {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.lpn-gallery-item {
+  width: 90px;
+  height: 90px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #EADCC9;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.lpn-gallery-item:hover {
+  transform: scale(1.04);
+}
+
+.lpn-gallery-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ==========================================================================
+   LPN DASHBOARD OVERLAY & DIALOG (Workspace-integrated responsive overlay)
+   Tự động bám theo không gian làm việc chính, không đè lên Sidebar & Header,
+   tự động co giãn mượt mà khi Sidebar thụt thò (collapsed/expanded).
+   ========================================================================== */
+.lpn-dashboard-overlay {
+  position: fixed;
+  top: 60px;
+  bottom: 0;
+  right: 0;
+  left: 260px;
+  background-color: rgba(25, 15, 10, 0.45);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 850;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 20px;
+  box-sizing: border-box;
+  transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+/* Khi sidebar thu gọn (thụt vào): Modal tự động co giãn tràn sang left: 0 */
+.admin-main.sidebar-collapsed .lpn-dashboard-overlay {
+  left: 0 !important;
+}
+
+/* Trên màn hình tablet/mobile: Header cao 50px và sidebar là drawer ẩn */
+@media (max-width: 992px) {
+  .lpn-dashboard-overlay {
+    left: 0 !important;
+    top: 50px !important;
+    padding: 10px !important;
+  }
+}
+
+.lpn-dashboard-dialog {
+  background-color: #FFFFFF;
+  border-radius: 14px;
+  width: 100%;
+  max-width: 1560px;
+  height: 100%;
+  max-height: calc(100vh - 92px);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 16px 45px rgba(45, 26, 18, 0.2);
+  border: 1.5px solid #EADCC9;
+  animation: modalScaleUp 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+@keyframes modalScaleUp {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+
+

@@ -1,6 +1,8 @@
 import sys
+# Reload triggered for SQL Server exclude_ids fix
 import os
 import asyncio
+# Reload trigger for AI OCR 4-worker parallel speedup v4
 
 if sys.platform == 'win32':
     try:
@@ -149,6 +151,21 @@ async def lifespan(app: FastAPI):
         except Exception as backup_err:
             print(f"Data backup startup warning: {backup_err}")
 
+        # [AI OCR BACKGROUND WARMUP] Khởi động trước OCR engine trong background để triệt tiêu 7-8s cold-start
+        try:
+            import threading
+            def _bg_warmup():
+                try:
+                    from lpn_crawler.ai_ocr_train.core.pipeline import get_default_pipeline
+                    pipe = get_default_pipeline()
+                    pipe.ocr_engine.warmup()
+                    print("[AI OCR] Background warmup completed successfully.")
+                except Exception as we:
+                    print(f"[AI OCR] Background warmup note: {we}")
+            threading.Thread(target=_bg_warmup, daemon=True).start()
+        except Exception as ocr_err:
+            print(f"[AI OCR] Startup warmup launcher error: {ocr_err}")
+
     except Exception as e:
         print(f"Startup initialization error: {e}")
     finally:
@@ -169,7 +186,7 @@ async def health_check():
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex=r"https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

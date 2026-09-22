@@ -360,17 +360,11 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int):
 # CORS configuration - Mở rộng tối đa cho App Mobile
 
 app.add_middleware(
-
     CORSMiddleware,
-
-    allow_origins=["*"],
-
-    allow_credentials=False,
-
+    allow_origin_regex=r"https?://.*",
+    allow_credentials=True,
     allow_methods=["*"],
-
     allow_headers=["*"],
-
 )
 
 

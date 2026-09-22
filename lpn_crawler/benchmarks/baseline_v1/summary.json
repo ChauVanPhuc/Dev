@@ -1,0 +1,28 @@
+{
+  "benchmark_name": "dev_benchmark_v1",
+  "baseline_type": "CURRENT_EASYOCR_COMPATIBILITY_BASELINE",
+  "baseline_status": "CURRENT_EASYOCR_BASELINE_ONLY",
+  "timestamp": "2026-09-10T13:52:15.555603",
+  "total_images": 500,
+  "metrics": {
+    "lpn_exact_match": 251,
+    "lpn_exact_rate_pct": 50.2,
+    "sku_exact_match": 91,
+    "sku_exact_rate_pct": 18.2,
+    "both_correct_e2e": 47,
+    "both_correct_e2e_rate_pct": 9.4
+  },
+  "status_distribution": {
+    "success_count": 107,
+    "success_rate_pct": 21.4,
+    "review_count": 365,
+    "review_rate_pct": 73.0,
+    "failed_count": 28,
+    "failed_rate_pct": 5.6
+  },
+  "source": {
+    "manifest": "benchmarks/manifests/dev_benchmark_v1.json",
+    "source_pool": "val_v1.json",
+    "official_test_accessed": false
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "total_time_seconds": 1195.6,
+  "total_images": 500,
+  "throughput_images_per_min": 25.09,
+  "average_latency_ms": 4646.8,
+  "median_latency_ms": 4683.8,
+  "p95_latency_ms": 7204.7,
+  "p99_latency_ms": 8065.6,
+  "num_workers": 2
+}

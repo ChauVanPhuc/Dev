@@ -1,0 +1,13 @@
+{
+  "baseline_type": "CURRENT_EASYOCR_COMPATIBILITY_BASELINE",
+  "baseline_status": "CURRENT_EASYOCR_BASELINE_ONLY",
+  "recognizer_mode": "easyocr",
+  "pipeline": "AiOcrPipeline",
+  "detector": "LabelDetector (YOLO / Morphology Multi-ROI)",
+  "orientation": "AutoOrient",
+  "recognizer": "EasyOCR (CRAFT + ResNet/LSTM CTC)",
+  "parser": "LabelDataParser v2.0",
+  "benchmark_manifest": "benchmarks/manifests/dev_benchmark_v1.json",
+  "official_test_accessed": false,
+  "notes": "Benchmark executed using EasyOCR recognizer mode on current production pipeline and parser codebase. Original commit 44067c7 baseline requires separate execution."
+}

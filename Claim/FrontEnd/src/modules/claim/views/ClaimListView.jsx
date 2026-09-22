@@ -321,6 +321,7 @@ export const ClaimListView = () => {
     addGiaTriPhat, setAddGiaTriPhat,
     addHeSoPhat, setAddHeSoPhat,
     addMaLoi, setAddMaLoi,
+    addTenLoiKH, setAddTenLoiKH,
     addMaLoiCty, setAddMaLoiCty,
     addTenLoiG7, setAddTenLoiG7,
     showAddG7CodeSuggestions, setShowAddG7CodeSuggestions,
@@ -336,6 +337,7 @@ export const ClaimListView = () => {
     addModalError,
     showAddSuggestions, setShowAddSuggestions,
     showAddDefectSuggestions, setShowAddDefectSuggestions,
+    showAddTenLoiKHSuggestions, setShowAddTenLoiKHSuggestions,
     handleOpenAddNewClaim,
     handleSaveNewClaim,
     getAddTotalPenaltyPreview,
@@ -351,8 +353,11 @@ export const ClaimListView = () => {
     processGiaTriPhat, setProcessGiaTriPhat,
     processHeSoPhat, setProcessHeSoPhat,
     processMaLoi, setProcessMaLoi,
+    processTenLoiKH, setProcessTenLoiKH,
     processMaLoiCty, setProcessMaLoiCty,
     processTenLoiG7, setProcessTenLoiG7,
+    showProcessDefectCodeSuggestions, setShowProcessDefectCodeSuggestions,
+    showProcessTenLoiKHSuggestions, setShowProcessTenLoiKHSuggestions,
     showProcessG7CodeSuggestions, setShowProcessG7CodeSuggestions,
     showProcessG7NameSuggestions, setShowProcessG7NameSuggestions,
     processLpn, setProcessLpn,
@@ -371,9 +376,41 @@ export const ClaimListView = () => {
     handleDeleteProcessImageClick,
     handlePrevClaim,
     handleNextClaim,
+    handleSelectDefectCode,
+    handleSelectCustomerDefectName,
     handleSelectG7Code,
     handleSelectG7Name
   } = formProps;
+
+  // Compute unified customer defect suggestions (codes & names)
+  const customerDefectCodeSuggestions = useMemo(() => {
+    const set = new Set();
+    (defectCatalog || []).forEach(d => {
+      const code = (d.code || d.client_defect_code || d.defect_code || '').trim();
+      if (code) set.add(code);
+    });
+    (claims || []).forEach(c => {
+      const code = (c.order_code || c.defect_code || '').trim();
+      if (code) set.add(code);
+    });
+    if (set.size === 0) {
+      ['DVA_08', 'DVA_11', 'DVA_14', 'DVA_01', 'DVA_05', 'DVA_06', 'DVA_12', 'DVA_15'].forEach(code => set.add(code));
+    }
+    return Array.from(set).filter(Boolean).sort();
+  }, [defectCatalog, claims]);
+
+  const customerDefectNameSuggestions = useMemo(() => {
+    const set = new Set();
+    (defectCatalog || []).forEach(d => {
+      if (d.name) set.add(d.name.trim());
+      if (d.name_en) set.add(d.name_en.trim());
+    });
+    (claims || []).forEach(c => {
+      if (c.claim_description) set.add(c.claim_description.trim());
+      if (c.description) set.add(c.description.trim());
+    });
+    return Array.from(set).filter(Boolean).sort();
+  }, [defectCatalog, claims]);
 
   // Review Modal State
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
@@ -688,6 +725,10 @@ export const ClaimListView = () => {
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                     <span style={{ color: textColor, fontWeight: 'bold', minWidth: '110px' }}>Mã lỗi KH:</span>
                     <span style={{ color: textColor, wordBreak: 'break-all' }}>{claim.order_code || claim.defect_code || 'N/A'}</span>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                    <span style={{ color: textColor, fontWeight: 'bold', minWidth: '110px' }}>Tên lỗi KH:</span>
+                    <span style={{ color: textColor, wordBreak: 'break-all' }}>{claim.claim_description || claim.description || 'N/A'}</span>
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                     <span style={{ color: textColor, fontWeight: 'bold', minWidth: '110px' }}>Tên lỗi G7:</span>
@@ -1030,7 +1071,13 @@ export const ClaimListView = () => {
         uniquePenaltyOptions={penaltySuggestions}
         getAddTotalPenaltyPreview={getAddTotalPenaltyPreview}
         addMaLoi={addMaLoi} setAddMaLoi={setAddMaLoi}
+        addTenLoiKH={addTenLoiKH} setAddTenLoiKH={setAddTenLoiKH}
         showAddDefectSuggestions={showAddDefectSuggestions} setShowAddDefectSuggestions={setShowAddDefectSuggestions}
+        showAddTenLoiKHSuggestions={showAddTenLoiKHSuggestions} setShowAddTenLoiKHSuggestions={setShowAddTenLoiKHSuggestions}
+        uniqueCustomerDefectCodeOptions={customerDefectCodeSuggestions}
+        uniqueCustomerDefectNameOptions={customerDefectNameSuggestions}
+        handleSelectDefectCode={handleSelectDefectCode}
+        handleSelectCustomerDefectName={handleSelectCustomerDefectName}
         defectCatalog={defectCatalog}
         addMaLoiCty={addMaLoiCty} setAddMaLoiCty={setAddMaLoiCty}
         showAddG7CodeSuggestions={showAddG7CodeSuggestions} setShowAddG7CodeSuggestions={setShowAddG7CodeSuggestions}
@@ -1077,6 +1124,13 @@ export const ClaimListView = () => {
         processHeSoPhat={processHeSoPhat} setProcessHeSoPhat={setProcessHeSoPhat}
         getProcessTotalPenaltyPreview={getProcessTotalPenaltyPreview}
         processMaLoi={processMaLoi} setProcessMaLoi={setProcessMaLoi}
+        showProcessDefectCodeSuggestions={showProcessDefectCodeSuggestions} setShowProcessDefectCodeSuggestions={setShowProcessDefectCodeSuggestions}
+        uniqueCustomerDefectCodeOptions={customerDefectCodeSuggestions}
+        handleSelectDefectCode={handleSelectDefectCode}
+        processTenLoiKH={processTenLoiKH} setProcessTenLoiKH={setProcessTenLoiKH}
+        showProcessTenLoiKHSuggestions={showProcessTenLoiKHSuggestions} setShowProcessTenLoiKHSuggestions={setShowProcessTenLoiKHSuggestions}
+        uniqueCustomerDefectNameOptions={customerDefectNameSuggestions}
+        handleSelectCustomerDefectName={handleSelectCustomerDefectName}
         processMaLoiCty={processMaLoiCty} setProcessMaLoiCty={setProcessMaLoiCty}
         showProcessG7CodeSuggestions={showProcessG7CodeSuggestions} setShowProcessG7CodeSuggestions={setShowProcessG7CodeSuggestions}
         uniqueCompanyErrorCodeOptions={companyErrorCodeSuggestions}
@@ -1232,6 +1286,10 @@ export const ClaimListView = () => {
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                     <span style={{ color: '#7B5233', fontWeight: 'bold', minWidth: '120px' }}>Mã lỗi KH:</span>
                     <span style={{ color: '#2D1A12', wordBreak: 'break-all' }}>{item.order_code || item.defect_code || 'N/A'}</span>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    <span style={{ color: '#7B5233', fontWeight: 'bold', minWidth: '120px' }}>Tên lỗi KH:</span>
+                    <span style={{ color: '#2D1A12', wordBreak: 'break-all' }}>{item.claim_description || item.description || 'N/A'}</span>
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                     <span style={{ color: '#7B5233', fontWeight: 'bold', minWidth: '120px' }}>Tên lỗi G7:</span>

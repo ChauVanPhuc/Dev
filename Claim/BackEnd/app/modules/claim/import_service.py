@@ -79,7 +79,7 @@ def get_existing_claims_keys(db=None):
         for c in db_items:
             cab_no = None
             if c.claim_code:
-                cab_match = re.search(r'Cabinet\s*#?\s*(\d+)', c.claim_code, re.IGNORECASE)
+                cab_match = re.search(r'(?:Cabinet|Claim)\s*#?\s*(\d+)', c.claim_code, re.IGNORECASE)
                 if cab_match:
                     try:
                         cab_no = int(cab_match.group(1))
@@ -101,21 +101,23 @@ def get_existing_claims_keys(db=None):
         logger.warning(f"Error reading existing claims from database: {e}")
     return keys
 
-def generate_unique_claim_code(c, period, db, local_seen_codes):
+def generate_unique_claim_code(c, period, db, local_seen_codes, mechanism_id=None):
     """
-    Generates a unique claim code in the format: Cabinet#<no>_<month_year>[_suffix]
-    e.g., Cabinet#1_052026
+    Generates a unique claim code:
+    - Cơ chế 3 (Label-Value Table): Claim#<no>_<month_year>[_suffix]
+    - Cơ chế 1 & 2 (Cabinet-based Table): Cabinet#<no>_<month_year>[_suffix]
     """
-    cabinet_no = c.get("cabinet_no")
-    if cabinet_no is None:
-        cabinet_no = "Unknown"
+    prefix = "Claim" if (mechanism_id == 3 or c.get("reference_prefix") == "Claim") else "Cabinet"
+    claim_num = c.get("claim_no") if prefix == "Claim" else c.get("cabinet_no")
+    if claim_num is None:
+        claim_num = c.get("cabinet_no") or c.get("claim_no") or "Unknown"
         
     period_str = c.get("period") or period or ""
     month_year = re.sub(r'[^0-9]', '', period_str)
     if not month_year:
         month_year = datetime.now().strftime("%m%Y")
         
-    base_code = f"Cabinet#{cabinet_no}_{month_year}"
+    base_code = f"{prefix}#{claim_num}_{month_year}"
     
     candidate = base_code
     suffix = 1
@@ -137,77 +139,6 @@ def generate_unique_claim_code(c, period, db, local_seen_codes):
         
     local_seen_codes.add(candidate)
     return candidate
-
-def validate_import_files(files, db=None):
-    """
-    Validates that all uploaded PDF files contain at least one valid claim.
-    Also checks if claims already exist in DB - blocks import if all claims are duplicates.
-    """
-    existing_keys = get_existing_claims_keys(db) if db else set()
-    total_new_claims = 0
-    total_duplicate_claims = 0
-    
-    for upload_file in files:
-        filename = upload_file.filename.split('/')[-1].split('\\')[-1]
-        file_bytes = upload_file.file.read()
-        upload_file.file.seek(0)
-        
-        temp_pdf_name = f"val_route_{datetime.now().strftime('%H%M%S_%f')}_{filename}"
-        temp_pdf_path = os.path.join(tempfile.gettempdir(), temp_pdf_name)
-        with open(temp_pdf_path, "wb") as f:
-            f.write(file_bytes)
-            
-        try:
-            seen_keys_temp = set()
-            claims, period, parse_warnings, mechanism_info = parse_pdf_claims(
-                temp_pdf_path, "val_batch", "", seen_keys_temp, normalize_penalty_value, claims_only=True
-            )
-            
-            if os.path.exists(temp_pdf_path):
-                os.remove(temp_pdf_path)
-                
-            if not claims or len(claims) == 0:
-                raise ValueError(f"file PDF [{filename}] ko hợp lệ, yêu cầu kiểm tra lại")
-            
-            if existing_keys:
-                for c in claims:
-                    try:
-                        cab_no = int(c["cabinet_no"]) if c.get("cabinet_no") is not None else None
-                    except (ValueError, TypeError):
-                        cab_no = c.get("cabinet_no")
-                    
-                    data_fields = (
-                        str(c.get("sku") or "").strip(),
-                        str(c.get("claim_description") or "").strip(),
-                        str(c.get("defect_code") or "").strip(),
-                        normalize_penalty_value(c.get("action")),
-                        str(c.get("lpn") or "").strip(),
-                        str(c.get("container_no") or "").strip(),
-                        str(c.get("period") or "").strip()
-                    )
-                    key_with_cab = (cab_no,) + data_fields
-                    key_without_cab = (None,) + data_fields
-                    
-                    if key_with_cab in existing_keys or key_without_cab in existing_keys:
-                        total_duplicate_claims += 1
-                    else:
-                        total_new_claims += 1
-            else:
-                total_new_claims += len(claims)
-                
-        except Exception as e:
-            if os.path.exists(temp_pdf_path):
-                os.remove(temp_pdf_path)
-            if isinstance(e, ValueError) and "ko hợp lệ" in str(e):
-                raise e
-            raise ValueError(f"Lỗi khi đọc file {filename}: {str(e)}")
-    
-    if total_new_claims == 0 and total_duplicate_claims > 0:
-        raise ValueError(
-            f"Dữ liệu đã tồn tại trong hệ thống! "
-            f"Tất cả {total_duplicate_claims} dòng khiếu nại đã được import trước đó. "
-            f"Không thể import trùng lặp."
-        )
 
 def process_pdf_import(file_bytes: bytes = None, filename: str = "", db=None, pdf_bytes: bytes = None):
     """
@@ -288,9 +219,10 @@ def process_pdf_import(file_bytes: bytes = None, filename: str = "", db=None, pd
 
         # Generate unique claim_code for each parsed claim
         local_seen_codes = set()
+        c_mech_id = mechanism_info.get("id") if isinstance(mechanism_info, dict) else None
         for c in claims:
-            if not c.get("claim_code") and c.get("cabinet_no") is not None:
-                c["claim_code"] = generate_unique_claim_code(c, period, db, local_seen_codes)
+            if not c.get("claim_code") and (c.get("cabinet_no") is not None or c.get("claim_no") is not None):
+                c["claim_code"] = generate_unique_claim_code(c, period, db, local_seen_codes, c_mech_id)
     except Exception as parse_err:
         logger.exception("PDF parsing process failed critically.")
         if os.path.exists(pdf_path):
@@ -308,15 +240,17 @@ def process_pdf_import(file_bytes: bytes = None, filename: str = "", db=None, pd
         for c in claims:
             try:
                 code = c.get("claim_code")
-                if not code and c.get("cabinet_no") is not None:
-                    code = c.get("id", f"{batch_id}_Cabinet#{c['cabinet_no']}_{c.get('stt', 0)}")
+                if not code and (c.get("cabinet_no") is not None or c.get("claim_no") is not None):
+                    claim_num = c.get("claim_no") or c.get("cabinet_no")
+                    prefix = "Claim" if c.get("reference_prefix") == "Claim" else "Cabinet"
+                    code = c.get("id", f"{batch_id}_{prefix}#{claim_num}_{c.get('stt', 0)}")
                 
                 claim_data = CustomerClaimCreate(
                     claim_code=code,
                     customer_name=c.get("customer_name") or "Atlas",
                     product_name=c.get("sku"),
                     order_code=c.get("defect_code"),
-                    company_error_code=c.get("company_error_code"),
+                    company_error_code=c.get("company_error_code") or resolve_company_error_codes(c.get("defect_code"), db),
                     description=c.get("claim_description"),
                     severity=c.get("severity") or "Medium",
                     status="Received",
@@ -392,8 +326,8 @@ async def process_folder_import(files, db=None):
             logger.info(f"File {filename}: Sử dụng {mechanism_info['name']} — {len(claims)} claims, period={period}")
             
             for c in claims:
-                if not c.get("claim_code") and c.get("cabinet_no") is not None:
-                    c["claim_code"] = generate_unique_claim_code(c, period, db, local_seen_codes)
+                if not c.get("claim_code") and (c.get("cabinet_no") is not None or c.get("claim_no") is not None):
+                    c["claim_code"] = generate_unique_claim_code(c, period, db, local_seen_codes, mechanism_info.get("id") if isinstance(mechanism_info, dict) else None)
             
             file_stats.append({
                 "filename": filename,
@@ -406,7 +340,7 @@ async def process_folder_import(files, db=None):
                 for c in claims:
                     try:
                         code = c.get("claim_code")
-                        if not code and c.get("cabinet_no") is not None:
+                        if not code and (c.get("cabinet_no") is not None or c.get("claim_no") is not None):
                             code = f"{batch_id}_{stt_counter}"
                             stt_counter += 1
                         
@@ -415,7 +349,7 @@ async def process_folder_import(files, db=None):
                             customer_name=c.get("customer_name") or "Atlas",
                             product_name=c.get("sku"),
                             order_code=c.get("defect_code"),
-                            company_error_code=c.get("company_error_code"),
+                            company_error_code=c.get("company_error_code") or resolve_company_error_codes(c.get("defect_code"), db),
                             description=c.get("claim_description"),
                             severity=c.get("severity") or "Medium",
                             status="Received",
@@ -521,8 +455,8 @@ async def process_folder_import_streaming(files, db=None):
             logger.info(f"File {filename}: Sử dụng {mechanism_info['name']} — {len(claims)} claims, period={period}")
             
             for c in claims:
-                if not c.get("claim_code") and c.get("cabinet_no") is not None:
-                    c["claim_code"] = generate_unique_claim_code(c, period, db, local_seen_codes)
+                if not c.get("claim_code") and (c.get("cabinet_no") is not None or c.get("claim_no") is not None):
+                    c["claim_code"] = generate_unique_claim_code(c, period, db, local_seen_codes, mechanism_info.get("id") if isinstance(mechanism_info, dict) else None)
             
             file_stats.append({
                 "filename": filename,
@@ -535,7 +469,7 @@ async def process_folder_import_streaming(files, db=None):
                 for c in claims:
                     try:
                         code = c.get("claim_code")
-                        if not code and c.get("cabinet_no") is not None:
+                        if not code and (c.get("cabinet_no") is not None or c.get("claim_no") is not None):
                             code = f"{batch_id}_{stt_counter}"
                             stt_counter += 1
                         
@@ -544,7 +478,7 @@ async def process_folder_import_streaming(files, db=None):
                             customer_name=c.get("customer_name") or "Atlas",
                             product_name=c.get("sku"),
                             order_code=c.get("defect_code"),
-                            company_error_code=c.get("company_error_code"),
+                            company_error_code=c.get("company_error_code") or resolve_company_error_codes(c.get("defect_code"), db),
                             description=c.get("claim_description"),
                             severity=c.get("severity") or "Medium",
                             status="Received",

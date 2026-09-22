@@ -13,15 +13,6 @@ import Pagination from '@/modules/claim/components/Pagination';
 import { FilterModal, FormModal, AlertModal } from '@/modules/claim/components/Modal';
 import DeleteConfirmationModal from '@/modules/claim/components/DeleteConfirmationModal';
 
-const MOCK_CABINET_PRICES = [
-  { id: 1, cabinet_code: 'A042S-L-BC-WOA', cabinet_name: 'Tủ gỗ Atlas màu sồi tự nhiên', material: 'Gỗ sồi (Oak)', dimensions: '600x800x400', base_price: 100.00, sale_price: 142.49, status: 'Active', last_updated: '2026-06-01T08:00:00Z' },
-  { id: 2, cabinet_code: 'A037S-R-BC-WHT', cabinet_name: 'Tủ gỗ Atlas màu trắng bên phải', material: 'Gỗ sồi (Oak)', dimensions: '600x800x400', base_price: 110.00, sale_price: 142.49, status: 'Active', last_updated: '2026-06-02T10:30:00Z' },
-  { id: 3, cabinet_code: 'T066D-BC-WOA', cabinet_name: 'Tủ gỗ Table màu sồi tự nhiên', material: 'Gỗ sồi (Oak)', dimensions: '1200x2000x600', base_price: 150.00, sale_price: 195.00, status: 'Active', last_updated: '2026-05-15T14:20:00Z' },
-  { id: 4, cabinet_code: 'T036S-R-BC-GRY', cabinet_name: 'Tủ gỗ Table màu xám bên phải', material: 'Gỗ sồi (Oak)', dimensions: '1200x2000x600', base_price: 130.00, sale_price: 175.50, status: 'Active', last_updated: '2026-06-03T16:45:00Z' },
-  { id: 5, cabinet_code: 'T036S-L-BC-MNB', cabinet_name: 'Tủ gỗ Table màu xanh navy bên trái', material: 'Gỗ sồi (Oak)', dimensions: '1200x2000x600', base_price: 135.00, sale_price: 175.50, status: 'Active', last_updated: '2026-06-05T11:15:00Z' },
-  { id: 6, cabinet_code: 'A049S-BC-WHT', cabinet_name: 'Tủ gỗ Atlas màu trắng', material: 'Gỗ sồi (Oak)', dimensions: '600x800x400', base_price: 90.00, sale_price: 125.00, status: 'Active', last_updated: '2026-04-20T09:00:00Z' },
-  { id: 7, cabinet_code: 'T072D-BC-WOA', cabinet_name: 'Tủ gỗ Table lớn sồi tự nhiên', material: 'Gỗ sồi (Oak)', dimensions: '1200x2000x600', base_price: 180.00, sale_price: 240.00, status: 'Inactive', last_updated: '2026-06-06T15:30:00Z' }
-];
 
 const getColorName = (code) => {
   if (!code) return '';

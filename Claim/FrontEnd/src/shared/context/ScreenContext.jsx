@@ -25,6 +25,14 @@ export const ScreenProvider = ({ children }) => {
         isActive: true
       };
     }
+    if (path.includes('ai-ocr-train')) {
+      return {
+        screenCode: 'AI-OCR',
+        title: 'Huấn Luyện & Kiểm Thử Mô Hình AI OCR Đọc Nhãn',
+        subtitle: '',
+        isActive: true
+      };
+    }
     if (path.includes('prices')) {
       return {
         screenCode: 'CL2',

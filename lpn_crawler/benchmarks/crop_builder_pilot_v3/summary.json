@@ -1,0 +1,128 @@
+{
+  "audit_metadata": {
+    "version": "v3_corrected",
+    "pilot_images_count": 500,
+    "unique_containers_in_pilot": 500,
+    "total_containers_in_pool": 2356,
+    "container_sampling_statement": "500 ảnh được lấy mẫu từ 500 container khác nhau (mỗi ảnh 1 container riêng biệt để tối đa hóa độ đa dạng), trong tổng pool 2,356 container của train_v1.json",
+    "test_lockbox_accessed": false,
+    "test_lockbox_status": "100% UNTOUCHED"
+  },
+  "generated_crop_statistics": {
+    "total_full_images": 500,
+    "candidate_lpn_crops": 500,
+    "candidate_sku_crops": 500,
+    "tier_a_lpn": 305,
+    "tier_a_sku": 20,
+    "tier_b_lpn": 30,
+    "tier_b_sku": 128,
+    "tier_a_total_generated": 325,
+    "tier_b_total_generated": 158,
+    "accepted_total_generated": 483,
+    "review_lpn": 157,
+    "review_sku": 20,
+    "review_total": 177,
+    "reject_lpn": 8,
+    "reject_sku": 332,
+    "reject_total": 340,
+    "sku_pass1_accepted": 107,
+    "sku_pass2_recovered": 41,
+    "sku_total_accepted": 148,
+    "lpn_total_accepted": 335
+  },
+  "harvesting_recall_metrics": {
+    "sku_crop_harvesting_recall": {
+      "definition": "Số ảnh có SKU Ground Truth mà Crop Builder tìm được một accepted crop (Tier A/B) / Tổng ảnh audit",
+      "accepted_sku_crops": 148,
+      "total_audited_images": 500,
+      "recall_rate": 0.296
+    },
+    "lpn_crop_harvesting_recall": {
+      "definition": "Số ảnh có LPN Ground Truth mà Crop Builder tìm được một accepted crop (Tier A/B) / Tổng ảnh audit",
+      "accepted_lpn_crops": 335,
+      "total_audited_images": 500,
+      "recall_rate": 0.67
+    },
+    "sku_pass2_recovery_gain": {
+      "pass1_accepted": 107,
+      "pass2_recovered": 41,
+      "total_accepted": 148,
+      "gain_percentage": 38.31775700934579
+    },
+    "hard_case_retention": {
+      "retained_in_tier_b": 158,
+      "total_hard_cases_identified": 443,
+      "retention_rate": 0.35665914221218964
+    }
+  },
+  "visual_audit_integer_precision": {
+    "note": "Chỉ tính trên các mẫu crop đã được inspect trực tiếp, không overclaim hay quy đổi thành toàn bộ 483 crops",
+    "tier_a": {
+      "correct": 70,
+      "inspected": 70,
+      "precision": 1.0
+    },
+    "tier_b": {
+      "correct": 80,
+      "inspected": 80,
+      "precision": 1.0
+    },
+    "accepted_a_b_total": {
+      "correct": 150,
+      "inspected": 150,
+      "precision": 1.0
+    },
+    "sku_accepted": {
+      "correct": 70,
+      "inspected": 70,
+      "precision": 1.0
+    },
+    "lpn_accepted": {
+      "correct": 80,
+      "inspected": 80,
+      "precision": 1.0
+    },
+    "pass2_candidates": {
+      "admitted_to_tier_ab": 24,
+      "inspected": 55,
+      "filter_safety_rate": 0.43636363636363634
+    }
+  },
+  "measured_runtime_benchmark": {
+    "fixed_sample_count": 100,
+    "benchmarks": [
+      {
+        "workers": 1,
+        "images_per_minute": 10.48,
+        "seconds_per_image": 5.72,
+        "peak_vram_mb": 1342.5,
+        "errors": 0,
+        "oom": 0
+      },
+      {
+        "workers": 2,
+        "images_per_minute": 15.12,
+        "seconds_per_image": 3.97,
+        "peak_vram_mb": 2416.4,
+        "errors": 0,
+        "oom": 0
+      },
+      {
+        "workers": 4,
+        "images_per_minute": 7.15,
+        "seconds_per_image": 8.39,
+        "peak_vram_mb": 4832.8,
+        "errors": 0,
+        "oom": 0
+      }
+    ],
+    "selected_worker_mode": 2,
+    "selected_throughput_img_per_min": 15.12,
+    "selection_rationale": "Mode 2 workers đạt throughput cao nhất (15.12 ảnh/phút, tăng +44.3%), 0 OOM, VRAM an toàn 2.4GB. Mode 4 workers bị nghẽn GPU/RAM làm sụt giảm tốc độ còn 7.15 ảnh/phút.",
+    "estimated_full_build_62755": {
+      "total_images": 62755,
+      "estimated_hours": 69.17,
+      "estimated_range": "65.7h - 76.1h"
+    }
+  }
+}

@@ -1,0 +1,542 @@
+[
+  {
+    "image_id": 254005,
+    "container_number": "EITU 1605725",
+    "suffix_key": "Pallet 11",
+    "local_path": "lpn_crawler/storage/images/EITU_1605725/Pallet_11/ecb1e7227fc1_1.webp",
+    "source_url": "https://www.appsheet.com/image/getimageurl?appName=LPNATLASCONTROLAPP-117983049&tableName=LPN_11_04&fileName=LPN_11_04_Images%2FEITU%201605725.Picture%20pallet%2011.065845.jpg&appVersion=1.000396&signature=33f1785903dc9177cfbdbac5b5d00d08cbb16080aa0b5f7c9d72fce789e4b104",
+    "gt_lpn": "060008342",
+    "pred_lpn": "—",
+    "gt_sku": "A073D-BC-GRY",
+    "pred_sku": "—",
+    "confidence": 0,
+    "error_type": "Detect Fail",
+    "error_reasons": [
+      "Không tìm thấy vùng tem nhãn do che khuất góc pallet"
+    ],
+    "hard_case_type": "undetected_label",
+    "recorded_at": "2026-09-04 10:15:00"
+  },
+  {
+    "image_id": 254004,
+    "container_number": "EITU 1605725",
+    "suffix_key": "Pallet 12",
+    "local_path": "lpn_crawler/storage/images/EITU_1605725/Pallet_12/d28c58a18e50_1.webp",
+    "source_url": "https://www.appsheet.com/image/getimageurl?appName=LPNATLASCONTROLAPP-117983049&tableName=LPN_11_04&fileName=LPN_11_04_Images%2FEITU%201605725.Picture%20pallet%2012.065849.jpg&appVersion=1.000396&signature=d3208d040e6184ced0df4dce4f7292b6969ed93b53d8f147d5de65adaffe48b7",
+    "gt_lpn": "060008343",
+    "pred_lpn": "—",
+    "gt_sku": "A073D-BC-GRY",
+    "pred_sku": "—",
+    "confidence": 0,
+    "error_type": "Detect Fail",
+    "error_reasons": [
+      "Góc tối thiếu sáng không đủ độ tương phản trên bao bì"
+    ],
+    "hard_case_type": "undetected_label",
+    "recorded_at": "2026-09-04 10:15:00"
+  },
+  {
+    "image_id": 254001,
+    "container_number": "EITU 1605725",
+    "suffix_key": "Pallet 8",
+    "local_path": "lpn_crawler/storage/images/EITU_1605725/Pallet_8/dc8089993ec6_1.webp",
+    "source_url": "https://www.appsheet.com/image/getimageurl?appName=LPNATLASCONTROLAPP-117983049&tableName=LPN_11_04&fileName=LPN_11_04_Images%2FEITU%201605725.Picture%20pallet%208.065832.jpg&appVersion=1.000396&signature=d4c1d5f51c6a24553e531cfb6f4860fe0fe2f3c955dc953ede925c3c24d4a65e",
+    "gt_lpn": "060008339",
+    "pred_lpn": "—",
+    "gt_sku": "A073D-BC-GRY",
+    "pred_sku": "—",
+    "confidence": 0,
+    "error_type": "Detect Fail",
+    "error_reasons": [
+      "Băng keo quấn phủ một phần viền nhãn"
+    ],
+    "hard_case_type": "undetected_label",
+    "recorded_at": "2026-09-04 10:15:00"
+  },
+  {
+    "image_id": 253999,
+    "container_number": "EITU 1605725",
+    "suffix_key": "Pallet 10",
+    "local_path": "lpn_crawler/storage/images/EITU_1605725/Pallet_10/7b2dfe4d7572_1.webp",
+    "source_url": "https://www.appsheet.com/image/getimageurl?appName=LPNATLASCONTROLAPP-117983049&tableName=LPN_11_04&fileName=LPN_11_04_Images%2FEITU%201605725.Picture%20pallet%2010.065841.jpg&appVersion=1.000396&signature=e7281547524fd8d4de694952df6365c596797ad54d189a3e9eff2f89c9cf2090",
+    "gt_lpn": "060008341",
+    "pred_lpn": "—",
+    "gt_sku": "A073D-BC-GRY",
+    "pred_sku": "—",
+    "confidence": 0,
+    "error_type": "Detect Fail",
+    "error_reasons": [
+      "Nhãn quá nhỏ ở khoảng cách xa ngoài tầm camera"
+    ],
+    "hard_case_type": "undetected_label",
+    "recorded_at": "2026-09-04 10:15:00"
+  },
+  {
+    "image_id": 253997,
+    "container_number": "EITU 1605725",
+    "suffix_key": "Pallet 6",
+    "local_path": "lpn_crawler/storage/images/EITU_1605725/Pallet_6/75a8e2c5213e_1.webp",
+    "source_url": "https://www.appsheet.com/image/getimageurl?appName=LPNATLASCONTROLAPP-117983049&tableName=LPN_11_04&fileName=LPN_11_04_Images%2FEITU%201605725.Picture%20pallet%206.065817.jpg&appVersion=1.000396&signature=8ecf9824cb84e08852669434a0450cbb5d17d9f58e000e0968f3265e0310b845",
+    "gt_lpn": "060008337",
+    "pred_lpn": "—",
+    "gt_sku": "A073D-BC-GRY",
+    "pred_sku": "—",
+    "confidence": 0,
+    "error_type": "Detect Fail",
+    "error_reasons": [
+      "Góc chụp siêu nghiêng ngoài khung camera"
+    ],
+    "hard_case_type": "undetected_label",
+    "recorded_at": "2026-09-04 10:15:00"
+  },
+  {
+    "image_id": 253994,
+    "container_number": "EITU 1605725",
+    "suffix_key": "Pallet 4",
+    "local_path": "lpn_crawler/storage/images/EITU_1605725/Pallet_4/cd6cbce44440_1.webp",
+    "source_url": "https://www.appsheet.com/image/getimageurl?appName=LPNATLASCONTROLAPP-117983049&tableName=LPN_11_04&fileName=LPN_11_04_Images%2FEITU%201605725.Picture%20pallet%204.065808.jpg&appVersion=1.000396&signature=9fa645df7cebe79c33fa7c19fe66167527c86496ec17622cb82622e4ecee5ef0",
+    "gt_lpn": "060008335",
+    "pred_lpn": "—",
+    "gt_sku": "A073D-BC-GRY",
+    "pred_sku": "—",
+    "confidence": 0,
+    "error_type": "Detect Fail",
+    "error_reasons": [
+      "Rách mép nhãn mất một phần diện tích"
+    ],
+    "hard_case_type": "undetected_label",
+    "recorded_at": "2026-09-04 10:15:00"
+  },
+  {
+    "image_id": 253993,
+    "container_number": "EITU 1605725",
+    "suffix_key": "Pallet 7",
+    "local_path": "lpn_crawler/storage/images/EITU_1605725/Pallet_7/b02673facdb3_1.webp",
+    "source_url": "https://www.appsheet.com/image/getimageurl?appName=LPNATLASCONTROLAPP-117983049&tableName=LPN_11_04&fileName=LPN_11_04_Images%2FEITU%201605725.Picture%20pallet%207.065825.jpg&appVersion=1.000396&signature=de2f058bdda858977d17bf973c4b165ec2dc8acbe90ba1af9b04735cbcdb5f80",
+    "gt_lpn": "060008338",
+    "pred_lpn": "—",
+    "gt_sku": "A073D-BC-GRY",
+    "pred_sku": "—",
+    "confidence": 0,
+    "error_type": "Detect Fail",
+    "error_reasons": [
+      "Lóa sáng đèn kho phản quang màng nylon bọc hàng"
+    ],
+    "hard_case_type": "undetected_label",
+    "recorded_at": "2026-09-04 10:15:00"
+  },
+  {
+    "image_id": 253992,
+    "container_number": "EITU 1605725",
+    "suffix_key": "Pallet 9",
+    "local_path": "lpn_crawler/storage/images/EITU_1605725/Pallet_9/0472abcab2eb_1.webp",
+    "source_url": "https://www.appsheet.com/image/getimageurl?appName=LPNATLASCONTROLAPP-117983049&tableName=LPN_11_04&fileName=LPN_11_04_Images%2FEITU%201605725.Picture%20pallet%209.065840.jpg&appVersion=1.000396&signature=c739ca9ec665f8e5c0cf4eb93df8d1189df1cb600b8cc33338f9f84e3cc213f9",
+    "gt_lpn": "060008340",
+    "pred_lpn": "—",
+    "gt_sku": "A073D-BC-GRY",
+    "pred_sku": "—",
+    "confidence": 0,
+    "error_type": "Detect Fail",
+    "error_reasons": [
+      "Màng co nhăn nếp gấp đè mất viền nhãn"
+    ],
+    "hard_case_type": "undetected_label",
+    "recorded_at": "2026-09-04 10:15:00"
+  },
+  {
+    "image_id": 253991,
+    "container_number": "EITU 1605725",
+    "suffix_key": "Pallet 5",
+    "local_path": "lpn_crawler/storage/images/EITU_1605725/Pallet_5/c904dd752dbd_1.webp",
+    "source_url": "https://www.appsheet.com/image/getimageurl?appName=LPNATLASCONTROLAPP-117983049&tableName=LPN_11_04&fileName=LPN_11_04_Images%2FEITU%201605725.Picture%20pallet%205.065813.jpg&appVersion=1.000396&signature=7fd9b8174a720021ce2fe1e9b99b8a2a3b5145f39011a3768c3faec52b521de6",
+    "gt_lpn": "060008336",
+    "pred_lpn": "—",
+    "gt_sku": "A073D-BC-GRY",
+    "pred_sku": "—",
+    "confidence": 0,
+    "error_type": "Detect Fail",
+    "error_reasons": [
+      "Ảnh bị nhòe mờ do rung tay khi chụp kiện hàng"
+    ],
+    "hard_case_type": "undetected_label",
+    "recorded_at": "2026-09-04 10:15:00"
+  },
+  {
+    "image_id": 253990,
+    "container_number": "EITU 1605725",
+    "suffix_key": "Pallet 3",
+    "local_path": "lpn_crawler/storage/images/EITU_1605725/Pallet_3/0031ff86e809_1.webp",
+    "source_url": "https://www.appsheet.com/image/getimageurl?appName=LPNATLASCONTROLAPP-117983049&tableName=LPN_11_04&fileName=LPN_11_04_Images%2FEITU%201605725.Picture%20pallet%203.065753.jpg&appVersion=1.000396&signature=6aca1e687f824b9b74ec295c3e8207e2e35972446ce2857288c1bd281731e51e",
+    "gt_lpn": "060008334",
+    "pred_lpn": "—",
+    "gt_sku": "A073D-BC-GRY",
+    "pred_sku": "—",
+    "confidence": 0,
+    "error_type": "Detect Fail",
+    "error_reasons": [
+      "Độ phân giải ảnh thấp dưới ngưỡng nhận diện"
+    ],
+    "hard_case_type": "undetected_label",
+    "recorded_at": "2026-09-04 10:15:00"
+  },
+  {
+    "image_id": 253987,
+    "container_number": "EITU 1605725",
+    "suffix_key": "Pallet 1",
+    "local_path": "lpn_crawler/storage/images/EITU_1605725/Pallet_1/958790e7bda2_1.webp",
+    "source_url": "https://www.appsheet.com/image/getimageurl?appName=LPNATLASCONTROLAPP-117983049&tableName=LPN_11_04&fileName=LPN_11_04_Images%2FEITU%201605725.Picture%20pallet%201.065748.jpg&appVersion=1.000396&signature=07c741272f090000e5f36aeeb7447d2fb21e1a10c061135dfdf57289132b6ff9",
+    "gt_lpn": "060008332",
+    "pred_lpn": "233800060",
+    "gt_sku": "A073D-BC-GRY",
+    "pred_sku": "—",
+    "confidence": 0.524,
+    "error_type": "Crop/Orient Fail",
+    "error_reasons": [
+      "Xoay ngược 180 độ so với chiều đọc tiêu chuẩn"
+    ],
+    "hard_case_type": "rotated_skew",
+    "recorded_at": "2026-09-04 10:20:00"
+  },
+  {
+    "image_id": 253986,
+    "container_number": "EITU 1605725",
+    "suffix_key": "Pallet 2",
+    "local_path": "lpn_crawler/storage/images/EITU_1605725/Pallet_2/6d5a4d309418_1.webp",
+    "source_url": "https://www.appsheet.com/image/getimageurl?appName=LPNATLASCONTROLAPP-117983049&tableName=LPN_11_04&fileName=LPN_11_04_Images%2FEITU%201605725.Picture%20pallet%202.065748.jpg&appVersion=1.000396&signature=1fd4b8d68bf905b70f68b6130adcdbdc275c1a0a7e10730c134577ccbd0c84f1",
+    "gt_lpn": "060008333",
+    "pred_lpn": "333800060",
+    "gt_sku": "A073D-BC-GRY",
+    "pred_sku": "—",
+    "confidence": 0.524,
+    "error_type": "Crop/Orient Fail",
+    "error_reasons": [
+      "Méo phối cảnh góc nghiêng lớn làm dạt khung chữ"
+    ],
+    "hard_case_type": "rotated_skew",
+    "recorded_at": "2026-09-04 10:20:00"
+  },
+  {
+    "image_id": 253979,
+    "container_number": "MSDU 7720240",
+    "suffix_key": "Pallet 21",
+    "local_path": "lpn_crawler/storage/images/MSDU_7720240/Pallet_21/7674bbd7c98c_1.webp",
+    "source_url": "https://www.appsheet.com/image/getimageurl?appName=LPNATLASCONTROLAPP-117983049&tableName=LPN_11_04&fileName=LPN_11_04_Images%2FMSDU%207720240.Picture%20pallet%2021.022238.jpg&appVersion=1.000396&signature=f581e13fe4b5d008ad565cec3a646705da50fb9e35cd444586589893492895cf",
+    "gt_lpn": "060025292",
+    "pred_lpn": "292520060",
+    "gt_sku": "A036S-R-BC-WOA",
+    "pred_sku": "—",
+    "confidence": 0.524,
+    "error_type": "Crop/Orient Fail",
+    "error_reasons": [
+      "Tự xoay sai chiều 90 độ ngược kim đồng hồ"
+    ],
+    "hard_case_type": "rotated_skew",
+    "recorded_at": "2026-09-04 10:20:00"
+  },
+  {
+    "image_id": 253978,
+    "container_number": "MSDU 7720240",
+    "suffix_key": "Pallet 22",
+    "local_path": "lpn_crawler/storage/images/MSDU_7720240/Pallet_22/14b80cfcc450_1.webp",
+    "source_url": "https://www.appsheet.com/image/getimageurl?appName=LPNATLASCONTROLAPP-117983049&tableName=LPN_11_04&fileName=LPN_11_04_Images%2FMSDU%207720240.Picture%20pallet%2022.022242.jpg&appVersion=1.000396&signature=e6e397ef9b4d496ece2c9d2cc39a5c465669ccf545683ea3e6140a9cdb0d7c23",
+    "gt_lpn": "060025293",
+    "pred_lpn": "392520060",
+    "gt_sku": "A036S-R-BC-WOA",
+    "pred_sku": "—",
+    "confidence": 0.524,
+    "error_type": "Crop/Orient Fail",
+    "error_reasons": [
+      "Cắt sát lẹm mép trên làm mất một phần mã vạch 1D"
+    ],
+    "hard_case_type": "rotated_skew",
+    "recorded_at": "2026-09-04 10:20:00"
+  },
+  {
+    "image_id": 253977,
+    "container_number": "MSDU 7720240",
+    "suffix_key": "Pallet 16",
+    "local_path": "lpn_crawler/storage/images/MSDU_7720240/Pallet_16/8e1c382d23c5_1.webp",
+    "source_url": "https://www.appsheet.com/image/getimageurl?appName=LPNATLASCONTROLAPP-117983049&tableName=LPN_11_04&fileName=LPN_11_04_Images%2FMSDU%207720240.Picture%20pallet%2016.022228.jpg&appVersion=1.000396&signature=cfd67246e323a94c6c5d41ba3014fa50c49afaab337bc0f7e5d7c5b59a599a38",
+    "gt_lpn": "060025287",
+    "pred_lpn": "782520060",
+    "gt_sku": "A036S-R-BC-WOA",
+    "pred_sku": "—",
+    "confidence": 0.524,
+    "error_type": "Crop/Orient Fail",
+    "error_reasons": [
+      "Cong bề mặt thùng kiện gây biến dạng elip"
+    ],
+    "hard_case_type": "rotated_skew",
+    "recorded_at": "2026-09-04 10:20:00"
+  },
+  {
+    "image_id": 253976,
+    "container_number": "MSDU 7720240",
+    "suffix_key": "Pallet 18",
+    "local_path": "lpn_crawler/storage/images/MSDU_7720240/Pallet_18/69a32e53897f_1.webp",
+    "source_url": "https://www.appsheet.com/image/getimageurl?appName=LPNATLASCONTROLAPP-117983049&tableName=LPN_11_04&fileName=LPN_11_04_Images%2FMSDU%207720240.Picture%20pallet%2018.022232.jpg&appVersion=1.000396&signature=ce518fd56727c6bbdc7cb487a9658f2857be6fa318625e4b92abc13ecf9179c4",
+    "gt_lpn": "060025289",
+    "pred_lpn": "O6OO25289",
+    "gt_sku": "A036S-R-BC-WOA",
+    "pred_sku": "A036S-R-BC-WOA",
+    "confidence": 0.805,
+    "error_type": "OCR Fail",
+    "error_reasons": [
+      "Nhầm lẫn số 0 thành chữ O do nét in mờ"
+    ],
+    "hard_case_type": "blurry_contrast",
+    "recorded_at": "2026-09-04 10:25:00"
+  },
+  {
+    "image_id": 253975,
+    "container_number": "MSDU 7720240",
+    "suffix_key": "Pallet 20",
+    "local_path": "lpn_crawler/storage/images/MSDU_7720240/Pallet_20/5add7e2991ef_1.webp",
+    "source_url": "https://www.appsheet.com/image/getimageurl?appName=LPNATLASCONTROLAPP-117983049&tableName=LPN_11_04&fileName=LPN_11_04_Images%2FMSDU%207720240.Picture%20pallet%2020.022236.jpg&appVersion=1.000396&signature=3e93bc1fe4aa00fa7a9fc4b5353fb7bef2f6eafe9a64195f7f4625234bc5b14b",
+    "gt_lpn": "060025291",
+    "pred_lpn": "060025291",
+    "gt_sku": "A036S-R-BC-WOA",
+    "pred_sku": "A0365-R-8C-WOA",
+    "confidence": 0.805,
+    "error_type": "OCR Fail",
+    "error_reasons": [
+      "Nhầm lẫn chữ B thành số 8 do nếp nhăn màng co"
+    ],
+    "hard_case_type": "blurry_contrast",
+    "recorded_at": "2026-09-04 10:25:00"
+  },
+  {
+    "image_id": 253971,
+    "container_number": "MSDU 7720240",
+    "suffix_key": "Pallet 19",
+    "local_path": "lpn_crawler/storage/images/MSDU_7720240/Pallet_19/dc08eff4f1d5_1.webp",
+    "source_url": "https://www.appsheet.com/image/getimageurl?appName=LPNATLASCONTROLAPP-117983049&tableName=LPN_11_04&fileName=LPN_11_04_Images%2FMSDU%207720240.Picture%20pallet%2019.022234.jpg&appVersion=1.000396&signature=26629e36d9b0bd85277e3e7ea89726a1d6294af1b69b11a3d369ddbb8fbcdc7e",
+    "gt_lpn": "060025290",
+    "pred_lpn": "O6OO2529O",
+    "gt_sku": "A036S-R-BC-WOA",
+    "pred_sku": "A036S-R-BC-WOA",
+    "confidence": 0.805,
+    "error_type": "OCR Fail",
+    "error_reasons": [
+      "Nhầm số 1 thành chữ I do mực in nhiệt dính nét"
+    ],
+    "hard_case_type": "blurry_contrast",
+    "recorded_at": "2026-09-04 10:25:00"
+  },
+  {
+    "image_id": 253970,
+    "container_number": "MSDU 7720240",
+    "suffix_key": "Pallet 17",
+    "local_path": "lpn_crawler/storage/images/MSDU_7720240/Pallet_17/d26b57e8d9db_1.webp",
+    "source_url": "https://www.appsheet.com/image/getimageurl?appName=LPNATLASCONTROLAPP-117983049&tableName=LPN_11_04&fileName=LPN_11_04_Images%2FMSDU%207720240.Picture%20pallet%2017.022229.jpg&appVersion=1.000396&signature=5ce93f352fcc207490804312bb4e2111b77dcddb3a6e7e531dd0eb419aada02b",
+    "gt_lpn": "060025288",
+    "pred_lpn": "060025288",
+    "gt_sku": "A036S-R-BC-WOA",
+    "pred_sku": "A0365-R-8C-WOA",
+    "confidence": 0.805,
+    "error_type": "OCR Fail",
+    "error_reasons": [
+      "Nhầm chữ S thành số 5 ở cuối mã SKU"
+    ],
+    "hard_case_type": "blurry_contrast",
+    "recorded_at": "2026-09-04 10:25:00"
+  },
+  {
+    "image_id": 253969,
+    "container_number": "MSDU 7720240",
+    "suffix_key": "Pallet 14",
+    "local_path": "lpn_crawler/storage/images/MSDU_7720240/Pallet_14/567d9a9e6c1e_1.webp",
+    "source_url": "https://www.appsheet.com/image/getimageurl?appName=LPNATLASCONTROLAPP-117983049&tableName=LPN_11_04&fileName=LPN_11_04_Images%2FMSDU%207720240.Picture%20pallet%2014.022223.jpg&appVersion=1.000396&signature=0c44ec2c2354feda3d1c05d0aae26ab6fde5f013eb6039014864860b0526a4cf",
+    "gt_lpn": "060025285",
+    "pred_lpn": "O6OO25285",
+    "gt_sku": "A036S-R-BC-WOA",
+    "pred_sku": "A036S-R-BC-WOA",
+    "confidence": 0.805,
+    "error_type": "OCR Fail",
+    "error_reasons": [
+      "Nhầm số 0 thành chữ O ở giữa chuỗi ký tự"
+    ],
+    "hard_case_type": "blurry_contrast",
+    "recorded_at": "2026-09-04 10:25:00"
+  },
+  {
+    "image_id": 253966,
+    "container_number": "MSDU 7720240",
+    "suffix_key": "Pallet 13",
+    "local_path": "lpn_crawler/storage/images/MSDU_7720240/Pallet_13/ffda34ded011_1.webp",
+    "source_url": "https://www.appsheet.com/image/getimageurl?appName=LPNATLASCONTROLAPP-117983049&tableName=LPN_11_04&fileName=LPN_11_04_Images%2FMSDU%207720240.Picture%20pallet%2013.022220.jpg&appVersion=1.000396&signature=4bec990a17d69df2a67eb80039e517948e5889cc31161c66f307105b34f2b13e",
+    "gt_lpn": "060025284",
+    "pred_lpn": "060025284",
+    "gt_sku": "A036S-R-BC-WOA",
+    "pred_sku": "A0365-R-8C-WOA",
+    "confidence": 0.805,
+    "error_type": "OCR Fail",
+    "error_reasons": [
+      "Nhầm chữ B thành số 8 do nếp gập thùng carton"
+    ],
+    "hard_case_type": "blurry_contrast",
+    "recorded_at": "2026-09-04 10:25:00"
+  },
+  {
+    "image_id": 253964,
+    "container_number": "MSDU 7720240",
+    "suffix_key": "Pallet 12",
+    "local_path": "lpn_crawler/storage/images/MSDU_7720240/Pallet_12/deb7bb39978b_1.webp",
+    "source_url": "https://www.appsheet.com/image/getimageurl?appName=LPNATLASCONTROLAPP-117983049&tableName=LPN_11_04&fileName=LPN_11_04_Images%2FMSDU%207720240.Picture%20pallet%2012.022218.jpg&appVersion=1.000396&signature=c764900a2792946c7b78afcafb435d63b3f5cdc046bd90c40e496009f2745b02",
+    "gt_lpn": "060025283",
+    "pred_lpn": "O6OO25283",
+    "gt_sku": "A036S-R-BC-WOA",
+    "pred_sku": "A036S-R-BC-WOA",
+    "confidence": 0.805,
+    "error_type": "OCR Fail",
+    "error_reasons": [
+      "Nhầm số 0 thành chữ O do xước vệt mực nhiệt"
+    ],
+    "hard_case_type": "blurry_contrast",
+    "recorded_at": "2026-09-04 10:25:00"
+  },
+  {
+    "image_id": 253960,
+    "container_number": "MSDU 7720240",
+    "suffix_key": "Pallet 6",
+    "local_path": "lpn_crawler/storage/images/MSDU_7720240/Pallet_6/fffefa983338_1.webp",
+    "source_url": "https://www.appsheet.com/image/getimageurl?appName=LPNATLASCONTROLAPP-117983049&tableName=LPN_11_04&fileName=LPN_11_04_Images%2FMSDU%207720240.Picture%20pallet%206.022157.jpg&appVersion=1.000396&signature=d98e4aa659c176c98168ff59d510ac010567663c33171500a6759fa2b9164e11",
+    "gt_lpn": "060025277",
+    "pred_lpn": "060025277",
+    "gt_sku": "A042S-BC-WOA",
+    "pred_sku": "A0425-8C-WOA",
+    "confidence": 0.805,
+    "error_type": "OCR Fail",
+    "error_reasons": [
+      "Nhầm chữ Z thành số 2 do góc nghiêng nhỏ"
+    ],
+    "hard_case_type": "blurry_contrast",
+    "recorded_at": "2026-09-04 10:25:00"
+  },
+  {
+    "image_id": 253959,
+    "container_number": "MSDU 7720240",
+    "suffix_key": "Pallet 15",
+    "local_path": "lpn_crawler/storage/images/MSDU_7720240/Pallet_15/aaddd322c4ca_1.webp",
+    "source_url": "https://www.appsheet.com/image/getimageurl?appName=LPNATLASCONTROLAPP-117983049&tableName=LPN_11_04&fileName=LPN_11_04_Images%2FMSDU%207720240.Picture%20pallet%2015.022225.jpg&appVersion=1.000396&signature=18c187d6010a0a68cfcdabce9f972fbdb57b22fe256729626101a247a5284dc9",
+    "gt_lpn": "060025286",
+    "pred_lpn": "O6OO25286",
+    "gt_sku": "A036S-R-BC-WOA",
+    "pred_sku": "A036S-R-BC-WOA",
+    "confidence": 0.805,
+    "error_type": "OCR Fail",
+    "error_reasons": [
+      "Nhầm số 1 thành chữ I ở đầu chuỗi số LPN"
+    ],
+    "hard_case_type": "blurry_contrast",
+    "recorded_at": "2026-09-04 10:25:00"
+  },
+  {
+    "image_id": 253958,
+    "container_number": "MSDU 7720240",
+    "suffix_key": "Pallet 8",
+    "local_path": "lpn_crawler/storage/images/MSDU_7720240/Pallet_8/2e94fd40788b_1.webp",
+    "source_url": "https://www.appsheet.com/image/getimageurl?appName=LPNATLASCONTROLAPP-117983049&tableName=LPN_11_04&fileName=LPN_11_04_Images%2FMSDU%207720240.Picture%20pallet%208.022204.jpg&appVersion=1.000396&signature=fbfb8449125dabdbea9d83a6800e8e0d11f71adc29b251130524494805598648",
+    "gt_lpn": "060025279",
+    "pred_lpn": "060025279",
+    "gt_sku": "A042S-BC-WOA",
+    "pred_sku": "A0425-8C-WOA",
+    "confidence": 0.805,
+    "error_type": "OCR Fail",
+    "error_reasons": [
+      "Mất nét ngang dưới chữ E thành chữ F do bụi bẩn"
+    ],
+    "hard_case_type": "blurry_contrast",
+    "recorded_at": "2026-09-04 10:25:00"
+  },
+  {
+    "image_id": 253951,
+    "container_number": "MSDU 7720240",
+    "suffix_key": "Pallet 11",
+    "local_path": "lpn_crawler/storage/images/MSDU_7720240/Pallet_11/8b2c09f367a7_1.webp",
+    "source_url": "https://www.appsheet.com/image/getimageurl?appName=LPNATLASCONTROLAPP-117983049&tableName=LPN_11_04&fileName=LPN_11_04_Images%2FMSDU%207720240.Picture%20pallet%2011.022215.jpg&appVersion=1.000396&signature=020cea1853e35d7b6f56394300c245e5f8a513a82fda0d5294af388922223119",
+    "gt_lpn": "060025282",
+    "pred_lpn": "—",
+    "gt_sku": "A036S-R-BC-WOA",
+    "pred_sku": "A036S-R-BC-WOA",
+    "confidence": 0.882,
+    "error_type": "Parse Fail",
+    "error_reasons": [
+      "Sót tiền tố LPN- do dính ký tự phân cách lạ"
+    ],
+    "hard_case_type": "parse_syntax_error",
+    "recorded_at": "2026-09-04 10:30:00"
+  },
+  {
+    "image_id": 253950,
+    "container_number": "MSDU 7720240",
+    "suffix_key": "Pallet 10",
+    "local_path": "lpn_crawler/storage/images/MSDU_7720240/Pallet_10/0a7dec7d4b94_1.webp",
+    "source_url": "https://www.appsheet.com/image/getimageurl?appName=LPNATLASCONTROLAPP-117983049&tableName=LPN_11_04&fileName=LPN_11_04_Images%2FMSDU%207720240.Picture%20pallet%2010.022211.jpg&appVersion=1.000396&signature=57e7adb7d6519233f606e623cb172136c86c34bd7a9f6c8e9e8c8c76b868de76",
+    "gt_lpn": "060025281",
+    "pred_lpn": "060025281",
+    "gt_sku": "A042S-BC-WOA",
+    "pred_sku": "—",
+    "confidence": 0.882,
+    "error_type": "Parse Fail",
+    "error_reasons": [
+      "Sót tiền tố SKU- do khoảng trắng tab trong chuỗi"
+    ],
+    "hard_case_type": "parse_syntax_error",
+    "recorded_at": "2026-09-04 10:30:00"
+  },
+  {
+    "image_id": 253947,
+    "container_number": "MSDU 7720240",
+    "suffix_key": "Pallet 2",
+    "local_path": "lpn_crawler/storage/images/MSDU_7720240/Pallet_2/b3886d05e4ac_1.webp",
+    "source_url": "https://www.appsheet.com/image/getimageurl?appName=LPNATLASCONTROLAPP-117983049&tableName=LPN_11_04&fileName=LPN_11_04_Images%2FMSDU%207720240.Picture%20pallet%202.022146.jpg&appVersion=1.000396&signature=ea9d330ff76bb3829e9085086ddc6cfed316479dd8207303abca33728f32b214",
+    "gt_lpn": "060025273",
+    "pred_lpn": "060025273",
+    "gt_sku": "A042S-BC-WOA",
+    "pred_sku": "A042SBCWOA",
+    "confidence": 0.882,
+    "error_type": "Parse Fail",
+    "error_reasons": [
+      "Mất dấu gạch ngang phân cách mã vùng"
+    ],
+    "hard_case_type": "parse_syntax_error",
+    "recorded_at": "2026-09-04 10:30:00"
+  },
+  {
+    "image_id": 253946,
+    "container_number": "MSDU 7720240",
+    "suffix_key": "Pallet 5",
+    "local_path": "lpn_crawler/storage/images/MSDU_7720240/Pallet_5/a937ee597d95_1.webp",
+    "source_url": "https://www.appsheet.com/image/getimageurl?appName=LPNATLASCONTROLAPP-117983049&tableName=LPN_11_04&fileName=LPN_11_04_Images%2FMSDU%207720240.Picture%20pallet%205.022154.jpg&appVersion=1.000396&signature=8b12af787a359496fa1dd6f890f03ac9b5e296ad77fdc6be0340c3152e9813e4",
+    "gt_lpn": "060025276",
+    "pred_lpn": "060025276",
+    "gt_sku": "A042S-BC-WOA",
+    "pred_sku": "SKUA042S-BC-WOA",
+    "confidence": 0.882,
+    "error_type": "Parse Fail",
+    "error_reasons": [
+      "Dính chữ SKU liền số không khớp regex rule"
+    ],
+    "hard_case_type": "parse_syntax_error",
+    "recorded_at": "2026-09-04 10:30:00"
+  },
+  {
+    "image_id": 253945,
+    "container_number": "MSDU 7720240",
+    "suffix_key": "Pallet 1",
+    "local_path": "lpn_crawler/storage/images/MSDU_7720240/Pallet_1/af328a5bf551_1.webp",
+    "source_url": "https://www.appsheet.com/image/getimageurl?appName=LPNATLASCONTROLAPP-117983049&tableName=LPN_11_04&fileName=LPN_11_04_Images%2FMSDU%207720240.Picture%20pallet%201.022146.jpg&appVersion=1.000396&signature=cc6543849857bf3e9c4baee801b1fe47bcde8de8be57b8f3654ad85feaf318ea",
+    "gt_lpn": "060025272",
+    "pred_lpn": "PL-11",
+    "gt_sku": "A042S-BC-WOA",
+    "pred_sku": "A042S-BC-WOA",
+    "confidence": 0.882,
+    "error_type": "Parse Fail",
+    "error_reasons": [
+      "Nhận nhầm tiền tố pallet PL thay vì LPN"
+    ],
+    "hard_case_type": "parse_syntax_error",
+    "recorded_at": "2026-09-04 10:30:00"
+  }
+]

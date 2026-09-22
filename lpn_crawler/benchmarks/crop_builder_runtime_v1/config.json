@@ -1,0 +1,14 @@
+{
+  "benchmark_name": "crop_builder_runtime_concurrency_benchmark",
+  "sample_size": 100,
+  "source_pool": "train_v1.json (first 100 unique containers)",
+  "device": "NVIDIA GeForce RTX 4060 Laptop GPU",
+  "concurrency_modes_tested": [
+    1,
+    2,
+    4
+  ],
+  "selected_worker_count": 2,
+  "rationale": "2 workers đạt đỉnh thông lượng 15.12 ảnh/phút, 0 CUDA OOM, 0 Error",
+  "official_test_accessed": false
+}

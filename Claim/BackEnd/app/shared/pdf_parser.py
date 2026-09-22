@@ -111,15 +111,14 @@ def group_blocks_into_rows(text_blocks):
 
 def parse_pdf_claims(pdf_path, batch_id, images_batch_dir, seen_keys=None, normalize_penalty_func=None, claims_only=False):
     """
-    Router entrypoint function: detects PDF format and delegates parsing to Mechanism 1 or Mechanism 2.
+    Router entrypoint: phát hiện cấu trúc PDF và điều hướng đến parser phù hợp.
     
-    Mechanism 1 (standard): PDF has separate data pages (tables) and photo pages 
-                            (identified by 'REFERENCE DEFECTS PHOTOS' header).
-    Mechanism 2 (mixed):    PDF has combined data+photos on each page (no separate photo section).
+    - Cơ chế 1 (Standard): Cấu trúc phân tách bảng dữ liệu ở các trang đầu và khu vực ảnh minh chứng riêng biệt ở các trang cuối.
+    - Cơ chế 2 (In-page Claim & Evidence): Cấu trúc claim legacy với bảng claim ở đầu trang và ảnh minh chứng nằm phía dưới bảng.
+    - Cơ chế 3 (Label-Value Table): Cấu trúc claim dạng nhãn - giá trị (Label-Value), mỗi record bắt đầu bằng Claim #<N>, ảnh nằm phía dưới.
     
     Returns:
         (claims, period, parse_warnings, mechanism_info)
-        mechanism_info = {"id": 1 or 2, "name": "...", "description": "..."}
     """
     if seen_keys is None:
         seen_keys = set()
@@ -129,6 +128,23 @@ def parse_pdf_claims(pdf_path, batch_id, images_batch_dir, seen_keys=None, norma
     
     filename = os.path.basename(pdf_path)
     doc = fitz.open(pdf_path)
+
+    # 1. Phát hiện CƠ CHẾ 3 (Label-Value Table dạng Claim #<N> kèm các nhãn cột đặc trưng)
+    is_mechanism_3 = False
+    for p_idx in range(min(5, len(doc))):
+        p_text = doc[p_idx].get_text()
+        has_claim_num = bool(re.search(r'Claim\s*#\s*\d+', p_text, re.IGNORECASE))
+        keywords = ['SKU', 'LPN', 'DEFECT NAME', 'CONTAINER', 'DEFECT CODE', 'ACTION']
+        kw_count = sum(1 for kw in keywords if re.search(r'\b' + kw.replace(' ', r'\s+') + r'\b', p_text, re.IGNORECASE))
+        if has_claim_num and kw_count >= 4:
+            is_mechanism_3 = True
+            break
+
+    if is_mechanism_3:
+        doc.close()
+        logger.info(f"[{filename}] ✓ Phát hiện CƠ CHẾ 3 (Cấu trúc bảng claim dạng Label-Value)")
+        return parse_pdf_claims_mechanism_3(pdf_path, batch_id, images_batch_dir, seen_keys, normalize_penalty_func, claims_only)
+
     has_separate_photo_section = False
     detected_on_page = None
     
@@ -150,17 +166,21 @@ def parse_pdf_claims(pdf_path, batch_id, images_batch_dir, seen_keys=None, norma
     doc.close()
     
     if has_separate_photo_section:
-        logger.info(f"[{filename}] ✓ Phát hiện CƠ CHẾ 1 (standard PDF, trang ảnh riêng biệt phát hiện tại trang {detected_on_page})")
+        logger.info(f"[{filename}] ✓ Phát hiện CƠ CHẾ 1 (Cấu trúc phân tách bảng dữ liệu và trang ảnh riêng)")
         return parse_pdf_claims_mechanism_1(pdf_path, batch_id, images_batch_dir, seen_keys, normalize_penalty_func, claims_only)
     else:
-        logger.info(f"[{filename}] ✓ Phát hiện CƠ CHẾ 2 (mixed PDF, không có trang ảnh riêng biệt)")
+        logger.info(f"[{filename}] ✓ Phát hiện CƠ CHẾ 2 (Cấu trúc claim legacy: bảng ở đầu trang và ảnh phía dưới)")
         return parse_pdf_claims_mechanism_2(pdf_path, batch_id, images_batch_dir, seen_keys, normalize_penalty_func, claims_only)
 
 
 def parse_pdf_claims_mechanism_1(pdf_path, batch_id, images_batch_dir, seen_keys=None, normalize_penalty_func=None, claims_only=False):
     """
-    [CƠ CHẾ 1] - Gốc 100% nguyên bản không thay đổi dòng nào so với mã nguồn ban đầu của dự án.
-    Dành riêng cho file định dạng cũ (Bảng claim ở các trang đầu, ảnh minh chứng có nhãn Cabinet riêng biệt ở các trang cuối).
+    [CƠ CHẾ 1]
+    Dành cho cấu trúc claim phân tách bảng dữ liệu và trang ảnh riêng biệt:
+    - Bảng danh sách claim tập trung ở các trang đầu (Cabinet #, SKU, Defect Name, LPN, Container, Defect Code, Action).
+    - Khu vực ảnh minh chứng nằm riêng biệt ở các trang cuối (tiêu đề 'REFERENCE DEFECTS PHOTOS' hoặc tương đương).
+    - Mỗi ảnh minh chứng có nhãn Cabinet tương ứng phía trên ảnh.
+    - Mã tham chiếu dùng `Cabinet#N_MMYYYY`.
     """
     if seen_keys is None:
         seen_keys = set()
@@ -197,16 +217,9 @@ def parse_pdf_claims_mechanism_1(pdf_path, batch_id, images_batch_dir, seen_keys
             photo_candidate_pages.append(page_num)
             continue
             
-        # If the page yields absolutely no text, try OCR fallback
+        # If the page yields absolutely no text, skip directly
         if not text.strip():
-            logger.info(f"Page {page_num + 1} has no text. Trying OCR fallback...")
-            try:
-                # OCR=True requires Tesseract on the host system.
-                text = page.get_text("text", ocr=True)
-            except Exception as ocr_err:
-                msg = f"OCR fallback failed on page {page_num + 1}: {str(ocr_err)}"
-                logger.warning(msg)
-                parse_warnings.append(msg)
+            continue
                 
         # Extract text blocks
         blocks = page.get_text("blocks")
@@ -435,7 +448,7 @@ def parse_pdf_claims_mechanism_1(pdf_path, batch_id, images_batch_dir, seen_keys
     mechanism_info = {
         "id": 1,
         "name": "Cơ chế 1 (Standard)",
-        "description": "Bảng claim ở các trang đầu, ảnh minh chứng ở các trang cuối"
+        "description": "Bảng claim ở các trang đầu, khu vực ảnh minh chứng riêng biệt ở các trang cuối"
     }
 
     if claims_only:
@@ -638,8 +651,14 @@ def parse_pdf_claims_mechanism_1(pdf_path, batch_id, images_batch_dir, seen_keys
 
 def parse_pdf_claims_mechanism_2(pdf_path, batch_id, images_batch_dir, seen_keys=None, normalize_penalty_func=None, claims_only=False):
     """
-    [CƠ CHẾ 2] - Cơ chế mới dành riêng cho file dạng hỗn hợp vừa có bảng claim vừa có ảnh trên từng trang (như file 1111.pdf).
-    Xử lý việc cắt ảnh theo các khung viền đen tự động và phân bổ các trang ảnh nối tiếp (overflow) một cách độc lập.
+    [CƠ CHẾ 2]
+    Dành cho cấu trúc claim legacy:
+    - Thông tin claim nằm trong bảng ở đầu trang.
+    - Một ô chứa chung Cabinet #, SKU, Defect Name, LPN, Container.
+    - Defect Code và Action nằm ở các cột riêng.
+    - Ảnh minh chứng nằm phía dưới bảng và có thể tiếp tục sang trang kế.
+    - Ảnh được xác định/cắt dựa trên layout và khung viền hiện có.
+    - Mã tham chiếu dùng `Cabinet#N_MMYYYY`.
     """
     if seen_keys is None:
         seen_keys = set()
@@ -658,13 +677,7 @@ def parse_pdf_claims_mechanism_2(pdf_path, batch_id, images_batch_dir, seen_keys
         text = page.get_text()
         
         if not text.strip():
-            logger.info(f"Page {page_num + 1} has no text. Trying OCR fallback...")
-            try:
-                text = page.get_text("text", ocr=True)
-            except Exception as ocr_err:
-                msg = f"OCR fallback failed on page {page_num + 1}: {str(ocr_err)}"
-                logger.warning(msg)
-                parse_warnings.append(msg)
+            continue
         
         # Skip photo-only pages (evidence photo pages contain this header)
         # These pages have "Cabinet#X: SKU / Description" labels but no actual claim data
@@ -896,15 +909,15 @@ def parse_pdf_claims_mechanism_2(pdf_path, batch_id, images_batch_dir, seen_keys
 
     mechanism_info = {
         "id": 2,
-        "name": "Cơ chế 2 (Mixed)",
-        "description": "Bảng claim và ảnh minh chứng trộn lẫn trên từng trang"
+        "name": "Cơ chế 2 (In-page Claim & Evidence)",
+        "description": "Bảng claim ở đầu trang và ảnh minh chứng nằm phía dưới bảng trên từng trang"
     }
 
     if claims_only:
         doc.close()
         return claims, period or datetime.now().strftime("%m-%Y"), parse_warnings, mechanism_info
 
-    # 2. Xử lý cắt ảnh theo Cơ chế 2 (Mixed pages & overflow pages)
+    # 2. Xử lý cắt ảnh theo Cơ chế 2 (Trang chứa bảng claim và các trang ảnh nối tiếp)
     claim_source_pages = {cl["source_page"] for cl in claims}
     
     for c in claims:
@@ -1028,7 +1041,7 @@ def parse_pdf_claims_mechanism_2(pdf_path, batch_id, images_batch_dir, seen_keys
                                 cab_no = c["cabinet_no"]
                                 
                                 is_continuation = page_num != (start_page_1 - 1)
-                                name_suffix = "continuation" if is_continuation else "mixed"
+                                name_suffix = "continuation" if is_continuation else "primary"
                                 caption_desc = "Ảnh bổ sung" if is_continuation else "Ảnh minh chứng"
                                 
                                 img_filename = f"{pdf_name_clean}_cabinet_{cab_no}_page_{page_num + 1}_{name_suffix}.png"
@@ -1040,10 +1053,258 @@ def parse_pdf_claims_mechanism_2(pdf_path, batch_id, images_batch_dir, seen_keys
                                 c["photo_pages"].append(page_num + 1)
                                 
                 except Exception as img_err:
-                    logger.warning(f"Bỏ qua cắt ảnh hỗn hợp trang {page_num + 1} cho Cabinet #{c['cabinet_no']}: {str(img_err)}")
+                    logger.warning(f"Bỏ qua cắt ảnh trang {page_num + 1} cho Cabinet #{c['cabinet_no']}: {str(img_err)}")
 
     doc.close()
     logger.info(f"[{os.path.basename(pdf_path)}] Cơ chế 2: Kết quả cuối cùng = {len(claims)} claims")
+    return claims, period or datetime.now().strftime("%m-%Y"), parse_warnings, mechanism_info
+
+
+def parse_pdf_claims_mechanism_3(pdf_path, batch_id, images_batch_dir, seen_keys=None, normalize_penalty_func=None, claims_only=False):
+    """
+    [CƠ CHẾ 3]
+    Dành cho cấu trúc claim dạng Label-Value:
+    - Mỗi record bắt đầu bằng `Claim #N`.
+    - SKU, LPN, Defect Name, Container, Defect Code và Action là các field tách riêng.
+    - Ảnh minh chứng nằm dưới phần thông tin claim và có thể tiếp tục sang trang kế.
+    - Mã tham chiếu dùng `Claim#N_MMYYYY`.
+    """
+    if seen_keys is None:
+        seen_keys = set()
+    
+    if normalize_penalty_func is None:
+        normalize_penalty_func = lambda x: x
+        
+    def _sort_and_join_cell_words(w_list):
+        if not w_list:
+            return ""
+        lines = []
+        w_sorted = sorted(w_list, key=lambda w: (w[1], w[0]))
+        for w in w_sorted:
+            placed = False
+            for line in lines:
+                if abs(line[0][1] - w[1]) < 6:
+                    line.append(w)
+                    placed = True
+                    break
+            if not placed:
+                lines.append([w])
+        lines.sort(key=lambda line: line[0][1])
+        line_strs = []
+        for line in lines:
+            line.sort(key=lambda w: w[0])
+            line_strs.append(" ".join(w[4] for w in line))
+        return "\n".join(line_strs).strip()
+
+    doc = fitz.open(pdf_path)
+    filename = os.path.basename(pdf_path)
+    pdf_name_clean = re.sub(r'[^a-zA-Z0-9_-]', '_', filename.lower().replace('.pdf', ''))
+    claims = []
+    parse_warnings = []
+    period = None
+
+    # 1. Trích xuất Period từ 5 trang đầu
+    for p_idx in range(min(5, len(doc))):
+        p_text = doc[p_idx].get_text()
+        m_period = re.search(r'Period\s*[:\s]*(\d{1,2})\s*[-–/]\s*(\d{4})', p_text, re.IGNORECASE)
+        if m_period:
+            period = f"{int(m_period.group(1)):02d}-{m_period.group(2)}"
+            break
+        m_period_vn = re.search(r'THÁNG\s*(\d{1,2})\s*(?:-|_|–|—|/)?\s*(\d{4})', p_text, re.IGNORECASE)
+        if m_period_vn:
+            period = f"{int(m_period_vn.group(1)):02d}-{m_period_vn.group(2)}"
+            break
+
+    # 2. Duyệt từng trang để bóc tách thông tin khiếu nại (Claim table)
+    for page_num in range(len(doc)):
+        page = doc[page_num]
+        text = page.get_text()
+        
+        header_m = re.search(r'Claim\s*#\s*(\d+)', text, re.IGNORECASE)
+        if not header_m:
+            continue
+            
+        claim_no = int(header_m.group(1))
+        words = page.get_text("words")
+        
+        # Định vị tọa độ các nhãn cột
+        sku_words = [w for w in words if w[4].upper() == 'SKU' and w[0] < 120]
+        lpn_words = [w for w in words if w[4].upper() == 'LPN']
+        defect_name_words = [w for w in words if w[4].upper() == 'DEFECT' and any(w2[4].upper() == 'NAME' and abs(w2[1] - w[1]) < 10 for w2 in words)]
+        container_words = [w for w in words if w[4].upper() == 'CONTAINER']
+        defect_code_words = [w for w in words if w[4].upper() == 'DEFECT' and any(w2[4].upper() == 'CODE' and abs(w2[1] - w[1]) < 10 for w2 in words)]
+        action_words = [w for w in words if w[4].upper() == 'ACTION']
+
+        if sku_words and defect_name_words and defect_code_words and action_words:
+            r1_y0 = sku_words[0][1] - 5
+            r2_y0 = defect_name_words[0][1] - 5
+            r3_y0 = defect_code_words[0][1] - 5
+            r3_y1 = r3_y0 + 70
+
+            lpn_x = lpn_words[0][0] if lpn_words else 320
+            r1_col2 = [w for w in words if r1_y0 <= w[1] < r2_y0 and 90 <= w[0] < lpn_x - 5]
+            r1_col4 = [w for w in words if r1_y0 - 25 <= w[1] < r2_y0 and w[0] >= lpn_x + 25 and w[4].upper() != 'LPN']
+
+            cont_x = container_words[0][0] if container_words else 320
+            r2_col2 = [w for w in words if r2_y0 <= w[1] < r3_y0 and 90 <= w[0] < cont_x - 5]
+            r2_col4 = [w for w in words if r2_y0 <= w[1] < r3_y0 and w[0] >= cont_x + 25 and w[4].upper() != 'CONTAINER']
+
+            act_x = action_words[0][0] if action_words else 320
+            r3_col2 = [w for w in words if r3_y0 <= w[1] < r3_y1 and 90 <= w[0] < act_x - 5]
+            r3_col4 = [w for w in words if r3_y0 <= w[1] < r3_y1 and w[0] >= act_x + 25 and w[4].upper() != 'ACTION']
+
+            sku_val = _sort_and_join_cell_words(r1_col2)
+            lpn_raw = _sort_and_join_cell_words(r1_col4)
+            lpn_val = ", ".join(lpn_raw.split()) if lpn_raw else ""
+            defect_name_val = _sort_and_join_cell_words(r2_col2).replace('\n', ', ')
+            container_val = _sort_and_join_cell_words(r2_col4)
+            defect_code_val = _sort_and_join_cell_words(r3_col2).replace('\n', ', ')
+            action_raw = _sort_and_join_cell_words(r3_col4)
+            action_clean = re.sub(r'VIDEO\s*LINK:.*$', '', action_raw, flags=re.IGNORECASE | re.DOTALL).strip()
+            action_val = action_clean.replace('\n', ' ')
+
+            penalty_val = normalize_penalty_func(action_val) if normalize_penalty_func else 0.0
+
+            claim_data = {
+                "stt": claim_no,
+                "cabinet_no": claim_no,
+                "claim_no": claim_no,
+                "reference_prefix": "Claim",
+                "mechanism_id": 3,
+                "sku": sku_val,
+                "claim_description": defect_name_val,
+                "defect_code": defect_code_val,
+                "action": action_val,
+                "lpn": lpn_val,
+                "container_no": container_val,
+                "period": period,
+                "penalty": penalty_val,
+                "source_page": page_num + 1,
+                "image_paths": [],
+                "image_captions": [],
+                "photo_pages": []
+            }
+            claims.append(claim_data)
+
+    parsed_count_before_dedup = len(claims)
+    logger.info(f"[{filename}] Cơ chế 3: Đã parse được {parsed_count_before_dedup} claims (trước dedup)")
+
+    # Deduplicate claims where all key fields are identical
+    unique_claims = []
+    duplicate_count = 0
+    seen_in_file = set()
+    for c in claims:
+        c_no = c["claim_no"]
+        data_fields = (
+            str(c["sku"] or "").strip(),
+            str(c["claim_description"] or "").strip(),
+            str(c["defect_code"] or "").strip(),
+            normalize_penalty_func(c["action"]) if normalize_penalty_func else str(c["action"] or "").strip(),
+            str(c["lpn"] or "").strip(),
+            str(c["container_no"] or "").strip(),
+            str(c["period"] or "").strip()
+        )
+        key_with_claim = (c_no,) + data_fields
+        is_dup_in_file = key_with_claim in seen_in_file
+        is_dup_in_db = key_with_claim in seen_keys
+        if is_dup_in_file or is_dup_in_db:
+            duplicate_count += 1
+            msg = f"Dòng Claim #{c_no} (STT {c['stt']}) bị trùng lặp dữ liệu hoàn toàn 100%."
+            if msg not in parse_warnings:
+                parse_warnings.append(msg)
+        seen_in_file.add(key_with_claim)
+        seen_keys.add(key_with_claim)
+        unique_claims.append(c)
+
+    for i, c in enumerate(unique_claims):
+        c["stt"] = i + 1
+        c["id"] = f"{batch_id}_{i + 1}"
+    claims = unique_claims
+
+    # Validate parsing results
+    for c in claims:
+        c_no = c["claim_no"]
+        page_num = c["source_page"]
+        if not c["sku"]:
+            parse_warnings.append(f"Claim #{c_no} ở trang {page_num}: Thiếu mã SKU.")
+        if not c["period"]:
+            parse_warnings.append(f"Claim #{c_no} ở trang {page_num}: Thiếu kỳ báo cáo (Period).")
+        if not c["action"]:
+            parse_warnings.append(f"Claim #{c_no} ở trang {page_num}: Thiếu biện pháp xử lý (Action).")
+
+    mechanism_info = {
+        "id": 3,
+        "name": "Cơ chế 3 (Label-Value Table)",
+        "description": "Bảng claim dạng nhãn - giá trị và ảnh minh chứng nằm phía dưới thông tin claim"
+    }
+
+    if claims_only:
+        doc.close()
+        return claims, period or datetime.now().strftime("%m-%Y"), parse_warnings, mechanism_info
+
+    # 3. Trích xuất ảnh minh chứng trên từng trang và trang nối tiếp
+    claim_by_no = {c["claim_no"]: c for c in claims}
+    current_claim_no = None
+
+    for page_num in range(len(doc)):
+        page = doc[page_num]
+        text = page.get_text()
+        header_m = re.search(r'Claim\s*#\s*(\d+)', text, re.IGNORECASE)
+        if header_m:
+            current_claim_no = int(header_m.group(1))
+            act_words = [w for w in page.get_text("words") if w[4].upper() == 'ACTION']
+            table_bottom_y = act_words[0][3] + 25 if act_words else 350
+        else:
+            table_bottom_y = 30
+
+        if current_claim_no is None or current_claim_no not in claim_by_no:
+            continue
+
+        target_claim = claim_by_no[current_claim_no]
+        image_infos = page.get_image_info(xrefs=True)
+        if not image_infos:
+            continue
+
+        valid_images = [img for img in image_infos if img['bbox'][1] >= table_bottom_y and img['bbox'][2] - img['bbox'][0] > 20 and img['bbox'][3] - img['bbox'][1] > 20]
+        valid_images.sort(key=lambda img: (round(img['bbox'][1] / 30) * 30, img['bbox'][0]))
+
+        drawings = page.get_drawings()
+        v_lines = [d['rect'] for d in drawings if d['rect'].y0 >= table_bottom_y - 10 and d['rect'].width <= 3 and d['rect'].height >= 30]
+        h_lines = [d['rect'] for d in drawings if d['rect'].y0 >= table_bottom_y - 10 and d['rect'].height <= 3 and d['rect'].width >= 30]
+
+        for img_idx, img in enumerate(valid_images):
+            bx0, by0, bx1, by1 = img['bbox']
+            left_cands = [vl.x0 for vl in v_lines if vl.x0 <= bx0 + 2 and abs(vl.x0 - bx0) < 25]
+            right_cands = [vl.x1 for vl in v_lines if vl.x1 >= bx1 - 2 and abs(vl.x1 - bx1) < 25]
+            top_cands = [hl.y0 for hl in h_lines if hl.y0 <= by0 + 2 and abs(hl.y0 - by0) < 25]
+            bottom_cands = [hl.y1 for hl in h_lines if hl.y1 >= by1 - 2 and abs(hl.y1 - by1) < 25]
+
+            crop_x0 = min(left_cands, key=lambda x: abs(x - bx0)) if left_cands else max(0, bx0 - 3)
+            crop_x1 = min(right_cands, key=lambda x: abs(x - bx1)) if right_cands else min(page.rect.width, bx1 + 3)
+            crop_y0 = min(top_cands, key=lambda y: abs(y - by0)) if top_cands else max(0, by0 - 3)
+            crop_y1 = min(bottom_cands, key=lambda y: abs(y - by1)) if bottom_cands else min(page.rect.height, by1 + 3)
+
+            crop_rect = fitz.Rect(crop_x0, crop_y0, crop_x1, crop_y1) & page.rect
+            if crop_rect.is_empty or crop_rect.width < 5 or crop_rect.height < 5:
+                continue
+
+            try:
+                pix = page.get_pixmap(clip=crop_rect, dpi=150)
+                is_continuation = page_num != (target_claim["source_page"] - 1)
+                sub_num = len(target_claim["image_paths"]) + 1
+                suffix = f"photo_cont_{sub_num}" if is_continuation else f"photo_{sub_num}"
+                caption_desc = f"Ảnh nối tiếp {sub_num}" if is_continuation else f"Ảnh {sub_num}"
+                img_filename = f"{pdf_name_clean}_claim_{current_claim_no}_page_{page_num + 1}_{suffix}.png"
+                img_path = os.path.join(images_batch_dir, img_filename)
+                pix.save(img_path)
+                target_claim["image_paths"].append(f"/static/uploads/claim_imports/images/{batch_id}/{img_filename}")
+                target_claim["image_captions"].append(f"Claim #{current_claim_no} ({caption_desc} trang {page_num + 1})")
+                target_claim["photo_pages"].append(page_num + 1)
+            except Exception as img_err:
+                logger.warning(f"Lỗi khi lưu ảnh trang {page_num + 1} cho Claim #{current_claim_no}: {str(img_err)}")
+
+    doc.close()
+    logger.info(f"[{os.path.basename(pdf_path)}] Cơ chế 3: Kết quả cuối cùng = {len(claims)} claims")
     return claims, period or datetime.now().strftime("%m-%Y"), parse_warnings, mechanism_info
 
 
