@@ -600,6 +600,103 @@ const ProductDetailView = () => {
     }
   };
 
+  // Hàm xuất file Excel Cấu trúc BOM chuẩn mẫu D:\SmartFlow\BOM\BOM1.xlsx
+  const handleExportBOM = async () => {
+    if (!product || (!product.id && !id)) {
+      if (toast) toast('warning', 'Không tìm thấy thông tin sản phẩm để xuất!');
+      return;
+    }
+
+    const currentBomRows = bomRows || [];
+    if (currentBomRows.length === 0) {
+      if (toast) toast('warning', 'Sản phẩm này chưa có dữ liệu cấu trúc BOM để xuất!');
+      return;
+    }
+
+    const pSku = formData.sku || product?.sku || `SP_${id}`;
+    if (toast) toast('info', `Đang xuất file Excel BOM cho sản phẩm ${pSku}...`);
+
+    try {
+      // 1. Ưu tiên gọi Backend API xuất file Excel chuẩn openpyxl theo format BOM1.xlsx
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_URL}master-products/${id}/export-bom-excel`, {
+        method: 'GET',
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server trả về mã lỗi: ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      const cleanFileName = `BOM_${pSku.replace(/[^a-zA-Z0-9_-]/g, '_')}.xlsx`;
+      link.download = cleanFileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+
+      if (toast) toast('success', `Đã xuất file ${cleanFileName} thành công theo chuẩn BOM1.xlsx!`);
+    } catch (err) {
+      console.warn('Lỗi kết nối máy chủ khi xuất BOM, chuyển sang fallback client-side:', err);
+      // Fallback: xuất client-side bằng SheetJS
+      try {
+        const cleanFileName = `BOM_${pSku.replace(/[^a-zA-Z0-9_-]/g, '_')}.xlsx`;
+        const headers = [
+          'STT', 'Mã mặt hàng gốc', 'Tên mặt hàng gốc', 'Mã mặt hàng', 'Tên mặt hàng',
+          'ĐVT', 'Quy cách', 'Mã chi tiết', 'Tên chi tiết', 'ĐVT chi tiết',
+          'Quy cách chi tiết', 'Số lượng', 'Tỷ lệ hao hụt', 'Tổng SL', 'Mô tả',
+          'Là nguyên liệu', 'Không đưa vào QTSX', 'Cộng đoạn vào', 'Công đoạn ra'
+        ];
+
+        const aoa = [
+          [], // Dòng 1 để trống theo đúng BOM1.xlsx
+          headers // Dòng 2 tiêu đề
+        ];
+
+        currentBomRows.forEach((r, idx) => {
+          const isChild = r.stt && String(r.stt).includes('.');
+          aoa.push([
+            idx + 1,
+            isChild ? pSku : null,
+            isChild ? (formData.name || product.name) : null,
+            isChild ? (r.parent_sku || pSku) : pSku,
+            isChild ? (r.type || formData.name) : (formData.name || product.name),
+            isChild ? (r.unit || 'cái') : (formData.unit || product.unit || 'bộ'),
+            isChild ? (r.spec || null) : null,
+            r.compCode || r.sku,
+            r.compName || r.name,
+            r.unit || 'cái',
+            r.spec || null,
+            Number(r.quantity) || 1,
+            Number(r.waste_ratio) || 1,
+            Number(r.quantity) || 1,
+            r.note || null,
+            r.isRawMaterial ? 'Có' : null,
+            null,
+            r.stageTo || null,
+            r.stageFrom || null
+          ]);
+        });
+
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Sheet0');
+        XLSX.writeFile(wb, cleanFileName);
+
+        if (toast) toast('success', `Đã xuất file ${cleanFileName} thành công!`);
+      } catch (clientErr) {
+        console.error('Lỗi xuất Excel BOM:', clientErr);
+        if (toast) toast('error', 'Lỗi xuất file Excel BOM: ' + clientErr.message);
+      }
+    }
+  };
+
   // Hàm Import Excel tự động có Thanh tiến trình Upload toàn cục & Chọn Sheet
   const handleImportExcel = async (e) => {
     const file = e.target.files[0];
@@ -2056,7 +2153,7 @@ const ProductDetailView = () => {
 
                 <button
                   type="button"
-                  onClick={() => toast('info', 'Xuất dữ liệu')}
+                  onClick={handleExportBOM}
                   style={{
                     padding: '7px 14px',
                     backgroundColor: '#5D3B32',
@@ -2070,6 +2167,7 @@ const ProductDetailView = () => {
                     alignItems: 'center',
                     gap: '6px'
                   }}
+                  title="Xuất cấu trúc BOM ra file Excel chuẩn D:\SmartFlow\BOM\BOM1.xlsx"
                 >
                   <Download size={15} /> Xuất dữ liệu
                 </button>

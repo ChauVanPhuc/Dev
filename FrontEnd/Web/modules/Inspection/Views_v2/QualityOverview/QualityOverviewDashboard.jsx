@@ -18,7 +18,7 @@ import CustomKPIModal from '../components/CustomKPIModal';
  * Bảng điều khiển Quản trị chất lượng toàn diện với 6 Sections chuẩn ERP
  * Hỗ trợ Xuất dữ liệu đa định dạng (Ảnh chất lượng cao PNG & Tài liệu PDF Khổ ngang A4)
  */
-export const QualityOverviewDashboard = () => {
+export const QualityOverviewDashboard = ({ readOnly = false }) => {
   const [selectedYear, setSelectedYear] = useState('');
   const [selectedMonth, setSelectedMonth] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -212,7 +212,7 @@ export const QualityOverviewDashboard = () => {
           {/* Section 1: Chỉ số chất lượng sản phẩm (KPI) */}
           <Section1ProductKpi 
             kpiData={overviewData?.section1_kpi}
-            onEditKpi={(kpi) => {
+            onEditKpi={readOnly ? null : (kpi) => {
               setSelectedKpiForEdit(kpi);
               setIsKpiModalOpen(true);
             }}

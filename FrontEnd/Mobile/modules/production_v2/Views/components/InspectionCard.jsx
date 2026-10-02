@@ -104,9 +104,12 @@ const InspectionCard = ({ ticket, onClick }) => {
               Cách ly
             </span>
           )}
-          {(Number(ticket.sampleQty) > 0 || Number(ticket.errorQty) > 0) && (
+          {(Number(ticket.required_qty || ticket.needQty || ticket.sampleQty) > 0 || Number(ticket.errorQty) > 0) && (
             <span style={{ fontSize: 12, color: '#64748b' }}>
-              Mẫu: <strong>{ticket.sampleQty || 0}</strong> | Lỗi: <strong style={{ color: Number(ticket.errorQty) > 0 ? '#dc2626' : 'inherit' }}>{ticket.errorQty || 0}</strong>
+              {Number(ticket.required_qty || ticket.needQty) > 0 ? (
+                <>SL: <strong>{ticket.required_qty || ticket.needQty}</strong> | </>
+              ) : null}
+              Lỗi: <strong style={{ color: Number(ticket.errorQty) > 0 ? '#dc2626' : 'inherit' }}>{ticket.errorQty || 0}</strong>
             </span>
           )}
         </div>

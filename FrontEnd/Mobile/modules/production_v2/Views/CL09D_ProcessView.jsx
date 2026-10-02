@@ -3,6 +3,7 @@ import CustomSelect from '@mobile/Shared/Views/components/form/CustomSelect'
 import { useInspectionFormBase } from '../Controllers/useInspectionFormBase'
 import InspectionFormShell from './components/InspectionFormShell'
 import InspectionStepsTable from './components/InspectionStepsTable'
+import InspectionResultBanner from './components/InspectionResultBanner'
 import { INSPECT_MODES } from '../constants'
 import { FileText, ChevronDown, ChevronUp, BookOpen, X } from 'lucide-react'
 
@@ -79,20 +80,22 @@ const CL09D_ProcessView = () => {
                   </button>
                 )}
               </div>
-              <CustomSelect value={process} options={processOptions} onChange={setProcess} disabled={readOnly} />
+              <CustomSelect
+                value={process}
+                options={processOptions}
+                onChange={setProcess}
+                disabled={readOnly}
+                placeholder="Chọn hoặc nhập tên quy trình..."
+                allowCustomInput={true}
+              />
             </div>
 
-            <div className="pv2-field" style={{ marginBottom: 12 }}>
-              <label>Kết quả <span className="pv2-req">*</span></label>
-              <div className="pv2-radio-group">
-                <label className="pv2-radio-label">
-                  <input type="radio" name="res_proc" checked={result === 'pass'} onChange={() => setResult('pass')} disabled={readOnly} /> Đạt
-                </label>
-                <label className="pv2-radio-label">
-                  <input type="radio" name="res_proc" checked={result === 'fail'} onChange={() => setResult('fail')} disabled={readOnly} /> Không đạt
-                </label>
-              </div>
-            </div>
+            <InspectionResultBanner
+              result={result}
+              onResultChange={setResult}
+              disabled={readOnly}
+              showDefectCount={false}
+            />
 
             {!isProcessFilled && !readOnly ? (
               <div

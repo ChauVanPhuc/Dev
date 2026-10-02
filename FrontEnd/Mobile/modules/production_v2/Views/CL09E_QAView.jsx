@@ -1,6 +1,7 @@
 import CustomSelect from '@mobile/Shared/Views/components/form/CustomSelect'
 import { useInspectionFormBase } from '../Controllers/useInspectionFormBase'
 import InspectionFormShell from './components/InspectionFormShell'
+import InspectionResultBanner from './components/InspectionResultBanner'
 import { INSPECT_MODES } from '../constants'
 
 const CL09E_QAView = () => {
@@ -37,7 +38,14 @@ const CL09E_QAView = () => {
           <>
             <div className="pv2-field" style={{ marginBottom: 12 }}>
               <label>Tên nhân sự <span className="pv2-req">*</span></label>
-              <CustomSelect value={staff} options={staffOptions || []} onChange={setStaff} disabled={readOnly} />
+              <CustomSelect
+                value={staff}
+                options={staffOptions || []}
+                onChange={setStaff}
+                disabled={readOnly}
+                placeholder="Chọn hoặc nhập tên nhân sự..."
+                allowCustomInput={true}
+              />
             </div>
 
             {!isStaffFilled && !readOnly ? (
@@ -77,20 +85,17 @@ const CL09E_QAView = () => {
                   </div>
                 ))}
 
-                <div className="pv2-field" style={{ marginTop: 12 }}>
-                  <label>Kết quả <span className="pv2-req">*</span></label>
-                  <div className="pv2-radio-group">
-                    <label className="pv2-radio-label">
-                      <input type="radio" name="res_qa" checked={qaResult === 'excellent'} onChange={() => setQaResult('excellent')} disabled={readOnly} /> Xuất sắc
-                    </label>
-                    <label className="pv2-radio-label">
-                      <input type="radio" name="res_qa" checked={qaResult === 'pass'} onChange={() => setQaResult('pass')} disabled={readOnly} /> Đạt
-                    </label>
-                    <label className="pv2-radio-label">
-                      <input type="radio" name="res_qa" checked={qaResult === 'fail'} onChange={() => setQaResult('fail')} disabled={readOnly} /> Không đạt
-                    </label>
-                  </div>
-                </div>
+                <InspectionResultBanner
+                  result={qaResult}
+                  onResultChange={setQaResult}
+                  disabled={readOnly}
+                  showDefectCount={false}
+                  options={[
+                    { value: 'excellent', label: '★ Xuất sắc', activeBg: '#8b5cf6', activeColor: '#ffffff' },
+                    { value: 'pass', label: '✓ Đạt', activeBg: '#10b981', activeColor: '#ffffff' },
+                    { value: 'fail', label: '✕ K.đạt', activeBg: '#ef4444', activeColor: '#ffffff' },
+                  ]}
+                />
 
                 {renderImageUploadArea()}
               </div>

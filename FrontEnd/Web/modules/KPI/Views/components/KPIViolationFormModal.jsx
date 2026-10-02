@@ -7,7 +7,7 @@ import '@styles/components.css';
  * Modal KPIViolationFormModal (Tab 4 Dashboard - Xem Chi Tiết / Tạo Mới / Cập Nhật Biên Bản Vi Phạm QC)
  * Dữ liệu nhân sự được load 100% ĐỘNG từ Database API `/quality-employees` và `/hr/employees`
  */
-const KPIViolationFormModal = ({ isOpen, onClose, violationData, onSave }) => {
+const KPIViolationFormModal = ({ isOpen, onClose, violationData, onSave, readOnly = false }) => {
   if (!isOpen) return null;
 
   const [dbEmployees, setDbEmployees] = useState([]);
@@ -339,14 +339,16 @@ const KPIViolationFormModal = ({ isOpen, onClose, violationData, onSave }) => {
               onClick={onClose}
               style={{ padding: '6px 16px', border: '1px solid #CBD5E1', borderRadius: '6px', backgroundColor: '#FFFFFF', color: '#334155', fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer' }}
             >
-              Hủy bỏ
+              {readOnly ? 'Đóng' : 'Hủy bỏ'}
             </button>
-            <button
-              type="submit"
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 20px', border: 'none', borderRadius: '6px', backgroundColor: '#5D3B32', color: '#FFFFFF', fontWeight: '800', fontSize: '0.8rem', cursor: 'pointer' }}
-            >
-              <Save size={14} /> {violationData ? 'Cập Nhật Biên Bản' : 'Lưu Biên Bản Vào DB'}
-            </button>
+            {!readOnly && (
+              <button
+                type="submit"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 20px', border: 'none', borderRadius: '6px', backgroundColor: '#5D3B32', color: '#FFFFFF', fontWeight: '800', fontSize: '0.8rem', cursor: 'pointer' }}
+              >
+                <Save size={14} /> {violationData ? 'Cập Nhật Biên Bản' : 'Lưu Biên Bản Vào DB'}
+              </button>
+            )}
           </div>
 
         </form>

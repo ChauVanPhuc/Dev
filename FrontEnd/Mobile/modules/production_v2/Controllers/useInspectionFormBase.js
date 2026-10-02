@@ -29,6 +29,34 @@ const getCleanString = (val) => {
   return ''
 }
 
+const isPromptSuppressed = (key) => {
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return false
+    const parsed = JSON.parse(raw)
+    if (parsed && parsed.expiresAt && Date.now() < parsed.expiresAt) {
+      return true
+    }
+    // Đã quá 7 ngày -> tự động dọn dẹp để hiển thị lại
+    localStorage.removeItem(key)
+    return false
+  } catch {
+    return false
+  }
+}
+
+const suppressPrompt = (key, days = 7) => {
+  try {
+    const data = {
+      timestamp: Date.now(),
+      expiresAt: Date.now() + days * 24 * 60 * 60 * 1000,
+    }
+    localStorage.setItem(key, JSON.stringify(data))
+  } catch (err) {
+    console.warn('[useInspectionFormBase] Lỗi lưu suppressPrompt:', err)
+  }
+}
+
 export const calculateAqlSampleSize = (lotSize) => {
   const n = Number(lotSize) || 0
   if (n <= 0) return 0
@@ -289,6 +317,9 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
   const [formTypeRoutes, setFormTypeRoutes] = useState(MODE_TO_ROUTE)
   const [stage, setStage] = useState('')
   const [po, setPo] = useState('')
+  const [selectedPos, setSelectedPos] = useState([])
+  const [recheckQty, setRecheckQty] = useState('')
+
   const [result, setResult] = useState('pass')
   const [action, setAction] = useState('luu-kho')
   const [product, setProduct] = useState('')
@@ -300,8 +331,17 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
   const [note, setNote] = useState('')
   const [errors, setErrors] = useState(initErrors())
 
-  const [parameter, setParameter] = useState('do_am')
+  const [parameter, setParameter] = useState(DEFAULT_PARAMETER_OPTIONS[0]?.value || 'do_cong')
   const [parameterOptions, setParameterOptions] = useState(DEFAULT_PARAMETER_OPTIONS)
+
+  // Khi tạo mới phiếu kiểm tra thông số (NEW), luôn luôn mặc định lấy option đầu tiên của danh mục thông số
+  useEffect(() => {
+    if (isNew && parameterOptions && parameterOptions.length > 0) {
+      if (!parameter || !parameterOptions.some((opt) => opt.value === parameter)) {
+        setParameter(parameterOptions[0].value)
+      }
+    }
+  }, [isNew, parameterOptions, parameter])
   const [paramStage, setParamStage] = useState('')
   const [paramPo, setParamPo] = useState('')
   const [paramProduct, setParamProduct] = useState('')
@@ -338,6 +378,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
   const [isPartHistoryModalOpen, setIsPartHistoryModalOpen] = useState(false)
   const [totalInspectedSoFar, setTotalInspectedSoFar] = useState(0)
   const totalInspectedSoFarRef = useRef(0)
+  const rawHistoryTicketsRef = useRef([])
 
   useEffect(() => {
     totalBatchQtyRef.current = totalBatchQty
@@ -346,6 +387,60 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
   useEffect(() => {
     totalInspectedSoFarRef.current = totalInspectedSoFar
   }, [totalInspectedSoFar])
+
+  const handleMultiPoChange = useCallback((newPos) => {
+    const list = Array.isArray(newPos) ? newPos : []
+    setSelectedPos(list)
+    setPo(list.join(', '))
+    setIsDirty(true)
+  }, [])
+
+  // Chế độ DAILY: Tự động tính tổng số lượng của các chi tiết thuộc đúng công đoạn đó cho tất cả các PO đã chọn
+  useEffect(() => {
+    if (mode !== INSPECT_MODES.DAILY || !isNew) return
+
+    if (!stage || !selectedPos || selectedPos.length === 0) {
+      setTotalBatchQty('')
+      totalBatchQtyRef.current = ''
+      setSampleQty('')
+      setRequiredQty('')
+      return
+    }
+
+    let isMounted = true
+    const activeStage = stage
+    const posList = [...selectedPos]
+
+    // Gọi API lấy danh sách BOM chi tiết của từng PO theo đúng công đoạn đã chọn
+    Promise.all(posList.map((p) => orderService.getBom(p, activeStage).catch(() => [])))
+      .then((boms) => {
+        if (!isMounted) return
+        let sumBatch = 0
+        boms.forEach((bomList) => {
+          if (Array.isArray(bomList)) {
+            // Lấy đúng các chi tiết của công đoạn đó và cộng dồn số lượng
+            bomList.forEach((item) => {
+              sumBatch += Number(item.total_qty) || 0
+            })
+          }
+        })
+
+        const finalValStr = String(sumBatch)
+        setTotalBatchQty(finalValStr)
+        totalBatchQtyRef.current = finalValStr
+
+        // Mặc định ô Số lượng cần kiểm tra lấy bằng số lượng sản xuất chi tiết của công đoạn này
+        setSampleQty(finalValStr)
+        setRequiredQty(finalValStr)
+      })
+      .catch((err) => {
+        console.warn('[useInspectionFormBase] Lỗi tính tổng sản lượng chi tiết công đoạn:', err)
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [mode, stage, selectedPos, isNew])
 
   const isIncoming = useMemo(() => {
     const s = (stage || paramStage || '').toLowerCase()
@@ -362,6 +457,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
   const [palletOptions, setPalletOptions] = useState([])
   const [recentTickets, setRecentTickets] = useState([])
   const [isRecentModalOpen, setIsRecentModalOpen] = useState(false)
+  const isPalletSelectingRef = useRef(false)
   const [autoTicketCode, setAutoTicketCode] = useState(() => `DA${String(Date.now()).slice(-4)}${Math.floor(10 + Math.random() * 90)}`)
   const [confirmErrModal, setConfirmErrModal] = useState(false)
   const [finishModal, setFinishModal] = useState(false)
@@ -434,13 +530,17 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       .then((res) => {
         const data = res?.data !== undefined ? res.data : res
         if (Array.isArray(data) && data.length > 0) {
-          setParameterOptions(data.map((p) => ({
+          const opts = data.map((p) => ({
             value: p.code,
             label: p.name,
             unit: p.unit,
             min: p.default_min,
             max: p.default_max
-          })))
+          }))
+          setParameterOptions(opts)
+          if (isNew && opts.length > 0) {
+            setParameter(opts[0].value)
+          }
         }
       })
       .catch((e) => console.warn('[useInspectionFormBase] getParameters error:', e))
@@ -482,25 +582,42 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     setIsDirty(true)
     if (!selectedPallet) return
 
+    isPalletSelectingRef.current = true
+
     try {
-      const tickets = await inspectionService.getTicketsByPallet(selectedPallet, 3)
+      const tickets = await inspectionService.getTicketsByPallet(selectedPallet, 10)
       setRecentTickets(tickets || [])
 
       if (Array.isArray(tickets) && tickets.length > 0) {
         const origin = tickets[0]
+
+        // 1. Công đoạn
         if (origin.stage) {
           setStage(origin.stage)
           setParamStage(origin.stage)
-        }
-        if (origin.po) {
-          setPo(origin.po)
-          setParamPo(origin.po)
-          setPoOptions((prev) => {
+          setStageOptions((prev) => {
             const next = [...prev]
-            if (!next.some((o) => o.value === origin.po)) next.push({ value: origin.po, label: origin.po })
+            if (!next.some((o) => o.value === origin.stage)) next.push({ value: origin.stage, label: origin.stage })
             return next
           })
         }
+
+        // 2. PO
+        if (origin.po) {
+          setPo(origin.po)
+          setParamPo(origin.po)
+          const pList = origin.po.split(',').map((s) => s.trim()).filter(Boolean)
+          setSelectedPos(pList)
+          setPoOptions((prev) => {
+            const next = [...prev]
+            pList.forEach((p) => {
+              if (!next.some((o) => o.value === p)) next.push({ value: p, label: p })
+            })
+            return next
+          })
+        }
+
+        // 3. Sản phẩm / Chi tiết
         if (origin.product) {
           setProduct(origin.product)
           setParamProduct(origin.product)
@@ -514,31 +631,141 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
             return next
           })
         }
-        if (origin.spec) {
-          const cSpec = compactSpec(origin.spec)
-          setSpec(cSpec)
-          const specArr = cSpec.split(', ').map(s => s.trim()).filter(Boolean)
-          setSelectedSpecs(specArr)
-          setSpecOptions((prev) => {
-            const next = [...prev]
-            specArr.forEach((s) => {
-              if (!next.some((o) => o.value === s)) next.push({ value: s, label: s })
-            })
-            return next
+
+        // 4. Quy cách & Nạp BOM đồng bộ
+        const targetSpec = origin.spec || tickets.find(t => t.spec)?.spec || ''
+        const cSpec = targetSpec ? compactSpec(targetSpec) : ''
+
+        let currentBom = []
+        try {
+          if (origin.po && origin.stage) {
+            currentBom = await orderService.getBom(origin.po, origin.stage)
+            if (Array.isArray(currentBom)) {
+              setBomData(currentBom)
+            }
+          }
+        } catch (eBom) {
+          console.warn('[handlePalletSelect] getBom error:', eBom)
+        }
+
+        const effectiveBom = (Array.isArray(currentBom) && currentBom.length > 0) ? currentBom : bomData
+        const matchedPart = effectiveBom?.find(p => 
+          p.part_name === origin.product || 
+          (p.sku && p.sku === origin.product) ||
+          (origin.product && p.part_name && (p.part_name.includes(origin.product) || origin.product.includes(p.part_name)))
+        )
+
+        let specOpts = []
+        if (matchedPart && Array.isArray(matchedPart.specs) && matchedPart.specs.length > 0) {
+          specOpts = matchedPart.specs.map((s, idx) => {
+            const val = getEffectiveSpec(s.specification, matchedPart.part_name)
+            const rawTag = s.badge || s.product_label || s.product_name || s.product_sku || (matchedPart.sku ? `${matchedPart.part_name} (${matchedPart.sku})` : '')
+            const cabinetTag = cleanCabinetTag(rawTag, matchedPart.label || matchedPart.part_name || 'Chi tiết')
+            const optKey = s.id || `${matchedPart.part_name}__${val}__${s.order_code || ''}__${s.product_sku || s.product_name || idx}`
+            return {
+              value: optKey,
+              label: val,
+              rawSpec: val,
+              badge: cabinetTag,
+              productLabel: cabinetTag,
+              partName: matchedPart.part_name,
+              orderCode: s.order_code || '',
+              qty: Number(s.qty) || 0
+            }
           })
         }
-        if (origin.requiredQty) {
-          const details = getQuantityConversionDetails(origin.product || origin.spec, origin.requiredQty, origin.unit)
+
+        let matchedOpt = null
+        if (cSpec && specOpts.length > 0) {
+          matchedOpt = specOpts.find(o => 
+            o.rawSpec === cSpec || 
+            o.label === cSpec || 
+            compactSpec(o.label) === compactSpec(cSpec) ||
+            compactSpec(o.rawSpec) === compactSpec(cSpec)
+          )
+        }
+        if (!matchedOpt && specOpts.length > 0) {
+          matchedOpt = specOpts[0]
+        }
+
+        if (matchedOpt) {
+          setSpecOptions(specOpts)
+          setSelectedSpecs([matchedOpt.value])
+          setSpec(matchedOpt.rawSpec || matchedOpt.label || cSpec)
+        } else if (cSpec) {
+          const customOpt = { 
+            value: cSpec, 
+            label: cSpec, 
+            rawSpec: cSpec, 
+            qty: Number(origin.plan_qty || origin.totalBatchQty || 0) 
+          }
+          setSpecOptions([customOpt, ...specOpts])
+          setSelectedSpecs([cSpec])
+          setSpec(cSpec)
+        } else if (specOpts.length > 0) {
+          setSpecOptions(specOpts)
+        }
+
+        // 5. Số lượng sản xuất (Tổng số lượng lô)
+        const batchQtyVal = String(
+          matchedOpt?.qty ||
+          matchedPart?.total_qty ||
+          origin.totalBatchQty ||
+          origin.plan_qty ||
+          origin.requiredQty ||
+          ''
+        )
+        if (batchQtyVal) {
+          setTotalBatchQty(batchQtyVal)
+          totalBatchQtyRef.current = batchQtyVal
+        }
+
+        // 6. Số lượng kiểm tra (SL Cần Kiểm)
+        const rawReq = origin.requiredQty || origin.required_qty || origin.sampleQty || origin.sample_qty || ''
+        if (rawReq) {
+          const details = getQuantityConversionDetails(origin.product || cSpec, rawReq, origin.unit)
           setRequiredQty(String(details.qty))
           setIsQtyConverted(details.isConverted)
+        } else if (batchQtyVal) {
+          if (mode === INSPECT_MODES.FIRST_SAMPLE) {
+            const aqlVal = calculateAqlSampleSize(Number(batchQtyVal))
+            setRequiredQty(String(aqlVal || batchQtyVal))
+          } else {
+            setRequiredQty(String(batchQtyVal))
+          }
         }
-        if (origin.sampleQty) {
-          setSampleQty(String(origin.sampleQty))
-          setParamSample(String(origin.sampleQty))
+
+        // 7. Số lượng lấy mẫu
+        const smpVal = origin.sampleQty || origin.sample_qty || rawReq || (mode !== INSPECT_MODES.FIRST_SAMPLE ? batchQtyVal : '') || ''
+        if (smpVal) {
+          setSampleQty(String(smpVal))
+          setParamSample(String(smpVal))
         }
+
+        // 8. Danh sách lỗi và số lượng lỗi
+        if (Array.isArray(origin.errors) && origin.errors.length > 0) {
+          setErrors(origin.errors.map((e, i) => ({
+            id: e.id || i + 1,
+            name: e.name || e.label || '',
+            qty: Number(e.qty || 1),
+            defectId: e.defectId,
+            code: e.code,
+            is_custom: Boolean(e.is_custom)
+          })))
+          const totalErr = origin.errorQty ?? origin.errors.reduce((acc, curr) => acc + Number(curr.qty || 1), 0)
+          setErrorQty(totalErr)
+        }
+
+        // 9. Ghi chú & Hình ảnh
+        if (origin.notes) setNote(origin.notes)
+        if (Array.isArray(origin.images) && origin.images.length > 0) setImages(origin.images)
       }
     } catch (e) {
       console.warn('[useInspectionFormBase] handlePalletSelect error:', e)
+    } finally {
+      setTimeout(() => {
+        isPalletSelectingRef.current = false
+      }, 500)
     }
   }
 
@@ -874,19 +1101,31 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     message: '',
     confirmText: 'Xác nhận',
     cancelText: 'Hủy',
+    showDontRemind: false,
+    dontRemindText: 'Không hiển thị lại trong 7 ngày',
     onConfirm: null,
   })
 
-  const showConfirm = ({ title, message, confirmText = 'Xác nhận', cancelText = 'Hủy', onConfirm }) => {
+  const showConfirm = ({
+    title,
+    message,
+    confirmText = 'Xác nhận',
+    cancelText = 'Hủy',
+    showDontRemind = false,
+    dontRemindText = 'Không hiển thị lại trong 7 ngày',
+    onConfirm,
+  }) => {
     setConfirmConfig({
       isOpen: true,
       title,
       message,
       confirmText,
       cancelText,
-      onConfirm: () => {
+      showDontRemind,
+      dontRemindText,
+      onConfirm: (dontRemind) => {
         setConfirmConfig((prev) => ({ ...prev, isOpen: false }))
-        if (onConfirm) onConfirm()
+        if (onConfirm) onConfirm(dontRemind)
       },
       onCancel: () => {
         setConfirmConfig((prev) => ({ ...prev, isOpen: false }))
@@ -1024,11 +1263,18 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     const term = (searchTerm || '').trim()
 
     if (!term) {
-      // Khi xóa ô tìm kiếm -> xóa PO đã chọn và khôi phục danh sách PO của tháng hiện tại
-      handlePoChange('')
-      if (monthPoCacheRef.current.length > 0) {
-        setPoOptions([{ value: '', label: 'Nhập hoặc chọn PO...' }, ...monthPoCacheRef.current])
-      }
+      // Khi xóa ô tìm kiếm -> khôi phục danh sách PO trong cache, giữ nguyên các PO đã chọn
+      let baseOpts = monthPoCacheRef.current || []
+      const curList = Array.isArray(selectedPos) && selectedPos.length > 0
+        ? selectedPos
+        : (po ? [po] : (paramPo ? [paramPo] : []))
+      const combined = [...baseOpts]
+      curList.forEach((p) => {
+        if (p && !combined.some((o) => o.value === p)) {
+          combined.unshift({ value: p, label: p })
+        }
+      })
+      setPoOptions([{ value: '', label: 'Nhập hoặc chọn PO...' }, ...combined])
       return
     }
 
@@ -1036,10 +1282,18 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       orderService.getPurchaseOrders(term)
         .then((poCodes) => {
           const rawCodes = poCodes || []
-          if (rawCodes.length === 0) {
+          const opts = rawCodes.map((code) => ({ value: code, label: code }))
+          const curList = Array.isArray(selectedPos) && selectedPos.length > 0
+            ? selectedPos
+            : (po ? [po] : (paramPo ? [paramPo] : []))
+          curList.forEach((p) => {
+            if (p && !opts.some((o) => o.value === p)) {
+              opts.unshift({ value: p, label: p })
+            }
+          })
+          if (opts.length === 0) {
             setPoOptions([{ value: '', label: 'Không tìm thấy PO phù hợp' }])
           } else {
-            const opts = rawCodes.map((code) => ({ value: code, label: code }))
             setPoOptions([{ value: '', label: 'Nhập hoặc chọn PO...' }, ...opts])
           }
         })
@@ -1049,16 +1303,24 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       orderService.getPoCodes({ search: term, limit: 1000 })
         .then((codes) => {
           const rawCodes = deduplicatePoCodes(codes || [])
-          if (rawCodes.length === 0) {
+          const opts = rawCodes.map((code) => ({ value: code, label: code }))
+          const curList = Array.isArray(selectedPos) && selectedPos.length > 0
+            ? selectedPos
+            : (po ? [po] : (paramPo ? [paramPo] : []))
+          curList.forEach((p) => {
+            if (p && !opts.some((o) => o.value === p)) {
+              opts.unshift({ value: p, label: p })
+            }
+          })
+          if (opts.length === 0) {
             setPoOptions([{ value: '', label: 'Không tìm thấy PO phù hợp' }])
           } else {
-            const opts = rawCodes.map((code) => ({ value: code, label: code }))
             setPoOptions([{ value: '', label: 'Nhập hoặc chọn PO...' }, ...opts])
           }
         })
         .catch(() => {})
     }
-  }, [stage, paramStage, handlePoChange])
+  }, [stage, paramStage, po, paramPo, selectedPos])
 
   useEffect(() => {
     const activeStage = stage || paramStage
@@ -1076,15 +1338,21 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
           if (curPo && !opts.some((o) => o.value === curPo)) {
             opts.unshift({ value: curPo, label: curPo })
           }
+          if (Array.isArray(selectedPos) && selectedPos.length > 0) {
+            selectedPos.forEach((p) => {
+              if (p && !opts.some((o) => o.value === p)) {
+                opts.unshift({ value: p, label: p })
+              }
+            })
+          }
           setPoOptions([{ value: '', label: 'Nhập hoặc chọn PO...' }, ...opts])
         })
         .catch(() => {
           setPoOptions([{ value: '', label: 'Nhập hoặc chọn PO...' }])
         })
     } else {
-      // Mặc định chỉ lấy danh sách PO thuộc tháng hiện tại qua API siêu tốc
-      const currentMonth = new Date().getMonth() + 1
-      orderService.getPoCodes({ month: currentMonth, limit: 1000 })
+      // Tải danh sách PO gần nhất qua API siêu tốc (không lọc cứng 1 tháng duy nhất để bao gồm các PO đang sản xuất)
+      orderService.getPoCodes({ limit: 1000 })
         .then((codes) => {
           const cleanCodes = deduplicatePoCodes(codes || [])
           const opts = cleanCodes.map((code) => ({ value: code, label: code }))
@@ -1092,6 +1360,13 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
           const curPo = po || paramPo
           if (curPo && !opts.some((o) => o.value === curPo)) {
             opts.unshift({ value: curPo, label: curPo })
+          }
+          if (Array.isArray(selectedPos) && selectedPos.length > 0) {
+            selectedPos.forEach((p) => {
+              if (p && !opts.some((o) => o.value === p)) {
+                opts.unshift({ value: p, label: p })
+              }
+            })
           }
           setPoOptions([{ value: '', label: 'Nhập hoặc chọn PO...' }, ...opts])
         })
@@ -1107,7 +1382,18 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       if (ticket.mode) setMode(ticket.mode)
       if (ticket.stage) setStage(ticket.stage)
       const poVal = ticket.po || ticket.poCode || ticket.po_code || ''
-      if (poVal) setPo(poVal)
+      if (poVal) {
+        setPo(poVal)
+        const posList = Array.isArray(ticket.pos) && ticket.pos.length > 0
+          ? ticket.pos
+          : poVal.split(',').map((s) => s.trim()).filter(Boolean)
+        setSelectedPos(posList)
+      }
+
+      const recheckVal = ticket.recheckQty ?? ticket.recheck_qty ?? ticket.data_json?.recheckQty ?? ''
+      if (recheckVal !== '' && recheckVal !== null && recheckVal !== undefined) {
+        setRecheckQty(String(recheckVal))
+      }
 
       const prodVal = ticket.product || ticket.product_name || ticket.detail_name || ''
       if (prodVal) {
@@ -1121,7 +1407,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
         }
       }
 
-      const specVal = ticket.spec || ticket.specification || ''
+      const specVal = ticket.spec || ticket.specification || ticket.parts_details?.[0]?.specification || ticket.parts_details?.[0]?.spec || ''
       if (specVal) {
         const cSpec = compactSpec(specVal)
         setSpec(cSpec)
@@ -1137,6 +1423,12 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       const reqVal = ticket.requiredQty ?? ticket.required_qty ?? ticket.quantity_plan ?? ''
       if (reqVal !== '') setRequiredQty(String(reqVal))
 
+      const batchVal = ticket.totalBatchQty ?? ticket.batch_qty ?? reqVal ?? sampleVal ?? ''
+      if (batchVal !== '') {
+        setTotalBatchQty(String(batchVal))
+        totalBatchQtyRef.current = String(batchVal)
+      }
+
       const resVal = ticket.result || ticket.conclusion || 'pass'
       setResult(resVal)
 
@@ -1144,14 +1436,45 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       setAction(actVal)
 
       if (ticket.note || ticket.notes) setNote(ticket.note || ticket.notes || '')
-      if (ticket.palletCode || ticket.pallet_code) setPalletCode(ticket.palletCode || ticket.pallet_code)
+      
+      const effectivePallet = ticket.palletCode || ticket.pallet_code || ''
+      if (effectivePallet) {
+        setPalletCode(effectivePallet)
+        setPalletOptions((prev) => {
+          if (!prev.some((opt) => opt.value === effectivePallet)) {
+            return [...prev, { value: effectivePallet, label: effectivePallet }]
+          }
+          return prev
+        })
+      }
+
       if (ticket.parameter) setParameter(ticket.parameter)
-      if (ticket.paramStage) setParamStage(ticket.paramStage)
-      if (ticket.paramPo) setParamPo(ticket.paramPo)
-      if (ticket.paramProduct) setParamProduct(ticket.paramProduct)
-      if (ticket.paramSample !== undefined && ticket.paramSample !== null) setParamSample(String(ticket.paramSample))
-      if (ticket.paramPass !== undefined && ticket.paramPass !== null) setParamPass(String(ticket.paramPass))
-      if (ticket.paramFail !== undefined && ticket.paramFail !== null) setParamFail(String(ticket.paramFail))
+
+      // Fallback cho các trường kiểm tra thông số (Mode: parameter)
+      const effectiveStage = ticket.paramStage || ticket.stage || ''
+      if (effectiveStage) setParamStage(effectiveStage)
+
+      const effectivePo = ticket.paramPo || poVal || ''
+      if (effectivePo) setParamPo(effectivePo)
+
+      const effectiveProd = ticket.paramProduct || prodVal || ''
+      if (effectiveProd) setParamProduct(effectiveProd)
+
+      const effectiveSample = ticket.paramSample !== undefined && ticket.paramSample !== null
+        ? String(ticket.paramSample)
+        : (sampleVal !== '' ? String(sampleVal) : (reqVal !== '' ? String(reqVal) : ''))
+      if (effectiveSample !== '') setParamSample(effectiveSample)
+
+      const effectiveFail = ticket.paramFail !== undefined && ticket.paramFail !== null
+        ? String(ticket.paramFail)
+        : String(errorVal || '0')
+      setParamFail(effectiveFail)
+
+      const effectivePass = ticket.paramPass !== undefined && ticket.paramPass !== null
+        ? String(ticket.paramPass)
+        : String(Math.max(0, (Number(effectiveSample) || 0) - (Number(effectiveFail) || 0)))
+      setParamPass(effectivePass)
+
       if (ticket.process) setProcess(ticket.process)
       if (ticket.area) setArea(ticket.area)
       if (ticket.staff) setStaff(ticket.staff)
@@ -1170,10 +1493,11 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
         setErrors(cleanedErrors)
       }
 
-      if (prodVal) {
+      const displayProd = effectiveProd || prodVal
+      if (displayProd) {
         setProductOptions((prev) => {
-          if (!prev.some((opt) => opt.value === prodVal)) {
-            return [...prev, { value: prodVal, label: prodVal }]
+          if (!prev.some((opt) => opt.value === displayProd)) {
+            return [...prev, { value: displayProd, label: displayProd }]
           }
           return prev
         })
@@ -1187,18 +1511,20 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
           return prev
         })
       }
-      if (ticket.stage) {
+      const displayStage = effectiveStage || ticket.stage
+      if (displayStage) {
         setStageOptions((prev) => {
-          if (!prev.some((opt) => opt.value === ticket.stage)) {
-            return [...prev, { value: ticket.stage, label: ticket.stage }]
+          if (!prev.some((opt) => opt.value === displayStage)) {
+            return [...prev, { value: displayStage, label: displayStage }]
           }
           return prev
         })
       }
-      if (poVal) {
+      const displayPo = effectivePo || poVal
+      if (displayPo) {
         setPoOptions((prev) => {
-          if (!prev.some((opt) => opt.value === poVal)) {
-            return [...prev, { value: poVal, label: poVal }]
+          if (!prev.some((opt) => opt.value === displayPo)) {
+            return [...prev, { value: displayPo, label: displayPo }]
           }
           return prev
         })
@@ -1206,12 +1532,93 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     }
   }, [ticket])
 
+  const applySelectedSpecs = (specArray, currentOpts = specOptions, fallbackTotalQty = 0) => {
+    if (readOnly) return
+    setIsDirty(true)
+    const cleanKeys = Array.from(new Set(specArray || []))
+    setSelectedSpecs(cleanKeys)
+
+    // Trích xuất các kích thước thuần từ các dòng được chọn
+    const selectedOpts = (currentOpts || []).filter(o => cleanKeys.includes(o.value?.toString()))
+    const distinctRawSpecs = Array.from(new Set(selectedOpts.map(o => o.rawSpec || o.label))).filter(Boolean)
+    const combinedStr = distinctRawSpecs.join(', ')
+    setSpec(combinedStr)
+
+    // Tự động tính lại tổng số lượng và số lượng cần kiểm theo các dòng đã chọn
+    let sumQty = selectedOpts.reduce((sum, opt) => sum + (Number(opt.qty) || 0), 0)
+    if (sumQty <= 0 && fallbackTotalQty > 0) {
+      sumQty = Number(fallbackTotalQty)
+    }
+
+    if (sumQty > 0 && cleanKeys.length > 0) {
+      setTotalBatchQty(String(sumQty))
+      totalBatchQtyRef.current = String(sumQty)
+      // Mặc định SL Cần Kiểm theo lượng còn lại chưa kiểm (Tổng - Đã kiểm)
+      const prevInspected = Number(totalInspectedSoFarRef.current || totalInspectedSoFar || 0)
+      const remaining = Math.max(0, sumQty - prevInspected)
+      const lotSize = remaining > 0 ? remaining : sumQty
+
+      if (isIncoming) {
+        // Đối với Nhập kho/Đầu vào: "SL Cần Kiểm" là số lượng giao đợt này (người dùng có thể sửa)
+        setRequiredQty(String(lotSize))
+        const aqlSample = calculateAqlSampleSize(lotSize)
+        setSampleQty(String(aqlSample))
+        setParamSample(String(aqlSample))
+        apiClient.get(`/inspections/qc-sampling/lookup?lot_size=${lotSize}`)
+          .then((res) => {
+            const resData = res.data || res
+            if (resData?.rule) {
+              setSamplingRule(resData.rule)
+              if (resData.rule.sample_size) {
+                setSampleQty(String(resData.rule.sample_size))
+                setParamSample(String(resData.rule.sample_size))
+              }
+            }
+          })
+          .catch(() => {})
+      } else if (mode === INSPECT_MODES.FIRST_SAMPLE) {
+        // Đối với kiểm tra mẫu đầu (FIRST_SAMPLE):
+        // "Số lượng kiểm tra" (SL Cần Kiểm) ăn theo AQL của lô sản xuất (lotSize)!
+        const aqlSample = calculateAqlSampleSize(lotSize)
+        setRequiredQty(String(aqlSample))
+        setSampleQty(String(aqlSample))
+        setParamSample(String(aqlSample))
+        apiClient.get(`/inspections/qc-sampling/lookup?lot_size=${lotSize}`)
+          .then((res) => {
+            const resData = res.data || res
+            if (resData?.rule) {
+              setSamplingRule(resData.rule)
+              if (resData.rule.sample_size) {
+                setRequiredQty(String(resData.rule.sample_size))
+                setSampleQty(String(resData.rule.sample_size))
+                setParamSample(String(resData.rule.sample_size))
+              }
+            }
+          })
+          .catch(() => {})
+      } else {
+        // Đối với các phiếu kiểm tra khác (RE_INSPECT, PARAMETER, DAILY...):
+        // Mặc định lấy theo số lượng sản xuất (lotSize)!
+        setRequiredQty(String(lotSize))
+        setSampleQty(String(lotSize))
+        setParamSample(String(lotSize))
+      }
+    } else {
+      setTotalBatchQty('')
+      totalBatchQtyRef.current = ''
+      setRequiredQty('')
+      const defaultDailySample = ''
+      setSampleQty(defaultDailySample)
+      setParamSample(defaultDailySample)
+    }
+  }
+
   useEffect(() => {
     const activeStage = stage || paramStage
     const activePo = po || paramPo
 
     if (!activeStage) {
-      if (isNew) {
+      if (isNew && mode !== INSPECT_MODES.RE_INSPECT && !isPalletSelectingRef.current) {
         setProduct('')
         setParamProduct('')
         setSpec('')
@@ -1226,7 +1633,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     }
 
     if (!activePo) {
-      if (isNew) {
+      if (isNew && mode !== INSPECT_MODES.RE_INSPECT && !isPalletSelectingRef.current) {
         setProduct('')
         setParamProduct('')
         setSpec('')
@@ -1253,6 +1660,61 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       }
 
       if (isNew && bomList.length > 0) {
+        // Nếu đang ở chế độ Kiểm tra lại (RE_INSPECT) hoặc vừa nạp pallet xong:
+        // GIỮ NGUYÊN spec, selectedSpecs, requiredQty, totalBatchQty đã được nạp!
+        if (mode === INSPECT_MODES.RE_INSPECT || isPalletSelectingRef.current) {
+          const currentProdStr = product || paramProduct
+          const matchedPart = bomList.find(p => 
+            p.part_name === currentProdStr || 
+            (p.sku && p.sku === currentProdStr) ||
+            (currentProdStr && p.part_name && (p.part_name.includes(currentProdStr) || currentProdStr.includes(p.part_name)))
+          )
+          if (matchedPart && Array.isArray(matchedPart.specs) && matchedPart.specs.length > 0) {
+            let specOpts = matchedPart.specs.map((s, idx) => {
+              const val = getEffectiveSpec(s.specification, matchedPart.part_name)
+              const rawTag = s.badge || s.product_label || s.product_name || s.product_sku || (matchedPart.sku ? `${matchedPart.part_name} (${matchedPart.sku})` : '')
+              const cabinetTag = cleanCabinetTag(rawTag, matchedPart.label || matchedPart.part_name || 'Chi tiết')
+              const optKey = s.id || `${matchedPart.part_name}__${val}__${s.order_code || ''}__${s.product_sku || s.product_name || idx}`
+              return {
+                value: optKey,
+                label: val,
+                rawSpec: val,
+                badge: cabinetTag,
+                productLabel: cabinetTag,
+                partName: matchedPart.part_name,
+                orderCode: s.order_code || '',
+                qty: Number(s.qty) || 0
+              }
+            })
+            setSpecOptions(specOpts)
+            if (spec) {
+              const cSpec = compactSpec(spec)
+              const foundOpt = specOpts.find(o => 
+                o.rawSpec === cSpec || 
+                o.label === cSpec || 
+                compactSpec(o.label) === cSpec ||
+                compactSpec(o.rawSpec) === cSpec
+              )
+              if (foundOpt) {
+                setSelectedSpecs([foundOpt.value])
+                if (!totalBatchQtyRef.current && foundOpt.qty) {
+                  setTotalBatchQty(String(foundOpt.qty))
+                  totalBatchQtyRef.current = String(foundOpt.qty)
+                }
+              }
+            } else if (specOpts.length > 0) {
+              const firstOpt = specOpts[0]
+              setSelectedSpecs([firstOpt.value])
+              setSpec(firstOpt.rawSpec || firstOpt.label)
+              if (!totalBatchQtyRef.current && firstOpt.qty) {
+                setTotalBatchQty(String(firstOpt.qty))
+                totalBatchQtyRef.current = String(firstOpt.qty)
+              }
+            }
+          }
+          return
+        }
+
         const currentProdStr = product || paramProduct
         const currentProdArray = currentProdStr ? currentProdStr.split(', ').map(s => s.trim()).filter(Boolean) : []
         
@@ -1298,13 +1760,27 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
           })
           
           setSpecOptions([{ value: '', label: 'Chọn quy cách' }, ...specOpts])
-          // Mặc định không chọn trước quy cách nào
-          setSelectedSpecs([])
-          setSpec('')
-          setRequiredQty('')
-          setSampleQty('')
-          setParamSample('')
-          setIsQtyConverted(false)
+          const distinctSpecs = Array.from(new Set(specOpts.map(o => o.rawSpec || o.label))).filter(Boolean)
+          // Nếu chi tiết chỉ có duy nhất 1 quy cách thì tự động chọn luôn!
+          if (specOpts.length === 1 || distinctSpecs.length === 1) {
+            applySelectedSpecs(specOpts.map(o => o.value), specOpts, totalQtySum)
+          } else {
+            // Mặc định không chọn trước quy cách nào
+            setSelectedSpecs([])
+            setSpec('')
+            if (mode === INSPECT_MODES.PARAMETER && totalQtySum > 0) {
+              setTotalBatchQty(String(totalQtySum))
+              totalBatchQtyRef.current = String(totalQtySum)
+              setParamSample(String(totalQtySum))
+              setSampleQty(String(totalQtySum))
+              setRequiredQty(String(totalQtySum))
+            } else {
+              setRequiredQty('')
+              setSampleQty('')
+              setParamSample('')
+            }
+            setIsQtyConverted(false)
+          }
         } else {
           // Mặc định không tự chọn chi tiết nào, để người dùng chủ động chọn
           setProduct('')
@@ -1318,7 +1794,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
           setParamSample('')
           setIsQtyConverted(false)
         }
-      } else if (isNew) {
+      } else if (isNew && mode !== INSPECT_MODES.RE_INSPECT && !isPalletSelectingRef.current) {
         setProduct('')
         setParamProduct('')
         setSpec('')
@@ -1329,24 +1805,57 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       }
     }
 
-    const cacheKey = `${activePo}_${activeStage}`
-    if (bomCacheRef.current[cacheKey]) {
-      applyBomData(bomCacheRef.current[cacheKey])
+    const posList = (mode === INSPECT_MODES.DAILY && selectedPos && selectedPos.length > 0)
+      ? selectedPos
+      : (activePo && activePo.includes(',') ? activePo.split(',').map(s => s.trim()).filter(Boolean) : (activePo ? [activePo] : []))
+
+    if (posList.length <= 1) {
+      const singlePo = posList[0] || activePo
+      const cacheKey = `${singlePo}_${activeStage}`
+      if (bomCacheRef.current[cacheKey]) {
+        applyBomData(bomCacheRef.current[cacheKey])
+      } else {
+        orderService.getBom(singlePo, activeStage)
+          .then((data) => {
+            bomCacheRef.current[cacheKey] = data || []
+            applyBomData(data)
+          })
+          .catch(() => {
+            applyBomData([])
+          })
+      }
     } else {
-      orderService.getBom(activePo, activeStage)
-        .then((data) => {
-          bomCacheRef.current[cacheKey] = data || []
-          applyBomData(data)
+      // Khi chọn nhiều PO ở chế độ DAILY, tải BOM của tất cả các PO và gộp danh sách chi tiết
+      Promise.all(posList.map((p) => orderService.getBom(p, activeStage).catch(() => [])))
+        .then((bomArrays) => {
+          const mergedMap = new Map()
+          bomArrays.forEach((bomList) => {
+            if (Array.isArray(bomList)) {
+              bomList.forEach((item) => {
+                const key = item.part_name || item.sku || item.id
+                if (key && !mergedMap.has(key)) {
+                  mergedMap.set(key, { ...item })
+                } else if (key && mergedMap.has(key)) {
+                  const existing = mergedMap.get(key)
+                  const newQty = (Number(existing.total_qty) || 0) + (Number(item.total_qty) || 0)
+                  const combinedSpecs = [...(existing.specs || []), ...(item.specs || [])]
+                  mergedMap.set(key, { ...existing, total_qty: newQty, specs: combinedSpecs })
+                }
+              })
+            }
+          })
+          applyBomData(Array.from(mergedMap.values()))
         })
         .catch(() => {
           applyBomData([])
         })
     }
-  }, [po, paramPo, stage, paramStage, isNew])
+  }, [po, paramPo, stage, paramStage, isNew, selectedPos])
 
   // Tự động tra cứu mốc lấy mẫu AQL từ Database theo tổng SL lô hàng N
   useEffect(() => {
     if (!isNew) return
+    if (mode !== INSPECT_MODES.FIRST_SAMPLE && !isIncoming) return
 
     // Khi ở công đoạn sản xuất, tra cứu theo requiredQty nếu đã có, hoặc theo totalBatchQty
     const lotSize = Number(isIncoming ? requiredQty : (requiredQty || totalBatchQty))
@@ -1398,13 +1907,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       setParamFail('')
     }
 
-    if (totalFail > 0) {
-      setResult('fail')
-      setAction((prev) => (prev === 'cach-ly' ? 'cach-ly' : 'tra-ve'))
-    } else if (sampleVal > 0 && totalFail === 0) {
-      setResult('pass')
-      setAction('chap-nhan')
-    }
+    // Mặc định kết quả kiểm tra theo lựa chọn của người dùng (không tự động nhảy không đạt khi có lỗi)
   }, [paramSample, sampleQty, errors])
 
   useEffect(() => {
@@ -1438,20 +1941,14 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
 
   const hasFailedStep = steps.some((s) => s.result === 'fail')
   const isFailedResult =
-    hasFailedStep ||
     result === 'fail' ||
-    (mode === INSPECT_MODES.QA && qaResult === 'fail') ||
-    Number(errorQty) > 0 ||
-    errors.some((e) => Number(e.qty) > 0)
+    (mode === INSPECT_MODES.QA && qaResult === 'fail')
 
   const handleStepResultChange = (stepIdx, newResult) => {
     if (readOnly) return
     setIsDirty(true)
     setSteps((prev) => {
-      const next = prev.map((s, i) => (i === stepIdx ? { ...s, result: newResult } : s))
-      const anyFail = next.some((s) => s.result === 'fail')
-      setResult(anyFail ? 'fail' : 'pass')
-      return next
+      return prev.map((s, i) => (i === stepIdx ? { ...s, result: newResult } : s))
     })
   }
 
@@ -1475,7 +1972,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
           productLabel: cabinetTag,
           partName: partName,
           orderCode: s.order_code || '',
-          qty: Number(s.qty) || 0
+          qty: Number(s.qty) || Number(part.total_qty) || 0
         }
       })
       if (specOpts.length === 0) {
@@ -1483,15 +1980,32 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
         const cabinetTag = part.sku ? `${part.part_name} (${part.sku})` : ''
         specOpts = [{ value: effSpec, label: effSpec, rawSpec: effSpec, badge: cabinetTag, productLabel: cabinetTag, qty: Number(part.total_qty) || 0 }]
       }
-      setSpecOptions([{ value: '', label: 'Chọn quy cách' }, ...specOpts])
-      // Mặc định không chọn trước quy cách nào; chỉ hiện số lượng sau khi chọn quy cách
-      setSelectedSpecs([])
-      setSpec('')
-      setTotalBatchQty('')
-      totalBatchQtyRef.current = ''
-      setRequiredQty('')
-      setSampleQty('')
-      setParamSample('')
+      const distinctSpecs = Array.from(new Set(specOpts.map(o => o.rawSpec || o.label))).filter(Boolean)
+      // Nếu chi tiết chỉ có duy nhất 1 quy cách thì tự động chọn luôn!
+      if (specOpts.length === 1 || distinctSpecs.length === 1) {
+        setSpecOptions(specOpts)
+        applySelectedSpecs(specOpts.map(o => o.value), specOpts, Number(part.total_qty) || 0)
+      } else {
+        setSpecOptions([{ value: '', label: 'Chọn quy cách' }, ...specOpts])
+        setSelectedSpecs([])
+        setSpec('')
+        if (mode === INSPECT_MODES.PARAMETER) {
+          const prodQty = Number(part.total_qty) || (specOpts.reduce((sum, o) => sum + (Number(o.qty) || 0), 0)) || 0
+          if (prodQty > 0) {
+            setTotalBatchQty(String(prodQty))
+            totalBatchQtyRef.current = String(prodQty)
+            setParamSample(String(prodQty))
+            setSampleQty(String(prodQty))
+            setRequiredQty(String(prodQty))
+          }
+        } else {
+          setTotalBatchQty('')
+          totalBatchQtyRef.current = ''
+          setRequiredQty('')
+          setSampleQty('')
+          setParamSample('')
+        }
+      }
     } else {
       setSpecOptions([{ value: '', label: 'Chọn quy cách' }])
       setSpec('')
@@ -1516,7 +2030,10 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     selectedParts.forEach((part) => {
       const partSpecs = (Array.isArray(part.specs) && part.specs.length > 0)
         ? part.specs
-        : [{ specification: getEffectiveSpec('', part.part_name) }]
+        : (part.specification || part.spec
+            ? [{ specification: part.specification || part.spec, qty: part.total_qty }]
+            : [{ specification: getEffectiveSpec('', part.part_name), qty: part.total_qty }]
+          )
 
       partSpecs.forEach((s, idx) => {
         const effSpec = getEffectiveSpec(s.specification, part.part_name)
@@ -1531,7 +2048,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
           productLabel: cabinetTag,
           partName: part.part_name,
           orderCode: s.order_code || '',
-          qty: Number(s.qty) || 0
+          qty: Number(s.qty) || Number(part.total_qty) || 0
         })
       })
 
@@ -1542,15 +2059,28 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     })
 
     setSpecOptions(specOpts)
-    // Mặc định không chọn trước quy cách nào; chỉ hiện số lượng sau khi người dùng chọn quy cách
-    setSelectedSpecs([])
-    setSpec('')
-    setTotalBatchQty('')
-    totalBatchQtyRef.current = ''
-    setRequiredQty('')
-    const defaultDailySample = mode === INSPECT_MODES.DAILY ? '100' : ''
-    setSampleQty(defaultDailySample)
-    setParamSample(defaultDailySample)
+    const distinctSpecs = Array.from(new Set(specOpts.map(o => o.rawSpec || o.label))).filter(Boolean)
+    // Nếu chi tiết chỉ có duy nhất 1 quy cách thì tự động chọn luôn!
+    if (specOpts.length === 1 || distinctSpecs.length === 1) {
+      applySelectedSpecs(specOpts.map(o => o.value), specOpts, totalQtySum)
+    } else {
+      setSelectedSpecs([])
+      setSpec('')
+      if ((mode === INSPECT_MODES.PARAMETER || mode === INSPECT_MODES.DAILY) && totalQtySum > 0) {
+        setTotalBatchQty(String(totalQtySum))
+        totalBatchQtyRef.current = String(totalQtySum)
+        setParamSample(String(totalQtySum))
+        setSampleQty(String(totalQtySum))
+        setRequiredQty(String(totalQtySum))
+      } else {
+        setTotalBatchQty('')
+        totalBatchQtyRef.current = ''
+        setRequiredQty('')
+        const defaultDailySample = ''
+        setSampleQty(defaultDailySample)
+        setParamSample(defaultDailySample)
+      }
+    }
   }
 
   // Bỏ gán cứng khóa quy cách để người dùng linh hoạt chọn/bỏ chọn theo từng dòng tủ
@@ -1559,101 +2089,51 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
   }, [])
 
   const handleMultiSpecChange = (specArray) => {
-    if (readOnly) return
-    setIsDirty(true)
-    const cleanKeys = Array.from(new Set(specArray || []))
-    setSelectedSpecs(cleanKeys)
-
-    // Trích xuất các kích thước thuần từ các dòng được chọn
-    const selectedOpts = specOptions.filter(o => cleanKeys.includes(o.value?.toString()))
-    const distinctRawSpecs = Array.from(new Set(selectedOpts.map(o => o.rawSpec || o.label))).filter(Boolean)
-    const combinedStr = distinctRawSpecs.join(', ')
-    setSpec(combinedStr)
-
-    // Tự động tính lại tổng số lượng và số lượng cần kiểm theo các dòng đã chọn
-    const sumQty = selectedOpts.reduce((sum, opt) => sum + (Number(opt.qty) || 0), 0)
-    if (sumQty > 0 && cleanKeys.length > 0) {
-      setTotalBatchQty(String(sumQty))
-      totalBatchQtyRef.current = String(sumQty)
-      // Mặc định SL Cần Kiểm theo lượng còn lại chưa kiểm (Tổng - Đã kiểm)
-      const prevInspected = Number(totalInspectedSoFarRef.current || totalInspectedSoFar || 0)
-      const remaining = Math.max(0, sumQty - prevInspected)
-      const lotSize = remaining > 0 ? remaining : sumQty
-
-      if (isIncoming) {
-        // Đối với Nhập kho/Đầu vào: "SL Cần Kiểm" là số lượng giao đợt này (người dùng có thể sửa)
-        setRequiredQty(String(lotSize))
-        const aqlSample = calculateAqlSampleSize(lotSize)
-        setSampleQty(String(aqlSample))
-        setParamSample(String(aqlSample))
-        apiClient.get(`/inspections/qc-sampling/lookup?lot_size=${lotSize}`)
-          .then((res) => {
-            const resData = res.data || res
-            if (resData?.rule) {
-              setSamplingRule(resData.rule)
-              if (resData.rule.sample_size) {
-                setSampleQty(String(resData.rule.sample_size))
-                setParamSample(String(resData.rule.sample_size))
-              }
-            }
-          })
-          .catch(() => {})
-      } else {
-        // Đối với tất cả công đoạn sản xuất & kiểm tra mẫu đầu (FIRST_SAMPLE):
-        // "Số lượng kiểm tra" (SL Cần Kiểm) ăn theo AQL của lô sản xuất (lotSize)!
-        const aqlSample = calculateAqlSampleSize(lotSize)
-        setRequiredQty(String(aqlSample))
-        setSampleQty(String(aqlSample))
-        setParamSample(String(aqlSample))
-        apiClient.get(`/inspections/qc-sampling/lookup?lot_size=${lotSize}`)
-          .then((res) => {
-            const resData = res.data || res
-            if (resData?.rule) {
-              setSamplingRule(resData.rule)
-              if (resData.rule.sample_size) {
-                setRequiredQty(String(resData.rule.sample_size))
-                setSampleQty(String(resData.rule.sample_size))
-                setParamSample(String(resData.rule.sample_size))
-              }
-            }
-          })
-          .catch(() => {})
-      }
-    } else {
-      setTotalBatchQty('')
-      totalBatchQtyRef.current = ''
-      setRequiredQty('')
-      const defaultDailySample = mode === INSPECT_MODES.DAILY ? '100' : ''
-      setSampleQty(defaultDailySample)
-      setParamSample(defaultDailySample)
-    }
+    applySelectedSpecs(specArray, specOptions)
   }
 
-  // Tự động tải lịch sử các phiếu kiểm tra trước đây của chi tiết này theo PO
+  // Tự động tải lịch sử các phiếu kiểm tra trước đây của chi tiết này theo PO & Công đoạn & Quy cách
   useEffect(() => {
     const activePo = po || paramPo
     const activeProduct = product || paramProduct
+    const activeStage = stage || paramStage
     if (!activePo || !activeProduct) {
+      rawHistoryTicketsRef.current = []
       setPartHistoryTickets([])
       setTotalInspectedSoFar(0)
       return
     }
 
     let isMounted = true
-    inspectionService.getList({
-      poCode: activePo,
-      product: activeProduct,
-      tab: 'all',
-      limit: 50
-    }).then((res) => {
-      if (!isMounted) return
-      const items = res?.items || []
-      // Bỏ qua phiếu hiện tại nếu đang ở chế độ xem/sửa phiếu cũ
-      const filtered = ticket?.id ? items.filter(t => String(t.id) !== String(ticket.id)) : items
+
+    const isSpecMatching = (ticketSpec, targetSpec) => {
+      if (!targetSpec) return true
+      if (!ticketSpec) return false
+      const cTarget = compactSpec(targetSpec)
+      const cTicket = compactSpec(ticketSpec)
+      if (!cTarget || !cTicket) return true
+      return cTicket === cTarget || cTicket.includes(cTarget) || cTarget.includes(cTicket)
+    }
+
+    const isStageMatching = (ticketStage, targetStage) => {
+      if (!targetStage) return true
+      if (!ticketStage) return true
+      const s1 = String(ticketStage).toLowerCase().trim()
+      const s2 = String(targetStage).toLowerCase().trim()
+      return s1 === s2 || s1.includes(s2) || s2.includes(s1)
+    }
+
+    const applyHistoryFilter = (items) => {
+      const filtered = (items || []).filter(t => {
+        if (ticket?.id && String(t.id) === String(ticket.id)) return false
+        if (activeStage && !isStageMatching(t.stage, activeStage)) return false
+        if (spec && !isSpecMatching(t.spec, spec)) return false
+        return true
+      })
       setPartHistoryTickets(filtered)
 
       const sumPrev = filtered.reduce((acc, t) => {
-        const q = Number(t.requiredQty ?? t.required_qty ?? t.plan_qty ?? 0)
+        const q = Number(t.sampleQty ?? t.sample_qty ?? 0)
         return acc + (isNaN(q) ? 0 : q)
       }, 0)
       totalInspectedSoFarRef.current = sumPrev
@@ -1675,17 +2155,35 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
             const aqlSample = calculateAqlSampleSize(targetLot)
             setSampleQty(String(aqlSample))
             setParamSample(String(aqlSample))
-          } else {
+          } else if (mode === INSPECT_MODES.FIRST_SAMPLE) {
             const aqlSample = calculateAqlSampleSize(targetLot)
             setRequiredQty(String(aqlSample))
             setSampleQty(String(aqlSample))
             setParamSample(String(aqlSample))
+          } else {
+            setRequiredQty(String(targetLot))
+            setSampleQty(String(targetLot))
+            setParamSample(String(targetLot))
           }
         }
       }
+    }
+
+    inspectionService.getList({
+      poCode: activePo,
+      product: activeProduct,
+      stage: activeStage,
+      tab: 'all',
+      limit: 100
+    }).then((res) => {
+      if (!isMounted) return
+      const items = res?.items || []
+      rawHistoryTicketsRef.current = items
+      applyHistoryFilter(items)
     }).catch((err) => {
       console.warn('[useInspectionFormBase] Lỗi tải lịch sử kiểm tra chi tiết:', err)
       if (isMounted) {
+        rawHistoryTicketsRef.current = []
         setPartHistoryTickets([])
         setTotalInspectedSoFar(0)
       }
@@ -1694,7 +2192,8 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     return () => {
       isMounted = false
     }
-  }, [po, paramPo, product, paramProduct, ticket?.id, isIncoming])
+  }, [po, paramPo, stage, paramStage, product, paramProduct, spec, ticket?.id, isIncoming, mode])
+
 
   const handleRequiredQtyChange = (val) => {
     if (readOnly) return
@@ -1747,9 +2246,6 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       const next = p.map((r, i) => (i === idx ? row : r))
       const totalErr = next.reduce((sum, item) => sum + (Number(item.qty) || 0), 0)
       setErrorQty(String(totalErr))
-      if (totalErr > 0) {
-        setResult('fail')
-      }
       return next
     })
   }
@@ -1793,17 +2289,25 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
         showMessage('Thiếu thông tin', 'Vui lòng chọn Sản phẩm trước khi tiếp tục.', 'warning')
         return
       }
+      if (!requiredQty || Number(requiredQty) <= 0) {
+        showMessage('Thiếu thông tin', 'Vui lòng nhập Số lượng kiểm tra hợp lệ.', 'warning')
+        return
+      }
     } else if (mode === INSPECT_MODES.PARAMETER) {
       if (!paramStage) {
         showMessage('Thiếu thông tin', 'Vui lòng chọn Công đoạn trước khi tiếp tục.', 'warning')
         return
       }
-      if (!paramPo) {
-        showMessage('Thiếu thông tin', 'Vui lòng chọn PO trước khi tiếp tục.', 'warning')
+      if (!paramPo && !palletCode) {
+        showMessage('Thiếu thông tin', 'Vui lòng chọn PO hoặc Pallet trước khi tiếp tục.', 'warning')
         return
       }
       if (!paramProduct) {
         showMessage('Thiếu thông tin', 'Vui lòng chọn Sản phẩm trước khi tiếp tục.', 'warning')
+        return
+      }
+      if (!paramSample || Number(paramSample) <= 0) {
+        showMessage('Thiếu thông tin', 'Vui lòng nhập Số lượng cần kiểm tra hợp lệ.', 'warning')
         return
       }
     } else if (mode === INSPECT_MODES.PROCESS) {
@@ -1814,6 +2318,20 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     } else if (mode === INSPECT_MODES.QA) {
       if (!staff) {
         showMessage('Thiếu thông tin', 'Vui lòng chọn Tên nhân sự trước khi tiếp tục.', 'warning')
+        return
+      }
+    } else if (mode === INSPECT_MODES.DAILY) {
+      if (!stage) {
+        showMessage('Thiếu thông tin', 'Vui lòng chọn Công đoạn trước khi tiếp tục.', 'warning')
+        return
+      }
+      const hasAnyPo = Boolean(po || (selectedPos && selectedPos.length > 0))
+      if (!hasAnyPo) {
+        showMessage('Thiếu thông tin', 'Vui lòng chọn hoặc nhập ít nhất một mã PO.', 'warning')
+        return
+      }
+      if (!sampleQty || Number(sampleQty) <= 0) {
+        showMessage('Thiếu thông tin', 'Vui lòng nhập Số lượng cần kiểm tra hợp lệ.', 'warning')
         return
       }
     }
@@ -1926,17 +2444,25 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
         }
       }
 
+      const isDaily = mode === INSPECT_MODES.DAILY
+      const finalPoStr = (isDaily && Array.isArray(selectedPos) && selectedPos.length > 0)
+        ? selectedPos.join(', ')
+        : (activePo || '')
+
       const createdResult = await createTicket({
         mode,
         stage: activeStage,
-        po: activePo,
+        po: finalPoStr,
+        pos: isDaily ? selectedPos : (selectedPos?.length > 0 ? selectedPos : (finalPoStr ? [finalPoStr] : [])),
         result: finalResult,
         action: finalAction,
-        product: activeProduct,
-        spec: compactSpec(spec),
+        product: activeProduct || '',
+        spec: compactSpec(spec) || '',
         requiredQty: requiredQty || sampleQty,
         sampleQty: activeSampleQty,
         errorQty: activeErrorQty,
+        recheckQty: Number(recheckQty) || 0,
+        recheck_qty: Number(recheckQty) || 0,
         note: finalNote,
         errors: sanitizedErrors,
         images: finalImages,
@@ -1946,9 +2472,15 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
         palletCode: finalPalletCode || backupQrCode || '',
         backup_qr: backupQrCode || null,
         backupQrCode: backupQrCode || null,
-        parts_details: partsDetails,
+        parts_details: (Array.isArray(partsDetails) && partsDetails.length > 0) ? partsDetails : [],
         parameter,
         paramPass,
+        paramStage,
+        paramPo,
+        paramProduct,
+        paramSample,
+        paramFail,
+        totalBatchQty: totalBatchQty || requiredQty || sampleQty,
         process,
         area,
         staff,
@@ -2144,11 +2676,9 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
   }, [selectedProducts, selectedSpecs, bomData, spec, product, ticket])
 
   const curSummaryResult = mode === INSPECT_MODES.QA
-    ? qaResult
-    : (isFailedResult ? 'fail' : (result || ticket?.conclusion || ticket?.result || 'pass'))
-  const curSummaryAction = curSummaryResult === 'pass'
-    ? 'chap-nhan'
-    : (action === 'cach-ly' ? 'cach-ly' : 'tra-ve')
+    ? (qaResult || 'pass')
+    : (result || ticket?.conclusion || ticket?.result || 'pass')
+  const curSummaryAction = action || (curSummaryResult === 'pass' ? 'chap-nhan' : 'tra-ve')
 
   const summary = useMemo(() => ({
     poCode: mode === INSPECT_MODES.PARAMETER ? (paramPo || '—') : (po || ticket?.po_code || ticket?.po || '—'),
@@ -2159,7 +2689,10 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     spec: compactSpec(spec || ticket?.specification || ticket?.spec) || '—',
     partsDetails: currentPartsDetails,
     needQty: (() => {
-      const details = getQuantityConversionDetails(product || spec || ticket?.product_name || ticket?.detail_name, requiredQty || ticket?.quantity_plan || ticket?.required_qty || sampleQty)
+      const targetVal = (mode === INSPECT_MODES.DAILY || mode === INSPECT_MODES.PARAMETER)
+        ? (mode === INSPECT_MODES.PARAMETER ? paramSample : sampleQty)
+        : (sampleQty || requiredQty || ticket?.quantity_plan || ticket?.required_qty)
+      const details = getQuantityConversionDetails(product || spec || ticket?.product_name || ticket?.detail_name, targetVal)
       const val = details.qty || '—'
       return (details.isConverted || isQtyConverted) && val !== '—' ? `≈ ${val}` : val
     })(),
@@ -2200,13 +2733,22 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       navigate(targetUrl, { replace: true })
     }
 
-    if (isDirty && !readOnly) {
+    const SKIP_CONFIRM_KEY = 'pv2_skip_confirm_mode_change'
+
+    if (isDirty && !readOnly && !isPromptSuppressed(SKIP_CONFIRM_KEY)) {
       showConfirm({
         title: 'Xác nhận đổi cách kiểm tra',
         message: 'Dữ liệu bạn vừa nhập chưa được lưu. Bạn có chắc chắn muốn chuyển sang cách kiểm tra khác không?',
         confirmText: 'Rời đi & Đổi',
         cancelText: 'Ở lại tiếp tục',
-        onConfirm: doChange,
+        showDontRemind: true,
+        dontRemindText: 'Không hiển thị lại trong 7 ngày',
+        onConfirm: (dontRemind) => {
+          if (dontRemind) {
+            suppressPrompt(SKIP_CONFIRM_KEY, 7)
+          }
+          doChange()
+        },
       })
     } else {
       doChange()
@@ -2254,6 +2796,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
 
     setPo('')
     setParamPo('')
+    setSelectedPos([])
     setProduct('')
     setParamProduct('')
     setSelectedProducts([])
@@ -2317,7 +2860,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
   const setSampleQtyWithDirty = (val) => {
     let num = Number(val)
     if (mode !== INSPECT_MODES.DAILY) {
-      const maxAllowed = Number(requiredQty) || samplingRule?.sample_size || 0
+      const maxAllowed = Number(totalBatchQty || requiredQty) || 0
       if (maxAllowed > 0 && num > maxAllowed) {
         num = maxAllowed
       }
@@ -2325,6 +2868,9 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     const finalVal = val === '' ? '' : String(isNaN(num) || num < 0 ? 0 : num)
     setSampleQty(finalVal)
     setParamSample(finalVal)
+    if (mode === INSPECT_MODES.DAILY) {
+      setRequiredQty(finalVal)
+    }
     setIsDirty(true)
   }
   const setErrorQtyWithDirty = (val) => { setErrorQty(val); setIsDirty(true); }
@@ -2334,13 +2880,18 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
   const setParamProductWithDirty = (val) => { setParamProduct(val); setIsDirty(true); }
   const setParamSampleWithDirty = (val) => {
     let num = Number(val)
-    const maxAllowed = Number(requiredQty) || samplingRule?.sample_size || 0
+    const maxAllowed = Number(totalBatchQty || requiredQty) || 0
     if (maxAllowed > 0 && num > maxAllowed) {
       num = maxAllowed
     }
     const finalVal = val === '' ? '' : String(isNaN(num) || num < 0 ? 0 : num)
     setSampleQty(finalVal)
     setParamSample(finalVal)
+    setIsDirty(true)
+  }
+  const handleTotalBatchQtyChange = (val) => {
+    setTotalBatchQty(val)
+    totalBatchQtyRef.current = val
     setIsDirty(true)
   }
   const setProcessWithDirty = (val) => { setProcess(val); setIsDirty(true); }
@@ -2483,7 +3034,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     handleParamPoChange: handlePoChange,
     paramProduct,
     setParamProduct: setParamProductWithDirty,
-    handleParamProductChange: (val) => { setParamProduct(val); setProduct(val); setIsDirty(true); },
+    handleParamProductChange: (val) => { setParamProduct(val); handleProductChange(val); },
     paramSample,
     setParamSample: setParamSampleWithDirty,
     paramPass,
@@ -2510,6 +3061,11 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     stageOptions,
     processOptions,
     poOptions,
+    selectedPos,
+    setSelectedPos,
+    handleMultiPoChange,
+    recheckQty,
+    setRecheckQty,
     handlePoSearch,
     productOptions,
     specOptions,
@@ -2517,7 +3073,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     requiredQty,
     setRequiredQty: handleRequiredQtyChange,
     totalBatchQty,
-    setTotalBatchQty,
+    setTotalBatchQty: handleTotalBatchQtyChange,
     isIncomingStage: isIncoming,
     partHistoryTickets,
     isPartHistoryModalOpen,
@@ -2572,6 +3128,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     handleSubmit,
     handleFinishConfirm,
     handleConfirmTicketClick,
+    ticket,
     ticketCode,
     displayCreator,
     displayTime,

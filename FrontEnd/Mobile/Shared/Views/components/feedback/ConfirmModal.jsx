@@ -1,11 +1,29 @@
-import React from 'react'
-import { AlertTriangle, Check, X } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import { AlertTriangle } from 'lucide-react'
 
 /**
  * ConfirmModal Component
- * Dùng để xác nhận hành động quan trọng (Xác nhận tạo phiếu).
+ * Dùng để xác nhận hành động quan trọng (Xác nhận tạo phiếu, đổi mode, thoát trang...).
  */
-const ConfirmModal = ({ isOpen, title, message, onConfirm, onCancel, confirmText = 'Xác nhận', cancelText = 'Hủy' }) => {
+const ConfirmModal = ({
+  isOpen,
+  title,
+  message,
+  onConfirm,
+  onCancel,
+  confirmText = 'Xác nhận',
+  cancelText = 'Hủy',
+  showDontRemind = false,
+  dontRemindText = 'Không hiển thị lại trong 7 ngày',
+}) => {
+  const [dontRemind, setDontRemind] = useState(false)
+
+  useEffect(() => {
+    if (isOpen) {
+      setDontRemind(false)
+    }
+  }, [isOpen])
+
   if (!isOpen) return null
 
   return (
@@ -67,13 +85,61 @@ const ConfirmModal = ({ isOpen, title, message, onConfirm, onCancel, confirmText
           {title}
         </h3>
         
-        <div style={{ fontSize: '0.95rem', color: '#64748b', lineHeight: '1.5', marginBottom: '24px' }}>
+        <div style={{ fontSize: '0.95rem', color: '#64748b', lineHeight: '1.5', marginBottom: showDontRemind ? '16px' : '24px' }}>
           {message}
         </div>
+
+        {/* Checkbox Không hiển thị lại */}
+        {showDontRemind && (
+          <div
+            onClick={() => setDontRemind(!dontRemind)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              padding: '6px 10px',
+              marginBottom: '18px',
+              backgroundColor: '#f8fafc',
+              borderRadius: '10px',
+              border: '1px solid #e2e8f0',
+              cursor: 'pointer',
+              userSelect: 'none'
+            }}
+          >
+            <input
+              type="checkbox"
+              id="confirm-modal-dont-remind"
+              checked={dontRemind}
+              onChange={(e) => setDontRemind(e.target.checked)}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: '16px',
+                height: '16px',
+                accentColor: 'var(--primary-color, #7B5233)',
+                cursor: 'pointer',
+                borderRadius: '4px'
+              }}
+            />
+            <label
+              htmlFor="confirm-modal-dont-remind"
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                fontSize: '0.85rem',
+                color: dontRemind ? '#7B5233' : '#64748b',
+                fontWeight: dontRemind ? '700' : '500',
+                cursor: 'pointer'
+              }}
+            >
+              {dontRemindText}
+            </label>
+          </div>
+        )}
 
         {/* Nút tác vụ */}
         <div style={{ display: 'flex', gap: '12px' }}>
           <button 
+            type="button"
             onClick={onCancel}
             style={{
               flex: 1, padding: '12px', borderRadius: '14px', border: '1px solid #e2e8f0', 
@@ -83,7 +149,8 @@ const ConfirmModal = ({ isOpen, title, message, onConfirm, onCancel, confirmText
             {cancelText}
           </button>
           <button 
-            onClick={onConfirm}
+            type="button"
+            onClick={() => onConfirm && onConfirm(dontRemind)}
             style={{
               flex: 1, padding: '12px', borderRadius: '14px', border: 'none', 
               backgroundColor: 'var(--primary-color, #2b1810)', color: '#fff', fontWeight: '700', fontSize: '0.9rem', 

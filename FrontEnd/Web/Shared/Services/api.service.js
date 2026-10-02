@@ -28,12 +28,16 @@ export const API_URL = `${API_ROOT}api/v1/`;
 
 export const getFullImageUrl = (path) => {
   if (!path) return '';
-  if (path.startsWith('blob:') || path.startsWith('data:') || path.startsWith('http://') || path.startsWith('https://')) {
-    return path;
+  let cleanPath = typeof path === 'string' ? path.trim() : '';
+  if (cleanPath.startsWith('http://localhost') || cleanPath.startsWith('http://127.0.0.1')) {
+    cleanPath = cleanPath.replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/, '');
+  }
+  if (cleanPath.startsWith('blob:') || cleanPath.startsWith('data:') || cleanPath.startsWith('http://') || cleanPath.startsWith('https://')) {
+    return cleanPath;
   }
   const cleanRoot = API_ROOT ? API_ROOT.replace(/\/$/, '') : '';
-  const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  return `${cleanRoot}${cleanPath}`;
+  const finalPath = cleanPath.startsWith('/') ? cleanPath : `/${cleanPath}`;
+  return `${cleanRoot}${finalPath}`;
 };
 
 const api = axios.create({

@@ -1,5 +1,4 @@
-# -*- coding: utf-8 -*-
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
@@ -7,6 +6,8 @@ from datetime import date, datetime, timedelta
 import math
 import openpyxl
 import os
+import io
+import json
 
 from config.database import get_db, engine, Base
 from modules.kpi.models.quality_employee import QualityEmployee
@@ -76,12 +77,135 @@ class AttendanceResponse(AttendanceBase):
 
 # --- Endpoints ---
 
+def parse_and_sync_excel_workbook(wb, db: Session, force_clean: bool = True):
+    # 1. Đảm bảo nhân sự STT 29: Nguyễn Thị Hồng Tươi có trong DB
+    tuoi = db.query(QualityEmployee).filter(QualityEmployee.full_name == "Nguyễn Thị Hồng Tươi").first()
+    if not tuoi:
+        db.add(QualityEmployee(
+            employee_id="0029",
+            full_name="Nguyễn Thị Hồng Tươi",
+            department="SX",
+            stage="NVSX",
+            factory="Vaniti Phân Xưởng 2",
+            status="Đang làm việc",
+            latest_rating="A",
+            note=json.dumps({"level": "Cấp 3", "parent_level": "Ngô Diễm My", "parent_id": "5981"}, ensure_ascii=False)
+        ))
+        db.commit()
+
+    # 2. Nhân sự lịch sử nghỉ việc
+    historical = [
+        ("OLD_001", "Vi Thị Mai Chi ( nghỉ việc)", "QC", "Vaniti Phân Xưởng 2"),
+        ("OLD_002", "Vi Thị Mai Chi", "QC", "Vaniti Phân Xưởng 2"),
+        ("OLD_003", "Lê Văn Đoàn", "QC", "Vaniti Phân Xưởng 1"),
+        ("OLD_004", "Nguyễn Thị Ngọc Linh", "QC", "Vaniti Phân Xưởng 1"),
+        ("OLD_005", "Nguyễn Thị Trang", "QC", "Vaniti Phân Xưởng 2"),
+    ]
+    for h_id, h_name, h_stage, h_factory in historical:
+        if not db.query(QualityEmployee).filter(QualityEmployee.full_name == h_name).first():
+            db.add(QualityEmployee(
+                employee_id=h_id,
+                full_name=h_name,
+                department="Phòng QLCL",
+                stage=h_stage,
+                factory=h_factory,
+                status="Đã nghỉ việc",
+                latest_rating="B",
+                note="Nhân sự cũ trong lịch sử tháng 05-06/2026"
+            ))
+    db.commit()
+
+    all_emps = db.query(QualityEmployee).all()
+    emp_by_name = {e.full_name.strip().lower(): e for e in all_emps}
+
+    if 'DS Nghỉ' not in wb.sheetnames:
+        raise HTTPException(status_code=400, detail="Không tìm thấy sheet 'DS Nghỉ' trong file Excel")
+
+    sh_nghi = wb['DS Nghỉ']
+    if force_clean:
+        db.query(QualityEmployeeAttendance).delete()
+        db.commit()
+
+    count = 0
+    for r in range(4, sh_nghi.max_row + 1):
+        d_val = sh_nghi.cell(r, 1).value
+        name_val = sh_nghi.cell(r, 2).value
+        dept_val = sh_nghi.cell(r, 3).value
+        status_val = sh_nghi.cell(r, 4).value
+        note_val = sh_nghi.cell(r, 5).value
+
+        if not name_val or not status_val or not d_val:
+            continue
+
+        name_str = str(name_val).strip()
+        status_str = str(status_val).strip()
+        note_str = str(note_val).strip() if note_val is not None else None
+
+        parsed_date = None
+        if isinstance(d_val, datetime):
+            parsed_date = d_val.date()
+        elif isinstance(d_val, date):
+            parsed_date = d_val
+        elif isinstance(d_val, (int, float)):
+            parsed_date = (datetime(1899, 12, 30) + timedelta(days=int(d_val))).date()
+        elif isinstance(d_val, str):
+            for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%Y/%m/%d"):
+                try:
+                    parsed_date = datetime.strptime(d_val.strip(), fmt).date()
+                    break
+                except Exception:
+                    pass
+
+        if not parsed_date:
+            continue
+
+        st_code = LABEL_TO_STATUS.get(status_str, "LEAVE_PAID")
+        st_lbl = status_str
+        ot_hrs = 4.0 if status_str == "22h" else (2.0 if status_str == "20h" else 0.0)
+
+        emp = emp_by_name.get(name_str.lower())
+        if emp:
+            emp_id = emp.employee_id
+            emp_name = emp.full_name
+            emp_dept = emp.department
+            emp_stage = emp.stage
+            emp_factory = emp.factory
+        else:
+            emp_id = f"NV_{name_str[:6]}"
+            emp_name = name_str
+            emp_dept = str(dept_val).strip() if dept_val else "Phòng QLCL"
+            emp_stage = str(dept_val).strip() if dept_val else "QLCL"
+            emp_factory = "Vaniti Phân Xưởng 2"
+
+        final_note = note_str if note_str else "Đồng bộ từ Excel DS Nghỉ"
+
+        rec = QualityEmployeeAttendance(
+            employee_id=emp_id,
+            full_name=emp_name,
+            department=emp_dept,
+            stage=emp_stage,
+            factory=emp_factory,
+            work_date=parsed_date,
+            status=st_code,
+            status_label=st_lbl,
+            overtime_hours=ot_hrs,
+            note=final_note
+        )
+        db.add(rec)
+        count += 1
+
+    db.commit()
+    return count
+
+
 @router.post("/seed-initial-data")
 def seed_attendance_from_excel(db: Session = Depends(get_db)):
     """
-    Tự động import dữ liệu lịch chấm công từ file Excel D:\File\Báo cáo quân số 2026 .xlsx nếu DB chưa có
+    Tự động import dữ liệu lịch chấm công từ file Excel nếu DB chưa có
     """
-    excel_path = r'D:\File\Báo cáo quân số 2026 .xlsx'
+    excel_path = r"D:\SmartFlow\Báo cáo quân số 2026 .xlsx"
+    if not os.path.exists(excel_path):
+        excel_path = r"D:\File\Báo cáo quân số 2026 .xlsx"
     if not os.path.exists(excel_path):
         raise HTTPException(status_code=404, detail="Không tìm thấy file Excel Báo cáo quân số 2026 .xlsx")
 
@@ -89,85 +213,61 @@ def seed_attendance_from_excel(db: Session = Depends(get_db)):
     if existing_count > 0:
         return {"message": f"Bảng chấm công đã có {existing_count} bản ghi.", "count": existing_count}
 
-    # Fetch existing quality employees map by full_name and employee_id
-    employees = db.query(QualityEmployee).all()
-    emp_by_name = {e.full_name.strip().lower(): e for e in employees}
-    emp_by_id = {e.employee_id.strip(): e for e in employees}
-
     wb = openpyxl.load_workbook(excel_path, data_only=True)
-    count = 0
-
-    # 1. Parse Sheet 'DS Nghỉ'
-    if 'DS Nghỉ' in wb.sheetnames:
-        sh_nghi = wb['DS Nghỉ']
-        for r in range(4, sh_nghi.max_row + 1):
-            date_val = sh_nghi.cell(r, 1).value
-            name_val = sh_nghi.cell(r, 2).value
-            dept_val = sh_nghi.cell(r, 3).value
-            status_val = sh_nghi.cell(r, 4).value
-
-            if not name_val or not status_val:
-                continue
-
-            name_str = str(name_val).strip()
-            status_str = str(status_val).strip()
-
-            # Parse date
-            parsed_date = None
-            if isinstance(date_val, datetime):
-                parsed_date = date_val.date()
-            elif isinstance(date_val, (int, float)):
-                # Excel serial date (origin 1899-12-30)
-                parsed_date = (datetime(1899, 12, 30) + timedelta(days=int(date_val))).date()
-
-            if not parsed_date:
-                parsed_date = date.today()
-
-            # Map status
-            st_code = LABEL_TO_STATUS.get(status_str, "LEAVE_PAID")
-            st_lbl = status_str
-            ot_hrs = 4.0 if status_str == "22h" else (2.0 if status_str == "20h" else 0.0)
-
-            # Match employee
-            emp = emp_by_name.get(name_str.lower())
-            if not emp:
-                new_code = f"NV_QLCL_{len(emp_by_name) + 1:03d}"
-                emp = QualityEmployee(
-                    employee_id=new_code,
-                    full_name=name_str,
-                    department=dept_val or "Phòng QLCL",
-                    stage=dept_val or "QLCL",
-                    factory="Nhà máy 1",
-                    status="Đang làm việc",
-                    latest_rating="A"
-                )
-                db.add(emp)
-                db.flush()
-                emp_by_name[name_str.lower()] = emp
-                emp_by_id[new_code] = emp
-
-            emp_id = emp.employee_id
-            emp_factory = emp.factory
-            emp_dept = emp.department
-            emp_stage = emp.stage
-
-            rec = QualityEmployeeAttendance(
-                employee_id=emp_id,
-                full_name=name_str,
-                department=emp_dept,
-                stage=emp_stage,
-                factory=emp_factory,
-                work_date=parsed_date,
-                status=st_code,
-                status_label=st_lbl,
-                overtime_hours=ot_hrs,
-                note=f"Imported from DS Nghỉ"
-            )
-            db.add(rec)
-            count += 1
-
-    db.commit()
+    count = parse_and_sync_excel_workbook(wb, db, force_clean=False)
     return {"message": f"Đã khởi tạo thành công {count} bản ghi chấm công từ Excel!", "count": count}
+
+
+@router.post("/sync-from-excel")
+def sync_attendance_from_excel_endpoint(
+    force_resync: bool = Query(True, description="Làm sạch và đồng bộ lại toàn bộ"),
+    db: Session = Depends(get_db)
+):
+    """
+    Đồng bộ dữ liệu chấm công & báo nghỉ QLCL từ file Báo cáo quân số 2026 .xlsx trên máy chủ
+    """
+    excel_path = r"D:\SmartFlow\Báo cáo quân số 2026 .xlsx"
+    if not os.path.exists(excel_path):
+        excel_path = r"D:\File\Báo cáo quân số 2026 .xlsx"
+    if not os.path.exists(excel_path):
+        raise HTTPException(status_code=404, detail="Không tìm thấy file Excel Báo cáo quân số 2026 .xlsx tại D:\\SmartFlow\\ hoặc D:\\File\\")
+
+    try:
+        wb = openpyxl.load_workbook(excel_path, data_only=True)
+        count = parse_and_sync_excel_workbook(wb, db, force_clean=force_resync)
+        return {
+            "success": True,
+            "message": f"Đồng bộ thành công {count} bản ghi chấm công & nghỉ phép từ file Excel!",
+            "count": count,
+            "source_file": excel_path
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lỗi khi đọc file Excel: {str(e)}")
+
+
+@router.post("/upload-excel-sync")
+async def upload_attendance_excel_sync(
+    file: UploadFile = File(...),
+    force_resync: bool = Query(True, description="Làm sạch và đồng bộ lại toàn bộ"),
+    db: Session = Depends(get_db)
+):
+    """
+    Upload file Excel Báo cáo quân số mới và đồng bộ ngay lập tức vào hệ thống
+    """
+    if not file.filename.endswith(('.xlsx', '.xlsm')):
+        raise HTTPException(status_code=400, detail="Vui lòng tải lên file Excel định dạng .xlsx hoặc .xlsm")
+
+    try:
+        content = await file.read()
+        wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+        count = parse_and_sync_excel_workbook(wb, db, force_clean=force_resync)
+        return {
+            "success": True,
+            "message": f"Đã upload và đồng bộ thành công {count} bản ghi từ {file.filename}!",
+            "count": count
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lỗi xử lý file upload: {str(e)}")
 
 
 @router.get("/day-details")
@@ -521,6 +621,18 @@ def get_daily_headcount_summary(
             "note": "; ".join(notes) if notes else ""
         })
 
+    totals = {
+        "total": sum(item["total"] for item in summary_matrix.values()),
+        "working": sum(item["working"] for item in summary_matrix.values()),
+        "leave_paid": sum(item["leave_paid"] for item in summary_matrix.values()),
+        "leave_unpaid": sum(item["leave_unpaid"] for item in summary_matrix.values()),
+        "early_1630": sum(item["early_1630"] for item in summary_matrix.values()),
+        "half_day": sum(item["half_day"] for item in summary_matrix.values()),
+        "ot_20h": sum(item["ot_20h"] for item in summary_matrix.values()),
+        "ot_22h": sum(item["ot_22h"] for item in summary_matrix.values()),
+        "sunday_off": sum(item["sunday_off"] for item in summary_matrix.values()),
+    }
+
     return {
         "period_type": period_type,
         "period_label": period_label,
@@ -529,6 +641,7 @@ def get_daily_headcount_summary(
         "end_date": end_date.strftime("%Y-%m-%d"),
         "summary": summary_matrix,
         "totals": totals,
+        "grand_total": totals,
         "details": employee_details
     }
 

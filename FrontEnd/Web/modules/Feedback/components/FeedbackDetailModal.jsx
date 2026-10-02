@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Sparkles, Save, Trash2, CheckCircle2, AlertCircle, Clock, User, MapPin, Calendar, FileText, Send, Volume2, Image as ImageIcon, Plus, Upload } from 'lucide-react';
+import { X, Sparkles, Save, Trash2, CheckCircle2, AlertCircle, Clock, User, MapPin, Calendar, FileText, Send, Volume2, Image as ImageIcon, Plus, Upload, FileDown } from 'lucide-react';
+import ExcelJS from 'exceljs';
 import { feedbackService } from '../services/feedback.service';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
@@ -23,6 +24,7 @@ export const FeedbackDetailModal = ({ report, onClose, onSaved, onDelete, onImag
 
   // Confirm modal state
   const [confirmModal, setConfirmModal] = useState({ visible: false, title: '', message: '', type: 'warning', onConfirm: null });
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
 
   useEffect(() => {
     if (report) {
@@ -192,6 +194,322 @@ export const FeedbackDetailModal = ({ report, onClose, onSaved, onDelete, onImag
     });
   };
 
+  // Xuất phiếu chi tiết này ra file Excel chuẩn giao diện SmartFlow
+  const handleExportExcel = async () => {
+    if (!report) return;
+    setIsExportingExcel(true);
+    try {
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'SmartFlow System';
+      workbook.created = new Date();
+
+      const sheetName = `Phieu_${String(report.code || report.id).replace(/[^a-zA-Z0-9_\-]/g, '_')}`.substring(0, 31);
+      const worksheet = workbook.addWorksheet(sheetName, {
+        views: [{ showGridLines: true }]
+      });
+
+      // 4 cột chuẩn tỷ lệ, căn chỉnh rộng rãi
+      worksheet.columns = [
+        { key: 'colA', width: 25 },
+        { key: 'colB', width: 38 },
+        { key: 'colC', width: 25 },
+        { key: 'colD', width: 38 }
+      ];
+
+      // Row 1: Tên doanh nghiệp
+      worksheet.mergeCells('A1:D1');
+      const compCell = worksheet.getCell('A1');
+      compCell.value = 'CÔNG TY CỔ PHẦN NỘI THẤT SMARTFLOW';
+      compCell.font = { name: 'Arial', size: 11, bold: true, color: { argb: '7B5233' } };
+      compCell.alignment = { horizontal: 'left', vertical: 'middle' };
+      worksheet.getRow(1).height = 22;
+
+      // Row 2: Phụ đề hệ thống
+      worksheet.mergeCells('A2:D2');
+      const subCompCell = worksheet.getCell('A2');
+      subCompCell.value = 'HỆ THỐNG QUẢN LÝ CHẤT LƯỢNG & PHẢN HỒI SỰ CỐ - ĐÓNG GÓP Ý KIẾN';
+      subCompCell.font = { name: 'Arial', size: 9, italic: true, color: { argb: '64748B' } };
+      subCompCell.alignment = { horizontal: 'left', vertical: 'middle' };
+      worksheet.getRow(2).height = 18;
+
+      // Row 4: Tiêu đề Phiếu trang nhã, viền nổi bật
+      worksheet.mergeCells('A4:D4');
+      const titleCell = worksheet.getCell('A4');
+      titleCell.value = 'PHIẾU CHI TIẾT BÁO CÁO SỰ CỐ & ĐÓNG GÓP Ý KIẾN';
+      titleCell.font = { name: 'Arial', size: 13.5, bold: true, color: { argb: '5C3A21' } };
+      titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+      titleCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FBF6F0' }
+      };
+      [1, 2, 3, 4].forEach(col => {
+        const c = worksheet.getRow(4).getCell(col);
+        c.border = {
+          top: { style: 'medium', color: { argb: '7B5233' } },
+          bottom: { style: 'double', color: { argb: '7B5233' } },
+          left: { style: 'thin', color: { argb: 'E2E8F0' } },
+          right: { style: 'thin', color: { argb: 'E2E8F0' } }
+        };
+      });
+      worksheet.getRow(4).height = 34;
+
+      // Row 5: Metadata (Mã phiếu & Thời điểm xuất)
+      worksheet.mergeCells('A5:D5');
+      const metaCell = worksheet.getCell('A5');
+      const now = new Date();
+      const exportDateStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      metaCell.value = `Mã phiếu: #${report.code || report.id}   •   Thời điểm xuất: ${exportDateStr}`;
+      metaCell.font = { name: 'Arial', size: 9, italic: true, color: { argb: '8C7B73' } };
+      metaCell.alignment = { horizontal: 'center', vertical: 'middle' };
+      worksheet.getRow(5).height = 20;
+
+      // Helper phân biệt màu trạng thái theo style badge
+      const getStatusStyle = (val) => {
+        const str = String(val || '').toLowerCase();
+        if (str.includes('xử lý') || str.includes('hoàn thành') || str.includes('đã xong')) {
+          return { fontColor: '15803D', bgColor: 'DCFCE7', bold: true };
+        }
+        if (str.includes('tiếp nhận') || str.includes('đang')) {
+          return { fontColor: '1D4ED8', bgColor: 'DBEAFE', bold: true };
+        }
+        if (str.includes('chờ')) {
+          return { fontColor: 'B45309', bgColor: 'FEF3C7', bold: true };
+        }
+        if (str.includes('từ chối') || str.includes('hủy')) {
+          return { fontColor: 'B91C1C', bgColor: 'FEE2E2', bold: true };
+        }
+        return null;
+      };
+
+      // Helper: Tiêu đề phân mục (Section Header)
+      const addSectionHeader = (rowNum, titleText) => {
+        worksheet.mergeCells(`A${rowNum}:D${rowNum}`);
+        const cell = worksheet.getCell(`A${rowNum}`);
+        cell.value = titleText;
+        cell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFF' } };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: '7B5233' }
+        };
+        cell.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+        [1, 2, 3, 4].forEach(col => {
+          worksheet.getRow(rowNum).getCell(col).border = {
+            top: { style: 'thin', color: { argb: '6B4226' } },
+            bottom: { style: 'thin', color: { argb: '6B4226' } },
+            left: { style: 'thin', color: { argb: '6B4226' } },
+            right: { style: 'thin', color: { argb: '6B4226' } }
+          };
+        });
+        worksheet.getRow(rowNum).height = 26;
+      };
+
+      // Helper: Dòng dữ liệu 2 cột kép (A: label1, B: val1, C: label2, D: val2)
+      const addDataRow2Col = (rowNum, label1, val1, label2, val2) => {
+        const row = worksheet.getRow(rowNum);
+        row.getCell(1).value = label1;
+        row.getCell(2).value = val1 || '---';
+        row.getCell(3).value = label2;
+        row.getCell(4).value = val2 || '---';
+
+        [1, 3].forEach(col => {
+          const c = row.getCell(col);
+          c.font = { name: 'Arial', size: 9, bold: true, color: { argb: '4A3B32' } };
+          c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F8F6F3' } };
+          c.alignment = { horizontal: 'left', vertical: 'middle' };
+        });
+
+        [2, 4].forEach(col => {
+          const c = row.getCell(col);
+          const isStatus = (col === 4 && (label2.includes('Trạng thái') || label2.includes('xử lý'))) ||
+                           (col === 2 && label1.includes('Trạng thái'));
+          const stStyle = isStatus ? getStatusStyle(c.value) : null;
+
+          if (stStyle) {
+            c.font = { name: 'Arial', size: 9.5, bold: true, color: { argb: stStyle.fontColor } };
+            c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: stStyle.bgColor } };
+            c.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+          } else {
+            const isCode = String(c.value).startsWith('#');
+            c.font = { name: 'Arial', size: 9.5, bold: isCode, color: { argb: isCode ? '7B5233' : '1E293B' } };
+            c.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+          }
+        });
+
+        [1, 2, 3, 4].forEach(col => {
+          row.getCell(col).border = {
+            top: { style: 'thin', color: { argb: 'E2E8F0' } },
+            bottom: { style: 'thin', color: { argb: 'E2E8F0' } },
+            left: { style: 'thin', color: { argb: 'E2E8F0' } },
+            right: { style: 'thin', color: { argb: 'E2E8F0' } }
+          };
+        });
+        row.height = 25;
+      };
+
+      // Helper: Khối nội dung dài (Label + Text block)
+      const addFullContentBlock = (startRow, label, contentText) => {
+        const lblRow = worksheet.getRow(startRow);
+        worksheet.mergeCells(`A${startRow}:D${startRow}`);
+        const lblCell = lblRow.getCell(1);
+        lblCell.value = label;
+        lblCell.font = { name: 'Arial', size: 9.5, bold: true, color: { argb: '6B4226' } };
+        lblCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F5EDE4' } };
+        lblCell.alignment = { horizontal: 'left', vertical: 'middle' };
+        [1, 2, 3, 4].forEach(col => {
+          lblRow.getCell(col).border = {
+            top: { style: 'thin', color: { argb: 'E2E8F0' } },
+            bottom: { style: 'thin', color: { argb: 'E2E8F0' } },
+            left: { style: 'thin', color: { argb: 'E2E8F0' } },
+            right: { style: 'thin', color: { argb: 'E2E8F0' } }
+          };
+        });
+        lblRow.height = 23;
+
+        const contentRow = worksheet.getRow(startRow + 1);
+        worksheet.mergeCells(`A${startRow + 1}:D${startRow + 1}`);
+        const cntCell = contentRow.getCell(1);
+        cntCell.value = contentText || '(Không có nội dung)';
+        cntCell.font = { name: 'Arial', size: 9.5, color: { argb: '1E293B' } };
+        cntCell.alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
+        cntCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF' } };
+        [1, 2, 3, 4].forEach(col => {
+          contentRow.getCell(col).border = {
+            top: { style: 'thin', color: { argb: 'E2E8F0' } },
+            bottom: { style: 'thin', color: { argb: 'E2E8F0' } },
+            left: { style: 'thin', color: { argb: 'E2E8F0' } },
+            right: { style: 'thin', color: { argb: 'E2E8F0' } }
+          };
+        });
+
+        const lines = String(contentText || '').split('\n').length;
+        const len = String(contentText || '').length;
+        const estLines = Math.max(lines, Math.ceil(len / 85));
+        contentRow.height = Math.max(45, estLines * 19);
+      };
+
+      let currentRow = 7;
+
+      // I. THÔNG TIN BÁO CÁO
+      addSectionHeader(currentRow, 'I. THÔNG TIN BÁO CÁO');
+      currentRow++;
+
+      addDataRow2Col(currentRow, 'Mã phiếu:', `#${report.code || report.id}`, 'Loại phiếu:', report.report_type || 'Báo cáo sự cố');
+      currentRow++;
+
+      const creatorDisplay = report.is_anonymous ? 'Ẩn danh (Bảo mật danh tính)' : (report.creator_name || '---');
+      addDataRow2Col(currentRow, 'Người tạo báo cáo:', creatorDisplay, 'Trạng thái hiện tại:', status || report.status || 'Chờ xử lý');
+      currentRow++;
+
+      addDataRow2Col(currentRow, 'Phòng ban liên quan:', report.issue_type || '---', 'Bộ phận / Khu vực:', report.area || '---');
+      currentRow++;
+
+      addDataRow2Col(currentRow, 'Ngày tạo:', report.created_at || '---', 'Phiếu liên quan:', report.related_ticket || '---');
+      currentRow++;
+
+      if (report.attendees) {
+        worksheet.mergeCells(`B${currentRow}:D${currentRow}`);
+        const r = worksheet.getRow(currentRow);
+        r.getCell(1).value = 'Thành phần tham dự:';
+        r.getCell(1).font = { name: 'Arial', size: 9, bold: true, color: { argb: '4A3B32' } };
+        r.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F8F6F3' } };
+        r.getCell(2).value = report.attendees;
+        r.getCell(2).font = { name: 'Arial', size: 9.5, color: { argb: '1E293B' } };
+        [1, 2, 3, 4].forEach(col => {
+          r.getCell(col).border = {
+            top: { style: 'thin', color: { argb: 'E2E8F0' } },
+            bottom: { style: 'thin', color: { argb: 'E2E8F0' } },
+            left: { style: 'thin', color: { argb: 'E2E8F0' } },
+            right: { style: 'thin', color: { argb: 'E2E8F0' } }
+          };
+        });
+        r.height = 25;
+        currentRow++;
+      }
+
+      currentRow++; // Dòng cách
+
+      // II. NỘI DUNG VẤN ĐỀ & ĐỀ XUẤT
+      addSectionHeader(currentRow, 'II. NỘI DUNG PHẢN ÁNH & ĐỀ XUẤT GIẢI PHÁP');
+      currentRow++;
+
+      addFullContentBlock(currentRow, '1. Nội dung sự cố / Vấn đề phản ánh:', report.main_content);
+      currentRow += 2;
+
+      if (report.solution_recommendation) {
+        addFullContentBlock(currentRow, '2. Đề xuất / Kiến nghị ban đầu:', report.solution_recommendation);
+        currentRow += 2;
+      }
+
+      // Đính kèm (Ghi âm & Hình ảnh)
+      const audioStatus = report.audio_url ? 'Có đính kèm file ghi âm' : 'Không có file ghi âm';
+      const imgStatus = imagesList.length > 0 ? `${imagesList.length} hình ảnh minh chứng` : 'Không có ảnh đính kèm';
+      addDataRow2Col(currentRow, 'File ghi âm:', audioStatus, 'Hình ảnh minh chứng:', imgStatus);
+      currentRow++;
+
+      if (imagesList.length > 0) {
+        worksheet.mergeCells(`A${currentRow}:D${currentRow}`);
+        const imgListRow = worksheet.getRow(currentRow);
+        imgListRow.getCell(1).value = 'Danh sách liên kết ảnh minh chứng:\n' + imagesList.join('\n');
+        imgListRow.getCell(1).font = { name: 'Arial', size: 8.5, color: { argb: '2563EB' } };
+        imgListRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+        imgListRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F8FAFC' } };
+        [1, 2, 3, 4].forEach(col => {
+          imgListRow.getCell(col).border = {
+            top: { style: 'thin', color: { argb: 'E2E8F0' } },
+            bottom: { style: 'thin', color: { argb: 'E2E8F0' } },
+            left: { style: 'thin', color: { argb: 'E2E8F0' } },
+            right: { style: 'thin', color: { argb: 'E2E8F0' } }
+          };
+        });
+        imgListRow.height = Math.max(26, imagesList.length * 18);
+        currentRow++;
+      }
+
+      currentRow++; // Dòng cách
+
+      // III. PHƯƠNG ÁN XỬ LÝ & PHẢN HỒI
+      addSectionHeader(currentRow, 'III. BIỆN PHÁP XỬ LÝ & KẾT QUẢ PHẢN HỒI');
+      currentRow++;
+
+      addDataRow2Col(currentRow, 'Người / Ban xử lý:', handlerName || report.handler_name || 'Ban Quản Lý', 'Trạng thái xử lý:', status || report.status || 'Chờ xử lý');
+      currentRow++;
+
+      addFullContentBlock(currentRow, 'Nội dung phản hồi & Phương án xử lý cụ thể:', handlerResponse || report.handler_response || '(Chưa có nội dung phản hồi)');
+      currentRow += 2;
+
+      // Footer tinh tế thay cho khối ký xác nhận
+      currentRow++;
+      worksheet.mergeCells(`A${currentRow}:D${currentRow}`);
+      const footerRow = worksheet.getRow(currentRow);
+      const footerCell = footerRow.getCell(1);
+      footerCell.value = `— Phiếu báo cáo được trích xuất tự động từ Hệ thống Quản trị SmartFlow (${exportDateStr}) • Mọi thông tin phản ánh được lưu trữ bảo mật —`;
+      footerCell.font = { name: 'Arial', size: 8.5, italic: true, color: { argb: '94A3B8' } };
+      footerCell.alignment = { horizontal: 'center', vertical: 'middle' };
+      footerRow.height = 24;
+
+      // Xuất file
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      const fileCode = String(report.code || `ID_${report.id}`).replace(/[^a-zA-Z0-9_\-]/g, '_');
+      const dateForFile = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+      anchor.download = `Phieu_Bao_Cao_${fileCode}_${dateForFile}.xlsx`;
+      anchor.click();
+      window.URL.revokeObjectURL(url);
+
+      toast('success', `Đã xuất phiếu #${report.code || report.id} ra file Excel thành công!`);
+    } catch (err) {
+      console.error('Lỗi khi xuất Excel chi tiết:', err);
+      toast('error', 'Không thể xuất file Excel chi tiết: ' + (err.message || 'Lỗi xử lý'));
+    } finally {
+      setIsExportingExcel(false);
+    }
+  };
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
@@ -216,24 +534,26 @@ export const FeedbackDetailModal = ({ report, onClose, onSaved, onDelete, onImag
               </div>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              background: '#F1EAE4',
-              borderRadius: '50%',
-              width: 32,
-              height: 32,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#5D4037',
-              border: 'none',
-              cursor: 'pointer'
-            }}
-          >
-            <X size={18} />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                background: '#F1EAE4',
+                borderRadius: '50%',
+                width: 32,
+                height: 32,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#5D4037',
+                border: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         {/* Navigation Tabs */}
@@ -659,6 +979,46 @@ export const FeedbackDetailModal = ({ report, onClose, onSaved, onDelete, onImag
             <Trash2 size={15} />
             <span>Xóa phiếu</span>
           </button>
+
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            disabled={isExportingExcel}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              color: '#7B5233',
+              fontWeight: 700,
+              fontSize: '0.84rem',
+              padding: '8px 16px',
+              borderRadius: 8,
+              border: '1.5px solid #EADCC9',
+              background: '#FAF6F0',
+              cursor: isExportingExcel ? 'not-allowed' : 'pointer',
+              transition: 'all 0.15s ease',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+            }}
+            onMouseEnter={(e) => {
+              if (!isExportingExcel) {
+                e.currentTarget.style.backgroundColor = '#7B5233';
+                e.currentTarget.style.color = '#FFFFFF';
+                e.currentTarget.style.borderColor = '#7B5233';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isExportingExcel) {
+                e.currentTarget.style.backgroundColor = '#FAF6F0';
+                e.currentTarget.style.color = '#7B5233';
+                e.currentTarget.style.borderColor = '#EADCC9';
+              }
+            }}
+            title="Xuất phiếu chi tiết này ra file Excel"
+          >
+            <FileDown size={15} />
+            <span>{isExportingExcel ? 'Đang xuất...' : 'Xuất Excel'}</span>
+          </button>
+
           <button
             type="button"
             onClick={onClose}

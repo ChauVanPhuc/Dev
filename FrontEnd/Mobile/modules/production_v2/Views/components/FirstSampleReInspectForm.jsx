@@ -5,6 +5,7 @@ import FormMultiSearchSelect from '@mobile/Shared/Views/components/form/FormMult
 import InspectionStepsTable from './InspectionStepsTable'
 import ErrorTrendRow from './ErrorTrendRow'
 import RecentResultsModal from './RecentResultsModal'
+import InspectionResultBanner from './InspectionResultBanner'
 import { INSPECT_MODES } from '../../constants'
 
 const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
@@ -70,10 +71,10 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
   const hasProduct = Boolean(product || (selectedProducts && selectedProducts.length > 0))
   const hasSpec = Boolean(spec || (selectedSpecs && selectedSpecs.length > 0))
 
-  const isPoDisabled = readOnly || isReInspect || !hasStage
-  const isProductDisabled = readOnly || isReInspect || !hasStage || !hasPo
-  const isSpecDisabled = readOnly || isReInspect || !hasStage || !hasPo || !hasProduct
-  const isQtyDisabled = readOnly || isReInspect || !hasStage || !hasPo || !hasProduct || !hasSpec
+  const isPoDisabled = readOnly || (isReInspect && Boolean(po)) || !hasStage
+  const isProductDisabled = readOnly || (isReInspect && Boolean(product)) || !hasStage || !hasPo
+  const isSpecDisabled = readOnly || !hasStage || !hasPo || !hasProduct
+  const isQtyDisabled = readOnly || !hasStage || !hasPo || !hasProduct || !hasSpec
   const isSampleQtyDisabled = readOnly || !hasStage || !hasPo || !hasProduct || !hasSpec
 
   const isIncoming = Boolean(
@@ -107,19 +108,25 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
           ? 'Chọn quy cách trước...'
           : (isIncoming ? 'Nhập SL giao đợt này...' : 'SL kiểm tra theo AQL...'))))
 
-  const hasSampleQty = Boolean(sampleQty || requiredQty)
-  const isFormFilled = readOnly || (hasPo && hasProduct && hasSpec && hasSampleQty)
+  const isFormFilled = readOnly || (hasPo && hasProduct && hasSpec && Boolean(requiredQty))
+
+  const totalDefects = useMemo(() => {
+    if (!Array.isArray(errors)) return 0
+    return errors.reduce((sum, item) => sum + (Number(item.qty) || 0), 0)
+  }, [errors])
 
   const totalBatchDisplay = useMemo(() => {
-    if (!hasSpec && !readOnly) return ''
-    if (!totalBatchQty) return readOnly ? (requiredQty || '') : ''
-    return `${totalInspectedSoFar || 0}/${totalBatchQty}`
-  }, [hasSpec, readOnly, totalBatchQty, totalInspectedSoFar, requiredQty])
+    if (totalBatchQty !== '' && totalBatchQty !== null && totalBatchQty !== undefined) {
+      const num = Number(totalBatchQty)
+      return isNaN(num) ? totalBatchQty : num.toLocaleString('en-US')
+    }
+    return readOnly ? (requiredQty || '—') : '—'
+  }, [readOnly, totalBatchQty, requiredQty])
 
   return (
     <>
-      <div className="pv2-field-row pv2-field-row--2col">
-        <div className="pv2-field">
+      <div className="pv2-field-row" style={{ marginTop: '4px' }}>
+        <div className="pv2-field" style={{ width: '100%' }}>
           <label>Chọn PO <span className="pv2-req">*</span></label>
           <CustomSelect
             value={po}
@@ -130,17 +137,6 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
             allowCustomInput={true}
             onSearch={handlePoSearch}
           />
-        </div>
-        <div className="pv2-field">
-          <label>Kết quả <span className="pv2-req">*</span></label>
-          <div className="pv2-radio-group">
-            <label className="pv2-radio-label">
-              <input type="radio" name="res" checked={result === 'pass'} onChange={() => setResult('pass')} disabled={readOnly} /> Đạt
-            </label>
-            <label className="pv2-radio-label">
-              <input type="radio" name="res" checked={result === 'fail'} onChange={() => setResult('fail')} disabled={readOnly} /> Không đạt
-            </label>
-          </div>
         </div>
       </div>
 
@@ -193,7 +189,7 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
             <span>
               Chi tiết này đã có <strong>{partHistoryTickets.length} phiếu</strong> kiểm tra
               {totalInspectedSoFar > 0 && (
-                <> • Đã kiểm: <strong>{totalInspectedSoFar}</strong>{totalBatchQty ? ` / ${totalBatchQty}` : ''}</>
+                <> • Đã kiểm: <strong>{Number(totalInspectedSoFar).toLocaleString('en-US')}</strong>{totalBatchQty ? ` / ${Number(totalBatchQty).toLocaleString('en-US')}` : ''}</>
               )}
             </span>
           </div>
@@ -237,31 +233,21 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
             min="1"
             className={`pv2-input ${isQtyDisabled ? 'pv2-input--disabled' : ''}`}
             value={requiredQty}
-            onChange={(e) => setRequiredQty(e.target.value)}
+            onChange={(e) => {
+              setRequiredQty(e.target.value)
+              if (setSampleQty) setSampleQty(e.target.value)
+            }}
             placeholder={requiredQtyPlaceholder}
             disabled={isQtyDisabled}
           />
         </div>
       </div>
 
-      {/* Hàng 2: SL Mẫu (AQL tính toán theo SL Cần Kiểm) & Lỗi (nếu có) */}
-      <div className="pv2-field-row pv2-field-row--2col">
-        <div className="pv2-field">
-          <label>SL mẫu <span className="pv2-req">*</span></label>
-          <input
-            type="number"
-            min="1"
-            max={requiredQty || samplingRule?.sample_size || undefined}
-            className={`pv2-input ${isSampleQtyDisabled ? 'pv2-input--disabled' : ''}`}
-            value={sampleQty}
-            onChange={(e) => setSampleQty(e.target.value)}
-            placeholder={!hasSpec ? '—' : (samplingRule?.sample_size ? String(samplingRule.sample_size) : (requiredQty || '—'))}
-            disabled={isSampleQtyDisabled}
-          />
-        </div>
+      {/* Hàng 2: Lỗi (nếu có) */}
+      <div className="pv2-field-row">
         <div className="pv2-field">
           <label>Lỗi (nếu có)</label>
-          <input type="number" className="pv2-input pv2-input--disabled" value={errorQty} onChange={(e) => setErrorQty(e.target.value)} disabled />
+          <input type="number" className="pv2-input pv2-input--disabled" value={errorQty || '0'} disabled />
         </div>
       </div>
 
@@ -305,16 +291,24 @@ const FirstSampleReInspectForm = ({ formState, renderImageUploadArea }) => {
                 ? 'Vui lòng chọn PO để tiếp tục.'
                 : !hasProduct
                 ? `Vui lòng chọn ${itemLabel}.`
-                : !hasSampleQty
-                ? 'Vui lòng nhập Số lượng mẫu cần kiểm tra.'
+                : !requiredQty
+                ? 'Vui lòng nhập Số lượng kiểm tra.'
                 : 'Hoàn tất các thông tin trên để mở Hướng dẫn kiểm tra và Ghi nhận lỗi.'}
             </span>
           </div>
         </div>
       ) : (
         <div className="pv2-fade-in" style={{ marginTop: 16 }}>
+          {/* Banner Kết Quả & Tổng Số Lỗi (Chuẩn Ảnh 1) */}
+          <InspectionResultBanner
+            result={result}
+            onResultChange={setResult}
+            disabled={readOnly}
+            totalDefects={totalDefects}
+          />
+
           <div className="pv2-section-title">Hướng dẫn kiểm tra</div>
-          <InspectionStepsTable steps={steps} onStepChange={handleStepResultChange} sampleQty={sampleQty} disabled={readOnly} />
+          <InspectionStepsTable steps={steps} onStepChange={handleStepResultChange} sampleQty={requiredQty || sampleQty} disabled={readOnly} />
 
           {renderImageUploadArea && renderImageUploadArea()}
 

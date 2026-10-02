@@ -13,6 +13,10 @@ export default defineConfig({
     alias: {
       '@shared': path.resolve(__dirname, '../shared'),
       '@mobile': path.resolve(__dirname, '.'),
+      '@modules/System': path.resolve(__dirname, '../Web/modules/System'),
+      '@modules/system': path.resolve(__dirname, '../Web/modules/System'),
+      '@modules/Inspection': path.resolve(__dirname, '../Web/modules/Inspection'),
+      '@modules/KPI': path.resolve(__dirname, '../Web/modules/KPI'),
       '@modules': path.resolve(__dirname, './modules'),
       '@modules/auth': path.resolve(__dirname, './modules/auth'),
       '@modules/capa': path.resolve(__dirname, './modules/capa'),
@@ -28,6 +32,10 @@ export default defineConfig({
       'zustand': path.resolve(__dirname, '../node_modules/zustand'),
       '@capacitor/core': path.resolve(__dirname, '../node_modules/@capacitor/core'),
       '@capacitor/push-notifications': path.resolve(__dirname, '../node_modules/@capacitor/push-notifications'),
+      'exceljs': path.resolve(__dirname, '../node_modules/exceljs'),
+      '@webShared': path.resolve(__dirname, '../Web/Shared'),
+      '@styles': path.resolve(__dirname, '../Web/Shared/styles'),
+      '@webModules': path.resolve(__dirname, '../Web/modules'),
     },
   },
   server: {

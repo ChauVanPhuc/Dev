@@ -8,6 +8,7 @@ import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import SopStepsTable from './components/SopStepsTable';
+import AccountQualityTab from './components/AccountQualityTab';
 import '@styles/components.css';
 import 'bootstrap/dist/css/bootstrap-grid.min.css';
 import 'bootstrap/dist/css/bootstrap-utilities.min.css';
@@ -60,7 +61,21 @@ const QualityOverviewView = () => {
     if (setCustomScreenCode) setCustomScreenCode(screenCode || 'CL1');
   }, [title, subtitle, screenCode, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
+  const [activeMainTab, setActiveMainTab] = useState('tasks'); // 'tasks' | 'accounts'
   const [pendingTasks, setPendingTasks] = useState([]);
+  const [accountCount, setAccountCount] = useState(0);
+  const [accountTabRefreshTrigger, setAccountTabRefreshTrigger] = useState(0);
+
+  // Đếm số lượng tài khoản kiểm tra viên duy nhất trong danh sách tồn đọng
+  const distinctAccountCount = useMemo(() => {
+    if (!Array.isArray(pendingTasks)) return 0;
+    const s = new Set();
+    pendingTasks.forEach(t => {
+      const name = (t.inspector_name || 'QC Hệ thống').trim();
+      if (name) s.add(name);
+    });
+    return s.size;
+  }, [pendingTasks]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOption, setSortOption] = useState('date_desc');
@@ -492,6 +507,7 @@ const QualityOverviewView = () => {
   // Fetch dữ liệu công việc tồn đọng từ Backend (toàn bộ phiếu chưa xác nhận)
   const fetchPendingTasks = async () => {
     setLoading(true);
+    setAccountTabRefreshTrigger(prev => prev + 1);
     try {
       const data = await api.get('/inspections/pending');
       if (Array.isArray(data)) {
@@ -2077,7 +2093,7 @@ const QualityOverviewView = () => {
   };
 
   return (
-    <div className="gold-layout" style={{ fontFamily: "'Outfit', 'Inter', sans-serif" }}>
+    <div className="gold-layout" style={{ fontFamily: "'Outfit', 'Inter', sans-serif", position: 'relative' }}>
       <style dangerouslySetInnerHTML={{ __html: `
         .badge-chualam {
           background-color: #FEF2F2;
@@ -2183,11 +2199,11 @@ const QualityOverviewView = () => {
         .modal-overlay {
           position: fixed;
           top: 0; left: 0; right: 0; bottom: 0;
-          background: rgba(0, 0, 0, 0.5);
+          background: rgba(0, 0, 0, 0.55);
           display: flex;
           align-items: center;
           justify-content: center;
-          z-index: 1000;
+          z-index: 10050 !important;
           backdrop-filter: blur(3px);
         }
         .modal-flank-container {
@@ -2260,8 +2276,151 @@ const QualityOverviewView = () => {
           box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
           position: relative;
         }
+        .quality-main-nav-wrapper {
+          display: flex;
+          align-items: center;
+          margin-bottom: 8px;
+          flex-shrink: 0;
+        }
+        .quality-main-nav-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          background-color: #F5EFE8;
+          padding: 3px 4px;
+          border-radius: 10px;
+          border: 1px solid #E8DDD0;
+          height: 38px;
+          min-height: 38px;
+          box-sizing: border-box;
+          max-width: 100%;
+        }
+        .quality-nav-tab-btn {
+          height: 30px;
+          padding: 0 14px;
+          border-radius: 7px;
+          border: 1px solid transparent;
+          outline: none;
+          cursor: pointer;
+          font-weight: 600;
+          font-size: 0.83rem;
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          transition: all 0.15s ease;
+          background-color: transparent;
+          color: #78716C;
+          white-space: nowrap;
+          box-sizing: border-box;
+        }
+        .quality-nav-tab-btn.active {
+          border-color: #DFD2C4;
+          font-weight: 700;
+          background-color: #FFFFFF;
+          color: #5D3B32;
+          box-shadow: 0 1px 3px rgba(45, 26, 18, 0.08);
+        }
+        .quality-nav-tab-btn .tab-count-badge {
+          font-size: 0.72rem;
+          font-weight: 700;
+          padding: 1px 7px;
+          border-radius: 10px;
+          background-color: #EAE3DA;
+          color: #64748B;
+        }
+        .quality-nav-tab-btn.active .tab-count-badge {
+          background-color: #FAF0E6;
+          color: #7B5233;
+          border: 1px solid #EADCC9;
+        }
+        .desktop-tab-label {
+          display: inline;
+        }
+        .mobile-tab-label {
+          display: none;
+        }
+        @media (max-width: 768px) {
+          .gold-layout {
+            overflow: visible !important;
+            overflow-x: visible !important;
+            overflow-y: visible !important;
+            height: auto !important;
+            max-height: none !important;
+          }
+          .quality-main-nav-wrapper {
+            position: -webkit-sticky !important;
+            position: sticky !important;
+            top: 0 !important;
+            z-index: 60 !important;
+            background-color: #FAF7F2 !important;
+            padding: 6px 4px 4px 4px !important;
+            margin-bottom: 0 !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
+          }
+          .quality-main-nav-pill {
+            width: 100% !important;
+            display: flex !important;
+          }
+          .quality-nav-tab-btn {
+            flex: 1 1 50% !important;
+            justify-content: center !important;
+            padding: 0 6px !important;
+            font-size: 0.8rem !important;
+            gap: 5px !important;
+          }
+          .desktop-tab-label {
+            display: none !important;
+          }
+          .mobile-tab-label {
+            display: inline !important;
+          }
+          .sticky-top-zone {
+            top: 48px !important;
+          }
+        }
       ` }} />
 
+      {/* MAIN NAVIGATION TABS */}
+      <div className="quality-main-nav-wrapper">
+        <div className="quality-main-nav-pill">
+          <button
+            type="button"
+            className={`quality-nav-tab-btn ${activeMainTab === 'tasks' ? 'active' : ''}`}
+            onClick={() => setActiveMainTab('tasks')}
+          >
+            <FileText size={14} style={{ color: activeMainTab === 'tasks' ? '#7B5233' : '#94A3B8' }} />
+            <span className="desktop-tab-label">Theo danh sách phiếu tồn đọng</span>
+            <span className="mobile-tab-label">Theo phiếu</span>
+            <span className="tab-count-badge">
+              {pendingTasks.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            className={`quality-nav-tab-btn ${activeMainTab === 'accounts' ? 'active' : ''}`}
+            onClick={() => setActiveMainTab('accounts')}
+          >
+            <User size={14} style={{ color: activeMainTab === 'accounts' ? '#7B5233' : '#94A3B8' }} />
+            <span className="desktop-tab-label">Theo tài khoản kiểm tra viên</span>
+            <span className="mobile-tab-label">Theo tài khoản</span>
+            <span className="tab-count-badge">
+              {accountCount || distinctAccountCount}
+            </span>
+          </button>
+        </div>
+      </div>
+
+      {activeMainTab === 'accounts' ? (
+        <AccountQualityTab
+          pendingTasks={pendingTasks}
+          onSelectTask={(task) => setSelectedTask(task)}
+          refreshTrigger={accountTabRefreshTrigger}
+          onUpdateAccountCount={(cnt) => setAccountCount(cnt)}
+        />
+      ) : (
+        <>
       {/* STICKY TOP ZONE */}
       <div className="sticky-top-zone">
         <PageToolbar
@@ -2884,9 +3043,12 @@ const QualityOverviewView = () => {
         </div>
       )}
 
+              </>
+      )}
+
       {/* MODAL CHI TIẾT & XÁC NHẬN PHIẾU */}
       {selectedTask && (
-        <div className="modal-overlay" onClick={handleRequestCloseModal}>
+        <div className="modal-overlay" onClick={handleRequestCloseModal} style={{ zIndex: 10050 }}>
           <div className="modal-flank-container" onClick={(e) => e.stopPropagation()}>
             {/* NÚT ĐIỀU HƯỚNG BÊN HÔNG TRÁI (<) */}
             <button

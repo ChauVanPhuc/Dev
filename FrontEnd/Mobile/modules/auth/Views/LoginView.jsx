@@ -24,19 +24,25 @@ const Login = () => {
 
   // Xác định đường dẫn điều hướng sau đăng nhập
   const getDestinationPath = (currentUser) => {
+    const isQC = isQCUser(currentUser);
     const from = location.state?.from?.pathname
       ? (location.state.from.pathname + (location.state.from.search || ''))
       : null;
 
-    if (from && from !== '/' && from !== '/dashboard') {
+    if (from && from !== '/' && from !== '/login' && from !== '/dashboard') {
+      // Nếu là đường dẫn inspection nhưng tài khoản không phải bộ phận QC -> chuyển về trang chủ (Dash)
+      if (from.startsWith('/production_v2/inspection') && !isQC) {
+        return '/dashboard';
+      }
       return from;
     }
 
-    // Nếu là tài khoản bộ phận QC, vào thẳng màn hình First Sample
-    if (isQCUser(currentUser)) {
+    // Tài khoản có Bộ phận bắt đầu bằng chữ "QC" (trên /admin/users) -> Tạo phiếu kiểm tra
+    if (isQC) {
       return '/production_v2/inspection/first-sample';
     }
 
+    // Ngược lại -> Vào Dash (Trang chủ)
     return '/dashboard';
   };
 

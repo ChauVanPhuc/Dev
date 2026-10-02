@@ -155,6 +155,12 @@ const InspectionReportsView = ({ onlyDefects = false, isEmbedded = false } = {})
     setDeleteTarget,
     isDeleting,
     handleConfirmDelete,
+    revertTarget,
+    setRevertTarget,
+    revertReason,
+    setRevertReason,
+    isReverting,
+    handleConfirmRevert,
     setActiveActionMenu,
     setActiveTab,
     setDailyEndDate,
@@ -1859,6 +1865,132 @@ const InspectionReportsView = ({ onlyDefects = false, isEmbedded = false } = {})
                 }}
               >
                 {isDeleting ? 'Đang xóa...' : 'Xác nhận xóa'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL XÁC NHẬN TRẢ VỀ PHIẾU KIỂM TRA (CHƯA LÀM) */}
+      {revertTarget && (
+        <div 
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.45)',
+            backdropFilter: 'blur(3px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 100000,
+            padding: '16px'
+          }}
+          onClick={() => !isReverting && setRevertTarget(null)}
+        >
+          <div 
+            style={{
+              backgroundColor: '#ffffff',
+              borderRadius: '14px',
+              maxWidth: '460px',
+              width: '100%',
+              boxShadow: '0 20px 40px rgba(0, 0, 0, 0.2)',
+              border: '1.5px solid #FDE68A',
+              overflow: 'hidden'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ padding: '18px 22px', backgroundColor: '#FFFBEB', borderBottom: '1px solid #FEF3C7', display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: '#FEF3C7', border: '1px solid #FCD34D', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <RotateCcw size={22} style={{ color: '#D97706' }} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '800', color: '#92400E' }}>Xác nhận trả về phiếu kiểm tra</h3>
+                <p style={{ margin: '2px 0 0 0', fontSize: '0.8rem', color: '#B45309' }}>Chuyển trạng thái từ "Đã xác nhận" về "Chưa làm"</p>
+              </div>
+            </div>
+
+            <div style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <p style={{ fontSize: '0.88rem', color: '#374151', margin: 0, lineHeight: 1.5 }}>
+                Bạn có chắc chắn muốn trả về phiếu kiểm tra <b style={{ color: '#92400E' }}>#{revertTarget.item?.id}</b>? Sau khi trả về, hồ sơ sẽ chuyển thành trạng thái <b style={{ color: '#D97706' }}>Chưa làm</b> để QC kiểm tra / xử lý lại.
+              </p>
+
+              <div style={{ backgroundColor: '#FAF6F0', borderRadius: '8px', padding: '12px 14px', border: '1px solid #EADCC9', fontSize: '0.83rem', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#8D6E63' }}>Mã phiếu / Lô PO:</span>
+                  <span style={{ fontWeight: '700', color: '#2D1A12' }}>{revertTarget.item?.ticket_code || revertTarget.item?.batch_no || '---'}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#8D6E63' }}>Phân loại:</span>
+                  <span style={{ fontWeight: '700', color: '#7B5233' }}>{revertTarget.item?.category || getInspectionTypeLabel(revertTarget.item?.inspection_type)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#8D6E63' }}>Công đoạn:</span>
+                  <span style={{ fontWeight: '700', color: '#2D1A12' }}>{revertTarget.item?.stage || revertTarget.item?.stage_name || '---'}</span>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '0.82rem', fontWeight: '700', color: '#475569' }}>
+                  Lý do trả về (QC sẽ xem được ghi chú này):
+                </label>
+                <textarea
+                  value={revertReason}
+                  onChange={(e) => setRevertReason(e.target.value)}
+                  placeholder="Ví dụ: Cần kiểm tra lại kích thước phôi, bổ sung hình ảnh mẫu lỗi..."
+                  rows={3}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #CBD5E1',
+                    fontSize: '0.84rem',
+                    fontFamily: 'inherit',
+                    boxSizing: 'border-box',
+                    resize: 'none'
+                  }}
+                />
+              </div>
+            </div>
+
+            <div style={{ padding: '14px 22px', backgroundColor: '#F9FAFB', borderTop: '1px solid #E5E7EB', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                disabled={isReverting}
+                onClick={() => setRevertTarget(null)}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  border: '1px solid #D1D5DB',
+                  backgroundColor: '#ffffff',
+                  color: '#374151',
+                  fontWeight: '600',
+                  fontSize: '0.85rem',
+                  cursor: isReverting ? 'not-allowed' : 'pointer'
+                }}
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                disabled={isReverting}
+                onClick={handleConfirmRevert}
+                style={{
+                  padding: '8px 18px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  backgroundColor: '#D97706',
+                  color: '#ffffff',
+                  fontWeight: '700',
+                  fontSize: '0.85rem',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  cursor: isReverting ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 2px 6px rgba(217, 119, 6, 0.3)'
+                }}
+              >
+                <RotateCcw size={15} />
+                {isReverting ? 'Đang trả về...' : 'Xác nhận trả về'}
               </button>
             </div>
           </div>

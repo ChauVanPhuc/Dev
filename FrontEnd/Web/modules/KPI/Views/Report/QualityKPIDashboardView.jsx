@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useLocation } from 'react-router-dom';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import { 
   BarChart3, 
@@ -39,7 +39,7 @@ import KPISendAlertModal from '../components/KPISendAlertModal';
 import KPITrainingDetailModal from '../components/KPITrainingDetailModal';
 import KPIViolationFormModal from '../components/KPIViolationFormModal';
 import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
-import QualityOverviewDashboard from '@modules/Inspection/Views_v2/QualityOverview/QualityOverviewDashboard';
+import QualityOverviewDashboard from '../../../Inspection/Views_v2/QualityOverview/QualityOverviewDashboard';
 
 // Map technical calculation method codes into human-readable Vietnamese descriptions
 const CALC_METHOD_MAP = {
@@ -218,9 +218,12 @@ const TableControlToolbar = ({
   );
 };
 
-const QualityKPIDashboardView = () => {
+const QualityKPIDashboardView = ({ readOnly: propReadOnly = false, isMobileView: propMobileView = false }) => {
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/kpi/dashboard');
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location?.search || '');
+  const isReadOnly = propReadOnly || searchParams.get('readonly') === 'true';
 
   useEffect(() => {
     if (setCustomTitle) setCustomTitle(title || 'Báo cáo KPI & Đánh giá Chất lượng');
@@ -233,16 +236,20 @@ const QualityKPIDashboardView = () => {
 
   // Mobile detection for responsive Card View on narrow screens
   const [isMobile, setIsMobile] = useState(
-    typeof window !== 'undefined' ? window.innerWidth <= 850 : false
+    propMobileView || (typeof window !== 'undefined' ? window.innerWidth <= 850 : false)
   );
 
   useEffect(() => {
+    if (propMobileView) {
+      setIsMobile(true);
+      return;
+    }
     const handleResize = () => {
       setIsMobile(window.innerWidth <= 850);
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  }, [propMobileView]);
 
   // Global Filter & Search States
   const [selectedMonth, setSelectedMonth] = useState('Tháng 8/2026');
@@ -1487,7 +1494,7 @@ const QualityKPIDashboardView = () => {
   };
 
   return (
-    <div className="gold-layout kpi-dashboard-container" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 68px)', backgroundColor: '#FAF6F0', padding: '12px 14px', boxSizing: 'border-box', overflow: 'hidden' }}>
+    <div className="gold-layout kpi-dashboard-container" style={{ display: 'flex', flexDirection: 'column', height: propMobileView ? '100%' : 'calc(100vh - 68px)', backgroundColor: '#FAF6F0', padding: isMobile ? '8px 10px' : '12px 14px', boxSizing: 'border-box', overflow: 'hidden' }}>
       
       {/* 7 MAIN TAB BUTTONS (CLEAN TEXT-ONLY, COMPACT DESIGN) */}
       <div style={{
@@ -1559,7 +1566,7 @@ const QualityKPIDashboardView = () => {
         {/* ========================================================================= */}
         {activeTab === 'quality_targets' && (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflowY: 'auto' }}>
-            <QualityOverviewDashboard />
+            <QualityOverviewDashboard readOnly={isReadOnly} />
           </div>
         )}
 
@@ -1662,13 +1669,15 @@ const QualityKPIDashboardView = () => {
                   sortAsc={sortAsc}
                   isFilterActive={filterOpen}
                 />
-                <button
-                  onClick={() => { setEditingTarget(null); setIsTargetModalOpen(true); }}
-                  className="kpi-btn-add-primary"
-                  style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 14px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '800', fontSize: '0.75rem', cursor: 'pointer' }}
-                >
-                  <Plus size={13} /> Thêm chỉ số KPI mới
-                </button>
+                {!isReadOnly && (
+                  <button
+                    onClick={() => { setEditingTarget(null); setIsTargetModalOpen(true); }}
+                    className="kpi-btn-add-primary"
+                    style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 14px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '800', fontSize: '0.75rem', cursor: 'pointer' }}
+                  >
+                    <Plus size={13} /> Thêm chỉ số KPI mới
+                  </button>
+                )}
               </div>
 
               {filterOpen && (
@@ -1754,22 +1763,24 @@ const QualityKPIDashboardView = () => {
                                   </span>
                                 </div>
 
-                                <div style={{ display: 'flex', gap: '6px' }}>
-                                  <button
-                                    onClick={() => { setEditingTarget(item); setIsTargetModalOpen(true); }}
-                                    style={{ border: 'none', background: '#E0F2FE', color: '#0369A1', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '0.72rem', fontWeight: '700' }}
-                                    title="Sửa"
-                                  >
-                                    <Edit2 size={12} /> Sửa
-                                  </button>
-                                  <button
-                                    onClick={() => handleOpenDeleteConfirm(item)}
-                                    style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '0.72rem', fontWeight: '700' }}
-                                    title="Xóa"
-                                  >
-                                    <Trash2 size={12} /> Xóa
-                                  </button>
-                                </div>
+                                {!isReadOnly && (
+                                  <div style={{ display: 'flex', gap: '6px' }}>
+                                    <button
+                                      onClick={() => { setEditingTarget(item); setIsTargetModalOpen(true); }}
+                                      style={{ border: 'none', background: '#E0F2FE', color: '#0369A1', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '0.72rem', fontWeight: '700' }}
+                                      title="Sửa"
+                                    >
+                                      <Edit2 size={12} /> Sửa
+                                    </button>
+                                    <button
+                                      onClick={() => handleOpenDeleteConfirm(item)}
+                                      style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '0.72rem', fontWeight: '700' }}
+                                      title="Xóa"
+                                    >
+                                      <Trash2 size={12} /> Xóa
+                                    </button>
+                                  </div>
+                                )}
                               </div>
 
                               {/* Title */}
@@ -1855,7 +1866,7 @@ const QualityKPIDashboardView = () => {
                           <th style={{ padding: '8px 8px', fontWeight: '800', textAlign: 'center', width: '100px' }}>Mục Tiêu Đạt</th>
                           <th style={{ padding: '8px 8px', fontWeight: '800', textAlign: 'center', width: '95px' }}>Tần Suất</th>
                           <th style={{ padding: '8px 8px', fontWeight: '800', textAlign: 'center', width: '95px' }}>Trạng Thái</th>
-                          <th style={{ padding: '8px 6px', fontWeight: '800', textAlign: 'center', width: '80px' }}>Thao Tác</th>
+                          {!isReadOnly && <th style={{ padding: '8px 6px', fontWeight: '800', textAlign: 'center', width: '80px' }}>Thao Tác</th>}
                         </tr>
                       </thead>
                       <tbody>
@@ -1904,24 +1915,26 @@ const QualityKPIDashboardView = () => {
                                   {item.status || 'Áp dụng'}
                                 </span>
                               </td>
-                              <td style={{ padding: '8px 6px', textAlign: 'center' }}>
-                                <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
-                                  <button
-                                    onClick={() => { setEditingTarget(item); setIsTargetModalOpen(true); }}
-                                    style={{ border: 'none', background: '#E0F2FE', color: '#0369A1', padding: '4px 7px', borderRadius: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-                                    title="Sửa"
-                                  >
-                                    <Edit2 size={13} />
-                                  </button>
-                                  <button
-                                    onClick={() => handleOpenDeleteConfirm(item)}
-                                    style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '4px 7px', borderRadius: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-                                    title="Xóa"
-                                  >
-                                    <Trash2 size={13} />
-                                  </button>
-                                </div>
-                              </td>
+                              {!isReadOnly && (
+                                <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+                                  <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
+                                    <button
+                                      onClick={() => { setEditingTarget(item); setIsTargetModalOpen(true); }}
+                                      style={{ border: 'none', background: '#E0F2FE', color: '#0369A1', padding: '4px 7px', borderRadius: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                                      title="Sửa"
+                                    >
+                                      <Edit2 size={13} />
+                                    </button>
+                                    <button
+                                      onClick={() => handleOpenDeleteConfirm(item)}
+                                      style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '4px 7px', borderRadius: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                                      title="Xóa"
+                                    >
+                                      <Trash2 size={13} />
+                                    </button>
+                                  </div>
+                                </td>
+                              )}
                             </tr>
                           );
                         })}
@@ -2014,13 +2027,15 @@ const QualityKPIDashboardView = () => {
                   sortAsc={sortAsc}
                   isFilterActive={filterOpen}
                 />
-                <button
-                  onClick={handleAddDashboardChecklist}
-                  className="kpi-btn-add-primary"
-                  style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 14px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '800', fontSize: '0.75rem', cursor: 'pointer' }}
-                >
-                  <Plus size={13} /> Thêm Checklist mới
-                </button>
+                {!isReadOnly && (
+                  <button
+                    onClick={handleAddDashboardChecklist}
+                    className="kpi-btn-add-primary"
+                    style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 14px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '800', fontSize: '0.75rem', cursor: 'pointer' }}
+                  >
+                    <Plus size={13} /> Thêm Checklist mới
+                  </button>
+                )}
               </div>
 
               {/* BAR BỘ LỌC BỘ PHẬN QLCL - NẰM TRONG BỘ LỌC PHỄU (filterOpen) - COMPACT GỖ NÂU */}
@@ -2111,46 +2126,48 @@ const QualityKPIDashboardView = () => {
                                   </span>
                                 </div>
 
-                                <div style={{ display: 'flex', gap: '6px' }}>
-                                  <button
-                                    onClick={() => handleEditDashboardChecklist(item)}
-                                    style={{
-                                      border: '1px solid #EADCC9',
-                                      background: '#FFFFFF',
-                                      color: '#5D3B32',
-                                      padding: '4px 8px',
-                                      borderRadius: '4px',
-                                      cursor: 'pointer',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '3px',
-                                      fontWeight: '700',
-                                      fontSize: '0.72rem'
-                                    }}
-                                    title="Chỉnh sửa"
-                                  >
-                                    <Edit2 size={12} /> Sửa
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteDashboardChecklist(item)}
-                                    style={{
-                                      border: '1px solid #FCA5A5',
-                                      background: '#FEF2F2',
-                                      color: '#DC2626',
-                                      padding: '4px 8px',
-                                      borderRadius: '4px',
-                                      cursor: 'pointer',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '3px',
-                                      fontWeight: '700',
-                                      fontSize: '0.72rem'
-                                    }}
-                                    title="Xóa công việc"
-                                  >
-                                    <Trash2 size={12} /> Xóa
-                                  </button>
-                                </div>
+                                {!isReadOnly && (
+                                  <div style={{ display: 'flex', gap: '6px' }}>
+                                    <button
+                                      onClick={() => handleEditDashboardChecklist(item)}
+                                      style={{
+                                        border: '1px solid #EADCC9',
+                                        background: '#FFFFFF',
+                                        color: '#5D3B32',
+                                        padding: '4px 8px',
+                                        borderRadius: '4px',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '3px',
+                                        fontWeight: '700',
+                                        fontSize: '0.72rem'
+                                      }}
+                                      title="Chỉnh sửa"
+                                    >
+                                      <Edit2 size={12} /> Sửa
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteDashboardChecklist(item)}
+                                      style={{
+                                        border: '1px solid #FCA5A5',
+                                        background: '#FEF2F2',
+                                        color: '#DC2626',
+                                        padding: '4px 8px',
+                                        borderRadius: '4px',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '3px',
+                                        fontWeight: '700',
+                                        fontSize: '0.72rem'
+                                      }}
+                                      title="Xóa công việc"
+                                    >
+                                      <Trash2 size={12} /> Xóa
+                                    </button>
+                                  </div>
+                                )}
                               </div>
 
                               {/* Body: Nội dung Checklist công việc */}
@@ -2195,7 +2212,7 @@ const QualityKPIDashboardView = () => {
                           <th style={{ padding: '8px 10px', fontWeight: '800', width: '110px' }}>Bộ phận</th>
                           <th style={{ padding: '8px 10px', fontWeight: '800' }}>Nội dung Checklist công việc</th>
                           <th style={{ padding: '8px 10px', fontWeight: '800', width: '140px' }}>Tần suất thực hiện</th>
-                          <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '110px' }}>Thao tác</th>
+                          {!isReadOnly && <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '110px' }}>Thao tác</th>}
                         </tr>
                       </thead>
                       <tbody>
@@ -2219,24 +2236,26 @@ const QualityKPIDashboardView = () => {
                               </td>
                               <td style={{ padding: '8px 10px', fontWeight: '600', color: '#1E293B', fontSize: '0.82rem' }}>{item.content}</td>
                               <td style={{ padding: '8px 10px', color: '#475569', fontWeight: '600' }}>{item.frequency || 'Hàng ngày'}</td>
-                              <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                                <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                                  <button
-                                    onClick={() => handleEditDashboardChecklist(item)}
-                                    style={{ border: '1px solid #EADCC9', background: '#FFFFFF', color: '#5D3B32', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontWeight: '600', fontSize: '0.7rem' }}
-                                    title="Chỉnh sửa"
-                                  >
-                                    <Edit2 size={12} /> Sửa
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteDashboardChecklist(item)}
-                                    style={{ border: '1px solid #FCA5A5', background: '#FEF2F2', color: '#DC2626', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontWeight: '600', fontSize: '0.7rem' }}
-                                    title="Xóa công việc"
-                                  >
-                                    <Trash2 size={12} /> Xóa
-                                  </button>
-                                </div>
-                              </td>
+                              {!isReadOnly && (
+                                <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                  <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                                    <button
+                                      onClick={() => handleEditDashboardChecklist(item)}
+                                      style={{ border: '1px solid #EADCC9', background: '#FFFFFF', color: '#5D3B32', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontWeight: '600', fontSize: '0.7rem' }}
+                                      title="Chỉnh sửa"
+                                    >
+                                      <Edit2 size={12} /> Sửa
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteDashboardChecklist(item)}
+                                      style={{ border: '1px solid #FCA5A5', background: '#FEF2F2', color: '#DC2626', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontWeight: '600', fontSize: '0.7rem' }}
+                                      title="Xóa công việc"
+                                    >
+                                      <Trash2 size={12} /> Xóa
+                                    </button>
+                                  </div>
+                                </td>
+                              )}
                             </tr>
                           );
                         })}
@@ -2313,13 +2332,15 @@ const QualityKPIDashboardView = () => {
                   sortAsc={sortAsc}
                   isFilterActive={filterOpen}
                 />
-                <button
-                  onClick={() => handleOpenViolationModal(null)}
-                  className="kpi-btn-add-primary"
-                  style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 14px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '800', fontSize: '0.75rem', cursor: 'pointer' }}
-                >
-                  <Plus size={13} /> Thêm mới
-                </button>
+                {!isReadOnly && (
+                  <button
+                    onClick={() => handleOpenViolationModal(null)}
+                    className="kpi-btn-add-primary"
+                    style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 14px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '800', fontSize: '0.75rem', cursor: 'pointer' }}
+                  >
+                    <Plus size={13} /> Thêm mới
+                  </button>
+                )}
               </div>
 
               {filterOpen && (
@@ -2510,13 +2531,15 @@ const QualityKPIDashboardView = () => {
                   sortAsc={sortAsc}
                   isFilterActive={filterOpen}
                 />
-                <button
-                  onClick={() => setIsTrainingModalOpen(true)}
-                  className="kpi-btn-add-primary"
-                  style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 14px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '800', fontSize: '0.75rem', cursor: 'pointer' }}
-                >
-                  <Plus size={13} /> Tạo kế hoạch đào tạo
-                </button>
+                {!isReadOnly && (
+                  <button
+                    onClick={() => setIsTrainingModalOpen(true)}
+                    className="kpi-btn-add-primary"
+                    style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 14px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '800', fontSize: '0.75rem', cursor: 'pointer' }}
+                  >
+                    <Plus size={13} /> Tạo kế hoạch đào tạo
+                  </button>
+                )}
               </div>
 
               {filterOpen && (
@@ -2609,20 +2632,24 @@ const QualityKPIDashboardView = () => {
                                   >
                                     <Eye size={12} />
                                   </button>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); handleEditTrainingPlan(item); }}
-                                    style={{ border: 'none', background: '#FEF3C7', color: '#D97706', padding: '4px 6px', borderRadius: '4px', cursor: 'pointer' }}
-                                    title="Chỉnh sửa"
-                                  >
-                                    <Edit2 size={12} />
-                                  </button>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); handleOpenDeleteTrainingConfirm(item); }}
-                                    style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '4px 6px', borderRadius: '4px', cursor: 'pointer' }}
-                                    title="Xóa khóa học"
-                                  >
-                                    <Trash2 size={12} />
-                                  </button>
+                                  {!isReadOnly && (
+                                    <>
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); handleEditTrainingPlan(item); }}
+                                        style={{ border: 'none', background: '#FEF3C7', color: '#D97706', padding: '4px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                                        title="Chỉnh sửa"
+                                      >
+                                        <Edit2 size={12} />
+                                      </button>
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); handleOpenDeleteTrainingConfirm(item); }}
+                                        style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '4px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                                        title="Xóa khóa học"
+                                      >
+                                        <Trash2 size={12} />
+                                      </button>
+                                    </>
+                                  )}
                                 </div>
                               </div>
 
@@ -2737,20 +2764,24 @@ const QualityKPIDashboardView = () => {
                                   >
                                     <Eye size={12} />
                                   </button>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); handleEditTrainingPlan(item); }}
-                                    style={{ border: 'none', background: '#FEF3C7', color: '#D97706', padding: '4px 6px', borderRadius: '4px', cursor: 'pointer' }}
-                                    title="Chỉnh sửa"
-                                  >
-                                    <Edit2 size={12} />
-                                  </button>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); handleOpenDeleteTrainingConfirm(item); }}
-                                    style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '4px 6px', borderRadius: '4px', cursor: 'pointer' }}
-                                    title="Xóa khóa học"
-                                  >
-                                    <Trash2 size={12} />
-                                  </button>
+                                  {!isReadOnly && (
+                                    <>
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); handleEditTrainingPlan(item); }}
+                                        style={{ border: 'none', background: '#FEF3C7', color: '#D97706', padding: '4px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                                        title="Chỉnh sửa"
+                                      >
+                                        <Edit2 size={12} />
+                                      </button>
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); handleOpenDeleteTrainingConfirm(item); }}
+                                        style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '4px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                                        title="Xóa khóa học"
+                                      >
+                                        <Trash2 size={12} />
+                                      </button>
+                                    </>
+                                  )}
                                 </div>
                               </td>
                             </tr>
@@ -2971,13 +3002,15 @@ const QualityKPIDashboardView = () => {
                   sortAsc={sortAsc}
                   isFilterActive={filterOpen}
                 />
-                <button
-                  onClick={() => { setEditingAlert(null); setIsAlertModalOpen(true); }}
-                  className="kpi-btn-add-primary"
-                  style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 14px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '800', fontSize: '0.75rem', cursor: 'pointer' }}
-                >
-                  <Send size={13} /> Bắn thông báo mới đến Mobile
-                </button>
+                {!isReadOnly && (
+                  <button
+                    onClick={() => { setEditingAlert(null); setIsAlertModalOpen(true); }}
+                    className="kpi-btn-add-primary"
+                    style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 14px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '800', fontSize: '0.75rem', cursor: 'pointer' }}
+                  >
+                    <Send size={13} /> Bắn thông báo mới đến Mobile
+                  </button>
+                )}
               </div>
 
               {filterOpen && (
@@ -3056,22 +3089,24 @@ const QualityKPIDashboardView = () => {
                                   </span>
                                 </div>
 
-                                <div style={{ display: 'flex', gap: '4px' }}>
-                                  <button
-                                    onClick={() => handleEditAlert(item)}
-                                    style={{ border: 'none', background: '#FEF3C7', color: '#D97706', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px', fontSize: '0.72rem', fontWeight: '700' }}
-                                    title="Sửa"
-                                  >
-                                    <Edit2 size={12} /> Sửa
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteAlert(item)}
-                                    style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px', fontSize: '0.72rem', fontWeight: '700' }}
-                                    title="Xóa"
-                                  >
-                                    <Trash2 size={12} /> Xóa
-                                  </button>
-                                </div>
+                                {!isReadOnly && (
+                                  <div style={{ display: 'flex', gap: '4px' }}>
+                                    <button
+                                      onClick={() => handleEditAlert(item)}
+                                      style={{ border: 'none', background: '#FEF3C7', color: '#D97706', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px', fontSize: '0.72rem', fontWeight: '700' }}
+                                      title="Sửa"
+                                    >
+                                      <Edit2 size={12} /> Sửa
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteAlert(item)}
+                                      style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px', fontSize: '0.72rem', fontWeight: '700' }}
+                                      title="Xóa"
+                                    >
+                                      <Trash2 size={12} /> Xóa
+                                    </button>
+                                  </div>
+                                )}
                               </div>
 
                               <div style={{ fontWeight: '800', color: '#1E293B', fontSize: '0.86rem' }}>
@@ -3118,7 +3153,7 @@ const QualityKPIDashboardView = () => {
                           <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '115px', whiteSpace: 'nowrap' }}>Thời Gian Kết Thúc</th>
                           <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '100px', whiteSpace: 'nowrap' }}>Tổng Thời Gian</th>
                           <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '105px', whiteSpace: 'nowrap' }}>Trạng Thái</th>
-                          <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '80px', whiteSpace: 'nowrap' }}>Thao Tác</th>
+                          {!isReadOnly && <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '80px', whiteSpace: 'nowrap' }}>Thao Tác</th>}
                         </tr>
                       </thead>
                       <tbody>
@@ -3135,24 +3170,26 @@ const QualityKPIDashboardView = () => {
                               <td style={{ padding: '5px 10px', textAlign: 'center', color: '#DC2626', fontWeight: '700' }}>{item.expiresAt || '10/09/2026 17:00'}</td>
                               <td style={{ padding: '5px 10px', textAlign: 'center', color: '#15803D', fontWeight: '800' }}>{calculateDuration(item.issuedAt, item.expiresAt) || '7 ngày'}</td>
                               <td style={{ padding: '5px 10px', textAlign: 'center', color: '#16A34A', fontWeight: '800' }}>{item.status || 'Đã phát'}</td>
-                              <td style={{ padding: '5px 10px', textAlign: 'center' }}>
-                                <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
-                                  <button
-                                    onClick={() => handleEditAlert(item)}
-                                    style={{ border: 'none', background: '#FEF3C7', color: '#D97706', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
-                                    title="Chỉnh sửa"
-                                  >
-                                    <Edit2 size={12} />
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteAlert(item)}
-                                    style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
-                                    title="Xóa thông báo"
-                                  >
-                                    <Trash2 size={12} />
-                                  </button>
-                                </div>
-                              </td>
+                              {!isReadOnly && (
+                                <td style={{ padding: '5px 10px', textAlign: 'center' }}>
+                                  <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                                    <button
+                                      onClick={() => handleEditAlert(item)}
+                                      style={{ border: 'none', background: '#FEF3C7', color: '#D97706', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                                      title="Chỉnh sửa"
+                                    >
+                                      <Edit2 size={12} />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteAlert(item)}
+                                      style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer' }}
+                                      title="Xóa thông báo"
+                                    >
+                                      <Trash2 size={12} />
+                                    </button>
+                                  </div>
+                                </td>
+                              )}
                             </tr>
                           );
                         })}
@@ -3216,6 +3253,7 @@ const QualityKPIDashboardView = () => {
         onClose={() => { setIsViolationModalOpen(false); setEditingViolation(null); }}
         violationData={editingViolation}
         onSave={handleSaveViolation}
+        readOnly={isReadOnly}
       />
 
       {/* 5. Custom Project Delete Confirmation Modal (BeautifulConfirmModal) */}

@@ -131,11 +131,12 @@ export const BOM_STAGE_OPTIONS = [
 ]
 
 export const DEFAULT_PARAMETER_OPTIONS = [
+  { value: 'do_cong', label: 'Độ cong' },
   { value: 'do_am', label: 'Độ ẩm' },
   { value: 'nhiet_do', label: 'Nhiệt độ' },
-  { value: 'anh_sang', label: 'Ánh sáng' },
   { value: 'do_bong', label: 'Độ bóng sơn' },
   { value: 'do_day', label: 'Độ dày màng sơn' },
+  { value: 'anh_sang', label: 'Ánh sáng' },
 ]
 
 export const PAGE_SIZE = 10

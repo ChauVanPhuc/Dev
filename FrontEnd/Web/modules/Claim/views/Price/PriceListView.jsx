@@ -138,10 +138,14 @@ const PriceListView = () => {
 
   const getFullImagePath = (path) => {
     if (!path) return '';
-    if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('blob:') || path.startsWith('data:')) {
-      return path;
+    let clean = typeof path === 'string' ? path.trim() : '';
+    if (clean.startsWith('http://localhost') || clean.startsWith('http://127.0.0.1')) {
+      clean = clean.replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/, '');
     }
-    const cleanPath = path.startsWith('/') ? path.slice(1) : path;
+    if (clean.startsWith('http://') || clean.startsWith('https://') || clean.startsWith('blob:') || clean.startsWith('data:')) {
+      return clean;
+    }
+    const cleanPath = clean.startsWith('/') ? clean.slice(1) : clean;
     return `${API_ROOT}${cleanPath}`;
   };
 
@@ -435,7 +439,7 @@ const PriceListView = () => {
     showModal('Đang xử lý', 'Đang đọc và tải dữ liệu từ file lên hệ thống...', 'info');
 
     const reader = new FileReader();
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
       try {
         const data = new Uint8Array(evt.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
@@ -577,11 +581,17 @@ const PriceListView = () => {
           }));
 
           const nextPrices = [...finalizedNewItems, ...allPrices];
-          setAllPrices(nextPrices);
-          claimService.saveCabinetPricesTemp(nextPrices).catch(err => {
-            console.error("Lỗi lưu trữ giá tạm thời:", err);
-          });
-          showModal('Thành công', `Đã nhập khẩu thành công ${importedItems.length} sản phẩm tủ gỗ từ file ${file.name}!`, 'success');
+          try {
+            await claimService.saveCabinetPricesTemp(nextPrices);
+            setAllPrices(nextPrices);
+            fetchPrices();
+            showModal('Thành công', `Đã nhập khẩu và lưu thành công ${importedItems.length} sản phẩm tủ gỗ vào CSDL từ file ${file.name}!`, 'success');
+          } catch (err) {
+            console.error("Lỗi lưu trữ giá vào CSDL:", err);
+            const detail = err?.response?.data?.detail;
+            const msg = Array.isArray(detail) ? detail.map(d => d.msg || JSON.stringify(d)).join('; ') : (typeof detail === 'object' ? JSON.stringify(detail) : (detail || err.message));
+            showModal('Lỗi', `Lưu dữ liệu vào Database thất bại: ${msg}`, 'error');
+          }
         }
       } catch (error) {
         console.error('Lỗi phân tích file Excel/CSV:', error);
@@ -597,7 +607,7 @@ const PriceListView = () => {
     e.target.value = '';
   };
 
-  const handleResolveDuplicates = (choice) => {
+  const handleResolveDuplicates = async (choice) => {
     if (!duplicateImportData) return;
     const { duplicates, uniqueImported, fileName } = duplicateImportData;
     const timestamp = new Date().toISOString();
@@ -649,18 +659,30 @@ const PriceListView = () => {
       });
 
       const nextPrices = [...finalizedNewItems, ...updatedPricesList];
-      setAllPrices(nextPrices);
-      claimService.saveCabinetPricesTemp(nextPrices).catch(err => {
-        console.error("Lỗi lưu trữ giá tạm thời:", err);
-      });
-      showModal('Thành công', `Đã cập nhật giá mới cho ${duplicates.length} sản phẩm trùng và thêm mới ${uniqueImported.length} sản phẩm từ file ${fileName}!`, 'success');
+      try {
+        await claimService.saveCabinetPricesTemp(nextPrices);
+        setAllPrices(nextPrices);
+        fetchPrices();
+        showModal('Thành công', `Đã cập nhật giá mới cho ${duplicates.length} sản phẩm trùng và thêm mới ${uniqueImported.length} sản phẩm vào CSDL từ file ${fileName}!`, 'success');
+      } catch (err) {
+        console.error("Lỗi lưu trữ giá vào CSDL:", err);
+        const detail = err?.response?.data?.detail;
+        const msg = Array.isArray(detail) ? detail.map(d => d.msg || JSON.stringify(d)).join('; ') : (typeof detail === 'object' ? JSON.stringify(detail) : (detail || err.message));
+        showModal('Lỗi', `Lưu dữ liệu vào Database thất bại: ${msg}`, 'error');
+      }
     } else if (choice === 'old') {
       const nextPrices = [...finalizedNewItems, ...updatedPricesList];
-      setAllPrices(nextPrices);
-      claimService.saveCabinetPricesTemp(nextPrices).catch(err => {
-        console.error("Lỗi lưu trữ giá tạm thời:", err);
-      });
-      showModal('Thành công', `Đã giữ lại giá cũ cho ${duplicates.length} sản phẩm trùng và thêm mới ${uniqueImported.length} sản phẩm mới từ file ${fileName}!`, 'success');
+      try {
+        await claimService.saveCabinetPricesTemp(nextPrices);
+        setAllPrices(nextPrices);
+        fetchPrices();
+        showModal('Thành công', `Đã giữ lại giá cũ cho ${duplicates.length} sản phẩm trùng và thêm mới ${uniqueImported.length} sản phẩm mới vào CSDL từ file ${fileName}!`, 'success');
+      } catch (err) {
+        console.error("Lỗi lưu trữ giá vào CSDL:", err);
+        const detail = err?.response?.data?.detail;
+        const msg = Array.isArray(detail) ? detail.map(d => d.msg || JSON.stringify(d)).join('; ') : (typeof detail === 'object' ? JSON.stringify(detail) : (detail || err.message));
+        showModal('Lỗi', `Lưu dữ liệu vào Database thất bại: ${msg}`, 'error');
+      }
     }
 
     setDuplicateImportData(null);
@@ -717,7 +739,7 @@ const PriceListView = () => {
     XLSX.writeFile(workbook, "Bang_gia_tu_go.xlsx");
   };
 
-  const handleCreateCabinet = (e) => {
+  const handleCreateCabinet = async (e) => {
     e.preventDefault();
     if (!newCode || !newSalePrice) {
       showModal('Lỗi', 'Vui lòng điền đầy đủ các thông tin bắt buộc.', 'error');
@@ -799,9 +821,12 @@ const PriceListView = () => {
     }
 
     setAllPrices(nextPrices);
-    claimService.saveCabinetPricesTemp(nextPrices).catch(err => {
-      console.error("Lỗi lưu trữ giá tạm thời:", err);
-    });
+    try {
+      await claimService.saveCabinetPricesTemp(nextPrices);
+      fetchPrices();
+    } catch (err) {
+      console.error("Lỗi lưu trữ giá:", err);
+    }
 
     setIsAddModalOpen(false);
     setNewCode('');
@@ -825,7 +850,8 @@ const PriceListView = () => {
     setLoading(true);
     try {
       const response = await claimService.getCabinetPrices({
-        search: search || undefined
+        search: search || undefined,
+        size: 5000
       });
       let fetched = response.items || [];
       if (search) {

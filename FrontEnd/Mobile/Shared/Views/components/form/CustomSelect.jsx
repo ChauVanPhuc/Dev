@@ -106,12 +106,24 @@ const CustomSelect = ({
     : options
 
   const filteredOptions = allowCustomInput && inputValue && !onSearch
-    ? availableOptions.filter((opt) => {
-        const term = inputValue.toLowerCase().trim()
-        const labelStr = String(opt.label || '').toLowerCase()
-        const valStr = String(opt.value || '').toLowerCase()
-        return labelStr.includes(term) || valStr.includes(term)
-      })
+    ? availableOptions
+        .filter((opt) => {
+          const term = inputValue.toLowerCase().trim()
+          const labelStr = String(opt.label || '').toLowerCase()
+          return labelStr.includes(term)
+        })
+        .sort((a, b) => {
+          const term = inputValue.toLowerCase().trim()
+          const aStr = String(a.label || '').toLowerCase()
+          const bStr = String(b.label || '').toLowerCase()
+          const aStarts = aStr.startsWith(term) ? 1 : 0
+          const bStarts = bStr.startsWith(term) ? 1 : 0
+          if (aStarts !== bStarts) return bStarts - aStarts
+          const aEnds = aStr.endsWith(term) ? 1 : 0
+          const bEnds = bStr.endsWith(term) ? 1 : 0
+          if (aEnds !== bEnds) return bEnds - aEnds
+          return aStr.localeCompare(bStr)
+        })
     : availableOptions
 
   const handleInputChange = (e) => {

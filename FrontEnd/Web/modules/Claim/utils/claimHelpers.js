@@ -2,8 +2,9 @@
  * Utility helper functions for Frontend Claim module
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
-export const API_ROOT = API_BASE_URL.replace('/api/v1', '');
+import { getBaseURL, API_ROOT as SHARED_API_ROOT } from '@webShared/Services/api.service';
+
+export const API_ROOT = SHARED_API_ROOT || (typeof getBaseURL === 'function' ? `${getBaseURL()}/` : 'http://localhost:8000/');
 
 export const normalizePenaltyValue = (val) => {
   if (!val) return '';
@@ -65,12 +66,19 @@ export const parseDate = (dateStr) => {
 
 export const getFullImagePath = (path) => {
   if (!path) return '';
-  if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('blob:')) {
-    return path;
+  let cleanPath = typeof path === 'string' ? path.trim() : '';
+
+  // Xóa domain localhost / 127.0.0.1 nếu dữ liệu cũ bị dính hardcode
+  if (cleanPath.startsWith('http://localhost') || cleanPath.startsWith('http://127.0.0.1')) {
+    cleanPath = cleanPath.replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/, '');
   }
-  const root = API_ROOT.endsWith('/') ? API_ROOT.slice(0, -1) : API_ROOT;
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  return `${root}${normalizedPath}`;
+
+  if (cleanPath.startsWith('http://') || cleanPath.startsWith('https://') || cleanPath.startsWith('blob:') || cleanPath.startsWith('data:')) {
+    return cleanPath;
+  }
+  const base = (typeof getBaseURL === 'function' ? getBaseURL() : '').replace(/\/api\/v1\/?$/, '').replace(/\/$/, '');
+  const normalizedPath = cleanPath.startsWith('/') ? cleanPath : `/${cleanPath}`;
+  return `${base}${normalizedPath}`;
 };
 
 export const formatPenaltyValue = (number) => {
@@ -91,46 +99,86 @@ export const extractMultiplierFromPenalty = (penaltyStr) => {
 
 export const getCabinetSalePrice = (sku, cabinetPrices = []) => {
   if (!sku) return 0;
-  const cleanSku = sku.trim().toLowerCase();
-  const match = cabinetPrices.find(p => p.cabinet_code && p.cabinet_code.trim().toLowerCase() === cleanSku);
-  if (match) return match.sale_price || 0;
+  const cleanSku = String(sku).trim().toLowerCase();
+  
+  // 1. So khớp chính xác
+  const exactMatch = cabinetPrices.find(p => p.cabinet_code && p.cabinet_code.trim().toLowerCase() === cleanSku);
+  if (exactMatch && exactMatch.sale_price !== undefined) {
+    return parseFloat(exactMatch.sale_price) || 0;
+  }
+
+  // 2. So khớp bỏ qua các khoảng trắng thừa hoặc ký tự đặc biệt
+  const normalizedClean = cleanSku.replace(/[\s_]+/g, '-');
+  const relaxedMatch = cabinetPrices.find(p => {
+    if (!p.cabinet_code) return false;
+    const itemCode = p.cabinet_code.trim().toLowerCase().replace(/[\s_]+/g, '-');
+    return itemCode === normalizedClean;
+  });
+  if (relaxedMatch && relaxedMatch.sale_price !== undefined) {
+    return parseFloat(relaxedMatch.sale_price) || 0;
+  }
+
+  // 3. Fallback: tìm theo base SKU trước dấu gạch ngang (ví dụ "T042S-BC-WHT" -> "T042S")
+  const baseSku = cleanSku.split('-')[0];
+  if (baseSku && baseSku.length >= 3) {
+    const baseMatch = cabinetPrices.find(p => {
+      if (!p.cabinet_code) return false;
+      const itemCode = p.cabinet_code.trim().toLowerCase();
+      return itemCode.startsWith(baseSku);
+    });
+    if (baseMatch && baseMatch.sale_price !== undefined) {
+      return parseFloat(baseMatch.sale_price) || 0;
+    }
+  }
+
   return 0;
 };
 
 export const calculateTotalPenalty = (claim, customMultiplier, cabinetPrices = []) => {
-  const p = normalizePenaltyValue(claim.penalty || claim.action || 'Không có');
-  const lower = p.toLowerCase();
-  const sku = claim.product_name || claim.sku;
-  let val = 0;
+  if (!claim) return 0;
+  const rawAction = String(claim.action || claim.penalty || '').trim();
+  const lower = rawAction.toLowerCase();
+  const sku = claim.product_name || claim.sku || '';
 
-  let multiplier = customMultiplier;
-  if (multiplier === undefined || multiplier === null || isNaN(multiplier) || multiplier === '') {
-    multiplier = claim.penalty_multiplier !== undefined ? claim.penalty_multiplier : extractMultiplierFromPenalty(p);
-  } else {
-    multiplier = parseFloat(multiplier);
-  }
-  if (isNaN(multiplier) || multiplier < 1) {
-    multiplier = 1;
-  } else if (multiplier > 100) {
-    multiplier = 100;
-  }
-
-  if (lower.includes('unit')) {
-    const salePrice = getCabinetSalePrice(sku, cabinetPrices);
-    val = salePrice * multiplier;
-  } else if (lower.includes('x2 unit') || lower.includes('x2unit') || lower.includes('2x unit') || lower.includes('x2')) {
-    const salePrice = getCabinetSalePrice(sku, cabinetPrices);
-    val = salePrice * multiplier;
-  } else if (lower.includes('full bc') || lower.includes('ful bc')) {
-    const salePrice = getCabinetSalePrice(sku, cabinetPrices);
-    val = salePrice;
-  } else {
-    const parsed = parseFloat(String(p).replace(/[^0-9.]/g, ''));
-    if (!isNaN(parsed)) {
-      val = parsed;
+  // 1. NẾU CÓ GIÁ SẴN TRONG MỨC PHẠT (Ví dụ: "Pay $100", "Pay $50", "Repair, $50", "$20") -> Lấy luôn giá đó
+  const dollarMatch = rawAction.match(/\$\s*([\d,]+(?:\.\d+)?)|([\d,]+(?:\.\d+)?)\s*\$/);
+  if (dollarMatch) {
+    const numStr = (dollarMatch[1] || dollarMatch[2]).replace(/,/g, '');
+    const amount = parseFloat(numStr);
+    if (!isNaN(amount) && amount > 0) {
+      return amount;
     }
   }
-  return val;
+
+  // Đơn giá tủ lấy từ bảng giá /admin/prices
+  const salePrice = getCabinetSalePrice(sku, cabinetPrices);
+
+  // 2. X2 LÀ X2 GIÁ TỦ (Ví dụ: "X2 Unit", "Pay X2", "2x", "x2")
+  const xMatch = lower.match(/x\s*(\d+)|(\d+)\s*x/i);
+  const isX2 = lower.includes('x2') || lower.includes('2x') || (xMatch && parseFloat(xMatch[1] || xMatch[2]) >= 2);
+  if (isX2) {
+    let multiplier = customMultiplier;
+    if (multiplier === undefined || multiplier === null || isNaN(multiplier) || multiplier === '') {
+      multiplier = xMatch ? parseFloat(xMatch[1] || xMatch[2]) : (claim.penalty_multiplier || 2);
+    } else {
+      multiplier = parseFloat(multiplier);
+    }
+    if (isNaN(multiplier) || multiplier < 1) multiplier = 2;
+    return salePrice * multiplier;
+  }
+
+  // 3. FULL SẼ LÀ LẤY BẰNG GIÁ TỦ (Ví dụ: "Full", "Pay Full", "Full BC", "Pay Full BC", "Repair, Full BC")
+  if (lower.includes('full') || lower.includes('ful bc') || lower.includes('unit') || lower.includes('bc')) {
+    return salePrice;
+  }
+
+  // 4. Nếu mức phạt là một con số thuần tuý (Ví dụ: "50", "100") mà không chứa chữ text khác
+  const parsedNum = parseFloat(rawAction.replace(/[^0-9.]/g, ''));
+  if (!isNaN(parsedNum) && parsedNum > 0 && !lower.includes('pallet') && !lower.includes('cont') && !lower.includes('claim')) {
+    return parsedNum;
+  }
+
+  return salePrice;
 };
 
 export const getClaimTimeValue = (claim) => {

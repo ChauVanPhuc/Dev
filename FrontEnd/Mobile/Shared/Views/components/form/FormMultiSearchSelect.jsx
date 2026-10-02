@@ -15,14 +15,24 @@ const FormMultiSearchSelect = ({
   required = false,
   disabled = false,
   lockedValues = [], // Mảng các ID/value không được phép bỏ chọn (cố định)
-  lockedMessage = 'Quy cách duy nhất của chi tiết, không thể bỏ chọn'
+  lockedMessage = 'Quy cách duy nhất của chi tiết, không thể bỏ chọn',
+  allowCustomInput = false, // Cho phép thêm mục tùy chọn khi tìm kiếm không có trong danh sách
+  onSearch, // Hàm tìm kiếm trên Server khi người dùng nhập từ khóa
 }) => {
   const [isOpen, setIsOpen] = useState(false)
   const [alignRight, setAlignRight] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [lockedHint, setLockedHint] = useState(null)
   const containerRef = useRef(null)
-  const searchInputRef = useRef(null)
+  const inputRef = useRef(null)
+  const searchTimerRef = useRef(null)
+
+  // Cleanup timer tìm kiếm khi unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    }
+  }, [])
 
   // Kiểm tra vị trí để căn phải nếu ở gần mép phải màn hình
   useEffect(() => {
@@ -41,6 +51,10 @@ const FormMultiSearchSelect = ({
     const handleClickOutside = (event) => {
       if (containerRef.current && !containerRef.current.contains(event.target)) {
         setIsOpen(false)
+        if (searchTerm) {
+          setSearchTerm('')
+          if (onSearch) onSearch('')
+        }
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -49,26 +63,40 @@ const FormMultiSearchSelect = ({
       document.removeEventListener('mousedown', handleClickOutside)
       document.removeEventListener('touchstart', handleClickOutside)
     }
-  }, [])
+  }, [searchTerm, onSearch])
 
   // Focus vào ô tìm kiếm khi mở dropdown
   useEffect(() => {
-    if (isOpen && searchInputRef.current) {
-      setTimeout(() => searchInputRef.current?.focus(), 100)
+    if (isOpen && inputRef.current) {
+      setTimeout(() => inputRef.current?.focus(), 50)
     }
   }, [isOpen])
 
-  // Lọc danh sách theo từ khóa tìm kiếm
+  // Lọc danh sách theo từ khóa tìm kiếm (chỉ lọc trên nhãn hiển thị, không lọc mã ID/lô con ẩn)
   const filteredOptions = useMemo(() => {
     if (!searchTerm) return options
     const s = searchTerm.toLowerCase().trim()
-    return options.filter(opt => 
-      String(opt.label || '').toLowerCase().includes(s) || 
-      String(opt.value || '').toLowerCase().includes(s) ||
-      String(opt.badge || '').toLowerCase().includes(s) ||
-      String(opt.orderCode || opt.order_code || '').toLowerCase().includes(s) ||
-      String(opt.productLabel || opt.product_label || '').toLowerCase().includes(s)
-    )
+    const matched = options.filter(opt => {
+      const label = String(opt.label || '').toLowerCase()
+      const rawSpec = String(opt.rawSpec || '').toLowerCase()
+      const badge = String(opt.badge || '').toLowerCase()
+      const productLabel = String(opt.productLabel || opt.product_label || '').toLowerCase()
+      const valStr = String(opt.value || '').toLowerCase()
+      return label.includes(s) || rawSpec.includes(s) || badge.includes(s) || productLabel.includes(s) || valStr.includes(s)
+    })
+
+    // Xếp hạng ưu tiên: bắt đầu bằng s (09xx) -> kết thúc bằng s (xx09) -> vị trí khác
+    return matched.sort((a, b) => {
+      const aStr = String(a.label || a.rawSpec || a.value || '').toLowerCase()
+      const bStr = String(b.label || b.rawSpec || b.value || '').toLowerCase()
+      const aStarts = aStr.startsWith(s) ? 1 : 0
+      const bStarts = bStr.startsWith(s) ? 1 : 0
+      if (aStarts !== bStarts) return bStarts - aStarts
+      const aEnds = aStr.endsWith(s) ? 1 : 0
+      const bEnds = bStr.endsWith(s) ? 1 : 0
+      if (aEnds !== bEnds) return bEnds - aEnds
+      return aStr.localeCompare(bStr)
+    })
   }, [options, searchTerm])
 
   // Nhãn hiển thị khi thu gọn
@@ -81,7 +109,12 @@ const FormMultiSearchSelect = ({
       return `Đã chọn ${count} ${typeStr}`
     }
     if (matched.length === 1) {
-      return String(matched[0].label).split(' (')[0]
+      const item = matched[0]
+      const base = String(item.label || item.rawSpec || values[0]).trim()
+      if (item.badge && !base.includes(item.badge)) {
+        return `${base} (${item.badge})`
+      }
+      return base
     }
     return values[0] || placeholder
   }, [options, values, placeholder, itemType])
@@ -125,41 +158,127 @@ const FormMultiSearchSelect = ({
         </label>
       )}
 
-      {/* Ô hiển thị giá trị đã chọn */}
+      {/* Ô hiển thị & nhập giá trị tìm kiếm trực tiếp (như Ảnh 2) */}
       <div
-        onClick={() => !disabled && setIsOpen(!isOpen)}
+        onClick={() => {
+          if (!disabled) {
+            setIsOpen(true)
+            if (inputRef.current) inputRef.current.focus()
+          }
+        }}
         style={{
           height: '42px',
           minHeight: '42px',
-          padding: '0 8px',
+          padding: '0 10px',
           borderRadius: '10px',
           border: `1.5px solid ${isOpen ? '#4a240e' : '#a3998e'}`,
           backgroundColor: disabled ? '#e2ded9' : '#ffffff',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          cursor: disabled ? 'not-allowed' : 'pointer',
+          cursor: disabled ? 'not-allowed' : 'text',
           transition: 'all 0.2s ease',
           boxShadow: isOpen ? '0 0 0 2px rgba(92, 45, 14, 0.15)' : 'none',
           width: '100%',
           boxSizing: 'border-box'
         }}
       >
-        <span style={{ 
-          fontSize: '12.5px', 
-          color: values.length > 0 ? '#1e293b' : '#94a3b8', 
-          fontWeight: '600',
-          whiteSpace: 'nowrap', 
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          flex: 1,
-          minWidth: 0,
-          marginRight: '4px',
-          lineHeight: '1.2'
-        }}>
-          {selectedLabel}
-        </span>
-        <ChevronDown size={15} color="#64748b" style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', flexShrink: 0 }} />
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center' }}>
+          {isOpen ? (
+            <input
+              ref={inputRef}
+              type="text"
+              value={searchTerm}
+              onChange={(e) => {
+                const val = e.target.value
+                setSearchTerm(val)
+                if (onSearch) {
+                  if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+                  searchTimerRef.current = setTimeout(() => {
+                    onSearch(val)
+                  }, 250)
+                }
+              }}
+              placeholder={values.length > 0 ? selectedLabel : (placeholder || 'Nhập hoặc chọn...')}
+              disabled={disabled}
+              style={{
+                border: 'none',
+                outline: 'none',
+                backgroundColor: 'transparent',
+                fontSize: '13px',
+                fontWeight: '600',
+                color: disabled ? '#666666' : '#1e293b',
+                cursor: disabled ? 'not-allowed' : 'text',
+                width: '100%',
+                padding: 0,
+              }}
+            />
+          ) : (
+            <span
+              style={{
+                fontSize: '13px',
+                color: values.length > 0 ? '#1e293b' : '#94a3b8',
+                fontWeight: '600',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                width: '100%',
+                lineHeight: '1.2'
+              }}
+            >
+              {selectedLabel}
+            </span>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0, marginLeft: '6px' }}>
+          {isOpen && searchTerm ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                setSearchTerm('')
+                if (onSearch) {
+                  if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+                  onSearch('')
+                }
+                if (inputRef.current) inputRef.current.focus()
+              }}
+              style={{
+                border: 'none',
+                background: 'transparent',
+                padding: '2px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                color: '#94a3b8',
+                borderRadius: '50%',
+              }}
+              title="Xóa tìm kiếm"
+            >
+              <X size={14} />
+            </button>
+          ) : null}
+          <ChevronDown
+            size={15}
+            color="#64748b"
+            onClick={(e) => {
+              e.stopPropagation()
+              if (!disabled) {
+                setIsOpen(!isOpen)
+                if (!isOpen) {
+                  setTimeout(() => inputRef.current?.focus(), 50)
+                }
+              }
+            }}
+            style={{
+              transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+              transition: 'transform 0.2s',
+              cursor: 'pointer'
+            }}
+          />
+        </div>
       </div>
 
       {/* Dropdown Menu */}
@@ -183,31 +302,38 @@ const FormMultiSearchSelect = ({
           maxHeight: '280px',
           boxSizing: 'border-box'
         }}>
-          {/* Ô Input tìm kiếm bên trong dropdown */}
-          <div style={{ padding: '8px 10px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#f8fafc', flexShrink: 0 }}>
-            <Search size={14} color="#64748b" />
-            <input
-              ref={searchInputRef}
-              type="text"
-              placeholder="Gõ để tìm kiếm..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              style={{
-                flex: 1,
-                border: 'none',
-                backgroundColor: 'transparent',
-                outline: 'none',
-                fontSize: '12.5px',
-                color: '#1e293b'
-              }}
-            />
-            {searchTerm && (
-              <X size={14} color="#94a3b8" onClick={() => setSearchTerm('')} style={{ cursor: 'pointer' }} />
-            )}
-          </div>
 
           {/* Danh sách Options */}
           <div style={{ overflowY: 'auto', flex: 1, padding: '4px' }}>
+            {allowCustomInput && searchTerm.trim() && !options.some(o => String(o.value || '').toLowerCase() === searchTerm.trim().toLowerCase() || String(o.label || '').toLowerCase() === searchTerm.trim().toLowerCase()) && (
+              <div
+                onClick={() => {
+                  const customVal = searchTerm.trim().toUpperCase()
+                  if (!values.includes(customVal)) {
+                    onChange([...values, customVal])
+                  }
+                  setSearchTerm('')
+                }}
+                style={{
+                  padding: '9px 10px',
+                  borderRadius: '6px',
+                  fontSize: '12.5px',
+                  color: '#5c2d0e',
+                  backgroundColor: '#FAF5EE',
+                  cursor: 'pointer',
+                  fontWeight: '700',
+                  border: '1.5px dashed #C89D7C',
+                  marginBottom: '6px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+                }}
+              >
+                <span>+ Thêm {itemType ? itemType : 'mục'}: <strong>"{searchTerm.trim().toUpperCase()}"</strong></span>
+                <span style={{ fontSize: '11px', color: '#b45309', fontWeight: '800' }}>Nhấn để thêm</span>
+              </div>
+            )}
             {filteredOptions.length > 0 ? (
               filteredOptions.map((opt, idx) => {
                 const optValStr = opt.value?.toString()

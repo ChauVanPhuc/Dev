@@ -35,6 +35,7 @@ mimetypes.add_type('application/vnd.android.package-archive', '.apk')
 
 
 
+# pyrefly: ignore [missing-import]
 from shared.utils.banner import print_banner
 
 from app.routes import api_router
@@ -377,6 +378,7 @@ async def log_requests(request: Request, call_next):
             
     # Ghi nhận hoạt động thiết bị truy cập
     try:
+        # pyrefly: ignore [missing-import]
         from shared.utils.device_tracker import device_tracker
         client_host = request.client.host if request.client else "unknown"
         user_agent = request.headers.get("user-agent", "unknown")
@@ -465,12 +467,14 @@ async def check_write_permissions(request: Request, call_next):
                                 elif path.startswith("/api/v1/inspections"):
                                     candidate_keys = [
                                         "/inspection-stage", "/input-inspection", "/production_v2/inspection",
-                                        "/admin/reports", "reports", "/admin/defects", "defects"
+                                        "/admin/reports", "reports", "/admin/defects", "defects",
+                                        "/admin/quality", "admin/quality", "quality-records", "/admin/quality-records"
                                     ]
                                 elif path.startswith("/api/v1/qc"):
                                     candidate_keys = [
                                         "/inspection-stage", "/inspection-daily", "/admin/defects",
-                                        "defects", "/admin/reports", "reports"
+                                        "defects", "/admin/reports", "reports",
+                                        "/admin/quality", "admin/quality", "quality-records", "/admin/quality-records"
                                     ]
                                     
                                 # 2. Deliveries

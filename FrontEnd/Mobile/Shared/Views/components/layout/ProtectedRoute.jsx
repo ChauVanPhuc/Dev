@@ -36,9 +36,11 @@ const mapPathToPermissionKeys = (pathname) => {
   if (path.startsWith('/feedback')) return ['/feedback', 'feedback', 'mobile_feedback'];
   if (path.startsWith('/ctq-sos')) return ['/ctq-sos', 'ctq-sos', 'mobile_ctq-sos'];
   if (path.startsWith('/warnings')) return ['/warnings', 'warnings', 'mobile_warnings'];
+  if (path.startsWith('/admin/kpi')) return ['/admin/kpi/dashboard', '/admin/kpi', 'kpi', 'mobile_kpi'];
   if (path.startsWith('/production/orders') || path.startsWith('/production/order-detail')) return ['/production/orders', 'production-orders', '/plan'];
   if (path.startsWith('/production/plans')) return ['/production/plans', 'production-plans', '/plan'];
   if (path.startsWith('/production/transfers')) return ['/production/transfers', 'production-transfers', '/delivery-info'];
+  if (path.startsWith('/admin/quality') || path.startsWith('/quality') || path === 'admin/quality') return ['/admin/quality', 'admin/quality', 'quality-records', '/admin/quality-records', 'quality', 'mobile_quality', '/inspection-stage'];
   if (path.startsWith('/production_v2') || path.startsWith('/production-v2')) return ['/production_v2', 'mobile_production_v2', '/delivery-info', '/inspection-stage'];
 
   return [path, path.replace(/^\//, '')];

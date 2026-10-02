@@ -743,10 +743,14 @@ def get_inspections_list(
     sort: Optional[str] = Query("desc"),
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1),
+    user_id: Optional[int] = Query(None),
+    user_name: Optional[str] = Query(None),
+    only_my_tickets: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     """
     [GET] Lấy danh sách phiếu kiểm tra cho Mobile CL08 (phân trang, lọc theo tab/tháng/sắp xếp).
+    Tự động lọc theo tài khoản đăng nhập (nếu tài khoản chưa có dữ liệu thì mặc định nhìn thấy hết).
     """
     import json
     from sqlalchemy import extract
@@ -778,11 +782,35 @@ def get_inspections_list(
             )
         )
 
-    # Đếm số phiếu Chờ kiểm tra theo đúng bộ lọc đang chọn
-    total_pending = base_query.filter(
-        or_(InputInspection.is_confirmed == False, InputInspection.is_confirmed.is_(None))
-    ).count()
+    # Điều kiện lọc theo tài khoản người dùng
+    user_cond = None
+    user_conditions = []
+    if user_id and str(user_id).isdigit():
+        user_conditions.append(InputInspection.inspector_id == int(user_id))
+        user_conditions.append(InputInspection.confirmed_by == int(user_id))
+    if user_name and str(user_name).strip():
+        clean_name = str(user_name).strip()
+        user_conditions.append(InputInspection.inspector_name.ilike(f"%{clean_name}%"))
+        user_conditions.append(InputInspection.data_json.ilike(f'%"created_by": "{clean_name}"%'))
+        user_conditions.append(InputInspection.data_json.ilike(f'%"creator": "{clean_name}"%'))
 
+    if user_conditions:
+        user_cond = or_(*user_conditions)
+
+    # Tính pendingCount (số phiếu Chờ kiểm tra):
+    # Nếu user có phiếu chờ -> lấy số phiếu của user, nếu user không có phiếu chờ nào -> lấy toàn bộ phiếu chờ
+    all_pending_query = base_query.filter(
+        or_(InputInspection.is_confirmed == False, InputInspection.is_confirmed.is_(None))
+    )
+    all_pending_count = all_pending_query.count()
+
+    user_pending_count = 0
+    if user_cond is not None and only_my_tickets != "false":
+        user_pending_count = all_pending_query.filter(user_cond).count()
+
+    total_pending = user_pending_count if user_pending_count > 0 else all_pending_count
+
+    # Xác định query theo Tab
     query = base_query
     if tab in ["pending", "transfer"]:
         query = query.filter(or_(InputInspection.is_confirmed == False, InputInspection.is_confirmed.is_(None)))
@@ -796,7 +824,23 @@ def get_inspections_list(
                 )
             )
 
-    total_count = query.count()
+    # Lọc theo tài khoản:
+    # Nếu user có phiếu trong danh sách hiện tại -> hiển thị phiếu của user đó.
+    # Nếu user không có phiếu nào trong danh sách hiện tại -> mặc định hiển thị tất cả phiếu!
+    is_user_filtered = False
+    if user_cond is not None and only_my_tickets != "false":
+        user_query = query.filter(user_cond)
+        user_count = user_query.count()
+        if user_count > 0:
+            query = user_query
+            total_count = user_count
+            is_user_filtered = True
+        else:
+            total_count = query.count()
+            is_user_filtered = False
+    else:
+        total_count = query.count()
+        is_user_filtered = False
     skip = (page - 1) * limit
 
     if sort == "asc":
@@ -857,7 +901,8 @@ def get_inspections_list(
         "total": total_count,
         "total_pending": total_pending,
         "page": page,
-        "pageSize": limit
+        "pageSize": limit,
+        "is_user_filtered": is_user_filtered,
     }
 
 
@@ -1042,7 +1087,7 @@ def get_pallet_list(
                 "po": r.batch_no or "",
                 "product": r.product_sku or "",
                 "spec": r.specification or "",
-                "stage": r.stage_name or r.inspection_type or "",
+                "stage": r.stage or r.stage_name or r.inspection_type or "",
                 "conclusion": r.conclusion or "pass",
                 "sampleQty": r.sample_qty or 0,
                 "errorQty": r.error_qty or 0,
@@ -1054,6 +1099,29 @@ def get_pallet_list(
             }
         elif clean_code and clean_code in pallets_map:
             pallets_map[clean_code]["inspectionCount"] += 1
+
+        # Bổ sung gợi ý theo Mã phiếu kiểm tra (KT... / DA...) để người dùng chọn trực tiếp mã phiếu
+        kt_code = f"KT{r.id}"
+        if kt_code not in pallets_map:
+            t_display = r.ticket_code or kt_code
+            desc_parts = [p for p in [r.pallet_code or r.batch_no, r.product_sku] if p]
+            desc_str = f" ({' - '.join(desc_parts)})" if desc_parts else ""
+            pallets_map[kt_code] = {
+                "palletCode": kt_code,
+                "ticketCode": t_display,
+                "po": r.batch_no or "",
+                "product": r.product_sku or "",
+                "spec": r.specification or "",
+                "stage": r.stage or r.stage_name or r.inspection_type or "",
+                "conclusion": r.conclusion or "pass",
+                "sampleQty": r.sample_qty or 0,
+                "errorQty": r.error_qty or 0,
+                "inspectionCount": 1,
+                "lastInspectionId": r.id,
+                "lastInspectionCode": t_display,
+                "lastInspectionAt": r.created_at.strftime("%H:%M | %d/%m/%Y") if r.created_at else "",
+                "label": f"Phiếu {kt_code}{desc_str}"
+            }
 
     # 2. Pallets from PalletCard table
     try:
@@ -1108,13 +1176,14 @@ def get_pallet_list(
         print(f"[get_pallet_list] InputInspection fetch error: {err}")
 
     results = list(pallets_map.values())
-    if search and search.strip():
+    if isinstance(search, str) and search.strip():
         st = search.strip().lower()
         results = [
             p for p in results
             if st in p["palletCode"].lower() or st in p["po"].lower() or st in p["product"].lower() or st in p["stage"].lower()
         ]
-    return results[:limit]
+    lim = limit if isinstance(limit, int) else 50
+    return results[:lim]
 
 
 @router.get("/by-pallet")
@@ -1143,17 +1212,48 @@ def get_pallet_inspection_details(
     Tự động nạp vào form khi chọn/nhập Mã Pallet ở chế độ Kiểm tra lại.
     """
     import json
+    import re
     from sqlalchemy import or_, cast, String
     clean_code = pallet_code.strip()
-    records = db.query(InputInspection).filter(
-        or_(
-            InputInspection.pallet_code == clean_code,
-            InputInspection.ticket_code == clean_code,
-            InputInspection.batch_no == clean_code,
-            InputInspection.cont_name == clean_code,
-            InputInspection.data_json.ilike(f'%"{clean_code}"%')
-        )
-    ).order_by(InputInspection.id.desc()).all()
+
+    # Tạo các biến thể mã tìm kiếm (hỗ trợ cả Mã Pallet và Mã Phiếu Kiểm Tra KT / DA / ID số)
+    code_variants = {clean_code, clean_code.upper()}
+    clean_upper = clean_code.upper()
+    if clean_upper.startswith("KT"):
+        num_part = clean_upper[2:].strip()
+        if num_part:
+            code_variants.add(f"DA{num_part}")
+            code_variants.add(num_part)
+            if num_part.isdigit():
+                code_variants.add(f"DA{int(num_part):03d}")
+    elif clean_upper.startswith("DA"):
+        num_part = clean_upper[2:].strip()
+        if num_part:
+            code_variants.add(f"KT{num_part}")
+            code_variants.add(num_part)
+            if num_part.isdigit():
+                code_variants.add(f"KT{int(num_part):03d}")
+    elif clean_code.isdigit():
+        code_variants.add(f"KT{clean_code}")
+        code_variants.add(f"DA{clean_code}")
+        code_variants.add(f"KT{int(clean_code):03d}")
+        code_variants.add(f"DA{int(clean_code):03d}")
+
+    filter_conditions = [
+        InputInspection.pallet_code.in_(code_variants),
+        InputInspection.ticket_code.in_(code_variants),
+        InputInspection.batch_no.in_(code_variants),
+        InputInspection.cont_name.in_(code_variants),
+        InputInspection.data_json.ilike(f'%"{clean_code}"%')
+    ]
+    digits_match = re.search(r'\d+', clean_code)
+    if digits_match:
+        try:
+            filter_conditions.append(InputInspection.id == int(digits_match.group()))
+        except (ValueError, TypeError):
+            pass
+
+    records = db.query(InputInspection).filter(or_(*filter_conditions)).order_by(InputInspection.id.desc()).all()
 
     if not records:
         # 1. Fallback tìm từ bảng pallet_cards
@@ -1287,6 +1387,14 @@ def get_pallet_inspection_details(
         except Exception:
             pass
 
+    # Build a lookup of product -> non-empty spec from all records to fallback if a record has empty spec
+    product_spec_map = {}
+    for rec in records:
+        pn = (rec.product_sku or rec.part_name or "").strip()
+        sp = (rec.specification or "").strip()
+        if pn and sp and pn not in product_spec_map:
+            product_spec_map[pn] = sp
+
     for r in records:
         pj = {}
         if r.data_json:
@@ -1310,16 +1418,37 @@ def get_pallet_inspection_details(
             img_list = pj.get("images")
 
         t_code = r.ticket_code or f"DA{r.id:03d}"
+        p_name = r.product_sku or r.part_name or pj.get("product") or ""
+        pn_clean = p_name.strip().lower()
+        s_val = r.specification or pj.get("spec") or ""
+        if not s_val and pn_clean:
+            for k, v in product_spec_map.items():
+                if pn_clean in k.lower() or k.lower() in pn_clean:
+                    s_val = v
+                    break
+
+        b_qty = pj.get("totalBatchQty") or pj.get("plan_qty") or getattr(r, "plan_qty", None) or r.required_qty or 0
+        req_qty = r.required_qty or pj.get("requiredQty") or ""
+        if (not req_qty or req_qty == 0 or req_qty == "0") and pn_clean:
+            for other_r in records:
+                op = (other_r.product_sku or other_r.part_name or "").strip().lower()
+                if (pn_clean in op or op in pn_clean) and other_r.required_qty:
+                    req_qty = other_r.required_qty
+                    break
+        if (not b_qty or b_qty == 0 or b_qty == "0") and req_qty:
+            b_qty = req_qty
 
         history.append({
             "id": r.id,
             "code": t_code,
             "mode": r.inspection_type or "first_sample",
             "po": r.batch_no or r.cont_name or pj.get("po") or "",
-            "product": r.product_sku or r.part_name or pj.get("product") or "",
-            "spec": r.specification or pj.get("spec") or "",
+            "product": p_name,
+            "spec": s_val,
             "stage": r.stage or pj.get("stage") or r.inspection_type or "",
-            "requiredQty": r.required_qty or pj.get("requiredQty") or "",
+            "requiredQty": req_qty,
+            "plan_qty": b_qty,
+            "totalBatchQty": b_qty,
             "conclusion": r.conclusion or r.result or pj.get("result") or "pass",
             "sampleQty": r.sample_qty or pj.get("sampleQty") or 0,
             "errorQty": r.error_qty or pj.get("errorQty") or 0,
@@ -1399,6 +1528,11 @@ def get_pallet_inspection_details(
     parts_array = [p.strip() for p in parts_raw.split(",") if p.strip()] if "," in parts_raw else ([parts_raw] if parts_raw else [])
 
     specs_raw = first_record.specification or first_parsed.get("spec") or ""
+    if not specs_raw and parts_raw:
+        for k, v in product_spec_map.items():
+            if parts_raw.lower() in k.lower() or k.lower() in parts_raw.lower():
+                specs_raw = v
+                break
     specs_array = [s.strip() for s in specs_raw.split(",") if s.strip()] if "," in specs_raw else ([specs_raw] if specs_raw else [])
 
     parts_details_saved = first_parsed.get("parts_details") or []
@@ -1460,7 +1594,7 @@ def get_pallet_inspection_details(
         "inspected_parts": parts_array,
         "inspected_specs": specs_array,
         "inspected_details": inspected_details,
-        "spec": first_record.specification or first_parsed.get("spec") or "",
+        "spec": specs_raw or first_record.specification or first_parsed.get("spec") or "",
         "stage": first_record.stage or first_parsed.get("stage") or first_record.inspection_type or "",
         "requiredQty": remaining_pallet_qty,
         "plan_qty": base_required_qty,
@@ -1737,6 +1871,8 @@ async def create_inspection(
         spec = body.get("spec") or ""
         sample_qty = int(body.get("sampleQty") or 0)
         error_qty = int(body.get("errorQty") or 0)
+        recheck_qty = int(body.get("recheckQty") or body.get("recheck_qty") or 0)
+        pos = body.get("pos") or []
         note = body.get("note") or ""
         errors = body.get("errors") or []
         raw_images = body.get("images") or []
@@ -1758,6 +1894,7 @@ async def create_inspection(
             "mode": mode,
             "stage": stage,
             "po": po,
+            "pos": pos,
             "product": product,
             "images": images,
             "spec": spec,
@@ -1765,6 +1902,8 @@ async def create_inspection(
             "requiredQty": body.get("requiredQty"),
             "sampleQty": sample_qty,
             "errorQty": error_qty,
+            "recheckQty": recheck_qty,
+            "recheck_qty": recheck_qty,
             "errors": errors,
             "palletCode": pallet_code_val,
             "backup_qr": backup_qr or None,
@@ -1876,7 +2015,7 @@ async def create_inspection(
                                 pass
 
                 if defect_items:
-                    sync_defects_to_daily_inspection(stage, defect_items, creator, db, inspected_qty=sample_qty)
+                    sync_defects_to_daily_inspection(stage, defect_items, creator, db, inspected_qty=sample_qty, batch_no=po)
             except Exception as sync_e:
                 print(f"[Mobile Inspection Sync Error] {sync_e}")
 
@@ -1888,12 +2027,14 @@ async def create_inspection(
             "mode": mode,
             "stage": stage,
             "po": po,
+            "pos": pos,
             "result": result,
             "action": action,
             "product": product,
             "spec": spec,
             "sampleQty": sample_qty,
             "errorQty": error_qty,
+            "recheckQty": recheck_qty,
             "palletCode": pallet_code_val,
             "note": note,
             "images": images,
@@ -4103,6 +4244,134 @@ def get_pending_inspections(
     return pending_tasks
 
 
+@router.get("/all-tickets")
+def get_all_inspection_tickets(
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    period: Optional[str] = Query(None),  # 'today', 'week', 'month', 'all'
+    q: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Lấy danh sách toàn bộ phiếu kiểm tra (cả đã xác nhận và chưa xác nhận).
+    Hỗ trợ lọc theo khoảng thời gian (ngày, tuần, tháng) hoặc tìm kiếm theo từ khóa q.
+    """
+    query = db.query(InputInspection)
+
+    now = datetime.datetime.now()
+    if period == "today":
+        today_start = datetime.datetime(now.year, now.month, now.day, 0, 0, 0)
+        query = query.filter(or_(InputInspection.inspected_at >= today_start, and_(InputInspection.inspected_at.is_(None), InputInspection.created_at >= today_start)))
+    elif period == "week":
+        today_start = datetime.datetime(now.year, now.month, now.day, 0, 0, 0)
+        week_start = today_start - timedelta(days=now.weekday())
+        query = query.filter(or_(InputInspection.inspected_at >= week_start, and_(InputInspection.inspected_at.is_(None), InputInspection.created_at >= week_start)))
+    elif period == "month":
+        month_start = datetime.datetime(now.year, now.month, 1, 0, 0, 0)
+        query = query.filter(or_(InputInspection.inspected_at >= month_start, and_(InputInspection.inspected_at.is_(None), InputInspection.created_at >= month_start)))
+    else:
+        if start_date:
+            try:
+                s_dt = datetime.datetime.strptime(start_date, "%Y-%m-%d")
+                query = query.filter(or_(InputInspection.inspected_at >= s_dt, and_(InputInspection.inspected_at.is_(None), InputInspection.created_at >= s_dt)))
+            except Exception:
+                pass
+        if end_date:
+            try:
+                e_dt = datetime.datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+                query = query.filter(or_(InputInspection.inspected_at <= e_dt, and_(InputInspection.inspected_at.is_(None), InputInspection.created_at <= e_dt)))
+            except Exception:
+                pass
+
+    if q and q.strip():
+        search_kw = f"%{q.strip()}%"
+        query = query.filter(
+            or_(
+                InputInspection.ticket_code.ilike(search_kw),
+                InputInspection.part_name.ilike(search_kw),
+                InputInspection.batch_no.ilike(search_kw),
+                InputInspection.product_sku.ilike(search_kw),
+                InputInspection.note.ilike(search_kw),
+                InputInspection.inspection_type.ilike(search_kw),
+                InputInspection.stage.ilike(search_kw),
+                InputInspection.inspector_name.ilike(search_kw)
+            )
+        )
+
+    all_records = query.order_by(
+        InputInspection.inspected_at.desc(),
+        InputInspection.created_at.desc(),
+        InputInspection.id.desc()
+    ).all()
+
+    tasks = []
+    for item in all_records:
+        type_label = get_inspectionTypeLabel_local(item.inspection_type or item.stage) if (item.inspection_type or item.stage) else "Kiểm tra phiếu"
+        task_type = "stage" if (item.inspection_type and item.inspection_type != "first_sample" and not item.plan_id) else "input"
+        ticket_str = item.ticket_code or f"KT{item.id:03d}"
+        part_str = item.part_name or item.product_sku or item.batch_no or "N/A"
+        rec_date = item.inspected_at or item.created_at or datetime.datetime.now()
+
+        data_dict = {}
+        if item.data_json:
+            try:
+                data_dict = json.loads(item.data_json)
+            except Exception:
+                data_dict = {}
+
+        # Bỏ qua phiếu đã bị hủy hồ sơ
+        if (data_dict and (data_dict.get("is_cancelled") is True or data_dict.get("status") == "cancelled")) or (item.note and "[ĐÃ HỦY HỒ SƠ]" in str(item.note)):
+            continue
+
+        is_conf = bool(item.is_confirmed)
+        status_val = data_dict.get("status") or ("Đã xong" if is_conf else "Chưa Làm")
+        action_val = data_dict.get("action") or ("chap-nhan" if (item.result in ["pass", "Đạt"] or item.conclusion in ["pass", "Đạt"]) else "tra-ve")
+        insp_name = item.inspector_name or data_dict.get("staff") or data_dict.get("creator") or data_dict.get("inspector_name") or "QC"
+
+        tasks.append({
+            "id": item.id,
+            "type": task_type,
+            "inspection_type": item.inspection_type,
+            "stage": item.stage,
+            "ticket_code": ticket_str,
+            "task_name": f"Hồ sơ kiểm tra #{ticket_str} ({part_str})" if ticket_str else f"Hồ sơ kiểm tra - {part_str}",
+            "category": type_label,
+            "priority": 3,
+            "status": status_val,
+            "recorded_date": rec_date.isoformat() if hasattr(rec_date, 'isoformat') else str(rec_date),
+            "completion_date": rec_date.isoformat() if hasattr(rec_date, 'isoformat') else str(rec_date),
+            "notes": item.note or item.notes or "",
+            "part_name": item.part_name or item.product_sku or "",
+            "specification": item.specification or "",
+            "required_qty": item.required_qty or data_dict.get("requiredQty") or 0,
+            "sample_qty": item.sample_qty or data_dict.get("sampleQty") or 0,
+            "error_qty": item.error_qty or data_dict.get("errorQty") or 0,
+            "batch_no": item.batch_no or "",
+            "inspector_name": insp_name,
+            "result": item.result or item.conclusion or "pass",
+            "action": action_val,
+            "handling_info": data_dict.get("handling_info") or data_dict.get("resolution_note") or "",
+            "image_path_1": item.image_path_1,
+            "image_path_2": item.image_path_2,
+            "image_path_3": item.image_path_3,
+            "images": (
+                [img for img in [item.image_path_1, item.image_path_2, item.image_path_3] if img]
+                or (data_dict.get("images") if isinstance(data_dict.get("images"), list) else [])
+            ),
+            "parameter": data_dict.get("parameter") or "",
+            "data_json": item.data_json or "",
+            "parts_details": data_dict.get("parts_details") or data_dict.get("partsDetails") or [],
+            "edit_history": data_dict.get("edit_history") or [],
+            "is_confirmed": is_conf
+        })
+
+    for i, task in enumerate(tasks):
+        task["stt"] = i + 1
+
+    return tasks
+
+
+
 def _normalize_result_label(val: Optional[str]) -> str:
     if not val:
         return "Đạt"
@@ -4553,6 +4822,114 @@ def update_inspection_record(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Lỗi khi cập nhật phiếu kiểm tra: {str(e)}")
+
+
+@router.post("/revert/{type}/{id}")
+@router.post("/revert/{id}")
+def revert_inspection_to_pending(
+    id: int,
+    type: str = "input",
+    payload: Optional[Dict[str, Any]] = Body(None),
+    db: Session = Depends(get_db)
+):
+    """
+    [POST] Trả về phiếu kiểm tra: thay đổi trạng thái từ 'Đã xác nhận' về 'Chưa làm'.
+    - is_confirmed = False
+    - confirmed_at = None
+    - confirmed_by = None
+    - data_json.status = "Chưa Làm"
+    - data_json.action = "cho-xu-ly"
+    - Tự động ghi nhận lịch sử Audit Trail.
+    """
+    body_data = payload or {}
+    reason = (body_data.get("reason") or body_data.get("note") or "").strip()
+    user_name = body_data.get("reverted_by") or body_data.get("user_name") or "QC Administrator"
+    user_role = body_data.get("user_role") or "Quản lý QC"
+
+    # 1. Nếu là phiếu daily inspection
+    if type == "daily":
+        daily_rec = db.query(DailyInspectionRecord).filter(DailyInspectionRecord.id == id).first()
+        if not daily_rec:
+            raise HTTPException(status_code=404, detail=f"Không tìm thấy biên bản kiểm tra ca ID {id}")
+        daily_rec.is_confirmed = False
+        daily_rec.status = "Chưa Làm"
+        db.commit()
+        db.refresh(daily_rec)
+        return {
+            "success": True,
+            "message": "Đã trả về biên bản kiểm tra ca thành công (Chuyển thành Chưa làm)",
+            "type": "daily",
+            "id": id,
+            "is_confirmed": False,
+            "status": "Chưa Làm"
+        }
+
+    # 2. Với các phiếu input / stage / process / etc.
+    record = db.query(InputInspection).filter(InputInspection.id == id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail=f"Không tìm thấy phiếu kiểm tra có ID {id}")
+
+    old_confirmed = bool(record.is_confirmed)
+    record.is_confirmed = False
+    record.confirmed_at = None
+    record.confirmed_by = None
+
+    data_dict = {}
+    if record.data_json:
+        try:
+            data_dict = json.loads(record.data_json) if isinstance(record.data_json, str) else dict(record.data_json)
+        except Exception:
+            data_dict = {}
+
+    old_status = data_dict.get("status") or ("Đã xong" if old_confirmed else "Chưa Làm")
+    data_dict["status"] = "Chưa Làm"
+    data_dict["action"] = "cho-xu-ly"
+    if reason:
+        data_dict["revert_reason"] = reason
+
+    # Ghi nhận lịch sử Audit Trail
+    changes = [
+        {
+            "field": "is_confirmed",
+            "label": "Trạng thái xác nhận",
+            "old_val": "Đã xác nhận" if old_confirmed else "Chưa xác nhận",
+            "new_val": "Chưa làm"
+        },
+        {
+            "field": "status",
+            "label": "Trạng thái hồ sơ",
+            "old_val": old_status,
+            "new_val": "Chưa Làm"
+        }
+    ]
+
+    _record_inspection_history(
+        data_dict=data_dict,
+        action_type="revert",
+        action_label="Trả về phiếu kiểm tra (Chuyển thành Chưa làm)",
+        changes=changes,
+        user_name=user_name,
+        user_role=user_role,
+        note=reason or "Yêu cầu kiểm tra / xử lý lại hồ sơ"
+    )
+
+    record.data_json = json.dumps(data_dict, ensure_ascii=False)
+
+    try:
+        db.commit()
+        db.refresh(record)
+        return {
+            "success": True,
+            "message": "Đã trả về phiếu kiểm tra thành công, trạng thái chuyển thành Chưa làm",
+            "type": type,
+            "id": id,
+            "is_confirmed": False,
+            "status": "Chưa Làm",
+            "edit_history": data_dict.get("edit_history") or []
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Lỗi khi trả về phiếu kiểm tra: {str(e)}")
 
 
 @router.post("/cancel-inspection/{id}")
@@ -5741,12 +6118,16 @@ def get_inspection_detail_by_id(id: str, db: Session = Depends(get_db)):
         "process": data_dict.get("process"),
         "staff": data_dict.get("staff"),
         "parameter": data_dict.get("parameter"),
-        "paramStage": data_dict.get("paramStage"),
-        "paramPo": data_dict.get("paramPo"),
-        "paramProduct": data_dict.get("paramProduct"),
-        "paramSample": data_dict.get("paramSample"),
-        "paramPass": data_dict.get("paramPass"),
-        "paramFail": data_dict.get("paramFail")
+        "paramStage": data_dict.get("paramStage") or stage_name,
+        "paramPo": data_dict.get("paramPo") or record.batch_no or record.cont_name or data_dict.get("po") or "",
+        "paramProduct": data_dict.get("paramProduct") or record.product_sku or record.part_name or data_dict.get("product") or "",
+        "paramSample": data_dict.get("paramSample") if data_dict.get("paramSample") is not None else (record.sample_qty or data_dict.get("sampleQty")),
+        "paramPass": data_dict.get("paramPass") if data_dict.get("paramPass") is not None else (sample_qty - error_qty),
+        "paramFail": data_dict.get("paramFail") if data_dict.get("paramFail") is not None else (record.error_qty or data_dict.get("errorQty")),
+        "totalBatchQty": data_dict.get("totalBatchQty") or record.required_qty or data_dict.get("requiredQty") or sample_qty,
+        "targetType": data_dict.get("targetType") or ("pallet" if (record.pallet_code and not (record.batch_no or data_dict.get("po"))) else "po"),
+        "recheckQty": data_dict.get("recheckQty") or data_dict.get("recheck_qty") or 0,
+        "pos": data_dict.get("pos") or []
     }
 
 

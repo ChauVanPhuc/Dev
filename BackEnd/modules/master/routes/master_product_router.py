@@ -1,4 +1,5 @@
 import os
+import re
 import uuid
 from typing import Optional, List, Any
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
@@ -437,5 +438,31 @@ def delete_product_material_by_id(material_id: int, id: int, db: Session = Depen
     if not success:
         raise HTTPException(status_code=404, detail="Không tìm thấy dòng vật tư để xóa")
     return {"message": "Đã xóa dòng vật tư thành công"}
+
+
+@router.get("/{id}/export-bom-excel")
+def export_bom_excel_endpoint(id: int, db: Session = Depends(get_db)):
+    """
+    [GET] Xuất cấu trúc BOM phân tầng của sản phẩm ra file Excel chuẩn D:\\SmartFlow\\BOM\\BOM1.xlsx.
+    """
+    try:
+        excel_buffer = master_product_controller.export_master_product_bom_excel(db, product_id=id)
+        prod = db.query(master_product_controller.MasterProduct).filter(master_product_controller.MasterProduct.id == id).first()
+        sku_clean = re.sub(r'[^a-zA-Z0-9_\-\.]', '_', prod.sku if prod and prod.sku else str(id))
+        filename = f"BOM_{sku_clean}.xlsx"
+
+        return StreamingResponse(
+            excel_buffer,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Access-Control-Expose-Headers": "Content-Disposition"
+            }
+        )
+    except ValueError as ve:
+        raise HTTPException(status_code=404, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lỗi xuất Excel BOM: {str(e)}")
+
 
 

@@ -1,4 +1,5 @@
 import React from 'react';
+import { getFullImagePath } from '../utils/claimHelpers';
 
 export const ClaimCustomerPenaltyModal = ({
   editingMonthData,
@@ -157,7 +158,7 @@ export const ClaimCustomerPenaltyModal = ({
                           if (showModal) showModal('Thông báo', 'Không tìm thấy liên kết file PDF.', 'warning');
                           return;
                         }
-                        const fullUrl = fileUrl.startsWith('http') ? fileUrl : `http://localhost:8000${fileUrl}`;
+                        const fullUrl = getFullImagePath(fileUrl);
                         window.open(fullUrl, '_blank');
                       }}
                       style={{

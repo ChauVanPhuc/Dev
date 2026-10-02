@@ -157,6 +157,11 @@ export const useInspectionReports = () => {
   // Delete Modal state
   const [deleteTarget, setDeleteTarget] = useState(null); // { item, tabType }
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Revert Modal state
+  const [revertTarget, setRevertTarget] = useState(null); // { item, tabType }
+  const [revertReason, setRevertReason] = useState('');
+  const [isReverting, setIsReverting] = useState(false);
   const [stageInspections, setStageInspections] = useState([]);
   const [dailyInspections, setDailyInspections] = useState([]);
   const [defectTypesMap, setDefectTypesMap] = useState({});
@@ -407,6 +412,33 @@ export const useInspectionReports = () => {
               <Printer size={15} /> In / Xuất PDF
             </button>
 
+            <button
+              onClick={() => {
+                setActiveActionMenu(null);
+                setRevertReason('');
+                setRevertTarget({ item, tabType });
+              }}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: 'none',
+                background: 'transparent',
+                textAlign: 'left',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontSize: '0.82rem',
+                color: '#D97706',
+                fontWeight: '600',
+                transition: 'background-color 0.15s ease'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FFFBEB'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            >
+              <RotateCcw size={15} style={{ color: '#D97706' }} /> Trả về (Chưa làm)
+            </button>
+
             <div style={{ height: '1px', backgroundColor: '#F3E9DD', margin: '4px 0' }} />
 
             <button
@@ -462,6 +494,38 @@ export const useInspectionReports = () => {
       else alert(err.response?.data?.detail || 'Xóa phiếu kiểm tra thất bại!');
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleConfirmRevert = async () => {
+    if (!revertTarget?.item) return;
+    const { item, tabType } = revertTarget;
+    setIsReverting(true);
+    try {
+      const revertUrl = `/inspections/revert/${tabType}/${item.id}`;
+      await api.post(revertUrl, {
+        reason: revertReason,
+        reverted_by: 'Quản lý QC'
+      });
+
+      // Cập nhật trạng thái tức thì trên giao diện
+      if (tabType === 'daily') {
+        setDailyInspections(prev => prev.map(i => i.id === item.id ? { ...i, is_confirmed: false, status: 'Chưa Làm' } : i));
+      } else {
+        setStageInspections(prev => prev.map(i => i.id === item.id ? { ...i, is_confirmed: false, status: 'Chưa Làm' } : i));
+      }
+
+      if (toast) toast('success', `Đã trả về phiếu kiểm tra #${item.id} thành công! Trạng thái chuyển thành Chưa làm.`);
+      else alert(`Đã trả về phiếu kiểm tra #${item.id} thành công! Trạng thái chuyển thành Chưa làm.`);
+      setRevertTarget(null);
+      setRevertReason('');
+      fetchData();
+    } catch (err) {
+      console.error('Lỗi khi trả về phiếu kiểm tra:', err);
+      if (toast) toast('error', err.response?.data?.detail || 'Trả về phiếu kiểm tra thất bại!');
+      else alert(err.response?.data?.detail || 'Trả về phiếu kiểm tra thất bại!');
+    } finally {
+      setIsReverting(false);
     }
   };
 
@@ -2249,5 +2313,11 @@ export const useInspectionReports = () => {
     setDeleteTarget,
     isDeleting,
     handleConfirmDelete,
+    revertTarget,
+    setRevertTarget,
+    revertReason,
+    setRevertReason,
+    isReverting,
+    handleConfirmRevert,
   };
 };

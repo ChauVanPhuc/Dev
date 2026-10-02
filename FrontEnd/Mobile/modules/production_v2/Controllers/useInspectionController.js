@@ -2,15 +2,19 @@ import { useState, useEffect, useCallback } from 'react'
 import { inspectionService } from '../services/inspectionService'
 import { transferService } from '../services/transferService'
 import useProduction_v2Store from '../Models/production_v2Store'
+import useAuthStore from '@modules/auth/Models/authModel'
 
 export const useInspectionController = () => {
   const { inspectionFilters, setInspectionFilters } = useProduction_v2Store()
+  const user = useAuthStore((state) => state.user)
   const [tickets, setTickets] = useState([])
   const [total, setTotal] = useState(0)
   const [pendingCount, setPendingCount] = useState(0)
   const [availableMonths, setAvailableMonths] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [isUserFiltered, setIsUserFiltered] = useState(false)
+  const [hasUserData, setHasUserData] = useState(false)
 
   useEffect(() => {
     transferService.getAvailableMonths().then((data) => {
@@ -24,9 +28,15 @@ export const useInspectionController = () => {
     setLoading(true)
     setError(null)
     try {
-      const res = await inspectionService.getList(inspectionFilters)
+      const res = await inspectionService.getList({
+        ...inspectionFilters,
+        user_id: user?.id,
+        user_name: user?.full_name || user?.username || '',
+      })
       setTickets(res.items || [])
       setTotal(res.total || 0)
+      setIsUserFiltered(Boolean(res.is_user_filtered))
+      setHasUserData(Boolean(res.has_user_data))
       if (res.total_pending !== undefined) {
         setPendingCount(res.total_pending)
       } else if (inspectionFilters.tab === 'pending') {
@@ -37,7 +47,7 @@ export const useInspectionController = () => {
     } finally {
       setLoading(false)
     }
-  }, [inspectionFilters])
+  }, [inspectionFilters, user?.id, user?.full_name, user?.username])
 
   useEffect(() => { fetchList() }, [fetchList])
 
@@ -60,6 +70,9 @@ export const useInspectionController = () => {
     filters: inspectionFilters,
     setFilters: setInspectionFilters,
     pendingCount,
+    isUserFiltered,
+    hasUserData,
+    currentUser: user,
     createTicket,
     confirmTicket,
     refresh: fetchList,

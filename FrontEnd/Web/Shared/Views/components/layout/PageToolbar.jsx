@@ -116,6 +116,7 @@ const PageToolbar = ({
   const showImportBtn = visibleImportActions.length > 0;
   const showExportBtn = !!onExport;
   const showCreateBtn = (!!onCreate || (Array.isArray(createActions) && createActions.length > 0)) && hasWritePermission;
+  const hasRightSection = Boolean(onSync || showOtherBtn || showImportBtn || showExportBtn || showCreateBtn);
 
   return (
     <div className="page-toolbar">
@@ -188,7 +189,8 @@ const PageToolbar = ({
       </div>
 
       {/* ═══ RIGHT SIDE: Đồng bộ + Khác + Nhập + Xuất + Tạo mới ═══ */}
-      <div className="page-toolbar__right">
+      {hasRightSection && (
+        <div className="page-toolbar__right">
         {/* 0. NÚT TỰ ĐỘNG ĐỒNG BỘ BOM */}
         {onSync && (
           <button
@@ -372,6 +374,7 @@ const PageToolbar = ({
           )
         )}
       </div>
+      )}
 
       {/* Hidden file inputs and other extra content */}
       {children}

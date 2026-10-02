@@ -122,7 +122,7 @@ export const ClaimListView = () => {
       else if (Array.isArray(res)) setG7DefectTypes(res);
     }).catch(err => console.error('Lỗi tải danh mục mã lỗi G7:', err));
 
-    claimService.getCabinetPrices().then(res => {
+    claimService.getCabinetPrices({ size: 5000 }).then(res => {
       if (res && res.items) setCabinetPrices(res.items);
       else if (Array.isArray(res)) setCabinetPrices(res);
     }).catch(err => console.error('Lỗi tải bảng giá tủ:', err));

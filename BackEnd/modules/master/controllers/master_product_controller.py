@@ -2812,5 +2812,214 @@ def get_materials_by_product(db: Session, product_id: Optional[int] = None, sku:
     return []
 
 
+def export_master_product_bom_excel(db: Session, product_id: int) -> io.BytesIO:
+    """
+    [EXCEL EXPORT] Xuất toàn bộ cây cấu trúc BOM phân tầng của sản phẩm thành file Excel
+    chuẩn 100% theo định dạng, 19 cột dữ liệu, kiểu dáng và công thức tính toán của D:\\SmartFlow\\BOM\\BOM1.xlsx.
+    """
+    product = db.query(MasterProduct).filter(MasterProduct.id == product_id).first()
+    if not product:
+        raise ValueError("Không tìm thấy sản phẩm mẫu để xuất BOM Excel")
+
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    # 1. Lấy toàn bộ BOM details của sản phẩm
+    bom_items = db.query(MasterBOMDetail).filter(MasterBOMDetail.master_product_id == product.id).all()
+
+    # Nhận diện tiền tố nhà máy (NM1, NM2, NM3)
+    factory = product.description or ''
+    p_num = ''
+    if 'NM1' in factory: factory_prefix = 'NM1'; p_num = '1'
+    elif 'NM2' in factory: factory_prefix = 'NM2'; p_num = '2'
+    elif 'NM3' in factory: factory_prefix = 'NM3'; p_num = '3'
+    else:
+        factory_prefix = ''
+        for b in bom_items:
+            combined = f"{b.input_stage or ''} {b.output_stage or ''}"
+            m = re.search(r'NM([1-3])', combined)
+            if m:
+                factory_prefix = f"NM{m.group(1)}"
+                p_num = m.group(1)
+                break
+
+    def format_stage(stage_name):
+        if not stage_name or stage_name == 'None':
+            return ''
+        stage_str = str(stage_name).strip()
+        if not stage_str or stage_str.lower() == 'none':
+            return ''
+        if factory_prefix and p_num and not stage_str.startswith(factory_prefix):
+            return f"{factory_prefix} - {stage_str} {p_num}"
+        return stage_str
+
+    # 2. Xây dựng cây phân cấp BOM
+    by_id = {b.id: b for b in bom_items}
+    children_map = {}
+    root_bom_nodes = []
+
+    for b in bom_items:
+        if b.parent_id and b.parent_id in by_id:
+            children_map.setdefault(b.parent_id, []).append(b)
+        else:
+            root_bom_nodes.append(b)
+
+    # 3. Duyệt cây (DFS / Pre-order) để sinh các dòng đúng thứ tự BOM1.xlsx
+    export_rows = []
+    stt_counter = 1
+
+    def traverse(parent_obj, child_obj, depth, cumulative_parent_qty):
+        nonlocal stt_counter
+        qty = float(child_obj.quantity or 0.0)
+        waste = float(child_obj.waste_ratio or 1.0)
+        tot_qty = qty * waste * cumulative_parent_qty
+
+        # Format số
+        if abs(tot_qty - round(tot_qty)) < 1e-9:
+            tot_qty_val = int(round(tot_qty))
+        else:
+            tot_qty_val = round(tot_qty, 12)
+
+        if abs(qty - round(qty)) < 1e-9:
+            qty_val = int(round(qty))
+        else:
+            qty_val = round(qty, 12)
+
+        if abs(waste - round(waste)) < 1e-9:
+            waste_val = int(round(waste))
+        else:
+            waste_val = round(waste, 6)
+
+        is_raw = 'Có' if child_obj.is_raw_material else None
+        exclude_prod = 'Có' if child_obj.exclude_production else None
+
+        in_stage = format_stage(child_obj.input_stage)
+        out_stage = format_stage(child_obj.output_stage)
+
+        if depth == 1:
+            r_sku = None
+            r_name = None
+            p_sku = product.sku
+            p_name = product.name
+            p_unit = product.unit or 'bộ'
+            p_spec = None
+        else:
+            r_sku = product.sku
+            r_name = product.name
+            p_sku = parent_obj.sku
+            p_name = parent_obj.name
+            p_unit = parent_obj.unit or 'cái'
+            p_spec = parent_obj.specification or None
+
+        c_spec = child_obj.specification or None
+        c_unit = child_obj.unit or 'cái'
+
+        row_data = [
+            stt_counter,
+            r_sku,
+            r_name,
+            p_sku,
+            p_name,
+            p_unit,
+            p_spec,
+            child_obj.sku,
+            child_obj.name,
+            c_unit,
+            c_spec,
+            qty_val,
+            waste_val,
+            tot_qty_val,
+            child_obj.description or None,
+            is_raw,
+            exclude_prod,
+            in_stage,
+            out_stage
+        ]
+        export_rows.append(row_data)
+        stt_counter += 1
+
+        current_cum_qty = cumulative_parent_qty * qty
+        for next_child in children_map.get(child_obj.id, []):
+            traverse(child_obj, next_child, depth + 1, current_cum_qty)
+
+    for r_node in root_bom_nodes:
+        traverse(product, r_node, depth=1, cumulative_parent_qty=1.0)
+
+    # 4. Khởi tạo workbook Excel theo đúng cấu trúc BOM1.xlsx
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Sheet0"
+
+    # Style definitions
+    header_fill = PatternFill(start_color="FFDDE5EF", end_color="FFDDE5EF", fill_type="solid")
+    header_font = Font(name="Calibri", size=12, bold=True)
+    header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    data_font = Font(name="Calibri", size=11)
+    align_center = Alignment(horizontal="center", vertical="center")
+    align_left = Alignment(horizontal="left", vertical="center")
+    align_right = Alignment(horizontal="right", vertical="center")
+
+    thin_border = Border(
+        left=Side(style="thin", color="D3D3D3"),
+        right=Side(style="thin", color="D3D3D3"),
+        top=Side(style="thin", color="D3D3D3"),
+        bottom=Side(style="thin", color="D3D3D3")
+    )
+    header_border = Border(
+        left=Side(style="thin", color="A0A0A0"),
+        right=Side(style="thin", color="A0A0A0"),
+        top=Side(style="thin", color="A0A0A0"),
+        bottom=Side(style="thin", color="A0A0A0")
+    )
+
+    headers = [
+        'STT', 'Mã mặt hàng gốc', 'Tên mặt hàng gốc', 'Mã mặt hàng', 'Tên mặt hàng',
+        'ĐVT', 'Quy cách', 'Mã chi tiết', 'Tên chi tiết', 'ĐVT chi tiết',
+        'Quy cách chi tiết', 'Số lượng', 'Tỷ lệ hao hụt', 'Tổng SL', 'Mô tả',
+        'Là nguyên liệu', 'Không đưa vào QTSX', 'Cộng đoạn vào', 'Công đoạn ra'
+    ]
+
+    col_widths = {
+        1: 13.0, 2: 19.5, 3: 72.0, 4: 23.5, 5: 85.0,
+        6: 8.0, 7: 16.5, 8: 23.5, 9: 62.0, 10: 12.5,
+        11: 17.5, 12: 13.5, 13: 14.0, 14: 13.0, 15: 92.0,
+        16: 15.0, 17: 22.0, 18: 25.0, 19: 13.0
+    }
+
+    # Ghi row 2 (Dòng 1 để trống theo file BOM1.xlsx)
+    for col_idx, header in enumerate(headers, 1):
+        cell = ws.cell(row=2, column=col_idx, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_alignment
+        cell.border = header_border
+
+    # Ghi row 3 trở đi (Dữ liệu cây BOM)
+    for row_idx, r_data in enumerate(export_rows, 3):
+        for col_idx, val in enumerate(r_data, 1):
+            cell = ws.cell(row=row_idx, column=col_idx, value=val)
+            cell.font = data_font
+            cell.border = thin_border
+            if col_idx in [1, 6, 10, 16, 17]:
+                cell.alignment = align_center
+            elif col_idx in [12, 13, 14]:
+                cell.alignment = align_right
+            else:
+                cell.alignment = align_left
+
+    # Gán độ rộng cột
+    for col_idx, w in col_widths.items():
+        col_letter = get_column_letter(col_idx)
+        ws.column_dimensions[col_letter].width = w
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output
+
+
+
 
 

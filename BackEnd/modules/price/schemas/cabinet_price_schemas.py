@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 class CabinetPriceBase(BaseModel):
     cabinet_code: str
@@ -26,6 +26,15 @@ class CabinetPriceUpdate(BaseModel):
 class CabinetPriceResponse(CabinetPriceBase):
     id: int
     last_updated: datetime
+
+    class Config:
+        from_attributes = True
+
+class CabinetPriceListResponse(BaseModel):
+    items: List[CabinetPriceResponse]
+    total: int
+    page: int
+    size: int
 
     class Config:
         from_attributes = True

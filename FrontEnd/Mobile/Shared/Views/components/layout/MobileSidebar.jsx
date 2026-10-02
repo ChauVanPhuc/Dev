@@ -55,6 +55,13 @@ const Sidebar = () => {
             is_active: true
           },
           {
+            id: 'm-quality-management',
+            title: 'Quản lý chất lượng',
+            route_path: '/admin/kpi/dashboard',
+            icon: 'Target',
+            is_active: true
+          },
+          {
             id: 'm-create-ticket',
             title: 'Khởi tạo phiếu',
             route_path: '#',
@@ -110,6 +117,13 @@ const Sidebar = () => {
             title: 'Nhân sự Quản lý Chất lượng',
             route_path: '/kpi-quality-employees',
             icon: 'UserCheck',
+            is_active: true
+          },
+          {
+            id: 'm-quality-confirm',
+            title: 'Xác nhận phiếu kiểm tra',
+            route_path: '/admin/quality',
+            icon: 'ShieldCheck',
             is_active: true
           }
         ])
@@ -196,9 +210,10 @@ const Sidebar = () => {
 
   const handleNavigate = (path) => {
     if (!path || path === '#') return;
-    navigate(path)
-    setSidebarOpen(false)
-  }
+    const cleanPath = (path.startsWith('/') || path.startsWith('http')) ? path : '/' + path;
+    navigate(cleanPath);
+    setSidebarOpen(false);
+  };
 
   const getStyleForItem = (item, isSub = false) => {
     const active = isSub ? isActive(item.route_path) : isMenuRowActive(item);

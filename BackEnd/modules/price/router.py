@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from typing import List, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Body
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.modules.price import schemas, service, sync_service
@@ -14,31 +14,28 @@ def read_cabinet_prices(
     search: str = None,
     db: Session = Depends(get_db)
 ):
-    temp_prices = sync_service.load_temp_cabinet_prices()
-    if temp_prices is not None:
-        filtered = temp_prices
-        if search:
-            search_lower = search.lower()
-            filtered = [
-                p for p in temp_prices 
-                if search_lower in (p.get("cabinet_code") or "").lower() or 
-                   search_lower in (p.get("cabinet_name") or "").lower() or
-                   search_lower in (p.get("material") or "").lower()
-            ]
-        total = len(filtered)
-        if size and size > 0:
-            skip = (page - 1) * size
-            items = filtered[skip : skip + size]
-        else:
-            items = filtered
-        return {"items": items, "total": total, "page": page, "size": size or total}
+    # Ưu tiên lấy từ CSDL
+    total_db = db.query(CabinetPrice).count()
+    if total_db == 0:
+        temp_prices = sync_service.load_temp_cabinet_prices()
+        if temp_prices:
+            try:
+                sync_service.sync_temp_cabinet_prices_to_db(db, prices=temp_prices)
+            except Exception as sync_err:
+                sync_service.logger.warning(f"Auto-sync from temp json failed: {sync_err}")
 
-    skip = (page - 1) * (size or 50)
-    items, total = service.get_cabinet_prices(db, skip=skip, limit=(size or 50), search=search)
-    return {"items": items, "total": total, "page": page, "size": size or 50}
+    if not size or size <= 0:
+        limit = 5000
+        skip = 0
+    else:
+        limit = size
+        skip = (page - 1) * size
+
+    items, total = service.get_cabinet_prices(db, skip=skip, limit=limit, search=search)
+    return {"items": items, "total": total, "page": page, "size": limit}
 
 @router.post("/cabinet-prices/temp")
-def save_cabinet_prices_temp(payload: Any, db: Session = Depends(get_db)):
+def save_cabinet_prices_temp(payload: Any = Body(...), db: Session = Depends(get_db)):
     try:
         if isinstance(payload, dict):
             prices = payload.get("prices", [])
@@ -49,8 +46,11 @@ def save_cabinet_prices_temp(payload: Any, db: Session = Depends(get_db)):
             filename = None
             file_bytes_base64 = None
 
+        if not isinstance(prices, list):
+            prices = []
+
         sync_service.save_temp_cabinet_prices(prices)
-        sync_service.sync_temp_cabinet_prices_to_db(db)
+        new_c, up_c = sync_service.sync_temp_cabinet_prices_to_db(db, prices=prices)
 
         if len(prices) > 0 and filename and file_bytes_base64:
             try:
@@ -61,7 +61,13 @@ def save_cabinet_prices_temp(payload: Any, db: Session = Depends(get_db)):
             except Exception as arch_err:
                 sync_service.logger.warning(f"Failed to archive cabinet_prices input file: {arch_err}")
 
-        return {"status": "success", "message": f"Đã lưu và đồng bộ thành công {len(prices)} đơn giá tủ vào CSDL."}
+        return {
+            "status": "success",
+            "inserted": new_c,
+            "updated": up_c,
+            "total": len(prices),
+            "message": f"Đã lưu và đồng bộ thành công {len(prices)} đơn giá tủ vào CSDL (Mới: {new_c}, Cập nhật: {up_c})."
+        }
     except Exception as e:
         sync_service.logger.exception("Error saving temp cabinet prices:")
         raise HTTPException(status_code=500, detail=f"Lỗi lưu đơn giá tủ tạm: {str(e)}")

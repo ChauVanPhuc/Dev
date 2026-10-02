@@ -70,11 +70,10 @@ const FinishInspectionModal = ({ open, summary, palletCode, onConfirm, onClose, 
   const [modalNote, setModalNote] = useState('')
   const [actionError, setActionError] = useState('')
 
-  const isTicketFailed = Boolean(summary?.isFailed || Number(summary?.errorQty) > 0 || summary?.result === 'fail')
-
   const [currentResult, setCurrentResult] = useState(() => {
-    return isTicketFailed ? 'fail' : 'pass'
+    return summary?.result || 'pass'
   })
+  const isTicketFailed = currentResult === 'fail'
 
   const prevOpenRef = useRef(false)
 
@@ -85,21 +84,21 @@ const FinishInspectionModal = ({ open, summary, palletCode, onConfirm, onClose, 
       if (!isReInspect && !palletCode && onCreatePallet) {
         handleCreatePalletClick()
       }
-      const initialTicketResult = isTicketFailed ? 'fail' : 'pass'
+      const initialTicketResult = summary?.result || 'pass'
       setCurrentResult(initialTicketResult)
 
       if (summary?.action === 'cach-ly') {
         setSelectedAction('cach-ly')
-      } else if (initialTicketResult === 'pass') {
-        setSelectedAction('chap-nhan')
+      } else if (summary?.action === 'tra-ve' || initialTicketResult === 'fail') {
+        setSelectedAction(summary?.action || 'tra-ve')
       } else {
-        setSelectedAction('tra-ve')
+        setSelectedAction('chap-nhan')
       }
       setModalNote(summary?.note || '')
       setActionError('')
     }
     prevOpenRef.current = open
-  }, [open, isReInspect, palletCode, onCreatePallet, summary, isTicketFailed])
+  }, [open, isReInspect, palletCode, onCreatePallet, summary])
 
   // Cập nhật trạng thái confirmCheck khi mã pallet được tạo thành công
   useEffect(() => {
@@ -248,74 +247,57 @@ const FinishInspectionModal = ({ open, summary, palletCode, onConfirm, onClose, 
                 alignItems: 'center',
                 height: '40px',
               }}>
-                {selectedAction === 'cach-ly' ? (
-                  <div style={{
-                    display: 'inline-flex',
-                    backgroundColor: '#f1f5f9',
-                    padding: '3px',
-                    borderRadius: '8px',
-                    gap: '3px',
-                    border: '1px solid #e2e8f0',
-                    width: '100%',
-                    boxSizing: 'border-box'
-                  }}>
-                    <button
-                      type="button"
-                      onClick={() => setCurrentResult('pass')}
-                      style={{
-                        flex: 1,
-                        padding: '6px 6px',
-                        borderRadius: '6px',
-                        fontSize: '12px',
-                        fontWeight: '700',
-                        border: 'none',
-                        backgroundColor: currentResult === 'pass' ? '#10b981' : 'transparent',
-                        color: currentResult === 'pass' ? '#ffffff' : '#64748b',
-                        cursor: 'pointer',
-                        transition: 'all 0.15s ease',
-                        boxShadow: currentResult === 'pass' ? '0 1px 3px rgba(16, 185, 129, 0.3)' : 'none',
-                        whiteSpace: 'nowrap'
-                      }}
-                    >
-                      ✓ Đạt
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCurrentResult('fail')}
-                      style={{
-                        flex: 1,
-                        padding: '6px 6px',
-                        borderRadius: '6px',
-                        fontSize: '12px',
-                        fontWeight: '700',
-                        border: 'none',
-                        backgroundColor: currentResult === 'fail' ? '#ef4444' : 'transparent',
-                        color: currentResult === 'fail' ? '#ffffff' : '#64748b',
-                        cursor: 'pointer',
-                        transition: 'all 0.15s ease',
-                        boxShadow: currentResult === 'fail' ? '0 1px 3px rgba(239, 68, 68, 0.3)' : 'none',
-                        whiteSpace: 'nowrap'
-                      }}
-                    >
-                      ✕ K.đạt
-                    </button>
-                  </div>
-                ) : (
-                  <span style={{
-                    fontSize: '13px',
-                    fontWeight: '700',
-                    color: currentResult === 'pass' ? '#15803d' : '#dc2626',
-                    backgroundColor: currentResult === 'pass' ? '#dcfce7' : '#fee2e2',
-                    border: currentResult === 'pass' ? '1px solid #86efac' : '1px solid #fca5a5',
-                    padding: '7px 14px',
-                    borderRadius: '8px',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '5px'
-                  }}>
-                    {currentResult === 'pass' ? '✓ Đạt' : '✕ Không đạt'}
-                  </span>
-                )}
+                <div style={{
+                  display: 'inline-flex',
+                  backgroundColor: '#f1f5f9',
+                  padding: '3px',
+                  borderRadius: '8px',
+                  gap: '3px',
+                  border: '1px solid #e2e8f0',
+                  width: '100%',
+                  boxSizing: 'border-box'
+                }}>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentResult('pass')}
+                    style={{
+                      flex: 1,
+                      padding: '6px 6px',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      fontWeight: '700',
+                      border: 'none',
+                      backgroundColor: currentResult === 'pass' ? '#10b981' : 'transparent',
+                      color: currentResult === 'pass' ? '#ffffff' : '#64748b',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                      boxShadow: currentResult === 'pass' ? '0 1px 3px rgba(16, 185, 129, 0.3)' : 'none',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    ✓ Đạt
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentResult('fail')}
+                    style={{
+                      flex: 1,
+                      padding: '6px 6px',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      fontWeight: '700',
+                      border: 'none',
+                      backgroundColor: currentResult === 'fail' ? '#ef4444' : 'transparent',
+                      color: currentResult === 'fail' ? '#ffffff' : '#64748b',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                      boxShadow: currentResult === 'fail' ? '0 1px 3px rgba(239, 68, 68, 0.3)' : 'none',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    ✕ K.đạt
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -345,22 +327,17 @@ const FinishInspectionModal = ({ open, summary, palletCode, onConfirm, onClose, 
               gridTemplateColumns: 'repeat(3, 1fr)',
               gap: '8px'
             }}>
-              {/* Option 1: Chấp nhận (hoặc Chấp nhận / Tự xử lý khi có lỗi) */}
+              {/* Option 1: Chấp nhận */}
               <button
                 type="button"
                 onClick={() => {
                   setSelectedAction('chap-nhan')
-                  if (isTicketFailed) {
-                    setCurrentResult('fail')
-                  } else {
-                    setCurrentResult('pass')
-                  }
                   setActionError('')
                 }}
                 style={{
                   padding: '7px 4px',
                   borderRadius: '10px',
-                  fontSize: isTicketFailed ? '12px' : '13px',
+                  fontSize: '13px',
                   fontWeight: '700',
                   border: selectedAction === 'chap-nhan' || selectedAction === 'luu-kho' ? '2px solid #10b981' : '1.5px solid #d1d5db',
                   backgroundColor: selectedAction === 'chap-nhan' || selectedAction === 'luu-kho' ? '#ecfdf5' : '#ffffff',
@@ -377,25 +354,13 @@ const FinishInspectionModal = ({ open, summary, palletCode, onConfirm, onClose, 
                 }}
               >
                 {(selectedAction === 'chap-nhan' || selectedAction === 'luu-kho') && <span style={{ fontSize: '14px' }}>✓</span>}
-                {isTicketFailed ? (
-                  <span style={{ lineHeight: '1.2' }}>
-                    Chấp nhận<br />
-                    <span style={{ fontSize: '10.5px', fontWeight: '600', opacity: 0.9 }}>/ Tự xử lý</span>
-                  </span>
-                ) : (
-                  <span>Chấp nhận</span>
-                )}
+                <span>Chấp nhận</span>
               </button>
 
               {/* Option 2: Cách Ly */}
               <button
                 type="button"
                 onClick={() => {
-                  if (selectedAction === 'tra-ve') {
-                    setCurrentResult('fail')
-                  } else if (selectedAction === 'chap-nhan' || selectedAction === 'luu-kho') {
-                    setCurrentResult(isTicketFailed ? 'fail' : 'pass')
-                  }
                   setSelectedAction('cach-ly')
                   setActionError('')
                 }}
@@ -580,8 +545,8 @@ const FinishInspectionModal = ({ open, summary, palletCode, onConfirm, onClose, 
             )
           })()}
 
-          {/* Row 3: SL Cần Kiểm (minmax) + SL mẫu (minmax) + Lỗi nếu có (minmax) */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)', gap: '10px', width: '100%', boxSizing: 'border-box' }}>
+          {/* Row 3: Số lượng kiểm tra + Lỗi (nếu có) */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '10px', width: '100%', boxSizing: 'border-box' }}>
             <div style={{ minWidth: 0 }}>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: '#1e293b', marginBottom: '6px', whiteSpace: 'nowrap' }}>
                 {Boolean(summary?.stage && (summary.stage.toLowerCase().includes('nhập kho') || summary.stage.toLowerCase().includes('nhap kho') || summary.stage.toLowerCase().includes('đầu vào') || summary.stage.toLowerCase().includes('dau vao'))) ? 'SL Cần Kiểm' : 'Số lượng kiểm tra'}
@@ -603,32 +568,9 @@ const FinishInspectionModal = ({ open, summary, palletCode, onConfirm, onClose, 
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap'
               }}>
-                {summary?.needQty ?? '—'}
-              </div>
-            </div>
-
-            <div style={{ minWidth: 0 }}>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: '#1e293b', marginBottom: '6px', whiteSpace: 'nowrap' }}>
-                SL mẫu
-              </label>
-              <div style={{
-                backgroundColor: '#e2e8f0',
-                borderRadius: '10px',
-                padding: '10px 8px',
-                fontSize: '13.5px',
-                fontWeight: '600',
-                color: '#1e293b',
-                minHeight: '40px',
-                boxSizing: 'border-box',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                textAlign: 'center',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap'
-              }}>
-                {summary?.sampleQty ?? '—'}
+                {(summary?.needQty && String(summary.needQty).startsWith('≈'))
+                  ? summary.needQty
+                  : (summary?.sampleQty && summary.sampleQty !== '—' ? summary.sampleQty : (summary?.needQty || '—'))}
               </div>
             </div>
 
@@ -642,7 +584,7 @@ const FinishInspectionModal = ({ open, summary, palletCode, onConfirm, onClose, 
                 padding: '10px 8px',
                 fontSize: '13.5px',
                 fontWeight: '600',
-                color: '#1e293b',
+                color: Number(summary?.errorQty) > 0 ? '#b91c1c' : '#1e293b',
                 minHeight: '40px',
                 boxSizing: 'border-box',
                 display: 'flex',

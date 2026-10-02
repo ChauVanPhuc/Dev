@@ -62,15 +62,19 @@ const InspectionFormShell = ({ title, subTitle, formState, children, showLastRes
   )
 
   // Bước 2: Đã điền các trường chính của form chưa
-  const hasPoSelected = Boolean(formState.po || formState.paramPo || formState.palletCode)
+  const hasPoSelected = Boolean(formState.po || formState.paramPo || formState.palletCode || (formState.selectedPos && formState.selectedPos.length > 0))
   const hasProductSelected = Boolean(formState.product || formState.paramProduct || (formState.selectedProducts && formState.selectedProducts.length > 0))
-  const hasQtySelected = Boolean(formState.sampleQty || formState.paramSample || formState.requiredQty)
+  const hasQtySelected = Boolean(formState.requiredQty || formState.sampleQty || formState.paramSample)
 
   const isFormFilled = readOnly || Boolean(
     formState.mode === INSPECT_MODES.PROCESS
       ? formState.process
       : formState.mode === INSPECT_MODES.QA
       ? formState.staff
+      : formState.mode === INSPECT_MODES.DAILY
+      ? (hasPoSelected && hasProductSelected && hasQtySelected)
+      : formState.mode === INSPECT_MODES.PARAMETER
+      ? (hasPoSelected && hasProductSelected && hasQtySelected)
       : (hasPoSelected && hasProductSelected && hasQtySelected)
   )
 
@@ -354,7 +358,7 @@ const InspectionFormShell = ({ title, subTitle, formState, children, showLastRes
               }}>
                 {isStageReady ? '✓' : '1'}
               </span>
-              <span>Công đoạn</span>
+              <span>{formState.mode === INSPECT_MODES.RE_INSPECT ? 'Pallet / Mã KT' : 'Công đoạn'}</span>
             </div>
 
             <div style={{
@@ -444,14 +448,14 @@ const InspectionFormShell = ({ title, subTitle, formState, children, showLastRes
               {formState.mode === INSPECT_MODES.RE_INSPECT ? (
                 <div className="pv2-field">
                   <label style={{ fontSize: '13.5px', fontWeight: '700', color: '#4a240e', marginBottom: '4px', display: 'block' }}>
-                    Mã pallet <span className="pv2-req">*</span>
+                    Mã pallet / Mã kiểm tra <span className="pv2-req">*</span>
                   </label>
                   <CustomSelect
                     value={formState.palletCode}
                     options={formState.palletOptions || []}
                     onChange={formState.handlePalletSelect}
                     disabled={readOnly}
-                    placeholder="Chọn/Nhập mã pallet"
+                    placeholder="Chọn/Nhập mã pallet hoặc mã kiểm tra..."
                     allowCustomInput={true}
                   />
                 </div>
@@ -509,12 +513,12 @@ const InspectionFormShell = ({ title, subTitle, formState, children, showLastRes
             <div>
               <div style={{ fontSize: '15.5px', fontWeight: '800', color: '#4a240e', marginBottom: '6px' }}>
                 {formState.mode === INSPECT_MODES.RE_INSPECT
-                  ? 'Bước 1: Chọn hoặc nhập Mã pallet'
+                  ? 'Bước 1: Chọn hoặc nhập Mã pallet / Mã kiểm tra'
                   : 'Bước 1: Chọn Công đoạn kiểm tra'}
               </div>
               <div style={{ fontSize: '13.5px', color: '#78716c', lineHeight: '1.5', maxWidth: '320px', margin: '0 auto' }}>
                 {formState.mode === INSPECT_MODES.RE_INSPECT
-                  ? 'Vui lòng chọn hoặc quét mã pallet ở phía trên để hệ thống tự động tải phiếu.'
+                  ? 'Vui lòng chọn hoặc nhập mã pallet hoặc mã phiếu kiểm tra ở phía trên để hệ thống tự động tải phiếu.'
                   : 'Vui lòng chọn công đoạn kiểm tra ở phía trên để bắt đầu mở biểu mẫu phiếu.'}
               </div>
             </div>
@@ -555,6 +559,11 @@ const InspectionFormShell = ({ title, subTitle, formState, children, showLastRes
                 <div className="pv2-ticket-creator" style={{ fontSize: '12px', fontStyle: 'italic', color: '#b45309', fontWeight: '600', marginTop: '2px' }}>
                   Được tạo bởi: {displayCreator} {displayTime && `• ${displayTime}`}
                 </div>
+                {readOnly && currentStage && (
+                  <div style={{ fontSize: '12px', fontStyle: 'italic', color: '#78523b', fontWeight: '600', marginTop: '3px' }}>
+                    Công đoạn: <span style={{ fontWeight: '700', color: '#4a240e', fontStyle: 'normal' }}>{currentStage}</span>
+                  </div>
+                )}
               </div>
               {!readOnly && showLastResultButton && formState.mode !== INSPECT_MODES.RE_INSPECT && (
                 <button
@@ -726,6 +735,8 @@ const InspectionFormShell = ({ title, subTitle, formState, children, showLastRes
         message={confirmConfig.message}
         confirmText={confirmConfig.confirmText}
         cancelText={confirmConfig.cancelText}
+        showDontRemind={confirmConfig.showDontRemind}
+        dontRemindText={confirmConfig.dontRemindText}
         onConfirm={confirmConfig.onConfirm}
         onCancel={confirmConfig.onCancel}
       />

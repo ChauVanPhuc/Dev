@@ -3,7 +3,7 @@ import { compressImage, blobToBase64 } from '@shared/utils/imageCompressor'
 import { PAGE_SIZE } from '../constants'
 
 export const inspectionService = {
-  async getList({ tab, month, stage, poCode, product, sort, page = 1 } = {}) {
+  async getList({ tab, month, stage, poCode, product, sort, page = 1, limit = PAGE_SIZE, user_id, user_name, only_my_tickets } = {}) {
     const params = new URLSearchParams()
     if (tab) params.append('tab', tab)
     if (month) params.append('month', month)
@@ -12,6 +12,12 @@ export const inspectionService = {
     if (product) params.append('product', product)
     if (sort) params.append('sort', sort)
     if (page) params.append('page', page)
+    if (limit) params.append('limit', limit)
+    if (user_id) params.append('user_id', user_id)
+    if (user_name) params.append('user_name', user_name)
+    if (only_my_tickets !== undefined && only_my_tickets !== null && only_my_tickets !== '') {
+      params.append('only_my_tickets', String(only_my_tickets))
+    }
 
     try {
       const res = await apiClient.get(`/inspections/?${params.toString()}`)
@@ -260,15 +266,22 @@ export const inspectionService = {
     return []
   },
 
-  async getTicketsByPallet(palletCode, limit = 3) {
+  async getTicketsByPallet(palletCode, limit = 10) {
     if (!palletCode) return []
     try {
       const res = await apiClient.get(`/inspections/by-pallet?pallet_code=${encodeURIComponent(palletCode)}&limit=${limit}`)
       const data = res?.data !== undefined ? res.data : res
-      if (Array.isArray(data)) return data.slice(0, limit)
+      if (Array.isArray(data) && data.length > 0) return data.slice(0, limit)
     } catch (e) {
       console.warn('[inspectionService.getTicketsByPallet] fallback filter:', e)
     }
+    try {
+      // Fallback tra cứu trực tiếp theo mã phiếu kiểm tra (getById)
+      const ticket = await this.getById(palletCode)
+      if (ticket && (ticket.id || ticket.code)) {
+        return [ticket]
+      }
+    } catch (e) {}
     try {
       const res = await this.getList({ page: 1 })
       const items = res?.items || []

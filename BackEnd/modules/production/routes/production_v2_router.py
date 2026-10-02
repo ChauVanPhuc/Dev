@@ -149,10 +149,13 @@ def get_available_months(db: Session = Depends(get_db)):
 @router.get("/dashboard")
 def get_production_dashboard(
     employee_id: Optional[str] = Query(None),
+    factory: Optional[str] = Query(None),
+    date_filter: Optional[str] = Query("week"),
     db: Session = Depends(get_db)
 ):
     """
     TRUY VẤN CSDL THỰC: Trả về dữ liệu tổng quan cho trang Trang chủ (CL01: Thông tin cần chú ý)
+    Hỗ trợ lọc theo Nhà máy (NM1, NM2, NM3, ALL) và tỷ lệ lỗi theo công đoạn.
     """
     try:
         # A. Hiển thị thông báo mới nhất (Ưu tiên lấy từ Tab 6 "Thiết lập cảnh báo" - target_stage='MOBILE_BANNER')
@@ -239,18 +242,49 @@ def get_production_dashboard(
                 logger.warning(f"Error calculating employee KPI for {employee_id}: {err}")
                 kpi_month = None
 
-        # C. Các lỗi cần theo dõi (Real Stacked Bar Chart từ CSDL xưởng)
+        # Xây dựng điều kiện lọc theo nhà máy (NM1, NM2, NM3 hoặc ALL)
+        factory_condition = "1=1"
+        f_val = str(factory or '').strip().upper()
+        if f_val in ["NM1", "1", "NHÀ MÁY 1", "NHA MAY 1", "VANITI PHÂN XƯỞNG 1"]:
+            factory_condition = "(r.stage_name LIKE '% 1' OR a.factory_id = 1 OR a.factory_name LIKE '% 1%')"
+        elif f_val in ["NM2", "2", "NHÀ MÁY 2", "NHA MAY 2", "VANITI PHÂN XƯỞNG 2"]:
+            factory_condition = "(r.stage_name LIKE '% 2' OR a.factory_id = 2 OR a.factory_name LIKE '% 2%')"
+        elif f_val in ["NM3", "3", "NHÀ MÁY 3", "NHA MAY 3", "FURNITURE NHÀ MÁY 3"]:
+            factory_condition = "(r.stage_name LIKE '% 3' OR a.factory_id = 3 OR a.factory_name LIKE '% 3%')"
+
+        # C. Các lỗi cần theo dõi (Real Stacked Bar Chart từ CSDL xưởng, lọc theo Nhà máy & Ngày)
         today = date.today()
         start_of_week = today - timedelta(days=today.weekday())
         yesterday = today - timedelta(days=1)
 
-        # Lấy top 5 loại lỗi phát sinh nhiều nhất 30 ngày gần đây
-        top_defects_query = db.execute(text("""
+        d_mode = str(date_filter or 'week').lower().strip()
+        if d_mode in ['today', 'hom_nay', 'hôm nay']:
+            target_date_cond = "r.inspection_date = :target_date"
+            date_params = {"target_date": today}
+            date_label = "Hôm nay"
+        elif d_mode in ['yesterday', 'hom_qua', 'hôm qua']:
+            target_date_cond = "r.inspection_date = :target_date"
+            date_params = {"target_date": yesterday}
+            date_label = "Hôm qua"
+        elif re.match(r'^\d{4}-\d{2}-\d{2}$', d_mode):
+            target_date_cond = "r.inspection_date = :target_date"
+            date_params = {"target_date": d_mode}
+            date_label = f"Ngày {d_mode}"
+        else:
+            d_mode = "week"
+            target_date_cond = "r.inspection_date >= :target_date"
+            date_params = {"target_date": start_of_week}
+            date_label = "Trong tuần"
+
+        # Lấy top 5 loại lỗi phát sinh nhiều nhất 30 ngày gần đây theo nhà máy
+        top_defects_query = db.execute(text(f"""
             SELECT TOP 5 dt.id, dt.name, SUM(d.quantity) as total_qty
             FROM defect_types dt
             JOIN daily_inspection_defects d ON dt.id = d.defect_id
             JOIN daily_inspection_records r ON d.record_id = r.id
+            LEFT JOIN accounts a ON r.inspector_id = a.id
             WHERE r.inspection_date >= DATEADD(day, -30, GETDATE())
+              AND {factory_condition}
             GROUP BY dt.id, dt.name
             ORDER BY total_qty DESC
         """)).fetchall()
@@ -258,52 +292,372 @@ def get_production_dashboard(
         top_defect_ids = [r[0] for r in top_defects_query]
         top_defect_names = {r[0]: r[1] for r in top_defects_query}
 
-        week_sql = text("""
-            SELECT dt.id, dt.name, 
+        # Truy vấn các công đoạn thực tế phát sinh lỗi trong 30 ngày gần đây
+        defect_stages_map = {}
+        try:
+            stage_breakdown_sql = text(f"""
+                SELECT d.defect_id, r.stage_name, SUM(d.quantity) as qty
+                FROM daily_inspection_defects d
+                JOIN daily_inspection_records r ON d.record_id = r.id
+                LEFT JOIN accounts a ON r.inspector_id = a.id
+                WHERE r.inspection_date >= DATEADD(day, -30, GETDATE())
+                  AND {factory_condition}
+                  AND r.stage_name IS NOT NULL
+                GROUP BY d.defect_id, r.stage_name
+                ORDER BY d.defect_id, qty DESC
+            """)
+            st_rows = db.execute(stage_breakdown_sql).fetchall()
+            for sr in st_rows:
+                did, sname = sr[0], sr[1]
+                if sname:
+                    cleaned_sname = re.sub(r'\s*\d+$', '', str(sname)).strip()
+                    defect_stages_map.setdefault(did, []).append(cleaned_sname or str(sname))
+        except Exception as st_err:
+            logger.warning(f"Error querying defect stages: {st_err}")
+
+        def get_defect_stage_display(def_id, dt_stage_raw):
+            stages = defect_stages_map.get(def_id, [])
+            seen = set()
+            uniq = []
+            for s in stages:
+                if s not in seen:
+                    seen.add(s)
+                    uniq.append(s)
+            if uniq:
+                return ", ".join(uniq[:3])
+            if dt_stage_raw:
+                try:
+                    if str(dt_stage_raw).startswith("["):
+                        arr = json.loads(dt_stage_raw)
+                        return ", ".join(arr[:3])
+                    return str(dt_stage_raw)
+                except Exception:
+                    return str(dt_stage_raw)
+            return "Toàn xưởng"
+
+        week_sql = text(f"""
+            SELECT dt.id, dt.name, dt.code, dt.category, dt.stage,
+                   SUM(CASE WHEN {target_date_cond} THEN d.quantity ELSE 0 END) as period_qty,
                    SUM(CASE WHEN r.inspection_date >= :start_week THEN d.quantity ELSE 0 END) as this_week,
-                   SUM(CASE WHEN r.inspection_date = :yesterday THEN d.quantity ELSE 0 END) as yesterday
+                   SUM(CASE WHEN r.inspection_date = :yesterday THEN d.quantity ELSE 0 END) as yesterday,
+                   SUM(d.quantity) as total_30d
+            FROM defect_types dt
+            JOIN daily_inspection_defects d ON dt.id = d.defect_id
+            JOIN daily_inspection_records r ON d.record_id = r.id
+            LEFT JOIN accounts a ON r.inspector_id = a.id
+            WHERE r.inspection_date >= DATEADD(day, -30, GETDATE())
+              AND {factory_condition}
+            GROUP BY dt.id, dt.name, dt.code, dt.category, dt.stage
+            ORDER BY period_qty DESC, this_week DESC, total_30d DESC
+        """)
+        week_rows = db.execute(week_sql, {**date_params, "start_week": start_of_week, "yesterday": yesterday}).fetchall()
+
+        tracked_defects = []
+        all_tracked_defects = []
+        other_week = 0
+        other_yesterday = 0
+        matched_top_ids = set()
+
+        total_all_period = 0
+        total_all_week = 0
+        total_all_yesterday = 0
+
+        # Bảng màu công đoạn hài hòa, trang nhã, phối hợp đẹp mắt
+        STAGE_COLOR_MAP = {
+            "Sơn": "#9A3412",       # Nâu gạch nung ấm áp
+            "Định Hình": "#059669", # Xanh ngọc lục bảo tinh tế
+            "Lắp Ráp": "#D97706",   # Vàng hổ phách mật ong
+            "Đóng Gói": "#6366F1",  # Xanh tím Indigo dịu mát
+            "Tạo Phôi": "#E11D48",  # Đỏ san hô
+            "Nhập Kho": "#0284C7",  # Xanh dương Slate
+            "Lưu Kho": "#4F46E5",   # Chàm
+            "Khác": "#64748B"       # Xám than
+        }
+
+        # Truy vấn phân rã số lượng lỗi theo từng công đoạn theo bộ lọc thời gian
+        week_stage_sql = text(f"""
+            SELECT dt.id,
+                   CASE 
+                       WHEN r.stage_name LIKE 'Sơn%' THEN N'Sơn'
+                       WHEN r.stage_name LIKE N'Định Hình%' THEN N'Định Hình'
+                       WHEN r.stage_name LIKE N'Lắp Ráp%' THEN N'Lắp Ráp'
+                       WHEN r.stage_name LIKE N'Đóng Gói%' THEN N'Đóng Gói'
+                       WHEN r.stage_name LIKE N'Tạo Phôi%' THEN N'Tạo Phôi'
+                       WHEN r.stage_name LIKE N'Nhập Kho%' THEN N'Nhập Kho'
+                       ELSE r.stage_name
+                   END as stage_group,
+                   SUM(d.quantity) as qty
             FROM daily_inspection_defects d
             JOIN daily_inspection_records r ON d.record_id = r.id
             JOIN defect_types dt ON d.defect_id = dt.id
-            WHERE r.inspection_date >= :start_week
-            GROUP BY dt.id, dt.name
+            LEFT JOIN accounts a ON r.inspector_id = a.id
+            WHERE {target_date_cond}
+              AND {factory_condition}
+            GROUP BY dt.id,
+                   CASE 
+                       WHEN r.stage_name LIKE 'Sơn%' THEN N'Sơn'
+                       WHEN r.stage_name LIKE N'Định Hình%' THEN N'Định Hình'
+                       WHEN r.stage_name LIKE N'Lắp Ráp%' THEN N'Lắp Ráp'
+                       WHEN r.stage_name LIKE N'Đóng Gói%' THEN N'Đóng Gói'
+                       WHEN r.stage_name LIKE N'Tạo Phôi%' THEN N'Tạo Phôi'
+                       WHEN r.stage_name LIKE N'Nhập Kho%' THEN N'Nhập Kho'
+                       ELSE r.stage_name
+                   END
+            ORDER BY dt.id, qty DESC
         """)
-        week_rows = db.execute(week_sql, {"start_week": start_of_week, "yesterday": yesterday}).fetchall()
+        week_stage_rows = db.execute(week_stage_sql, date_params).fetchall()
 
-        tracked_defects = []
-        other_week = 0
-        other_yesterday = 0
-        matched_ids = set()
+        week_defect_stages = {}
+        active_stages_map = {}
+        for wsr in week_stage_rows:
+            did, stg_name, sqty = wsr[0], wsr[1] or "Khác", int(wsr[2] or 0)
+            if sqty > 0:
+                color = STAGE_COLOR_MAP.get(stg_name, "#64748B")
+                week_defect_stages.setdefault(did, []).append({
+                    "stage": stg_name,
+                    "count": sqty,
+                    "color": color
+                })
+                active_stages_map[stg_name] = color
 
         for r in week_rows:
-            def_id, def_name, w_qty, y_qty = r[0], r[1], int(r[2] or 0), int(r[3] or 0)
+            def_id, def_name, def_code, def_cat, dt_stage_raw = r[0], r[1], r[2], r[3], r[4]
+            p_qty, w_qty, y_qty, total_30d = int(r[5] or 0), int(r[6] or 0), int(r[7] or 0), int(r[8] or 0)
+
+            total_all_period += p_qty
+            total_all_week += w_qty
+            total_all_yesterday += y_qty
+            stage_str = get_defect_stage_display(def_id, dt_stage_raw)
+
             if def_id in top_defect_ids:
                 tracked_defects.append({
+                    "id": def_id,
+                    "code": def_code or f"DEF_{def_id}",
                     "category": def_name,
                     "this_week": w_qty,
-                    "yesterday": y_qty
+                    "yesterday": y_qty,
+                    "stages_display": stage_str
                 })
-                matched_ids.add(def_id)
+                matched_top_ids.add(def_id)
             else:
                 other_week += w_qty
                 other_yesterday += y_qty
 
+            # Phân rã công đoạn trong khoảng thời gian đã chọn
+            stg_breakdown = week_defect_stages.get(def_id, [])
+            if not stg_breakdown and p_qty > 0:
+                fallback_stg = stage_str.split(",")[0].strip() if stage_str else "Khác"
+                fallback_clr = STAGE_COLOR_MAP.get(fallback_stg, "#9A3412")
+                stg_breakdown = [{
+                    "stage": fallback_stg,
+                    "count": p_qty,
+                    "color": fallback_clr
+                }]
+                active_stages_map[fallback_stg] = fallback_clr
+
+            # Tính phần trăm của từng công đoạn trong lỗi này
+            for sb in stg_breakdown:
+                sb["pct"] = round((sb["count"] / p_qty * 100), 1) if p_qty > 0 else 0
+
+            # Chỉ lấy các lỗi có số liệu TRONG KỲ (Hôm nay / Hôm qua / Trong tuần)
+            if p_qty > 0:
+                all_tracked_defects.append({
+                    "id": def_id,
+                    "code": def_code or f"DEF_{def_id}",
+                    "category": def_name,
+                    "group": def_cat or "",
+                    "stages_display": stage_str,
+                    "this_week": p_qty,
+                    "stages_breakdown": stg_breakdown
+                })
+
         # Điền các loại lỗi trong top 5 nếu chưa có số liệu tuần này (với số 0)
         for def_id in top_defect_ids:
-            if def_id not in matched_ids:
+            if def_id not in matched_top_ids:
                 tracked_defects.append({
+                    "id": def_id,
+                    "code": f"DEF_{def_id}",
                     "category": top_defect_names[def_id],
                     "this_week": 0,
                     "yesterday": 0
                 })
 
-        tracked_defects.append({
-            "category": "Khác",
-            "this_week": other_week,
-            "yesterday": other_yesterday
-        })
+        if other_week > 0 or other_yesterday > 0 or len(tracked_defects) > 0:
+            tracked_defects.append({
+                "id": None,
+                "code": "OTHER",
+                "category": "Khác",
+                "this_week": other_week,
+                "yesterday": other_yesterday
+            })
 
-        # D. Công việc cần làm (Checklist theo nhân sự từ /admin/kpi/quality-employees)
+        # Tính tỷ lệ % đóng góp cho từng lỗi trong tổng lỗi kỳ chọn
+        for item in all_tracked_defects:
+            item["pct"] = round((item["this_week"] / total_all_period * 100), 1) if total_all_period > 0 else 0
+
+        # Sắp xếp danh sách lỗi giảm dần theo số lượng
+        all_tracked_defects.sort(key=lambda x: x["this_week"], reverse=True)
+
+        stage_totals = {}
+        total_stage_qty = 0
+        for wsr in week_stage_rows:
+            stg_name, sqty = wsr[1] or "Khác", int(wsr[2] or 0)
+            if sqty > 0:
+                stage_totals[stg_name] = stage_totals.get(stg_name, 0) + sqty
+                total_stage_qty += sqty
+
+        active_stages = []
+        for s, c in active_stages_map.items():
+            s_qty = stage_totals.get(s, 0)
+            s_pct = round((s_qty / total_stage_qty * 100), 1) if total_stage_qty > 0 else 0
+            active_stages.append({
+                "stage": s,
+                "color": c,
+                "count": s_qty,
+                "pct": s_pct
+            })
+
+        # Tính tỷ lệ lỗi: T = số lượng lỗi / (số lượng kiểm tra) * 100
+        # Hôm nay vs Hôm qua: T(hôm nay) - T(hôm qua)
+        # Tuần này vs Tuần trước: T(tuần này) - T(tuần trước)
+        start_of_last_week = start_of_week - timedelta(days=7)
+        end_of_last_week = start_of_week - timedelta(days=1)
+        end_of_this_week = start_of_week + timedelta(days=6)
+
+        rate_comp_sql = text(f"""
+            SELECT 
+                SUM(CASE WHEN r.inspection_date = :today THEN ISNULL(r.total_products, 0) ELSE 0 END) as ins_today,
+                SUM(CASE WHEN r.inspection_date = :today THEN ISNULL(r.total_defects, 0) ELSE 0 END) as def_today,
+                SUM(CASE WHEN r.inspection_date = :yesterday THEN ISNULL(r.total_products, 0) ELSE 0 END) as ins_yesterday,
+                SUM(CASE WHEN r.inspection_date = :yesterday THEN ISNULL(r.total_defects, 0) ELSE 0 END) as def_yesterday,
+                SUM(CASE WHEN r.inspection_date >= :start_of_week AND r.inspection_date <= :end_of_this_week THEN ISNULL(r.total_products, 0) ELSE 0 END) as ins_this_week,
+                SUM(CASE WHEN r.inspection_date >= :start_of_week AND r.inspection_date <= :end_of_this_week THEN ISNULL(r.total_defects, 0) ELSE 0 END) as def_this_week,
+                SUM(CASE WHEN r.inspection_date >= :start_of_last_week AND r.inspection_date <= :end_of_last_week THEN ISNULL(r.total_products, 0) ELSE 0 END) as ins_last_week,
+                SUM(CASE WHEN r.inspection_date >= :start_of_last_week AND r.inspection_date <= :end_of_last_week THEN ISNULL(r.total_defects, 0) ELSE 0 END) as def_last_week
+            FROM daily_inspection_records r
+            LEFT JOIN accounts a ON r.inspector_id = a.id
+            WHERE (r.inspection_date >= :start_of_last_week AND r.inspection_date <= :end_of_this_week)
+              AND {factory_condition}
+        """)
+        rate_comp_row = db.execute(rate_comp_sql, {
+            "today": today,
+            "yesterday": yesterday,
+            "start_of_week": start_of_week,
+            "end_of_this_week": end_of_this_week,
+            "start_of_last_week": start_of_last_week,
+            "end_of_last_week": end_of_last_week
+        }).fetchone()
+
+        ins_today = int(rate_comp_row[0] or 0)
+        def_today = int(rate_comp_row[1] or 0)
+        ins_yesterday = int(rate_comp_row[2] or 0)
+        def_yesterday = int(rate_comp_row[3] or 0)
+        ins_this_week = int(rate_comp_row[4] or 0)
+        def_this_week = int(rate_comp_row[5] or 0)
+        ins_last_week = int(rate_comp_row[6] or 0)
+        def_last_week = int(rate_comp_row[7] or 0)
+
+        t_today = round((def_today / ins_today * 100), 2) if ins_today > 0 else 0.0
+        t_yesterday = round((def_yesterday / ins_yesterday * 100), 2) if ins_yesterday > 0 else 0.0
+        delta_day = round(t_today - t_yesterday, 2)
+
+        t_this_week = round((def_this_week / ins_this_week * 100), 2) if ins_this_week > 0 else 0.0
+        t_last_week = round((def_last_week / ins_last_week * 100), 2) if ins_last_week > 0 else 0.0
+        delta_week = round(t_this_week - t_last_week, 2)
+
+        rate_comparison = {
+            "rate_today": t_today,
+            "rate_yesterday": t_yesterday,
+            "delta_day": delta_day,
+            "is_increase_day": delta_day > 0,
+            "ins_today": ins_today,
+            "def_today": def_today,
+            "ins_yesterday": ins_yesterday,
+            "def_yesterday": def_yesterday,
+
+            "rate_this_week": t_this_week,
+            "rate_last_week": t_last_week,
+            "delta_week": delta_week,
+            "is_increase_week": delta_week > 0,
+            "ins_this_week": ins_this_week,
+            "def_this_week": def_this_week,
+            "ins_last_week": ins_last_week,
+            "def_last_week": def_last_week,
+
+            "current_rate": t_this_week if d_mode == 'week' else (t_yesterday if d_mode == 'yesterday' else t_today),
+            "prev_rate": t_last_week if d_mode == 'week' else t_yesterday,
+            "delta_rate": delta_week if d_mode == 'week' else delta_day,
+            "is_increase": (delta_week > 0) if d_mode == 'week' else (delta_day > 0),
+            "date_mode": d_mode
+        }
+
+        defects_summary = {
+            "total_week": total_all_period,
+            "total_period": total_all_period,
+            "defect_types_count": len(all_tracked_defects),
+            "active_stages": active_stages,
+            "date_mode": d_mode,
+            "date_label": date_label,
+            "rate_comparison": rate_comparison
+        }
+
+        # D. Tỷ lệ lỗi theo công đoạn (Stage Defect Distribution - Donut Chart)
+        stage_defect_sql = text(f"""
+            SELECT 
+                CASE 
+                    WHEN r.stage_name LIKE 'Sơn%' THEN N'Sơn'
+                    WHEN r.stage_name LIKE N'Định Hình%' THEN N'Định Hình'
+                    WHEN r.stage_name LIKE N'Lắp Ráp%' THEN N'Lắp Ráp'
+                    WHEN r.stage_name LIKE N'Đóng Gói%' THEN N'Đóng Gói'
+                    WHEN r.stage_name LIKE N'Tạo Phôi%' THEN N'Tạo Phôi'
+                    WHEN r.stage_name LIKE N'Nhập Kho%' THEN N'Nhập Kho'
+                    ELSE r.stage_name
+                END as stage_group,
+                SUM(d.quantity) as defect_qty
+            FROM daily_inspection_defects d
+            JOIN daily_inspection_records r ON d.record_id = r.id
+            LEFT JOIN accounts a ON r.inspector_id = a.id
+            WHERE r.inspection_date >= DATEADD(day, -30, GETDATE())
+              AND {factory_condition}
+            GROUP BY 
+                CASE 
+                    WHEN r.stage_name LIKE 'Sơn%' THEN N'Sơn'
+                    WHEN r.stage_name LIKE N'Định Hình%' THEN N'Định Hình'
+                    WHEN r.stage_name LIKE N'Lắp Ráp%' THEN N'Lắp Ráp'
+                    WHEN r.stage_name LIKE N'Đóng Gói%' THEN N'Đóng Gói'
+                    WHEN r.stage_name LIKE N'Tạo Phôi%' THEN N'Tạo Phôi'
+                    WHEN r.stage_name LIKE N'Nhập Kho%' THEN N'Nhập Kho'
+                    ELSE r.stage_name
+                END
+            ORDER BY defect_qty DESC
+        """)
+        stage_defect_rows = db.execute(stage_defect_sql).fetchall()
+        total_stage_defects = sum(int(r[1] or 0) for r in stage_defect_rows)
+
+        STAGE_COLORS = {
+            "Sơn": "#78350F",       # Nâu đậm gỗ / sơn
+            "Định Hình": "#B45309", # Hổ phách đậm
+            "Lắp Ráp": "#D97706",   # Cam vàng
+            "Đóng Gói": "#CA8A04",  # Vàng đất
+            "Tạo Phôi": "#9A3412",  # Cam cháy
+            "Nhập Kho": "#713F12",  # Nâu đất
+            "Khác": "#64748B"       # Xám
+        }
+
+        stage_defect_items = []
+        for r in stage_defect_rows:
+            stg_name = r[0] or "Khác"
+            qty = int(r[1] or 0)
+            pct = round((qty / total_stage_defects * 100), 1) if total_stage_defects > 0 else 0
+            color = STAGE_COLORS.get(stg_name, "#A16207")
+            stage_defect_items.append({
+                "stage": stg_name,
+                "count": qty,
+                "pct": pct,
+                "color": color
+            })
+
+        # E. Công việc cần làm (Checklist theo nhân sự từ /admin/kpi/quality-employees)
         from modules.kpi.models.kpi_management import KPIChecklist
         from modules.kpi.models.quality_employee import QualityEmployee
 
@@ -364,7 +718,14 @@ def get_production_dashboard(
         return {
             "notifications": notifications_data,
             "kpi_month": kpi_month,
+            "stage_defects": {
+                "total": total_stage_defects,
+                "items": stage_defect_items
+            },
             "tracked_defects": tracked_defects,
+            "all_tracked_defects": all_tracked_defects,
+            "defects_summary": defects_summary,
+            "rate_comparison": rate_comparison,
             "action_items": action_items
         }
     except Exception as e:
@@ -520,21 +881,50 @@ def get_po_codes(
                 Order.partner_po.ilike(s),
                 Order.production_code.ilike(s)
             ))
-            rows = query.order_by(Order.order_code.asc(), Order.id.desc()).limit(limit).all()
+            # Quét tối đa 3000 bản ghi để đảm bảo các lô con không chèn ép mã gốc
+            rows = query.order_by(Order.order_code.asc(), Order.id.desc()).limit(max(limit, 3000)).all()
         else:
             rows = query.order_by(Order.id.desc()).limit(limit).all()
         
         codes = []
         seen = set()
+        s_low = search_clean.lower() if search_clean else None
+
         for r in rows:
             for val in [r.order_code, r.partner_po, r.production_code]:
                 if val:
                     code = val.strip()
                     root_code = extract_root_po(code)
                     if root_code and root_code not in seen:
+                        # BẮT BUỘC KIỂM TRA: Nếu tìm kiếm thì mã PO gốc phải chứa đúng từ khóa
+                        if s_low and s_low not in root_code.lower():
+                            continue
                         seen.add(root_code)
                         codes.append(root_code)
                         break
+
+        # Nếu có từ khóa tìm kiếm, phân hạng ưu tiên (Ranking):
+        # 1. Bắt đầu bằng từ khóa (09xx, ví dụ APT-0901, 0901...)
+        # 2. Kết thúc bằng từ khóa (xx09, ví dụ ADV-0409, FOL-0409...)
+        # 3. Chứa từ khóa ở vị trí khác
+        if s_low and codes:
+            import re
+
+            def get_priority(c):
+                c_low = c.lower()
+                segments = re.findall(r'[a-zA-Z]+|\d+', c_low)
+                if c_low.startswith(s_low) or any(seg.startswith(s_low) for seg in segments):
+                    return (1, c)
+                elif c_low.endswith(s_low) or any(seg.endswith(s_low) for seg in segments):
+                    return (2, c)
+                else:
+                    return (3, c)
+
+            ranked = sorted(codes, key=get_priority)
+            codes = ranked[:limit]
+        else:
+            codes = codes[:limit]
+
         return {"codes": codes, "total": len(codes)}
     except Exception as e:
         logger.error(f"Lỗi khi lấy po-codes: {e}")

@@ -106,33 +106,21 @@ export const useAuthController = () => {
 }
 
 /**
- * Kiểm tra xem người dùng có thuộc bộ phận / vai trò QC (Quản lý chất lượng) hay không
+ * Kiểm tra xem người dùng có thuộc bộ phận QC (Quality Control) trực tiếp kiểm tra hay không.
+ * Tiêu chí: Cột "Bộ phận" (department_name) trên màn hình /admin/users phải bắt đầu bằng chữ "QC" (không phân biệt hoa/thường).
+ * Ví dụ hợp lệ: "QC Định Hình - Lắp Ráp", "QC Sơn - Đóng Gói", "QC Final", "QC Kiểm Tra Nhập Kho", "QC"...
+ * Các bộ phận khác (ví dụ: "Nhân Viên Kiểm Soát Quy Trình", "Process QA", "Giám Đốc", "Tổ trưởng QC"...) -> false -> vào Dash (/dashboard).
+ * 
  * @param {Object} user - Đối tượng user từ AuthStore
  * @returns {boolean}
  */
 export const isQCUser = (user) => {
   if (!user) return false;
 
-  const dept = (user.department_name || user.department || '').toLowerCase();
-  const role = (user.role_name || user.role_description || '').toLowerCase();
-  const perm = (user.permission_name || user.permission_description || '').toLowerCase();
-  const stage = (user.stage_name || user.activeStageName || '').toLowerCase();
-  const username = (user.username || '').toLowerCase();
+  // Lấy tên bộ phận từ thông tin tài khoản (cột "Bộ phận" trên /admin/users)
+  const deptName = (user.department_name || user.department || '').trim();
+  if (!deptName) return false;
 
-  const combined = `${dept} | ${role} | ${perm} | ${stage} | ${username}`;
-
-  const qcKeywords = [
-    'qc',
-    'qlcl',
-    'kcs',
-    'chất lượng',
-    'chat luong',
-    'kiểm soát quy trình',
-    'kiem soat quy trinh',
-    'kiểm tra',
-    'kiem tra',
-    'qa'
-  ];
-
-  return qcKeywords.some(kw => combined.includes(kw));
+  // Kiểm tra tên bộ phận có bắt đầu bằng "QC" (không phân biệt hoa thường)
+  return deptName.toUpperCase().startsWith('QC');
 };

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { Plus, ScanLine } from 'lucide-react'
 import CustomSelect from '@mobile/Shared/Views/components/form/CustomSelect'
 import FormMultiSearchSelect from '@mobile/Shared/Views/components/form/FormMultiSearchSelect'
@@ -7,6 +7,7 @@ import { useInspectionFormBase } from '../Controllers/useInspectionFormBase'
 import InspectionFormShell from './components/InspectionFormShell'
 import InspectionStepsTable from './components/InspectionStepsTable'
 import ErrorTrendRow from './components/ErrorTrendRow'
+import InspectionResultBanner from './components/InspectionResultBanner'
 import { INSPECT_MODES } from '../constants'
 
 const CL09C_ParameterView = () => {
@@ -32,6 +33,7 @@ const CL09C_ParameterView = () => {
     setParamProduct,
     handleParamProductChange,
     productOptions,
+    totalBatchQty,
     paramSample,
     setParamSample,
     paramPass,
@@ -57,12 +59,31 @@ const CL09C_ParameterView = () => {
     isIncomingStage,
     selectedProducts,
     handleMultiProductChange,
+    spec,
+    setSpec,
+    specOptions,
+    selectedSpecs,
+    handleMultiSpecChange,
     samplingRule,
     requiredQty,
   } = formState
 
   const [targetType, setTargetType] = useState('po') // 'po' | 'pallet'
   const [isQrScannerOpen, setIsQrScannerOpen] = useState(false)
+
+  // Đồng bộ loại đối tượng kiểm tra (PO hay Pallet) khi xem phiếu chi tiết
+  useEffect(() => {
+    if (formState.ticket) {
+      const t = formState.ticket
+      if (t.targetType) {
+        setTargetType(t.targetType)
+      } else if ((t.palletCode || t.pallet_code) && !t.po && !t.paramPo && !t.batch_no) {
+        setTargetType('pallet')
+      } else {
+        setTargetType('po')
+      }
+    }
+  }, [formState.ticket])
 
   const handleInFormPalletScan = (scanned) => {
     setIsQrScannerOpen(false)
@@ -79,17 +100,32 @@ const CL09C_ParameterView = () => {
   const hasStage = Boolean(currentStage)
   const hasPo = Boolean(paramPo)
   const hasProduct = Boolean(paramProduct || (selectedProducts && selectedProducts.length > 0))
+  const hasSpec = Boolean(spec || (selectedSpecs && selectedSpecs.length > 0))
 
   const isPoDisabled = readOnly || !hasStage
   const isProductDisabled = readOnly || !hasStage || (targetType === 'po' && !hasPo)
+  const isSpecDisabled = readOnly || isProductDisabled || !hasProduct
   const isSampleDisabled = readOnly || !hasStage || (targetType === 'po' && (!hasPo || !hasProduct))
 
   const poPlaceholder = !hasStage ? 'Chọn công đoạn trước' : 'Nhập hoặc chọn PO...'
   const productPlaceholder = !hasStage ? 'Chọn công đoạn trước' : (targetType === 'po' && !hasPo ? 'Chọn PO trước' : 'Chọn sản phẩm...')
+  const specPlaceholder = !hasStage
+    ? 'Chọn công đoạn trước'
+    : (targetType === 'po' && !hasPo
+      ? 'Chọn PO trước'
+      : (!hasProduct ? 'Chọn chi tiết trước' : 'Chọn quy cách...'))
 
   const safeProductOptions = Array.isArray(productOptions) ? productOptions.filter((o) => Boolean(o && o.value)) : []
+  const safeSpecOptions = useMemo(() => {
+    let opts = Array.isArray(specOptions) ? specOptions.filter((o) => Boolean(o && o.value)) : []
+    if (spec && !opts.some((o) => o.value === spec || o.label === spec || o.rawSpec === spec)) {
+      opts = [{ value: spec, label: spec, rawSpec: spec }, ...opts]
+    }
+    return opts
+  }, [specOptions, spec])
   const safeErrors = Array.isArray(errors) ? errors : []
   const safeSelectedDefectIds = safeErrors.map((e) => e?.defectId || e?.defect_id || (e?.code ? e?.code : null)).filter(Boolean)
+  const totalDefects = useMemo(() => safeErrors.reduce((sum, item) => sum + (Number(item.qty) || 0), 0), [safeErrors])
 
   return (
     <>
@@ -105,7 +141,7 @@ const CL09C_ParameterView = () => {
             <span style={{ fontSize: '13px', fontWeight: '700', color: '#4a240e' }}>
               Kiểm tra theo:
             </span>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '13.5px', fontWeight: targetType === 'po' ? '700' : '500', color: targetType === 'po' ? '#7B5233' : '#64748b' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: readOnly ? 'default' : 'pointer', fontSize: '13.5px', fontWeight: targetType === 'po' ? '700' : '500', color: targetType === 'po' ? '#7B5233' : '#64748b' }}>
               <input
                 type="radio"
                 name="paramTargetType"
@@ -115,10 +151,11 @@ const CL09C_ParameterView = () => {
                   setPalletCode('')
                 }}
                 disabled={readOnly}
+                style={{ accentColor: '#7B5233', width: '16px', height: '16px', cursor: readOnly ? 'default' : 'pointer' }}
               />
               Mã PO
             </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '13.5px', fontWeight: targetType === 'pallet' ? '700' : '500', color: targetType === 'pallet' ? '#7B5233' : '#64748b' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: readOnly ? 'default' : 'pointer', fontSize: '13.5px', fontWeight: targetType === 'pallet' ? '700' : '500', color: targetType === 'pallet' ? '#7B5233' : '#64748b' }}>
               <input
                 type="radio"
                 name="paramTargetType"
@@ -128,6 +165,7 @@ const CL09C_ParameterView = () => {
                   setParamPo('')
                 }}
                 disabled={readOnly}
+                style={{ accentColor: '#7B5233', width: '16px', height: '16px', cursor: readOnly ? 'default' : 'pointer' }}
               />
               Mã Pallet
             </label>
@@ -196,10 +234,10 @@ const CL09C_ParameterView = () => {
             )}
           </div>
 
-          {/* Hàng 2: Chi tiết / Sản phẩm & Số lượng mẫu */}
-          <div className="pv2-field-row pv2-field-row--2col">
+          {/* Hàng 2: Chi tiết / Sản phẩm & Quy cách */}
+          <div className="pv2-field-row pv2-field-row--2col" style={{ marginTop: '4px' }}>
             <div className="pv2-field">
-              <label>Sản phẩm <span className="pv2-req">*</span></label>
+              <label>Chi tiết / Sản phẩm <span className="pv2-req">*</span></label>
               {isIncomingStage ? (
                 <FormMultiSearchSelect
                   values={selectedProducts || []}
@@ -217,42 +255,54 @@ const CL09C_ParameterView = () => {
                   onChange={handleParamProductChange || setParamProduct}
                   disabled={isProductDisabled}
                   placeholder={productPlaceholder}
+                  allowCustomInput={true}
                 />
               )}
             </div>
-
             <div className="pv2-field">
-              <label>SL mẫu kiểm tra <span className="pv2-req">*</span></label>
-              <input
-                type="number"
-                min="1"
-                max={samplingRule?.sample_size || requiredQty || undefined}
-                className={`pv2-input ${isSampleDisabled ? 'pv2-input--disabled' : ''}`}
-                value={paramSample || ''}
-                onChange={(e) => setParamSample(e.target.value)}
-                placeholder={samplingRule?.sample_size ? String(samplingRule.sample_size) : 'VD: 50'}
-                disabled={isSampleDisabled}
-                style={{
-                  width: '100%',
-                  height: '42px',
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  border: '1.5px solid #EADCC9',
-                  backgroundColor: isSampleDisabled ? '#F8FAFC' : '#FFFFFF',
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  color: '#2D1A12',
-                }}
+              <label>Quy cách <span className="pv2-req">*</span></label>
+              <FormMultiSearchSelect
+                values={selectedSpecs?.length > 0 ? selectedSpecs : (spec ? [spec] : [])}
+                options={safeSpecOptions}
+                onChange={handleMultiSpecChange}
+                placeholder={specPlaceholder}
+                itemType="quy cách"
+                required
+                disabled={isSpecDisabled}
+                allowCustomInput={true}
               />
             </div>
           </div>
 
-          {/* Hàng 3: SL Đạt & SL Không đạt */}
-          <div className="pv2-field-row pv2-field-row--2col" style={{ marginTop: '4px' }}>
+          {/* Hàng: Số lượng sản xuất & Số lượng cần kiểm tra */}
+          <div className="pv2-field-row pv2-field-row--2col" style={{ marginTop: '8px' }}>
             <div className="pv2-field">
-              <label>SL đạt</label>
-              <input type="number" className="pv2-input pv2-input--disabled" value={paramPass || ''} onChange={(e) => setParamPass && setParamPass(e.target.value)} disabled />
+              <label>Số lượng sản xuất</label>
+              <input
+                type="text"
+                className="pv2-input pv2-input--disabled"
+                value={totalBatchQty || requiredQty || paramSample || '—'}
+                disabled
+                readOnly
+                placeholder="—"
+              />
             </div>
+            <div className="pv2-field">
+              <label>Số lượng cần kiểm tra <span className="pv2-req">*</span></label>
+              <input
+                type="number"
+                min="1"
+                className={`pv2-input ${isSampleDisabled ? 'pv2-input--disabled' : ''}`}
+                value={paramSample || ''}
+                onChange={(e) => setParamSample && setParamSample(e.target.value)}
+                placeholder={totalBatchQty ? `VD: ${totalBatchQty}` : 'Nhập SL kiểm tra...'}
+                disabled={isSampleDisabled}
+              />
+            </div>
+          </div>
+
+          {/* Hàng 3: SL không đạt */}
+          <div className="pv2-field-row" style={{ marginTop: '4px' }}>
             <div className="pv2-field">
               <label>SL không đạt</label>
               <input type="number" className="pv2-input pv2-input--disabled" value={paramFail || ''} onChange={(e) => setParamFail && setParamFail(e.target.value)} disabled />
@@ -276,17 +326,12 @@ const CL09C_ParameterView = () => {
             <div className="pv2-fade-in" style={{ marginTop: 16 }}>
               {renderImageUploadArea && renderImageUploadArea()}
 
-              <div className="pv2-field" style={{ marginTop: '12px' }}>
-                <label>Kết quả <span className="pv2-req">*</span></label>
-                <div className="pv2-radio-group">
-                  <label className="pv2-radio-label">
-                    <input type="radio" name="res_param" checked={result === 'pass'} onChange={() => setResult('pass')} disabled={readOnly} /> Đạt
-                  </label>
-                  <label className="pv2-radio-label">
-                    <input type="radio" name="res_param" checked={result === 'fail'} onChange={() => setResult('fail')} disabled={readOnly} /> Không đạt
-                  </label>
-                </div>
-              </div>
+              <InspectionResultBanner
+                result={result}
+                onResultChange={setResult}
+                disabled={readOnly}
+                totalDefects={totalDefects}
+              />
 
               {readOnly && note ? (
                 <div className="pv2-field">

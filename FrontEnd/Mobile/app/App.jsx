@@ -24,6 +24,8 @@ import InputInspection from '@modules/inspection/Views/InputInspectionView'
 import EquipmentList from '@modules/equipment/Views/EquipmentListView'
 import KPIStaffList from '@modules/kpi/Views/KPIStaffListView'
 import QualityEmployeeListMobileView from '@modules/kpi/Views/QualityEmployeeListMobileView'
+import QualityKPIDashboardMobileView from '@modules/kpi/Views/QualityKPIDashboardMobileView'
+import QualityOverviewMobileView from '@modules/inspection/Views/QualityOverviewMobileView'
 import CAPAList from '@modules/capa/Views/CAPAListView'
 import CAPAReport from '@modules/capa/Views/CAPAReportView'
 import CAPADetail from '@modules/capa/Views/CAPADetailView'
@@ -119,6 +121,11 @@ function App() {
             <Route path="/equipment-list" element={<EquipmentList />} />
             <Route path="/kpi-staff" element={<KPIStaffList />} />
             <Route path="/kpi-quality-employees" element={<QualityEmployeeListMobileView />} />
+            <Route path="/admin/kpi/dashboard" element={<QualityKPIDashboardMobileView />} />
+            <Route path="/kpi/dashboard" element={<QualityKPIDashboardMobileView />} />
+            <Route path="/admin/quality" element={<QualityOverviewMobileView />} />
+            <Route path="/quality" element={<QualityOverviewMobileView />} />
+            <Route path="admin/quality" element={<QualityOverviewMobileView />} />
             <Route path="/capa-list" element={<CAPAList />} />
             <Route path="/mobile/capa/list" element={<CAPAList />} />
             <Route path="/capa-report/:id" element={<CAPAReport />} />
