@@ -30,7 +30,7 @@ const AccountQualityTab = ({
   onUpdateAccountCount,
 }) => {
   // Lọc theo thời gian (Hôm nay, Tuần này, Tháng này, Tất cả, hoặc Tùy chọn)
-  const [timePeriod, setTimePeriod] = useState('all'); // 'all' | 'today' | 'week' | 'month' | 'custom'
+  const [timePeriod, setTimePeriod] = useState('today'); // 'all' | 'today' | 'week' | 'month' | 'custom'
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
 
@@ -49,7 +49,7 @@ const AccountQualityTab = ({
 
   // Phân trang
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(30);
 
   // Reset trang khi bộ lọc thay đổi
   useEffect(() => {
@@ -155,13 +155,6 @@ const AccountQualityTab = ({
       return isQc;
     });
   }, [rawAccounts]);
-
-  // Cập nhật số lượng tài khoản QLCL lên View cha
-  useEffect(() => {
-    if (onUpdateAccountCount && qlclAccounts.length > 0) {
-      onUpdateAccountCount(qlclAccounts.length);
-    }
-  }, [qlclAccounts.length, onUpdateAccountCount]);
 
   // Tổng hợp dữ liệu theo từng tài khoản kiểm tra viên
   const accountStats = useMemo(() => {
@@ -271,17 +264,26 @@ const AccountQualityTab = ({
       }
     });
 
-    return Object.values(groups).map(g => {
-      const defectRate = g.total > 0 ? ((g.failCount / g.total) * 100).toFixed(1) : '0.0';
-      const returnRate = g.total > 0 ? ((g.returnCount / g.total) * 100).toFixed(1) : '0.0';
-      return {
-        ...g,
-        defectRate: Number(defectRate),
-        returnRate: Number(returnRate),
-        stagesList: Array.from(g.stages),
-      };
-    });
+    return Object.values(groups)
+      .filter(g => g.total > 0)
+      .map(g => {
+        const defectRate = g.total > 0 ? ((g.failCount / g.total) * 100).toFixed(1) : '0.0';
+        const returnRate = g.total > 0 ? ((g.returnCount / g.total) * 100).toFixed(1) : '0.0';
+        return {
+          ...g,
+          defectRate: Number(defectRate),
+          returnRate: Number(returnRate),
+          stagesList: Array.from(g.stages),
+        };
+      });
   }, [qlclAccounts, allTickets, pendingTasks]);
+
+  // Cập nhật số lượng tài khoản QLCL có phát sinh phiếu lên View cha
+  useEffect(() => {
+    if (onUpdateAccountCount && accountStats.length > 0) {
+      onUpdateAccountCount(accountStats.length);
+    }
+  }, [accountStats.length, onUpdateAccountCount]);
 
   // Danh sách công đoạn duy nhất cho bộ lọc
   const allStages = useMemo(() => {
@@ -307,17 +309,17 @@ const AccountQualityTab = ({
   const activeFiltersCount = useMemo(() => {
     let count = 0;
     if (selectedStage !== 'all') count += 1;
-    if (pageSize !== 10) count += 1;
-    if (timePeriod !== 'all') count += 1;
+    if (pageSize !== 30) count += 1;
+    if (timePeriod !== 'today') count += 1;
     return count;
   }, [selectedStage, pageSize, timePeriod]);
 
   const handleResetFilters = () => {
     setSelectedStage('all');
-    setTimePeriod('all');
+    setTimePeriod('today');
     setCustomStartDate('');
     setCustomEndDate('');
-    setPageSize(10);
+    setPageSize(30);
     setCurrentPage(1);
   };
 
@@ -950,6 +952,7 @@ const AccountQualityTab = ({
               >
                 <option value={10}>10 dòng / trang</option>
                 <option value={20}>20 dòng / trang</option>
+                <option value={30}>30 dòng / trang</option>
                 <option value={50}>50 dòng / trang</option>
                 <option value={100}>100 dòng / trang</option>
               </select>
@@ -1151,18 +1154,16 @@ const AccountQualityTab = ({
                                 }}>
                                   {acc.passCount} Đạt
                                 </span>
-                                {acc.failCount > 0 && (
-                                  <span style={{
-                                    padding: '2px 6px',
-                                    borderRadius: '4px',
-                                    backgroundColor: '#FEE2E2',
-                                    color: '#DC2626',
-                                    fontWeight: '700',
-                                    fontSize: '0.73rem'
-                                  }}>
-                                    {acc.failCount} Lỗi
-                                  </span>
-                                )}
+                                <span style={{
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  backgroundColor: '#FEE2E2',
+                                  color: '#DC2626',
+                                  fontWeight: '700',
+                                  fontSize: '0.73rem'
+                                }}>
+                                  {acc.failCount} Lỗi
+                                </span>
                               </div>
                             ) : (
                               <span style={{ color: '#CBD5E1', fontSize: '0.78rem' }}>—</span>
@@ -1445,18 +1446,16 @@ const AccountQualityTab = ({
                             }}>
                               {acc.passCount} Đạt
                             </span>
-                            {acc.failCount > 0 && (
-                              <span style={{
-                                padding: '2px 6px',
-                                borderRadius: '4px',
-                                backgroundColor: '#FEE2E2',
-                                color: '#DC2626',
-                                fontWeight: '700',
-                                fontSize: '0.72rem'
-                              }}>
-                                {acc.failCount} Lỗi
-                              </span>
-                            )}
+                            <span style={{
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              backgroundColor: '#FEE2E2',
+                              color: '#DC2626',
+                              fontWeight: '700',
+                              fontSize: '0.72rem'
+                            }}>
+                              {acc.failCount} Lỗi
+                            </span>
                             {acc.returnCount > 0 && (
                               <span style={{
                                 padding: '2px 6px',
