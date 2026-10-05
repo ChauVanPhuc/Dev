@@ -229,63 +229,117 @@ const InspectionDetailView = () => {
   };
 
   const getImageUrl = (path) => {
-    if (!path) return '';
+    if (!path || typeof path !== 'string') return '';
     if (path.startsWith('http')) return path;
-    const clean = path.replace(/^\/+/, '');
-    const { hostname } = window.location;
-    const isDev = window.location.port === '1222' || window.location.port === '1333' || window.location.port === '5173' || window.location.port === '3000' || window.location.port === '5174';
-    const base = isDev ? `http://${hostname}:1111` : window.location.origin;
-    return `${base}/${clean}`;
+    let clean = path.replace(/\\/g, '/').replace(/^\/+/, '');
+    if (clean.startsWith('uploads/')) {
+      clean = `static/${clean}`;
+    }
+    const baseApi = (api.defaults?.baseURL || '').replace(/\/api\/v1\/?$/, '').replace(/\/+$/, '');
+    const origin = baseApi || window.location.origin;
+    return `${origin}/${clean}`;
   };
 
-  // Trích xuất toàn bộ ảnh minh chứng của phiếu kiểm tra công đoạn
-  const getStageImages = (stageItem) => {
-    if (!stageItem) return [];
+  const getImageStemKey = (img) => {
+    if (!img || typeof img !== 'string') return '';
+    const clean = img.trim().split('?')[0].split('#')[0].replace(/\\/g, '/');
+    const filename = clean.split('/').pop();
+    if (!filename) return '';
+    const dotIdx = filename.lastIndexOf('.');
+    return dotIdx > 0 ? filename.substring(0, dotIdx).toLowerCase() : filename.toLowerCase();
+  };
+
+  const deduplicateInspectionImages = (imgs) => {
+    if (!Array.isArray(imgs)) return [];
+    const stemMap = new Map();
+    imgs.filter(Boolean).forEach(img => {
+      if (typeof img !== 'string' || !img.trim()) return;
+      const cleanImg = img.trim();
+      if (cleanImg.includes('qc_phoi_1') || cleanImg.includes('qc_phoi_2') || cleanImg.includes('qc_phoi_3')) return;
+
+      const stem = getImageStemKey(cleanImg);
+      if (!stem) return;
+
+      if (!stemMap.has(stem)) {
+        stemMap.set(stem, cleanImg);
+      } else {
+        const existing = stemMap.get(stem);
+        if (existing.toLowerCase().endsWith('.webp') && cleanImg.toLowerCase().endsWith('.jpg')) {
+          stemMap.set(stem, cleanImg);
+        }
+      }
+    });
+    return Array.from(stemMap.values());
+  };
+
+  const handleImageError = (e) => {
+    const currentSrc = e.target?.src || '';
+    if (currentSrc.toLowerCase().includes('.webp') && !e.target.dataset.triedJpg) {
+      e.target.dataset.triedJpg = 'true';
+      e.target.src = currentSrc.replace(/\.webp($|\?)/i, '.jpg$1');
+      return;
+    }
+    e.target.onerror = null;
+    e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 24 24" fill="none" stroke="%23A89F91" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2" fill="%23FAF7F2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>';
+  };
+
+  // Trích xuất toàn bộ ảnh minh chứng của phiếu (hỗ trợ cả IQC và Stage, khử trùng lặp thông minh)
+  const getAllTicketImages = (ticketItem) => {
+    if (!ticketItem) return [];
     const list = [];
+    const add = (img) => {
+      if (img && typeof img === 'string') list.push(img);
+    };
+
+    [ticketItem.image_path_1, ticketItem.image_path_2, ticketItem.image_path_3].forEach(add);
+
     let parsedData = {};
     try {
-      parsedData = typeof stageItem.data_json === 'string' ? JSON.parse(stageItem.data_json || '{}') : (stageItem.data_json || {});
+      parsedData = typeof ticketItem.data_json === 'string' ? JSON.parse(ticketItem.data_json || '{}') : (ticketItem.data_json || {});
     } catch (e) {}
 
+    if (Array.isArray(parsedData.images)) {
+      parsedData.images.forEach(add);
+    }
     if (parsedData.steps) {
       Object.values(parsedData.steps).forEach(st => {
-        if (st.photo) list.push(st.photo);
+        if (st?.photo) add(st.photo);
+        if (Array.isArray(st?.images)) st.images.forEach(add);
       });
     }
     if (Array.isArray(parsedData.detailsList)) {
       parsedData.detailsList.forEach(det => {
-        if (det.image) list.push(det.image);
+        if (det?.image) add(det.image);
       });
     }
     if (Array.isArray(parsedData.samples)) {
       parsedData.samples.forEach(s => {
-        if (s.moisture?.photo) list.push(s.moisture.photo);
-        if (s.size?.photo) list.push(s.size.photo);
+        if (s?.moisture?.photo) add(s.moisture.photo);
+        if (s?.size?.photo) add(s.size.photo);
       });
     }
     if (Array.isArray(parsedData.checklist_results)) {
       parsedData.checklist_results.forEach(res => {
-        if (Array.isArray(res.images)) list.push(...res.images);
-        if (Array.isArray(res.steps)) {
+        if (Array.isArray(res?.images)) res.images.forEach(add);
+        if (Array.isArray(res?.steps)) {
           res.steps.forEach(st => {
-            if (Array.isArray(st.images)) list.push(...st.images);
+            if (Array.isArray(st?.images)) st.images.forEach(add);
           });
         }
       });
     }
-    
-    // Thêm các ảnh tổng hợp từ images_json
-    let generalImages = [];
-    try {
-      const parsedImages = typeof stageItem.images_json === 'string' ? JSON.parse(stageItem.images_json || '{}') : (stageItem.images_json || {});
-      Object.values(parsedImages).forEach(val => {
-        if (Array.isArray(val)) generalImages.push(...val);
-        else if (typeof val === 'string') generalImages.push(val);
-      });
-    } catch (e) {}
 
-    const allImages = Array.from(new Set([...list, ...generalImages, stageItem.image_path_1, stageItem.image_path_2, stageItem.image_path_3])).filter(Boolean);
-    return allImages;
+    if (ticketItem.images_json) {
+      try {
+        const parsedImages = typeof ticketItem.images_json === 'string' ? JSON.parse(ticketItem.images_json || '{}') : (ticketItem.images_json || {});
+        Object.values(parsedImages).forEach(val => {
+          if (Array.isArray(val)) val.forEach(add);
+          else if (typeof val === 'string') add(val);
+        });
+      } catch (e) {}
+    }
+
+    return deduplicateInspectionImages(list);
   };
 
   // In / Xuất PDF lẻ
@@ -296,7 +350,7 @@ const InspectionDetailView = () => {
     const dateVal = isInput ? item.inspected_at : item.inspection_date;
     
     let detailsHtml = '';
-    const imagesList = isInput ? [item.image_path_1, item.image_path_2, item.image_path_3].filter(Boolean) : getStageImages(item);
+    const imagesList = getAllTicketImages(item);
     
     if (isInput) {
       detailsHtml = `
@@ -526,7 +580,7 @@ const InspectionDetailView = () => {
   const isInput = type === 'input';
   const isPass = isInput ? item.result === 'Đạt' : item.conclusion === 'pass';
   const dateVal = isInput ? item.inspected_at : item.inspection_date;
-  const imagesList = isInput ? [item.image_path_1, item.image_path_2, item.image_path_3].filter(Boolean) : getStageImages(item);
+  const imagesList = getAllTicketImages(item);
   const defectsList = extractDefects(item);
 
   let itemAction = item.action;
@@ -1077,6 +1131,7 @@ const InspectionDetailView = () => {
                   <img 
                     src={getImageUrl(img)} 
                     alt="Evidence" 
+                    onError={handleImageError}
                     style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.2s' }}
                     onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
                     onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1.0)'}
@@ -1097,6 +1152,7 @@ const InspectionDetailView = () => {
           <img 
             src={getImageUrl(lightboxImage)} 
             alt="Full Preview"
+            onError={handleImageError}
             style={{ maxWidth: '90%', maxHeight: '90%', borderRadius: '8px', boxShadow: '0 10px 25px rgba(0,0,0,0.5)', objectFit: 'contain', margin: 'auto' }}
           />
           <button 

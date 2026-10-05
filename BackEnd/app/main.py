@@ -722,10 +722,32 @@ get_upload_dir("products")
 get_upload_dir("violations")
 get_upload_dir("inspections")
 
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
-app.mount("/api/v1/static", StaticFiles(directory=STATIC_DIR), name="api_v1_static")
-app.mount("/api/v1/uploads", StaticFiles(directory=UPLOADS_DIR), name="api_v1_uploads")
+class SmartStaticFiles(StaticFiles):
+    """
+    StaticFiles với cơ chế Fallback thông minh:
+    Tự động tìm kiếm file thay thế nếu định dạng yêu cầu không tồn tại (VD: yêu cầu .webp nhưng đĩa lưu .jpg, hoặc ngược lại).
+    """
+    def lookup_path(self, path: str):
+        full_path, stat_result = super().lookup_path(path)
+        if stat_result is not None:
+            return full_path, stat_result
+
+        stem, ext = os.path.splitext(path)
+        ext_lower = ext.lower()
+        if ext_lower in [".webp", ".jpg", ".jpeg", ".png"]:
+            candidates = [".jpg", ".png", ".jpeg", ".webp"]
+            for alt_ext in candidates:
+                if alt_ext != ext_lower:
+                    alt_path = stem + alt_ext
+                    alt_full_path, alt_stat = super().lookup_path(alt_path)
+                    if alt_stat is not None:
+                        return alt_full_path, alt_stat
+        return "", None
+
+app.mount("/static", SmartStaticFiles(directory=STATIC_DIR), name="static")
+app.mount("/uploads", SmartStaticFiles(directory=UPLOADS_DIR), name="uploads")
+app.mount("/api/v1/static", SmartStaticFiles(directory=STATIC_DIR), name="api_v1_static")
+app.mount("/api/v1/uploads", SmartStaticFiles(directory=UPLOADS_DIR), name="api_v1_uploads")
 
 
 
@@ -758,8 +780,25 @@ async def serve_ui(request: Request, full_path: str):
     # Loại bỏ leading slashes để chuẩn hóa đường dẫn tránh bypass (ví dụ: //static/...)
     full_path_clean = full_path.lstrip("/")
 
+    # Phục vụ file tĩnh và uploads với cơ chế SmartStaticFiles fallback
+    if full_path_clean.startswith("static/"):
+        sub_path = full_path_clean[len("static/"):]
+        ssf = SmartStaticFiles(directory=STATIC_DIR)
+        full_p, stat_res = ssf.lookup_path(sub_path)
+        if stat_res is not None:
+            return FileResponse(full_p)
+        raise HTTPException(status_code=404)
+
+    if full_path_clean.startswith("uploads/"):
+        sub_path = full_path_clean[len("uploads/"):]
+        ssf = SmartStaticFiles(directory=UPLOADS_DIR)
+        full_p, stat_res = ssf.lookup_path(sub_path)
+        if stat_res is not None:
+            return FileResponse(full_p)
+        raise HTTPException(status_code=404)
+
     # Loại trừ các đường dẫn hệ thống
-    if full_path_clean.startswith(("api/", "static/", "uploads/", "accounts/")):
+    if full_path_clean.startswith(("api/", "accounts/")):
         raise HTTPException(status_code=404)
 
     # Nhận diện tên miền và nguồn gốc (referer) để phục vụ đúng UI (Dashboard vs Mobile)

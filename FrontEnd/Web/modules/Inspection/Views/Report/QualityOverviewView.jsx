@@ -48,6 +48,49 @@ const normalizeInspectionType = (typeKey, category) => {
   return typeKey || 'first_sample';
 };
 
+const getImageStemKey = (img) => {
+  if (!img || typeof img !== 'string') return '';
+  const clean = img.trim().split('?')[0].split('#')[0].replace(/\\/g, '/');
+  const filename = clean.split('/').pop();
+  if (!filename) return '';
+  const dotIdx = filename.lastIndexOf('.');
+  return dotIdx > 0 ? filename.substring(0, dotIdx).toLowerCase() : filename.toLowerCase();
+};
+
+const deduplicateInspectionImages = (imgs) => {
+  if (!Array.isArray(imgs)) return [];
+  const stemMap = new Map();
+  imgs.filter(Boolean).forEach(img => {
+    if (typeof img !== 'string' || !img.trim()) return;
+    const cleanImg = img.trim();
+    if (cleanImg.includes('qc_phoi_1') || cleanImg.includes('qc_phoi_2') || cleanImg.includes('qc_phoi_3')) return;
+
+    const stem = getImageStemKey(cleanImg);
+    if (!stem) return;
+
+    if (!stemMap.has(stem)) {
+      stemMap.set(stem, cleanImg);
+    } else {
+      const existing = stemMap.get(stem);
+      if (existing.toLowerCase().endsWith('.webp') && cleanImg.toLowerCase().endsWith('.jpg')) {
+        stemMap.set(stem, cleanImg);
+      }
+    }
+  });
+  return Array.from(stemMap.values());
+};
+
+const handleInspectionImageError = (e) => {
+  const currentSrc = e.target?.src || '';
+  if (currentSrc.toLowerCase().includes('.webp') && !e.target.dataset.triedJpg) {
+    e.target.dataset.triedJpg = 'true';
+    e.target.src = currentSrc.replace(/\.webp($|\?)/i, '.jpg$1');
+    return;
+  }
+  e.target.onerror = null;
+  e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 24 24" fill="none" stroke="%23A89F91" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2" fill="%23FAF7F2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>';
+};
+
 const QualityOverviewView = () => {
   const navigate = useNavigate();
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
@@ -255,6 +298,7 @@ const QualityOverviewView = () => {
           if (rawHandlingImgs.trim()) initHandlingImgs = [rawHandlingImgs];
         }
       }
+      initHandlingImgs = deduplicateInspectionImages(initHandlingImgs);
       setHandlingImages(initHandlingImgs);
 
       setModalTab('info');
@@ -265,37 +309,45 @@ const QualityOverviewView = () => {
       const hist = selectedTask.edit_history || parsedJson?.edit_history || [];
       setModalHistory(Array.isArray(hist) ? hist : []);
 
-      // Khởi tạo danh sách ảnh minh chứng từ selectedTask
-      const initImgs = [];
+      // Khởi tạo danh sách ảnh minh chứng từ selectedTask (có khử trùng lặp thông minh)
+      const rawImgs = [];
       if (Array.isArray(selectedTask.images)) {
-        selectedTask.images.filter(Boolean).forEach(img => {
-          if (!initImgs.includes(img)) initImgs.push(img);
-        });
+        selectedTask.images.forEach(img => rawImgs.push(img));
       } else if (typeof selectedTask.images === 'string') {
         try {
           const parsed = JSON.parse(selectedTask.images);
-          if (Array.isArray(parsed)) {
-            parsed.filter(Boolean).forEach(img => { if (!initImgs.includes(img)) initImgs.push(img); });
-          }
+          if (Array.isArray(parsed)) parsed.forEach(img => rawImgs.push(img));
         } catch (e) {}
       }
 
-      [selectedTask.image_path_1, selectedTask.image_path_2, selectedTask.image_path_3].filter(Boolean).forEach(img => {
-        if (!initImgs.includes(img)) initImgs.push(img);
+      [selectedTask.image_path_1, selectedTask.image_path_2, selectedTask.image_path_3].forEach(img => {
+        if (img) rawImgs.push(img);
       });
       if (selectedTask.images_json) {
         try {
           const pImg = typeof selectedTask.images_json === 'string' ? JSON.parse(selectedTask.images_json) : selectedTask.images_json;
           if (Array.isArray(pImg)) {
-            pImg.forEach(img => { if (img && !initImgs.includes(img)) initImgs.push(img); });
+            pImg.forEach(img => rawImgs.push(img));
           } else if (pImg?.images && Array.isArray(pImg.images)) {
-            pImg.images.forEach(img => { if (img && !initImgs.includes(img)) initImgs.push(img); });
+            pImg.images.forEach(img => rawImgs.push(img));
+          } else if (pImg && typeof pImg === 'object') {
+            Object.values(pImg).forEach(val => {
+              if (Array.isArray(val)) val.forEach(v => rawImgs.push(v));
+              else if (typeof val === 'string') rawImgs.push(val);
+            });
           }
         } catch (e) {}
       }
       if (parsedJson?.images && Array.isArray(parsedJson.images)) {
-        parsedJson.images.forEach(img => { if (img && !initImgs.includes(img)) initImgs.push(img); });
+        parsedJson.images.forEach(img => rawImgs.push(img));
       }
+      if (parsedJson?.steps && typeof parsedJson.steps === 'object') {
+        Object.values(parsedJson.steps).forEach(st => {
+          if (st?.photo) rawImgs.push(st.photo);
+          if (Array.isArray(st?.images)) st.images.forEach(img => rawImgs.push(img));
+        });
+      }
+      const initImgs = deduplicateInspectionImages(rawImgs);
       setModalImages(initImgs);
 
       // Lưu snapshot giá trị ban đầu để kiểm tra thay đổi chưa lưu (Dirty Check)
@@ -524,11 +576,15 @@ const QualityOverviewView = () => {
   };
 
   const getImageUrl = (path) => {
-    if (!path) return '';
+    if (!path || typeof path !== 'string') return '';
     if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('blob:') || path.startsWith('data:')) {
       return path;
     }
-    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    let normalized = path.replace(/\\/g, '/');
+    if (normalized.startsWith('uploads/')) {
+      normalized = `static/${normalized}`;
+    }
+    const cleanPath = normalized.startsWith('/') ? normalized : `/${normalized}`;
     const baseApi = (api.defaults.baseURL || '').replace(/\/api\/v1\/?$/, '').replace(/\/+$/, '');
     const origin = baseApi || window.location.origin;
     return `${origin}${cleanPath}`;
@@ -3696,6 +3752,7 @@ const QualityOverviewView = () => {
                               <img
                                 src={imgUrl}
                                 alt={`Ảnh xử lý ${idx + 1}`}
+                                onError={handleInspectionImageError}
                                 style={{ width: '92px', height: '92px', objectFit: 'cover', display: 'block', cursor: 'pointer' }}
                                 onClick={() => setPreviewImgUrl(imgUrl)}
                                 title="Nhấp để xem ảnh lớn"
@@ -3890,6 +3947,7 @@ const QualityOverviewView = () => {
                                 <img
                                   src={imgUrl}
                                   alt={`Minh chứng QC ${idx + 1}`}
+                                  onError={handleInspectionImageError}
                                   style={{ width: '92px', height: '92px', objectFit: 'cover', display: 'block', cursor: 'pointer' }}
                                   onClick={() => setPreviewImgUrl(imgUrl)}
                                   title="Nhấp để xem ảnh lớn"
@@ -4903,6 +4961,7 @@ const QualityOverviewView = () => {
                   <img
                     src={previewImgUrl}
                     alt="Xem ảnh lớn"
+                    onError={handleInspectionImageError}
                     style={{ maxWidth: '100%', maxHeight: '85vh', borderRadius: '8px', objectFit: 'contain', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}
                   />
                   <button

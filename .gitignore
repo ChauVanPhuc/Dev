@@ -63,12 +63,16 @@ BackEnd/modules/claim_imports/
 /static/
 BackEnd/uploads/
 
-# Sample Data & Excel Imports
+# Sample Data & Excel/Word Imports
 data/
 *.xlsx
 *.xls
 *.csv
 ~$*.xlsx
+*.docx
+*.doc
+~$*.docx
+~$*.doc
 
 # Python Test Cache
 .pytest_cache/

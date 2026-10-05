@@ -5032,12 +5032,22 @@ def get_inspection_history(
     """
     [GET] Lấy toàn bộ lịch sử chỉnh sửa (Audit Trail) của phiếu kiểm tra theo thứ tự mới nhất lên đầu.
     """
-    record = db.query(InputInspection).filter(InputInspection.id == id).first()
+    record = None
+    type_lower = (type or "").strip().lower()
+    if type_lower in ["daily", "hang-ngay"]:
+        record = db.query(DailyInspectionRecord).filter(DailyInspectionRecord.id == id).first()
+        if not record:
+            record = db.query(InputInspection).filter(InputInspection.id == id).first()
+    else:
+        record = db.query(InputInspection).filter(InputInspection.id == id).first()
+        if not record:
+            record = db.query(DailyInspectionRecord).filter(DailyInspectionRecord.id == id).first()
+
     if not record:
         raise HTTPException(status_code=404, detail=f"Không tìm thấy phiếu kiểm tra có ID {id}")
         
     data_dict = {}
-    if record.data_json:
+    if getattr(record, "data_json", None):
         try:
             data_dict = json.loads(record.data_json) if isinstance(record.data_json, str) else dict(record.data_json)
         except Exception:
@@ -5046,7 +5056,7 @@ def get_inspection_history(
     history = data_dict.get("edit_history") or []
     return {
         "id": id,
-        "ticket_code": record.ticket_code or f"KT{record.id:03d}",
+        "ticket_code": getattr(record, "ticket_code", None) or getattr(record, "code", None) or f"KT{record.id:03d}",
         "edit_history": history,
         "total_edits": len(history)
     }

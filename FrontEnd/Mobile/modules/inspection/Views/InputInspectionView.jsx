@@ -106,17 +106,56 @@ const InputInspection = () => {
   const fileInputRef = useRef(null)
 
   // Ảnh hiện có (khi viewOnly)
-  const existingImages = effectiveViewOnly
-    ? [inspection?.image_path_1, inspection?.image_path_2, inspection?.image_path_3].filter(Boolean)
-    : []
+  const existingImages = useMemo(() => {
+    if (!effectiveViewOnly || !inspection) return [];
+    const list = [inspection.image_path_1, inspection.image_path_2, inspection.image_path_3].filter(Boolean);
+    if (inspection.images_json) {
+      try {
+        const p = typeof inspection.images_json === 'string' ? JSON.parse(inspection.images_json) : inspection.images_json;
+        if (Array.isArray(p)) list.push(...p);
+        else if (p && typeof p === 'object') {
+          Object.values(p).forEach(v => {
+            if (Array.isArray(v)) list.push(...v);
+            else if (typeof v === 'string') list.push(v);
+          });
+        }
+      } catch (e) {}
+    }
+    const stemMap = new Map();
+    list.filter(Boolean).forEach(img => {
+      if (typeof img !== 'string') return;
+      const clean = img.trim().split('?')[0].split('#')[0].replace(/\\/g, '/');
+      const filename = clean.split('/').pop() || '';
+      const dotIdx = filename.lastIndexOf('.');
+      const stem = dotIdx > 0 ? filename.substring(0, dotIdx).toLowerCase() : filename.toLowerCase();
+      if (!stem || stem.includes('qc_phoi_')) return;
+      if (!stemMap.has(stem) || (stemMap.get(stem).toLowerCase().endsWith('.webp') && clean.toLowerCase().endsWith('.jpg'))) {
+        stemMap.set(stem, clean);
+      }
+    });
+    return Array.from(stemMap.values());
+  }, [effectiveViewOnly, inspection]);
 
   const getFullImageUrl = (path) => {
     if (!path) return '';
     if (path.startsWith('http')) return path;
+    let clean = path.replace(/\\/g, '/');
+    if (clean.startsWith('uploads/')) clean = `static/${clean}`;
     const root = API_ROOT.endsWith('/') ? API_ROOT.slice(0, -1) : API_ROOT;
-    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    const cleanPath = clean.startsWith('/') ? clean : `/${clean}`;
     return `${root}${cleanPath}`;
   }
+
+  const handleImageError = (e) => {
+    const currentSrc = e.target?.src || '';
+    if (currentSrc.toLowerCase().includes('.webp') && !e.target.dataset.triedJpg) {
+      e.target.dataset.triedJpg = 'true';
+      e.target.src = currentSrc.replace(/\.webp($|\?)/i, '.jpg$1');
+      return;
+    }
+    e.target.onerror = null;
+    e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 24 24" fill="none" stroke="%2394a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>';
+  };
 
   // Nén ảnh để giảm dung lượng trước khi upload
   const compressImage = (file) => {
@@ -494,6 +533,7 @@ const InputInspection = () => {
                   key={i}
                   src={getFullImageUrl(src)}
                   alt={`Ảnh ${i + 1}`}
+                  onError={handleImageError}
                   style={{ width: '72px', height: '72px', objectFit: 'cover', borderRadius: '10px', border: '1px solid #e2e8f0' }}
                 />
               ))

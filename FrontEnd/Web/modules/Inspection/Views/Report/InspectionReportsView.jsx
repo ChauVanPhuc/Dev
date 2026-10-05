@@ -26,7 +26,13 @@ import {
   ClipboardList,
   Package,
   Camera,
-  Loader2
+  Loader2,
+  History,
+  Clock,
+  User,
+  PlusCircle,
+  Edit,
+  ArrowRight
 } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
@@ -36,6 +42,38 @@ import { useInspectionReports, getInspectionTypeLabel } from './hooks/useInspect
 import SopStepsTable from './components/SopStepsTable';
 
 import '@styles/components.css';
+
+const getImageStemKey = (img) => {
+  if (!img || typeof img !== 'string') return '';
+  const clean = img.trim().split('?')[0].split('#')[0].replace(/\\/g, '/');
+  const filename = clean.split('/').pop();
+  if (!filename) return '';
+  const dotIdx = filename.lastIndexOf('.');
+  return dotIdx > 0 ? filename.substring(0, dotIdx).toLowerCase() : filename.toLowerCase();
+};
+
+const deduplicateInspectionImages = (imgs) => {
+  if (!Array.isArray(imgs)) return [];
+  const stemMap = new Map();
+  imgs.filter(Boolean).forEach(img => {
+    if (typeof img !== 'string' || !img.trim()) return;
+    const cleanImg = img.trim();
+    if (cleanImg.includes('qc_phoi_1') || cleanImg.includes('qc_phoi_2') || cleanImg.includes('qc_phoi_3')) return;
+
+    const stem = getImageStemKey(cleanImg);
+    if (!stem) return;
+
+    if (!stemMap.has(stem)) {
+      stemMap.set(stem, cleanImg);
+    } else {
+      const existing = stemMap.get(stem);
+      if (existing.toLowerCase().endsWith('.webp') && cleanImg.toLowerCase().endsWith('.jpg')) {
+        stemMap.set(stem, cleanImg);
+      }
+    }
+  });
+  return Array.from(stemMap.values());
+};
 
 const InspectionReportsView = () => {
   const reports = useInspectionReports();
@@ -268,10 +306,12 @@ const InspectionReportsView = () => {
     return <span style={{ color: '#9CA3AF', fontSize: '0.85rem' }}>---</span>;
   };
 
-  // ─── STATE & HELPERS CHO MODAL XEM CHI TIẾT 2 TAB (CHẾ ĐỘ READ-ONLY) ───
+  // ─── STATE & HELPERS CHO MODAL XEM CHI TIẾT 3 TAB (CHẾ ĐỘ READ-ONLY) ───
   const [selectedReportItem, setSelectedReportItem] = useState(null);
-  const [modalTab, setModalTab] = useState('info'); // 'info' | 'details'
+  const [modalTab, setModalTab] = useState('info'); // 'info' | 'details' | 'history'
   const [lightboxImgUrl, setLightboxImgUrl] = useState(null);
+  const [modalHistory, setModalHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   // Đồng bộ khi có trigger từ menu ngoài (selectedInspection, selectedInbound, selectedDaily)
   useEffect(() => {
@@ -345,14 +385,20 @@ const InspectionReportsView = () => {
     setSelectedInbound(null);
     setSelectedDaily(null);
     setLightboxImgUrl(null);
+    setModalHistory([]);
+    setLoadingHistory(false);
   };
 
   const getSafeImageUrl = (path) => {
-    if (!path) return '';
+    if (!path || typeof path !== 'string') return '';
     if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('blob:') || path.startsWith('data:')) {
       return path;
     }
-    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    let normalized = path.replace(/\\/g, '/');
+    if (normalized.startsWith('uploads/')) {
+      normalized = `static/${normalized}`;
+    }
+    const cleanPath = normalized.startsWith('/') ? normalized : `/${normalized}`;
     const baseApi = (api.defaults?.baseURL || '').replace(/\/api\/v1\/?$/, '').replace(/\/+$/, '');
     const origin = baseApi || window.location.origin;
     return `${origin}${cleanPath}`;
@@ -375,12 +421,12 @@ const InspectionReportsView = () => {
     }
   }, [activeReportItem]);
 
-  // Tổng hợp toàn bộ hình ảnh minh chứng của phiếu
+  // Tổng hợp toàn bộ hình ảnh minh chứng của phiếu (có khử trùng lặp thông minh)
   const reportImages = useMemo(() => {
     if (!activeReportItem) return [];
     const list = [];
     const add = (img) => {
-      if (img && typeof img === 'string' && !list.includes(img)) {
+      if (img && typeof img === 'string') {
         list.push(img);
       }
     };
@@ -439,7 +485,7 @@ const InspectionReportsView = () => {
       activeReportItem.photos.forEach(add);
     }
 
-    return list;
+    return deduplicateInspectionImages(list);
   }, [activeReportItem, parsedReportData]);
 
   const [fallbackReportSteps, setFallbackReportSteps] = useState([]);
@@ -671,6 +717,124 @@ const InspectionReportsView = () => {
     return [];
   }, [activeReportItem, parsedReportData]);
 
+  // Lịch sử timeline hoàn chỉnh (tự động bổ sung mốc khởi tạo phiếu kiểm tra ban đầu & mốc xác nhận)
+  const fullTimelineHistory = useMemo(() => {
+    if (!activeReportItem) return [];
+    const list = Array.isArray(modalHistory) ? [...modalHistory] : [];
+
+    // Kiểm tra xem đã có bản ghi khởi tạo phiếu (create) chưa
+    const hasCreate = list.some(item => item.action_type === 'create');
+    if (!hasCreate) {
+      const inspectorName = getDisplayInspector(activeReportItem) || 
+                            activeReportItem.inspector_name || 
+                            activeReportItem.inspector || 
+                            parsedReportData?.inspector_name || 
+                            activeReportItem.created_by_name || 
+                            'QC Kiểm tra';
+      const department = activeReportItem.department || parsedReportData?.department || 'Phòng Quản lý Chất lượng (QC)';
+      const poNo = activeReportItem.batch_no || activeReportItem.po_no || parsedReportData?.po_no || activeReportItem.po_code || activeReportItem.production_order_code || '';
+      const stageName = activeReportItem.stage || activeReportItem.stage_name || parsedReportData?.stage || '';
+      const resultVal = activeReportItem.conclusion || activeReportItem.result || 'fail';
+      const isPass = resultVal === 'pass' || resultVal === 'Đạt' || resultVal === 'ĐẠT';
+      const createdTime = activeReportItem.created_at || activeReportItem.inspected_at || activeReportItem.inspection_date || activeReportItem.date || '';
+
+      const creationEntry = {
+        id: 'init_create_' + (activeReportItem.id || '0'),
+        action_type: 'create',
+        action_label: 'Khởi tạo phiếu kiểm tra',
+        user_name: inspectorName,
+        user_role: 'QC Kiểm tra',
+        department: department,
+        timestamp: createdTime,
+        initial_data: {
+          ticket_code: activeReportItem.batch_no || activeReportItem.ticket_code || activeReportItem.code || `#${activeReportItem.id}`,
+          po_no: poNo,
+          stage: stageName,
+          result: isPass ? 'Đạt' : 'Không đạt',
+          sample_qty: activeReportItem.sample_qty || activeReportItem.inspected_qty || parsedReportData?.sample_qty || parsedReportData?.inspected_qty || activeReportItem.required_qty || 0,
+          error_qty: reportErrors.reduce((sum, e) => sum + (Number(e.qty || e.quantity || 0)), 0),
+          notes: activeReportItem.notes || activeReportItem.note || parsedReportData?.notes || ''
+        },
+        note: activeReportItem.notes || activeReportItem.note || 'Phiếu kiểm tra được khởi tạo từ ứng dụng Mobile QC tại xưởng sản xuất.'
+      };
+
+      list.push(creationEntry);
+    }
+
+    // Nếu phiếu đã được xác nhận và chưa có bản ghi confirm trong history thì bổ sung mốc xác nhận
+    const isConfirmed = activeReportItem.is_confirmed === true || activeReportItem.status === 'confirmed' || activeReportItem.status === 'approved';
+    const hasConfirm = list.some(item => item.action_type === 'confirm');
+    if (isConfirmed && !hasConfirm) {
+      const confirmTime = activeReportItem.confirmed_at || activeReportItem.updated_at || activeReportItem.created_at || '';
+      const confirmUser = activeReportItem.confirmed_by_name || activeReportItem.approved_by_name || 'QC Administrator';
+      list.unshift({
+        id: 'init_confirm_' + (activeReportItem.id || '0'),
+        action_type: 'confirm',
+        action_label: 'Xác nhận hồ sơ',
+        user_name: confirmUser,
+        user_role: 'Quản lý QC',
+        department: 'Phòng Quản lý Chất lượng (QC)',
+        timestamp: confirmTime,
+        note: 'Đã xác nhận đạt và hoàn tất hồ sơ kiểm tra.'
+      });
+    }
+
+    return list;
+  }, [modalHistory, activeReportItem, parsedReportData, reportErrors, getDisplayInspector]);
+
+  // Đồng bộ lịch sử chỉnh sửa (Audit Trail) khi mở phiếu hoặc đổi phiếu
+  useEffect(() => {
+    if (!activeReportItem) {
+      setModalHistory([]);
+      setLoadingHistory(false);
+      return;
+    }
+
+    // 1. Khởi tạo từ dữ liệu sẵn có của phiếu
+    const rawHist = activeReportItem.edit_history || parsedReportData?.edit_history || [];
+    if (Array.isArray(rawHist) && rawHist.length > 0) {
+      setModalHistory(rawHist);
+    } else {
+      setModalHistory([]);
+    }
+
+    // 2. Tải thêm lịch sử chi tiết từ Backend
+    const ticketId = activeReportItem.id;
+    const ticketType = activeReportItem._reportType || activeReportItem.type || 'stage';
+    if (!ticketId) return;
+
+    let isMounted = true;
+    setLoadingHistory(true);
+
+    api.get(`/inspections/record-history/${ticketType}/${ticketId}`)
+      .then(res => {
+        if (!isMounted) return;
+        const apiHist = res?.edit_history || (Array.isArray(res) ? res : []);
+        if (Array.isArray(apiHist) && apiHist.length > 0) {
+          setModalHistory(apiHist);
+        }
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        api.get(`/inspections/${ticketType}/${ticketId}/history`)
+          .then(res => {
+            if (!isMounted) return;
+            const apiHist = res?.edit_history || (Array.isArray(res) ? res : []);
+            if (Array.isArray(apiHist) && apiHist.length > 0) {
+              setModalHistory(apiHist);
+            }
+          })
+          .catch(() => {});
+      })
+      .finally(() => {
+        if (isMounted) setLoadingHistory(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeReportItem?.id, activeReportItem?._reportType, activeReportItem?.type, parsedReportData]);
+
   // Phím tắt bàn phím khi đang mở modal xem báo cáo
   useEffect(() => {
     if (!activeReportItem) return;
@@ -688,7 +852,11 @@ const InspectionReportsView = () => {
 
       if (e.key === 'Tab') {
         e.preventDefault();
-        setModalTab(prev => prev === 'info' ? 'details' : 'info');
+        setModalTab(prev => {
+          if (prev === 'info') return 'details';
+          if (prev === 'details') return 'history';
+          return 'info';
+        });
         return;
       }
 
@@ -1987,22 +2155,46 @@ const InspectionReportsView = () => {
                     </span>
                   )}
                 </button>
-              </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.74rem', color: '#8D6E63', fontWeight: 600 }}>
-                <span>Phím tắt:</span>
-                <span className="kbd-shortcut-pill">Tab</span>
-                <span>đổi tab</span>
-                <span style={{ margin: '0 2px' }}>•</span>
-                <span className="kbd-shortcut-pill">←</span>
-                <span className="kbd-shortcut-pill">→</span>
-                <span>đổi phiếu</span>
+                <button
+                  type="button"
+                  onClick={() => setModalTab('history')}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '11px 18px',
+                    border: 'none',
+                    borderBottom: modalTab === 'history' ? '3px solid #7B5233' : '3px solid transparent',
+                    backgroundColor: 'transparent',
+                    color: modalTab === 'history' ? '#7B5233' : '#8D6E63',
+                    fontWeight: modalTab === 'history' ? 800 : 600,
+                    fontSize: '0.88rem',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <History size={16} />
+                  <span>Lịch sử</span>
+                  {fullTimelineHistory.length > 0 && (
+                    <span style={{
+                      fontSize: '0.72rem',
+                      padding: '1px 7px',
+                      borderRadius: '10px',
+                      backgroundColor: modalTab === 'history' ? '#7B5233' : '#EADCC9',
+                      color: modalTab === 'history' ? '#FFFFFF' : '#7B5233',
+                      fontWeight: 700
+                    }}>
+                      {fullTimelineHistory.length}
+                    </span>
+                  )}
+                </button>
               </div>
             </div>
 
             {/* MODAL BODY */}
             <div style={{ padding: '20px 22px', maxHeight: 'calc(85vh - 140px)', overflowY: 'auto' }}>
-              {modalTab === 'info' ? (
+              {modalTab === 'info' && (
                 <>
                   {/* CARD THÔNG TIN TỔNG QUAN (3 DÒNG x 3 CỘT) */}
                   <div style={{
@@ -2272,7 +2464,9 @@ const InspectionReportsView = () => {
                     )}
                   </div>
                 </>
-              ) : (
+              )}
+
+              {modalTab === 'details' && (
                 <>
                   {/* TAB CHI TIẾT */}
                   {/* BẢNG DANH SÁCH CHI TIẾT / PHÔI KIỂM TRA */}
@@ -2526,6 +2720,407 @@ const InspectionReportsView = () => {
                     </div>
                   )}
                 </>
+              )}
+
+              {modalTab === 'history' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {/* Header mục Nhật ký */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    backgroundColor: '#FAF6F0',
+                    border: '1.5px solid #EADCC9',
+                    borderRadius: '12px',
+                    padding: '12px 16px'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '8px',
+                        backgroundColor: '#EADCC9',
+                        border: '1px solid #D8CCC0',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}>
+                        <History size={18} color="#7B5233" />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#2D1A12' }}>
+                          Nhật ký chỉnh sửa & kiểm tra (Audit Trail)
+                        </div>
+                        <div style={{ fontSize: '0.76rem', color: '#8D6E63' }}>
+                          Tự động lưu vết lịch sử thay đổi thông tin phiếu kiểm tra
+                        </div>
+                      </div>
+                    </div>
+
+                    <span style={{
+                      fontSize: '0.78rem',
+                      padding: '3px 12px',
+                      borderRadius: '9999px',
+                      backgroundColor: '#FFFFFF',
+                      color: '#7B5233',
+                      border: '1px solid #EADCC9',
+                      fontWeight: 700
+                    }}>
+                      {fullTimelineHistory.length} mốc sự kiện
+                    </span>
+                  </div>
+
+                  {loadingHistory ? (
+                    <div style={{
+                      textAlign: 'center',
+                      padding: '40px 24px',
+                      color: '#8D6E63'
+                    }}>
+                      <Loader2 size={28} className="spin-animate" style={{ margin: '0 auto 8px auto', display: 'block', color: '#7B5233' }} />
+                      <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Đang tải lịch sử phiếu...</span>
+                    </div>
+                  ) : fullTimelineHistory.length === 0 ? (
+                    <div style={{
+                      textAlign: 'center',
+                      padding: '48px 24px',
+                      backgroundColor: '#FAF6F0',
+                      borderRadius: '12px',
+                      border: '1.5px dashed #EADCC9',
+                      color: '#8D6E63'
+                    }}>
+                      <Clock size={36} style={{ margin: '0 auto 10px auto', display: 'block', opacity: 0.4 }} />
+                      <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#7B5233' }}>
+                        Chưa có lịch sử chỉnh sửa
+                      </div>
+                      <div style={{ fontSize: '0.8rem', marginTop: '4px' }}>
+                        Mọi thay đổi về kết quả, công đoạn, hành động, hình ảnh hoặc trạng thái khi lưu sẽ được tự động ghi lại tại đây.
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ position: 'relative', paddingLeft: '24px', marginTop: '4px' }}>
+                      {/* Continuous vertical timeline line */}
+                      <div style={{
+                        position: 'absolute',
+                        top: '12px',
+                        bottom: '24px',
+                        left: '11px',
+                        width: '2px',
+                        backgroundColor: '#EADCC9'
+                      }} />
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                        {fullTimelineHistory.map((item, idx) => {
+                          const isCreate = item.action_type === 'create';
+                          const isConfirm = item.action_type === 'confirm';
+                          const isCancel = item.action_type === 'cancel';
+                          const badgeColor = isCreate ? '#7B5233' : (isConfirm ? '#059669' : (isCancel ? '#DC2626' : '#7B5233'));
+                          const badgeBg = isCreate ? '#FAF6F0' : (isConfirm ? '#ECFDF5' : (isCancel ? '#FEF2F2' : '#FAF6F0'));
+                          const badgeBorder = isCreate ? '#EADCC9' : (isConfirm ? '#A7F3D0' : (isCancel ? '#FECDD3' : '#EADCC9'));
+
+                          // Format date
+                          let formattedTime = item.timestamp || '';
+                          let relativeTime = '';
+                          try {
+                            if (item.timestamp) {
+                              const dateObj = new Date(item.timestamp);
+                              const day = String(dateObj.getDate()).padStart(2, '0');
+                              const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+                              const year = dateObj.getFullYear();
+                              const hours = String(dateObj.getHours()).padStart(2, '0');
+                              const minutes = String(dateObj.getMinutes()).padStart(2, '0');
+                              formattedTime = `${hours}:${minutes} ${day}/${month}/${year}`;
+
+                              const diffMs = Date.now() - dateObj.getTime();
+                              const diffMins = Math.floor(diffMs / 60000);
+                              if (diffMins < 1) relativeTime = 'Vừa xong';
+                              else if (diffMins < 60) relativeTime = `${diffMins} phút trước`;
+                              else {
+                                const diffHours = Math.floor(diffMins / 60);
+                                if (diffHours < 24) relativeTime = `${diffHours} giờ trước`;
+                                else {
+                                  const diffDays = Math.floor(diffHours / 24);
+                                  relativeTime = `${diffDays} ngày trước`;
+                                }
+                              }
+                            }
+                          } catch (e) {}
+
+                          return (
+                            <div key={item.id || idx} style={{ position: 'relative' }}>
+                              {/* Timeline Dot Icon */}
+                              <div style={{
+                                position: 'absolute',
+                                left: '-24px',
+                                top: '12px',
+                                transform: 'translate(-50%, 0)',
+                                width: '24px',
+                                height: '24px',
+                                borderRadius: '50%',
+                                backgroundColor: badgeBg,
+                                border: `2px solid ${badgeColor}`,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.06)',
+                                zIndex: 2
+                              }}>
+                                {isCreate ? (
+                                  <PlusCircle size={13} color="#7B5233" />
+                                ) : isConfirm ? (
+                                  <CheckCircle2 size={12} color="#059669" />
+                                ) : isCancel ? (
+                                  <XCircle size={12} color="#DC2626" />
+                                ) : (
+                                  <Edit size={11} color="#7B5233" />
+                                )}
+                              </div>
+
+                              {/* Timeline Card Content */}
+                              <div style={{
+                                backgroundColor: '#FFFFFF',
+                                border: '1.5px solid #EADCC9',
+                                borderRadius: '12px',
+                                padding: '14px 16px',
+                                boxShadow: '0 1px 4px rgba(123,82,51,0.05)',
+                                transition: 'all 0.15s ease'
+                              }}>
+                                {/* Card Header */}
+                                <div style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  flexWrap: 'wrap',
+                                  gap: '8px',
+                                  marginBottom: '10px'
+                                }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                    <span style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '5px',
+                                      fontWeight: 800,
+                                      color: '#2D1A12',
+                                      fontSize: '0.88rem'
+                                    }}>
+                                      <User size={15} color="#7B5233" />
+                                      {item.user_name || (isCreate ? (getDisplayInspector(activeReportItem) || 'QC Inspector') : 'QC Administrator')}
+                                    </span>
+
+                                    {(item.department || item.user_role) && (
+                                      <span style={{
+                                        fontSize: '0.74rem',
+                                        padding: '2px 8px',
+                                        borderRadius: '6px',
+                                        backgroundColor: '#FAF6F0',
+                                        color: '#7B5233',
+                                        border: '1px solid #EADCC9',
+                                        fontWeight: 600
+                                      }}>
+                                        {item.department || item.user_role}
+                                      </span>
+                                    )}
+
+                                    <span style={{
+                                      fontSize: '0.76rem',
+                                      padding: '2px 8px',
+                                      borderRadius: '6px',
+                                      backgroundColor: badgeBg,
+                                      color: badgeColor,
+                                      border: `1px solid ${badgeBorder}`,
+                                      fontWeight: 700
+                                    }}>
+                                      {item.action_label || (isCreate ? 'Khởi tạo phiếu kiểm tra' : isConfirm ? 'Xác nhận hồ sơ' : isCancel ? 'Hủy hồ sơ' : 'Chỉnh sửa')}
+                                    </span>
+                                  </div>
+
+                                  <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    fontSize: '0.76rem',
+                                    color: '#8D6E63'
+                                  }}>
+                                    {relativeTime && (
+                                      <span style={{
+                                        backgroundColor: '#FAF6F0',
+                                        padding: '2px 6px',
+                                        borderRadius: '4px',
+                                        border: '1px solid #EADCC9',
+                                        fontWeight: 600
+                                      }}>
+                                        {relativeTime}
+                                      </span>
+                                    )}
+                                    <span style={{ fontWeight: 600 }}>{formattedTime}</span>
+                                  </div>
+                                </div>
+
+                                {/* Timeline Item Content: Creation Details or Changes Diff List */}
+                                {isCreate ? (
+                                  <div style={{
+                                    backgroundColor: '#FAF6F0',
+                                    border: '1px solid #EADCC9',
+                                    borderRadius: '8px',
+                                    padding: '10px 12px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '8px'
+                                  }}>
+                                    <div style={{
+                                      display: 'grid',
+                                      gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
+                                      gap: '8px',
+                                      fontSize: '0.8rem'
+                                    }}>
+                                      {item.initial_data?.ticket_code && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                          <span style={{ color: '#8D6E63', fontWeight: 600 }}>Mã phiếu:</span>
+                                          <span style={{ fontWeight: 800, color: '#2D1A12' }}>{item.initial_data.ticket_code}</span>
+                                        </div>
+                                      )}
+                                      {item.initial_data?.po_no && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                          <span style={{ color: '#8D6E63', fontWeight: 600 }}>Đơn hàng (PO):</span>
+                                          <span style={{ fontWeight: 800, color: '#2D1A12' }}>{item.initial_data.po_no}</span>
+                                        </div>
+                                      )}
+                                      {item.initial_data?.stage && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                          <span style={{ color: '#8D6E63', fontWeight: 600 }}>Công đoạn:</span>
+                                          <span style={{ fontWeight: 700, color: '#2D1A12' }}>{item.initial_data.stage}</span>
+                                        </div>
+                                      )}
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <span style={{ color: '#8D6E63', fontWeight: 600 }}>Kết quả ban đầu:</span>
+                                        <span style={{
+                                          fontSize: '0.74rem',
+                                          fontWeight: 700,
+                                          padding: '1px 8px',
+                                          borderRadius: '4px',
+                                          backgroundColor: (item.initial_data?.result === 'Đạt' || item.initial_data?.result === 'pass') ? '#ECFDF5' : '#FEF2F2',
+                                          color: (item.initial_data?.result === 'Đạt' || item.initial_data?.result === 'pass') ? '#059669' : '#DC2626',
+                                          border: `1px solid ${(item.initial_data?.result === 'Đạt' || item.initial_data?.result === 'pass') ? '#A7F3D0' : '#FECACA'}`
+                                        }}>
+                                          {item.initial_data?.result || (activeReportItem?.conclusion === 'pass' || activeReportItem?.result === 'Đạt' ? 'Đạt' : 'Không đạt')}
+                                        </span>
+                                      </div>
+                                      {item.initial_data?.sample_qty !== undefined && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                          <span style={{ color: '#8D6E63', fontWeight: 600 }}>SL mẫu kiểm:</span>
+                                          <span style={{ fontWeight: 800, color: '#2D1A12' }}>{item.initial_data.sample_qty} sp</span>
+                                        </div>
+                                      )}
+                                      {item.initial_data?.error_qty !== undefined && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                          <span style={{ color: '#8D6E63', fontWeight: 600 }}>Số lỗi phát hiện:</span>
+                                          <span style={{
+                                            fontWeight: 800,
+                                            color: Number(item.initial_data.error_qty) > 0 ? '#DC2626' : '#059669'
+                                          }}>
+                                            {item.initial_data.error_qty} lỗi
+                                          </span>
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {item.note && (
+                                      <div style={{
+                                        marginTop: '2px',
+                                        fontSize: '0.78rem',
+                                        color: '#7B5233',
+                                        backgroundColor: '#FFFFFF',
+                                        padding: '6px 10px',
+                                        borderRadius: '6px',
+                                        border: '1px dashed #EADCC9',
+                                        lineHeight: 1.4
+                                      }}>
+                                        <strong style={{ color: '#2D1A12' }}>Ghi chú:</strong> {item.note}
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : Array.isArray(item.changes) && item.changes.length > 0 ? (
+                                  <div style={{
+                                    backgroundColor: '#FAF6F0',
+                                    border: '1px solid #EADCC9',
+                                    borderRadius: '8px',
+                                    padding: '8px 12px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '6px'
+                                  }}>
+                                    {item.changes.map((ch, cIdx) => (
+                                      <div key={cIdx} style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                        fontSize: '0.8rem',
+                                        lineHeight: 1.4,
+                                        flexWrap: 'wrap'
+                                      }}>
+                                        <span style={{
+                                          fontWeight: 700,
+                                          color: '#2D1A12',
+                                          minWidth: '130px'
+                                        }}>
+                                          {ch.label || ch.field}:
+                                        </span>
+
+                                        <span style={{
+                                          color: '#DC2626',
+                                          backgroundColor: '#FEF2F2',
+                                          border: '1px solid #FECACA',
+                                          padding: '1px 7px',
+                                          borderRadius: '5px',
+                                          fontSize: '0.76rem',
+                                          textDecoration: 'line-through',
+                                          fontWeight: 500
+                                        }}>
+                                          {ch.old_val || '(Trống)'}
+                                        </span>
+
+                                        <ArrowRight size={12} color="#8D6E63" style={{ flexShrink: 0 }} />
+
+                                        <span style={{
+                                          color: '#059669',
+                                          backgroundColor: '#ECFDF5',
+                                          border: '1px solid #A7F3D0',
+                                          padding: '1px 7px',
+                                          borderRadius: '5px',
+                                          fontSize: '0.76rem',
+                                          fontWeight: 700
+                                        }}>
+                                          {ch.new_val}
+                                        </span>
+                                      </div>
+                                    ))}
+
+                                    {item.note && (
+                                      <div style={{
+                                        marginTop: '4px',
+                                        fontSize: '0.78rem',
+                                        color: '#7B5233',
+                                        backgroundColor: '#FFFFFF',
+                                        padding: '4px 8px',
+                                        borderRadius: '4px',
+                                        border: '1px dashed #EADCC9'
+                                      }}>
+                                        <strong style={{ color: '#2D1A12' }}>Ghi chú:</strong> {item.note}
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div style={{ fontSize: '0.8rem', color: '#8D6E63', fontStyle: 'italic' }}>
+                                    {isConfirm ? 'Đã xác nhận đạt và hoàn tất hồ sơ kiểm tra.' : (item.note || 'Không có ghi chú thay đổi chi tiết.')}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 
