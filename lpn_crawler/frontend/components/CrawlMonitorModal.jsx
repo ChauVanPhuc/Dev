@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Minus, Maximize2, Minimize2, Pause, Play, Square } from 'lucide-react';
+import { Minus, Maximize2, Minimize2, Pause, Play, Square, Terminal } from 'lucide-react';
 import { lpnCrawlerApi } from '../services/api';
 
 export const CrawlMonitorModal = ({
@@ -107,16 +107,17 @@ export const CrawlMonitorModal = ({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: isFullscreen ? '0' : '20px'
+        padding: isFullscreen ? '0' : '8px'
       }}
     >
       <div
+        className="lpn-crawl-monitor-dialog"
         onClick={(e) => e.stopPropagation()}
         style={{
           backgroundColor: '#FFFFFF',
           borderRadius: isFullscreen ? '0' : '14px',
-          width: isFullscreen ? '100vw' : '1100px',
-          maxWidth: isFullscreen ? '100vw' : '1260px',
+          width: isFullscreen ? '100vw' : 'min(98vw, 1100px)',
+          maxWidth: isFullscreen ? '100vw' : '98vw',
           height: isFullscreen ? '100vh' : '88vh',
           maxHeight: isFullscreen ? '100vh' : '88vh',
           boxShadow: '0 16px 48px rgba(123, 82, 51, 0.3)',
@@ -128,17 +129,19 @@ export const CrawlMonitorModal = ({
       >
         {/* Modal Header */}
         <div style={{
-          padding: '10px 20px',
+          padding: '10px 16px',
           backgroundColor: '#FAF6F0',
           borderBottom: '1px solid #EADCC9',
           display: 'flex',
+          flexWrap: 'wrap',
+          gap: '8px',
           justifyContent: 'space-between',
           alignItems: 'center',
           flexShrink: 0
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <Terminal size={20} color="#7B5233" />
-            <span style={{ fontWeight: '800', fontSize: '1.05rem', color: '#2D1A12' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Terminal size={18} color="#7B5233" />
+            <span style={{ fontWeight: '800', fontSize: '1.02rem', color: '#2D1A12' }}>
               Tiến Trình Crawl AppSheet
             </span>
           </div>
@@ -267,17 +270,20 @@ export const CrawlMonitorModal = ({
             </div>
           </div>
 
-          {/* Quick Metrics Grid - Căng đều 6 cột, chống tràn & chống rớt dòng */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
-            gap: '8px',
-            backgroundColor: '#FAF6F0',
-            padding: '10px 14px',
-            borderRadius: '8px',
-            border: '1px solid #EADCC9',
-            flexShrink: 0
-          }}>
+          {/* Quick Metrics Grid */}
+          <div
+            className="lpn-crawl-monitor-grid"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
+              gap: '8px',
+              backgroundColor: '#FAF6F0',
+              padding: '10px 14px',
+              borderRadius: '8px',
+              border: '1px solid #EADCC9',
+              flexShrink: 0
+            }}
+          >
             <div style={{ minWidth: 0, overflow: 'hidden' }}>
               <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>Đã Quét:</span>
               <div style={{ fontWeight: '800', color: '#2D1A12', fontSize: '0.92rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{Number(processed || 0).toLocaleString()} / {Number(total || 0).toLocaleString()}</div>

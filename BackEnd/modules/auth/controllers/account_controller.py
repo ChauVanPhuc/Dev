@@ -353,6 +353,34 @@ def resolve_permissions_by_params(
         
         all_screens_dict[key] = parent_titles
         
+    # Bổ sung các màn hình chi tiết từ SystemScreen chưa có trong sidebar
+    all_system_screens = db.query(SystemScreen).filter(SystemScreen.is_active == True).all()
+    for sc in all_system_screens:
+        if sc.route_path and sc.route_path not in all_screens_dict:
+            parent_titles = set()
+            r_lower = sc.route_path.lower()
+            if any(p in r_lower for p in ["/admin/users", "/admin/screens", "/admin/monitor", "/admin/system"]):
+                parent_titles.add("Quản lý hệ thống")
+            elif "/admin/hr" in r_lower:
+                parent_titles.add("Quản lý nhân sự")
+            elif "/admin/iso" in r_lower:
+                parent_titles.add("Hồ sơ ISO")
+            elif any(p in r_lower for p in ["/admin/plan", "/admin/production", "/admin/delivery", "/admin/handovers", "/admin/progress"]):
+                parent_titles.add("Quản lý sản xuất")
+            elif any(p in r_lower for p in ["/admin/quality", "/admin/reports", "/admin/defects", "/admin/capa", "/admin/claims", "guides"]):
+                parent_titles.add("Quản lý chất lượng")
+            elif any(p in r_lower for p in ["/admin/orders", "/admin/customers", "/admin/prices", "/admin/shipments", "/admin/purchase"]):
+                parent_titles.add("Quản lý kinh doanh")
+            elif any(p in r_lower for p in ["/admin/products", "/admin/technical", "/admin/material-boms"]):
+                parent_titles.add("Quản lý kỹ thuật")
+            elif any(p in r_lower for p in ["/admin/machines", "/admin/equipment", "/admin/maintenance"]):
+                parent_titles.add("Bảo trì - cơ sở hạ tầng")
+            elif any(p in r_lower for p in ["/admin/kpi", "/admin/violations"]):
+                parent_titles.add("Quản lý KPI")
+            elif any(p in r_lower for p in ["/admin/lpn-crawler", "/admin/ai-ocr-train"]):
+                parent_titles.add("Crawl & Tích hợp")
+            all_screens_dict[sc.route_path] = parent_titles
+        
     ALL_SCREENS = list(all_screens_dict.keys())
     
     # Root admin luôn có toàn bộ quyền cao nhất
@@ -505,22 +533,30 @@ def resolve_permissions_by_params(
 
     return resolved_actions
 
+_PERM_CACHE = {}  # {user_id: (timestamp, final_resolved)}
+_PERM_CACHE_TTL = 300  # 5 phút
+
+def invalidate_permission_cache(user_id: int = None):
+    """Xóa cache phân quyền khi có cập nhật."""
+    if user_id is None:
+        _PERM_CACHE.clear()
+    else:
+        _PERM_CACHE.pop(user_id, None)
+
 def resolve_user_permissions(user, db: Session) -> dict:
     """
-    Phân giải quyền thực tế của User cho từng màn hình từ Sidebar DB:
-    - Hợp nhất tất cả các Vị Trí (Chức vụ) mà user nắm giữ từ bảng Department junction.
-    - IT/BGD: Toàn bộ màn hình hệ thống.
-    - Sx: Chỉ các màn hình thuộc Module sản xuất và KPI. Các màn hình khác là 'none'.
-    - QLCL: Chỉ các màn hình thuộc Module chất lượng và KPI. Các màn hình khác là 'none'.
-    - Khối Công nhân trực tiếp (NV SX, NV QC): Kế thừa trực tiếp từ Chức Vụ (permissions.default_permissions) mà không lọc qua permission_level.
-    - Lọc qua Cấp bậc quyền hạn (permission_level) đối với văn phòng/quản lý:
-      + Không được phép -> 'none' cho tất cả.
-      + Chỉ xem -> 'read' cho tất cả màn hình được phép.
-      + Thêm / Sửa / Xóa / Duyệt / Xuất nhập file -> Giới hạn cấp bậc (min) đối với mặc định bộ phận.
-    - Ghi đè cá nhân (ACL Overrides) ở accounts.screen_permissions có độ ưu tiên cao nhất,
-      chứa các quyền hạn chi tiết trên từng trang.
+    Phân giải quyền thực tế của User cho từng màn hình từ Sidebar DB (có In-Memory Cache):
     """
     import json
+    import time
+
+    user_id = getattr(user, 'id', None)
+    if user_id:
+        cached = _PERM_CACHE.get(user_id)
+        if cached:
+            cached_time, cached_data = cached
+            if time.time() - cached_time < _PERM_CACHE_TTL:
+                return cached_data
     
     # Lấy thông tin Department (Bộ phận & các Chức vụ) của User
     depts = db.query(Department).filter(Department.account_id == user.id).all()
@@ -602,4 +638,7 @@ def resolve_user_permissions(user, db: Session) -> dict:
         else:
             final_resolved[screen] = ",".join(actions)
             
+    if user_id:
+        _PERM_CACHE[user_id] = (time.time(), final_resolved)
+
     return final_resolved

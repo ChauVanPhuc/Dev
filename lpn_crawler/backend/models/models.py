@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
 from typing import List, Optional, Dict, Any
-from sqlalchemy import Column, Integer, BigInteger, String, DateTime, Text, ForeignKey, Date, Boolean, UnicodeText, Index, Float
+from sqlalchemy import Column, Integer, BigInteger, String, DateTime, Text, ForeignKey, Date, Boolean, UnicodeText, Unicode, Index, Float
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 from lpn_crawler.backend.services.validators import check_item_missing_fields
@@ -82,6 +82,10 @@ class LpnItem(Base):
     lpn = Column(String(100), nullable=True)
     sku = Column(String(150), nullable=True)
     raw_group_key = Column(String(200), nullable=True)
+    resolution_status = Column(String(50), nullable=True)  # 'resolved', 'unresolved'
+    resolution_note = Column(UnicodeText, nullable=True)
+    resolved_at = Column(DateTime, nullable=True)
+    resolved_by = Column(Unicode(100), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -129,17 +133,17 @@ class LpnAiOcrResult(Base):
     item_id = Column(BigInteger, index=True, nullable=False)
     image_id = Column(BigInteger, index=True, nullable=True)
     container_number = Column(String(100), index=True, nullable=True)
-    suffix_key = Column(String(100), nullable=True)
+    suffix_key = Column(Unicode(100), nullable=True)
     model_id = Column(String(150), nullable=True)
-    detected_lpn = Column(String(100), nullable=True)
-    detected_sku = Column(String(150), nullable=True)
-    detected_barcodes = Column(Text, nullable=True)  # JSON string
+    detected_lpn = Column(Unicode(100), nullable=True)
+    detected_sku = Column(Unicode(150), nullable=True)
+    detected_barcodes = Column(UnicodeText, nullable=True)  # JSON string
     confidence = Column(Float, default=0.0)
     is_lpn_match = Column(Boolean, default=False)
     is_sku_match = Column(Boolean, default=False)
     status = Column(String(50), default="success")  # success, failed
-    error_reason = Column(Text, nullable=True)
-    raw_ocr_text = Column(Text, nullable=True)
+    error_reason = Column(UnicodeText, nullable=True)
+    raw_ocr_text = Column(UnicodeText, nullable=True)
     processing_time_ms = Column(Float, default=0.0)
     scanned_at = Column(DateTime, default=datetime.utcnow)
 

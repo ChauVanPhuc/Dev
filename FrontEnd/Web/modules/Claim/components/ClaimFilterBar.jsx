@@ -5,7 +5,7 @@ export const ClaimFilterBar = ({
   isFilterBarOpen = false,
   activeDropdown = null,
   setActiveDropdown = () => {},
-  rowsPerPage = 30,
+  rowsPerPage = 15,
   setRowsPerPage = () => {},
   setCurrentPage = () => {},
   editYear = '',
@@ -220,7 +220,6 @@ export const ClaimFilterBar = ({
       border: '1px solid #EADCC9',
       flexWrap: 'wrap',
       position: 'relative',
-      zIndex: 90,
       boxSizing: 'border-box'
     }}>
       {/* CATEGORY 0: HIỂN THỊ SỐ DÒNG */}

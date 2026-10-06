@@ -81,12 +81,12 @@ class CrawlerApiMixin:
                 "container_total_items": total_cnt_items
             })
 
-    def fetch_appsheet_template_api_direct(self, page: Page, context: Any) -> Optional[Dict[str, Any]]:
+    def fetch_appsheet_template_api_direct(self, page: Page, context: Any, force_fresh: bool = False) -> Optional[Dict[str, Any]]:
         """
         Trích xuất Session Cookie từ Playwright Context và chủ động gọi AppSheet Template API.
         """
         try:
-            if getattr(self, "captured_template_payload", None):
+            if not force_fresh and getattr(self, "captured_template_payload", None):
                 self.log("Sử dụng gói dữ liệu Template API đã bắt được từ trình duyệt.")
                 return self.captured_template_payload
 
@@ -243,6 +243,7 @@ class CrawlerApiMixin:
             consecutive_duplicate_count = 0
             last_activity_time = time.time()
             freeze_retry_done = False
+            break_to_realtime = False
 
             # Sắp xếp container theo date_loading mới nhất trước
             sorted_containers = sorted(
@@ -250,6 +251,60 @@ class CrawlerApiMixin:
                 key=lambda itm: (itm[1]["header"].get("date_loading") or date.min, itm[1]["header"].get("timestamp_val") or datetime.min),
                 reverse=True
             )
+
+            # Xác định các ngày tải hàng gần nhất cho chế độ quét nhanh (incremental)
+            distinct_loading_dates = []
+            for _, pdata in sorted_containers:
+                d = pdata["header"].get("date_loading")
+                if d and d not in distinct_loading_dates:
+                    distinct_loading_dates.append(d)
+
+            target_recent_days = 4
+            if len(distinct_loading_dates) >= target_recent_days:
+                recent_dates_set = set(distinct_loading_dates[:target_recent_days])
+                cutoff_date = distinct_loading_dates[target_recent_days - 1]
+                date_range_str = f"{cutoff_date.strftime('%d/%m/%Y')} -> {distinct_loading_dates[0].strftime('%d/%m/%Y')}"
+            elif distinct_loading_dates:
+                recent_dates_set = set(distinct_loading_dates)
+                cutoff_date = distinct_loading_dates[-1]
+                date_range_str = f"toàn bộ {len(distinct_loading_dates)} ngày có sẵn ({cutoff_date.strftime('%d/%m/%Y')} -> {distinct_loading_dates[0].strftime('%d/%m/%Y')})"
+            else:
+                recent_dates_set = set()
+                cutoff_date = None
+                date_range_str = "không xác định"
+
+            # Tập hợp các Container duy nhất thuộc phạm vi 4 ngày gần nhất
+            recent_target_containers = set()
+            if recent_dates_set:
+                for c_n, pdata in sorted_containers:
+                    d = pdata["header"].get("date_loading")
+                    if d in recent_dates_set:
+                        recent_target_containers.add(c_n)
+
+            total_recent_target_count = len(recent_target_containers)
+            completed_recent_containers = set()
+            seen_consecutive_unique_containers = set()
+
+            if self.mode == "incremental" and total_recent_target_count > 0:
+                display_total_q = total_recent_target_count
+                job.total_containers_found = display_total_q
+                self.db.commit()
+            else:
+                display_total_q = total_q
+
+            if self.mode == "incremental":
+                if total_recent_target_count > 0:
+                    self.log(
+                        f"[ĐỒNG BỘ CẬP NHẬT 4 NGÀY GẦN NHẤT] Bắt đầu rà soát dữ liệu 4 ngày tải hàng gần nhất ({date_range_str}) "
+                        f"gồm {total_recent_target_count} tủ (container). Khi toàn bộ tủ và ảnh của 4 ngày này đã cào xong, có đầy đủ 100% trong CSDL, "
+                        f"hệ thống sẽ tự động chuyển sang chế độ THƯỜNG TRỰC ĐỒNG BỘ THỜI GIAN THỰC (Real-time Listening 24/7)...",
+                        level="INFO"
+                    )
+                else:
+                    self.log(
+                        f"[ĐỒNG BỘ CẬP NHẬT] Đang rà soát dữ liệu container mới nhất để đồng bộ...",
+                        level="INFO"
+                    )
 
             for c_num, parsed_data in sorted_containers:
                 c_start_t = time.time()
@@ -342,36 +397,105 @@ class CrawlerApiMixin:
                         prefix_tag = "[ĐÃ ĐỦ 100%]"
                         status_note = f"Đã đủ {existing_img_count}/{tot_items_n} ảnh theo kiện"
 
-                    if self.mode == "incremental" and not getattr(self, "auto_ocr", False):
-                        consecutive_duplicate_count += 1
-                        self.log(
-                            f"[{processed_count}/{total_q}] {prefix_tag} Container '{c_num}' ({status_note}). Bỏ qua (Trùng #{consecutive_duplicate_count}/4).",
-                            container_number=c_num,
-                            level="SKIP"
-                        )
-                        if consecutive_duplicate_count >= 4:
-                            stop_msg = f"Dữ liệu đã có trên hệ thống! Đã quét đến vùng dữ liệu cũ ({c_num}). Hoàn tất cập nhật."
-                            self.log(stop_msg, level="SUCCESS")
-                            job.status = "completed"
-                            job.error_message = stop_msg
-                            job.end_time = datetime.utcnow()
-                            self.db.commit()
-                            if browser:
-                                try:
-                                    browser.close()
-                                except Exception:
-                                    pass
-                            return True
+                    if self.mode == "incremental":
+                        if c_num in recent_target_containers:
+                            completed_recent_containers.add(c_num)
+                        seen_consecutive_unique_containers.add(c_num)
+
+                        curr_loading_date = header_data.get("date_loading")
+
+                        # Điều kiện hoàn tất rà soát 4 ngày gần nhất:
+                        # 1. Đã kiểm tra và có đủ 100% tất cả các tủ duy nhất trong 4 ngày gần nhất
+                        # 2. Hoặc con trỏ đã duyệt xong toàn bộ container của 4 ngày gần nhất và bắt đầu sang ngày cũ hơn (curr_loading_date < cutoff_date)
+                        is_recent_sync_done = False
+                        if total_recent_target_count > 0:
+                            if len(completed_recent_containers) >= total_recent_target_count:
+                                is_recent_sync_done = True
+                            elif curr_loading_date and cutoff_date and curr_loading_date < cutoff_date:
+                                is_recent_sync_done = True
+
+                        if is_recent_sync_done:
+                            synced_n = len(completed_recent_containers)
+                            if getattr(self, "auto_ocr", False):
+                                stop_msg = (
+                                    f"[HOÀN TẤT ĐỒNG BỘ 4 NGÀY GẦN NHẤT] Toàn bộ {synced_n}/{total_recent_target_count} tủ và ảnh của 4 ngày tải hàng gần nhất ({date_range_str}) "
+                                    f"đã được rà soát và có đầy đủ 100% trong CSDL! Tự động chuyển ngay sang chế độ THƯỜNG TRỰC ĐỒNG BỘ THỜI GIAN THỰC (Real-time Listening 24/7)..."
+                                )
+                                self.log(stop_msg, level="SUCCESS")
+                                break_to_realtime = True
+                                break
+                            else:
+                                stop_msg = (
+                                    f"[HOÀN TẤT ĐỒNG BỘ 4 NGÀY GẦN NHẤT] Toàn bộ {synced_n}/{total_recent_target_count} tủ và ảnh của 4 ngày tải hàng gần nhất ({date_range_str}) "
+                                    f"đã có đầy đủ 100% trên hệ thống. Hoàn tất cập nhật!"
+                                )
+                                self.log(stop_msg, level="SUCCESS")
+                                job.status = "completed"
+                                job.error_message = stop_msg
+                                job.end_time = datetime.utcnow()
+                                self.db.commit()
+                                if browser:
+                                    try:
+                                        browser.close()
+                                    except Exception:
+                                        pass
+                                return True
+
+                        # Fallback: Nếu không phân biệt được ngày tải hàng, dùng 5 tủ khác nhau liên tiếp đã có đủ 100%
+                        if total_recent_target_count == 0 and len(seen_consecutive_unique_containers) >= 5:
+                            if getattr(self, "auto_ocr", False):
+                                stop_msg = f"[HOÀN TẤT ĐỒNG BỘ CẬP NHẬT] Đã rà soát 5 tủ khác nhau liên tiếp ({c_num}) đã có đầy đủ 100% trong CSDL. Tự động chuyển ngay sang chế độ THƯỜNG TRỰC ĐỒNG BỘ THỜI GIAN THỰC..."
+                                self.log(stop_msg, level="SUCCESS")
+                                break_to_realtime = True
+                                break
+                            else:
+                                stop_msg = f"Dữ liệu đã có trên hệ thống! Đã quét đến vùng dữ liệu cũ ({c_num}). Hoàn tất cập nhật."
+                                self.log(stop_msg, level="SUCCESS")
+                                job.status = "completed"
+                                job.error_message = stop_msg
+                                job.end_time = datetime.utcnow()
+                                self.db.commit()
+                                if browser:
+                                    try:
+                                        browser.close()
+                                    except Exception:
+                                        pass
+                                return True
+
+                        # Nếu chưa xong 4 ngày gần nhất, ghi nhận log tiến độ
+                        if total_recent_target_count > 0:
+                            self.log(
+                                f"[{processed_count}/{display_total_q}] {prefix_tag} Container '{c_num}' ({status_note}). "
+                                f"Tiến độ 4 ngày gần nhất: {len(completed_recent_containers)}/{total_recent_target_count} tủ đã đủ.",
+                                container_number=c_num,
+                                level="SKIP"
+                            )
+                        else:
+                            self.log(
+                                f"[{processed_count}/{display_total_q}] {prefix_tag} Container '{c_num}' ({status_note}). Bỏ qua (Trùng #{len(seen_consecutive_unique_containers)}/5 tủ khác nhau).",
+                                container_number=c_num,
+                                level="SKIP"
+                            )
                         continue
                     else:
-                        # Chế độ Đồng bộ (auto_ocr=True): Kiểm tra xem container đã có sẵn nhưng có ảnh nào CHƯA QUÉT OCR không
+                        # Chế độ Đồng bộ (auto_ocr=True) trong Full Mode: Kiểm tra xem container đã có sẵn nhưng có ảnh nào CHƯA QUÉT OCR không
                         if getattr(self, "auto_ocr", False) and hasattr(self, "ocr_queue"):
-                            while hasattr(self, "ocr_queue") and self.ocr_queue.qsize() > 80:
+                            wait_start_ocr = time.time()
+                            while hasattr(self, "ocr_queue") and self.ocr_queue.qsize() > 25:
                                 if crawl_job_manager.is_cancelled(self.job_id):
                                     break
                                 self.check_paused(page, c_num, "Chờ giải phóng hàng đợi AI OCR")
                                 last_activity_time = time.time()
-                                time.sleep(0.5)
+                                if time.time() - wait_start_ocr > 15:
+                                    self.log(f"[AI OCR Queue] Hàng đợi đang bận ({self.ocr_queue.qsize()} ảnh). Tiếp tục xử lý container để chống nghẽn luồng...", level="INFO")
+                                    break
+                                self.send_progress(
+                                    c_num, "CRAWLING", processed_count, display_total_q,
+                                    total_items_count, total_images_count,
+                                    current_action=f"Đang bóc tách AI OCR ({self.ocr_queue.qsize()} ảnh trong hàng đợi)...",
+                                    sku_crawled=total_sku_count
+                                )
+                                time.sleep(1.0)
 
                             unscanned_imgs = self.db.query(LpnImage, LpnItem).join(
                                 LpnItem, LpnImage.lpn_item_id == LpnItem.id
@@ -388,7 +512,7 @@ class CrawlerApiMixin:
                             if unscanned_imgs:
                                 q_now = self.ocr_queue.qsize() if hasattr(self, "ocr_queue") else 0
                                 self.log(
-                                    f"[{processed_count}/{total_q}] [ĐÃ CÓ DỮ LIỆU] Xếp vào hàng đợi AI OCR: Container '{c_num}' ({len(unscanned_imgs)} ảnh). Hàng đợi: ~{q_now + len(unscanned_imgs)} ảnh chờ xử lý.",
+                                    f"[{processed_count}/{display_total_q}] [ĐÃ CÓ DỮ LIỆU] Xếp vào hàng đợi AI OCR: Container '{c_num}' ({len(unscanned_imgs)} ảnh). Hàng đợi: ~{q_now + len(unscanned_imgs)} ảnh chờ xử lý.",
                                     container_number=c_num,
                                     level="INFO"
                                 )
@@ -408,7 +532,7 @@ class CrawlerApiMixin:
                                         "container_total_items": total_u
                                     })
                                 self.send_progress(
-                                    c_num, "CRAWLING", processed_count, total_q,
+                                    c_num, "CRAWLING", processed_count, display_total_q,
                                     total_items_count, total_images_count,
                                     current_action=f"[BỔ SUNG OCR] {c_num} ({len(unscanned_imgs)} ảnh chưa quét)",
                                     sku_crawled=total_sku_count
@@ -416,14 +540,14 @@ class CrawlerApiMixin:
                                 continue
 
                         # Nếu đã có đủ dữ liệu VÀ toàn bộ ảnh đều đã được quét OCR rồi -> Bỏ qua
-                        if processed_count % 15 == 0 or processed_count == total_q or consecutive_duplicate_count <= 1:
+                        if processed_count % 15 == 0 or processed_count == display_total_q or consecutive_duplicate_count <= 1:
                             self.log(
-                                f"[{processed_count}/{total_q}] [ĐÃ CÓ TRONG DB & ĐÃ QUÉT ĐỦ] Container '{c_num}' ({status_note}). Bỏ qua.",
+                                f"[{processed_count}/{display_total_q}] [ĐÃ CÓ TRONG DB & ĐÃ QUÉT ĐỦ] Container '{c_num}' ({status_note}). Bỏ qua.",
                                 container_number=c_num,
                                 level="SKIP"
                             )
                         self.send_progress(
-                            c_num, "CRAWLING", processed_count, total_q,
+                            c_num, "CRAWLING", processed_count, display_total_q,
                             total_items_count, total_images_count,
                             current_action=f"[ĐÃ CÓ SẴN & ĐỦ OCR] {c_num} ({status_note})",
                             sku_crawled=total_sku_count
@@ -431,26 +555,27 @@ class CrawlerApiMixin:
                         continue
 
                 consecutive_duplicate_count = 0
+                seen_consecutive_unique_containers.clear()
 
                 is_rehealing = bool(existing_cont)
                 if is_rehealing:
                     missing_img_n = max(0, total_expected_pics - existing_img_count)
                     self.log(
-                        f"[{processed_count + 1}/{total_q}] [CŨ - BỔ SUNG DỮ LIỆU] Container '{c_num}' đã có trong DB nhưng thiếu {missing_img_n} ảnh. Đang tự động bù đắp...",
+                        f"[{processed_count + 1}/{display_total_q}] [CŨ - BỔ SUNG DỮ LIỆU] Container '{c_num}' đã có trong DB nhưng thiếu {missing_img_n} ảnh. Đang tự động bù đắp...",
                         container_number=c_num,
                         level="RECOVERY"
                     )
-                    action_msg = f"Đang bổ sung {missing_img_n} ảnh: {c_num} ({processed_count + 1}/{total_q})"
+                    action_msg = f"Đang bổ sung {missing_img_n} ảnh: {c_num} ({processed_count + 1}/{display_total_q})"
                 else:
                     self.log(
-                        f"[{processed_count + 1}/{total_q}] [CONTAINER MỚI] Phát hiện Container mới '{c_num}' (chưa có trong DB). Bắt đầu cào dữ liệu và tải {total_expected_pics} ảnh...",
+                        f"[{processed_count + 1}/{display_total_q}] [CONTAINER MỚI] Phát hiện Container mới '{c_num}' (chưa có trong DB). Bắt đầu cào dữ liệu và tải {total_expected_pics} ảnh...",
                         container_number=c_num
                     )
-                    action_msg = f"Đang tải {total_expected_pics} ảnh mới: {c_num} ({processed_count + 1}/{total_q})"
+                    action_msg = f"Đang tải {total_expected_pics} ảnh mới: {c_num} ({processed_count + 1}/{display_total_q})"
 
                 # Cập nhật ngay lập tức lên giao diện để hiển thị đúng Container và trạng thái Đang tải ảnh
                 self.send_progress(
-                    c_num, "CRAWLING", processed_count, total_q,
+                    c_num, "CRAWLING", processed_count, display_total_q,
                     total_items_count, total_images_count,
                     current_action=action_msg,
                     sku_crawled=total_sku_count,
@@ -605,13 +730,13 @@ class CrawlerApiMixin:
 
                     if is_rehealing:
                         self.log(
-                            f"[{processed_count + 1}/{total_q}] [BỔ SUNG THÀNH CÔNG] Hoàn tất cập nhật bổ sung: {c_num} | Items: {len(items_data)} | SKU: {c_sku} | Đã bù đắp: {downloaded_imgs}/{total_expected_pics} ảnh",
+                            f"[{processed_count + 1}/{display_total_q}] [BỔ SUNG THÀNH CÔNG] Hoàn tất cập nhật bổ sung: {c_num} | Items: {len(items_data)} | SKU: {c_sku} | Đã bù đắp: {downloaded_imgs}/{total_expected_pics} ảnh",
                             container_number=c_num,
                             level="SUCCESS"
                         )
                     else:
                         self.log(
-                            f"[{processed_count + 1}/{total_q}] [LƯU MỚI THÀNH CÔNG] Hoàn tất container mới: {c_num} | Items: {len(items_data)} | SKU: {c_sku} | Ảnh: {downloaded_imgs}/{total_expected_pics}",
+                            f"[{processed_count + 1}/{display_total_q}] [LƯU MỚI THÀNH CÔNG] Hoàn tất container mới: {c_num} | Items: {len(items_data)} | SKU: {c_sku} | Ảnh: {downloaded_imgs}/{total_expected_pics}",
                             container_number=c_num,
                             level="SUCCESS"
                         )
@@ -628,6 +753,45 @@ class CrawlerApiMixin:
                             })
                         except Exception:
                             pass
+
+                    if c_num in recent_target_containers:
+                        completed_recent_containers.add(c_num)
+
+                    # Kiểm tra xem sau khi tải bù/cào xong container này thì 4 ngày gần nhất đã đủ hết 100% chưa
+                    if self.mode == "incremental" and total_recent_target_count > 0:
+                        curr_loading_date = header_data.get("date_loading")
+                        is_recent_sync_done = False
+                        if len(completed_recent_containers) >= total_recent_target_count:
+                            is_recent_sync_done = True
+                        elif curr_loading_date and cutoff_date and curr_loading_date < cutoff_date:
+                            is_recent_sync_done = True
+
+                        if is_recent_sync_done:
+                            synced_n = len(completed_recent_containers)
+                            if getattr(self, "auto_ocr", False):
+                                stop_msg = (
+                                    f"[HOÀN TẤT ĐỒNG BỘ 4 NGÀY GẦN NHẤT] Toàn bộ {synced_n}/{total_recent_target_count} tủ và ảnh của 4 ngày tải hàng gần nhất ({date_range_str}) "
+                                    f"đã được cào và cập nhật đầy đủ 100% trong CSDL! Tự động chuyển ngay sang chế độ THƯỜNG TRỰC ĐỒNG BỘ THỜI GIAN THỰC (Real-time Listening 24/7)..."
+                                )
+                                self.log(stop_msg, level="SUCCESS")
+                                break_to_realtime = True
+                                break
+                            else:
+                                stop_msg = (
+                                    f"[HOÀN TẤT ĐỒNG BỘ 4 NGÀY GẦN NHẤT] Toàn bộ {synced_n}/{total_recent_target_count} tủ và ảnh của 4 ngày tải hàng gần nhất ({date_range_str}) "
+                                    f"đã có đầy đủ 100% trên hệ thống. Hoàn tất cập nhật!"
+                                )
+                                self.log(stop_msg, level="SUCCESS")
+                                job.status = "completed"
+                                job.error_message = stop_msg
+                                job.end_time = datetime.utcnow()
+                                self.db.commit()
+                                if browser:
+                                    try:
+                                        browser.close()
+                                    except Exception:
+                                        pass
+                                return True
 
                 except Exception as row_err:
                     failed_count += 1
@@ -660,11 +824,12 @@ class CrawlerApiMixin:
 
             # Nếu đang ở chế độ Đồng bộ Thời gian thực (auto_ocr=True), KHÔNG kết thúc job mà chuyển sang vòng lặp THƯỜNG TRỰC LẮNG NGHE
             if getattr(self, "auto_ocr", False):
-                self.log(
-                    f"Đã rà soát xong toàn bộ {total_q} Container hiện có! "
-                    f"Hệ thống chuyển sang chế độ THƯỜNG TRỰC ĐỒNG BỘ THỜI GIAN THỰC (Đang lắng nghe container và ảnh mới từ AppSheet)...",
-                    level="SUCCESS"
-                )
+                if not break_to_realtime:
+                    self.log(
+                        f"Đã rà soát xong toàn bộ {total_q} Container hiện có! "
+                        f"Hệ thống chuyển sang chế độ THƯỜNG TRỰC ĐỒNG BỘ THỜI GIAN THỰC (Đang lắng nghe container và ảnh mới từ AppSheet)...",
+                        level="SUCCESS"
+                    )
                 self.send_progress(
                     "", "LISTENING", total_q, total_q,
                     total_items_count, total_images_count,
@@ -693,12 +858,17 @@ class CrawlerApiMixin:
                     )
 
                     try:
-                        latest_payload = self.fetch_template_nested_datasets(page)
+                        latest_payload = self.fetch_appsheet_template_api_direct(page, getattr(page, 'context', None), force_fresh=True)
                         if not latest_payload:
                             continue
                         latest_containers = process_template_nested_datasets(latest_payload, app_name=self.app_name, table_name=self.table_name)
                         if not latest_containers:
                             continue
+
+                        self.log(
+                            f"[REAL-TIME LISTENING #{poll_count}] Đang trích xuất và đối soát {len(latest_containers)} container từ AppSheet Template API...",
+                            level="INFO"
+                        )
 
                         sorted_latest = sorted(
                             latest_containers.items(),
@@ -706,6 +876,7 @@ class CrawlerApiMixin:
                             reverse=True
                         )
 
+                        consecutive_synced_rt = 0
                         found_new = False
                         for c_num_new, c_data_new in sorted_latest:
                             if crawl_job_manager.is_cancelled(self.job_id):
@@ -731,7 +902,13 @@ class CrawlerApiMixin:
                                 ).count()
 
                             c_complete = bool(db_c and db_c.content_hash == c_hsh and (ex_pics >= tot_pics if tot_pics > 0 else True))
-                            if not c_complete:
+                            if c_complete:
+                                consecutive_synced_rt += 1
+                                if consecutive_synced_rt >= 10:
+                                    # Đã gặp 10 container liên tiếp đã đồng bộ đầy đủ, các container cũ hơn không thay đổi
+                                    break
+                            else:
+                                consecutive_synced_rt = 0
                                 found_new = True
                                 self.log(f"[PHÁT HIỆN DỮ LIỆU MỚI] Container '{c_num_new}'! Đang tải dữ liệu và bóc tách AI OCR...", level="SUCCESS", container_number=c_num_new)
 
@@ -841,10 +1018,15 @@ class CrawlerApiMixin:
                                         pass
 
                         if not found_new:
+                            now_time_str = datetime.now().strftime("%H:%M:%S")
+                            self.log(
+                                f"[{now_time_str}] [CHU KỲ #{poll_count} HOÀN TẤT] Đã đối soát {len(latest_containers)} container từ AppSheet -> Toàn bộ dữ liệu 100% đã đồng bộ (Chưa có container/ảnh mới). Sẽ rà soát lại sau 25s...",
+                                level="INFO"
+                            )
                             self.send_progress(
                                 "", "LISTENING", total_q, total_q,
                                 total_items_count, total_images_count,
-                                current_action="Đang thường trực đồng bộ thời gian thực (Chưa phát sinh container mới)...",
+                                current_action=f"Đã đối soát {len(latest_containers)} container lúc {now_time_str} (Khớp 100% CSDL). Sẽ kiểm tra lại sau 25s...",
                                 sku_crawled=total_sku_count
                             )
                     except Exception as poll_e:
@@ -950,8 +1132,66 @@ class CrawlerApiMixin:
             consecutive_duplicate_count = 0
             last_activity_time = time.time()
             freeze_retry_done = False
+            break_to_realtime_api = False
 
-            for c_num, raw_row in containers_map.items():
+            # Sắp xếp container theo date_loading mới nhất trước
+            sorted_api_containers = []
+            for c_n, r_row in containers_map.items():
+                p_data = process_api_row_data(r_row, app_name=self.app_name, table_name=self.table_name)
+                sorted_api_containers.append((c_n, r_row, p_data))
+
+            sorted_api_containers.sort(
+                key=lambda itm: (itm[2]["header"].get("date_loading") or date.min, itm[2]["header"].get("timestamp_val") or datetime.min),
+                reverse=True
+            )
+
+            distinct_loading_dates_api = []
+            for _, _, pdata in sorted_api_containers:
+                d = pdata["header"].get("date_loading")
+                if d and d not in distinct_loading_dates_api:
+                    distinct_loading_dates_api.append(d)
+
+            target_recent_days_api = 4
+            if len(distinct_loading_dates_api) >= target_recent_days_api:
+                recent_dates_api = set(distinct_loading_dates_api[:target_recent_days_api])
+                cutoff_date_api = distinct_loading_dates_api[target_recent_days_api - 1]
+                date_range_str_api = f"{cutoff_date_api.strftime('%d/%m/%Y')} -> {distinct_loading_dates_api[0].strftime('%d/%m/%Y')}"
+            elif distinct_loading_dates_api:
+                recent_dates_api = set(distinct_loading_dates_api)
+                cutoff_date_api = distinct_loading_dates_api[-1]
+                date_range_str_api = f"toàn bộ {len(distinct_loading_dates_api)} ngày có sẵn ({cutoff_date_api.strftime('%d/%m/%Y')} -> {distinct_loading_dates_api[0].strftime('%d/%m/%Y')})"
+            else:
+                recent_dates_api = set()
+                cutoff_date_api = None
+                date_range_str_api = "không xác định"
+
+            recent_target_containers_api = set()
+            if recent_dates_api:
+                for c_n, _, pdata in sorted_api_containers:
+                    d = pdata["header"].get("date_loading")
+                    if d in recent_dates_api:
+                        recent_target_containers_api.add(c_n)
+
+            total_recent_target_count_api = len(recent_target_containers_api)
+            completed_recent_containers_api = set()
+            seen_consecutive_unique_containers_api = set()
+
+            if self.mode == "incremental" and total_recent_target_count_api > 0:
+                display_total_q = total_recent_target_count_api
+                job.total_containers_found = display_total_q
+                self.db.commit()
+            else:
+                display_total_q = total_q
+
+            if self.mode == "incremental":
+                if total_recent_target_count_api > 0:
+                    self.log(
+                        f"[ĐỒNG BỘ CẬP NHẬT 4 NGÀY GẦN NHẤT] Bắt đầu rà soát dữ liệu 4 ngày tải hàng gần nhất ({date_range_str_api}) "
+                        f"gồm {total_recent_target_count_api} tủ (container)...",
+                        level="INFO"
+                    )
+
+            for c_num, raw_row, parsed_data in sorted_api_containers:
                 c_start_t = time.time()
                 if crawl_job_manager.is_cancelled(self.job_id):
                     self.log("Nhận được tín hiệu HỦY JOB (Cancelled by user).", level="WARNING")
@@ -991,8 +1231,6 @@ class CrawlerApiMixin:
                 self.check_paused(page, c_num, "Đang xử lý container")
 
                 try:
-                    # Parse dữ liệu từ row
-                    parsed_data = process_api_row_data(raw_row, app_name=self.app_name, table_name=self.table_name)
                     header_data = parsed_data["header"]
                     items_data = parsed_data["items"]
 
@@ -1050,36 +1288,99 @@ class CrawlerApiMixin:
                             prefix_tag = "[ĐÃ ĐỦ 100%]"
                             status_note = f"Đã đủ {existing_img_count}/{tot_items_n} ảnh theo kiện"
 
-                        if self.mode == "incremental" and not getattr(self, "auto_ocr", False):
-                            consecutive_duplicate_count += 1
-                            self.log(
-                                f"[{processed_count}/{total_q}] {prefix_tag} Container '{c_num}' ({status_note}). Bỏ qua (Trùng #{consecutive_duplicate_count}/4).",
-                                container_number=c_num,
-                                level="SKIP"
-                            )
-                            if consecutive_duplicate_count >= 4:
-                                stop_msg = f"Dữ liệu đã có trên hệ thống! Đã quét đến vùng dữ liệu cũ ({c_num}). Hoàn tất cập nhật."
-                                self.log(stop_msg, level="SUCCESS")
-                                job.status = "completed"
-                                job.error_message = stop_msg
-                                job.end_time = datetime.utcnow()
-                                self.db.commit()
-                                if browser:
-                                    try:
-                                        browser.close()
-                                    except Exception:
-                                        pass
-                                return True
+                        if self.mode == "incremental":
+                            if c_num in recent_target_containers_api:
+                                completed_recent_containers_api.add(c_num)
+                            seen_consecutive_unique_containers_api.add(c_num)
+
+                            curr_loading_date = header_data.get("date_loading")
+                            is_recent_sync_done = False
+                            if total_recent_target_count_api > 0:
+                                if len(completed_recent_containers_api) >= total_recent_target_count_api:
+                                    is_recent_sync_done = True
+                                elif curr_loading_date and cutoff_date_api and curr_loading_date < cutoff_date_api:
+                                    is_recent_sync_done = True
+
+                            if is_recent_sync_done:
+                                synced_n = len(completed_recent_containers_api)
+                                if getattr(self, "auto_ocr", False):
+                                    stop_msg = (
+                                        f"[HOÀN TẤT ĐỒNG BỘ 4 NGÀY GẦN NHẤT] Toàn bộ {synced_n}/{total_recent_target_count_api} tủ và ảnh của 4 ngày tải hàng gần nhất ({date_range_str_api}) "
+                                        f"đã được rà soát và có đầy đủ 100% trong CSDL! Tự động chuyển ngay sang chế độ THƯỜNG TRỰC ĐỒNG BỘ THỜI GIAN THỰC (Real-time Listening 24/7)..."
+                                    )
+                                    self.log(stop_msg, level="SUCCESS")
+                                    break_to_realtime_api = True
+                                    break
+                                else:
+                                    stop_msg = (
+                                        f"[HOÀN TẤT ĐỒNG BỘ 4 NGÀY GẦN NHẤT] Toàn bộ {synced_n}/{total_recent_target_count_api} tủ và ảnh của 4 ngày tải hàng gần nhất ({date_range_str_api}) "
+                                        f"đã có đầy đủ 100% trên hệ thống. Hoàn tất cập nhật!"
+                                    )
+                                    self.log(stop_msg, level="SUCCESS")
+                                    job.status = "completed"
+                                    job.error_message = stop_msg
+                                    job.end_time = datetime.utcnow()
+                                    self.db.commit()
+                                    if browser:
+                                        try:
+                                            browser.close()
+                                        except Exception:
+                                            pass
+                                    return True
+
+                            if total_recent_target_count_api == 0 and len(seen_consecutive_unique_containers_api) >= 5:
+                                if getattr(self, "auto_ocr", False):
+                                    stop_msg = f"[HOÀN TẤT ĐỒNG BỘ CẬP NHẬT] Đã rà soát 5 tủ khác nhau liên tiếp ({c_num}) đã có đầy đủ 100% trong CSDL. Tự động chuyển ngay sang chế độ THƯỜNG TRỰC ĐỒNG BỘ THỜI GIAN THỰC..."
+                                    self.log(stop_msg, level="SUCCESS")
+                                    break_to_realtime_api = True
+                                    break
+                                else:
+                                    stop_msg = f"Dữ liệu đã có trên hệ thống! Đã quét đến vùng dữ liệu cũ ({c_num}). Hoàn tất cập nhật."
+                                    self.log(stop_msg, level="SUCCESS")
+                                    job.status = "completed"
+                                    job.error_message = stop_msg
+                                    job.end_time = datetime.utcnow()
+                                    self.db.commit()
+                                    if browser:
+                                        try:
+                                            browser.close()
+                                        except Exception:
+                                            pass
+                                    return True
+
+                            if total_recent_target_count_api > 0:
+                                self.log(
+                                    f"[{processed_count}/{total_q}] {prefix_tag} Container '{c_num}' ({status_note}). "
+                                    f"Tiến độ 4 ngày gần nhất: {len(completed_recent_containers_api)}/{total_recent_target_count_api} tủ đã đủ.",
+                                    container_number=c_num,
+                                    level="SKIP"
+                                )
+                            else:
+                                self.log(
+                                    f"[{processed_count}/{total_q}] {prefix_tag} Container '{c_num}' ({status_note}). Bỏ qua (Trùng #{len(seen_consecutive_unique_containers_api)}/5 tủ khác nhau).",
+                                    container_number=c_num,
+                                    level="SKIP"
+                                )
                             continue
                         else:
-                            # Chế độ Đồng bộ (auto_ocr=True): Kiểm tra xem container đã có sẵn nhưng có ảnh nào CHƯA QUÉT OCR không
+                            # Chế độ Đồng bộ (auto_ocr=True) trong Full Mode: Kiểm tra xem container đã có sẵn nhưng có ảnh nào CHƯA QUÉT OCR không
                             if getattr(self, "auto_ocr", False) and hasattr(self, "ocr_queue"):
-                                while hasattr(self, "ocr_queue") and self.ocr_queue.qsize() > 80:
+                                wait_start_ocr = time.time()
+                                while hasattr(self, "ocr_queue") and self.ocr_queue.qsize() > 25:
                                     if crawl_job_manager.is_cancelled(self.job_id):
                                         break
                                     self.check_paused(page, c_num, "Chờ giải phóng hàng đợi AI OCR")
                                     last_activity_time = time.time()
-                                    time.sleep(0.5)
+                                    if time.time() - wait_start_ocr > 15:
+                                        self.log(f"[AI OCR Queue] Hàng đợi đang bận ({self.ocr_queue.qsize()} ảnh). Tiếp tục xử lý container để chống nghẽn luồng...", level="INFO")
+                                        break
+                                    self.send_progress(
+                                        c_num, "CRAWLING", processed_count, total_q,
+                                        total_items_count, total_images_count,
+                                        current_action=f"Đang bóc tách AI OCR ({self.ocr_queue.qsize()} ảnh trong hàng đợi)...",
+                                        sku_crawled=total_sku_count
+                                    )
+                                    time.sleep(1.0)
 
                                 unscanned_imgs = self.db.query(LpnImage, LpnItem).join(
                                     LpnItem, LpnImage.lpn_item_id == LpnItem.id
@@ -1139,26 +1440,27 @@ class CrawlerApiMixin:
                             continue
 
                     consecutive_duplicate_count = 0
+                    seen_consecutive_unique_containers_api.clear()
 
                     is_rehealing = bool(existing_cont)
                     if is_rehealing:
                         missing_img_n = max(0, total_expected_pics - existing_img_count)
                         self.log(
-                            f"[{processed_count + 1}/{total_q}] [CŨ - BỔ SUNG DỮ LIỆU] Container '{c_num}' đã có trong DB nhưng thiếu {missing_img_n} ảnh. Đang tự động bù đắp...",
+                            f"[{processed_count + 1}/{display_total_q}] [CŨ - BỔ SUNG DỮ LIỆU] Container '{c_num}' đã có trong DB nhưng thiếu {missing_img_n} ảnh. Đang tự động bù đắp...",
                             container_number=c_num,
                             level="RECOVERY"
                         )
-                        action_msg = f"Đang bổ sung {missing_img_n} ảnh: {c_num} ({processed_count + 1}/{total_q})"
+                        action_msg = f"Đang bổ sung {missing_img_n} ảnh: {c_num} ({processed_count + 1}/{display_total_q})"
                     else:
                         self.log(
-                            f"[{processed_count + 1}/{total_q}] [CONTAINER MỚI] Phát hiện Container mới '{c_num}' (chưa có trong DB). Bắt đầu cào dữ liệu và tải {total_expected_pics} ảnh...",
+                            f"[{processed_count + 1}/{display_total_q}] [CONTAINER MỚI] Phát hiện Container mới '{c_num}' (chưa có trong DB). Bắt đầu cào dữ liệu và tải {total_expected_pics} ảnh...",
                             container_number=c_num
                         )
-                        action_msg = f"Đang tải {total_expected_pics} ảnh mới: {c_num} ({processed_count + 1}/{total_q})"
+                        action_msg = f"Đang tải {total_expected_pics} ảnh mới: {c_num} ({processed_count + 1}/{display_total_q})"
 
                     # Cập nhật ngay lập tức lên giao diện để hiển thị đúng Container và trạng thái Đang tải ảnh
                     self.send_progress(
-                        c_num, "CRAWLING", processed_count, total_q,
+                        c_num, "CRAWLING", processed_count, display_total_q,
                         total_items_count, total_images_count,
                         current_action=action_msg,
                         sku_crawled=total_sku_count,
@@ -1298,16 +1600,54 @@ class CrawlerApiMixin:
 
                     if is_rehealing:
                         self.log(
-                            f"[{processed_count + 1}/{total_q}] [BỔ SUNG THÀNH CÔNG] Hoàn tất cập nhật bổ sung: {c_num} | Items: {len(items_data)} | SKU: {c_sku} | Đã bù đắp: {downloaded_imgs}/{total_expected_pics} ảnh",
+                            f"[{processed_count + 1}/{display_total_q}] [BỔ SUNG THÀNH CÔNG] Hoàn tất cập nhật bổ sung: {c_num} | Items: {len(items_data)} | SKU: {c_sku} | Đã bù đắp: {downloaded_imgs}/{total_expected_pics} ảnh",
                             container_number=c_num,
                             level="SUCCESS"
                         )
                     else:
                         self.log(
-                            f"[{processed_count + 1}/{total_q}] [LƯU MỚI THÀNH CÔNG] Hoàn tất container mới: {c_num} | Items: {len(items_data)} | SKU: {c_sku} | Ảnh: {downloaded_imgs}/{total_expected_pics}",
+                            f"[{processed_count + 1}/{display_total_q}] [LƯU MỚI THÀNH CÔNG] Hoàn tất container mới: {c_num} | Items: {len(items_data)} | SKU: {c_sku} | Ảnh: {downloaded_imgs}/{total_expected_pics}",
                             container_number=c_num,
                             level="SUCCESS"
                         )
+
+                    if c_num in recent_target_containers_api:
+                        completed_recent_containers_api.add(c_num)
+
+                    if self.mode == "incremental" and total_recent_target_count_api > 0:
+                        curr_loading_date = header_data.get("date_loading")
+                        is_recent_sync_done = False
+                        if len(completed_recent_containers_api) >= total_recent_target_count_api:
+                            is_recent_sync_done = True
+                        elif curr_loading_date and cutoff_date_api and curr_loading_date < cutoff_date_api:
+                            is_recent_sync_done = True
+
+                        if is_recent_sync_done:
+                            synced_n = len(completed_recent_containers_api)
+                            if getattr(self, "auto_ocr", False):
+                                stop_msg = (
+                                    f"[HOÀN TẤT ĐỒNG BỘ 4 NGÀY GẦN NHẤT] Toàn bộ {synced_n}/{total_recent_target_count_api} tủ và ảnh của 4 ngày tải hàng gần nhất ({date_range_str_api}) "
+                                    f"đã được cào và cập nhật đầy đủ 100% trong CSDL! Tự động chuyển ngay sang chế độ THƯỜNG TRỰC ĐỒNG BỘ THỜI GIAN THỰC (Real-time Listening 24/7)..."
+                                )
+                                self.log(stop_msg, level="SUCCESS")
+                                break_to_realtime_api = True
+                                break
+                            else:
+                                stop_msg = (
+                                    f"[HOÀN TẤT ĐỒNG BỘ 4 NGÀY GẦN NHẤT] Toàn bộ {synced_n}/{total_recent_target_count_api} tủ và ảnh của 4 ngày tải hàng gần nhất ({date_range_str_api}) "
+                                    f"đã có đầy đủ 100% trên hệ thống. Hoàn tất cập nhật!"
+                                )
+                                self.log(stop_msg, level="SUCCESS")
+                                job.status = "completed"
+                                job.error_message = stop_msg
+                                job.end_time = datetime.utcnow()
+                                self.db.commit()
+                                if browser:
+                                    try:
+                                        browser.close()
+                                    except Exception:
+                                        pass
+                                return True
 
                 except Exception as row_err:
                     failed_count += 1

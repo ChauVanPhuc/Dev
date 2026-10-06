@@ -65,5 +65,60 @@ class TestSkuSync(unittest.TestCase):
             self.assertEqual(norm, "2-42-MNB")
             self.assertEqual(calib, "2-42-MNB")
 
+    def test_optical_confusion_1_vs_4(self):
+        # Khi CSDL là 19-48-SAN: OCR nhầm 49- hoặc 410- được hiệu chỉnh về 19-48-SAN
+        self.assertEqual(LabelDataParser.calibrate_sku_with_expected("49-48-SAN", ["19-48-SAN"]), "19-48-SAN")
+        self.assertEqual(LabelDataParser.calibrate_sku_with_expected("410-48-SAN", ["19-48-SAN"]), "19-48-SAN")
+        # Khi CSDL thực sự là 49-48-SAN: Giữ nguyên 49-48-SAN, không được tự ý đổi thành 19-
+        self.assertEqual(LabelDataParser.calibrate_sku_with_expected("49-48-SAN", ["49-48-SAN"]), "49-48-SAN")
+        self.assertEqual(LabelDataParser.normalize_sku("49-48-SAN"), "49-48-SAN")
+
+    def test_mrku_2939500_single_label_exclusivity(self):
+        # Kiểm tra trường hợp MRKU 2939500 (Box 1B):
+        # Tem #1: Tem SKU sản phẩm, không được bóc tách LPN rác 11410485
+        tokens_tem1 = [
+            {"text": "48 CENTER", "confidence": 0.95},
+            {"text": "WARM white", "confidence": 0.92},
+            {"text": "I1", "confidence": 0.8},
+            {"text": "410.48-SAN", "confidence": 0.88},
+            {"text": "6", "confidence": 0.8},
+            {"text": "1", "confidence": 0.8},
+            {"text": "0", "confidence": 0.8},
+            {"text": "4", "confidence": 0.8}
+        ]
+        res1 = LabelDataParser.parse_extracted_data(
+            tokens_tem1, [], expected_skus=["19-48-SAN"], expected_lpn="060078862", is_single_label=True
+        )
+        self.assertEqual(res1.get("sku"), "19-48-SAN")
+        self.assertIsNone(res1.get("lpn"))
+        self.assertEqual(res1.get("all_lpns"), [])
+
+        # Tem #2: Tem SKU sản phẩm, không được bóc tách LPN rác 11149485
+        tokens_tem2 = [
+            {"text": "AE CENTER", "confidence": 0.9},
+            {"text": "White", "confidence": 0.9},
+            {"text": "X", "confidence": 0.8},
+            {"text": "MIII", "confidence": 0.7},
+            {"text": "49-48-SAN", "confidence": 0.88},
+            {"text": "1", "confidence": 0.8},
+            {"text": "J", "confidence": 0.7}
+        ]
+        res2 = LabelDataParser.parse_extracted_data(
+            tokens_tem2, [], expected_skus=["19-48-SAN"], expected_lpn="060078862", is_single_label=True
+        )
+        self.assertEqual(res2.get("sku"), "19-48-SAN")
+        self.assertIsNone(res2.get("lpn"))
+        self.assertEqual(res2.get("all_lpns"), [])
+
+        # Tem #4: Tem LPN kho, có mã vạch 060078860, không có SKU
+        barcodes_tem4 = [{"data": "060078860", "type": "CODE128"}]
+        res4 = LabelDataParser.parse_extracted_data(
+            [], barcodes_tem4, expected_skus=["19-48-SAN"], expected_lpn="060078862", is_single_label=True
+        )
+        self.assertEqual(res4.get("lpn"), "060078860")
+        self.assertIsNone(res4.get("sku"))
+        self.assertEqual(res4.get("all_skus"), [])
+
+
 if __name__ == "__main__":
     unittest.main()

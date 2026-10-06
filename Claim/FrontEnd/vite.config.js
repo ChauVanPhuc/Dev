@@ -11,18 +11,21 @@ export default defineConfig({
       'react-dom': path.resolve(__dirname, './node_modules/react-dom'),
       'react-router-dom': path.resolve(__dirname, './node_modules/react-router-dom'),
       'lucide-react': path.resolve(__dirname, './node_modules/lucide-react'),
+      'axios': path.resolve(__dirname, './node_modules/axios'),
+      'recharts': path.resolve(__dirname, './node_modules/recharts'),
       '@': path.resolve(__dirname, './src'),
       '@shared': path.resolve(__dirname, './src/shared'),
       '@styles': path.resolve(__dirname, './src/shared/styles'),
       '@assets': path.resolve(__dirname, './src/shared/assets'),
       '@modules': path.resolve(__dirname, './src/modules'),
       '@lpn': path.resolve(__dirname, '../../lpn_crawler/frontend'),
-      '@ai-ocr': path.resolve(__dirname, '../../lpn_crawler/ai_ocr_train/frontend')
+      '@ai-ocr': path.resolve(__dirname, '../../lpn_crawler/ai_ocr_train/frontend'),
+      '@dashboard': path.resolve(__dirname, '../../dashboard/frontend')
     }
   },
   server: {
     host: "0.0.0.0",
-    port: 5173,
+    port: 2222,
     open: false,
     allowedHosts: true,
     proxy: {

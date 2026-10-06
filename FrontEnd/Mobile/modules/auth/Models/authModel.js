@@ -2,7 +2,8 @@
  * File: AuthModel.js
  * Quản lý trạng thái xác thực và thông tin người dùng bằng Zustand.
  */
-import { create } from 'zustand'
+import * as zustandModule from 'zustand'
+const create = zustandModule.create || zustandModule.default || zustandModule
 import axios from 'axios'
 import apiClient, { API_URL } from '@shared/services/api'
 

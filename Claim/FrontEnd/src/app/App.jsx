@@ -15,6 +15,9 @@ import LpnCrawlerView from '@lpn/pages/LpnCrawlerView';
 // Module AI OCR & Training Độc Lập
 import AiOcrTrainTab from '@ai-ocr/AiOcrTrainTab';
 
+// Module Dashboard Thống Kê & Phân Tích Độc Lập
+import DashboardView from '@dashboard/DashboardView';
+
 import { ScreenProvider } from '@/shared/context/ScreenContext';
 
 // ProtectedRoute cho hệ thống Claim_v2
@@ -37,6 +40,7 @@ function App() {
           {/* Route Admin (Layout chung) */}
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<Navigate to="/admin/claims" replace />} />
+            <Route path="dashboard" element={<ProtectedRoute><DashboardView /></ProtectedRoute>} />
             <Route path="defects" element={<ProtectedRoute><DefectManagementView /></ProtectedRoute>} />
             <Route path="lpn-crawler" element={<ProtectedRoute><LpnCrawlerView /></ProtectedRoute>} />
             <Route path="ai-ocr-train" element={<ProtectedRoute><AiOcrTrainTab /></ProtectedRoute>} />

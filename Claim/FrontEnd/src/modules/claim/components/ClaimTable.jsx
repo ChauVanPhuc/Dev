@@ -1,7 +1,7 @@
 import React from 'react';
 import { Table } from './Table';
 import { Pagination } from './Pagination';
-import { formatPenaltyValue, calculateTotalPenalty } from '../utils/claimHelpers';
+import { formatPenaltyValue, calculateTotalPenalty, getCabinetSalePrice, formatMonthYear } from '../utils/claimHelpers';
 
 export const ClaimTable = ({
   claims = [],
@@ -42,8 +42,8 @@ export const ClaimTable = ({
     { label: 'TÊN LỖI G7' },
     { label: 'GIÁ TRỊ PHẠT' },
     { label: 'TỔNG TIỀN PHẠT' },
-    { label: 'LPN' },
     { label: 'CONTAINER' },
+    { label: 'THỜI GIAN LOAD CONT' },
     { label: 'THỜI GIAN CLAIM' },
     { label: 'TRẠNG THÁI' },
     ...(hasWritePermission ? [{ label: 'THAO TÁC', style: { textAlign: 'center', width: '90px' } }] : [])
@@ -116,12 +116,23 @@ export const ClaimTable = ({
             <td className="code-error" style={{ padding: '10px 14px' }}>{claim.order_code}</td>
             <td className="code-error" style={{ padding: '10px 14px' }}>{claim.company_error_name || ''}</td>
             <td className="value-penalty" style={{ padding: '10px 14px' }}>{claim.penalty}</td>
-            <td className="value-penalty" style={{ padding: '10px 14px', fontWeight: '600', color: '#B91C1C' }}>
+            <td
+              className="value-penalty"
+              style={{ padding: '10px 14px', fontWeight: '600', color: '#B91C1C' }}
+              title={(() => {
+                const sp = getCabinetSalePrice(claim.product_name, cabinetPrices);
+                return sp > 0 ? `Đơn giá tủ: ${formatPenaltyValue(sp)}` : 'Chưa có giá tủ trong bảng giá';
+              })()}
+            >
               {formatPenaltyValue(calculateTotalPenalty(claim, undefined, cabinetPrices))}
             </td>
-            <td className="code-lpn" style={{ padding: '10px 14px' }}>{claim.lpn}</td>
-            <td className="code-cont" style={{ padding: '10px 14px' }}>{claim.cont}</td>
-            <td style={{ padding: '10px 14px' }}>{claim.date}</td>
+            <td className="code-cont" style={{ padding: '10px 14px', fontWeight: '500' }}>{claim.cont || '—'}</td>
+            <td style={{ padding: '10px 14px', fontWeight: '500', color: (claim.date_loading_raw || claim.date_loading) ? '#4B5563' : '#9CA3AF' }}>
+              {formatMonthYear(claim.date_loading_raw || claim.date_loading) || '—'}
+            </td>
+            <td style={{ padding: '10px 14px', fontWeight: '500', color: (claim.date || claim.period) ? '#4B5563' : '#9CA3AF' }}>
+              {formatMonthYear(claim.date || claim.period) || '—'}
+            </td>
             <td style={{ padding: '10px 14px' }}>
               <span className={`status-badge badge-${claim.status === 'Mới' ? 'new' : claim.status === 'Đang xem xét' ? 'pending' : 'accepted'}`}>
                 {claim.status}

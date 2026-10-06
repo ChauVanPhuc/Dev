@@ -1,0 +1,419 @@
+/* 
+  FILE: style.css
+  MÔ TẢ: File CSS tập trung cho hệ thống ERP G7.
+  THIẾT KẾ: Responsive, sạch sẽ, chuyên nghiệp.
+*/
+
+/* =========================================
+   1. KHỞI TẠO BIẾN (CSS VARIABLES)
+   ========================================= */
+:root {
+    --primary-color: #2c3e50;    /* Màu chính: Xanh đậm chuyên nghiệp */
+    --secondary-color: #34495e;  /* Màu phụ */
+    --accent-color: #3498db;     /* Màu nhấn: Xanh dương sáng */
+    --text-color: #333333;       /* Màu chữ chính */
+    --bg-color: #f4f7f6;         /* Màu nền tổng thể */
+    --white: #ffffff;
+    --login-bg: #FDF5EC;         /* Màu nền be sáng của trang login */
+    --login-btn: #4D3422;        /* Màu nâu đậm của nút đăng nhập */
+    --sidebar-width: 260px;
+    --header-height: 60px;
+    --transition: all 0.3s ease;
+}
+
+/* =========================================
+   2. RESET CSS CƠ BẢN
+   ========================================= */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    overflow-x: hidden;
+}
+
+/* =========================================
+   3. BỐ CỤC CHÍNH (LAYOUT)
+   ========================================= */
+.app-container {
+    display: flex;
+    min-height: 100vh;
+}
+
+/* Sidebar - Cột bên trái */
+.sidebar {
+    width: var(--sidebar-width);
+    background-color: var(--primary-color);
+    color: var(--white);
+    padding: 20px;
+    height: 100vh;
+    position: fixed;
+    transition: var(--transition);
+    z-index: 1000;
+}
+
+/* Nội dung chính bên phải */
+.main-wrapper {
+    flex: 1;
+    margin-left: var(--sidebar-width);
+    display: flex;
+    flex-direction: column;
+    min-width: 0; /* Ngăn chặn flex item bị tràn */
+    transition: var(--transition);
+}
+
+/* Header - Thanh đầu trang */
+.header {
+    height: var(--header-height);
+    background-color: var(--white);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+/* Content Area - Vùng chứa nội dung trang */
+.content-area {
+    padding: 20px;
+    flex: 1;
+}
+
+/* =========================================
+   4. THIẾT KẾ ĐÁP ỨNG (RESPONSIVE)
+   ========================================= */
+
+/* Tablet (Dưới 992px) */
+@media (max-width: 992px) {
+    .sidebar {
+        width: 80px;
+        padding: 10px;
+    }
+    
+    .sidebar span {
+        display: none; /* Ẩn text menu trên tablet */
+    }
+    
+    .main-wrapper {
+        margin-left: 80px;
+    }
+}
+
+/* Mobile (Dưới 768px) */
+@media (max-width: 768px) {
+    .sidebar {
+        transform: translateX(-100%); /* Ẩn hoàn toàn sidebar trên mobile */
+    }
+    
+    .sidebar.active {
+        transform: translateX(0); /* Hiện sidebar khi có class active */
+    }
+    
+    .main-wrapper {
+        margin-left: 0;
+    }
+}
+
+/* =========================================
+   5. CÁC THÀNH PHẦN UI (COMPONENTS)
+   ========================================= */
+.card {
+    background: var(--white);
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    margin-bottom: 20px;
+}
+
+.btn {
+    padding: 10px 20px;
+    border-radius: 5px;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+    transition: var(--transition);
+}
+
+.btn-primary {
+    background-color: var(--accent-color);
+    color: var(--white);
+}
+
+.btn-primary:hover {
+    filter: brightness(1.1);
+}
+
+/* =========================================
+   6. TRANG ĐĂNG NHẬP (LOGIN PAGE)
+   ========================================= */
+.login-container {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+}
+
+/* Phần hình ảnh bên trái (Desktop) */
+.login-image-side {
+    flex: 1.2;
+    background-color: #000;
+}
+
+.login-bg-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* Phần Form bên phải */
+.login-form-side {
+    flex: 0.8;
+    background-color: var(--login-bg);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+
+.login-box {
+    width: 100%;
+    max-width: 450px;
+    text-align: center;
+}
+
+.login-header {
+    margin-bottom: 30px;
+}
+
+.login-logo {
+    width: 80px;
+    margin-bottom: 15px;
+}
+
+.brand-name {
+    font-size: 2.2rem;
+    color: var(--login-btn);
+    margin-bottom: 5px;
+    font-weight: 800;
+}
+
+.tagline {
+    color: #5d4037;
+    font-size: 1rem;
+    font-weight: 500;
+}
+
+/* Container chứa form trắng */
+.login-form-container {
+    background: var(--white);
+    padding: 40px 30px;
+    border-radius: 20px;
+    box-shadow: 0 15px 35px rgba(0,0,0,0.1);
+}
+
+.login-title {
+    font-size: 1.6rem;
+    margin-bottom: 30px;
+    color: #1a1a1a;
+    font-weight: 700;
+}
+
+.form-group {
+    text-align: left;
+    margin-bottom: 25px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 10px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: #444;
+}
+
+.form-group input {
+    width: 100%;
+    padding: 14px 18px;
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    font-size: 1rem;
+    transition: var(--transition);
+    background-color: #fff;
+}
+
+.form-group input:focus {
+    border-color: var(--login-btn);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(77, 52, 34, 0.1);
+}
+
+/* Wrapper cho ô mật khẩu có nút ẩn/hiện */
+.password-input-wrapper {
+    position: relative;
+}
+
+.password-toggle {
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #777;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.form-options {
+    text-align: left;
+    margin-bottom: 30px;
+}
+
+/* Tùy chỉnh checkbox */
+.checkbox-container {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    font-size: 0.95rem;
+    color: #444;
+    user-select: none;
+}
+
+.checkbox-container input {
+    width: 20px;
+    height: 20px;
+    margin-right: 12px;
+    cursor: pointer;
+    accent-color: var(--login-btn);
+}
+
+.login-btn {
+    width: 100%;
+    padding: 16px;
+    background-color: var(--login-btn);
+    color: var(--white);
+    border: none;
+    border-radius: 12px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.login-btn:hover {
+    filter: brightness(1.2);
+    transform: translateY(-2px);
+}
+
+.login-btn:active {
+    transform: translateY(0);
+}
+
+.login-btn:disabled {
+    background-color: #bdc3c7;
+    cursor: not-allowed;
+}
+
+.error-message {
+    color: #c0392b;
+    margin-bottom: 25px;
+    font-size: 0.95rem;
+    background: #fdf2f2;
+    padding: 10px;
+    border-radius: 8px;
+    border-left: 4px solid #c0392b;
+}
+
+.login-footer {
+    margin-top: 50px;
+    color: #5d4037;
+    font-size: 1rem;
+    line-height: 1.6;
+    font-weight: 500;
+}
+
+/* Responsive cho Mobile (Theo ảnh mẫu 2) */
+@media (max-width: 768px) {
+    .login-container {
+        flex-direction: column;
+        overflow: hidden; /* Cố định độ cao, không cho cuộn */
+        height: 100vh;
+    }
+    
+    .login-image-side {
+        flex: none;
+        height: 30vh; /* Giảm độ cao ảnh để ưu tiên form */
+    }
+    
+    .login-form-side {
+        flex: 1;
+        padding: 15px; /* Giảm padding để tiết kiệm không gian */
+        align-items: center; 
+        height: 70vh;
+        overflow: hidden;
+    }
+    
+    .login-box {
+        max-width: 100%;
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        justify-content: space-between; /* Phân bổ các phần đều nhau */
+    }
+
+    .login-header {
+        margin-bottom: 15px;
+    }
+
+    .login-logo {
+        width: 50px; /* Thu nhỏ logo trên mobile */
+        margin-bottom: 5px;
+    }
+
+    .brand-name {
+        font-size: 1.5rem;
+    }
+
+    .tagline {
+        font-size: 0.85rem;
+    }
+
+    .login-form-container {
+        padding: 20px;
+        border-radius: 15px;
+    }
+
+    .login-title {
+        font-size: 1.3rem;
+        margin-bottom: 15px;
+    }
+
+    .form-group {
+        margin-bottom: 15px;
+    }
+
+    .form-group input {
+        padding: 10px 15px;
+    }
+
+    .form-options {
+        margin-bottom: 20px;
+    }
+
+    .login-btn {
+        padding: 12px;
+    }
+
+    .login-footer {
+        margin-top: 20px;
+        font-size: 0.85rem;
+    }
+}
+
+

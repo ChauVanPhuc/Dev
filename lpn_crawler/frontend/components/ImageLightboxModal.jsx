@@ -106,10 +106,34 @@ export function ImageLightboxModal({ imageData, onClose }) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '30px',
+        padding: '12px',
         userSelect: 'none'
       }}
     >
+      {/* Top right close button for easy tapping on mobile */}
+      <button
+        type="button"
+        onClick={onClose}
+        style={{
+          position: 'fixed',
+          top: '16px',
+          right: '16px',
+          width: '38px',
+          height: '38px',
+          borderRadius: '50%',
+          backgroundColor: 'rgba(0, 0, 0, 0.65)',
+          border: '1px solid rgba(255, 255, 255, 0.3)',
+          color: '#FFFFFF',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          zIndex: 10060
+        }}
+        title="Đóng (ESC)"
+      >
+        <X size={20} />
+      </button>
       <div
         onClick={(e) => e.stopPropagation()}
         style={{

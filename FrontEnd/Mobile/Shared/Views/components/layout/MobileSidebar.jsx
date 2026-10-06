@@ -40,6 +40,36 @@ const Sidebar = () => {
         let items = Array.isArray(response.data) ? [...response.data] : [];
 
         if (items && items.length > 0) {
+          if (!items.some(it => it.route_path === '/pallet-check-v1')) {
+            const homeIdx = items.findIndex(it => it.route_path === '/dashboard' || it.id === 'm-home');
+            items.splice(homeIdx >= 0 ? homeIdx + 1 : 1, 0, {
+              id: 'm-pallet-check-v1',
+              title: 'Kiểm tra Pallet v1',
+              route_path: '/pallet-check-v1',
+              icon: 'Barcode',
+              is_active: true
+            });
+          }
+          if (!items.some(it => it.route_path === '/pallet-check')) {
+            const v1Idx = items.findIndex(it => it.route_path === '/pallet-check-v1');
+            items.splice(v1Idx >= 0 ? v1Idx + 1 : 1, 0, {
+              id: 'm-pallet-check',
+              title: 'Kiểm tra Pallet (AI)',
+              route_path: '/pallet-check',
+              icon: 'ScanLine',
+              is_active: true
+            });
+          }
+          if (!items.some(it => it.route_path === '/cabinet-box-check')) {
+            const palIdx = items.findIndex(it => it.route_path === '/pallet-check' || it.route_path === '/pallet-check-v1');
+            items.splice(palIdx >= 0 ? palIdx + 1 : 1, 0, {
+              id: 'm-cabinet-box-check',
+              title: 'Kiểm tra Tủ thùng',
+              route_path: '/cabinet-box-check',
+              icon: 'Boxes',
+              is_active: true
+            });
+          }
           setMenuList(items);
         } else {
           throw new Error('Empty sidebar list from server');
@@ -52,6 +82,27 @@ const Sidebar = () => {
             title: 'Trang chủ',
             route_path: '/dashboard',
             icon: 'LayoutGrid',
+            is_active: true
+          },
+          {
+            id: 'm-cabinet-box-check',
+            title: 'Kiểm tra Tủ thùng',
+            route_path: '/cabinet-box-check',
+            icon: 'Boxes',
+            is_active: true
+          },
+          {
+            id: 'm-pallet-check-v1',
+            title: 'Kiểm tra Pallet v1',
+            route_path: '/pallet-check-v1',
+            icon: 'Barcode',
+            is_active: true
+          },
+          {
+            id: 'm-pallet-check',
+            title: 'Kiểm tra Pallet (AI)',
+            route_path: '/pallet-check',
+            icon: 'ScanLine',
             is_active: true
           },
           {
@@ -68,6 +119,9 @@ const Sidebar = () => {
             icon: 'FolderPlus',
             is_active: true,
             children: [
+              { id: 'sub-pv2-box', title: 'Kiểm tra Tủ thùng', route_path: '/cabinet-box-check', icon: 'Boxes' },
+              { id: 'sub-pv2-v1', title: 'Kiểm tra Pallet v1', route_path: '/pallet-check-v1', icon: 'Barcode' },
+              { id: 'sub-pv2-5', title: 'Kiểm tra Pallet (AI)', route_path: '/pallet-check', icon: 'ScanLine' },
               { id: 'sub-pv2-1', title: 'Tạo phiếu luân chuyển', route_path: '/production_v2/transfer', icon: 'FilePlus' },
               { id: 'sub-pv2-2', title: 'Danh sách luân chuyển', route_path: '/production_v2/transfer-list', icon: 'ListOrdered' },
               { id: 'sub-pv2-3', title: 'Tạo phiếu kiểm tra', route_path: '/production_v2/inspection', icon: 'ClipboardCheck' },

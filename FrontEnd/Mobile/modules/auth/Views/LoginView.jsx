@@ -8,7 +8,7 @@ import Input from '@mobile/Shared/Views/components/ui/Input'
 
 // Import tài nguyên hình ảnh
 import logo from '@mobile/assets/logo-no-bg.png'
-import background from '@mobile/assets/background-1.png'
+import background from '@mobile/assets/background-1.webp'
 
 /**
  * MH1 - Đăng nhập

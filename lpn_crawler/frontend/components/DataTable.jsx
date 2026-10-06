@@ -60,7 +60,8 @@ export const DataTable = ({
 
   return (
     <div className="lpn-table-container">
-      <div className="lpn-table-scroll" style={{ overflowX: 'auto' }}>
+      {/* Desktop Table View */}
+      <div className="lpn-table-scroll lpn-desktop-only" style={{ overflowX: 'auto' }}>
         <table className="lpn-table-claim" style={{ minWidth: '1150px' }}>
           <thead>
             <tr>
@@ -253,6 +254,68 @@ export const DataTable = ({
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile Card List View (Hiển thị mượt mà trên Mobile / Tablet) */}
+      <div className="lpn-mobile-card-list lpn-mobile-only">
+        {loading && items.length === 0 ? (
+          <div className="lpn-mobile-empty">Đang tải danh sách Pallet / Box...</div>
+        ) : items.length === 0 ? (
+          <div className="lpn-mobile-empty">Chưa có bản ghi Pallet / Box nào.</div>
+        ) : (
+          items.map((row, idx) => {
+            const isSelected = selectedItemIds.includes(row.item_id);
+            const hasImage = Boolean((row.images_count > 0) || (row.images && row.images.length > 0));
+            return (
+              <div
+                key={row.item_id || idx}
+                className={`lpn-mobile-row-card ${isSelected ? 'selected' : ''}`}
+                onClick={() => onSelectItem && onSelectItem(row)}
+              >
+                <div className="lpn-mobile-row-header">
+                  <div className="lpn-mobile-row-title-box">
+                    <input
+                      type="checkbox"
+                      className="checkbox-custom"
+                      checked={isSelected}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={() => onToggleSelectRow(row.item_id)}
+                    />
+                    <span className="lpn-mobile-stt">#{(page - 1) * effectivePageSize + idx + 1}</span>
+                    <span className="lpn-mobile-cont-num">{row.container_number}</span>
+                    {row.factory && <span className="lpn-mobile-factory-badge">{row.factory}</span>}
+                  </div>
+                  <div className="lpn-mobile-row-right">
+                    {hasImage ? (
+                      <span className="lpn-img-badge-yes"><Check size={11} strokeWidth={2.5} /> Có ảnh</span>
+                    ) : (
+                      <span className="lpn-img-badge-no">N/A</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="lpn-mobile-row-grid">
+                  <div className="lpn-mobile-row-cell">
+                    <span className="lpn-cell-label">LPN:</span>
+                    <span className="lpn-cell-val lpn-highlight">{row.lpn || '—'}</span>
+                  </div>
+                  <div className="lpn-mobile-row-cell">
+                    <span className="lpn-cell-label">SKU:</span>
+                    <span className="lpn-cell-val">{row.sku || '—'}</span>
+                  </div>
+                  <div className="lpn-mobile-row-cell">
+                    <span className="lpn-cell-label">Ngày xếp:</span>
+                    <span className="lpn-cell-val">{formatDateMDY(row.date_loading || row.date_loading_raw) || '—'}</span>
+                  </div>
+                  <div className="lpn-mobile-row-cell">
+                    <span className="lpn-cell-label">Operator:</span>
+                    <span className="lpn-cell-val">{row.operator_name || '—'}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
 
       {/* Pagination */}

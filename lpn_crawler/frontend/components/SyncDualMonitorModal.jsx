@@ -44,6 +44,60 @@ const resolveItemImageUrl = (item) => {
   return null;
 };
 
+// Helper bóc tách và chuẩn hóa thời gian [HH:mm:ss] cho từng dòng log trong cả 2 bảng nhật ký
+const parseLogEntry = (logItem) => {
+  if (!logItem) return { timeStr: '', text: '' };
+
+  const rawText = typeof logItem === 'string' ? logItem : (logItem.message || JSON.stringify(logItem));
+  let timeStr = '';
+
+  // 1. Lấy từ timestamp, created_at hoặc time nếu logItem là object
+  if (typeof logItem === 'object' && logItem !== null) {
+    if (logItem.timestamp) {
+      const match = String(logItem.timestamp).match(/(\d{1,2}:\d{2}:\d{2})/);
+      timeStr = match ? match[1] : String(logItem.timestamp);
+    } else if (logItem.created_at) {
+      const s = String(logItem.created_at);
+      const match = s.match(/(\d{2}:\d{2}:\d{2})/);
+      if (match) {
+        timeStr = match[1];
+      } else {
+        try {
+          const d = new Date(s);
+          if (!isNaN(d.getTime())) {
+            timeStr = d.toLocaleTimeString('vi-VN', { hour12: false });
+          }
+        } catch (e) {}
+      }
+    } else if (logItem.time) {
+      const match = String(logItem.time).match(/(\d{1,2}:\d{2}:\d{2})/);
+      timeStr = match ? match[1] : String(logItem.time);
+    }
+  }
+
+  // 2. Nếu trong rawText đã có sẵn [HH:mm:ss] ở đầu dòng
+  let cleanText = rawText;
+  const existingTimeMatch = rawText.match(/^\[(\d{1,2}:\d{2}:\d{2})\]\s*/);
+  if (existingTimeMatch) {
+    if (!timeStr) timeStr = existingTimeMatch[1];
+    cleanText = rawText.replace(/^\[(\d{1,2}:\d{2}:\d{2})\]\s*/, '');
+  }
+
+  // 3. Đảm bảo chuẩn 2 chữ số giờ (09:05:00)
+  if (timeStr && timeStr.length < 8 && /^\d:\d{2}:\d{2}$/.test(timeStr)) {
+    timeStr = '0' + timeStr;
+  }
+
+  // 4. Nếu vẫn trống (ví dụ log tạo động tức thời không có trường thời gian), fallback giờ hệ thống
+  if (!timeStr && typeof window !== 'undefined') {
+    try {
+      timeStr = new Date().toLocaleTimeString('vi-VN', { hour12: false });
+    } catch (e) {}
+  }
+
+  return { timeStr, text: cleanText };
+};
+
 export const SyncDualMonitorModal = ({
   currentJob,
   progressData,
@@ -67,7 +121,7 @@ export const SyncDualMonitorModal = ({
   const [feedPage, setFeedPage] = useState(1);
   const [feedPageSize, setFeedPageSize] = useState(10);
   const [dbFeed, setDbFeed] = useState([]);
-  const [dbFeedLoading, setDbFeedLoading] = useState(false);
+  const [mobileActiveTab, setMobileActiveTab] = useState('crawler');
   const crawlerLogEndRef = useRef(null);
   const ocrLogEndRef = useRef(null);
   const feedEndRef = useRef(null);
@@ -188,20 +242,20 @@ export const SyncDualMonitorModal = ({
     if (typeof logItem === 'object' && logItem !== null) {
       if (logItem.source) return logItem.source !== 'ai_ocr';
       const msg = logItem.message || '';
-      return !(msg.startsWith('[AI OCR]') || msg.startsWith('[AI OCR Lỗi]'));
+      return !(msg.includes('[AI OCR]') || msg.includes('[AI OCR Lỗi]') || msg.includes('Dual-Engine'));
     }
     const raw = String(logItem);
-    return !(raw.startsWith('[AI OCR]') || raw.startsWith('[AI OCR Lỗi]'));
+    return !(raw.includes('[AI OCR]') || raw.includes('[AI OCR Lỗi]') || raw.includes('Dual-Engine'));
   });
 
   const ocrLogs = propOcrLogs || liveLogs.filter((logItem) => {
     if (typeof logItem === 'object' && logItem !== null) {
       if (logItem.source) return logItem.source === 'ai_ocr';
       const msg = logItem.message || '';
-      return msg.startsWith('[AI OCR]') || msg.startsWith('[AI OCR Lỗi]');
+      return msg.includes('[AI OCR]') || msg.includes('[AI OCR Lỗi]') || msg.includes('Dual-Engine');
     }
     const raw = String(logItem);
-    return raw.startsWith('[AI OCR]') || raw.startsWith('[AI OCR Lỗi]');
+    return raw.includes('[AI OCR]') || raw.includes('[AI OCR Lỗi]') || raw.includes('Dual-Engine');
   });
 
   useEffect(() => {
@@ -365,6 +419,7 @@ export const SyncDualMonitorModal = ({
       }}
     >
       <div
+        className="lpn-sync-monitor-dialog"
         onClick={(e) => e.stopPropagation()}
         style={{
           backgroundColor: '#FFFFFF',
@@ -381,17 +436,22 @@ export const SyncDualMonitorModal = ({
         }}
       >
         {/* Modal Header */}
-        <div style={{
-          padding: '10px 20px',
-          backgroundColor: '#FAF6F0',
-          borderBottom: '1px solid #EADCC9',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexShrink: 0
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontWeight: '800', fontSize: '1.05rem', color: '#2D1A12' }}>
+        <div
+          className="lpn-sync-header"
+          style={{
+            padding: '10px 18px',
+            backgroundColor: '#FAF6F0',
+            borderBottom: '1px solid #EADCC9',
+            display: 'flex',
+            flexWrap: 'wrap',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: '8px',
+            flexShrink: 0
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: '800', fontSize: '1.02rem', color: '#2D1A12' }}>
               Tiến Trình Đồng Bộ & Nhận Diện AI OCR
             </span>
             <span
@@ -407,7 +467,7 @@ export const SyncDualMonitorModal = ({
             </span>
           </div>
 
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
             {isRunning ? (
               <>
                 <button
@@ -579,7 +639,7 @@ export const SyncDualMonitorModal = ({
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#8D6E63' }}>
               <span style={{ fontStyle: 'italic', maxWidth: '80%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {isListening
-                  ? 'Dữ liệu hiện có đã được đồng bộ đầy đủ. Hệ thống đang thường trực lắng nghe để tự động bóc tách ngay khi có container hoặc ảnh mới phát sinh từ AppSheet.'
+                  ? (currentAction || 'Dữ liệu hiện có đã được đồng bộ đầy đủ. Hệ thống đang thường trực lắng nghe để tự động bóc tách ngay khi có container hoặc ảnh mới phát sinh từ AppSheet.')
                   : isCompleted
                   ? 'Toàn bộ danh sách container đã được rà soát. Container nào có sẵn được bỏ qua nhanh, container mới và ảnh mới đã được tải và nhận diện thành công.'
                   : isStopped
@@ -591,16 +651,19 @@ export const SyncDualMonitorModal = ({
           </div>
 
           {/* Quick Metrics Grid - 4 Columns */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-            gap: '8px',
-            backgroundColor: '#FAF6F0',
-            padding: '10px 14px',
-            borderRadius: '8px',
-            border: '1px solid #EADCC9',
-            flexShrink: 0
-          }}>
+          <div
+            className="lpn-sync-metrics-grid"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+              gap: '8px',
+              backgroundColor: '#FAF6F0',
+              padding: '10px 14px',
+              borderRadius: '8px',
+              border: '1px solid #EADCC9',
+              flexShrink: 0
+            }}
+          >
             <div style={{ minWidth: 0, overflow: 'hidden' }}>
               <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>Container đã kiểm tra:</span>
               <div style={{ fontWeight: '800', color: '#2D1A12', fontSize: '0.92rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -627,25 +690,92 @@ export const SyncDualMonitorModal = ({
             </div>
           </div>
 
-          {/* Modal Body: 2 Split Areas (Left: Crawler Stream Logs | Right: Live AI OCR Engine & Results) */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
-            gap: '12px',
-            flex: 1,
-            overflow: 'hidden'
-          }}>
-            {/* ================= AREA 1: LEFT - APPSHEET CRAWLER STREAM LOGS ================= */}
-            <div style={{
+          {/* Mobile Tab Switcher: Xem toàn màn hình luồng cào hoặc luồng OCR trên điện thoại */}
+          <div
+            className="lpn-mobile-only"
+            style={{
               display: 'flex',
-              flexDirection: 'column',
-              gap: '10px',
               backgroundColor: '#FAF6F0',
-              borderRadius: '10px',
               border: '1px solid #EADCC9',
-              padding: '12px 14px',
+              borderRadius: '8px',
+              padding: '3px',
+              gap: '4px',
+              flexShrink: 0
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setMobileActiveTab('crawler')}
+              style={{
+                flex: 1,
+                padding: '6px 8px',
+                borderRadius: '6px',
+                fontSize: '0.76rem',
+                fontWeight: '700',
+                border: 'none',
+                cursor: 'pointer',
+                backgroundColor: mobileActiveTab === 'crawler' ? '#7B5233' : 'transparent',
+                color: mobileActiveTab === 'crawler' ? '#FFFFFF' : '#7B5233',
+                transition: 'all 0.15s ease',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '4px'
+              }}
+            >
+              <span>📜 Luồng Cào</span>
+              <span style={{ fontSize: '0.66rem', opacity: 0.85 }}>({crawlerLogs.length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobileActiveTab('ocr')}
+              style={{
+                flex: 1,
+                padding: '6px 8px',
+                borderRadius: '6px',
+                fontSize: '0.76rem',
+                fontWeight: '700',
+                border: 'none',
+                cursor: 'pointer',
+                backgroundColor: mobileActiveTab === 'ocr' ? '#7B5233' : 'transparent',
+                color: mobileActiveTab === 'ocr' ? '#FFFFFF' : '#7B5233',
+                transition: 'all 0.15s ease',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '4px'
+              }}
+            >
+              <span>🤖 Nhận Diện OCR</span>
+              <span style={{ fontSize: '0.66rem', opacity: 0.85 }}>({ocrTotalScanned})</span>
+            </button>
+          </div>
+
+          {/* Modal Body: 2 Split Areas (Left: Crawler Stream Logs | Right: Live AI OCR Engine & Results) */}
+          <div
+            className="lpn-sync-split-grid"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+              gap: '12px',
+              flex: 1,
               overflow: 'hidden'
-            }}>
+            }}
+          >
+            {/* ================= AREA 1: LEFT - APPSHEET CRAWLER STREAM LOGS ================= */}
+            <div
+              className={`lpn-sync-area-crawler ${mobileActiveTab !== 'crawler' ? 'lpn-mobile-hidden' : ''}`}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+                backgroundColor: '#FAF6F0',
+                borderRadius: '10px',
+                border: '1px solid #EADCC9',
+                padding: '12px 14px',
+                overflow: 'hidden'
+              }}
+            >
               {/* Area Header */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, gap: '8px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
@@ -711,11 +841,11 @@ export const SyncDualMonitorModal = ({
                     </div>
                   ) : (
                     crawlerLogs.map((logItem, idx) => {
-                      const rawText = typeof logItem === 'string' ? logItem : (logItem.message || JSON.stringify(logItem));
-                      const isErr = rawText.includes('ERROR') || (rawText.toLowerCase().includes('lỗi') && !rawText.includes('Lỗi: 0'));
-                      const isSucc = rawText.includes('SUCCESS') || rawText.includes('THÀNH CÔNG') || rawText.includes('Hoàn tất');
-                      const isSkip = rawText.includes('Bỏ qua') || rawText.includes('ĐÃ ĐỦ 100%') || rawText.includes('ĐÃ CÓ TRONG DB');
-                      const formattedText = rawText.replace(/\bBỏ qua\b/g, 'Bỏ\u00A0qua');
+                      const { timeStr, text } = parseLogEntry(logItem);
+                      const isErr = text.includes('ERROR') || (text.toLowerCase().includes('lỗi') && !text.includes('Lỗi: 0'));
+                      const isSucc = text.includes('SUCCESS') || text.includes('THÀNH CÔNG') || text.includes('Hoàn tất');
+                      const isSkip = text.includes('Bỏ qua') || text.includes('ĐÃ ĐỦ 100%') || text.includes('ĐÃ CÓ TRONG DB');
+                      const formattedText = text.replace(/\bBỏ qua\b/g, 'Bỏ\u00A0qua');
                       return (
                         <div
                           key={idx}
@@ -728,6 +858,19 @@ export const SyncDualMonitorModal = ({
                             padding: '1.5px 0'
                           }}
                         >
+                          {timeStr ? (
+                            <span style={{
+                              color: '#9CA3AF',
+                              fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+                              fontSize: '0.74rem',
+                              marginRight: '6px',
+                              fontWeight: '600',
+                              opacity: 0.9,
+                              userSelect: 'none'
+                            }}>
+                              [{timeStr}]
+                            </span>
+                          ) : null}
                           {formattedText}
                         </div>
                       );
@@ -739,16 +882,19 @@ export const SyncDualMonitorModal = ({
             </div>
 
             {/* ================= AREA 2: RIGHT - LIVE AI OCR ENGINE ================= */}
-            <div style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '10px',
-              backgroundColor: '#FAF6F0',
-              borderRadius: '10px',
-              border: '1px solid #EADCC9',
-              padding: '12px 14px',
-              overflow: 'hidden'
-            }}>
+            <div
+              className={`lpn-sync-area-ocr ${mobileActiveTab !== 'ocr' ? 'lpn-mobile-hidden' : ''}`}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+                backgroundColor: '#FAF6F0',
+                borderRadius: '10px',
+                border: '1px solid #EADCC9',
+                padding: '12px 14px',
+                overflow: 'hidden'
+              }}
+            >
               {/* Area Header */}
               <div style={{
                 display: 'flex',
@@ -1008,9 +1154,26 @@ export const SyncDualMonitorModal = ({
                           onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = isFirstOnFirstPage ? '#FAF6F0' : '#FFFFFF'; }}
                         >
                           <span style={{ color: '#8D6E63', fontSize: '0.7rem' }}>{item.timestamp || ''}</span>
-                          <strong style={{ color: '#2D1A12', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {item.container_number}
-                          </strong>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', minWidth: 0, overflow: 'hidden' }}>
+                            <strong style={{ color: '#2D1A12', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {item.container_number}
+                            </strong>
+                            {item.is_missing_recheck && (
+                              <span style={{
+                                fontSize: '0.62rem',
+                                fontWeight: '700',
+                                color: '#B45309',
+                                backgroundColor: '#FEF3C7',
+                                border: '1px solid #FDE68A',
+                                borderRadius: '3px',
+                                padding: '1px 3px',
+                                whiteSpace: 'nowrap',
+                                flexShrink: 0
+                              }} title="Đang đối soát quét lại từ Danh Sách Thiếu / Lệch">
+                                Quét lại
+                              </span>
+                            )}
+                          </div>
                           <span style={{
                             fontFamily: 'monospace',
                             color: item.is_lpn_match ? '#15803D' : '#2D1A12',
@@ -1191,9 +1354,9 @@ export const SyncDualMonitorModal = ({
                     </div>
                   ) : (
                     ocrLogs.map((logItem, idx) => {
-                      const rawText = typeof logItem === 'string' ? logItem : (logItem.message || JSON.stringify(logItem));
-                      const isErr = rawText.includes('ERROR') || (rawText.toLowerCase().includes('lỗi') && !rawText.includes('Lỗi: 0'));
-                      const isSucc = rawText.includes('SUCCESS') || rawText.includes('KHỚP') || rawText.includes('THÀNH CÔNG');
+                      const { timeStr, text } = parseLogEntry(logItem);
+                      const isErr = text.includes('ERROR') || (text.toLowerCase().includes('lỗi') && !text.includes('Lỗi: 0'));
+                      const isSucc = text.includes('SUCCESS') || text.includes('KHỚP') || text.includes('THÀNH CÔNG');
                       return (
                         <div
                           key={idx}
@@ -1206,7 +1369,20 @@ export const SyncDualMonitorModal = ({
                             padding: '1.5px 0'
                           }}
                         >
-                          {rawText}
+                          {timeStr ? (
+                            <span style={{
+                              color: '#9CA3AF',
+                              fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+                              fontSize: '0.74rem',
+                              marginRight: '6px',
+                              fontWeight: '600',
+                              opacity: 0.9,
+                              userSelect: 'none'
+                            }}>
+                              [{timeStr}]
+                            </span>
+                          ) : null}
+                          {text}
                         </div>
                       );
                     })

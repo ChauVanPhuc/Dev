@@ -1,4 +1,5 @@
-# Reload triggered: Added upload-image endpoints for inspections and deliveries
+# Reloaded at: 1791180307.193231
+# Reload triggered: Mounted lpn-crawler and dashboard routers
 
 import logging
 
@@ -85,7 +86,20 @@ async def lifespan(app: FastAPI):
 
     db = SessionLocal()
 
+    # Pre-warm AI OCR Engine in background thread to eliminate initial 6-8s cold-start latency
+    def _bg_warmup_ocr():
+        try:
+            import time
+            time.sleep(1.0)
+            from lpn_crawler.ai_ocr_train.core.ocr_engine import OcrEngine
+            eng = OcrEngine()
+            eng.warmup()
+            print("[OcrEngine] GPU DirectML & CRNN models pre-warmed in background successfully!")
+        except Exception as e:
+            print(f"[OcrEngine] Background warmup notice: {e}")
 
+    import threading
+    threading.Thread(target=_bg_warmup_ocr, daemon=True).start()
 
     yield
 
@@ -702,6 +716,14 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 app.include_router(api_router, prefix="/api/v1")
 
+# [COMPATIBILITY] Mount trực tiếp /api/ai-ocr để phục vụ frontend không bị 404
+try:
+    from lpn_crawler.ai_ocr_train.api.router import router as ai_ocr_compat_router
+    # Router đã có sẵn prefix "/ai-ocr" nên chỉ cần thêm "/api" -> /api/ai-ocr/...
+    app.include_router(ai_ocr_compat_router, prefix="/api", tags=["ai-ocr-compat"])
+except Exception as e:
+    print(f"[Warning] Failed to mount /api/ai-ocr compat router: {e}")
+
 
 
 # [TEST] Hỗ trợ login trực tiếp không cần /api/v1 theo yêu cầu người dùng
@@ -880,5 +902,3 @@ def test_direct_endpoint():
             "error": str(e),
             "traceback": traceback.format_exc()
         }
-
-

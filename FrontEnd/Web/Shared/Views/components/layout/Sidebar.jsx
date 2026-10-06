@@ -41,12 +41,27 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
   const user = JSON.parse(localStorage.getItem('smartflow_user') || '{}');
   const isAdmin = user.role_name === 'IT' || user.role_name === 'BGD' || user.username === 'admin';
 
-  let activePermissions = {};
-  try {
-    activePermissions = JSON.parse(localStorage.getItem('smartflow_active_permissions') || '{}');
-  } catch (e) {
-    console.error('Failed to parse screen permissions in Sidebar:', e);
-  }
+  const [activePermissions, setActivePermissions] = React.useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('smartflow_active_permissions') || '{}');
+    } catch {
+      return {};
+    }
+  });
+
+  React.useEffect(() => {
+    const handleUpdated = (e) => {
+      if (e?.detail) {
+        setActivePermissions(e.detail);
+      } else {
+        try {
+          setActivePermissions(JSON.parse(localStorage.getItem('smartflow_active_permissions') || '{}'));
+        } catch {}
+      }
+    };
+    window.addEventListener('smartflow_permissions_updated', handleUpdated);
+    return () => window.removeEventListener('smartflow_permissions_updated', handleUpdated);
+  }, []);
 
   React.useEffect(() => {
     const fetchSidebar = async () => {
@@ -72,6 +87,43 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
             list.splice(sysIdx + 1, 0, feedbackItem);
           } else {
             list.push(feedbackItem);
+          }
+        }
+
+        // 1. Chuẩn hóa nhóm "Module chất lượng": Đổi tên và icon ShieldCheck, đưa Dashboard Thống Kê, Mã Lỗi, Claim khách hàng lên đầu
+        const qualityGroup = list.find(item => item.title === 'Quản lý chất lượng' || item.title === 'Quản lý Chất Lượng' || item.title === 'Module chất lượng' || item.id === 28);
+        if (qualityGroup) {
+          qualityGroup.title = 'Module chất lượng';
+          qualityGroup.icon = 'ShieldCheck';
+        }
+
+        // 2. Chuẩn hóa nhóm "Quản lý kinh doanh": Đổi icon sang Code (<>) chuẩn theo thiết kế
+        const bizGroup = list.find(item => item.title === 'Quản lý kinh doanh');
+        if (bizGroup) {
+          bizGroup.icon = 'Code';
+        }
+
+        // 3. Đảm bảo nhóm "Crawl & Tích hợp" (icon Globe) luôn xuất hiện
+        const hasCrawler = list.some(item => item.title === 'Crawl & Tích hợp' || item.id === 'crawler');
+        if (!hasCrawler) {
+          const crawlerGroup = {
+            id: 'crawler',
+            parent_id: null,
+            title: 'Crawl & Tích hợp',
+            route_path: '#',
+            icon: 'Globe',
+            sort_order: 90,
+            is_active: true,
+            children: [
+              { id: 'sub-lpn-crawler', title: 'Crawl dữ liệu LPN', route_path: '/admin/lpn-crawler', icon: 'Database', is_active: true },
+              { id: 'sub-ai-ocr-train', title: 'Train Hình ảnh', route_path: '/admin/ai-ocr-train', icon: 'Cpu', is_active: true }
+            ]
+          };
+          const bizIdx = list.findIndex(item => item.title === 'Quản lý kinh doanh');
+          if (bizIdx !== -1) {
+            list.splice(bizIdx + 1, 0, crawlerGroup);
+          } else {
+            list.push(crawlerGroup);
           }
         }
 
@@ -116,6 +168,20 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
     if (item.route_path === '/admin/feedback' || item.permission_key === 'feedback') {
       const fbPerm = activePermissions['/admin/feedback'] || activePermissions['feedback'];
       if (fbPerm !== 'none') return false;
+    }
+
+    // Whitelist các module Claim, Dashboard, Price, Crawl, Train không bao giờ bị chặn trừ khi gán 'none' rõ ràng
+    const allowByDefaultRoutes = [
+      '/admin/claim-dashboard',
+      '/admin/defects',
+      '/admin/claims',
+      '/admin/prices',
+      '/admin/lpn-crawler',
+      '/admin/ai-ocr-train'
+    ];
+    if (allowByDefaultRoutes.includes(item.route_path)) {
+      if (perm === 'none') return true;
+      return false;
     }
 
     // 1. Kiểm tra chặn rõ ràng (Explicit block)
@@ -212,6 +278,9 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
   // Helper lay danh sach trang con cua group (tinh den ca truong hop ghi de Quản lý sản xuất)
   const getGroupChildren = (group) => {
     if (group.title === 'Quản lý sản xuất') {
+      if (group.children && group.children.length > 0) {
+        return group.children;
+      }
       return [
         { id: 21, parent_id: 19, title: 'Lệnh sản xuất', route_path: '/admin/production-orders', icon: 'Handshake' },
         { id: 24, parent_id: 19, title: 'Quy trình - kế hoạch', route_path: '/admin/production-routing', icon: 'Handshake' },
@@ -219,6 +288,9 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
       ];
     }
     if (group.title === 'Quản lý KPI' || group.title === 'KPI') {
+      if (group.children && group.children.length > 0) {
+        return group.children;
+      }
       return [
         { id: 102, parent_id: group.id, title: 'Danh sách & Sơ đồ nhân sự', route_path: '/admin/kpi/personnel', icon: 'Users' },
         { id: 103, parent_id: group.id, title: 'Hồ sơ chất lượng', route_path: '/admin/kpi/quality-profiles', icon: 'ShieldCheck' },
@@ -228,11 +300,30 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
       ];
     }
     let list = group.children || [];
-    if (group.title === 'Quản lý chất lượng' || group.title === 'Quản lý Chất Lượng') {
+    if (group.title === 'Module chất lượng' || group.title === 'Quản lý chất lượng' || group.title === 'Quản lý Chất Lượng') {
       list = list.filter(item => item.route_path !== '/admin/quality-targets');
+      
+      // Lọc bỏ 3 item này khỏi list gốc để đưa lên đầu chuẩn theo ảnh thiết kế
+      const rest = list.filter(item => 
+        item.route_path !== '/admin/claim-dashboard' && 
+        item.title !== 'Dashboard Thống Kê' &&
+        item.route_path !== '/admin/defects' && 
+        item.title !== 'Mã Lỗi' && 
+        item.title !== 'Danh sách lỗi' &&
+        item.route_path !== '/admin/claims' && 
+        item.title !== 'Claim khách hàng'
+      );
+
+      list = [
+        { id: 991, parent_id: group.id, title: 'Dashboard Thống Kê', route_path: '/admin/claim-dashboard', icon: 'LayoutDashboard' },
+        { id: 992, parent_id: group.id, title: 'Mã Lỗi', route_path: '/admin/defects', icon: 'Slash' },
+        { id: 993, parent_id: group.id, title: 'Claim khách hàng', route_path: '/admin/claims', icon: 'MessageCircle' },
+        ...rest
+      ];
+
       const hasTargetMenu = list.some(item => item.route_path === '/admin/kpi/dashboard');
       if (!hasTargetMenu) {
-        list = [{ id: 101, parent_id: group.id, title: 'Mục tiêu Chất Lượng', route_path: '/admin/kpi/dashboard', icon: 'Target' }, ...list];
+        list = [...list, { id: 101, parent_id: group.id, title: 'Mục tiêu Chất Lượng', route_path: '/admin/kpi/dashboard', icon: 'Target' }];
       } else {
         list = list.map(item => item.route_path === '/admin/kpi/dashboard' ? { ...item, title: 'Mục tiêu Chất Lượng', icon: 'Target' } : item);
       }
@@ -243,6 +334,19 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
       } else {
         list = list.map(item => item.route_path === '/admin/kpi/quality-employees' ? { ...item, title: 'Danh sách nhân sự' } : item);
       }
+    }
+    if (group.title === 'Quản lý kinh doanh') {
+      const rest = list.filter(item => item.route_path !== '/admin/prices' && item.title !== 'Quản lý giá tủ');
+      list = [
+        { id: 994, parent_id: group.id, title: 'Quản lý giá tủ', route_path: '/admin/prices', icon: 'Tag' },
+        ...rest
+      ];
+    }
+    if (group.title === 'Crawl & Tích hợp') {
+      return [
+        { id: 995, parent_id: group.id, title: 'Crawl dữ liệu LPN', route_path: '/admin/lpn-crawler', icon: 'Database' },
+        { id: 996, parent_id: group.id, title: 'Train Hình ảnh', route_path: '/admin/ai-ocr-train', icon: 'Cpu' }
+      ];
     }
     // Đảm bảo không có Quản Lý Góp Ý nằm bên trong bất kỳ group nào (vì đã chuyển lên cấp cao nhất)
     list = list.filter(item => item.route_path !== '/admin/feedback' && item.route_path !== '/admin/quick-reports');
@@ -257,13 +361,33 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
     )) {
       return true;
     }
-    if ((group.title === 'Quản lý chất lượng' || group.title === 'Quản lý Chất Lượng') && (
+    if ((group.title === 'Module chất lượng' || group.title === 'Quản lý chất lượng' || group.title === 'Quản lý Chất Lượng') && (
       location.pathname === '/admin/quality' || 
       location.pathname === '/admin/quality/' ||
+      location.pathname === '/admin/claim-dashboard' ||
+      location.pathname === '/admin/claim-dashboard/' ||
+      location.pathname === '/admin/defects' ||
+      location.pathname === '/admin/defects/' ||
+      location.pathname === '/admin/claims' ||
+      location.pathname === '/admin/claims/' ||
       location.pathname === '/admin/kpi/dashboard' ||
       location.pathname === '/admin/kpi/dashboard/' ||
       location.pathname === '/admin/kpi/quality-employees' ||
       location.pathname === '/admin/kpi/quality-employees/'
+    )) {
+      return true;
+    }
+    if (group.title === 'Quản lý kinh doanh' && (
+      location.pathname === '/admin/prices' ||
+      location.pathname === '/admin/prices/'
+    )) {
+      return true;
+    }
+    if (group.title === 'Crawl & Tích hợp' && (
+      location.pathname === '/admin/lpn-crawler' ||
+      location.pathname === '/admin/lpn-crawler/' ||
+      location.pathname === '/admin/ai-ocr-train' ||
+      location.pathname === '/admin/ai-ocr-train/'
     )) {
       return true;
     }
@@ -292,10 +416,9 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
     setExpandedGroups(prev => {
       for (const groupIdStr in prev) {
         if (prev[groupIdStr]) {
-          const groupId = parseInt(groupIdStr);
-          const group = menuList.find(g => g.id === groupId);
+          const group = menuList.find(g => String(g.id) === String(groupIdStr));
           if (group && hasActiveChild(group)) {
-            targetGroupId = groupId;
+            targetGroupId = group.id;
             break;
           }
         }
@@ -496,16 +619,45 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
                 const isExpanded = !!expandedGroups[item.id];
                 const isGroupActive = isExpanded && hasActiveChild(item);
 
+                const isQualityGroup = item.id === 28 || 
+                  item.title === 'Module chất lượng' || 
+                  item.title === 'Quản lý chất lượng' || 
+                  item.title === 'Quản lý Chất Lượng' ||
+                  false;
+
+                const handleHeaderClick = () => {
+                  if (isQualityGroup) {
+                    setExpandedGroups(prev => ({
+                      ...prev,
+                      [item.id]: true
+                    }));
+                    if (location.pathname === '/admin/quality' || location.pathname === '/admin/quality/') {
+                      toggleGroup(item.id);
+                    } else {
+                      navigate('/admin/quality');
+                      if (onClose) onClose();
+                    }
+                  } else if (item.route_path && item.route_path !== '#' && item.route_path !== 'None') {
+                    if (location.pathname === item.route_path) {
+                      toggleGroup(item.id);
+                    } else {
+                      setExpandedGroups(prev => ({
+                        ...prev,
+                        [item.id]: true
+                      }));
+                      navigate(item.route_path);
+                      if (onClose) onClose();
+                    }
+                  } else {
+                    toggleGroup(item.id);
+                  }
+                };
+
                 return (
                   <div key={item.id} className="sidebar-group-container" style={{ marginBottom: '6px' }}>
                     <button
-                      onClick={() => {
-                        toggleGroup(item.id);
-                        if (item.title === 'Quản lý chất lượng') {
-                          navigate('/admin/quality');
-                          if (onClose) onClose();
-                        }
-                      }}
+                      type="button"
+                      onClick={handleHeaderClick}
                       className={`sidebar-group-header ${isGroupActive ? 'active' : ''}`}
                       style={{
                         width: '100%',
@@ -531,13 +683,24 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
                         </span>
                         <span className="nav-text" style={{ fontSize: '0.9rem' }}>{item.title}</span>
                       </div>
-                      <span className="chevron-icon" style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
-                        transition: 'transform 0.2s ease',
-                        color: isGroupActive ? '#5D3B32' : '#A0A3A8'
-                      }}>
+                      <span
+                        className="chevron-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleGroup(item.id);
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                          transition: 'transform 0.2s ease',
+                          color: isGroupActive ? '#5D3B32' : '#A0A3A8',
+                          padding: '4px',
+                          borderRadius: '4px',
+                          cursor: 'pointer'
+                        }}
+                        title={isExpanded ? 'Thu gọn' : 'Mở rộng'}
+                      >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="6 9 12 15 18 9"></polyline>
                         </svg>

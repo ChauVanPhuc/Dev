@@ -338,6 +338,7 @@ export const LogModal = ({ jobId, onClose }) => {
 
   return (
     <div
+      className="lpn-log-overlay"
       style={{
         position: 'fixed',
         inset: 0,
@@ -346,19 +347,19 @@ export const LogModal = ({ jobId, onClose }) => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '20px'
+        padding: '16px'
       }}
       onClick={onClose}
     >
       <div
+        className="lpn-log-dialog"
         style={{
           background: '#FFFFFF',
           borderRadius: '12px',
           maxWidth: '1200px',
           width: 'min(96vw, 1200px)',
           height: '85vh',
-          minHeight: '560px',
-          maxHeight: '88vh',
+          maxHeight: '92vh',
           display: 'flex',
           flexDirection: 'column',
           boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
@@ -370,8 +371,9 @@ export const LogModal = ({ jobId, onClose }) => {
       >
         {/* 1. Header */}
         <div
+          className="lpn-log-header"
           style={{
-            padding: '16px 24px',
+            padding: '14px 20px',
             borderBottom: '1px solid #F3F4F6',
             display: 'flex',
             justifyContent: 'space-between',
@@ -424,8 +426,9 @@ export const LogModal = ({ jobId, onClose }) => {
 
         {/* 2. Filter bar (Có Nút Hiển Thị Số Dòng chuẩn đẹp ở trên) */}
         <div
+          className="lpn-log-filter-bar"
           style={{
-            padding: '10px 24px',
+            padding: '10px 20px',
             borderBottom: '1px solid #F0E6D8',
             backgroundColor: '#FAF6F0',
             display: 'flex',
@@ -435,7 +438,7 @@ export const LogModal = ({ jobId, onClose }) => {
             flexShrink: 0
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', flex: 1 }}>
             {/* Ô tìm kiếm */}
             <div className="search-wrapper" style={{ margin: 0, height: '34px', width: '260px' }}>
               <Search size={15} className="search-icon" />
@@ -569,7 +572,7 @@ export const LogModal = ({ jobId, onClose }) => {
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
             <button
               type="button"
               onClick={handleClearLogs}
@@ -615,7 +618,10 @@ export const LogModal = ({ jobId, onClose }) => {
         </div>
 
         {/* 3. Log Table Body */}
-        <div style={{ padding: 0, overflowY: 'auto', overflowX: 'hidden', flex: 1, backgroundColor: '#FFFFFF', minHeight: 0 }}>
+        <div
+          className="lpn-log-table-container"
+          style={{ padding: 0, overflowY: 'auto', overflowX: 'auto', flex: 1, backgroundColor: '#FFFFFF', minHeight: 0 }}
+        >
           {loading ? (
             <div style={{ textAlign: 'center', padding: '60px 20px', color: '#6B7280' }}>
               Đang tải nhật ký hệ thống...
@@ -625,13 +631,13 @@ export const LogModal = ({ jobId, onClose }) => {
               Không tìm thấy bản ghi log nào phù hợp.
             </div>
           ) : (
-            <table className="lpn-table-claim" style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', margin: 0 }}>
+            <table className="lpn-table-claim" style={{ width: '100%', minWidth: '600px', tableLayout: 'fixed', borderCollapse: 'collapse', margin: 0 }}>
               <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#FAF6F0' }}>
                 <tr style={{ borderBottom: '1px solid #EADCC9' }}>
-                  <th style={{ width: '160px', paddingLeft: '24px', textAlign: 'left', backgroundColor: '#FAF6F0' }}>Thời Gian</th>
+                  <th style={{ width: '150px', paddingLeft: '20px', textAlign: 'left', backgroundColor: '#FAF6F0' }}>Thời Gian</th>
                   <th style={{ width: '110px', textAlign: 'center', backgroundColor: '#FAF6F0' }}>Mức Độ</th>
-                  <th style={{ width: '150px', textAlign: 'left', backgroundColor: '#FAF6F0' }}>Container</th>
-                  <th style={{ paddingRight: '24px', textAlign: 'left', backgroundColor: '#FAF6F0' }}>Nội Dung Chi Tiết</th>
+                  <th style={{ width: '140px', textAlign: 'left', backgroundColor: '#FAF6F0' }}>Container</th>
+                  <th style={{ paddingRight: '20px', textAlign: 'left', backgroundColor: '#FAF6F0' }}>Nội Dung Chi Tiết</th>
                 </tr>
               </thead>
               <tbody>
@@ -639,7 +645,7 @@ export const LogModal = ({ jobId, onClose }) => {
                   <tr key={log.id || idx} style={{ borderBottom: '1px solid #F3F4F6' }}>
                     <td
                       style={{
-                        paddingLeft: '24px',
+                        paddingLeft: '20px',
                         color: '#6B7280',
                         fontSize: '0.78rem',
                         fontFamily: 'monospace',
@@ -659,7 +665,7 @@ export const LogModal = ({ jobId, onClose }) => {
                     >
                       {log.container_number || '—'}
                     </td>
-                    <td style={{ paddingRight: '24px', color: '#2D1A12', fontSize: '0.84rem', lineHeight: '1.4', wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+                    <td style={{ paddingRight: '20px', color: '#2D1A12', fontSize: '0.84rem', lineHeight: '1.4', wordBreak: 'break-word', overflowWrap: 'break-word' }}>
                       <div>{log.message}</div>
                       {log.details && (
                         <div
@@ -690,8 +696,9 @@ export const LogModal = ({ jobId, onClose }) => {
 
         {/* 4. Footer with Clean Pagination */}
         <div
+          className="lpn-log-footer"
           style={{
-            padding: '10px 24px',
+            padding: '10px 20px',
             borderTop: '1px solid #EADCC9',
             backgroundColor: '#FAF6F0',
             display: 'flex',

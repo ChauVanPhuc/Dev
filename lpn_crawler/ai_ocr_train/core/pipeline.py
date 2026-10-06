@@ -49,7 +49,8 @@ class AiOcrPipeline:
         model_id: Optional[str] = None,
         inference_mode: Optional[str] = None,
         expected_skus: Optional[List[str]] = None,
-        expected_lpn: Optional[str] = None
+        expected_lpn: Optional[str] = None,
+        package_position: Optional[str] = None
     ) -> Dict[str, Any]:
         """Phương thức tiện ích cho Batch Scan và đọc ảnh nhanh."""
         cfg = {
@@ -65,7 +66,8 @@ class AiOcrPipeline:
             model_id=active_model_id,
             inference_mode=inference_mode,
             expected_skus=expected_skus,
-            expected_lpn=expected_lpn
+            expected_lpn=expected_lpn,
+            package_position=package_position
         )
         extracted = res.get("extracted", {})
         barcodes = [b.get("data") for b in res.get("barcodes", []) if isinstance(b, dict) and b.get("data")]
@@ -77,6 +79,8 @@ class AiOcrPipeline:
             "confidence": extracted.get("overall_confidence", 0.0),
             "time_metrics": res.get("time_metrics", {}),
             "extracted": extracted,
+            "detected_lpns_detail": extracted.get("detected_lpns_detail", []),
+            "detected_skus_detail": extracted.get("detected_skus_detail", []),
             "roi_details": res.get("roi_details", []),
             "full_result": res
         }
@@ -89,16 +93,19 @@ class AiOcrPipeline:
         model_id: Optional[str] = None,
         inference_mode: Optional[str] = None,
         expected_skus: Optional[List[str]] = None,
-        expected_lpn: Optional[str] = None
+        expected_lpn: Optional[str] = None,
+        package_position: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Xử lý toàn diện một bức ảnh nhãn Pallet / Thùng hàng đa nhãn.
+        Tự động nhận biết quy cách kiện hàng (Box 10A -> Kiện dọc / Top nóc; Box 10 -> Kiện ngang / Pallet đứng).
         """
         t_start_total = time.time()
         time_metrics = {}
         active_model_id = model_id or self.recognizer_mode or self.ocr_engine.get_best_model_id()
         cfg = preprocess_config or {}
         eff_inference_mode = inference_mode or cfg.get("inference_mode", "hybrid")
+        is_target_vertical = LabelDataParser.is_package_vertical(package_position)
 
         # 1. Nạp ảnh
         orig_img = ImagePreprocessor.load_image(image_input)
@@ -111,7 +118,7 @@ class AiOcrPipeline:
         # 2. Phát hiện TẤT CẢ các vùng nhãn dán trên kiện hàng (Multi-Label Detection)
         t_det_start = time.time()
         if auto_crop:
-            det_res = self.label_detector.detect_label_roi(orig_img, max_labels=20)
+            det_res = self.label_detector.detect_label_roi(orig_img, max_labels=22)
             roi_img = det_res["roi_image"] # Ảnh tổng hợp / ghép tất cả các nhãn
             all_rois = det_res.get("all_rois", [{"roi_image": roi_img, "bbox": det_res["bbox"], "label_id": 1}])
             det_bbox = det_res["bbox"]
@@ -157,54 +164,99 @@ class AiOcrPipeline:
         found_pallet_lpn = None
         found_pallet_sku = None
 
-        # Quét trên từng tem nhãn riêng lẻ với cơ chế Phóng to siêu phân giải (Adaptive Focus & Zoom)
-        # Sử dụng ThreadPoolExecutor (2 workers) để chạy song song giải mã mã vạch & OCR tăng tốc gấp đôi
-        from concurrent.futures import ThreadPoolExecutor
-
-        def _scan_one_roi(item):
-            idx, r_item = item
+        # Bước 5A: Quét nhanh Barcode trên toàn bộ các nhãn (chỉ mất ~50ms tổng cộng)
+        # Giúp nhận diện tức thì các tem có mã vạch LPN / SKU để ưu tiên OCR
+        roi_candidates = []
+        for idx, r_item in enumerate(all_rois):
             crop = r_item["roi_image"]
+            bbox = r_item.get("bbox", [])
+            w = bbox[2] if len(bbox) >= 4 else crop.shape[1]
+            h = bbox[3] if len(bbox) >= 4 else crop.shape[0]
+            # Chỉ loại bỏ các đốm nhiễu vi mô (< 1000 px^2 hoặc kích thước < 15px), giữ lại toàn bộ dải mã vạch & tem nhỏ
+            if (w * h < 1000) or w < 18 or h < 15:
+                continue
+
             zoomed_crop = ImagePreprocessor.focus_and_zoom_roi(crop, target_min_dim=180)
 
-            # 1. Giải mã Barcode (hỗ trợ đa hướng xoay và tem nhỏ)
             b_list = self.barcode_engine.read_barcodes(zoomed_crop)
             if not b_list and zoomed_crop is not crop:
                 b_list = self.barcode_engine.read_barcodes(crop)
 
             bc_lpn_found = False
             bc_sku_found = False
+            has_target_lpn = False
             for b in b_list:
                 b_data = str(b.get("data", "")).strip()
+                if expected_lpn and b_data == str(expected_lpn).strip():
+                    has_target_lpn = True
                 if LabelDataParser.is_warehouse_lpn(b_data) or (b_data.isdigit() and 8 <= len(b_data) <= 12):
                     bc_lpn_found = True
                 if LabelDataParser.is_valid_sku_candidate(LabelDataParser.normalize_sku(b_data)):
                     bc_sku_found = True
 
-            # 2. Deep Learning OCR với tự động xử lý xoay 90°/270° thông minh
+            # Điểm ưu tiên: Tem có mã LPN mục tiêu = 100, có mã vạch = 50, tem nhãn thường = 10
+            prio = 100 if has_target_lpn else (50 if (bc_lpn_found or bc_sku_found) else (30 if b_list else 10))
+            roi_candidates.append({
+                "idx": idx,
+                "r_item": r_item,
+                "crop": crop,
+                "zoomed_crop": zoomed_crop,
+                "b_list": b_list,
+                "bc_lpn_found": bc_lpn_found,
+                "bc_sku_found": bc_sku_found,
+                "prio": prio
+            })
+
+        # Sắp xếp để các tem chứa mã vạch & LPN mục tiêu được xử lý trước tiên
+        roi_candidates.sort(key=lambda x: (x["prio"], -x["idx"]), reverse=True)
+
+        # Bước 5B: Quét OCR chuyên sâu toàn diện TẤT CẢ các con tem trên Pallet (không ngắt sớm)
+        roi_exec_results = []
+        target_exp_lpn = str(expected_lpn).strip().upper() if expected_lpn else ""
+        target_exp_sku = str(expected_skus[0]).strip().upper() if (expected_skus and expected_skus[0]) else ""
+
+        for candidate in roi_candidates:
+            idx = candidate["idx"]
+            r_item = candidate["r_item"]
+            crop = candidate["crop"]
+            zoomed_crop = candidate["zoomed_crop"]
+            b_list = candidate["b_list"]
+            bc_lpn_found = candidate["bc_lpn_found"]
+            bc_sku_found = candidate["bc_sku_found"]
+
+            allow_rot = not (bc_lpn_found and bc_sku_found)
             ocr_item = self.ocr_engine.recognize_text(
                 zoomed_crop,
                 model_id=active_model_id,
                 inference_mode=eff_inference_mode,
-                allow_rotation=True,
-                already_has_lpn=bool(bc_lpn_found or found_pallet_lpn),
+                allow_rotation=allow_rot,
+                already_has_lpn=bool(bc_lpn_found),
                 already_has_sku=bool(bc_sku_found),
                 expected_skus=expected_skus,
                 expected_lpn=expected_lpn,
-                render_annotated=return_images_base64
+                render_annotated=return_images_base64,
+                is_target_vertical=is_target_vertical
             )
 
-            # 3. Phân tích mã LPN / SKU bóc tách riêng của con tem này
             roi_parsed = LabelDataParser.parse_extracted_data(
                 ocr_tokens=ocr_item.get("tokens", []),
                 barcode_results=b_list,
                 expected_skus=expected_skus,
-                expected_lpn=expected_lpn
+                expected_lpn=expected_lpn,
+                package_position=package_position,
+                is_single_label=True
             )
-            return idx, r_item, crop, zoomed_crop, b_list, ocr_item, roi_parsed
 
-        max_workers = 2 if len(all_rois) >= 2 else 1
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            roi_exec_results = list(executor.map(_scan_one_roi, enumerate(all_rois)))
+            r_lpn = roi_parsed.get("lpn")
+            r_sku = roi_parsed.get("sku")
+            if r_lpn:
+                if not found_pallet_lpn or (target_exp_lpn and str(r_lpn).strip().upper() == target_exp_lpn):
+                    found_pallet_lpn = r_lpn
+            if r_sku:
+                if not found_pallet_sku or (target_exp_sku and str(r_sku).strip().upper() == target_exp_sku):
+                    found_pallet_sku = r_sku
+
+            roi_exec_results.append((idx, r_item, crop, zoomed_crop, b_list, ocr_item, roi_parsed))
 
         roi_exec_results.sort(key=lambda x: x[0])
 
@@ -253,10 +305,27 @@ class AiOcrPipeline:
             if return_images_base64:
                 annotated_crops_for_grid.append(annotated_crop)
 
+            r_box = r_item.get("bbox", [0, 0, 0, 0])
+            r_w = r_box[2] if len(r_box) >= 4 else 0
+            r_h = r_box[3] if len(r_box) >= 4 else 0
+            r_asp = float(r_w) / float(r_h) if r_h > 0 else 1.0
+            r_tokens = ocr_item.get("tokens", [])
+            has_rot_token = any(tok.get("rotation_deg") in (90, 270) for tok in r_tokens)
+            applied_rot = ocr_item.get("applied_rotation", 0)
+            is_vertical = bool(r_asp < 0.88 or has_rot_token or applied_rot in (90, 270))
+            orientation = "vertical" if is_vertical else "horizontal"
+            label_category = "top_roof" if is_vertical else "pallet_standing"
+            category_name = "Top nóc" if is_vertical else "Pallet đứng"
+
             roi_info = {
                 "label_id": len(roi_details) + 1,
                 "bbox": r_item.get("bbox", []),
                 "area": r_item.get("area", 0),
+                "is_vertical": is_vertical,
+                "orientation": orientation,
+                "label_category": label_category,
+                "category_name": category_name,
+                "applied_rotation": applied_rot,
                 "tokens": r_tokens,
                 "barcodes": r_barcodes,
                 "extracted_lpn": roi_parsed.get("lpn"),
@@ -356,8 +425,19 @@ class AiOcrPipeline:
         )
         time_metrics["parsing_ms"] = round((time.time() - t_parse_start) * 1000, 1)
 
-        # 8. Quét bổ trợ toàn ảnh nếu chưa tìm thấy cả 2 mã hoặc thiếu LPN
-        if (extracted_data.get("sku") is None or (extracted_data.get("lpn") is None and expected_lpn)) and auto_crop and (roi_img.shape[0] < orig_img.shape[0] or roi_img.shape[1] < orig_img.shape[1]):
+        # 8. Quét bổ trợ toàn ảnh: Kích hoạt khi còn thiếu bất kỳ mã LPN hoặc SKU mục tiêu nào
+        has_matched_both = bool(extracted_data.get("lpn") and extracted_data.get("sku"))
+        has_exp_lpn_match = bool(expected_lpn and extracted_data.get("lpn") and str(extracted_data["lpn"]).strip() == str(expected_lpn).strip())
+        has_exp_sku_match = bool(expected_skus and expected_skus[0] and extracted_data.get("sku") and str(extracted_data["sku"]).strip().upper() == str(expected_skus[0]).strip().upper())
+        if expected_lpn and expected_skus:
+            need_fallback = not (has_exp_lpn_match and has_exp_sku_match)
+        elif expected_lpn:
+            need_fallback = not has_exp_lpn_match
+        elif expected_skus:
+            need_fallback = not has_exp_sku_match
+        else:
+            need_fallback = not has_matched_both
+        if need_fallback and auto_crop and (roi_img.shape[0] < orig_img.shape[0] or roi_img.shape[1] < orig_img.shape[1]):
             t_fallback_start = time.time()
             full_ocr_res = self.ocr_engine.recognize_text(
                 orig_img,
@@ -403,14 +483,17 @@ class AiOcrPipeline:
 
         # 9. Đồng bộ hóa tuyệt đối 100% giữa kết quả trích xuất và các con tem bóc tách (roi_details)
         roi_lpns = [r["extracted_lpn"] for r in roi_details if r.get("extracted_lpn")]
-        has_wh_roi = any(LabelDataParser.is_warehouse_lpn(x) for x in roi_lpns)
-        if has_wh_roi:
-            roi_lpns = [x for x in roi_lpns if LabelDataParser.is_warehouse_lpn(x)]
 
-        roi_skus = [
-            r["extracted_sku"].strip("-:;,. #*!_/") for r in roi_details
-            if r.get("extracted_sku") and LabelDataParser.is_valid_sku_candidate(r["extracted_sku"].strip("-:;,. #*!_/"))
-        ]
+        roi_skus = []
+        for r in roi_details:
+            s_val = r.get("extracted_sku")
+            if s_val:
+                s_clean = LabelDataParser.normalize_sku(str(s_val).strip("-:;,. #*!_/"))
+                if expected_skus:
+                    s_clean = LabelDataParser.calibrate_sku_with_expected(s_clean, expected_skus)
+                if LabelDataParser.is_valid_sku_candidate(s_clean):
+                    r["extracted_sku"] = s_clean
+                    roi_skus.append(s_clean)
 
         if roi_lpns:
             clean_roi_lpns = list(dict.fromkeys(roi_lpns))
@@ -424,11 +507,6 @@ class AiOcrPipeline:
                 extracted_data["lpn_source"] = "Tem ROI Match (Expected LPN)"
             elif not extracted_data.get("lpn") or extracted_data.get("lpn") not in clean_roi_lpns:
                 extracted_data["lpn"] = clean_roi_lpns[0]
-        else:
-            if extracted_data.get("all_lpns"):
-                has_wh = any(LabelDataParser.is_warehouse_lpn(x) for x in extracted_data["all_lpns"])
-                if has_wh:
-                    extracted_data["all_lpns"] = [x for x in extracted_data["all_lpns"] if LabelDataParser.is_warehouse_lpn(x)]
 
         if roi_skus:
             clean_roi_skus = list(dict.fromkeys(roi_skus))
@@ -467,14 +545,105 @@ class AiOcrPipeline:
                     r_item["is_outlier"] = False
         else:
             extracted_data["is_mixed_sku"] = False
-            extracted_data["mixed_sku_warning"] = None
-            for r_item in roi_details:
-                r_item["is_outlier"] = False
+        # 10. Xây dựng danh sách chi tiết các mã LPN và SKU đọc được kèm số lượng, phân loại riêng rẽ theo hướng (Pallet đứng vs Top nóc)
+        exp_lpn_clean = (expected_lpn or "").strip().upper()
+        exp_sku_clean = (expected_skus[0] if expected_skus else "").strip().upper()
+
+        lpn_map = {}
+        for r in roi_details:
+            code = r.get("extracted_lpn")
+            if not code:
+                continue
+            code_clean = str(code).strip()
+            ori_type = r.get("orientation", "horizontal")
+            cat_label = "Top nóc" if ori_type == "vertical" else "Pallet đứng"
+            key = (code_clean, ori_type)
+            if key not in lpn_map:
+                lpn_map[key] = {
+                    "code": code_clean,
+                    "count": 0,
+                    "orientation": ori_type,
+                    "category_label": cat_label
+                }
+            lpn_map[key]["count"] += 1
+
+        detected_lpns_detail = []
+        for (code, ori_type), info in sorted(lpn_map.items(), key=lambda x: -x[1]["count"]):
+            is_m = bool(exp_lpn_clean and code.upper() == exp_lpn_clean)
+            is_vert = (ori_type == "vertical")
+
+            if is_m:
+                reason = "Khớp CSDL"
+            else:
+                if exp_lpn_clean:
+                    reason = f"Lệch mã: CSDL là {exp_lpn_clean} (Thùng khác dán cạnh)"
+                else:
+                    reason = "Không có mã LPN trong CSDL để đối chiếu"
+
+            detected_lpns_detail.append({
+                "code": code,
+                "count": info["count"],
+                "is_match": is_m,
+                "orientation": ori_type,
+                "category_label": info["category_label"],
+                "match_reason": reason
+            })
+
+        sku_map = {}
+        for r in roi_details:
+            code = r.get("extracted_sku")
+            if not code:
+                continue
+            code_clean = str(code).strip("-:;,. #*!_/")
+            if exp_sku_clean:
+                code_clean = LabelDataParser.calibrate_sku_with_expected(code_clean, [exp_sku_clean])
+            ori_type = r.get("orientation", "horizontal")
+            cat_label = "Top nóc" if ori_type == "vertical" else "Pallet đứng"
+            key = (code_clean, ori_type)
+            if key not in sku_map:
+                sku_map[key] = {
+                    "code": code_clean,
+                    "count": 0,
+                    "orientation": ori_type,
+                    "category_label": cat_label
+                }
+            sku_map[key]["count"] += 1
+
+        detected_skus_detail = []
+        for (code, ori_type), info in sorted(sku_map.items(), key=lambda x: -x[1]["count"]):
+            is_m = bool(exp_sku_clean and code.upper() == exp_sku_clean)
+            if is_m:
+                reason = "Khớp CSDL"
+            else:
+                reason = f"Lệch mã: CSDL là {exp_sku_clean}" if exp_sku_clean else "Không có mã SKU trong CSDL để đối chiếu"
+
+            detected_skus_detail.append({
+                "code": code,
+                "count": info["count"],
+                "is_match": is_m,
+                "orientation": ori_type,
+                "category_label": info["category_label"],
+                "match_reason": reason
+            })
+
+        total_sku_detected = sum(s["count"] for s in detected_skus_detail)
+        total_lpn_detected = sum(l["count"] for l in detected_lpns_detail)
+        missing_lpn_count = max(0, total_sku_detected - total_lpn_detected)
+        
+        extracted_data["detected_lpns_detail"] = detected_lpns_detail
+        extracted_data["detected_skus_detail"] = detected_skus_detail
+        extracted_data["package_position"] = package_position
+        extracted_data["is_target_vertical"] = is_target_vertical
+        extracted_data["package_orientation"] = "vertical" if is_target_vertical else "horizontal"
+        extracted_data["package_orientation_label"] = "Kiện để dọc (Top nóc)" if is_target_vertical else "Kiện để ngang (Pallet đứng)"
+        extracted_data["missing_lpn_count"] = missing_lpn_count
+        if missing_lpn_count > 0:
+            extracted_data["missing_lpn_note"] = f"Phát hiện {total_sku_detected} thùng SKU nhưng chỉ đọc được {total_lpn_detected} mã LPN ({missing_lpn_count} thùng còn lại tem LPN bị mờ hoặc bóng lóa)"
 
         # Xác định engine cụ thể cho LPN và SKU
         if extracted_data.get("lpn"):
             cur_lpn = extracted_data["lpn"]
-            if any(b.get("data") == cur_lpn for b in all_barcodes):
+            if any(((b.get("data") if isinstance(b, dict) else str(b)) == cur_lpn) for b in all_barcodes):
                 extracted_data["lpn_engine"] = "1D Barcode (Code128)"
             else:
                 matching_tok = next((t for t in all_tokens if cur_lpn in t.get("text", "")), None)
@@ -491,7 +660,7 @@ class AiOcrPipeline:
             cur_sku = extracted_data["sku"]
             if "Deduction" in str(extracted_data.get("sku_source", "")):
                 extracted_data["sku_engine"] = "Suy Luận Quy Cách (Descriptor)"
-            elif any(b.get("data") == cur_sku for b in all_barcodes):
+            elif any(((b.get("data") if isinstance(b, dict) else str(b)) == cur_sku) for b in all_barcodes):
                 extracted_data["sku_engine"] = "1D Barcode (UPC)"
             else:
                 cur_sku_norm = cur_sku.replace("-", "").upper()

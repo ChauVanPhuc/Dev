@@ -97,19 +97,31 @@ def get_containers_rows(
         where_clauses.append("(c.date_loading <= :e_date OR c.date_loading_raw <= :e_date)")
 
     if year and year.strip():
-        y_str = year.strip()
-        if y_str.isdigit():
-            params["year"] = int(y_str)
-            params["year_str"] = f"%{y_str}%"
-            where_clauses.append("(YEAR(c.date_loading) = :year OR c.date_loading_raw LIKE :year_str OR c.timestamp_raw LIKE :year_str)")
+        y_digits = "".join(ch for ch in year.strip() if ch.isdigit())
+        if y_digits:
+            params["year"] = int(y_digits)
+            params["year_str"] = f"%{y_digits}%"
+            where_clauses.append("""(
+                (c.date_loading IS NOT NULL AND YEAR(c.date_loading) = :year)
+                OR (c.date_loading IS NULL AND (c.date_loading_raw LIKE :year_str OR c.timestamp_raw LIKE :year_str))
+            )""")
 
     if month and month.strip():
-        m_val = month.replace("Tháng", "").replace("tháng", "").strip()
-        if m_val.isdigit():
-            params["month"] = int(m_val)
-            params["month_str1"] = f"%/{m_val}/%"
-            params["month_str2"] = f"%/{int(m_val):02d}/%"
-            where_clauses.append("(MONTH(c.date_loading) = :month OR c.date_loading_raw LIKE :month_str1 OR c.date_loading_raw LIKE :month_str2)")
+        m_digits = "".join(ch for ch in month.strip() if ch.isdigit())
+        if m_digits:
+            m_int = int(m_digits)
+            params["month"] = m_int
+            params["month_str1"] = f"{m_int}/%"
+            params["month_str2"] = f"{m_int:02d}/%"
+            params["month_iso"] = f"%-{m_int:02d}-%"
+            where_clauses.append("""(
+                (c.date_loading IS NOT NULL AND MONTH(c.date_loading) = :month)
+                OR (c.date_loading IS NULL AND (
+                    c.date_loading_raw LIKE :month_str1 
+                    OR c.date_loading_raw LIKE :month_str2 
+                    OR c.date_loading_raw LIKE :month_iso
+                ))
+            )""")
 
     where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
@@ -303,6 +315,33 @@ def get_containers_cards(
         params["e_date"] = e_date
         where_clauses.append("(c.date_loading <= :e_date OR c.date_loading_raw <= :e_date)")
 
+    if year and year.strip():
+        y_digits = "".join(ch for ch in year.strip() if ch.isdigit())
+        if y_digits:
+            params["year"] = int(y_digits)
+            params["year_str"] = f"%{y_digits}%"
+            where_clauses.append("""(
+                (c.date_loading IS NOT NULL AND YEAR(c.date_loading) = :year)
+                OR (c.date_loading IS NULL AND (c.date_loading_raw LIKE :year_str OR c.timestamp_raw LIKE :year_str))
+            )""")
+
+    if month and month.strip():
+        m_digits = "".join(ch for ch in month.strip() if ch.isdigit())
+        if m_digits:
+            m_int = int(m_digits)
+            params["month"] = m_int
+            params["month_str1"] = f"{m_int}/%"
+            params["month_str2"] = f"{m_int:02d}/%"
+            params["month_iso"] = f"%-{m_int:02d}-%"
+            where_clauses.append("""(
+                (c.date_loading IS NOT NULL AND MONTH(c.date_loading) = :month)
+                OR (c.date_loading IS NULL AND (
+                    c.date_loading_raw LIKE :month_str1 
+                    OR c.date_loading_raw LIKE :month_str2 
+                    OR c.date_loading_raw LIKE :month_iso
+                ))
+            )""")
+
     where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
     # Count
@@ -334,7 +373,7 @@ def get_containers_cards(
             (SELECT COUNT(DISTINCT i.lpn) FROM lpn_items i WITH (NOLOCK) WHERE i.container_id = c.id AND i.lpn IS NOT NULL AND LTRIM(RTRIM(i.lpn)) != '' AND i.lpn != 'None' AND i.lpn != '0') as lpn_count,
             (SELECT COUNT(DISTINCT i.sku) FROM lpn_items i WITH (NOLOCK) WHERE i.container_id = c.id AND i.sku IS NOT NULL AND LTRIM(RTRIM(i.sku)) != '' AND i.sku != 'None' AND i.sku != '0') as sku_count,
             (SELECT COUNT(*) FROM lpn_items i WITH (NOLOCK) WHERE i.container_id = c.id) as total_items,
-            (SELECT COUNT(DISTINCT CONCAT(CAST(img.lpn_item_id AS VARCHAR(30)), '_', ISNULL(img.image_hash, CAST(img.id AS VARCHAR(30))))) FROM lpn_images img WITH (NOLOCK) WHERE img.container_id = c.id AND (
+            (SELECT COUNT(*) FROM lpn_images img WITH (NOLOCK) WHERE img.container_id = c.id AND (
                 (img.local_path IS NOT NULL AND LTRIM(RTRIM(img.local_path)) != '' AND img.local_path != 'None')
                 OR (img.source_url IS NOT NULL AND LTRIM(RTRIM(img.source_url)) != '' AND img.source_url != 'None')
             )) as total_images,

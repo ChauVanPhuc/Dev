@@ -4,8 +4,11 @@ import path from 'path'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react()
+  ],
   resolve: {
+    dedupe: ['react', 'react-dom', 'react-router-dom', 'lucide-react', 'axios', 'recharts', 'xlsx', 'zustand'],
     alias: {
       '@shared': path.resolve(__dirname, './shared'),
       '@web': path.resolve(__dirname, './Web'),
@@ -29,7 +32,17 @@ export default defineConfig({
       '@modules/production': path.resolve(__dirname, './Web/modules/Production'),
       '@modules/Production': path.resolve(__dirname, './Web/modules/Production'),
       '@modules/report': path.resolve(__dirname, './Web/modules/Report'),
-      '@modules/system': path.resolve(__dirname, './Web/modules/System')
+      '@modules/system': path.resolve(__dirname, './Web/modules/System'),
+      '@lpn': path.resolve(__dirname, '../lpn_crawler/frontend'),
+      '@ai-ocr': path.resolve(__dirname, '../lpn_crawler/ai_ocr_train/frontend'),
+      '@dashboard': path.resolve(__dirname, '../dashboard/frontend'),
+      '@claim': path.resolve(__dirname, '../Claim/FrontEnd/src/modules/claim'),
+      '@price': path.resolve(__dirname, '../Claim/FrontEnd/src/modules/price'),
+      '@defect': path.resolve(__dirname, '../Claim/FrontEnd/src/modules/defect'),
+      '@/modules/claim': path.resolve(__dirname, '../Claim/FrontEnd/src/modules/claim'),
+      '@/modules/price': path.resolve(__dirname, '../Claim/FrontEnd/src/modules/price'),
+      '@/modules': path.resolve(__dirname, '../Claim/FrontEnd/src/modules'),
+      '@/shared': path.resolve(__dirname, '../Claim/FrontEnd/src/shared')
     }
   },
   server: {
@@ -37,20 +50,57 @@ export default defineConfig({
     port: 5173,
     open: false,
     allowedHosts: true,
-    watch: {
-      usePolling: true
+    hmr: false,
+    watch: null,
+    fs: {
+      strict: false,
+      allow: [
+        path.resolve(__dirname, '..')
+      ]
     },
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
-        changeOrigin: true
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('error', (err, _req, res) => {
+            if (err && err.code === 'ECONNREFUSED') {
+              if (res && typeof res.writeHead === 'function' && !res.headersSent) {
+                res.writeHead(503, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                  error: 'Backend Starting Up',
+                  message: 'Máy chủ Backend đang khởi động hoặc chưa sẵn sàng. Vui lòng thử lại sau vài giây.'
+                }));
+              }
+            }
+          });
+        }
       },
       '/static': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true
       },
       '/uploads': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true
+      }
+    }
+  },
+  preview: {
+    port: 5173,
+    host: "0.0.0.0",
+    allowedHosts: true,
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true
+      },
+      '/static': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true
+      },
+      '/uploads': {
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true
       }
     }

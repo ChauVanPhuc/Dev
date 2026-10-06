@@ -96,6 +96,7 @@ export const LpnFilterBar = ({
     top: 'calc(100% + 4px)',
     left: 0,
     width,
+    maxWidth: 'min(92vw, 380px)',
     backgroundColor: '#FFFFFF',
     border: '1px solid #EADCC9',
     borderRadius: '8px',

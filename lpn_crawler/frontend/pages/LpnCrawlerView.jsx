@@ -187,6 +187,14 @@ export default function LpnCrawlerView() {
     fetchKpiStats();
   }, [page, pageSize, filters, sortOption, viewMode]);
 
+  // Tự động đồng bộ số liệu KPI ngoài màn hình mỗi 10 giây
+  useEffect(() => {
+    const timer = setInterval(() => {
+      fetchKpiStats();
+    }, 10000);
+    return () => clearInterval(timer);
+  }, []);
+
   // Auto show monitor popup if job is active upon entering screen
   useEffect(() => {
     if (currentJob && (currentJob.status === 'running' || currentJob.status === 'pending')) {
@@ -207,10 +215,32 @@ export default function LpnCrawlerView() {
         if (rawLogs.length > 0) {
           const cLogs = [];
           const oLogs = [];
-          rawLogs.forEach((l) => {
+          const normalizedLogs = rawLogs.map((l) => {
+            if (typeof l === 'object' && l !== null) {
+              let ts = l.timestamp;
+              if (!ts && l.created_at) {
+                const s = String(l.created_at);
+                const match = s.match(/(\d{2}:\d{2}:\d{2})/);
+                if (match) {
+                  ts = match[1];
+                } else {
+                  try {
+                    const d = new Date(s);
+                    if (!isNaN(d.getTime())) {
+                      ts = d.toLocaleTimeString('vi-VN', { hour12: false });
+                    }
+                  } catch (e) {}
+                }
+              }
+              return { ...l, timestamp: ts };
+            }
+            return l;
+          });
+
+          normalizedLogs.forEach((l) => {
             const isOcr = (typeof l === 'object' && l !== null && l.source === 'ai_ocr') ||
-              (typeof l === 'string' && (l.startsWith('[AI OCR]') || l.startsWith('[AI OCR Lỗi]'))) ||
-              (typeof l === 'object' && l?.message && (l.message.startsWith('[AI OCR]') || l.message.startsWith('[AI OCR Lỗi]')));
+              (typeof l === 'string' && (l.includes('[AI OCR]') || l.includes('[AI OCR Lỗi]') || l.includes('Dual-Engine'))) ||
+              (typeof l === 'object' && l?.message && (l.message.includes('[AI OCR]') || l.message.includes('[AI OCR Lỗi]') || l.message.includes('Dual-Engine')));
             if (isOcr) {
               oLogs.push(l);
             } else {
@@ -219,7 +249,7 @@ export default function LpnCrawlerView() {
           });
           setCrawlerLogs(cLogs.slice(-500));
           setOcrLogs(oLogs.slice(-500));
-          setLiveLogs(rawLogs.slice(-500));
+          setLiveLogs(normalizedLogs.slice(-500));
         }
       }).catch((e) => console.warn('[LpnCrawlerView] Lỗi nạp log lịch sử:', e));
 
@@ -263,14 +293,27 @@ export default function LpnCrawlerView() {
         }
       },
       (log) => {
-        setLiveLogs((prev) => [...prev, log].slice(-500));
-        const isOcr = (typeof log === 'object' && log !== null && log.source === 'ai_ocr') ||
-          (typeof log === 'string' && (log.startsWith('[AI OCR]') || log.startsWith('[AI OCR Lỗi]'))) ||
-          (typeof log === 'object' && log?.message && (log.message.startsWith('[AI OCR]') || log.message.startsWith('[AI OCR Lỗi]')));
+        let normalizedLog = log;
+        if (typeof log === 'string') {
+          normalizedLog = {
+            message: log,
+            timestamp: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+          };
+        } else if (typeof log === 'object' && log !== null && !log.timestamp && !log.created_at) {
+          normalizedLog = {
+            ...log,
+            timestamp: new Date().toLocaleTimeString('vi-VN', { hour12: false })
+          };
+        }
+
+        setLiveLogs((prev) => [...prev, normalizedLog].slice(-500));
+        const isOcr = (typeof normalizedLog === 'object' && normalizedLog !== null && normalizedLog.source === 'ai_ocr') ||
+          (typeof normalizedLog === 'string' && (normalizedLog.includes('[AI OCR]') || normalizedLog.includes('[AI OCR Lỗi]') || normalizedLog.includes('Dual-Engine'))) ||
+          (typeof normalizedLog === 'object' && normalizedLog?.message && (normalizedLog.message.includes('[AI OCR]') || normalizedLog.message.includes('[AI OCR Lỗi]') || normalizedLog.message.includes('Dual-Engine')));
         if (isOcr) {
-          setOcrLogs((prev) => [...prev, log].slice(-500));
+          setOcrLogs((prev) => [...prev, normalizedLog].slice(-500));
         } else {
-          setCrawlerLogs((prev) => [...prev, log].slice(-500));
+          setCrawlerLogs((prev) => [...prev, normalizedLog].slice(-500));
         }
       },
       (st) => {
@@ -328,6 +371,11 @@ export default function LpnCrawlerView() {
         if (ocrEvt?.data) {
           setSyncOcrLatest(ocrEvt.data);
           setSyncOcrLiveFeed((prev) => [...prev, ocrEvt.data].slice(-100));
+          // Định kỳ cập nhật lại KPI và Danh Sách Thiếu/Lệch khi AI OCR khớp dữ liệu
+          const scanned = ocrEvt.data?.stats?.total_scanned || 0;
+          if (scanned % 5 === 0 || ocrEvt.data?.is_missing_recheck) {
+            fetchKpiStats();
+          }
         }
       }
     );
@@ -362,11 +410,11 @@ export default function LpnCrawlerView() {
   const fetchContainers = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const activeFilters = filters;
-      const activeSort = sortOption;
-      const activePage = page;
-      const activePageSize = pageSize;
-      const currentMode = viewMode;
+      const activeFilters = filtersRef.current || filters;
+      const activeSort = sortOptionRef.current || sortOption;
+      const activePage = pageRef.current || page;
+      const activePageSize = pageSizeRef.current || pageSize;
+      const currentMode = viewModeRef.current || viewMode;
 
       if (currentMode === 'cards') {
         const res = await lpnCrawlerApi.getContainerCards({
@@ -375,6 +423,7 @@ export default function LpnCrawlerView() {
           page: activePage,
           page_size: activePageSize || 24
         });
+        if (viewModeRef.current !== 'cards') return;
         setItems(res.items || []);
         setTotal(res.total || 0);
       } else {
@@ -384,6 +433,7 @@ export default function LpnCrawlerView() {
           page: activePage,
           page_size: activePageSize || 15
         });
+        if (viewModeRef.current !== 'table') return;
         setItems(res.items || []);
         setTotal(res.total || 0);
       }
@@ -853,6 +903,11 @@ export default function LpnCrawlerView() {
           onClose={() => {
             setSelectedItem(null);
             setSelectedItemsList([]);
+            fetchKpiStats();
+          }}
+          onResolveSuccess={() => {
+            fetchKpiStats();
+            fetchContainers(true);
           }}
         />
       )}
@@ -865,9 +920,12 @@ export default function LpnCrawlerView() {
           endDate={missingRowsConfig.endDate}
           dateRangeLabel={missingRowsConfig.dateRangeLabel}
           isAllTime={missingRowsConfig.isAllTime}
-          onClose={() => setMissingRowsConfig(prev => ({ ...prev, isOpen: false }))}
-          onSelectItem={(itemId) => {
+          onClose={() => {
             setMissingRowsConfig(prev => ({ ...prev, isOpen: false }));
+            fetchKpiStats();
+          }}
+          onRefreshKpi={fetchKpiStats}
+          onSelectItem={(itemId) => {
             handleSelectItem(itemId);
           }}
           onStartCrawl={(force, mode) => {

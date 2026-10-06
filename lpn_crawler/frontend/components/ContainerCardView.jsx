@@ -144,13 +144,18 @@ export const ContainerCardView = ({
             <div style={{ fontSize: '0.82rem' }}>Không có bản ghi nào phù hợp với điều kiện tìm kiếm.</div>
           </div>
         ) : (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))',
-            gap: '12px',
-            alignItems: 'stretch'
-          }}>
-            {items.map((card) => {
+          <div
+            className="lpn-card-grid"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))',
+              gap: '12px',
+              alignItems: 'stretch'
+            }}
+          >
+            {items
+              .filter((card) => card && (card.total_items !== undefined || !card.item_id))
+              .map((card, idx) => {
               const imgUrl = resolveImgUrl(card.first_image);
               const formattedDate = card.date_loading || formatDateMDY(card.date_loading_raw) || card.date_loading_raw || '—';
               
@@ -160,7 +165,7 @@ export const ContainerCardView = ({
 
               return (
                 <div
-                  key={card.container_id || card.container_number}
+                  key={`container-card-${card.container_id || idx}`}
                   onClick={() => onSelectContainer ? onSelectContainer(card) : onSelectItem(card)}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.transform = 'translateY(-2px)';

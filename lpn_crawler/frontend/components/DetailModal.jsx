@@ -3,6 +3,7 @@ import { X, ChevronLeft, ChevronRight, Cpu, Sparkles, RefreshCw, CheckCircle2, A
 import { formatDateMDY } from '../utils/formatters';
 import { ImageLightboxModal } from './ImageLightboxModal';
 import { ImageCanvas } from '../../ai_ocr_train/frontend/components/ImageCanvas';
+import { lpnCrawlerApi } from '../services/api';
 
 /**
  * DetailModal — Hiển thị chi tiết 1 item (Pallet/Box).
@@ -23,7 +24,7 @@ const formatProcessingTime = (ms) => {
   return `${mins} phút ${secs > 0 ? `${secs} giây` : ''}`.trim();
 };
 
-export const DetailModal = ({ item, itemsList = [], onNavigate, onClose }) => {
+export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResolveSuccess }) => {
   const [selectedImage, setSelectedImage] = useState(null);
   const [activeImgIdx, setActiveImgIdx] = useState(0);
 
@@ -35,6 +36,46 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose }) => {
   const [models, setModels] = useState([]);
   const [selectedAiModel, setSelectedAiModel] = useState('hybrid_epoch15');
   const inspectorCacheRef = useRef({});
+
+  // Resolution Action States
+  const [isResolving, setIsResolving] = useState(false);
+  const [showUnresolvedPrompt, setShowUnresolvedPrompt] = useState(false);
+  const [unresolvedReason, setUnresolvedReason] = useState('');
+  const [resolveFeedback, setResolveFeedback] = useState(null);
+
+  const handleResolveAction = async (status, note = '') => {
+    const currentItemId = item?.id || item?.item_id;
+    if (!currentItemId) return;
+    if (status === 'unresolved' && !note.trim()) {
+      alert('Vui lòng nhập lý do không thể xử lý dòng này.');
+      return;
+    }
+    setIsResolving(true);
+    try {
+      const res = await lpnCrawlerApi.resolveItem(currentItemId, status, note.trim());
+      if (res && res.success) {
+        setResolveFeedback(
+          status === 'resolved'
+            ? 'Đã đánh dấu xử lý thành công.'
+            : 'Đã chuyển vào danh sách không xử lý được.'
+        );
+        setShowUnresolvedPrompt(false);
+        setTimeout(() => {
+          if (onResolveSuccess) {
+            onResolveSuccess(status, item);
+          } else {
+            onClose();
+          }
+        }, 500);
+      } else {
+        alert(res?.message || 'Lỗi khi cập nhật trạng thái.');
+      }
+    } catch (err) {
+      alert('Lỗi: ' + (err.message || 'Không thể cập nhật trạng thái'));
+    } finally {
+      setIsResolving(false);
+    }
+  };
 
   // Load danh sách model checkpoints
   useEffect(() => {
@@ -69,11 +110,13 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose }) => {
   const loadAiResult = async (itemId) => {
     setIsLoadingAi(true);
     setAiScanError(null);
+    let hasResult = false;
     try {
       let res = await fetch(`/api/v1/lpn-crawler/ai-ocr/item-result/${itemId}`);
       if (!res.ok) res = await fetch(`/api/ai-ocr/item-result/${itemId}`);
       const data = await res.json();
       if (data && data.has_result) {
+        hasResult = true;
         setAiResult(data);
         if (data.model_id) {
           setSelectedAiModel(data.model_id);
@@ -86,6 +129,10 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose }) => {
       setAiResult(null);
     } finally {
       setIsLoadingAi(false);
+      // Chỉ tải chi tiết Inspector nếu người dùng đang bật xem Inspector
+      if (hasResult && showPipelineInspector) {
+        fetchInspectorAnalysis(false);
+      }
     }
   };
 
@@ -97,29 +144,28 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose }) => {
     inspectorCacheRef.current = {};
     setInspectorAnalysis(null);
     try {
+      const scanPayload = {
+        item_id: currentItemId,
+        model_id: selectedAiModel || undefined,
+        package_position: item?.suffix_key || item?.record_type || undefined
+      };
       let res = await fetch('/api/v1/lpn-crawler/ai-ocr/scan-single-item', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          item_id: currentItemId,
-          model_id: selectedAiModel || undefined
-        })
+        body: JSON.stringify(scanPayload)
       });
       if (!res.ok) {
         res = await fetch('/api/ai-ocr/scan-single-item', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            item_id: currentItemId,
-            model_id: selectedAiModel || undefined
-          })
+          body: JSON.stringify(scanPayload)
         });
       }
       const data = await res.json();
       if (data && (data.success || data.has_result)) {
         setAiResult(data);
         if (showPipelineInspector) {
-          fetchInspectorAnalysis(true);
+          fetchInspectorAnalysis(false);
         }
       } else {
         setAiScanError(data.detail || data.error || 'Quét thất bại hoặc không nhận diện được nhãn');
@@ -163,7 +209,8 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose }) => {
         model_id: selectedAiModel || undefined,
         force_refresh: Boolean(forceRefresh),
         expected_lpn: item?.lpn || undefined,
-        expected_sku: item?.sku || undefined
+        expected_sku: item?.sku || undefined,
+        package_position: item?.suffix_key || item?.record_type || undefined
       };
       let res = await fetch('/api/v1/lpn-crawler/ai-ocr/analyze', {
         method: 'POST',
@@ -193,28 +240,43 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose }) => {
           roiList.forEach((r) => {
             const rawSku = r.extracted_sku || r.extracted?.sku || '';
             const sCode = typeof rawSku === 'string' ? rawSku.replace(/^[-:;,. #*!_/]+|[-:;,. #*!_/]+$/g, '') : rawSku;
+            const rRot = r.rotation_deg ?? r.rotation ?? 0;
+            const rOrient = r.orientation || ((rRot === 90 || rRot === 270 || r.crop_mode === 'vertical_rois') ? 'vertical' : 'horizontal');
+            const rawCat = r.category_name || '';
+            const rCat = (rawCat.toLowerCase().includes('top') || rOrient === 'vertical') ? 'Top nóc' : 'Pallet đứng';
+
             if (sCode) {
-              if (!skuCounts[sCode]) {
-                skuCounts[sCode] = {
+              const sKey = `${sCode}__${rOrient}`;
+              if (!skuCounts[sKey]) {
+                const isM = Boolean(expSku && sCode.toUpperCase() === expSku);
+                skuCounts[sKey] = {
                   code: sCode,
                   count: 0,
-                  is_match: Boolean(expSku && sCode.toUpperCase() === expSku)
+                  is_match: isM,
+                  orientation: rOrient,
+                  category_label: rCat,
+                  match_reason: isM ? 'Khớp CSDL' : (expSku ? `Lệch mã: CSDL là ${expSku}` : 'Không khớp CSDL')
                 };
               }
-              skuCounts[sCode].count += 1;
+              skuCounts[sKey].count += 1;
             }
 
             const rawLpn = r.extracted_lpn || r.extracted?.lpn || '';
             const lCode = typeof rawLpn === 'string' ? rawLpn.trim() : rawLpn;
             if (lCode) {
-              if (!lpnCounts[lCode]) {
-                lpnCounts[lCode] = {
+              const lKey = `${lCode}__${rOrient}`;
+              if (!lpnCounts[lKey]) {
+                const isM = Boolean(expLpn && lCode.toUpperCase() === expLpn);
+                lpnCounts[lKey] = {
                   code: lCode,
                   count: 0,
-                  is_match: Boolean(expLpn && lCode.toUpperCase() === expLpn)
+                  is_match: isM,
+                  orientation: rOrient,
+                  category_label: rCat,
+                  match_reason: isM ? 'Khớp CSDL' : (expLpn ? `Lệch mã: CSDL là ${expLpn} (Thùng khác dán cạnh)` : 'Không khớp CSDL')
                 };
               }
-              lpnCounts[lCode].count += 1;
+              lpnCounts[lKey].count += 1;
             }
           });
 
@@ -327,10 +389,14 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose }) => {
   const modalTitle = `Chi tiết ${containerPart}${skuPart}`.trim();
 
   // Navigation Logic
+  const currentItemId = item.id || item.item_id;
   const currentIndex = Array.isArray(itemsList)
-    ? itemsList.findIndex((i) =>
-      i.id && item.id ? i.id === item.id : i.suffix_key === item.suffix_key && i.container_number === item.container_number
-    )
+    ? itemsList.findIndex((i) => {
+        const iId = i.id || i.item_id;
+        return iId && currentItemId
+          ? Number(iId) === Number(currentItemId)
+          : i.suffix_key === item.suffix_key && i.container_number === item.container_number;
+      })
     : -1;
 
   const hasPrev = currentIndex > 0;
@@ -388,6 +454,17 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose }) => {
   const activeImgUrl = activeImageObj ? resolveImgUrl(activeImageObj) : '';
   const activeFallbackUrl = typeof activeImageObj === 'object' ? activeImageObj?.source_url || '' : '';
 
+  // Kiểm tra kiện hàng dán tem dọc (Top nóc / Box 10A có chữ cái đuôi) hay dán tem ngang (Pallet đứng / Box 10)
+  const isPosVertical = (() => {
+    const rawPos = item?.suffix_key || item?.record_type || '';
+    if (!rawPos) return false;
+    const s = String(rawPos).trim().toLowerCase();
+    if (/top[\s_-]*n[oó]c/.test(s) || /d[oọ]c/.test(s) || /topnoc/.test(s)) return true;
+    if (/pallet[\s_-]*[đd][uứ]ng/.test(s) || /ngang/.test(s)) return false;
+    // Box 10A, 10B, 1A (số theo sau bởi chữ cái) -> tem dán dọc
+    return Boolean(/\d+[a-z]$/i.test(s));
+  })();
+
   // Ưu tiên trích xuất từ roi_details của inspectorAnalysis nếu có, để luôn đồng nhất 100% với các tem trong Inspector
   const activeInspectorRois = inspectorAnalysis?.roi_details || inspectorAnalysis?.images?.roi_details;
   let inspectorSkusList = [];
@@ -401,16 +478,43 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose }) => {
     activeInspectorRois.forEach((r) => {
       const rawSku = r.extracted_sku || r.extracted?.sku || '';
       const sCode = typeof rawSku === 'string' ? rawSku.replace(/^[-:;,. #*!_/]+|[-:;,. #*!_/]+$/g, '') : rawSku;
+      const rRot = r.rotation_deg ?? r.rotation ?? 0;
+      const rOrient = r.orientation || ((rRot === 90 || rRot === 270 || r.crop_mode === 'vertical_rois') ? 'vertical' : 'horizontal');
+      const rawCat = r.category_name || '';
+      const rCat = (rawCat.toLowerCase().includes('top') || rOrient === 'vertical') ? 'Top nóc' : 'Pallet đứng';
+
       if (sCode) {
-        if (!sMap[sCode]) sMap[sCode] = { code: sCode, count: 0, is_match: Boolean(expSku && sCode.toUpperCase() === expSku) };
-        sMap[sCode].count += 1;
+        const sKey = `${sCode}__${rOrient}`;
+        if (!sMap[sKey]) {
+          const isM = Boolean(expSku && sCode.toUpperCase() === expSku);
+          sMap[sKey] = {
+            code: sCode,
+            count: 0,
+            is_match: isM,
+            orientation: rOrient,
+            category_label: rCat,
+            match_reason: isM ? 'Khớp CSDL' : `Lệch mã: CSDL là ${expSku}`
+          };
+        }
+        sMap[sKey].count += 1;
       }
 
       const rawLpn = r.extracted_lpn || r.extracted?.lpn || '';
       const lCode = typeof rawLpn === 'string' ? rawLpn.trim() : rawLpn;
       if (lCode) {
-        if (!lMap[lCode]) lMap[lCode] = { code: lCode, count: 0, is_match: Boolean(expLpn && lCode.toUpperCase() === expLpn) };
-        lMap[lCode].count += 1;
+        const lKey = `${lCode}__${rOrient}`;
+        if (!lMap[lKey]) {
+          const isM = Boolean(expLpn && lCode.toUpperCase() === expLpn);
+          lMap[lKey] = {
+            code: lCode,
+            count: 0,
+            is_match: isM,
+            orientation: rOrient,
+            category_label: rCat,
+            match_reason: isM ? 'Khớp CSDL' : `Lệch mã: CSDL là ${expLpn} (Thùng khác dán cạnh)`
+          };
+        }
+        lMap[lKey].count += 1;
       }
     });
     inspectorSkusList = Object.values(sMap);
@@ -455,40 +559,100 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose }) => {
   const rawLpnsList = (aiResult?.detected_lpns_detail && aiResult.detected_lpns_detail.length > 0)
     ? aiResult.detected_lpns_detail
     : aiResult?.detected_lpn
-      ? [{ code: aiResult.detected_lpn, count: 1, is_match: Boolean(aiResult.is_lpn_match) }]
+      ? [{
+          code: aiResult.detected_lpn,
+          count: 1,
+          is_match: Boolean(aiResult.is_lpn_match),
+          orientation: isPosVertical ? 'vertical' : 'horizontal',
+          category_label: isPosVertical ? 'Top nóc' : 'Pallet đứng',
+          match_reason: aiResult.is_lpn_match ? 'Khớp CSDL' : `Lệch mã: CSDL là ${expLpnClean}`
+        }]
       : [];
 
-  let baseLpnsList = (showPipelineInspector && inspectorLpnsList.length > 0)
+  const rawLpnTotal = rawLpnsList.reduce((acc, l) => acc + (l.count || 1), 0);
+  const inspectorLpnTotal = inspectorLpnsList.reduce((acc, l) => acc + (l.count || 1), 0);
+  let baseLpnsList = (inspectorLpnsList.length > 0 && inspectorLpnTotal >= rawLpnTotal)
     ? inspectorLpnsList
     : (rawLpnsList.length > 0 ? rawLpnsList : inspectorLpnsList);
+
   if (baseLpnsList.length === 0 && Array.isArray(aiResult?.all_lpns) && aiResult.all_lpns.length > 0) {
-    baseLpnsList = aiResult.all_lpns.map((code) => ({ code, count: 1 }));
+    baseLpnsList = aiResult.all_lpns.map((code) => ({
+      code,
+      count: 1,
+      orientation: isPosVertical ? 'vertical' : 'horizontal',
+      category_label: isPosVertical ? 'Top nóc' : 'Pallet đứng'
+    }));
   }
 
   // Tự động đối chiếu lại với expLpnClean để bảo đảm tính chuẩn xác 100%
-  const finalLpnsList = baseLpnsList.map((itemLpn) => ({
-    ...itemLpn,
-    is_match: isLpnCodeMatch(itemLpn.code) || Boolean(itemLpn.is_match)
-  }));
+  const finalLpnsList = baseLpnsList.map((itemLpn) => {
+    const isM = isLpnCodeMatch(itemLpn.code) || Boolean(itemLpn.is_match);
+    const itemOrient = itemLpn.orientation || (isPosVertical ? 'vertical' : 'horizontal');
+    const rawCat = itemLpn.category_label || '';
+    const itemCat = (rawCat.toLowerCase().includes('top') || itemOrient === 'vertical') ? 'Top nóc' : 'Pallet đứng';
+    let reason = itemLpn.match_reason;
+    if (!isM && !reason) {
+      reason = expLpnClean ? `Lệch mã: CSDL là ${expLpnClean} (Thùng khác dán cạnh)` : 'Mã không có trong CSDL';
+    }
+    return {
+      ...itemLpn,
+      is_match: isM,
+      orientation: itemOrient,
+      category_label: itemCat,
+      match_reason: isM ? 'Khớp CSDL' : reason
+    };
+  });
 
   const rawSkusList = (aiResult?.detected_skus_detail && aiResult.detected_skus_detail.length > 0)
     ? aiResult.detected_skus_detail
     : aiResult?.detected_sku
-      ? [{ code: aiResult.detected_sku, count: 1, is_match: Boolean(aiResult.is_sku_match) }]
+      ? [{
+          code: aiResult.detected_sku,
+          count: 1,
+          is_match: Boolean(aiResult.is_sku_match),
+          orientation: isPosVertical ? 'vertical' : 'horizontal',
+          category_label: isPosVertical ? 'Top nóc' : 'Pallet đứng',
+          match_reason: aiResult.is_sku_match ? 'Khớp CSDL' : `Lệch mã: CSDL là ${expSkuClean}`
+        }]
       : [];
 
-  let baseSkusList = (showPipelineInspector && inspectorSkusList.length > 0)
+  const rawSkuTotal = rawSkusList.reduce((acc, s) => acc + (s.count || 1), 0);
+  const inspectorSkuTotal = inspectorSkusList.reduce((acc, s) => acc + (s.count || 1), 0);
+  let baseSkusList = (inspectorSkusList.length > 0 && inspectorSkuTotal >= rawSkuTotal)
     ? inspectorSkusList
     : (rawSkusList.length > 0 ? rawSkusList : inspectorSkusList);
+
   if (baseSkusList.length === 0 && Array.isArray(aiResult?.all_skus) && aiResult.all_skus.length > 0) {
-    baseSkusList = aiResult.all_skus.map((code) => ({ code, count: 1 }));
+    baseSkusList = aiResult.all_skus.map((code) => ({
+      code,
+      count: 1,
+      orientation: isPosVertical ? 'vertical' : 'horizontal',
+      category_label: isPosVertical ? 'Top nóc' : 'Pallet đứng'
+    }));
   }
 
   // Tự động đối chiếu lại với expSkuClean để bảo đảm tính chuẩn xác 100%
-  const finalSkusList = baseSkusList.map((itemSku) => ({
-    ...itemSku,
-    is_match: isSkuCodeMatch(itemSku.code) || Boolean(itemSku.is_match)
-  }));
+  const finalSkusList = baseSkusList.map((itemSku) => {
+    const isM = isSkuCodeMatch(itemSku.code) || Boolean(itemSku.is_match);
+    const itemOrient = itemSku.orientation || (isPosVertical ? 'vertical' : 'horizontal');
+    const rawCat = itemSku.category_label || '';
+    const itemCat = (rawCat.toLowerCase().includes('top') || itemOrient === 'vertical') ? 'Top nóc' : 'Pallet đứng';
+    let reason = itemSku.match_reason;
+    if (!isM && !reason) {
+      reason = expSkuClean ? `Lệch mã: CSDL là ${expSkuClean}` : 'Mã không có trong CSDL';
+    }
+    return {
+      ...itemSku,
+      is_match: isM,
+      orientation: itemOrient,
+      category_label: itemCat,
+      match_reason: isM ? 'Khớp CSDL' : reason
+    };
+  });
+
+  const totalDetectedLpns = finalLpnsList.reduce((acc, l) => acc + (l.count || 1), 0);
+  const totalDetectedSkus = finalSkusList.reduce((acc, s) => acc + (s.count || 1), 0);
+  const missingLpnCount = Math.max(0, totalDetectedSkus - totalDetectedLpns);
 
   return (
     <>
@@ -513,6 +677,7 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose }) => {
       >
         {/* WRAPPER CHỨA MODAL VÀ 2 NÚT ĐIỀU HƯỚNG TRÒN 2 BÊN */}
         <div
+          className="lpn-detail-wrapper"
           style={{
             position: 'relative',
             display: 'flex',
@@ -525,6 +690,7 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose }) => {
           {hasPrev && (
             <button
               type="button"
+              className="lpn-modal-nav-btn prev"
               onClick={handlePrev}
               style={{
                 position: 'absolute',
@@ -563,95 +729,153 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose }) => {
 
           {/* NỘI DUNG CHÍNH CỦA MODAL POPUP (KÍCH THƯỚC CỐ ĐỊNH, ĐỒNG ĐỀU) */}
           <div
+            className="lpn-detail-dialog"
             style={{
               background: '#FAF6F0',
               borderRadius: '12px',
-              width: 'min(calc(100vw - 120px), 1260px)',
+              width: 'min(calc(100vw - 40px), 1460px)',
+              maxHeight: '94vh',
               overflow: 'hidden',
               boxShadow: '0 25px 60px rgba(45, 26, 18, 0.22), 0 6px 20px rgba(123, 82, 51, 0.1)',
               display: 'flex',
               flexDirection: 'column',
               border: '1px solid #EADCC9',
-              animation: 'modalScaleUp 0.18s ease-out forwards'
+              animation: 'modalScaleUp 0.18s ease-out forwards',
+              position: 'relative'
             }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* 1. HEADER */}
             <div
               style={{
-                padding: '14px 20px',
+                padding: '12px 18px',
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 borderBottom: '1px solid #EADCC9',
                 background: '#FAF6F0',
-                flexShrink: 0
+                flexShrink: 0,
+                gap: '10px'
               }}
             >
-              <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
                 <h2
                   style={{
-                    fontSize: '1.18rem',
+                    fontSize: '1.12rem',
                     fontWeight: '800',
                     color: '#2D1A12',
                     margin: 0,
-                    lineHeight: 1.2
+                    lineHeight: 1.2,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap'
                   }}
+                  title={modalTitle}
                 >
                   {modalTitle}
                 </h2>
               </div>
 
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onClose();
-                }}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  width: '32px',
-                  height: '32px',
-                  cursor: 'pointer',
-                  color: '#7B5233',
-                  borderRadius: '6px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'all 0.15s ease'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = '#EADCC9';
-                  e.currentTarget.style.color = '#2D1A12';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'none';
-                  e.currentTarget.style.color = '#7B5233';
-                }}
-                title="Đóng"
-              >
-                <X size={20} strokeWidth={2.5} />
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                {/* Mobile Prev / Next Arrows ngay trong header */}
+                <div className="lpn-mobile-only" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <button
+                    type="button"
+                    onClick={handlePrev}
+                    disabled={!hasPrev}
+                    style={{
+                      background: '#FFFFFF',
+                      border: '1px solid #EADCC9',
+                      borderRadius: '6px',
+                      width: '32px',
+                      height: '32px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: hasPrev ? '#7B5233' : '#D1D5DB',
+                      cursor: hasPrev ? 'pointer' : 'not-allowed'
+                    }}
+                    title="Trước"
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleNext}
+                    disabled={!hasNext}
+                    style={{
+                      background: '#FFFFFF',
+                      border: '1px solid #EADCC9',
+                      borderRadius: '6px',
+                      width: '32px',
+                      height: '32px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: hasNext ? '#7B5233' : '#D1D5DB',
+                      cursor: hasNext ? 'pointer' : 'not-allowed'
+                    }}
+                    title="Sau"
+                  >
+                    <ChevronRight size={18} />
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onClose();
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    width: '32px',
+                    height: '32px',
+                    cursor: 'pointer',
+                    color: '#7B5233',
+                    borderRadius: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = '#EADCC9';
+                    e.currentTarget.style.color = '#2D1A12';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'none';
+                    e.currentTarget.style.color = '#7B5233';
+                  }}
+                  title="Đóng"
+                >
+                  <X size={20} strokeWidth={2.5} />
+                </button>
+              </div>
             </div>
 
             {/* 2. BODY */}
             <div
               style={{
-                padding: '16px 20px',
-                backgroundColor: '#FAF6F0'
+                padding: '14px 16px',
+                backgroundColor: '#FAF6F0',
+                overflowY: 'auto',
+                flex: 1
               }}
             >
               <div
+                className="lpn-detail-grid"
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(310px, 1fr))',
+                  gridTemplateColumns: '290px minmax(320px, 1fr) minmax(460px, 1.35fr)',
                   gap: '16px',
-                  alignItems: 'stretch' // Cân đối đồng đều chiều cao hoàn hảo giữa 3 cột
+                  alignItems: 'stretch'
                 }}
               >
-                {/* CỘT TRÁI: 2 BẢNG THÔNG TIN CÂN ĐỐI (CỐ ĐỊNH 350PX) */}
+                {/* CỘT TRÁI: 2 BẢNG THÔNG TIN CÂN ĐỐI */}
                 <div
+                  className="lpn-detail-col-info"
                   style={{
                     display: 'flex',
                     flexDirection: 'column',
@@ -738,7 +962,30 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose }) => {
                           <CleanTableRow label="Mã SKU" value={item.sku} bold />
                           <CleanTableRow label="Mã LPN" value={item.lpn} bold />
                           <CleanTableRow label="Lô hàng (Batch)" value={item.batch_resolved || item.batch_original} />
-                          <CleanTableRow label="Vị trí kiện hàng" value={item.suffix_key || item.record_type} isLast />
+                          <CleanTableRow
+                            label="Vị trí kiện hàng"
+                            value={item.suffix_key || item.record_type}
+                            rightBadge={
+                              (item.suffix_key || item.record_type) ? (
+                                <span
+                                  style={{
+                                    fontSize: '0.67rem',
+                                    fontWeight: '700',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    backgroundColor: isPosVertical ? '#EEF2FF' : '#FEF3C7',
+                                    color: isPosVertical ? '#4338CA' : '#92400E',
+                                    border: `1px solid ${isPosVertical ? '#C7D2FE' : '#FDE68A'}`,
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                  title={isPosVertical ? 'Kiện có chữ cái đằng sau (Box 10A): LPN & SKU dán xoay dọc (Top nóc)' : 'Kiện không có chữ cái (Box 10 / Pallet 10): LPN & SKU dán ngang bình thường (Pallet đứng)'}
+                                >
+                                  {isPosVertical ? 'Top nóc' : 'Pallet đứng'}
+                                </span>
+                              ) : null
+                            }
+                            isLast
+                          />
                         </tbody>
                       </table>
                     </div>
@@ -747,6 +994,7 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose }) => {
 
                 {/* CỘT GIỮA: KHUNG PICTURE (CỐ ĐỊNH 350PX, KHÔNG BỊ KÉO DÀI BỞI ẢNH DỌC) */}
                 <div
+                  className="lpn-detail-col-pic"
                   style={{
                     border: '1px solid #EADCC9',
                     borderRadius: '8px',
@@ -845,6 +1093,7 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose }) => {
                       >
                         {/* Khung chứa ảnh: cố định kích thước gọn gàng, xem phóng to bấm vào mở lightbox */}
                         <div
+                          className="lpn-detail-pic-box"
                           onClick={() =>
                             setSelectedImage({ primary: activeImgUrl, fallback: activeFallbackUrl })
                           }
@@ -965,6 +1214,7 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose }) => {
 
                 {/* CỘT 3: THÔNG TIN ĐỌC TỪ TRAINING HÌNH ẢNH (CỐ ĐỊNH 350PX, CHIA 2 CỘT LPN & SKU) */}
                 <div
+                  className="lpn-detail-col-ocr"
                   style={{
                     border: '1px solid #EADCC9',
                     borderRadius: '8px',
@@ -1332,67 +1582,76 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose }) => {
                                 Chưa nhận diện được
                               </div>
                             ) : (
-                              finalLpnsList.map((itemLpn, idx) => (
-                                <div
-                                  key={idx}
-                                  style={{
-                                    padding: '4px 6px',
-                                    borderRadius: '4px',
-                                    backgroundColor: itemLpn.is_match ? '#F0FDF4' : '#FEF2F2',
-                                    border: `1px solid ${itemLpn.is_match ? '#BBF7D0' : '#FECACA'}`,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    gap: '4px',
-                                    whiteSpace: 'nowrap',
-                                    minWidth: 0
-                                  }}
-                                >
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', minWidth: 0, overflow: 'hidden' }}>
-                                    <span
-                                      style={{
-                                        fontFamily: 'Consolas, monospace',
-                                        fontSize: '0.78rem',
-                                        fontWeight: '800',
-                                        color: '#1F2937',
-                                        whiteSpace: 'nowrap',
-                                        letterSpacing: '-0.2px'
-                                      }}
-                                    >
-                                      {itemLpn.code}
-                                    </span>
-                                    <span
-                                      style={{
-                                        fontSize: '0.64rem',
-                                        color: '#4B5563',
-                                        fontWeight: '600',
-                                        backgroundColor: '#FFFFFF',
-                                        padding: '1px 4px',
-                                        borderRadius: '3px',
-                                        border: '1px solid #E5E7EB',
-                                        whiteSpace: 'nowrap',
-                                        flexShrink: 0
-                                      }}
-                                    >
-                                      {itemLpn.count} cái
-                                    </span>
-                                  </div>
-                                  <span
+                              finalLpnsList.map((itemLpn, idx) => {
+                                const isVertItem = itemLpn.orientation === 'vertical' || itemLpn.category_label?.includes('Top nóc');
+                                return (
+                                  <div
+                                    key={idx}
                                     style={{
-                                      fontSize: '0.65rem',
-                                      fontWeight: '700',
-                                      color: itemLpn.is_match ? '#15803D' : '#DC2626',
-                                      backgroundColor: itemLpn.is_match ? '#DCFCE7' : '#FEE2E2',
-                                      padding: '2px 5px',
-                                      borderRadius: '3px',
-                                      whiteSpace: 'nowrap',
-                                      flexShrink: 0
+                                      padding: '5px 7px',
+                                      borderRadius: '4px',
+                                      backgroundColor: itemLpn.is_match ? '#F0FDF4' : '#FEF2F2',
+                                      border: `1px solid ${itemLpn.is_match ? '#BBF7D0' : '#FECACA'}`,
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      gap: '3px',
+                                      minWidth: 0
                                     }}
+                                    title={itemLpn.match_reason}
                                   >
-                                    {itemLpn.is_match ? 'Khớp' : 'Ko khớp'}
-                                  </span>
-                                </div>
-                              ))
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'nowrap' }}>
+                                      <span
+                                        style={{
+                                          fontFamily: 'Consolas, monospace',
+                                          fontSize: '0.8rem',
+                                          fontWeight: '800',
+                                          color: '#1F2937',
+                                          whiteSpace: 'nowrap',
+                                          letterSpacing: '-0.2px'
+                                        }}
+                                      >
+                                        {itemLpn.code}
+                                      </span>
+                                      <span
+                                        style={{
+                                          fontSize: '0.66rem',
+                                          color: '#4B5563',
+                                          fontWeight: '600',
+                                          backgroundColor: '#FFFFFF',
+                                          padding: '1px 5px',
+                                          borderRadius: '3px',
+                                          border: '1px solid #E5E7EB',
+                                          whiteSpace: 'nowrap',
+                                          flexShrink: 0
+                                        }}
+                                      >
+                                        {itemLpn.count} cái
+                                      </span>
+                                      <span
+                                        style={{
+                                          fontSize: '0.64rem',
+                                          fontWeight: '700',
+                                          padding: '1px 5px',
+                                          borderRadius: '3px',
+                                          backgroundColor: isVertItem ? '#EEF2FF' : '#FEF3C7',
+                                          color: isVertItem ? '#4338CA' : '#92400E',
+                                          border: `1px solid ${isVertItem ? '#C7D2FE' : '#FDE68A'}`,
+                                          whiteSpace: 'nowrap',
+                                          flexShrink: 0
+                                        }}
+                                        title={isVertItem ? 'Tem đọc theo kiện để dọc (Top nóc)' : 'Tem đọc theo kiện để ngang (Pallet đứng)'}
+                                      >
+                                        {isVertItem ? 'Top nóc' : 'Pallet đứng'}
+                                      </span>
+                                    </div>
+                                    {!itemLpn.is_match && itemLpn.match_reason && (
+                                      <div style={{ fontSize: '0.65rem', color: '#B91C1C', fontStyle: 'italic', lineHeight: 1.2 }}>
+                                        {itemLpn.match_reason}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })
                             )}
                           </div>
                         </div>
@@ -1457,67 +1716,76 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose }) => {
                                 Chưa nhận diện được
                               </div>
                             ) : (
-                              finalSkusList.map((itemSku, idx) => (
-                                <div
-                                  key={idx}
-                                  style={{
-                                    padding: '4px 6px',
-                                    borderRadius: '4px',
-                                    backgroundColor: itemSku.is_match ? '#F0FDF4' : '#FEF2F2',
-                                    border: `1px solid ${itemSku.is_match ? '#BBF7D0' : '#FECACA'}`,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    gap: '4px',
-                                    whiteSpace: 'nowrap',
-                                    minWidth: 0
-                                  }}
-                                >
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', minWidth: 0, overflow: 'hidden' }}>
-                                    <span
-                                      style={{
-                                        fontFamily: 'Consolas, monospace',
-                                        fontSize: '0.78rem',
-                                        fontWeight: '800',
-                                        color: '#1F2937',
-                                        whiteSpace: 'nowrap',
-                                        letterSpacing: '-0.2px'
-                                      }}
-                                    >
-                                      {itemSku.code}
-                                    </span>
-                                    <span
-                                      style={{
-                                        fontSize: '0.64rem',
-                                        color: '#4B5563',
-                                        fontWeight: '600',
-                                        backgroundColor: '#FFFFFF',
-                                        padding: '1px 4px',
-                                        borderRadius: '3px',
-                                        border: '1px solid #E5E7EB',
-                                        whiteSpace: 'nowrap',
-                                        flexShrink: 0
-                                      }}
-                                    >
-                                      {itemSku.count} cái
-                                    </span>
-                                  </div>
-                                  <span
+                              finalSkusList.map((itemSku, idx) => {
+                                const isVertItem = itemSku.orientation === 'vertical' || itemSku.category_label?.includes('Top nóc');
+                                return (
+                                  <div
+                                    key={idx}
                                     style={{
-                                      fontSize: '0.65rem',
-                                      fontWeight: '700',
-                                      color: itemSku.is_match ? '#15803D' : '#DC2626',
-                                      backgroundColor: itemSku.is_match ? '#DCFCE7' : '#FEE2E2',
-                                      padding: '2px 5px',
-                                      borderRadius: '3px',
-                                      whiteSpace: 'nowrap',
-                                      flexShrink: 0
+                                      padding: '5px 7px',
+                                      borderRadius: '4px',
+                                      backgroundColor: itemSku.is_match ? '#F0FDF4' : '#FEF2F2',
+                                      border: `1px solid ${itemSku.is_match ? '#BBF7D0' : '#FECACA'}`,
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      gap: '3px',
+                                      minWidth: 0
                                     }}
+                                    title={itemSku.match_reason}
                                   >
-                                    {itemSku.is_match ? 'Khớp' : 'Ko khớp'}
-                                  </span>
-                                </div>
-                              ))
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'nowrap' }}>
+                                      <span
+                                        style={{
+                                          fontFamily: 'Consolas, monospace',
+                                          fontSize: '0.8rem',
+                                          fontWeight: '800',
+                                          color: '#1F2937',
+                                          whiteSpace: 'nowrap',
+                                          letterSpacing: '-0.2px'
+                                        }}
+                                      >
+                                        {itemSku.code}
+                                      </span>
+                                      <span
+                                        style={{
+                                          fontSize: '0.66rem',
+                                          color: '#4B5563',
+                                          fontWeight: '600',
+                                          backgroundColor: '#FFFFFF',
+                                          padding: '1px 5px',
+                                          borderRadius: '3px',
+                                          border: '1px solid #E5E7EB',
+                                          whiteSpace: 'nowrap',
+                                          flexShrink: 0
+                                        }}
+                                      >
+                                        {itemSku.count} cái
+                                      </span>
+                                      <span
+                                        style={{
+                                          fontSize: '0.64rem',
+                                          fontWeight: '700',
+                                          padding: '1px 5px',
+                                          borderRadius: '3px',
+                                          backgroundColor: isVertItem ? '#EEF2FF' : '#FEF3C7',
+                                          color: isVertItem ? '#4338CA' : '#92400E',
+                                          border: `1px solid ${isVertItem ? '#C7D2FE' : '#FDE68A'}`,
+                                          whiteSpace: 'nowrap',
+                                          flexShrink: 0
+                                        }}
+                                        title={isVertItem ? 'Tem đọc theo kiện để dọc (Top nóc)' : 'Tem đọc theo kiện để ngang (Pallet đứng)'}
+                                      >
+                                        {isVertItem ? 'Top nóc' : 'Pallet đứng'}
+                                      </span>
+                                    </div>
+                                    {!itemSku.is_match && itemSku.match_reason && (
+                                      <div style={{ fontSize: '0.65rem', color: '#B91C1C', fontStyle: 'italic', lineHeight: 1.2 }}>
+                                        {itemSku.match_reason}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })
                             )}
                           </div>
                         </div>
@@ -1583,12 +1851,243 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose }) => {
                 </div>
               </div>
             </div>
+
+            {/* 3. FOOTER BAR VỚI CÁC THAO TÁC XỬ LÝ (KHÔNG EMOJI) */}
+            <div
+              className="lpn-detail-footer"
+              style={{
+                padding: '12px 20px',
+                backgroundColor: '#FAF6F0',
+                borderTop: '1px solid #EADCC9',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: resolveFeedback ? 'space-between' : 'flex-end',
+                gap: '12px',
+                flexShrink: 0
+              }}
+            >
+              {/* Thông báo kết quả xử lý (nếu có) */}
+              {resolveFeedback && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '0.84rem', fontWeight: '800', color: '#059669' }}>
+                    {resolveFeedback}
+                  </span>
+                </div>
+              )}
+
+              {/* Các nút thao tác: Đóng, Không xử lý được, Đã xử lý */}
+              <div className="lpn-detail-footer-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  style={{
+                    border: '1px solid #D5C7B7',
+                    backgroundColor: '#FFFFFF',
+                    color: '#4E3629',
+                    padding: '7px 16px',
+                    borderRadius: '6px',
+                    fontSize: '0.82rem',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    transition: 'background-color 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#FAF6F0')}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#FFFFFF')}
+                >
+                  Đóng
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowUnresolvedPrompt(true)}
+                  disabled={isResolving}
+                  style={{
+                    border: '1.5px solid #DC2626',
+                    backgroundColor: '#FFFFFF',
+                    color: '#DC2626',
+                    padding: '7px 16px',
+                    borderRadius: '6px',
+                    fontSize: '0.82rem',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#DC2626';
+                    e.currentTarget.style.color = '#FFFFFF';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '#FFFFFF';
+                    e.currentTarget.style.color = '#DC2626';
+                  }}
+                  title="Đánh dấu dòng này không thể xử lý kèm lý do"
+                >
+                  Không xử lý được
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleResolveAction('resolved')}
+                  disabled={isResolving}
+                  style={{
+                    border: 'none',
+                    backgroundColor: '#059669',
+                    color: '#FFFFFF',
+                    padding: '7px 20px',
+                    borderRadius: '6px',
+                    fontSize: '0.82rem',
+                    fontWeight: '800',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 6px rgba(5, 150, 105, 0.25)',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#047857')}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#059669')}
+                  title="Đánh dấu dòng này đã được xử lý xong"
+                >
+                  Đã xử lý
+                </button>
+              </div>
+            </div>
+
+            {/* Prompt nhập lý do khi chọn "Không xử lý được" */}
+            {showUnresolvedPrompt && (
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  backgroundColor: 'rgba(0,0,0,0.45)',
+                  backdropFilter: 'blur(2px)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  zIndex: 200,
+                  padding: '16px'
+                }}
+                onClick={() => setShowUnresolvedPrompt(false)}
+              >
+                <div
+                  style={{
+                    backgroundColor: '#FFFFFF',
+                    borderRadius: '10px',
+                    border: '1.5px solid #FCA5A5',
+                    width: 'min(90vw, 480px)',
+                    padding: '18px',
+                    boxShadow: '0 12px 30px rgba(0,0,0,0.22)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px'
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.9rem', fontWeight: '800', color: '#991B1B' }}>
+                      Ghi chú lý do không thể xử lý (bắt buộc):
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowUnresolvedPrompt(false)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        fontSize: '1.2rem',
+                        cursor: 'pointer',
+                        color: '#6B7280'
+                      }}
+                    >
+                      &times;
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {[
+                      'Mất tem nhãn trên thùng',
+                      'Tem nhãn rách nát / chói sáng',
+                      'Sai quy cách dán nhãn',
+                      'Thùng hàng rỗng / dán nhầm'
+                    ].map((sug) => (
+                      <button
+                        key={sug}
+                        type="button"
+                        onClick={() => setUnresolvedReason(sug)}
+                        style={{
+                          border: '1px solid #FECACA',
+                          backgroundColor: '#FEF2F2',
+                          color: '#991B1B',
+                          borderRadius: '4px',
+                          padding: '3px 8px',
+                          fontSize: '0.72rem',
+                          fontWeight: '600',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        + {sug}
+                      </button>
+                    ))}
+                  </div>
+
+                  <textarea
+                    rows={3}
+                    value={unresolvedReason}
+                    onChange={(e) => setUnresolvedReason(e.target.value)}
+                    placeholder="Nhập lý do cụ thể..."
+                    style={{
+                      width: '100%',
+                      borderRadius: '6px',
+                      border: '1px solid #D1D5DB',
+                      padding: '8px',
+                      fontSize: '0.82rem',
+                      boxSizing: 'border-box',
+                      outline: 'none'
+                    }}
+                    autoFocus
+                  />
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowUnresolvedPrompt(false)}
+                      style={{
+                        border: '1px solid #D1D5DB',
+                        backgroundColor: '#FFFFFF',
+                        color: '#374151',
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        fontSize: '0.8rem',
+                        fontWeight: '600',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Hủy
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleResolveAction('unresolved', unresolvedReason)}
+                      disabled={isResolving}
+                      style={{
+                        border: 'none',
+                        backgroundColor: '#DC2626',
+                        color: '#FFFFFF',
+                        padding: '6px 14px',
+                        borderRadius: '6px',
+                        fontSize: '0.8rem',
+                        fontWeight: '700',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Xác nhận: Không xử lý được
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* NÚT QUA PHẢI (NEXT) */}
           {hasNext && (
             <button
               type="button"
+              className="lpn-modal-nav-btn next"
               onClick={handleNext}
               style={{
                 position: 'absolute',
@@ -1638,7 +2137,7 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose }) => {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: '20px',
+            padding: '12px',
             backdropFilter: 'blur(3px)'
           }}
           onClick={(e) => {
@@ -1647,6 +2146,7 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose }) => {
           }}
         >
           <div
+            className="lpn-inspector-dialog"
             style={{
               backgroundColor: '#FFFDF9',
               borderRadius: '12px',
@@ -1665,24 +2165,27 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose }) => {
             {/* Inspector Header */}
             <div
               style={{
-                height: '46px',
-                padding: '0 18px',
+                minHeight: '46px',
+                height: 'auto',
+                padding: '8px 14px',
                 backgroundColor: '#FAF6F0',
                 display: 'flex',
+                flexWrap: 'wrap',
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 borderBottom: '1px solid #EADCC9',
                 flexShrink: 0,
-                boxSizing: 'border-box'
+                boxSizing: 'border-box',
+                gap: '8px'
               }}
             >
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                  <span style={{ fontWeight: '800', fontSize: '1.02rem', color: '#2D1A12', letterSpacing: '0.01em' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: '800', fontSize: '0.98rem', color: '#2D1A12', letterSpacing: '0.01em' }}>
                     Chi Tiết Ảnh & Luồng Pipeline: {containerPart} ({item.suffix_key || 'Pallet'})
                   </span>
                   <span style={{
-                    fontSize: '0.72rem',
+                    fontSize: '0.70rem',
                     fontWeight: '800',
                     padding: '2px 8px',
                     borderRadius: '5px',
@@ -1691,7 +2194,7 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose }) => {
                     border: '1px solid #86EFAC',
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: '5px',
+                    gap: '4px',
                     whiteSpace: 'nowrap'
                   }}>
                     <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#16A34A', display: 'inline-block', boxShadow: '0 0 4px #16A34A' }} />
@@ -1768,7 +2271,7 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose }) => {
             <div
               style={{
                 flex: 1,
-                padding: '12px 18px',
+                padding: '12px 14px',
                 overflowY: 'auto',
                 display: 'flex',
                 flexDirection: 'column',
@@ -1777,9 +2280,12 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose }) => {
                 boxSizing: 'border-box'
               }}
             >
-              {/* ===== TOP: Image Viewer + Compact Steps (1.22fr / 0.78fr, fixed 340px) ===== */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1.22fr 0.78fr', gap: '12px', height: '340px', flexShrink: 0 }}>
-                {/* Left: Pipeline Image Viewer (Thống nhất 100% với AI OCR Train Lab) */}
+              {/* ===== TOP: Image Viewer + Compact Steps ===== */}
+              <div
+                className="lpn-inspector-top-grid"
+                style={{ display: 'grid', gridTemplateColumns: '1.22fr 0.78fr', gap: '12px', height: '340px', flexShrink: 0 }}
+              >
+                {/* Left: Pipeline Image Viewer */}
                 <div style={{ minWidth: 0, height: '340px', flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
                   <ImageCanvas
                     images={inspectorAnalysis?.images}
@@ -1962,7 +2468,10 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose }) => {
                   </span>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div
+                  className="lpn-inspector-compare-grid"
+                  style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}
+                >
                   {/* LPN Compare Card */}
                   {(() => {
                     const targetLpn = item?.lpn;

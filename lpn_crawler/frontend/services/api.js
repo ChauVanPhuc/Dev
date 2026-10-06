@@ -19,7 +19,7 @@ export const lpnCrawlerApi = {
       let data = {};
       try { data = text ? JSON.parse(text) : {}; } catch (e) {}
       if (!res.ok) {
-        const errObj = new Error(data.detail?.message || data.detail || `Lỗi kết nối Backend (${res.status}). Vui lòng kiểm tra Server Backend (cổng 8000) đã bật chưa.`);
+        const errObj = new Error(data.detail?.message || data.detail || `Lỗi kết nối Backend (${res.status}). Vui lòng kiểm tra Server Backend (cổng 1111) đã bật chưa.`);
         errObj.status = res.status;
         errObj.detail = data.detail;
         throw errObj;
@@ -27,7 +27,7 @@ export const lpnCrawlerApi = {
       return data;
     } catch (err) {
       if (err.message && err.message.includes('Failed to fetch')) {
-        throw new Error('Không thể kết nối đến máy chủ Backend (Cổng 8000). Vui lòng đảm bảo Backend (uvicorn) đã được khởi chạy.');
+        throw new Error('Không thể kết nối đến máy chủ Backend (Cổng 1111). Vui lòng đảm bảo Backend (uvicorn) đã được khởi chạy.');
       }
       throw err;
     }
@@ -51,7 +51,7 @@ export const lpnCrawlerApi = {
       let data = {};
       try { data = text ? JSON.parse(text) : {}; } catch (e) {}
       if (!res.ok) {
-        const errObj = new Error(data.detail?.message || data.detail || `Lỗi kết nối Backend (${res.status}). Vui lòng kiểm tra Server Backend (cổng 8000) đã bật chưa.`);
+        const errObj = new Error(data.detail?.message || data.detail || `Lỗi kết nối Backend (${res.status}). Vui lòng kiểm tra Server Backend (cổng 1111) đã bật chưa.`);
         errObj.status = res.status;
         errObj.detail = data.detail;
         throw errObj;
@@ -59,7 +59,7 @@ export const lpnCrawlerApi = {
       return data;
     } catch (err) {
       if (err.message && err.message.includes('Failed to fetch')) {
-        throw new Error('Không thể kết nối đến máy chủ Backend (Cổng 8000). Vui lòng đảm bảo Backend (uvicorn) đã được khởi chạy.');
+        throw new Error('Không thể kết nối đến máy chủ Backend (Cổng 1111). Vui lòng đảm bảo Backend (uvicorn) đã được khởi chạy.');
       }
       throw err;
     }
@@ -87,7 +87,7 @@ export const lpnCrawlerApi = {
       return data;
     } catch (err) {
       if (err.message && err.message.includes('Failed to fetch')) {
-        throw new Error('Không thể kết nối đến máy chủ Backend (Cổng 8000).');
+        throw new Error('Không thể kết nối đến máy chủ Backend (Cổng 1111).');
       }
       throw err;
     }
@@ -187,6 +187,8 @@ export const lpnCrawlerApi = {
       if (params.batch) query.append('batch', params.batch);
       if (params.sku) query.append('sku', params.sku);
       if (params.lpn) query.append('lpn', params.lpn);
+      if (params.year) query.append('year', params.year);
+      if (params.month) query.append('month', params.month);
       if (params.startDate) query.append('startDate', params.startDate);
       if (params.endDate) query.append('endDate', params.endDate);
       if (params.sort) query.append('sort', params.sort);
@@ -296,6 +298,8 @@ export const lpnCrawlerApi = {
       if (params.page) query.append('page', params.page);
       if (params.page_size) query.append('page_size', params.page_size);
 
+      if (params.tab) query.append('tab', params.tab);
+
       if (params.startDate || params.start_date) query.append('start_date', params.startDate || params.start_date);
       if (params.endDate || params.end_date) query.append('end_date', params.endDate || params.end_date);
 
@@ -305,6 +309,40 @@ export const lpnCrawlerApi = {
       return text ? JSON.parse(text) : { items: [], total: 0 };
     } catch (e) {
       return { items: [], total: 0 };
+    }
+  },
+
+  // Resolve item (Đã xử lý hoặc Không xử lý được)
+  async resolveItem(itemId, status, note = '', resolvedBy = '') {
+    try {
+      const res = await fetch(`${API_BASE}/items/${itemId}/resolve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status, note, resolved_by: resolvedBy })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        return { success: false, message: err.detail || 'Lỗi khi cập nhật trạng thái xử lý' };
+      }
+      return await res.json();
+    } catch (e) {
+      return { success: false, message: e.message };
+    }
+  },
+
+  // Unresolve item (Đưa lại danh sách)
+  async unresolveItem(itemId) {
+    try {
+      const res = await fetch(`${API_BASE}/items/${itemId}/unresolve`, {
+        method: 'POST'
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        return { success: false, message: err.detail || 'Lỗi khi hủy trạng thái xử lý' };
+      }
+      return await res.json();
+    } catch (e) {
+      return { success: false, message: e.message };
     }
   },
 
@@ -378,33 +416,77 @@ export const lpnCrawlerApi = {
 
   // Subscribe SSE
   subscribeJobSSE(jobId, onProgress, onLog, onStatus, onDataUpdated, onSyncOcr) {
-    const eventSource = new EventSource(`${API_BASE}/jobs/${jobId}/sse`);
+    let eventSource = null;
+    let isClosedExplicitly = false;
+    let reconnectTimeout = null;
+    let retryDelay = 1500;
 
-    eventSource.onmessage = (event) => {
+    const connect = () => {
+      if (isClosedExplicitly) return;
       try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'progress' && onProgress) {
-          onProgress(data);
-        } else if (data.type === 'log' && onLog) {
-          onLog(data);
-        } else if (data.type === 'status' && onStatus) {
-          onStatus(data);
-        } else if (data.type === 'data_updated' && onDataUpdated) {
-          onDataUpdated(data);
-        } else if (data.type === 'sync_ocr' && onSyncOcr) {
-          onSyncOcr(data);
+        eventSource = new EventSource(`${API_BASE}/jobs/${jobId}/sse`);
+
+        eventSource.onopen = () => {
+          retryDelay = 1500;
+        };
+
+        eventSource.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'progress' && onProgress) {
+              onProgress(data);
+            } else if (data.type === 'log' && onLog) {
+              onLog(data);
+            } else if (data.type === 'status' && onStatus) {
+              onStatus(data);
+              // Khi gặp trạng thái kết thúc dứt điểm, không kết nối lại
+              if (['completed', 'failed', 'cancelled', 'interrupted', 'auth_required', 'completed_with_errors'].includes(data.status)) {
+                isClosedExplicitly = true;
+                if (eventSource) {
+                  try { eventSource.close(); } catch (e) {}
+                }
+              }
+            } else if (data.type === 'data_updated' && onDataUpdated) {
+              onDataUpdated(data);
+            } else if (data.type === 'sync_ocr' && onSyncOcr) {
+              onSyncOcr(data);
+            }
+          } catch (e) {
+            console.error('SSE parse error', e);
+          }
+        };
+
+        eventSource.onerror = (err) => {
+          console.warn('SSE EventSource ngắt kết nối tạm thời, đang tự động thử kết nối lại...', err);
+          if (eventSource) {
+            try { eventSource.close(); } catch (e) {}
+          }
+          if (!isClosedExplicitly) {
+            reconnectTimeout = setTimeout(() => {
+              connect();
+            }, retryDelay);
+            retryDelay = Math.min(retryDelay * 1.5, 8000);
+          }
+        };
+      } catch (err) {
+        console.error('SSE connection initiation error:', err);
+        if (!isClosedExplicitly) {
+          reconnectTimeout = setTimeout(connect, retryDelay);
         }
-      } catch (e) {
-        console.error('SSE parse error', e);
       }
     };
 
-    eventSource.onerror = (err) => {
-      console.warn('SSE EventSource error/closed', err);
-      eventSource.close();
-    };
+    connect();
 
-    return eventSource;
+    return {
+      close: () => {
+        isClosedExplicitly = true;
+        if (reconnectTimeout) clearTimeout(reconnectTimeout);
+        if (eventSource) {
+          try { eventSource.close(); } catch (e) {}
+        }
+      }
+    };
   },
 
   // Lấy lịch sử kết quả AI OCR theo Container từ CSDL để modal đồng bộ không bị rỗng danh sách khi thoát ra vào lại

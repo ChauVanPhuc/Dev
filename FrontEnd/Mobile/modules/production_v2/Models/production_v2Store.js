@@ -1,4 +1,5 @@
-import { create } from 'zustand'
+import * as zustandModule from 'zustand'
+const create = zustandModule.create || zustandModule.default || zustandModule
 
 const currentMonth = String(new Date().getMonth() + 1)
 

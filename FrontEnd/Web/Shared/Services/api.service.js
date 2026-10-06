@@ -6,12 +6,9 @@ export const getBaseURL = () => {
   // chúng ta cần trỏ cứng về cổng 8000 của BackEnd
   const { hostname, port } = window.location;
 
-  // Nếu là môi trường Cloudflare với tách biệt subdomain
-  if (hostname.includes('smartflowg7.cloud')) {
-    if (hostname.startsWith('dev_')) {
-      return 'https://dev_api.smartflowg7.cloud';
-    }
-    return 'https://api.smartflowg7.cloud';
+  // Nếu là môi trường Cloudflare (smartflowq7.cloud hoặc smartflowg7.cloud)
+  if (hostname.includes('smartflowq7.cloud') || hostname.includes('smartflowg7.cloud')) {
+    return window.location.origin;
   }
 
   if (port === '5173' || port === '5174' || port === '5175' || port === '3000' || port === '1222' || port === '1333') {

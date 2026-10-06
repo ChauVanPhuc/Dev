@@ -41,7 +41,9 @@ const mapPathToPermissionKeys = (pathname) => {
   if (path.startsWith('/production/plans')) return ['/production/plans', 'production-plans', '/plan'];
   if (path.startsWith('/production/transfers')) return ['/production/transfers', 'production-transfers', '/delivery-info'];
   if (path.startsWith('/admin/quality') || path.startsWith('/quality') || path === 'admin/quality') return ['/admin/quality', 'admin/quality', 'quality-records', '/admin/quality-records', 'quality', 'mobile_quality', '/inspection-stage'];
-  if (path.startsWith('/production_v2') || path.startsWith('/production-v2')) return ['/production_v2', 'mobile_production_v2', '/delivery-info', '/inspection-stage'];
+  if (path.startsWith('/production_v2') || path.startsWith('/production-v2')) return [path, path.replace(/^\//, ''), '/production_v2', 'mobile_production_v2', 'production_v2', '/delivery-info', '/inspection-stage'];
+  if (path.startsWith('/pallet-check')) return [path, path.replace(/^\//, ''), 'pallet-check', 'mobile_pallet-check', '/pallet-check'];
+  if (path.startsWith('/cabinet-box-check')) return [path, path.replace(/^\//, ''), 'cabinet-box-check', 'mobile_cabinet-box-check', '/cabinet-box-check'];
 
   return [path, path.replace(/^\//, '')];
 };

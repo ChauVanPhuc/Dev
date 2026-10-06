@@ -32,6 +32,7 @@ class AnalyzeImageRequest(BaseModel):
     force_refresh: bool = Field(default=False, description="Bỏ qua cache và phân tích lại từ đầu")
     expected_lpn: Optional[str] = Field(default=None, description="Mã LPN kỳ vọng (CSDL Chuẩn)")
     expected_sku: Optional[str] = Field(default=None, description="Mã SKU kỳ vọng (CSDL Chuẩn)")
+    package_position: Optional[str] = Field(default=None, description="Vị trí kiện hàng (ví dụ: Box 10A, Box 10, Pallet 3)")
 
 
 class BenchmarkRequest(BaseModel):
@@ -57,5 +58,6 @@ class BatchScanRequest(BaseModel):
 class SingleItemScanRequest(BaseModel):
     item_id: int = Field(..., description="ID của LpnItem cần quét")
     model_id: Optional[str] = Field(default=None, description="Tên checkpoint model dùng để quét")
+    package_position: Optional[str] = Field(default=None, description="Vị trí kiện hàng (ví dụ: Box 10A, Box 10, Pallet 3)")
 
 

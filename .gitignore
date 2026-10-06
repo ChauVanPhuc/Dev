@@ -89,6 +89,11 @@ scratch_*.py
 audit_*.py
 *_audit*.json
 route_metadata_status.json
+node_modules_bak/
+**/node_modules_bak/
+query
+lpn_crawler/storage/
+lpn_crawler/ai_ocr_train/runs/
 
 
 

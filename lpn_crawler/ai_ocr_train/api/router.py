@@ -80,9 +80,6 @@ def sanitize_analysis_extracted(data: Dict[str, Any], exp_lpn: Optional[str] = N
     roi_details = data.get("images", {}).get("roi_details", [])
     if roi_details:
         roi_lpns = [r["extracted_lpn"] for r in roi_details if isinstance(r, dict) and r.get("extracted_lpn")]
-        has_wh = any(LabelDataParser.is_warehouse_lpn(x) for x in roi_lpns)
-        if has_wh:
-            roi_lpns = [x for x in roi_lpns if LabelDataParser.is_warehouse_lpn(x)]
 
         roi_skus = [
             r["extracted_sku"].strip("-:;,. #*!_/") for r in roi_details
@@ -108,10 +105,6 @@ def sanitize_analysis_extracted(data: Dict[str, Any], exp_lpn: Optional[str] = N
             elif not ext.get("sku") or ext.get("sku") not in clean_roi_skus:
                 ext["sku"] = clean_roi_skus[0]
     else:
-        if ext.get("all_lpns"):
-            has_wh = any(LabelDataParser.is_warehouse_lpn(x) for x in ext["all_lpns"])
-            if has_wh:
-                ext["all_lpns"] = [x for x in ext["all_lpns"] if LabelDataParser.is_warehouse_lpn(x)]
         if ext.get("all_skus"):
             ext["all_skus"] = [
                 s.strip("-:;,. #*!_/") for s in ext["all_skus"]
@@ -143,48 +136,72 @@ def save_to_pipeline_cache(keys: list, data: Dict[str, Any]):
 def _sync_analysis_to_db(db: Session, item_id: int, result: dict, model_id: str, exp_lpn: Optional[str] = None, exp_sku: Optional[str] = None):
     """Đồng bộ kết quả bóc tách tem nhãn chi tiết từ pipeline phân tích vào bảng lpn_ai_ocr_results trong CSDL."""
     roi_details = result.get("images", {}).get("roi_details") or result.get("roi_details") or []
-    if not roi_details:
-        return
+    ext = result.get("extracted", {})
 
     exp_sku_clean = (exp_sku or "").strip().upper()
     exp_lpn_clean = (exp_lpn or "").strip().upper()
 
-    sku_map = {}
-    lpn_map = {}
+    # Ưu tiên lấy trực tiếp detected_lpns_detail & detected_skus_detail từ pipeline (đã phân loại Pallet đứng vs Top nóc & lý do khớp)
+    detected_lpns_detail = ext.get("detected_lpns_detail") or []
+    detected_skus_detail = ext.get("detected_skus_detail") or []
 
-    for r in roi_details:
-        if not isinstance(r, dict):
-            continue
-        raw_sku = r.get("extracted_sku") or (r.get("extracted", {}).get("sku") if isinstance(r.get("extracted"), dict) else None) or ""
-        clean_sku = raw_sku.strip("-:;,. #*!_/")
-        if clean_sku:
-            if exp_sku_clean:
-                clean_sku = LabelDataParser.calibrate_sku_with_expected(clean_sku, [exp_sku_clean])
-            if clean_sku not in sku_map:
-                sku_map[clean_sku] = {
-                    "code": clean_sku,
-                    "count": 0,
-                    "is_match": bool(exp_sku_clean and clean_sku.upper() == exp_sku_clean)
-                }
-            sku_map[clean_sku]["count"] += 1
+    if not detected_skus_detail and roi_details:
+        sku_map = {}
+        for r in roi_details:
+            if not isinstance(r, dict):
+                continue
+            raw_sku = r.get("extracted_sku") or (r.get("extracted", {}).get("sku") if isinstance(r.get("extracted"), dict) else None) or ""
+            clean_sku = raw_sku.strip("-:;,. #*!_/")
+            if clean_sku:
+                if exp_sku_clean:
+                    clean_sku = LabelDataParser.calibrate_sku_with_expected(clean_sku, [exp_sku_clean])
+                r_orient = r.get("orientation") or ("vertical" if r.get("rotation_deg") in (90, 270) else "horizontal")
+                raw_cat = r.get("category_name", "")
+                cat_name = "Top nóc" if ("top" in raw_cat.lower() or r_orient == "vertical") else "Pallet đứng"
+                map_key = f"{clean_sku}__{r_orient}"
+                if map_key not in sku_map:
+                    is_m = bool(exp_sku_clean and clean_sku.upper() == exp_sku_clean)
+                    sku_map[map_key] = {
+                        "code": clean_sku,
+                        "count": 0,
+                        "is_match": is_m,
+                        "orientation": r_orient,
+                        "category_label": cat_name,
+                        "match_reason": "Khớp CSDL" if is_m else (f"Lệch mã: CSDL là {exp_sku_clean}" if exp_sku_clean else "Không có mã CSDL")
+                    }
+                sku_map[map_key]["count"] += 1
+        detected_skus_detail = list(sku_map.values())
 
-        raw_lpn = r.get("extracted_lpn") or (r.get("extracted", {}).get("lpn") if isinstance(r.get("extracted"), dict) else None) or ""
-        clean_lpn = raw_lpn.strip()
-        if clean_lpn:
-            if clean_lpn not in lpn_map:
-                lpn_map[clean_lpn] = {
-                    "code": clean_lpn,
-                    "count": 0,
-                    "is_match": bool(exp_lpn_clean and clean_lpn.upper() == exp_lpn_clean)
-                }
-            lpn_map[clean_lpn]["count"] += 1
+    if not detected_lpns_detail and roi_details:
+        lpn_map = {}
+        for r in roi_details:
+            if not isinstance(r, dict):
+                continue
+            raw_lpn = r.get("extracted_lpn") or (r.get("extracted", {}).get("lpn") if isinstance(r.get("extracted"), dict) else None) or ""
+            clean_lpn = raw_lpn.strip()
+            if clean_lpn:
+                r_orient = r.get("orientation") or ("vertical" if r.get("rotation_deg") in (90, 270) else "horizontal")
+                raw_cat = r.get("category_name", "")
+                cat_name = "Top nóc" if ("top" in raw_cat.lower() or r_orient == "vertical") else "Pallet đứng"
+                map_key = f"{clean_lpn}__{r_orient}"
+                if map_key not in lpn_map:
+                    is_m = bool(exp_lpn_clean and clean_lpn.upper() == exp_lpn_clean)
+                    lpn_map[map_key] = {
+                        "code": clean_lpn,
+                        "count": 0,
+                        "is_match": is_m,
+                        "orientation": r_orient,
+                        "category_label": cat_name,
+                        "match_reason": "Khớp CSDL" if is_m else (f"Lệch mã: CSDL là {exp_lpn_clean} (Thùng khác dán cạnh)" if exp_lpn_clean else "Không có mã CSDL")
+                    }
+                lpn_map[map_key]["count"] += 1
+        detected_lpns_detail = list(lpn_map.values())
 
-    detected_skus_detail = list(sku_map.values())
-    detected_lpns_detail = list(lpn_map.values())
+    if not detected_skus_detail and not detected_lpns_detail and not roi_details:
+        return
 
-    ext = result.get("extracted", {})
-    matching_sku = next((s["code"] for s in detected_skus_detail if s["is_match"]), None)
-    matching_lpn = next((l["code"] for l in detected_lpns_detail if l["is_match"]), None)
+    matching_sku = next((s["code"] for s in detected_skus_detail if s.get("is_match")), None)
+    matching_lpn = next((l["code"] for l in detected_lpns_detail if l.get("is_match")), None)
 
     pred_sku = matching_sku or ext.get("sku") or (detected_skus_detail[0]["code"] if detected_skus_detail else None)
     pred_lpn = matching_lpn or ext.get("lpn") or (detected_lpns_detail[0]["code"] if detected_lpns_detail else None)
@@ -209,8 +226,12 @@ def _sync_analysis_to_db(db: Session, item_id: int, result: dict, model_id: str,
     raw_payload = {
         "detected_lpns_detail": detected_lpns_detail,
         "detected_skus_detail": detected_skus_detail,
-        "all_lpns": list(lpn_map.keys()),
-        "all_skus": list(sku_map.keys())
+        "all_lpns": [l["code"] for l in detected_lpns_detail],
+        "all_skus": [s["code"] for s in detected_skus_detail],
+        "package_position": ext.get("package_position"),
+        "is_target_vertical": ext.get("is_target_vertical"),
+        "missing_lpn_count": ext.get("missing_lpn_count", 0),
+        "missing_lpn_note": ext.get("missing_lpn_note")
     }
     ocr_rec.raw_ocr_text = json.dumps(raw_payload, ensure_ascii=False)
     db.commit()
@@ -681,6 +702,7 @@ def analyze_image(
             return cached_res
 
     try:
+        pos_key = payload.package_position or meta_info.get("suffix_key") or meta_info.get("package_position")
         result = pipeline.process_image(
             image_input=image_input,
             preprocess_config=cfg_dict,
@@ -688,7 +710,8 @@ def analyze_image(
             model_id=payload.model_id or pipeline.ocr_engine.get_best_model_id(),
             inference_mode=payload.inference_mode or "hybrid",
             expected_skus=exp_skus,
-            expected_lpn=exp_lpn
+            expected_lpn=exp_lpn,
+            package_position=pos_key
         )
         result["meta_info"] = meta_info
         sanitize_analysis_extracted(result, exp_lpn=exp_lpn, exp_sku=exp_sku)
@@ -1482,6 +1505,12 @@ def get_item_ocr_result(
     """Lấy kết quả AI OCR mới nhất của một item để hiển thị trong DetailModal."""
     try:
         res = db.query(LpnAiOcrResult).filter(LpnAiOcrResult.item_id == item_id).order_by(LpnAiOcrResult.scanned_at.desc()).first()
+        item_rec = db.query(LpnItem).filter(LpnItem.id == item_id).first()
+        exp_lpn_clean = (item_rec.lpn or "").strip().upper() if item_rec else ""
+        exp_sku_clean = (item_rec.sku or "").strip().upper() if item_rec else ""
+        pos_key = (item_rec.suffix_key or item_rec.record_type or (res.suffix_key if res else "")) or ""
+        is_vert = LabelDataParser.is_package_vertical(pos_key)
+
         if not res:
             return {"has_result": False, "item_id": item_id}
         
@@ -1494,6 +1523,7 @@ def get_item_ocr_result(
 
         detected_lpns_detail = []
         detected_skus_detail = []
+        raw_obj = {}
         if res.raw_ocr_text:
             try:
                 raw_obj = json.loads(res.raw_ocr_text)
@@ -1503,37 +1533,79 @@ def get_item_ocr_result(
             except Exception:
                 pass
 
-        # Lấy thông tin LpnItem để đối chiếu LPN và SKU kỳ vọng
-        item_rec = db.query(LpnItem).filter(LpnItem.id == item_id).first()
-        exp_lpn_clean = (item_rec.lpn or "").strip().upper() if item_rec else ""
-        exp_sku_clean = (item_rec.sku or "").strip().upper() if item_rec else ""
+        # 1. Nếu raw_ocr_text có all_skus nhưng detected_skus_detail đang rỗng: tổng hợp lại theo tần suất
+        if not detected_skus_detail and raw_obj.get("all_skus"):
+            sku_map = {}
+            for s in raw_obj["all_skus"]:
+                s_c = str(s).strip("-:;,. #*!_/")
+                if s_c:
+                    if s_c not in sku_map:
+                        is_m = bool(exp_sku_clean and s_c.upper() == exp_sku_clean)
+                        sku_map[s_c] = {
+                            "code": s_c,
+                            "count": 0,
+                            "is_match": is_m,
+                            "orientation": "vertical" if is_vert else "horizontal",
+                            "category_label": "Top nóc" if is_vert else "Pallet đứng",
+                            "match_reason": "Khớp CSDL" if is_m else f"Lệch mã: CSDL là {exp_sku_clean}"
+                        }
+                    sku_map[s_c]["count"] += 1
+            detected_skus_detail = list(sku_map.values())
 
-        if not detected_skus_detail:
-            cache_keys = [f"item_{item_id}", f"item_{item_id}_hybrid_epoch15"]
-            cached = get_from_pipeline_cache(cache_keys)
-            if cached and (cached.get("images", {}).get("roi_details") or cached.get("roi_details")):
-                try:
-                    _sync_analysis_to_db(db, item_id, cached, res.model_id or "hybrid_epoch15", exp_lpn=exp_lpn_clean, exp_sku=exp_sku_clean)
-                    db.refresh(res)
-                    if res.raw_ocr_text:
-                        raw_obj = json.loads(res.raw_ocr_text)
-                        detected_lpns_detail = raw_obj.get("detected_lpns_detail", [])
-                        detected_skus_detail = raw_obj.get("detected_skus_detail", [])
-                except Exception:
-                    pass
+        if not detected_lpns_detail and raw_obj.get("all_lpns"):
+            lpn_map = {}
+            for l in raw_obj["all_lpns"]:
+                l_c = str(l).strip()
+                if l_c:
+                    if l_c not in lpn_map:
+                        is_m = bool(exp_lpn_clean and l_c.upper() == exp_lpn_clean)
+                        lpn_map[l_c] = {
+                            "code": l_c,
+                            "count": 0,
+                            "is_match": is_m,
+                            "orientation": "vertical" if is_vert else "horizontal",
+                            "category_label": "Top nóc" if is_vert else "Pallet đứng",
+                            "match_reason": "Khớp CSDL" if is_m else f"Lệch mã: CSDL là {exp_lpn_clean}"
+                        }
+                    lpn_map[l_c]["count"] += 1
+            detected_lpns_detail = list(lpn_map.values())
 
+        # 2. Kiểm tra cache pipeline xem đã từng phân tích đa nhãn chưa
+        sku_total_count = sum(s.get("count", 0) for s in detected_skus_detail) if detected_skus_detail else 0
+        cache_keys = [f"item_{item_id}", f"item_{item_id}_{res.model_id or 'hybrid_epoch15'}"]
+        cached = get_from_pipeline_cache(cache_keys, exp_lpn=exp_lpn_clean, exp_sku=exp_sku_clean)
+        if cached and (cached.get("images", {}).get("roi_details") or cached.get("roi_details")):
+            try:
+                _sync_analysis_to_db(db, item_id, cached, res.model_id or "hybrid_epoch15", exp_lpn=exp_lpn_clean, exp_sku=exp_sku_clean)
+                db.refresh(res)
+                if res.raw_ocr_text:
+                    raw_obj = json.loads(res.raw_ocr_text)
+                    detected_lpns_detail = raw_obj.get("detected_lpns_detail", [])
+                    detected_skus_detail = raw_obj.get("detected_skus_detail", [])
+            except Exception:
+                pass
+
+        # 3. Phục vụ kết quả tức thì từ CSDL (<5ms), không chạy mạng nơ-ron nặng trên GET request
+
+        # Fallback nếu sau tất cả vẫn chưa có detail list
         if not detected_lpns_detail and res.detected_lpn:
             detected_lpns_detail = [{
                 "code": res.detected_lpn,
                 "count": 1,
-                "is_match": bool(res.is_lpn_match)
+                "is_match": bool(res.is_lpn_match),
+                "orientation": "vertical" if is_vert else "horizontal",
+                "category_label": "Top nóc" if is_vert else "Pallet đứng",
+                "match_reason": "Khớp CSDL" if res.is_lpn_match else f"Lệch mã: CSDL là {exp_lpn_clean}"
             }]
 
         if not detected_skus_detail and res.detected_sku:
             detected_skus_detail = [{
                 "code": res.detected_sku,
                 "count": 1,
-                "is_match": bool(res.is_sku_match)
+                "is_match": bool(res.is_sku_match),
+                "orientation": "vertical" if is_vert else "horizontal",
+                "category_label": "Top nóc" if is_vert else "Pallet đứng",
+                "match_reason": "Khớp CSDL" if res.is_sku_match else f"Lệch mã: CSDL là {exp_sku_clean}"
             }]
 
         # Tự động hiệu chỉnh đối chiếu lại is_match cho các mã LPN và SKU
@@ -1567,6 +1639,10 @@ def get_item_ocr_result(
             "image_id": res.image_id,
             "container_number": res.container_number,
             "suffix_key": res.suffix_key,
+            "package_position": pos_key,
+            "is_target_vertical": is_vert,
+            "missing_lpn_count": raw_obj.get("missing_lpn_count", 0),
+            "missing_lpn_note": raw_obj.get("missing_lpn_note"),
             "model_id": res.model_id,
             "detected_lpn": res.detected_lpn,
             "detected_sku": res.detected_sku,
@@ -1607,6 +1683,9 @@ def scan_single_item(
     if not img_target:
         raise HTTPException(status_code=400, detail="Không tìm thấy file ảnh cục bộ hoặc URL")
 
+    pos_key = payload.package_position or item.suffix_key or item.record_type or ""
+    is_vert = LabelDataParser.is_package_vertical(pos_key)
+
     pipeline = get_default_pipeline()
     t0 = time.time()
     try:
@@ -1618,7 +1697,8 @@ def scan_single_item(
             apply_super_res=True,
             return_images_base64=True,
             expected_skus=[item.sku] if item.sku else None,
-            expected_lpn=item.lpn
+            expected_lpn=item.lpn,
+            package_position=pos_key
         )
         # Thời gian xử lý thuật toán thực tế của ảnh (bảo đảm chính xác, không bị tính oan thời gian nạp model cold-start)
         pipeline_total_ms = pipeline_res.get("time_metrics", {}).get("total_ms")
@@ -1634,6 +1714,7 @@ def scan_single_item(
                 "expected_sku": item.sku,
                 "gt_batch": item.batch_resolved or item.batch_original,
                 "suffix_key": item.suffix_key,
+                "package_position": pos_key,
                 "item_id": item.id,
                 "container_number": c_num,
                 "dataset_split": DatasetLoader.get_dataset_split(c_num) if c_num else "all"
@@ -1665,56 +1746,77 @@ def scan_single_item(
         all_skus = extracted_info.get("all_skus", [])
         roi_details = pipeline_res.get("roi_details", [])
 
-        # 1. Tổng hợp tần suất và chi tiết các mã LPN đọc được từ các nhãn
-        lpn_counts = {}
-        for r in roi_details:
-            r_lpn = r.get("extracted_lpn")
-            if r_lpn:
-                lpn_counts[r_lpn] = lpn_counts.get(r_lpn, 0) + 1
-        if not lpn_counts and det_lpn:
-            lpn_counts[det_lpn] = 1
-        for l in all_lpns:
-            if l not in lpn_counts:
-                lpn_counts[l] = 1
+        # Lấy trực tiếp danh sách chi tiết đa nhãn từ pipeline nếu có
+        detected_lpns_detail = pipeline_res.get("detected_lpns_detail") or []
+        detected_skus_detail = pipeline_res.get("detected_skus_detail") or []
+
+        # 1. Tổng hợp tần suất và chi tiết các mã LPN đọc được từ các nhãn nếu pipeline chưa trả
+        if not detected_lpns_detail:
+            lpn_counts = {}
+            for r in roi_details:
+                r_lpn = r.get("extracted_lpn")
+                if r_lpn:
+                    r_orient = r.get("orientation") or ("vertical" if r.get("rotation_deg") in (90, 270) else "horizontal")
+                    key = (r_lpn, r_orient)
+                    lpn_counts[key] = lpn_counts.get(key, 0) + 1
+            if not lpn_counts and det_lpn:
+                lpn_counts[(det_lpn, "vertical" if is_vert else "horizontal")] = 1
+            for l in all_lpns:
+                key = (l, "vertical" if is_vert else "horizontal")
+                if key not in lpn_counts:
+                    lpn_counts[key] = 1
+
+            exp_lpn = item.lpn.strip().upper() if item.lpn else ""
+            detected_lpns_detail = []
+            for (l_code, ori), count in sorted(lpn_counts.items(), key=lambda x: (-x[1], x[0][0])):
+                is_m = bool(exp_lpn and l_code.strip().upper() == exp_lpn)
+                detected_lpns_detail.append({
+                    "code": l_code,
+                    "count": count,
+                    "is_match": is_m,
+                    "orientation": ori,
+                    "category_label": "Top nóc" if ori == "vertical" else "Pallet đứng",
+                    "match_reason": "Khớp CSDL" if is_m else f"Lệch mã: CSDL là {exp_lpn} (Thùng khác dán cạnh)"
+                })
+
+        # 2. Tổng hợp tần suất và chi tiết các mã SKU đọc được từ các nhãn nếu pipeline chưa trả
+        if not detected_skus_detail:
+            exp_sku = item.sku.strip().upper() if item.sku else ""
+            sku_counts = {}
+            for r in roi_details:
+                r_sku = r.get("extracted_sku")
+                if r_sku:
+                    if exp_sku:
+                        r_sku = LabelDataParser.calibrate_sku_with_expected(r_sku, [exp_sku])
+                        r["extracted_sku"] = r_sku
+                    r_orient = r.get("orientation") or ("vertical" if r.get("rotation_deg") in (90, 270) else "horizontal")
+                    key = (r_sku, r_orient)
+                    sku_counts[key] = sku_counts.get(key, 0) + 1
+            if not sku_counts and det_sku:
+                if exp_sku:
+                    det_sku = LabelDataParser.calibrate_sku_with_expected(det_sku, [exp_sku])
+                sku_counts[(det_sku, "vertical" if is_vert else "horizontal")] = 1
+            for s in all_skus:
+                if exp_sku:
+                    s = LabelDataParser.calibrate_sku_with_expected(s, [exp_sku])
+                key = (s, "vertical" if is_vert else "horizontal")
+                if key not in sku_counts:
+                    sku_counts[key] = 1
+
+            detected_skus_detail = []
+            for (s_code, ori), count in sorted(sku_counts.items(), key=lambda x: (-x[1], x[0][0])):
+                is_m = bool(exp_sku and s_code.strip().upper() == exp_sku)
+                detected_skus_detail.append({
+                    "code": s_code,
+                    "count": count,
+                    "is_match": is_m,
+                    "orientation": ori,
+                    "category_label": "Top nóc" if ori == "vertical" else "Pallet đứng",
+                    "match_reason": "Khớp CSDL" if is_m else f"Lệch mã: CSDL là {exp_sku}"
+                })
 
         exp_lpn = item.lpn.strip().upper() if item.lpn else ""
-        detected_lpns_detail = []
-        for l_code, count in sorted(lpn_counts.items(), key=lambda x: (-x[1], x[0])):
-            is_m = bool(exp_lpn and l_code.strip().upper() == exp_lpn)
-            detected_lpns_detail.append({
-                "code": l_code,
-                "count": count,
-                "is_match": is_m
-            })
-
-        # 2. Tổng hợp tần suất và chi tiết các mã SKU đọc được từ các nhãn
         exp_sku = item.sku.strip().upper() if item.sku else ""
-        sku_counts = {}
-        for r in roi_details:
-            r_sku = r.get("extracted_sku")
-            if r_sku:
-                if exp_sku:
-                    r_sku = LabelDataParser.calibrate_sku_with_expected(r_sku, [exp_sku])
-                    r["extracted_sku"] = r_sku
-                sku_counts[r_sku] = sku_counts.get(r_sku, 0) + 1
-        if not sku_counts and det_sku:
-            if exp_sku:
-                det_sku = LabelDataParser.calibrate_sku_with_expected(det_sku, [exp_sku])
-            sku_counts[det_sku] = 1
-        for s in all_skus:
-            if exp_sku:
-                s = LabelDataParser.calibrate_sku_with_expected(s, [exp_sku])
-            if s not in sku_counts:
-                sku_counts[s] = 1
-
-        detected_skus_detail = []
-        for s_code, count in sorted(sku_counts.items(), key=lambda x: (-x[1], x[0])):
-            is_m = bool(exp_sku and s_code.strip().upper() == exp_sku)
-            detected_skus_detail.append({
-                "code": s_code,
-                "count": count,
-                "is_match": is_m
-            })
 
         # Đối chiếu LPN: Nếu có nhiều thùng trên pallet, kiểm tra xem có thùng nào khớp mã CSDL không
         if exp_lpn:
@@ -1756,7 +1858,11 @@ def scan_single_item(
         "detected_lpns_detail": detected_lpns_detail,
         "detected_skus_detail": detected_skus_detail,
         "all_lpns": all_lpns if 'all_lpns' in locals() else [],
-        "all_skus": all_skus if 'all_skus' in locals() else []
+        "all_skus": all_skus if 'all_skus' in locals() else [],
+        "package_position": pos_key,
+        "is_target_vertical": is_vert,
+        "missing_lpn_count": pipeline_res.get("missing_lpn_count", 0) if 'pipeline_res' in locals() else 0,
+        "missing_lpn_note": pipeline_res.get("missing_lpn_note") if 'pipeline_res' in locals() else None
     }
     raw_ocr_str = json.dumps(raw_payload, ensure_ascii=False)
 
@@ -1812,6 +1918,10 @@ def scan_single_item(
         "image_id": img.id,
         "container_number": c_num,
         "suffix_key": item.suffix_key,
+        "package_position": pos_key,
+        "is_target_vertical": is_vert,
+        "missing_lpn_count": raw_payload.get("missing_lpn_count", 0),
+        "missing_lpn_note": raw_payload.get("missing_lpn_note"),
         "model_id": payload.model_id or "hybrid_epoch15",
         "detected_lpn": det_lpn,
         "detected_sku": det_sku,

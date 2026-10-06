@@ -74,7 +74,7 @@ class AppSheetCrawlerEngine(
         """Worker loop ngầm tiêu thụ ảnh từ ocr_queue, xử lý AI OCR và broadcast SSE."""
         import json
         from app.core.database import SessionLocal
-        from lpn_crawler.backend.models.models import LpnAiOcrResult
+        from lpn_crawler.backend.models.models import LpnAiOcrResult, LpnItem
         from lpn_crawler.ai_ocr_train.core.pipeline import get_default_pipeline
         from lpn_crawler.ai_ocr_train.core.parser import LabelDataParser
         from lpn_crawler.ai_ocr_train.api.router import save_to_pipeline_cache
@@ -127,16 +127,18 @@ class AppSheetCrawlerEngine(
 
                 t0 = time.time()
                 try:
-                    pipeline_res = pipeline.process(
-                        image_input=abs_p,
-                        model_id=active_model_id,
-                        auto_crop=True,
-                        auto_rotate=True,
-                        apply_super_res=True,
-                        return_images_base64=True,
-                        expected_skus=[exp_sku] if exp_sku else None,
-                        expected_lpn=exp_lpn
-                    )
+                    import torch
+                    with torch.no_grad():
+                        pipeline_res = pipeline.process(
+                            image_input=abs_p,
+                            model_id=active_model_id,
+                            auto_crop=True,
+                            auto_rotate=True,
+                            apply_super_res=True,
+                            return_images_base64=False,
+                            expected_skus=[exp_sku] if exp_sku else None,
+                            expected_lpn=exp_lpn
+                        )
                     pipeline_total_ms = pipeline_res.get("time_metrics", {}).get("total_ms")
                     dur_ms = float(pipeline_total_ms) if pipeline_total_ms else round((time.time() - t0) * 1000, 1)
 
@@ -177,7 +179,12 @@ class AppSheetCrawlerEngine(
                     is_success = bool(det_lpn or det_sku or det_barcodes)
                     status_val = "success" if is_success else "failed"
 
+                    det_lpns_det = pipeline_res.get("detected_lpns_detail") or extracted_info.get("detected_lpns_detail", [])
+                    det_skus_det = pipeline_res.get("detected_skus_detail") or extracted_info.get("detected_skus_detail", [])
+
                     raw_ocr_str = json.dumps({
+                        "detected_lpns_detail": det_lpns_det,
+                        "detected_skus_detail": det_skus_det,
                         "all_lpns": all_lpns,
                         "all_skus": all_skus,
                         "roi_details_count": len(roi_details)
@@ -221,7 +228,31 @@ class AppSheetCrawlerEngine(
                         existing.raw_ocr_text = raw_ocr_str
                         existing.processing_time_ms = dur_ms
                         existing.scanned_at = datetime.utcnow()
-                    ocr_db.commit()
+
+                    # Cập nhật bổ sung thông tin thiếu vào lpn_items nếu đọc được mã
+                    if item_id:
+                        try:
+                            db_item = ocr_db.query(LpnItem).filter(LpnItem.id == item_id).first()
+                            if db_item:
+                                if (not db_item.lpn or db_item.lpn in ('None', '0', '')) and det_lpn:
+                                    db_item.lpn = det_lpn
+                                if (not db_item.sku or db_item.sku in ('None', '0', '')) and det_sku:
+                                    db_item.sku = det_sku
+                        except Exception:
+                            pass
+
+                    try:
+                        ocr_db.commit()
+                    except Exception as commit_err:
+                        try:
+                            ocr_db.rollback()
+                        except Exception:
+                            pass
+                        try:
+                            ocr_db.close()
+                        except Exception:
+                            pass
+                        ocr_db = SessionLocal()
 
                     # Save to pipeline cache
                     cached_full = pipeline_res.get("full_result")
@@ -247,6 +278,17 @@ class AppSheetCrawlerEngine(
                         self.ocr_stats["matched_count"] += 1
                     self.ocr_stats["total_ms"] += dur_ms
                     self.ocr_stats["avg_ms"] = round(self.ocr_stats["total_ms"] / max(1, self.ocr_stats["total_scanned"]), 1)
+
+                    # Dọn dẹp VRAM và RAM định kỳ sau mỗi 15 ảnh để ngăn chặn rò rỉ bộ nhớ
+                    if self.ocr_stats["total_scanned"] % 15 == 0:
+                        import gc
+                        gc.collect()
+                        try:
+                            import torch
+                            if torch.cuda.is_available():
+                                torch.cuda.empty_cache()
+                        except Exception:
+                            pass
 
                     if self.sse_callback:
                         thumb_b64 = None
@@ -297,12 +339,15 @@ class AppSheetCrawlerEngine(
                                 },
                                 "timestamp": datetime.now().strftime("%H:%M:%S"),
                                 "active_model": active_model_name,
-                                "model_id": active_model_id
+                                "model_id": active_model_id,
+                                "is_missing_recheck": task.get("is_missing_recheck", False)
                             }
                         })
 
+                    is_missing_recheck = task.get("is_missing_recheck", False)
                     match_tag = "KHỚP" if (is_lpn_match and is_sku_match) else ("KHỚP LPN" if is_lpn_match else ("KHỚP SKU" if is_sku_match else "CHƯA KHỚP"))
-                    ocr_log_msg = f"[{active_model_name}] [{c_num}] LPN: {det_lpn or '—'} | SKU: {det_sku or '—'} | {match_tag} ({dur_ms}ms)"
+                    prefix_tag = "[Quét Lại Thiếu/Lệch]" if is_missing_recheck else f"[{active_model_name}]"
+                    ocr_log_msg = f"{prefix_tag} [{c_num}] LPN: {det_lpn or '—'} | SKU: {det_sku or '—'} | {match_tag} ({dur_ms}ms)"
                     if self.sse_callback:
                         try:
                             self.sse_callback({
@@ -343,6 +388,81 @@ class AppSheetCrawlerEngine(
             except Exception:
                 pass
 
+    def _enqueue_missing_mismatch_items(self):
+        """
+        Tự động nạp toàn bộ ảnh thuộc các dòng trong 'Danh Sách Thiếu / Lệch Dữ Liệu'
+        chưa được xử lý vào hàng đợi AI OCR để tái nhận diện và đối soát lại bằng Dual-Engine OCR.
+        """
+        try:
+            from app.core.database import SessionLocal
+            from lpn_crawler.backend.models.models import LpnItem, LpnContainer, LpnImage, LpnAiOcrResult
+            from lpn_crawler.backend.api.routes.images import resolve_image_file_path
+            from sqlalchemy import or_, and_
+
+            with SessionLocal() as db_session:
+                query = (
+                    db_session.query(
+                        LpnImage.id.label('image_id'),
+                        LpnItem.id.label('item_id'),
+                        LpnContainer.container_number,
+                        LpnImage.local_path,
+                        LpnItem.lpn.label('expected_lpn'),
+                        LpnItem.sku.label('expected_sku'),
+                        LpnImage.image_type
+                    )
+                    .join(LpnItem, LpnImage.lpn_item_id == LpnItem.id)
+                    .join(LpnContainer, LpnItem.container_id == LpnContainer.id)
+                    .outerjoin(LpnAiOcrResult, LpnAiOcrResult.image_id == LpnImage.id)
+                    .filter(
+                        or_(LpnItem.resolution_status == None, LpnItem.resolution_status == ''),
+                        or_(
+                            LpnItem.lpn == None, LpnItem.lpn == '',
+                            LpnItem.sku == None, LpnItem.sku == '',
+                            and_(LpnAiOcrResult.id != None, or_(LpnAiOcrResult.is_lpn_match == 0, LpnAiOcrResult.is_sku_match == 0))
+                        ),
+                        LpnImage.local_path != None,
+                        LpnImage.local_path != ''
+                    )
+                    .distinct()
+                )
+                candidates = query.all()
+
+            valid_candidates = []
+            for c in candidates:
+                if c.local_path:
+                    abs_p = resolve_image_file_path(c.local_path)
+                    if abs_p and os.path.isfile(abs_p):
+                        valid_candidates.append(c)
+
+            if valid_candidates:
+                self.log(
+                    f"[Danh Sách Thiếu/Lệch] Phát hiện {len(valid_candidates)} ảnh từ các dòng thiếu / sai lệch mã. "
+                    f"Đang tự động nạp vào luồng AI OCR để đọc và nhận diện lại...",
+                    source="ai_ocr"
+                )
+                tot = len(valid_candidates)
+                for idx, row in enumerate(valid_candidates):
+                    task = {
+                        "image_id": row.image_id,
+                        "lpn_item_id": row.item_id,
+                        "container_number": row.container_number or "",
+                        "local_path": row.local_path,
+                        "expected_lpn": row.expected_lpn,
+                        "expected_sku": row.expected_sku,
+                        "suffix_key": row.image_type or "Pallet",
+                        "image_type": row.image_type or "Pallet",
+                        "container_img_idx": idx + 1,
+                        "container_img_total": tot,
+                        "container_total_items": tot,
+                        "is_missing_recheck": True
+                    }
+                    self.ocr_queue.put(task)
+            else:
+                self.log("[Danh Sách Thiếu/Lệch] Không có ảnh thiếu hoặc lệch mã nào cần quét lại.", source="ai_ocr")
+
+        except Exception as e:
+            self.log(f"[Danh Sách Thiếu/Lệch] Lỗi khi nạp ảnh quét lại: {e}", level="WARNING", source="ai_ocr")
+
     def run(self):
         """Luồng cào chính cho 1 Crawl Job"""
         job = self.db.query(LpnCrawlJob).filter(LpnCrawlJob.id == self.job_id).first()
@@ -359,6 +479,7 @@ class AppSheetCrawlerEngine(
             self.ocr_thread = threading.Thread(target=self._ocr_worker_loop, name=f"SyncOcrWorker-{self.job_id}", daemon=True)
             self.ocr_thread.start()
             self.log("[AI OCR Sync] Đã kích hoạt luồng nhận diện AI OCR thời gian thực.")
+            self._enqueue_missing_mismatch_items()
 
         browser = None
         try:
@@ -379,11 +500,20 @@ class AppSheetCrawlerEngine(
                 ]
                 
                 self.log("Đang khởi động trình duyệt Playwright Chromium ngầm")
-                browser = p.chromium.launch(
-                    headless=True,
-                    args=launch_args,
-                    timeout=20000
-                )
+                try:
+                    browser = p.chromium.launch(
+                        headless=True,
+                        args=launch_args,
+                        timeout=25000
+                    )
+                except Exception as launch_err:
+                    self.log(f"Chromium headless shell chưa sẵn sàng ({launch_err}). Tự động chuyển sang Google Chrome...", level="WARNING")
+                    browser = p.chromium.launch(
+                        channel="chrome",
+                        headless=True,
+                        args=launch_args,
+                        timeout=25000
+                    )
                 self.log("Khởi động trình duyệt Chromium ngầm thành công")
 
                 context_kwargs = {
@@ -590,6 +720,8 @@ class AppSheetCrawlerEngine(
                 total_images_count = 0
                 total_sku_count = 0
                 consecutive_duplicate_count = 0
+                seen_duplicate_containers = set()
+                seen_duplicate_dates = set()
 
                 for item_info in container_queue:
                     target_num = item_info["container_number"]
@@ -668,24 +800,34 @@ class AppSheetCrawlerEngine(
                         processed_count += 1
                         self.record_container_time(0.001, container_type="skip")
                         if self.mode == "incremental":
-                            consecutive_duplicate_count += 1
+                            seen_duplicate_containers.add(target_num)
+                            if existing_cont and existing_cont.date_loading:
+                                seen_duplicate_dates.add(existing_cont.date_loading)
+
                             self.log(
-                                f"[{processed_count}/{q_total}] Container '{target_num}' đã tồn tại và đầy đủ 100% dữ liệu ({len(existing_cont.items)} items). Bỏ qua (Trùng #{consecutive_duplicate_count}/4).",
+                                f"[{processed_count}/{q_total}] Container '{target_num}' đã tồn tại và đầy đủ 100% dữ liệu ({len(existing_cont.items)} items). "
+                                f"Bỏ qua ({len(seen_duplicate_containers)} tủ khác nhau, {len(seen_duplicate_dates)} ngày tải hàng đã quét đủ).",
                                 container_number=target_num
                             )
 
                             self.capture_and_send_progress(
                                 page, target_num, "SKIPPED_EXISTING", processed_count, q_total,
                                 total_items_count, total_images_count,
-                                current_action=f"Container '{target_num}' đã đầy đủ dữ liệu (Bỏ qua - Trùng #{consecutive_duplicate_count}/4)...",
+                                current_action=f"Container '{target_num}' đã đầy đủ dữ liệu (Đã kiểm tra {len(seen_duplicate_dates)} ngày, {len(seen_duplicate_containers)} tủ)...",
                                 sku_crawled=total_sku_count
                             )
 
-                            # ĐIỀU KIỆN DỪNG: Chỉ tự động dừng khi chạy ở chế độ Cào nhanh/Cập nhật (incremental)
-                            if consecutive_duplicate_count >= 4:
-                                stop_msg = f"Dữ liệu đã có trên hệ thống! Phát hiện 4 Container liên tiếp ({target_num}) đã có đầy đủ dữ liệu. Tự động dừng crawl để tránh duplicate dữ liệu."
-                                self.log(stop_msg)
+                            # ĐIỀU KIỆN DỪNG: Đã quét qua ít nhất 4 ngày tải hàng khác nhau có đầy đủ 100% dữ liệu, hoặc tối thiểu 5 container khác nhau
+                            is_ui_stop_reached = False
+                            if len(seen_duplicate_dates) >= 4:
+                                is_ui_stop_reached = True
+                                stop_msg = f"[HOÀN TẤT ĐỒNG BỘ 4 NGÀY GẦN NHẤT] Đã rà soát và xác nhận đầy đủ dữ liệu của 4 ngày tải hàng gần nhất ({len(seen_duplicate_containers)} tủ). Hoàn tất cập nhật!"
+                            elif len(seen_duplicate_dates) == 0 and len(seen_duplicate_containers) >= 5:
+                                is_ui_stop_reached = True
+                                stop_msg = f"Dữ liệu đã có trên hệ thống! Phát hiện 5 Container khác nhau liên tiếp ({target_num}) đã có đầy đủ dữ liệu. Hoàn tất cập nhật."
 
+                            if is_ui_stop_reached:
+                                self.log(stop_msg, level="SUCCESS")
                                 job.status = "completed"
                                 job.error_message = stop_msg
                                 job.end_time = datetime.utcnow()
@@ -720,8 +862,9 @@ class AppSheetCrawlerEngine(
                             )
                             continue
 
-                    # Nếu Container chưa tồn tại hoặc bị dở dang/thiếu dữ liệu -> Reset counter trùng liên tiếp về 0
                     consecutive_duplicate_count = 0
+                    seen_duplicate_containers.clear()
+                    seen_duplicate_dates.clear()
                     is_rehealing = bool(existing_cont)
                     if is_rehealing:
                         self.log(

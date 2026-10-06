@@ -17,13 +17,43 @@ from lpn_crawler.backend.crawler.engine import AppSheetCrawlerEngine
 
 router = APIRouter()
 
-# Global event queues for active SSE connections per job
-job_sse_queues = {}
+# Multi-subscriber Pub/Sub event queues for SSE connections per job
+job_subscribers = {}
+job_sse_queues = job_subscribers
 
-def get_job_sse_queue(job_id: int) -> asyncio.Queue:
-    if job_id not in job_sse_queues:
-        job_sse_queues[job_id] = asyncio.Queue()
-    return job_sse_queues[job_id]
+def get_job_sse_queue(job_id: int):
+    """Backward compatibility helper for get_job_sse_queue."""
+    return add_job_subscriber(job_id)
+
+def add_job_subscriber(job_id: int) -> asyncio.Queue:
+    q = asyncio.Queue(maxsize=300)
+    if job_id not in job_subscribers:
+        job_subscribers[job_id] = []
+    job_subscribers[job_id].append(q)
+    return q
+
+def remove_job_subscriber(job_id: int, q: asyncio.Queue):
+    if job_id in job_subscribers:
+        try:
+            job_subscribers[job_id].remove(q)
+            if not job_subscribers[job_id]:
+                job_subscribers.pop(job_id, None)
+        except ValueError:
+            pass
+
+def broadcast_job_event(job_id: int, event_data: dict):
+    subscribers = job_subscribers.get(job_id, [])
+    for q in list(subscribers):
+        try:
+            q.put_nowait(event_data)
+        except asyncio.QueueFull:
+            try:
+                q.get_nowait()
+                q.put_nowait(event_data)
+            except Exception:
+                pass
+        except Exception:
+            pass
 
 
 def start_crawler_worker_thread(job_id: int, mode: str = "full", auto_ocr: bool = False):
@@ -32,11 +62,10 @@ def start_crawler_worker_thread(job_id: int, mode: str = "full", auto_ocr: bool 
     Điều này giải quyết triệt để lỗi NotImplementedError trên Windows do SelectorEventLoop của Uvicorn gây ra.
     """
     main_loop = asyncio.get_running_loop()
-    queue = get_job_sse_queue(job_id)
 
     def sse_callback(event_data: dict):
         try:
-            main_loop.call_soon_threadsafe(queue.put_nowait, event_data)
+            main_loop.call_soon_threadsafe(broadcast_job_event, job_id, event_data)
         except Exception:
             pass
 
@@ -256,15 +285,15 @@ async def get_live_screenshot(job_id: Optional[int] = None):
 @router.get("/jobs/{job_id}/sse")
 async def stream_job_events(job_id: int):
     """
-    EventSource SSE Stream tiến độ % và live log cho Frontend
+    EventSource SSE Stream tiến độ % và live log cho Frontend (Pub/Sub đa kết nối)
     """
-    queue = get_job_sse_queue(job_id)
+    client_queue = add_job_subscriber(job_id)
 
     async def event_generator():
         try:
             while True:
                 try:
-                    event = await asyncio.wait_for(queue.get(), timeout=15.0)
+                    event = await asyncio.wait_for(client_queue.get(), timeout=15.0)
                     yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
                     if event.get("type") == "status" and event.get("status") in ("completed", "failed", "cancelled", "interrupted", "auth_required", "completed_with_errors"):
                         break
@@ -272,5 +301,15 @@ async def stream_job_events(job_id: int):
                     yield f": ping\n\n"
         except asyncio.CancelledError:
             pass
+        finally:
+            remove_job_subscriber(job_id, client_queue)
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )

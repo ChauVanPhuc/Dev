@@ -44,8 +44,8 @@ def get_lpn_kpi_stats(db: Session = Depends(get_db)):
     global _cached_kpi_stats
     now = time.time()
 
-    # Cache ngắn 2 giây tránh dội query khi nhiều client/tab cùng gọi
-    if (now - _cached_kpi_stats.get("_cached_at", 0)) < 2.0 and _cached_kpi_stats.get("all_time", {}).get("total_containers", 0) > 0:
+    # Cache 30 giây tránh dội query khi chuyển tab hoặc refresh liên tục
+    if (now - _cached_kpi_stats.get("_cached_at", 0)) < 30.0 and _cached_kpi_stats.get("all_time", {}).get("total_containers", 0) > 0:
         return _cached_kpi_stats
 
     try:
@@ -55,27 +55,41 @@ def get_lpn_kpi_stats(db: Session = Depends(get_db)):
         all_containers = db.execute(text("SELECT COUNT(*) FROM lpn_containers WITH (NOLOCK)")).scalar() or 0
         all_sku_rows = db.execute(text("SELECT COUNT(*) FROM lpn_items WITH (NOLOCK)")).scalar() or 0
         all_images = db.execute(text("""
-            SELECT COUNT(DISTINCT CONCAT(CAST(img.lpn_item_id AS VARCHAR(30)), '_', ISNULL(img.image_hash, CAST(img.id AS VARCHAR(30)))))
+            SELECT COUNT(*)
             FROM lpn_images img WITH (NOLOCK) 
             WHERE (img.local_path IS NOT NULL AND LTRIM(RTRIM(img.local_path)) != '' AND img.local_path != 'None')
                OR (img.source_url IS NOT NULL AND LTRIM(RTRIM(img.source_url)) != '' AND img.source_url != 'None')
         """)).scalar() or 0
         
-        all_missing_sql = text("""
+        mismatch_check_sql = """
+            EXISTS (
+                SELECT 1 FROM lpn_ai_ocr_results o WITH (NOLOCK)
+                WHERE o.item_id = i.id AND (
+                    (o.detected_lpn IS NOT NULL AND LTRIM(RTRIM(o.detected_lpn)) != '' AND o.is_lpn_match = 0)
+                    OR (o.detected_sku IS NOT NULL AND LTRIM(RTRIM(o.detected_sku)) != '' AND o.is_sku_match = 0)
+                )
+            )
+        """
+
+        all_missing_sql = text(f"""
             SELECT COUNT(*) FROM lpn_items i WITH (NOLOCK)
             JOIN lpn_containers c WITH (NOLOCK) ON i.container_id = c.id
-            WHERE c.container_number IS NULL OR LTRIM(RTRIM(c.container_number)) = ''
-               OR (c.date_loading IS NULL AND (c.date_loading_raw IS NULL OR LTRIM(RTRIM(c.date_loading_raw)) = ''))
-               OR c.timestamp_raw IS NULL OR LTRIM(RTRIM(c.timestamp_raw)) = ''
-               OR i.lpn IS NULL OR LTRIM(RTRIM(i.lpn)) = '' OR i.lpn = 'None' OR i.lpn = '0'
-               OR i.sku IS NULL OR LTRIM(RTRIM(i.sku)) = '' OR i.sku = 'None' OR i.sku = '0'
-               OR NOT EXISTS (
-                   SELECT 1 FROM lpn_images img WITH (NOLOCK) 
-                   WHERE img.lpn_item_id = i.id AND (
-                       (img.local_path IS NOT NULL AND LTRIM(RTRIM(img.local_path)) != '' AND img.local_path != 'None')
-                       OR (img.source_url IS NOT NULL AND LTRIM(RTRIM(img.source_url)) != '' AND img.source_url != 'None')
-                   )
-               )
+            WHERE (i.resolution_status IS NULL OR i.resolution_status = '')
+              AND (
+                 c.container_number IS NULL OR LTRIM(RTRIM(c.container_number)) = ''
+                 OR (c.date_loading IS NULL AND (c.date_loading_raw IS NULL OR LTRIM(RTRIM(c.date_loading_raw)) = ''))
+                 OR c.timestamp_raw IS NULL OR LTRIM(RTRIM(c.timestamp_raw)) = ''
+                 OR i.lpn IS NULL OR LTRIM(RTRIM(i.lpn)) = '' OR i.lpn = 'None' OR i.lpn = '0'
+                 OR i.sku IS NULL OR LTRIM(RTRIM(i.sku)) = '' OR i.sku = 'None' OR i.sku = '0'
+                 OR NOT EXISTS (
+                     SELECT 1 FROM lpn_images img WITH (NOLOCK) 
+                     WHERE img.lpn_item_id = i.id AND (
+                         (img.local_path IS NOT NULL AND LTRIM(RTRIM(img.local_path)) != '' AND img.local_path != 'None')
+                         OR (img.source_url IS NOT NULL AND LTRIM(RTRIM(img.source_url)) != '' AND img.source_url != 'None')
+                     )
+                 )
+                 OR {mismatch_check_sql}
+              )
         """)
         all_missing_rows = db.execute(all_missing_sql).scalar() or 0
         
@@ -116,7 +130,7 @@ def get_lpn_kpi_stats(db: Session = Depends(get_db)):
         """), params_7d).scalar() or 0
 
         img_7d = db.execute(text(f"""
-            SELECT COUNT(DISTINCT CONCAT(CAST(img.lpn_item_id AS VARCHAR(30)), '_', ISNULL(img.image_hash, CAST(img.id AS VARCHAR(30)))))
+            SELECT COUNT(*)
             FROM lpn_images img WITH (NOLOCK)
             JOIN lpn_containers c WITH (NOLOCK) ON img.container_id = c.id
             WHERE {date_cond_c}
@@ -128,6 +142,7 @@ def get_lpn_kpi_stats(db: Session = Depends(get_db)):
             SELECT COUNT(*) FROM lpn_items i WITH (NOLOCK)
             JOIN lpn_containers c WITH (NOLOCK) ON i.container_id = c.id
             WHERE {date_cond_c}
+              AND (i.resolution_status IS NULL OR i.resolution_status = '')
               AND (
                  c.container_number IS NULL OR LTRIM(RTRIM(c.container_number)) = ''
                  OR (c.date_loading IS NULL AND (c.date_loading_raw IS NULL OR LTRIM(RTRIM(c.date_loading_raw)) = ''))
@@ -141,11 +156,19 @@ def get_lpn_kpi_stats(db: Session = Depends(get_db)):
                          OR (img.source_url IS NOT NULL AND LTRIM(RTRIM(img.source_url)) != '' AND img.source_url != 'None')
                      )
                  )
+                 OR {mismatch_check_sql}
               )
         """)
         missing_7d = db.execute(missing_7d_sql, params_7d).scalar() or 0
 
         range_label = f"{s_date.strftime('%d/%m')} - {e_date.strftime('%d/%m')}"
+        if cont_7d == 0 and all_containers > 0:
+            cont_7d = all_containers
+            sku_7d = all_sku_rows
+            img_7d = all_images
+            missing_7d = all_missing_rows
+            range_label = "Toàn hệ thống"
+
         recent_7d_stats = {
             "total_containers": cont_7d,
             "total_sku_rows": sku_7d,

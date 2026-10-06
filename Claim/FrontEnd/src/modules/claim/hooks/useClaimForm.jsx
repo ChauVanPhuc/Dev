@@ -35,7 +35,7 @@ export const useClaimForm = ({
 
   // State form thêm mới Claim
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [addDongHang, setAddDongHang] = useState('Atlas');
+  const [addDongHang, setAddDongHang] = useState('Pigment');
   const [addLoaiClaim, setAddLoaiClaim] = useState('Khách nhắc nhở');
   const [addMaThamChieu, setAddMaThamChieu] = useState('');
   const [addTenSanPham, setAddTenSanPham] = useState('');
@@ -50,6 +50,7 @@ export const useClaimForm = ({
   const [showAddG7NameSuggestions, setShowAddG7NameSuggestions] = useState(false);
   const [addLpn, setAddLpn] = useState('');
   const [addMaCont, setAddMaCont] = useState('');
+  const [addDateLoading, setAddDateLoading] = useState('');
   const [addNgayXuat, setAddNgayXuat] = useState('');
   const [addTrangThaiXuLy, setAddTrangThaiXuLy] = useState('Mới');
   const [addLinkCapa, setAddLinkCapa] = useState('');
@@ -70,6 +71,7 @@ export const useClaimForm = ({
   const [processMucPhat, setProcessMucPhat] = useState('');
   const [processGiaTriPhat, setProcessGiaTriPhat] = useState('');
   const [processHeSoPhat, setProcessHeSoPhat] = useState(1);
+  const [processTongPhat, setProcessTongPhat] = useState('');
   const [processMaLoi, setProcessMaLoi] = useState('');
   const [processTenLoiKH, setProcessTenLoiKH] = useState('');
   const [processMaLoiCty, setProcessMaLoiCty] = useState('');
@@ -91,7 +93,8 @@ export const useClaimForm = ({
   // Auto populate Process Claim Form when activeDetailClaim changes
   useEffect(() => {
     if (activeDetailClaim) {
-      setProcessDongHang(activeDetailClaim.line || activeDetailClaim.dong_hang || 'AD2');
+      const autoLoai = activeDetailClaim.loai_hang || ((activeDetailClaim.product_name || activeDetailClaim.sku || '').toUpperCase().includes('WOA') ? 'OAK' : 'Pigment');
+      setProcessDongHang(autoLoai);
       setProcessLoaiClaim(activeDetailClaim.claim_type || activeDetailClaim.loai_claim || 'Claim Thường');
       setProcessMaThamChieu(activeDetailClaim.claim_code || activeDetailClaim.ma_tham_chieu || '');
       setProcessTenSanPham(activeDetailClaim.product_name || activeDetailClaim.sku || '');
@@ -103,6 +106,8 @@ export const useClaimForm = ({
         ? activeDetailClaim.penalty_multiplier
         : extractMultiplierFromPenalty(rawPenalty);
       setProcessHeSoPhat(initMult);
+      const initTotal = calculateTotalPenalty(activeDetailClaim, initMult, cabinetPrices);
+      setProcessTongPhat(formatPenaltyValue(initTotal));
       const custCode = activeDetailClaim.order_code || activeDetailClaim.defect_code || '';
       const resolvedG7Code = activeDetailClaim.company_error_code || resolveG7ErrorCode(custCode, defectCatalog) || '';
       const resolvedG7Name = activeDetailClaim.company_error_name || resolveG7ErrorName(resolvedG7Code, custCode, g7DefectTypes, defectCatalog) || '';
@@ -353,7 +358,7 @@ export const useClaimForm = ({
 
   // Open add new claim modal
   const handleOpenAddNewClaim = () => {
-    setAddDongHang('Atlas');
+    setAddDongHang('Pigment');
     setAddLoaiClaim('Khách nhắc nhở');
     setAddMaThamChieu('');
     setAddTenSanPham('');
@@ -366,6 +371,7 @@ export const useClaimForm = ({
     setAddTenLoiG7('');
     setAddLpn('');
     setAddMaCont('');
+    setAddDateLoading('');
 
     const today = new Date();
     const formattedToday = today.toISOString().split('T')[0];
@@ -579,7 +585,7 @@ export const useClaimForm = ({
         description: processTenLoiKH || '',
         severity: processMucPhat === 'Hủy đơn' ? 'High' : processMucPhat === 'Phạt tiền' ? 'Medium' : 'Low',
         status: backendStatus,
-        action: processGiaTriPhat,
+        action: processTongPhat || processGiaTriPhat,
         lpn: processLpn,
         container_no: processMaCont,
         image_paths: processImages,
@@ -596,7 +602,8 @@ export const useClaimForm = ({
           order_code: result.order_code,
           company_error_code: result.company_error_code,
           company_error_name: result.company_error_name || processTenLoiG7,
-          penalty: normalizePenaltyValue(processGiaTriPhat),
+          loai_hang: processDongHang,
+          penalty: normalizePenaltyValue(processTongPhat || processGiaTriPhat),
           lpn: processLpn,
           cont: processMaCont,
           status: (result.status === 'Resolved' || result.status === 'Đã xử lý') ? 'Đã xử lý' : (result.status === 'Processing' || result.status === 'Đang xem xét') ? 'Đang xem xét' : 'Mới',
@@ -672,6 +679,7 @@ export const useClaimForm = ({
     showAddG7NameSuggestions, setShowAddG7NameSuggestions,
     addLpn, setAddLpn,
     addMaCont, setAddMaCont,
+    addDateLoading, setAddDateLoading,
     addNgayXuat, setAddNgayXuat,
     addTrangThaiXuLy, setAddTrangThaiXuLy,
     addLinkCapa, setAddLinkCapa,
@@ -698,6 +706,7 @@ export const useClaimForm = ({
     processMucPhat, setProcessMucPhat,
     processGiaTriPhat, setProcessGiaTriPhat,
     processHeSoPhat, setProcessHeSoPhat,
+    processTongPhat, setProcessTongPhat,
     processMaLoi, setProcessMaLoi,
     processTenLoiKH, setProcessTenLoiKH,
     processMaLoiCty, setProcessMaLoiCty,

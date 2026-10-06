@@ -6,13 +6,13 @@ export const getBaseURL = () => {
 
   // Nếu là môi trường Cloudflare với tách biệt subdomain
   if (hostname.includes('smartflowg7.cloud')) {
-    if (hostname === 'smartflowg7.cloud') {
-      return window.location.origin;
+    if (hostname.startsWith('dev_')) {
+      return 'https://dev_api.smartflowg7.cloud';
     }
     return 'https://api.smartflowg7.cloud';
   }
 
-  if (port === '5173' || port === '5174' || port === '5175' || port === '3000' || port === '1222' || port === '1333') {
+  if (port === '2222' || port === '3333' || port === '5173' || port === '5174' || port === '5175' || port === '3000' || port === '1222' || port === '1333') {
     return `http://${hostname}:8000`;
   }
   

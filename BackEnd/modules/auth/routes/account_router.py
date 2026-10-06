@@ -588,6 +588,7 @@ def update_user_permissions(account_id: int, payload: dict, db: Session = Depend
     permissions_dict = payload.get("permissions", {})
     db_account.screen_permissions = json.dumps(permissions_dict)
     db.commit()
+    account_controller.invalidate_permission_cache(account_id)
     return {"message": "Cập nhật phân quyền thành công", "screen_permissions": db_account.screen_permissions}
 
 @router.post("/{account_id}/change-password")

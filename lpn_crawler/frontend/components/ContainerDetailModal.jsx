@@ -251,6 +251,7 @@ export const ContainerDetailModal = ({
 
   return (
     <div
+      className="lpn-container-detail-overlay"
       style={{
         position: 'fixed',
         inset: 0,
@@ -260,19 +261,20 @@ export const ContainerDetailModal = ({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '16px'
+        padding: '8px'
       }}
       onClick={onClose}
     >
       <div
+        className="lpn-container-detail-dialog"
         style={{
           backgroundColor: '#FAF6F0',
           border: '1px solid #EADCC9',
           borderRadius: '12px',
-          width: '92vw',
-          maxWidth: '1200px',
-          height: '88vh',
-          maxHeight: '900px',
+          width: 'min(98vw, 1200px)',
+          maxWidth: '98vw',
+          height: 'min(94vh, 900px)',
+          maxHeight: '94vh',
           display: 'flex',
           flexDirection: 'column',
           boxShadow: '0 20px 50px rgba(0, 0, 0, 0.35)',
@@ -282,29 +284,31 @@ export const ContainerDetailModal = ({
       >
         {/* 1. Unified Clean Header */}
         <div
+          className="lpn-container-detail-header"
           style={{
-            padding: '12px 18px',
+            padding: '10px 16px',
             backgroundColor: '#FFFFFF',
             borderBottom: '1px solid #EADCC9',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            gap: '16px',
+            gap: '10px',
+            flexWrap: 'wrap',
             flexShrink: 0
           }}
         >
           {/* Left: Container Number, Factory, Date Loading & Summary text */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '1.15rem', fontWeight: '800', color: '#2D1A12', letterSpacing: '0.2px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', flex: '1 1 auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '1.10rem', fontWeight: '800', color: '#2D1A12', letterSpacing: '0.2px' }}>
                 {containerData.container_number}
               </span>
               {containerData.factory && containerData.factory !== '—' && (
                 <span
                   style={{
-                    padding: '2px 8px',
+                    padding: '2px 7px',
                     borderRadius: '5px',
-                    fontSize: '0.72rem',
+                    fontSize: '0.70rem',
                     fontWeight: '700',
                     backgroundColor: '#4A2E1B',
                     color: '#FFFFFF'
@@ -317,19 +321,19 @@ export const ContainerDetailModal = ({
 
             <div style={{ height: '14px', width: '1px', backgroundColor: '#EADCC9' }} />
 
-            <div style={{ fontSize: '0.8rem', color: '#5D4037', fontWeight: '700' }}>
+            <div style={{ fontSize: '0.78rem', color: '#5D4037', fontWeight: '700' }}>
               {containerData.date_loading}
             </div>
 
             <div style={{ height: '14px', width: '1px', backgroundColor: '#EADCC9' }} />
 
-            <div style={{ fontSize: '0.8rem', color: '#7B5233' }}>
-              <b>{Number(containerData.lpn_count || 0).toLocaleString()}</b> LPN &bull; <b>{Number(containerData.sku_count || 0).toLocaleString()}</b> SKU &bull; <b>{items.length.toLocaleString()}</b> Pallet/Box ({Number(containerData.total_images || 0).toLocaleString()} ảnh)
+            <div style={{ fontSize: '0.78rem', color: '#7B5233' }}>
+              <b>{Number(containerData.lpn_count || 0).toLocaleString()}</b> LPN &bull; <b>{Number(containerData.sku_count || 0).toLocaleString()}</b> SKU &bull; <b>{items.length.toLocaleString()}</b> Pallet ({Number(containerData.total_images || 0).toLocaleString()} ảnh)
             </div>
           </div>
 
           {/* Right: Search Box + Close button */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: '1 1 200px', justifyContent: 'flex-end' }}>
             <div
               style={{
                 display: 'flex',
@@ -337,8 +341,9 @@ export const ContainerDetailModal = ({
                 backgroundColor: '#FAF6F0',
                 border: '1px solid #EADCC9',
                 borderRadius: '7px',
-                padding: '0 10px',
-                width: '230px',
+                padding: '0 8px',
+                flex: '1 1 140px',
+                maxWidth: '240px',
                 height: '32px'
               }}
             >
@@ -433,6 +438,7 @@ export const ContainerDetailModal = ({
             </div>
           ) : (
             <div
+              className="lpn-container-detail-grid"
               style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fill, minmax(175px, 1fr))',

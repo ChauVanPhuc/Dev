@@ -39,12 +39,12 @@ class LabelDetector:
     def detect_label_roi(
         self,
         image: np.ndarray,
-        max_labels: int = 20,
+        max_labels: int = 22,
         min_area_ratio: float = 0.0010,
         max_area_ratio: float = 0.35
     ) -> Dict[str, Any]:
         """
-        Phát hiện tất cả các vùng nhãn dán trên Pallet / Thùng carton (hỗ trợ tới 12 nhãn, tem ngang và tem xoay 90°).
+        Phát hiện tất cả các vùng nhãn dán trên Pallet / Thùng carton (hỗ trợ tới 22 nhãn, tem ngang và tem xoay 90°).
         Loại trừ triệt để hình vẽ sơ đồ thùng carton và chữ in thô trên nền carton.
         """
         if image is None or image.size == 0:
@@ -95,17 +95,25 @@ class LabelDetector:
             v_ch = hsv[:, :, 2]
             b_ch, g_ch, r_ch = cv2.split(work_img)
             
+            # Loại trừ vùng trời ngoài trời (Sky / Outdoor glare) ở đỉnh ảnh để tránh dính liền vào tem nhãn thùng hàng
+            is_sky = (b_ch > 170) & (g_ch > 150) & ((b_ch > r_ch + 10) | (b_ch >= 225))
+            sky_zone = np.zeros((det_h, det_w), dtype=bool)
+            sky_zone[:int(det_h * 0.22), :] = True
+            sky_mask = is_sky & sky_zone
+
             median_v = float(np.median(v_ch))
-            # Độ sáng ngưỡng tự động: giấy nhãn trắng linh hoạt thích nghi ánh sáng bóng râm hoặc chói nắng
-            thresh_v = max(175, int(median_v + 10))
-            is_white = (v_ch >= thresh_v) & (s_ch <= 80) & (b_ch >= 105)
+            # Độ sáng ngưỡng tự động: hỗ trợ cả tem nhãn trong bóng râm (v >= 110, s <= 70) lẫn tem dưới ánh sáng trực tiếp
+            thresh_v = max(160, int(median_v + 5))
+            is_bright_white = (v_ch >= thresh_v) & (s_ch <= 85) & (b_ch >= 100)
+            is_shadow_white = (v_ch >= 110) & (s_ch <= 70) & (b_ch >= 75)
+            is_white = (is_bright_white | is_shadow_white) & (~sky_mask)
 
             # Bổ trợ White Top-Hat để bắt các tem nhãn nhỏ bị sấp bóng hoặc tương phản cục bộ
             kt = max(11, int(51 * scale_det)) | 1
             kernel_tophat = cv2.getStructuringElement(cv2.MORPH_RECT, (kt, kt))
             tophat = cv2.morphologyEx(work_gray, cv2.MORPH_TOPHAT, kernel_tophat)
-            _, tophat_mask = cv2.threshold(tophat, 30, 255, cv2.THRESH_BINARY)
-            tophat_valid = (tophat_mask > 0) & (s_ch <= 85) & (v_ch >= 150)
+            _, tophat_mask = cv2.threshold(tophat, 20, 255, cv2.THRESH_BINARY)
+            tophat_valid = (tophat_mask > 0) & (s_ch <= 85) & (v_ch >= 110) & (~sky_mask)
 
             white_mask = ((is_white | tophat_valid).astype(np.uint8)) * 255
         else:
@@ -269,8 +277,13 @@ class LabelDetector:
                 continue
             c_patch = work_gray[cy:cy+cbh, cx:cx+cbw]
             mean_val = float(c_patch.mean())
-            if mean_val < 165:
+            if mean_val < 105:
                 continue
+            if mean_val < 160:
+                c_bc = barcode_mask[cy:cy+cbh, cx:cx+cbw]
+                bc_cov = float(np.count_nonzero(c_bc)) / float(c_area) if c_area > 0 else 0
+                if bc_cov < 0.04 and c_aspect > 4.5:
+                    continue
 
             # Bỏ qua nếu đã trùng với một ứng viên tem trắng đã có
             is_dup = False

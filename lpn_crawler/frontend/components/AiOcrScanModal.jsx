@@ -515,6 +515,7 @@ export const AiOcrScanModal = ({ isOpen, onClose }) => {
   return (
     <>
       <div
+        className="lpn-ai-scan-overlay"
         style={{
           position: 'fixed',
           inset: 0,
@@ -529,6 +530,7 @@ export const AiOcrScanModal = ({ isOpen, onClose }) => {
         onClick={onClose}
       >
         <div
+          className="lpn-ai-scan-dialog"
           style={{
             background: '#FAF6F0',
             borderRadius: '12px',
@@ -545,13 +547,15 @@ export const AiOcrScanModal = ({ isOpen, onClose }) => {
         >
           {/* Header */}
           <div
+            className="lpn-ai-scan-header"
             style={{
               padding: '12px 20px',
               borderBottom: '1px solid #EADCC9',
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
-              backgroundColor: '#FFFFFF'
+              backgroundColor: '#FFFFFF',
+              gap: '8px'
             }}
           >
             <div>
@@ -590,6 +594,7 @@ export const AiOcrScanModal = ({ isOpen, onClose }) => {
           >
             {/* Hàng 1: Các bộ lọc */}
             <div
+              className="lpn-ai-scan-filter-row"
               style={{
                 padding: '14px 20px 10px 20px',
                 display: 'flex',
@@ -725,6 +730,7 @@ export const AiOcrScanModal = ({ isOpen, onClose }) => {
 
             {/* Hàng 2: Action & KPI Bar (4 Cards KPI bên trái + Nút Hành Động bên phải) */}
             <div
+              className="lpn-ai-scan-kpi-bar"
               style={{
                 padding: '6px 18px',
                 backgroundColor: '#F7F2EA',
@@ -738,6 +744,7 @@ export const AiOcrScanModal = ({ isOpen, onClose }) => {
             >
               {/* 4 Cards KPI hiển thị dàn đều, tách rời thoáng đãng */}
               <div
+                className="lpn-ai-scan-kpi-grid"
                 style={{
                   display: 'grid',
                   gridTemplateColumns: 'repeat(4, 1fr)',
@@ -1107,8 +1114,11 @@ export const AiOcrScanModal = ({ isOpen, onClose }) => {
               </div>
 
               {/* Vùng Bảng - CHỈ VÙNG NÀY ĐƯỢC SCROLL */}
-              <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+              <div
+                className="lpn-ai-scan-table-scroll"
+                style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto' }}
+              >
+                <table style={{ width: '100%', minWidth: '700px', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
                   <thead style={{ position: 'sticky', top: 0, backgroundColor: '#F4ECE1', zIndex: 10 }}>
                     <tr style={{ borderBottom: '1px solid #EADCC9', color: '#4E3629', fontWeight: '800' }}>
                       <th style={{ padding: '8px 10px', textAlign: 'center', width: '55px', whiteSpace: 'nowrap' }}>Ảnh</th>
@@ -1462,6 +1472,7 @@ export const AiOcrScanModal = ({ isOpen, onClose }) => {
           }}
         >
           <div
+            className="lpn-inspector-dialog"
             style={{
               backgroundColor: '#FFFDF9',
               borderRadius: '12px',
@@ -1478,16 +1489,20 @@ export const AiOcrScanModal = ({ isOpen, onClose }) => {
           >
             {/* Inspector Header */}
             <div
+              className="lpn-inspector-header"
               style={{
-                height: '48px',
-                padding: '0 20px',
+                minHeight: '46px',
+                height: 'auto',
+                padding: '8px 14px',
                 backgroundColor: '#FAF6F0',
                 display: 'flex',
+                flexWrap: 'wrap',
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 borderBottom: '1px solid #EADCC9',
                 flexShrink: 0,
-                boxSizing: 'border-box'
+                boxSizing: 'border-box',
+                gap: '8px'
               }}
             >
               <div>
@@ -1593,7 +1608,10 @@ export const AiOcrScanModal = ({ isOpen, onClose }) => {
               }}
             >
               {/* ===== TOP: Image Viewer + Compact Steps (2 columns balanced, height 380px) ===== */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 0.85fr', gap: '12px', height: '380px', flexShrink: 0 }}>
+              <div
+                className="lpn-inspector-top-grid"
+                style={{ display: 'grid', gridTemplateColumns: '1.15fr 0.85fr', gap: '12px', height: '380px', flexShrink: 0 }}
+              >
                 {/* Left: Pipeline Image Viewer */}
                 <div style={{ minWidth: 0, height: '380px', flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
                   <ImageCanvas
@@ -1778,7 +1796,10 @@ export const AiOcrScanModal = ({ isOpen, onClose }) => {
                   </span>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div
+                  className="lpn-inspector-compare-grid"
+                  style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}
+                >
                   {/* LPN Compare Card */}
                   {(() => {
                     const targetLpn = inspectingItem.expected_lpn || inspectingItem.lpn;

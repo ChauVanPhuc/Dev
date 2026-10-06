@@ -1,0 +1,2580 @@
+
+pytorch
+2.13.0+cpu:˚∂
+ç
+inputval_1node_Shape_1"Shape*
+start†*
+
+end†JÑ
+	namespacew_empty_nn_module_stack_from_metadata_hook: _empty_nn_module_stack_from_metadata_hook/sym_size_int_74: aten.sym_size.intJd
+pkg.torch.onnx.class_hierarchyB['_empty_nn_module_stack_from_metadata_hook', 'aten.sym_size.int']Jã
+pkg.torch.onnx.fx_nodeq%sym_size_int_74 : [num_users=5] = call_function[target=torch.ops.aten.sym_size.int](args = (%x, 2), kwargs = {})J^
+pkg.torch.onnx.name_scopes@['_empty_nn_module_stack_from_metadata_hook', 'sym_size_int_74']Js
+pkg.torch.onnx.stack_traceUFile "torch/fx/passes/runtime_assert.py", line 24, in insert_deferred_runtime_asserts
+á
+val_1sym_size_int_74node_sym_size_int_74"SqueezeJÑ
+	namespacew_empty_nn_module_stack_from_metadata_hook: _empty_nn_module_stack_from_metadata_hook/sym_size_int_74: aten.sym_size.intJd
+pkg.torch.onnx.class_hierarchyB['_empty_nn_module_stack_from_metadata_hook', 'aten.sym_size.int']Jã
+pkg.torch.onnx.fx_nodeq%sym_size_int_74 : [num_users=5] = call_function[target=torch.ops.aten.sym_size.int](args = (%x, 2), kwargs = {})J^
+pkg.torch.onnx.name_scopes@['_empty_nn_module_stack_from_metadata_hook', 'sym_size_int_74']Js
+pkg.torch.onnx.stack_traceUFile "torch/fx/passes/runtime_assert.py", line 24, in insert_deferred_runtime_asserts
+ç
+inputval_2node_Shape_2"Shape*
+start†*
+
+end†JÑ
+	namespacew_empty_nn_module_stack_from_metadata_hook: _empty_nn_module_stack_from_metadata_hook/sym_size_int_75: aten.sym_size.intJd
+pkg.torch.onnx.class_hierarchyB['_empty_nn_module_stack_from_metadata_hook', 'aten.sym_size.int']Jã
+pkg.torch.onnx.fx_nodeq%sym_size_int_75 : [num_users=6] = call_function[target=torch.ops.aten.sym_size.int](args = (%x, 3), kwargs = {})J^
+pkg.torch.onnx.name_scopes@['_empty_nn_module_stack_from_metadata_hook', 'sym_size_int_75']Js
+pkg.torch.onnx.stack_traceUFile "torch/fx/passes/runtime_assert.py", line 24, in insert_deferred_runtime_asserts
+á
+val_2sym_size_int_75node_sym_size_int_75"SqueezeJÑ
+	namespacew_empty_nn_module_stack_from_metadata_hook: _empty_nn_module_stack_from_metadata_hook/sym_size_int_75: aten.sym_size.intJd
+pkg.torch.onnx.class_hierarchyB['_empty_nn_module_stack_from_metadata_hook', 'aten.sym_size.int']Jã
+pkg.torch.onnx.fx_nodeq%sym_size_int_75 : [num_users=6] = call_function[target=torch.ops.aten.sym_size.int](args = (%x, 3), kwargs = {})J^
+pkg.torch.onnx.name_scopes@['_empty_nn_module_stack_from_metadata_hook', 'sym_size_int_75']Js
+pkg.torch.onnx.stack_traceUFile "torch/fx/passes/runtime_assert.py", line 24, in insert_deferred_runtime_asserts
+ï
+sym_size_int_75
+val_5
+floordiv_8node_floordiv_8"DivJä
+	namespace}_empty_nn_module_stack_from_metadata_hook: _empty_nn_module_stack_from_metadata_hook/floordiv_8: <built-in function floordiv>Jo
+pkg.torch.onnx.class_hierarchyM['_empty_nn_module_stack_from_metadata_hook', '<built-in function floordiv>']Jä
+pkg.torch.onnx.fx_nodep%floordiv_8 : [num_users=5] = call_function[target=operator.floordiv](args = (%sym_size_int_75, 2), kwargs = {})JY
+pkg.torch.onnx.name_scopes;['_empty_nn_module_stack_from_metadata_hook', 'floordiv_8']Js
+pkg.torch.onnx.stack_traceUFile "torch/fx/passes/runtime_assert.py", line 24, in insert_deferred_runtime_asserts
+ï
+sym_size_int_74
+val_5
+floordiv_9node_floordiv_9"DivJä
+	namespace}_empty_nn_module_stack_from_metadata_hook: _empty_nn_module_stack_from_metadata_hook/floordiv_9: <built-in function floordiv>Jo
+pkg.torch.onnx.class_hierarchyM['_empty_nn_module_stack_from_metadata_hook', '<built-in function floordiv>']Jä
+pkg.torch.onnx.fx_nodep%floordiv_9 : [num_users=4] = call_function[target=operator.floordiv](args = (%sym_size_int_74, 2), kwargs = {})JY
+pkg.torch.onnx.name_scopes;['_empty_nn_module_stack_from_metadata_hook', 'floordiv_9']Js
+pkg.torch.onnx.stack_traceUFile "torch/fx/passes/runtime_assert.py", line 24, in insert_deferred_runtime_asserts
+ö
+sym_size_int_75
+val_7floordiv_10node_floordiv_10"DivJã
+	namespace~_empty_nn_module_stack_from_metadata_hook: _empty_nn_module_stack_from_metadata_hook/floordiv_10: <built-in function floordiv>Jo
+pkg.torch.onnx.class_hierarchyM['_empty_nn_module_stack_from_metadata_hook', '<built-in function floordiv>']Jã
+pkg.torch.onnx.fx_nodeq%floordiv_10 : [num_users=5] = call_function[target=operator.floordiv](args = (%sym_size_int_75, 4), kwargs = {})JZ
+pkg.torch.onnx.name_scopes<['_empty_nn_module_stack_from_metadata_hook', 'floordiv_10']Js
+pkg.torch.onnx.stack_traceUFile "torch/fx/passes/runtime_assert.py", line 24, in insert_deferred_runtime_asserts
+ö
+sym_size_int_74
+val_7floordiv_11node_floordiv_11"DivJã
+	namespace~_empty_nn_module_stack_from_metadata_hook: _empty_nn_module_stack_from_metadata_hook/floordiv_11: <built-in function floordiv>Jo
+pkg.torch.onnx.class_hierarchyM['_empty_nn_module_stack_from_metadata_hook', '<built-in function floordiv>']Jã
+pkg.torch.onnx.fx_nodeq%floordiv_11 : [num_users=4] = call_function[target=operator.floordiv](args = (%sym_size_int_74, 4), kwargs = {})JZ
+pkg.torch.onnx.name_scopes<['_empty_nn_module_stack_from_metadata_hook', 'floordiv_11']Js
+pkg.torch.onnx.stack_traceUFile "torch/fx/passes/runtime_assert.py", line 24, in insert_deferred_runtime_asserts
+ö
+sym_size_int_75
+val_8floordiv_12node_floordiv_12"DivJã
+	namespace~_empty_nn_module_stack_from_metadata_hook: _empty_nn_module_stack_from_metadata_hook/floordiv_12: <built-in function floordiv>Jo
+pkg.torch.onnx.class_hierarchyM['_empty_nn_module_stack_from_metadata_hook', '<built-in function floordiv>']Jã
+pkg.torch.onnx.fx_nodeq%floordiv_12 : [num_users=5] = call_function[target=operator.floordiv](args = (%sym_size_int_75, 8), kwargs = {})JZ
+pkg.torch.onnx.name_scopes<['_empty_nn_module_stack_from_metadata_hook', 'floordiv_12']Js
+pkg.torch.onnx.stack_traceUFile "torch/fx/passes/runtime_assert.py", line 24, in insert_deferred_runtime_asserts
+ö
+sym_size_int_74
+val_8floordiv_13node_floordiv_13"DivJã
+	namespace~_empty_nn_module_stack_from_metadata_hook: _empty_nn_module_stack_from_metadata_hook/floordiv_13: <built-in function floordiv>Jo
+pkg.torch.onnx.class_hierarchyM['_empty_nn_module_stack_from_metadata_hook', '<built-in function floordiv>']Jã
+pkg.torch.onnx.fx_nodeq%floordiv_13 : [num_users=4] = call_function[target=operator.floordiv](args = (%sym_size_int_74, 8), kwargs = {})JZ
+pkg.torch.onnx.name_scopes<['_empty_nn_module_stack_from_metadata_hook', 'floordiv_13']Js
+pkg.torch.onnx.stack_traceUFile "torch/fx/passes/runtime_assert.py", line 24, in insert_deferred_runtime_asserts
+’
+input
+basenet.slice1.0.weight
+basenet.slice1.0.biasgetitemnode_Conv_159"Conv*
+kernel_shape@@†*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@@@@†Jí
+	namespaceÑ: easyocr.craft.CRAFT/basenet: easyocr.model.modules.vgg16_bn/basenet.slice1: torch.nn.modules.container.Sequential/basenet.slice1.1: torch.nn.modules.batchnorm.BatchNorm2d/_native_batch_norm_legit_no_training: aten._native_batch_norm_legit_no_training.defaultJ:
+!pkg.onnxscript.rewriter.rule_nameFuseBatchNormIntoConvJ‰
+pkg.torch.onnx.class_hierarchy¡['easyocr.craft.CRAFT', 'easyocr.model.modules.vgg16_bn', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.batchnorm.BatchNorm2d', 'aten._native_batch_norm_legit_no_training.default']J»
+pkg.torch.onnx.fx_node≠%_native_batch_norm_legit_no_training : [num_users=1] = call_function[target=torch.ops.aten._native_batch_norm_legit_no_training.default](args = (%conv2d, %p_basenet_slice1_1_weight, %p_basenet_slice1_1_bias, %b_basenet_slice1_1_running_mean, %b_basenet_slice1_1_running_var, 0.1, 1e-05), kwargs = {})J{
+pkg.torch.onnx.name_scopes]['', 'basenet', 'basenet.slice1', 'basenet.slice1.1', '_native_batch_norm_legit_no_training']Jà
+pkg.torch.onnx.stack_traceÈFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 60, in forward
+    sources = self.basenet(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\model\modules.py", line 68, in forward
+    h = self.slice1(X)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\batchnorm.py", line 210, in forward
+    return F.batch_norm(
+∂
+
+getitemrelu	node_relu"ReluJÃ
+	namespaceæ: easyocr.craft.CRAFT/basenet: easyocr.model.modules.vgg16_bn/basenet.slice1: torch.nn.modules.container.Sequential/basenet.slice1.2: torch.nn.modules.activation.ReLU/relu: aten.relu.defaultJæ
+pkg.torch.onnx.class_hierarchyõ['easyocr.craft.CRAFT', 'easyocr.model.modules.vgg16_bn', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.ReLU', 'aten.relu.default']JÑ
+pkg.torch.onnx.fx_nodej%relu : [num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%getitem,), kwargs = {})J[
+pkg.torch.onnx.name_scopes=['', 'basenet', 'basenet.slice1', 'basenet.slice1.2', 'relu']Jü
+pkg.torch.onnx.stack_traceÄFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 60, in forward
+    sources = self.basenet(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\model\modules.py", line 68, in forward
+    h = self.slice1(X)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\activation.py", line 143, in forward
+    return F.relu(input, inplace=self.inplace)
+ﬁ
+relu
+basenet.slice1.3.weight
+basenet.slice1.3.bias	getitem_3node_Conv_160"Conv*
+kernel_shape@@†*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@@@@†Jî
+	namespaceÜ: easyocr.craft.CRAFT/basenet: easyocr.model.modules.vgg16_bn/basenet.slice1: torch.nn.modules.container.Sequential/basenet.slice1.4: torch.nn.modules.batchnorm.BatchNorm2d/_native_batch_norm_legit_no_training_1: aten._native_batch_norm_legit_no_training.defaultJ:
+!pkg.onnxscript.rewriter.rule_nameFuseBatchNormIntoConvJ‰
+pkg.torch.onnx.class_hierarchy¡['easyocr.craft.CRAFT', 'easyocr.model.modules.vgg16_bn', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.batchnorm.BatchNorm2d', 'aten._native_batch_norm_legit_no_training.default']JÃ
+pkg.torch.onnx.fx_node±%_native_batch_norm_legit_no_training_1 : [num_users=1] = call_function[target=torch.ops.aten._native_batch_norm_legit_no_training.default](args = (%conv2d_1, %p_basenet_slice1_4_weight, %p_basenet_slice1_4_bias, %b_basenet_slice1_4_running_mean, %b_basenet_slice1_4_running_var, 0.1, 1e-05), kwargs = {})J}
+pkg.torch.onnx.name_scopes_['', 'basenet', 'basenet.slice1', 'basenet.slice1.4', '_native_batch_norm_legit_no_training_1']Jà
+pkg.torch.onnx.stack_traceÈFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 60, in forward
+    sources = self.basenet(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\model\modules.py", line 68, in forward
+    h = self.slice1(X)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\batchnorm.py", line 210, in forward
+    return F.batch_norm(
+ƒ
+
+	getitem_3relu_1node_relu_1"ReluJŒ
+	namespace¿: easyocr.craft.CRAFT/basenet: easyocr.model.modules.vgg16_bn/basenet.slice1: torch.nn.modules.container.Sequential/basenet.slice1.5: torch.nn.modules.activation.ReLU/relu_1: aten.relu.defaultJæ
+pkg.torch.onnx.class_hierarchyõ['easyocr.craft.CRAFT', 'easyocr.model.modules.vgg16_bn', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.ReLU', 'aten.relu.default']Jà
+pkg.torch.onnx.fx_noden%relu_1 : [num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%getitem_3,), kwargs = {})J]
+pkg.torch.onnx.name_scopes?['', 'basenet', 'basenet.slice1', 'basenet.slice1.5', 'relu_1']Jü
+pkg.torch.onnx.stack_traceÄFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 60, in forward
+    sources = self.basenet(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\model\modules.py", line 68, in forward
+    h = self.slice1(X)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\activation.py", line 143, in forward
+    return F.relu(input, inplace=self.inplace)
+Ò
+relu_1
+max_pool2dnode_max_pool2d"MaxPool*
+kernel_shape@@†*
+strides@@†*
+	dilations@@†*
+auto_pad"NOTSET†*
+pads@ @ @ @ †*
+	ceil_mode †*
+storage_order †J⁄
+	namespaceÃ: easyocr.craft.CRAFT/basenet: easyocr.model.modules.vgg16_bn/basenet.slice1: torch.nn.modules.container.Sequential/basenet.slice1.6: torch.nn.modules.pooling.MaxPool2d/max_pool2d: aten.max_pool2d.defaultJ∆
+pkg.torch.onnx.class_hierarchy£['easyocr.craft.CRAFT', 'easyocr.model.modules.vgg16_bn', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.pooling.MaxPool2d', 'aten.max_pool2d.default']Jü
+pkg.torch.onnx.fx_nodeÑ%max_pool2d : [num_users=1] = call_function[target=torch.ops.aten.max_pool2d.default](args = (%relu_1, [2, 2], [2, 2]), kwargs = {})Ja
+pkg.torch.onnx.name_scopesC['', 'basenet', 'basenet.slice1', 'basenet.slice1.6', 'max_pool2d']JÜ
+pkg.torch.onnx.stack_traceÁFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 60, in forward
+    sources = self.basenet(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\model\modules.py", line 68, in forward
+    h = self.slice1(X)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\pooling.py", line 224, in forward
+    return F.max_pool2d(
+‰
+
+max_pool2d
+basenet.slice1.7.weight
+basenet.slice1.7.bias	getitem_6node_Conv_161"Conv*
+kernel_shape@@†*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@@@@†Jî
+	namespaceÜ: easyocr.craft.CRAFT/basenet: easyocr.model.modules.vgg16_bn/basenet.slice1: torch.nn.modules.container.Sequential/basenet.slice1.8: torch.nn.modules.batchnorm.BatchNorm2d/_native_batch_norm_legit_no_training_2: aten._native_batch_norm_legit_no_training.defaultJ:
+!pkg.onnxscript.rewriter.rule_nameFuseBatchNormIntoConvJ‰
+pkg.torch.onnx.class_hierarchy¡['easyocr.craft.CRAFT', 'easyocr.model.modules.vgg16_bn', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.batchnorm.BatchNorm2d', 'aten._native_batch_norm_legit_no_training.default']JÃ
+pkg.torch.onnx.fx_node±%_native_batch_norm_legit_no_training_2 : [num_users=1] = call_function[target=torch.ops.aten._native_batch_norm_legit_no_training.default](args = (%conv2d_2, %p_basenet_slice1_8_weight, %p_basenet_slice1_8_bias, %b_basenet_slice1_8_running_mean, %b_basenet_slice1_8_running_var, 0.1, 1e-05), kwargs = {})J}
+pkg.torch.onnx.name_scopes_['', 'basenet', 'basenet.slice1', 'basenet.slice1.8', '_native_batch_norm_legit_no_training_2']Jà
+pkg.torch.onnx.stack_traceÈFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 60, in forward
+    sources = self.basenet(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\model\modules.py", line 68, in forward
+    h = self.slice1(X)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\batchnorm.py", line 210, in forward
+    return F.batch_norm(
+ƒ
+
+	getitem_6relu_2node_relu_2"ReluJŒ
+	namespace¿: easyocr.craft.CRAFT/basenet: easyocr.model.modules.vgg16_bn/basenet.slice1: torch.nn.modules.container.Sequential/basenet.slice1.9: torch.nn.modules.activation.ReLU/relu_2: aten.relu.defaultJæ
+pkg.torch.onnx.class_hierarchyõ['easyocr.craft.CRAFT', 'easyocr.model.modules.vgg16_bn', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.ReLU', 'aten.relu.default']Jà
+pkg.torch.onnx.fx_noden%relu_2 : [num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%getitem_6,), kwargs = {})J]
+pkg.torch.onnx.name_scopes?['', 'basenet', 'basenet.slice1', 'basenet.slice1.9', 'relu_2']Jü
+pkg.torch.onnx.stack_traceÄFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 60, in forward
+    sources = self.basenet(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\model\modules.py", line 68, in forward
+    h = self.slice1(X)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\activation.py", line 143, in forward
+    return F.relu(input, inplace=self.inplace)
+Ë
+relu_2
+basenet.slice1.10.weight
+basenet.slice1.10.bias	getitem_9node_Conv_162"Conv*
+kernel_shape@@†*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@@@@†Jï
+	namespaceá: easyocr.craft.CRAFT/basenet: easyocr.model.modules.vgg16_bn/basenet.slice1: torch.nn.modules.container.Sequential/basenet.slice1.11: torch.nn.modules.batchnorm.BatchNorm2d/_native_batch_norm_legit_no_training_3: aten._native_batch_norm_legit_no_training.defaultJ:
+!pkg.onnxscript.rewriter.rule_nameFuseBatchNormIntoConvJ‰
+pkg.torch.onnx.class_hierarchy¡['easyocr.craft.CRAFT', 'easyocr.model.modules.vgg16_bn', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.batchnorm.BatchNorm2d', 'aten._native_batch_norm_legit_no_training.default']J–
+pkg.torch.onnx.fx_nodeµ%_native_batch_norm_legit_no_training_3 : [num_users=1] = call_function[target=torch.ops.aten._native_batch_norm_legit_no_training.default](args = (%conv2d_3, %p_basenet_slice1_11_weight, %p_basenet_slice1_11_bias, %b_basenet_slice1_11_running_mean, %b_basenet_slice1_11_running_var, 0.1, 1e-05), kwargs = {})J~
+pkg.torch.onnx.name_scopes`['', 'basenet', 'basenet.slice1', 'basenet.slice1.11', '_native_batch_norm_legit_no_training_3']Jà
+pkg.torch.onnx.stack_traceÈFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 60, in forward
+    sources = self.basenet(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\model\modules.py", line 68, in forward
+    h = self.slice1(X)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\batchnorm.py", line 210, in forward
+    return F.batch_norm(
+∆
+
+	getitem_9relu_3node_relu_3"ReluJœ
+	namespace¡: easyocr.craft.CRAFT/basenet: easyocr.model.modules.vgg16_bn/basenet.slice2: torch.nn.modules.container.Sequential/basenet.slice2.12: torch.nn.modules.activation.ReLU/relu_3: aten.relu.defaultJæ
+pkg.torch.onnx.class_hierarchyõ['easyocr.craft.CRAFT', 'easyocr.model.modules.vgg16_bn', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.ReLU', 'aten.relu.default']Jà
+pkg.torch.onnx.fx_noden%relu_3 : [num_users=2] = call_function[target=torch.ops.aten.relu.default](args = (%getitem_9,), kwargs = {})J^
+pkg.torch.onnx.name_scopes@['', 'basenet', 'basenet.slice2', 'basenet.slice2.12', 'relu_3']Jü
+pkg.torch.onnx.stack_traceÄFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 60, in forward
+    sources = self.basenet(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\model\modules.py", line 70, in forward
+    h = self.slice2(h)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\activation.py", line 143, in forward
+    return F.relu(input, inplace=self.inplace)
+˝
+relu_3max_pool2d_1node_max_pool2d_1"MaxPool*
+kernel_shape@@†*
+strides@@†*
+	dilations@@†*
+auto_pad"NOTSET†*
+pads@ @ @ @ †*
+	ceil_mode †*
+storage_order †J›
+	namespaceœ: easyocr.craft.CRAFT/basenet: easyocr.model.modules.vgg16_bn/basenet.slice2: torch.nn.modules.container.Sequential/basenet.slice2.13: torch.nn.modules.pooling.MaxPool2d/max_pool2d_1: aten.max_pool2d.defaultJ∆
+pkg.torch.onnx.class_hierarchy£['easyocr.craft.CRAFT', 'easyocr.model.modules.vgg16_bn', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.pooling.MaxPool2d', 'aten.max_pool2d.default']J°
+pkg.torch.onnx.fx_nodeÜ%max_pool2d_1 : [num_users=1] = call_function[target=torch.ops.aten.max_pool2d.default](args = (%relu_3, [2, 2], [2, 2]), kwargs = {})Jd
+pkg.torch.onnx.name_scopesF['', 'basenet', 'basenet.slice2', 'basenet.slice2.13', 'max_pool2d_1']JÜ
+pkg.torch.onnx.stack_traceÁFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 60, in forward
+    sources = self.basenet(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\model\modules.py", line 70, in forward
+    h = self.slice2(h)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\pooling.py", line 224, in forward
+    return F.max_pool2d(
+Ô
+max_pool2d_1
+basenet.slice2.14.weight
+basenet.slice2.14.bias
+getitem_12node_Conv_163"Conv*
+kernel_shape@@†*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@@@@†Jï
+	namespaceá: easyocr.craft.CRAFT/basenet: easyocr.model.modules.vgg16_bn/basenet.slice2: torch.nn.modules.container.Sequential/basenet.slice2.15: torch.nn.modules.batchnorm.BatchNorm2d/_native_batch_norm_legit_no_training_4: aten._native_batch_norm_legit_no_training.defaultJ:
+!pkg.onnxscript.rewriter.rule_nameFuseBatchNormIntoConvJ‰
+pkg.torch.onnx.class_hierarchy¡['easyocr.craft.CRAFT', 'easyocr.model.modules.vgg16_bn', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.batchnorm.BatchNorm2d', 'aten._native_batch_norm_legit_no_training.default']J–
+pkg.torch.onnx.fx_nodeµ%_native_batch_norm_legit_no_training_4 : [num_users=1] = call_function[target=torch.ops.aten._native_batch_norm_legit_no_training.default](args = (%conv2d_4, %p_basenet_slice2_15_weight, %p_basenet_slice2_15_bias, %b_basenet_slice2_15_running_mean, %b_basenet_slice2_15_running_var, 0.1, 1e-05), kwargs = {})J~
+pkg.torch.onnx.name_scopes`['', 'basenet', 'basenet.slice2', 'basenet.slice2.15', '_native_batch_norm_legit_no_training_4']Jà
+pkg.torch.onnx.stack_traceÈFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 60, in forward
+    sources = self.basenet(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\model\modules.py", line 70, in forward
+    h = self.slice2(h)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\batchnorm.py", line 210, in forward
+    return F.batch_norm(
+»
+
+
+getitem_12relu_4node_relu_4"ReluJœ
+	namespace¡: easyocr.craft.CRAFT/basenet: easyocr.model.modules.vgg16_bn/basenet.slice2: torch.nn.modules.container.Sequential/basenet.slice2.16: torch.nn.modules.activation.ReLU/relu_4: aten.relu.defaultJæ
+pkg.torch.onnx.class_hierarchyõ['easyocr.craft.CRAFT', 'easyocr.model.modules.vgg16_bn', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.ReLU', 'aten.relu.default']Jâ
+pkg.torch.onnx.fx_nodeo%relu_4 : [num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%getitem_12,), kwargs = {})J^
+pkg.torch.onnx.name_scopes@['', 'basenet', 'basenet.slice2', 'basenet.slice2.16', 'relu_4']Jü
+pkg.torch.onnx.stack_traceÄFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 60, in forward
+    sources = self.basenet(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\model\modules.py", line 70, in forward
+    h = self.slice2(h)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\activation.py", line 143, in forward
+    return F.relu(input, inplace=self.inplace)
+È
+relu_4
+basenet.slice2.17.weight
+basenet.slice2.17.bias
+getitem_15node_Conv_164"Conv*
+kernel_shape@@†*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@@@@†Jï
+	namespaceá: easyocr.craft.CRAFT/basenet: easyocr.model.modules.vgg16_bn/basenet.slice2: torch.nn.modules.container.Sequential/basenet.slice2.18: torch.nn.modules.batchnorm.BatchNorm2d/_native_batch_norm_legit_no_training_5: aten._native_batch_norm_legit_no_training.defaultJ:
+!pkg.onnxscript.rewriter.rule_nameFuseBatchNormIntoConvJ‰
+pkg.torch.onnx.class_hierarchy¡['easyocr.craft.CRAFT', 'easyocr.model.modules.vgg16_bn', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.batchnorm.BatchNorm2d', 'aten._native_batch_norm_legit_no_training.default']J–
+pkg.torch.onnx.fx_nodeµ%_native_batch_norm_legit_no_training_5 : [num_users=1] = call_function[target=torch.ops.aten._native_batch_norm_legit_no_training.default](args = (%conv2d_5, %p_basenet_slice2_18_weight, %p_basenet_slice2_18_bias, %b_basenet_slice2_18_running_mean, %b_basenet_slice2_18_running_var, 0.1, 1e-05), kwargs = {})J~
+pkg.torch.onnx.name_scopes`['', 'basenet', 'basenet.slice2', 'basenet.slice2.18', '_native_batch_norm_legit_no_training_5']Jà
+pkg.torch.onnx.stack_traceÈFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 60, in forward
+    sources = self.basenet(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\model\modules.py", line 70, in forward
+    h = self.slice2(h)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\batchnorm.py", line 210, in forward
+    return F.batch_norm(
+»
+
+
+getitem_15relu_5node_relu_5"ReluJœ
+	namespace¡: easyocr.craft.CRAFT/basenet: easyocr.model.modules.vgg16_bn/basenet.slice3: torch.nn.modules.container.Sequential/basenet.slice3.19: torch.nn.modules.activation.ReLU/relu_5: aten.relu.defaultJæ
+pkg.torch.onnx.class_hierarchyõ['easyocr.craft.CRAFT', 'easyocr.model.modules.vgg16_bn', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.ReLU', 'aten.relu.default']Jâ
+pkg.torch.onnx.fx_nodeo%relu_5 : [num_users=2] = call_function[target=torch.ops.aten.relu.default](args = (%getitem_15,), kwargs = {})J^
+pkg.torch.onnx.name_scopes@['', 'basenet', 'basenet.slice3', 'basenet.slice3.19', 'relu_5']Jü
+pkg.torch.onnx.stack_traceÄFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 60, in forward
+    sources = self.basenet(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\model\modules.py", line 72, in forward
+    h = self.slice3(h)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\activation.py", line 143, in forward
+    return F.relu(input, inplace=self.inplace)
+È
+relu_5
+basenet.slice3.20.weight
+basenet.slice3.20.bias
+getitem_18node_Conv_165"Conv*
+kernel_shape@@†*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@@@@†Jï
+	namespaceá: easyocr.craft.CRAFT/basenet: easyocr.model.modules.vgg16_bn/basenet.slice3: torch.nn.modules.container.Sequential/basenet.slice3.21: torch.nn.modules.batchnorm.BatchNorm2d/_native_batch_norm_legit_no_training_6: aten._native_batch_norm_legit_no_training.defaultJ:
+!pkg.onnxscript.rewriter.rule_nameFuseBatchNormIntoConvJ‰
+pkg.torch.onnx.class_hierarchy¡['easyocr.craft.CRAFT', 'easyocr.model.modules.vgg16_bn', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.batchnorm.BatchNorm2d', 'aten._native_batch_norm_legit_no_training.default']J–
+pkg.torch.onnx.fx_nodeµ%_native_batch_norm_legit_no_training_6 : [num_users=1] = call_function[target=torch.ops.aten._native_batch_norm_legit_no_training.default](args = (%conv2d_6, %p_basenet_slice3_21_weight, %p_basenet_slice3_21_bias, %b_basenet_slice3_21_running_mean, %b_basenet_slice3_21_running_var, 0.1, 1e-05), kwargs = {})J~
+pkg.torch.onnx.name_scopes`['', 'basenet', 'basenet.slice3', 'basenet.slice3.21', '_native_batch_norm_legit_no_training_6']Jà
+pkg.torch.onnx.stack_traceÈFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 60, in forward
+    sources = self.basenet(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\model\modules.py", line 72, in forward
+    h = self.slice3(h)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\batchnorm.py", line 210, in forward
+    return F.batch_norm(
+»
+
+
+getitem_18relu_6node_relu_6"ReluJœ
+	namespace¡: easyocr.craft.CRAFT/basenet: easyocr.model.modules.vgg16_bn/basenet.slice3: torch.nn.modules.container.Sequential/basenet.slice3.22: torch.nn.modules.activation.ReLU/relu_6: aten.relu.defaultJæ
+pkg.torch.onnx.class_hierarchyõ['easyocr.craft.CRAFT', 'easyocr.model.modules.vgg16_bn', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.ReLU', 'aten.relu.default']Jâ
+pkg.torch.onnx.fx_nodeo%relu_6 : [num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%getitem_18,), kwargs = {})J^
+pkg.torch.onnx.name_scopes@['', 'basenet', 'basenet.slice3', 'basenet.slice3.22', 'relu_6']Jü
+pkg.torch.onnx.stack_traceÄFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 60, in forward
+    sources = self.basenet(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\model\modules.py", line 72, in forward
+    h = self.slice3(h)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\activation.py", line 143, in forward
+    return F.relu(input, inplace=self.inplace)
+˝
+relu_6max_pool2d_2node_max_pool2d_2"MaxPool*
+kernel_shape@@†*
+strides@@†*
+	dilations@@†*
+auto_pad"NOTSET†*
+pads@ @ @ @ †*
+	ceil_mode †*
+storage_order †J›
+	namespaceœ: easyocr.craft.CRAFT/basenet: easyocr.model.modules.vgg16_bn/basenet.slice3: torch.nn.modules.container.Sequential/basenet.slice3.23: torch.nn.modules.pooling.MaxPool2d/max_pool2d_2: aten.max_pool2d.defaultJ∆
+pkg.torch.onnx.class_hierarchy£['easyocr.craft.CRAFT', 'easyocr.model.modules.vgg16_bn', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.pooling.MaxPool2d', 'aten.max_pool2d.default']J°
+pkg.torch.onnx.fx_nodeÜ%max_pool2d_2 : [num_users=1] = call_function[target=torch.ops.aten.max_pool2d.default](args = (%relu_6, [2, 2], [2, 2]), kwargs = {})Jd
+pkg.torch.onnx.name_scopesF['', 'basenet', 'basenet.slice3', 'basenet.slice3.23', 'max_pool2d_2']JÜ
+pkg.torch.onnx.stack_traceÁFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 60, in forward
+    sources = self.basenet(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\model\modules.py", line 72, in forward
+    h = self.slice3(h)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\pooling.py", line 224, in forward
+    return F.max_pool2d(
+Ô
+max_pool2d_2
+basenet.slice3.24.weight
+basenet.slice3.24.bias
+getitem_21node_Conv_166"Conv*
+kernel_shape@@†*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@@@@†Jï
+	namespaceá: easyocr.craft.CRAFT/basenet: easyocr.model.modules.vgg16_bn/basenet.slice3: torch.nn.modules.container.Sequential/basenet.slice3.25: torch.nn.modules.batchnorm.BatchNorm2d/_native_batch_norm_legit_no_training_7: aten._native_batch_norm_legit_no_training.defaultJ:
+!pkg.onnxscript.rewriter.rule_nameFuseBatchNormIntoConvJ‰
+pkg.torch.onnx.class_hierarchy¡['easyocr.craft.CRAFT', 'easyocr.model.modules.vgg16_bn', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.batchnorm.BatchNorm2d', 'aten._native_batch_norm_legit_no_training.default']J–
+pkg.torch.onnx.fx_nodeµ%_native_batch_norm_legit_no_training_7 : [num_users=1] = call_function[target=torch.ops.aten._native_batch_norm_legit_no_training.default](args = (%conv2d_7, %p_basenet_slice3_25_weight, %p_basenet_slice3_25_bias, %b_basenet_slice3_25_running_mean, %b_basenet_slice3_25_running_var, 0.1, 1e-05), kwargs = {})J~
+pkg.torch.onnx.name_scopes`['', 'basenet', 'basenet.slice3', 'basenet.slice3.25', '_native_batch_norm_legit_no_training_7']Jà
+pkg.torch.onnx.stack_traceÈFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 60, in forward
+    sources = self.basenet(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\model\modules.py", line 72, in forward
+    h = self.slice3(h)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\batchnorm.py", line 210, in forward
+    return F.batch_norm(
+»
+
+
+getitem_21relu_7node_relu_7"ReluJœ
+	namespace¡: easyocr.craft.CRAFT/basenet: easyocr.model.modules.vgg16_bn/basenet.slice3: torch.nn.modules.container.Sequential/basenet.slice3.26: torch.nn.modules.activation.ReLU/relu_7: aten.relu.defaultJæ
+pkg.torch.onnx.class_hierarchyõ['easyocr.craft.CRAFT', 'easyocr.model.modules.vgg16_bn', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.ReLU', 'aten.relu.default']Jâ
+pkg.torch.onnx.fx_nodeo%relu_7 : [num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%getitem_21,), kwargs = {})J^
+pkg.torch.onnx.name_scopes@['', 'basenet', 'basenet.slice3', 'basenet.slice3.26', 'relu_7']Jü
+pkg.torch.onnx.stack_traceÄFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 60, in forward
+    sources = self.basenet(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\model\modules.py", line 72, in forward
+    h = self.slice3(h)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\activation.py", line 143, in forward
+    return F.relu(input, inplace=self.inplace)
+È
+relu_7
+basenet.slice3.27.weight
+basenet.slice3.27.bias
+getitem_24node_Conv_167"Conv*
+kernel_shape@@†*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@@@@†Jï
+	namespaceá: easyocr.craft.CRAFT/basenet: easyocr.model.modules.vgg16_bn/basenet.slice3: torch.nn.modules.container.Sequential/basenet.slice3.28: torch.nn.modules.batchnorm.BatchNorm2d/_native_batch_norm_legit_no_training_8: aten._native_batch_norm_legit_no_training.defaultJ:
+!pkg.onnxscript.rewriter.rule_nameFuseBatchNormIntoConvJ‰
+pkg.torch.onnx.class_hierarchy¡['easyocr.craft.CRAFT', 'easyocr.model.modules.vgg16_bn', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.batchnorm.BatchNorm2d', 'aten._native_batch_norm_legit_no_training.default']J–
+pkg.torch.onnx.fx_nodeµ%_native_batch_norm_legit_no_training_8 : [num_users=1] = call_function[target=torch.ops.aten._native_batch_norm_legit_no_training.default](args = (%conv2d_8, %p_basenet_slice3_28_weight, %p_basenet_slice3_28_bias, %b_basenet_slice3_28_running_mean, %b_basenet_slice3_28_running_var, 0.1, 1e-05), kwargs = {})J~
+pkg.torch.onnx.name_scopes`['', 'basenet', 'basenet.slice3', 'basenet.slice3.28', '_native_batch_norm_legit_no_training_8']Jà
+pkg.torch.onnx.stack_traceÈFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 60, in forward
+    sources = self.basenet(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\model\modules.py", line 72, in forward
+    h = self.slice3(h)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\batchnorm.py", line 210, in forward
+    return F.batch_norm(
+»
+
+
+getitem_24relu_8node_relu_8"ReluJœ
+	namespace¡: easyocr.craft.CRAFT/basenet: easyocr.model.modules.vgg16_bn/basenet.slice4: torch.nn.modules.container.Sequential/basenet.slice4.29: torch.nn.modules.activation.ReLU/relu_8: aten.relu.defaultJæ
+pkg.torch.onnx.class_hierarchyõ['easyocr.craft.CRAFT', 'easyocr.model.modules.vgg16_bn', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.ReLU', 'aten.relu.default']Jâ
+pkg.torch.onnx.fx_nodeo%relu_8 : [num_users=2] = call_function[target=torch.ops.aten.relu.default](args = (%getitem_24,), kwargs = {})J^
+pkg.torch.onnx.name_scopes@['', 'basenet', 'basenet.slice4', 'basenet.slice4.29', 'relu_8']Jü
+pkg.torch.onnx.stack_traceÄFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 60, in forward
+    sources = self.basenet(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\model\modules.py", line 74, in forward
+    h = self.slice4(h)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\activation.py", line 143, in forward
+    return F.relu(input, inplace=self.inplace)
+È
+relu_8
+basenet.slice4.30.weight
+basenet.slice4.30.bias
+getitem_27node_Conv_168"Conv*
+kernel_shape@@†*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@@@@†Jï
+	namespaceá: easyocr.craft.CRAFT/basenet: easyocr.model.modules.vgg16_bn/basenet.slice4: torch.nn.modules.container.Sequential/basenet.slice4.31: torch.nn.modules.batchnorm.BatchNorm2d/_native_batch_norm_legit_no_training_9: aten._native_batch_norm_legit_no_training.defaultJ:
+!pkg.onnxscript.rewriter.rule_nameFuseBatchNormIntoConvJ‰
+pkg.torch.onnx.class_hierarchy¡['easyocr.craft.CRAFT', 'easyocr.model.modules.vgg16_bn', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.batchnorm.BatchNorm2d', 'aten._native_batch_norm_legit_no_training.default']J–
+pkg.torch.onnx.fx_nodeµ%_native_batch_norm_legit_no_training_9 : [num_users=1] = call_function[target=torch.ops.aten._native_batch_norm_legit_no_training.default](args = (%conv2d_9, %p_basenet_slice4_31_weight, %p_basenet_slice4_31_bias, %b_basenet_slice4_31_running_mean, %b_basenet_slice4_31_running_var, 0.1, 1e-05), kwargs = {})J~
+pkg.torch.onnx.name_scopes`['', 'basenet', 'basenet.slice4', 'basenet.slice4.31', '_native_batch_norm_legit_no_training_9']Jà
+pkg.torch.onnx.stack_traceÈFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 60, in forward
+    sources = self.basenet(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\model\modules.py", line 74, in forward
+    h = self.slice4(h)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\batchnorm.py", line 210, in forward
+    return F.batch_norm(
+»
+
+
+getitem_27relu_9node_relu_9"ReluJœ
+	namespace¡: easyocr.craft.CRAFT/basenet: easyocr.model.modules.vgg16_bn/basenet.slice4: torch.nn.modules.container.Sequential/basenet.slice4.32: torch.nn.modules.activation.ReLU/relu_9: aten.relu.defaultJæ
+pkg.torch.onnx.class_hierarchyõ['easyocr.craft.CRAFT', 'easyocr.model.modules.vgg16_bn', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.ReLU', 'aten.relu.default']Jâ
+pkg.torch.onnx.fx_nodeo%relu_9 : [num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%getitem_27,), kwargs = {})J^
+pkg.torch.onnx.name_scopes@['', 'basenet', 'basenet.slice4', 'basenet.slice4.32', 'relu_9']Jü
+pkg.torch.onnx.stack_traceÄFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 60, in forward
+    sources = self.basenet(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\model\modules.py", line 74, in forward
+    h = self.slice4(h)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\activation.py", line 143, in forward
+    return F.relu(input, inplace=self.inplace)
+˝
+relu_9max_pool2d_3node_max_pool2d_3"MaxPool*
+kernel_shape@@†*
+strides@@†*
+	dilations@@†*
+auto_pad"NOTSET†*
+pads@ @ @ @ †*
+	ceil_mode †*
+storage_order †J›
+	namespaceœ: easyocr.craft.CRAFT/basenet: easyocr.model.modules.vgg16_bn/basenet.slice4: torch.nn.modules.container.Sequential/basenet.slice4.33: torch.nn.modules.pooling.MaxPool2d/max_pool2d_3: aten.max_pool2d.defaultJ∆
+pkg.torch.onnx.class_hierarchy£['easyocr.craft.CRAFT', 'easyocr.model.modules.vgg16_bn', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.pooling.MaxPool2d', 'aten.max_pool2d.default']J°
+pkg.torch.onnx.fx_nodeÜ%max_pool2d_3 : [num_users=1] = call_function[target=torch.ops.aten.max_pool2d.default](args = (%relu_9, [2, 2], [2, 2]), kwargs = {})Jd
+pkg.torch.onnx.name_scopesF['', 'basenet', 'basenet.slice4', 'basenet.slice4.33', 'max_pool2d_3']JÜ
+pkg.torch.onnx.stack_traceÁFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 60, in forward
+    sources = self.basenet(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\model\modules.py", line 74, in forward
+    h = self.slice4(h)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\pooling.py", line 224, in forward
+    return F.max_pool2d(
+Û
+max_pool2d_3
+basenet.slice4.34.weight
+basenet.slice4.34.bias
+getitem_30node_Conv_169"Conv*
+kernel_shape@@†*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@@@@†Jñ
+	namespaceà: easyocr.craft.CRAFT/basenet: easyocr.model.modules.vgg16_bn/basenet.slice4: torch.nn.modules.container.Sequential/basenet.slice4.35: torch.nn.modules.batchnorm.BatchNorm2d/_native_batch_norm_legit_no_training_10: aten._native_batch_norm_legit_no_training.defaultJ:
+!pkg.onnxscript.rewriter.rule_nameFuseBatchNormIntoConvJ‰
+pkg.torch.onnx.class_hierarchy¡['easyocr.craft.CRAFT', 'easyocr.model.modules.vgg16_bn', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.batchnorm.BatchNorm2d', 'aten._native_batch_norm_legit_no_training.default']J“
+pkg.torch.onnx.fx_node∑%_native_batch_norm_legit_no_training_10 : [num_users=1] = call_function[target=torch.ops.aten._native_batch_norm_legit_no_training.default](args = (%conv2d_10, %p_basenet_slice4_35_weight, %p_basenet_slice4_35_bias, %b_basenet_slice4_35_running_mean, %b_basenet_slice4_35_running_var, 0.1, 1e-05), kwargs = {})J
+pkg.torch.onnx.name_scopesa['', 'basenet', 'basenet.slice4', 'basenet.slice4.35', '_native_batch_norm_legit_no_training_10']Jà
+pkg.torch.onnx.stack_traceÈFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 60, in forward
+    sources = self.basenet(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\model\modules.py", line 74, in forward
+    h = self.slice4(h)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\batchnorm.py", line 210, in forward
+    return F.batch_norm(
+Õ
+
+
+getitem_30relu_10node_relu_10"ReluJ–
+	namespace¬: easyocr.craft.CRAFT/basenet: easyocr.model.modules.vgg16_bn/basenet.slice4: torch.nn.modules.container.Sequential/basenet.slice4.36: torch.nn.modules.activation.ReLU/relu_10: aten.relu.defaultJæ
+pkg.torch.onnx.class_hierarchyõ['easyocr.craft.CRAFT', 'easyocr.model.modules.vgg16_bn', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.ReLU', 'aten.relu.default']Jä
+pkg.torch.onnx.fx_nodep%relu_10 : [num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%getitem_30,), kwargs = {})J_
+pkg.torch.onnx.name_scopesA['', 'basenet', 'basenet.slice4', 'basenet.slice4.36', 'relu_10']Jü
+pkg.torch.onnx.stack_traceÄFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 60, in forward
+    sources = self.basenet(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\model\modules.py", line 74, in forward
+    h = self.slice4(h)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\activation.py", line 143, in forward
+    return F.relu(input, inplace=self.inplace)
+Ó
+relu_10
+basenet.slice4.37.weight
+basenet.slice4.37.bias
+getitem_33node_Conv_170"Conv*
+kernel_shape@@†*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@@@@†Jñ
+	namespaceà: easyocr.craft.CRAFT/basenet: easyocr.model.modules.vgg16_bn/basenet.slice4: torch.nn.modules.container.Sequential/basenet.slice4.38: torch.nn.modules.batchnorm.BatchNorm2d/_native_batch_norm_legit_no_training_11: aten._native_batch_norm_legit_no_training.defaultJ:
+!pkg.onnxscript.rewriter.rule_nameFuseBatchNormIntoConvJ‰
+pkg.torch.onnx.class_hierarchy¡['easyocr.craft.CRAFT', 'easyocr.model.modules.vgg16_bn', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.batchnorm.BatchNorm2d', 'aten._native_batch_norm_legit_no_training.default']J“
+pkg.torch.onnx.fx_node∑%_native_batch_norm_legit_no_training_11 : [num_users=1] = call_function[target=torch.ops.aten._native_batch_norm_legit_no_training.default](args = (%conv2d_11, %p_basenet_slice4_38_weight, %p_basenet_slice4_38_bias, %b_basenet_slice4_38_running_mean, %b_basenet_slice4_38_running_var, 0.1, 1e-05), kwargs = {})J
+pkg.torch.onnx.name_scopesa['', 'basenet', 'basenet.slice4', 'basenet.slice4.38', '_native_batch_norm_legit_no_training_11']Jà
+pkg.torch.onnx.stack_traceÈFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 60, in forward
+    sources = self.basenet(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\model\modules.py", line 74, in forward
+    h = self.slice4(h)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\batchnorm.py", line 210, in forward
+    return F.batch_norm(
+ã
+
+getitem_33max_pool2d_4node_max_pool2d_4"MaxPool*
+kernel_shape@@†*
+strides@@†*
+	dilations@@†*
+auto_pad"NOTSET†*
+pads@@@@†*
+	ceil_mode †*
+storage_order †J‹
+	namespaceŒ: easyocr.craft.CRAFT/basenet: easyocr.model.modules.vgg16_bn/basenet.slice5: torch.nn.modules.container.Sequential/basenet.slice5.0: torch.nn.modules.pooling.MaxPool2d/max_pool2d_4: aten.max_pool2d.defaultJ∆
+pkg.torch.onnx.class_hierarchy£['easyocr.craft.CRAFT', 'easyocr.model.modules.vgg16_bn', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.pooling.MaxPool2d', 'aten.max_pool2d.default']J≠
+pkg.torch.onnx.fx_nodeí%max_pool2d_4 : [num_users=1] = call_function[target=torch.ops.aten.max_pool2d.default](args = (%getitem_33, [3, 3], [1, 1], [1, 1]), kwargs = {})Jc
+pkg.torch.onnx.name_scopesE['', 'basenet', 'basenet.slice5', 'basenet.slice5.0', 'max_pool2d_4']JÜ
+pkg.torch.onnx.stack_traceÁFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 60, in forward
+    sources = self.basenet(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\model\modules.py", line 76, in forward
+    h = self.slice5(h)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\pooling.py", line 224, in forward
+    return F.max_pool2d(
+“
+max_pool2d_4
+basenet.slice5.1.weight
+basenet.slice5.1.bias	conv2d_12node_conv2d_12"Conv*
+kernel_shape@@†*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@@@@†Jœ
+	namespace¡: easyocr.craft.CRAFT/basenet: easyocr.model.modules.vgg16_bn/basenet.slice5: torch.nn.modules.container.Sequential/basenet.slice5.1: torch.nn.modules.conv.Conv2d/conv2d_12: aten.conv2d.defaultJº
+pkg.torch.onnx.class_hierarchyô['easyocr.craft.CRAFT', 'easyocr.model.modules.vgg16_bn', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.conv.Conv2d', 'aten.conv2d.default']Jﬁ
+pkg.torch.onnx.fx_node√%conv2d_12 : [num_users=1] = call_function[target=torch.ops.aten.conv2d.default](args = (%max_pool2d_4, %p_basenet_slice5_1_weight, %p_basenet_slice5_1_bias, [1, 1], [6, 6], [6, 6]), kwargs = {})J`
+pkg.torch.onnx.name_scopesB['', 'basenet', 'basenet.slice5', 'basenet.slice5.1', 'conv2d_12']Jß
+pkg.torch.onnx.stack_traceàFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 60, in forward
+    sources = self.basenet(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\model\modules.py", line 76, in forward
+    h = self.slice5(h)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\conv.py", line 565, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+¥
+	conv2d_12
+basenet.slice5.2.weight
+basenet.slice5.2.bias	conv2d_13node_conv2d_13"Conv*
+kernel_shape@@†*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †Jœ
+	namespace¡: easyocr.craft.CRAFT/basenet: easyocr.model.modules.vgg16_bn/basenet.slice5: torch.nn.modules.container.Sequential/basenet.slice5.2: torch.nn.modules.conv.Conv2d/conv2d_13: aten.conv2d.defaultJº
+pkg.torch.onnx.class_hierarchyô['easyocr.craft.CRAFT', 'easyocr.model.modules.vgg16_bn', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.conv.Conv2d', 'aten.conv2d.default']J√
+pkg.torch.onnx.fx_node®%conv2d_13 : [num_users=1] = call_function[target=torch.ops.aten.conv2d.default](args = (%conv2d_12, %p_basenet_slice5_2_weight, %p_basenet_slice5_2_bias), kwargs = {})J`
+pkg.torch.onnx.name_scopesB['', 'basenet', 'basenet.slice5', 'basenet.slice5.2', 'conv2d_13']Jß
+pkg.torch.onnx.stack_traceàFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 60, in forward
+    sources = self.basenet(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\model\modules.py", line 76, in forward
+    h = self.slice5(h)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\conv.py", line 565, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+—
+	conv2d_13
+
+getitem_33catnode_cat"Concat*
+axis†J8
+	namespace+: easyocr.craft.CRAFT/cat: aten.cat.defaultJM
+pkg.torch.onnx.class_hierarchy+['easyocr.craft.CRAFT', 'aten.cat.default']Jï
+pkg.torch.onnx.fx_node{%cat : [num_users=1] = call_function[target=torch.ops.aten.cat.default](args = ([%conv2d_13, %getitem_33], 1), kwargs = {})J)
+pkg.torch.onnx.name_scopes['', 'cat']J«
+pkg.torch.onnx.stack_trace®File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 63, in forward
+    y = torch.cat([sources[0], sources[1]], dim=1)
+¥
+cat
+upconv1.conv.0.weight
+upconv1.conv.0.bias
+getitem_36node_Conv_171"Conv*
+kernel_shape@@†*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †Jå
+	namespace˛: easyocr.craft.CRAFT/upconv1: easyocr.craft.double_conv/upconv1.conv: torch.nn.modules.container.Sequential/upconv1.conv.1: torch.nn.modules.batchnorm.BatchNorm2d/_native_batch_norm_legit_no_training_12: aten._native_batch_norm_legit_no_training.defaultJ:
+!pkg.onnxscript.rewriter.rule_nameFuseBatchNormIntoConvJﬂ
+pkg.torch.onnx.class_hierarchyº['easyocr.craft.CRAFT', 'easyocr.craft.double_conv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.batchnorm.BatchNorm2d', 'aten._native_batch_norm_legit_no_training.default']J∆
+pkg.torch.onnx.fx_node´%_native_batch_norm_legit_no_training_12 : [num_users=1] = call_function[target=torch.ops.aten._native_batch_norm_legit_no_training.default](args = (%conv2d_14, %p_upconv1_conv_1_weight, %p_upconv1_conv_1_bias, %b_upconv1_conv_1_running_mean, %b_upconv1_conv_1_running_var, 0.1, 1e-05), kwargs = {})Jz
+pkg.torch.onnx.name_scopes\['', 'upconv1', 'upconv1.conv', 'upconv1.conv.1', '_native_batch_norm_legit_no_training_12']J¯
+pkg.torch.onnx.stack_traceŸFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 64, in forward
+    y = self.upconv1(y)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 26, in forward
+    x = self.conv(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\batchnorm.py", line 210, in forward
+    return F.batch_norm(
+©
+
+
+getitem_36relu_11node_relu_11"ReluJ∆
+	namespace∏: easyocr.craft.CRAFT/upconv1: easyocr.craft.double_conv/upconv1.conv: torch.nn.modules.container.Sequential/upconv1.conv.2: torch.nn.modules.activation.ReLU/relu_11: aten.relu.defaultJπ
+pkg.torch.onnx.class_hierarchyñ['easyocr.craft.CRAFT', 'easyocr.craft.double_conv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.ReLU', 'aten.relu.default']Jä
+pkg.torch.onnx.fx_nodep%relu_11 : [num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%getitem_36,), kwargs = {})JZ
+pkg.torch.onnx.name_scopes<['', 'upconv1', 'upconv1.conv', 'upconv1.conv.2', 'relu_11']Jè
+pkg.torch.onnx.stack_traceFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 64, in forward
+    y = self.upconv1(y)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 26, in forward
+    x = self.conv(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\activation.py", line 143, in forward
+    return F.relu(input, inplace=self.inplace)
+∏
+relu_11
+upconv1.conv.3.weight
+upconv1.conv.3.bias
+getitem_39node_Conv_172"Conv*
+kernel_shape@@†*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@@@@†Jå
+	namespace˛: easyocr.craft.CRAFT/upconv1: easyocr.craft.double_conv/upconv1.conv: torch.nn.modules.container.Sequential/upconv1.conv.4: torch.nn.modules.batchnorm.BatchNorm2d/_native_batch_norm_legit_no_training_13: aten._native_batch_norm_legit_no_training.defaultJ:
+!pkg.onnxscript.rewriter.rule_nameFuseBatchNormIntoConvJﬂ
+pkg.torch.onnx.class_hierarchyº['easyocr.craft.CRAFT', 'easyocr.craft.double_conv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.batchnorm.BatchNorm2d', 'aten._native_batch_norm_legit_no_training.default']J∆
+pkg.torch.onnx.fx_node´%_native_batch_norm_legit_no_training_13 : [num_users=1] = call_function[target=torch.ops.aten._native_batch_norm_legit_no_training.default](args = (%conv2d_15, %p_upconv1_conv_4_weight, %p_upconv1_conv_4_bias, %b_upconv1_conv_4_running_mean, %b_upconv1_conv_4_running_var, 0.1, 1e-05), kwargs = {})Jz
+pkg.torch.onnx.name_scopes\['', 'upconv1', 'upconv1.conv', 'upconv1.conv.4', '_native_batch_norm_legit_no_training_13']J¯
+pkg.torch.onnx.stack_traceŸFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 64, in forward
+    y = self.upconv1(y)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 26, in forward
+    x = self.conv(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\batchnorm.py", line 210, in forward
+    return F.batch_norm(
+©
+
+
+getitem_39relu_12node_relu_12"ReluJ∆
+	namespace∏: easyocr.craft.CRAFT/upconv1: easyocr.craft.double_conv/upconv1.conv: torch.nn.modules.container.Sequential/upconv1.conv.5: torch.nn.modules.activation.ReLU/relu_12: aten.relu.defaultJπ
+pkg.torch.onnx.class_hierarchyñ['easyocr.craft.CRAFT', 'easyocr.craft.double_conv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.ReLU', 'aten.relu.default']Jä
+pkg.torch.onnx.fx_nodep%relu_12 : [num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%getitem_39,), kwargs = {})JZ
+pkg.torch.onnx.name_scopes<['', 'upconv1', 'upconv1.conv', 'upconv1.conv.5', 'relu_12']Jè
+pkg.torch.onnx.stack_traceFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 64, in forward
+    y = self.upconv1(y)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 26, in forward
+    x = self.conv(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\activation.py", line 143, in forward
+    return F.relu(input, inplace=self.inplace)
+Ï
+relu_12val_101node_Shape_96"Shape*
+start †*
+
+end†JT
+	namespaceG: easyocr.craft.CRAFT/upsample_bilinear2d: aten.upsample_bilinear2d.vecJY
+pkg.torch.onnx.class_hierarchy7['easyocr.craft.CRAFT', 'aten.upsample_bilinear2d.vec']J…
+pkg.torch.onnx.fx_nodeÆ%upsample_bilinear2d : [num_users=1] = call_function[target=torch.ops.aten.upsample_bilinear2d.vec](args = (%relu_12, [%floordiv_13, %floordiv_12], False, None), kwargs = {})J9
+pkg.torch.onnx.name_scopes['', 'upsample_bilinear2d']JÔ
+pkg.torch.onnx.stack_trace–File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 66, in forward
+    y = F.interpolate(y, size=sources[2].size()[2:], mode='bilinear', align_corners=False)
+ı
+floordiv_13
+val_102val_103node_Reshape_98"Reshape*
+	allowzero †JT
+	namespaceG: easyocr.craft.CRAFT/upsample_bilinear2d: aten.upsample_bilinear2d.vecJY
+pkg.torch.onnx.class_hierarchy7['easyocr.craft.CRAFT', 'aten.upsample_bilinear2d.vec']J…
+pkg.torch.onnx.fx_nodeÆ%upsample_bilinear2d : [num_users=1] = call_function[target=torch.ops.aten.upsample_bilinear2d.vec](args = (%relu_12, [%floordiv_13, %floordiv_12], False, None), kwargs = {})J9
+pkg.torch.onnx.name_scopes['', 'upsample_bilinear2d']JÔ
+pkg.torch.onnx.stack_trace–File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 66, in forward
+    y = F.interpolate(y, size=sources[2].size()[2:], mode='bilinear', align_corners=False)
+ˆ
+floordiv_12
+val_102val_105node_Reshape_100"Reshape*
+	allowzero †JT
+	namespaceG: easyocr.craft.CRAFT/upsample_bilinear2d: aten.upsample_bilinear2d.vecJY
+pkg.torch.onnx.class_hierarchy7['easyocr.craft.CRAFT', 'aten.upsample_bilinear2d.vec']J…
+pkg.torch.onnx.fx_nodeÆ%upsample_bilinear2d : [num_users=1] = call_function[target=torch.ops.aten.upsample_bilinear2d.vec](args = (%relu_12, [%floordiv_13, %floordiv_12], False, None), kwargs = {})J9
+pkg.torch.onnx.name_scopes['', 'upsample_bilinear2d']JÔ
+pkg.torch.onnx.stack_trace–File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 66, in forward
+    y = F.interpolate(y, size=sources[2].size()[2:], mode='bilinear', align_corners=False)
+Î
+val_103
+val_105val_106node_Concat_101"Concat*
+axis †JT
+	namespaceG: easyocr.craft.CRAFT/upsample_bilinear2d: aten.upsample_bilinear2d.vecJY
+pkg.torch.onnx.class_hierarchy7['easyocr.craft.CRAFT', 'aten.upsample_bilinear2d.vec']J…
+pkg.torch.onnx.fx_nodeÆ%upsample_bilinear2d : [num_users=1] = call_function[target=torch.ops.aten.upsample_bilinear2d.vec](args = (%relu_12, [%floordiv_13, %floordiv_12], False, None), kwargs = {})J9
+pkg.torch.onnx.name_scopes['', 'upsample_bilinear2d']JÔ
+pkg.torch.onnx.stack_trace–File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 66, in forward
+    y = F.interpolate(y, size=sources[2].size()[2:], mode='bilinear', align_corners=False)
+Î
+val_101
+val_106val_108node_Concat_103"Concat*
+axis †JT
+	namespaceG: easyocr.craft.CRAFT/upsample_bilinear2d: aten.upsample_bilinear2d.vecJY
+pkg.torch.onnx.class_hierarchy7['easyocr.craft.CRAFT', 'aten.upsample_bilinear2d.vec']J…
+pkg.torch.onnx.fx_nodeÆ%upsample_bilinear2d : [num_users=1] = call_function[target=torch.ops.aten.upsample_bilinear2d.vec](args = (%relu_12, [%floordiv_13, %floordiv_12], False, None), kwargs = {})J9
+pkg.torch.onnx.name_scopes['', 'upsample_bilinear2d']JÔ
+pkg.torch.onnx.stack_trace–File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 66, in forward
+    y = F.interpolate(y, size=sources[2].size()[2:], mode='bilinear', align_corners=False)
+ﬂ
+relu_12
+ 
+ 
+val_108upsample_bilinear2dnode_upsample_bilinear2d"Resize*
+mode"linear†*
+cubic_coeff_a  @ø†*/
+coordinate_transformation_mode"
+half_pixel†*
+exclude_outside †*
+nearest_mode"floor†*
+	antialias †*
+extrapolation_value    †*&
+keep_aspect_ratio_policy"stretch†JT
+	namespaceG: easyocr.craft.CRAFT/upsample_bilinear2d: aten.upsample_bilinear2d.vecJY
+pkg.torch.onnx.class_hierarchy7['easyocr.craft.CRAFT', 'aten.upsample_bilinear2d.vec']J…
+pkg.torch.onnx.fx_nodeÆ%upsample_bilinear2d : [num_users=1] = call_function[target=torch.ops.aten.upsample_bilinear2d.vec](args = (%relu_12, [%floordiv_13, %floordiv_12], False, None), kwargs = {})J9
+pkg.torch.onnx.name_scopes['', 'upsample_bilinear2d']JÔ
+pkg.torch.onnx.stack_trace–File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 66, in forward
+    y = F.interpolate(y, size=sources[2].size()[2:], mode='bilinear', align_corners=False)
+ﬂ
+upsample_bilinear2d
+relu_8cat_1
+node_cat_1"Concat*
+axis†J:
+	namespace-: easyocr.craft.CRAFT/cat_1: aten.cat.defaultJM
+pkg.torch.onnx.class_hierarchy+['easyocr.craft.CRAFT', 'aten.cat.default']Jû
+pkg.torch.onnx.fx_nodeÉ%cat_1 : [num_users=1] = call_function[target=torch.ops.aten.cat.default](args = ([%upsample_bilinear2d, %relu_8], 1), kwargs = {})J+
+pkg.torch.onnx.name_scopes['', 'cat_1']Jæ
+pkg.torch.onnx.stack_traceüFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 67, in forward
+    y = torch.cat([y, sources[2]], dim=1)
+∂
+cat_1
+upconv2.conv.0.weight
+upconv2.conv.0.bias
+getitem_42node_Conv_173"Conv*
+kernel_shape@@†*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †Jå
+	namespace˛: easyocr.craft.CRAFT/upconv2: easyocr.craft.double_conv/upconv2.conv: torch.nn.modules.container.Sequential/upconv2.conv.1: torch.nn.modules.batchnorm.BatchNorm2d/_native_batch_norm_legit_no_training_14: aten._native_batch_norm_legit_no_training.defaultJ:
+!pkg.onnxscript.rewriter.rule_nameFuseBatchNormIntoConvJﬂ
+pkg.torch.onnx.class_hierarchyº['easyocr.craft.CRAFT', 'easyocr.craft.double_conv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.batchnorm.BatchNorm2d', 'aten._native_batch_norm_legit_no_training.default']J∆
+pkg.torch.onnx.fx_node´%_native_batch_norm_legit_no_training_14 : [num_users=1] = call_function[target=torch.ops.aten._native_batch_norm_legit_no_training.default](args = (%conv2d_16, %p_upconv2_conv_1_weight, %p_upconv2_conv_1_bias, %b_upconv2_conv_1_running_mean, %b_upconv2_conv_1_running_var, 0.1, 1e-05), kwargs = {})Jz
+pkg.torch.onnx.name_scopes\['', 'upconv2', 'upconv2.conv', 'upconv2.conv.1', '_native_batch_norm_legit_no_training_14']J¯
+pkg.torch.onnx.stack_traceŸFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 68, in forward
+    y = self.upconv2(y)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 26, in forward
+    x = self.conv(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\batchnorm.py", line 210, in forward
+    return F.batch_norm(
+©
+
+
+getitem_42relu_13node_relu_13"ReluJ∆
+	namespace∏: easyocr.craft.CRAFT/upconv2: easyocr.craft.double_conv/upconv2.conv: torch.nn.modules.container.Sequential/upconv2.conv.2: torch.nn.modules.activation.ReLU/relu_13: aten.relu.defaultJπ
+pkg.torch.onnx.class_hierarchyñ['easyocr.craft.CRAFT', 'easyocr.craft.double_conv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.ReLU', 'aten.relu.default']Jä
+pkg.torch.onnx.fx_nodep%relu_13 : [num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%getitem_42,), kwargs = {})JZ
+pkg.torch.onnx.name_scopes<['', 'upconv2', 'upconv2.conv', 'upconv2.conv.2', 'relu_13']Jè
+pkg.torch.onnx.stack_traceFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 68, in forward
+    y = self.upconv2(y)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 26, in forward
+    x = self.conv(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\activation.py", line 143, in forward
+    return F.relu(input, inplace=self.inplace)
+∏
+relu_13
+upconv2.conv.3.weight
+upconv2.conv.3.bias
+getitem_45node_Conv_174"Conv*
+kernel_shape@@†*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@@@@†Jå
+	namespace˛: easyocr.craft.CRAFT/upconv2: easyocr.craft.double_conv/upconv2.conv: torch.nn.modules.container.Sequential/upconv2.conv.4: torch.nn.modules.batchnorm.BatchNorm2d/_native_batch_norm_legit_no_training_15: aten._native_batch_norm_legit_no_training.defaultJ:
+!pkg.onnxscript.rewriter.rule_nameFuseBatchNormIntoConvJﬂ
+pkg.torch.onnx.class_hierarchyº['easyocr.craft.CRAFT', 'easyocr.craft.double_conv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.batchnorm.BatchNorm2d', 'aten._native_batch_norm_legit_no_training.default']J∆
+pkg.torch.onnx.fx_node´%_native_batch_norm_legit_no_training_15 : [num_users=1] = call_function[target=torch.ops.aten._native_batch_norm_legit_no_training.default](args = (%conv2d_17, %p_upconv2_conv_4_weight, %p_upconv2_conv_4_bias, %b_upconv2_conv_4_running_mean, %b_upconv2_conv_4_running_var, 0.1, 1e-05), kwargs = {})Jz
+pkg.torch.onnx.name_scopes\['', 'upconv2', 'upconv2.conv', 'upconv2.conv.4', '_native_batch_norm_legit_no_training_15']J¯
+pkg.torch.onnx.stack_traceŸFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 68, in forward
+    y = self.upconv2(y)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 26, in forward
+    x = self.conv(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\batchnorm.py", line 210, in forward
+    return F.batch_norm(
+©
+
+
+getitem_45relu_14node_relu_14"ReluJ∆
+	namespace∏: easyocr.craft.CRAFT/upconv2: easyocr.craft.double_conv/upconv2.conv: torch.nn.modules.container.Sequential/upconv2.conv.5: torch.nn.modules.activation.ReLU/relu_14: aten.relu.defaultJπ
+pkg.torch.onnx.class_hierarchyñ['easyocr.craft.CRAFT', 'easyocr.craft.double_conv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.ReLU', 'aten.relu.default']Jä
+pkg.torch.onnx.fx_nodep%relu_14 : [num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%getitem_45,), kwargs = {})JZ
+pkg.torch.onnx.name_scopes<['', 'upconv2', 'upconv2.conv', 'upconv2.conv.5', 'relu_14']Jè
+pkg.torch.onnx.stack_traceFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 68, in forward
+    y = self.upconv2(y)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 26, in forward
+    x = self.conv(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\activation.py", line 143, in forward
+    return F.relu(input, inplace=self.inplace)
+Û
+relu_14val_121node_Shape_116"Shape*
+start †*
+
+end†JV
+	namespaceI: easyocr.craft.CRAFT/upsample_bilinear2d_1: aten.upsample_bilinear2d.vecJY
+pkg.torch.onnx.class_hierarchy7['easyocr.craft.CRAFT', 'aten.upsample_bilinear2d.vec']JÀ
+pkg.torch.onnx.fx_node∞%upsample_bilinear2d_1 : [num_users=1] = call_function[target=torch.ops.aten.upsample_bilinear2d.vec](args = (%relu_14, [%floordiv_11, %floordiv_10], False, None), kwargs = {})J;
+pkg.torch.onnx.name_scopes['', 'upsample_bilinear2d_1']JÔ
+pkg.torch.onnx.stack_trace–File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 70, in forward
+    y = F.interpolate(y, size=sources[3].size()[2:], mode='bilinear', align_corners=False)
+¸
+floordiv_11
+val_102val_123node_Reshape_118"Reshape*
+	allowzero †JV
+	namespaceI: easyocr.craft.CRAFT/upsample_bilinear2d_1: aten.upsample_bilinear2d.vecJY
+pkg.torch.onnx.class_hierarchy7['easyocr.craft.CRAFT', 'aten.upsample_bilinear2d.vec']JÀ
+pkg.torch.onnx.fx_node∞%upsample_bilinear2d_1 : [num_users=1] = call_function[target=torch.ops.aten.upsample_bilinear2d.vec](args = (%relu_14, [%floordiv_11, %floordiv_10], False, None), kwargs = {})J;
+pkg.torch.onnx.name_scopes['', 'upsample_bilinear2d_1']JÔ
+pkg.torch.onnx.stack_trace–File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 70, in forward
+    y = F.interpolate(y, size=sources[3].size()[2:], mode='bilinear', align_corners=False)
+¸
+floordiv_10
+val_102val_125node_Reshape_120"Reshape*
+	allowzero †JV
+	namespaceI: easyocr.craft.CRAFT/upsample_bilinear2d_1: aten.upsample_bilinear2d.vecJY
+pkg.torch.onnx.class_hierarchy7['easyocr.craft.CRAFT', 'aten.upsample_bilinear2d.vec']JÀ
+pkg.torch.onnx.fx_node∞%upsample_bilinear2d_1 : [num_users=1] = call_function[target=torch.ops.aten.upsample_bilinear2d.vec](args = (%relu_14, [%floordiv_11, %floordiv_10], False, None), kwargs = {})J;
+pkg.torch.onnx.name_scopes['', 'upsample_bilinear2d_1']JÔ
+pkg.torch.onnx.stack_trace–File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 70, in forward
+    y = F.interpolate(y, size=sources[3].size()[2:], mode='bilinear', align_corners=False)
+Ò
+val_123
+val_125val_126node_Concat_121"Concat*
+axis †JV
+	namespaceI: easyocr.craft.CRAFT/upsample_bilinear2d_1: aten.upsample_bilinear2d.vecJY
+pkg.torch.onnx.class_hierarchy7['easyocr.craft.CRAFT', 'aten.upsample_bilinear2d.vec']JÀ
+pkg.torch.onnx.fx_node∞%upsample_bilinear2d_1 : [num_users=1] = call_function[target=torch.ops.aten.upsample_bilinear2d.vec](args = (%relu_14, [%floordiv_11, %floordiv_10], False, None), kwargs = {})J;
+pkg.torch.onnx.name_scopes['', 'upsample_bilinear2d_1']JÔ
+pkg.torch.onnx.stack_trace–File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 70, in forward
+    y = F.interpolate(y, size=sources[3].size()[2:], mode='bilinear', align_corners=False)
+Ò
+val_121
+val_126val_128node_Concat_123"Concat*
+axis †JV
+	namespaceI: easyocr.craft.CRAFT/upsample_bilinear2d_1: aten.upsample_bilinear2d.vecJY
+pkg.torch.onnx.class_hierarchy7['easyocr.craft.CRAFT', 'aten.upsample_bilinear2d.vec']JÀ
+pkg.torch.onnx.fx_node∞%upsample_bilinear2d_1 : [num_users=1] = call_function[target=torch.ops.aten.upsample_bilinear2d.vec](args = (%relu_14, [%floordiv_11, %floordiv_10], False, None), kwargs = {})J;
+pkg.torch.onnx.name_scopes['', 'upsample_bilinear2d_1']JÔ
+pkg.torch.onnx.stack_trace–File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 70, in forward
+    y = F.interpolate(y, size=sources[3].size()[2:], mode='bilinear', align_corners=False)
+È
+relu_14
+ 
+ 
+val_128upsample_bilinear2d_1node_upsample_bilinear2d_1"Resize*
+mode"linear†*
+cubic_coeff_a  @ø†*/
+coordinate_transformation_mode"
+half_pixel†*
+exclude_outside †*
+nearest_mode"floor†*
+	antialias †*
+extrapolation_value    †*&
+keep_aspect_ratio_policy"stretch†JV
+	namespaceI: easyocr.craft.CRAFT/upsample_bilinear2d_1: aten.upsample_bilinear2d.vecJY
+pkg.torch.onnx.class_hierarchy7['easyocr.craft.CRAFT', 'aten.upsample_bilinear2d.vec']JÀ
+pkg.torch.onnx.fx_node∞%upsample_bilinear2d_1 : [num_users=1] = call_function[target=torch.ops.aten.upsample_bilinear2d.vec](args = (%relu_14, [%floordiv_11, %floordiv_10], False, None), kwargs = {})J;
+pkg.torch.onnx.name_scopes['', 'upsample_bilinear2d_1']JÔ
+pkg.torch.onnx.stack_trace–File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 70, in forward
+    y = F.interpolate(y, size=sources[3].size()[2:], mode='bilinear', align_corners=False)
+„
+upsample_bilinear2d_1
+relu_5cat_2
+node_cat_2"Concat*
+axis†J:
+	namespace-: easyocr.craft.CRAFT/cat_2: aten.cat.defaultJM
+pkg.torch.onnx.class_hierarchy+['easyocr.craft.CRAFT', 'aten.cat.default']J†
+pkg.torch.onnx.fx_nodeÖ%cat_2 : [num_users=1] = call_function[target=torch.ops.aten.cat.default](args = ([%upsample_bilinear2d_1, %relu_5], 1), kwargs = {})J+
+pkg.torch.onnx.name_scopes['', 'cat_2']Jæ
+pkg.torch.onnx.stack_traceüFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 71, in forward
+    y = torch.cat([y, sources[3]], dim=1)
+∂
+cat_2
+upconv3.conv.0.weight
+upconv3.conv.0.bias
+getitem_48node_Conv_175"Conv*
+kernel_shape@@†*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †Jå
+	namespace˛: easyocr.craft.CRAFT/upconv3: easyocr.craft.double_conv/upconv3.conv: torch.nn.modules.container.Sequential/upconv3.conv.1: torch.nn.modules.batchnorm.BatchNorm2d/_native_batch_norm_legit_no_training_16: aten._native_batch_norm_legit_no_training.defaultJ:
+!pkg.onnxscript.rewriter.rule_nameFuseBatchNormIntoConvJﬂ
+pkg.torch.onnx.class_hierarchyº['easyocr.craft.CRAFT', 'easyocr.craft.double_conv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.batchnorm.BatchNorm2d', 'aten._native_batch_norm_legit_no_training.default']J∆
+pkg.torch.onnx.fx_node´%_native_batch_norm_legit_no_training_16 : [num_users=1] = call_function[target=torch.ops.aten._native_batch_norm_legit_no_training.default](args = (%conv2d_18, %p_upconv3_conv_1_weight, %p_upconv3_conv_1_bias, %b_upconv3_conv_1_running_mean, %b_upconv3_conv_1_running_var, 0.1, 1e-05), kwargs = {})Jz
+pkg.torch.onnx.name_scopes\['', 'upconv3', 'upconv3.conv', 'upconv3.conv.1', '_native_batch_norm_legit_no_training_16']J¯
+pkg.torch.onnx.stack_traceŸFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 72, in forward
+    y = self.upconv3(y)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 26, in forward
+    x = self.conv(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\batchnorm.py", line 210, in forward
+    return F.batch_norm(
+©
+
+
+getitem_48relu_15node_relu_15"ReluJ∆
+	namespace∏: easyocr.craft.CRAFT/upconv3: easyocr.craft.double_conv/upconv3.conv: torch.nn.modules.container.Sequential/upconv3.conv.2: torch.nn.modules.activation.ReLU/relu_15: aten.relu.defaultJπ
+pkg.torch.onnx.class_hierarchyñ['easyocr.craft.CRAFT', 'easyocr.craft.double_conv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.ReLU', 'aten.relu.default']Jä
+pkg.torch.onnx.fx_nodep%relu_15 : [num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%getitem_48,), kwargs = {})JZ
+pkg.torch.onnx.name_scopes<['', 'upconv3', 'upconv3.conv', 'upconv3.conv.2', 'relu_15']Jè
+pkg.torch.onnx.stack_traceFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 72, in forward
+    y = self.upconv3(y)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 26, in forward
+    x = self.conv(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\activation.py", line 143, in forward
+    return F.relu(input, inplace=self.inplace)
+∏
+relu_15
+upconv3.conv.3.weight
+upconv3.conv.3.bias
+getitem_51node_Conv_176"Conv*
+kernel_shape@@†*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@@@@†Jå
+	namespace˛: easyocr.craft.CRAFT/upconv3: easyocr.craft.double_conv/upconv3.conv: torch.nn.modules.container.Sequential/upconv3.conv.4: torch.nn.modules.batchnorm.BatchNorm2d/_native_batch_norm_legit_no_training_17: aten._native_batch_norm_legit_no_training.defaultJ:
+!pkg.onnxscript.rewriter.rule_nameFuseBatchNormIntoConvJﬂ
+pkg.torch.onnx.class_hierarchyº['easyocr.craft.CRAFT', 'easyocr.craft.double_conv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.batchnorm.BatchNorm2d', 'aten._native_batch_norm_legit_no_training.default']J∆
+pkg.torch.onnx.fx_node´%_native_batch_norm_legit_no_training_17 : [num_users=1] = call_function[target=torch.ops.aten._native_batch_norm_legit_no_training.default](args = (%conv2d_19, %p_upconv3_conv_4_weight, %p_upconv3_conv_4_bias, %b_upconv3_conv_4_running_mean, %b_upconv3_conv_4_running_var, 0.1, 1e-05), kwargs = {})Jz
+pkg.torch.onnx.name_scopes\['', 'upconv3', 'upconv3.conv', 'upconv3.conv.4', '_native_batch_norm_legit_no_training_17']J¯
+pkg.torch.onnx.stack_traceŸFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 72, in forward
+    y = self.upconv3(y)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 26, in forward
+    x = self.conv(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\batchnorm.py", line 210, in forward
+    return F.batch_norm(
+©
+
+
+getitem_51relu_16node_relu_16"ReluJ∆
+	namespace∏: easyocr.craft.CRAFT/upconv3: easyocr.craft.double_conv/upconv3.conv: torch.nn.modules.container.Sequential/upconv3.conv.5: torch.nn.modules.activation.ReLU/relu_16: aten.relu.defaultJπ
+pkg.torch.onnx.class_hierarchyñ['easyocr.craft.CRAFT', 'easyocr.craft.double_conv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.ReLU', 'aten.relu.default']Jä
+pkg.torch.onnx.fx_nodep%relu_16 : [num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%getitem_51,), kwargs = {})JZ
+pkg.torch.onnx.name_scopes<['', 'upconv3', 'upconv3.conv', 'upconv3.conv.5', 'relu_16']Jè
+pkg.torch.onnx.stack_traceFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 72, in forward
+    y = self.upconv3(y)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 26, in forward
+    x = self.conv(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\activation.py", line 143, in forward
+    return F.relu(input, inplace=self.inplace)
+Ò
+relu_16val_141node_Shape_136"Shape*
+start †*
+
+end†JV
+	namespaceI: easyocr.craft.CRAFT/upsample_bilinear2d_2: aten.upsample_bilinear2d.vecJY
+pkg.torch.onnx.class_hierarchy7['easyocr.craft.CRAFT', 'aten.upsample_bilinear2d.vec']J…
+pkg.torch.onnx.fx_nodeÆ%upsample_bilinear2d_2 : [num_users=1] = call_function[target=torch.ops.aten.upsample_bilinear2d.vec](args = (%relu_16, [%floordiv_9, %floordiv_8], False, None), kwargs = {})J;
+pkg.torch.onnx.name_scopes['', 'upsample_bilinear2d_2']JÔ
+pkg.torch.onnx.stack_trace–File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 74, in forward
+    y = F.interpolate(y, size=sources[4].size()[2:], mode='bilinear', align_corners=False)
+˘
+
+floordiv_9
+val_102val_143node_Reshape_138"Reshape*
+	allowzero †JV
+	namespaceI: easyocr.craft.CRAFT/upsample_bilinear2d_2: aten.upsample_bilinear2d.vecJY
+pkg.torch.onnx.class_hierarchy7['easyocr.craft.CRAFT', 'aten.upsample_bilinear2d.vec']J…
+pkg.torch.onnx.fx_nodeÆ%upsample_bilinear2d_2 : [num_users=1] = call_function[target=torch.ops.aten.upsample_bilinear2d.vec](args = (%relu_16, [%floordiv_9, %floordiv_8], False, None), kwargs = {})J;
+pkg.torch.onnx.name_scopes['', 'upsample_bilinear2d_2']JÔ
+pkg.torch.onnx.stack_trace–File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 74, in forward
+    y = F.interpolate(y, size=sources[4].size()[2:], mode='bilinear', align_corners=False)
+˘
+
+floordiv_8
+val_102val_145node_Reshape_140"Reshape*
+	allowzero †JV
+	namespaceI: easyocr.craft.CRAFT/upsample_bilinear2d_2: aten.upsample_bilinear2d.vecJY
+pkg.torch.onnx.class_hierarchy7['easyocr.craft.CRAFT', 'aten.upsample_bilinear2d.vec']J…
+pkg.torch.onnx.fx_nodeÆ%upsample_bilinear2d_2 : [num_users=1] = call_function[target=torch.ops.aten.upsample_bilinear2d.vec](args = (%relu_16, [%floordiv_9, %floordiv_8], False, None), kwargs = {})J;
+pkg.torch.onnx.name_scopes['', 'upsample_bilinear2d_2']JÔ
+pkg.torch.onnx.stack_trace–File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 74, in forward
+    y = F.interpolate(y, size=sources[4].size()[2:], mode='bilinear', align_corners=False)
+Ô
+val_143
+val_145val_146node_Concat_141"Concat*
+axis †JV
+	namespaceI: easyocr.craft.CRAFT/upsample_bilinear2d_2: aten.upsample_bilinear2d.vecJY
+pkg.torch.onnx.class_hierarchy7['easyocr.craft.CRAFT', 'aten.upsample_bilinear2d.vec']J…
+pkg.torch.onnx.fx_nodeÆ%upsample_bilinear2d_2 : [num_users=1] = call_function[target=torch.ops.aten.upsample_bilinear2d.vec](args = (%relu_16, [%floordiv_9, %floordiv_8], False, None), kwargs = {})J;
+pkg.torch.onnx.name_scopes['', 'upsample_bilinear2d_2']JÔ
+pkg.torch.onnx.stack_trace–File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 74, in forward
+    y = F.interpolate(y, size=sources[4].size()[2:], mode='bilinear', align_corners=False)
+Ô
+val_141
+val_146val_148node_Concat_143"Concat*
+axis †JV
+	namespaceI: easyocr.craft.CRAFT/upsample_bilinear2d_2: aten.upsample_bilinear2d.vecJY
+pkg.torch.onnx.class_hierarchy7['easyocr.craft.CRAFT', 'aten.upsample_bilinear2d.vec']J…
+pkg.torch.onnx.fx_nodeÆ%upsample_bilinear2d_2 : [num_users=1] = call_function[target=torch.ops.aten.upsample_bilinear2d.vec](args = (%relu_16, [%floordiv_9, %floordiv_8], False, None), kwargs = {})J;
+pkg.torch.onnx.name_scopes['', 'upsample_bilinear2d_2']JÔ
+pkg.torch.onnx.stack_trace–File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 74, in forward
+    y = F.interpolate(y, size=sources[4].size()[2:], mode='bilinear', align_corners=False)
+Á
+relu_16
+ 
+ 
+val_148upsample_bilinear2d_2node_upsample_bilinear2d_2"Resize*
+mode"linear†*
+cubic_coeff_a  @ø†*/
+coordinate_transformation_mode"
+half_pixel†*
+exclude_outside †*
+nearest_mode"floor†*
+	antialias †*
+extrapolation_value    †*&
+keep_aspect_ratio_policy"stretch†JV
+	namespaceI: easyocr.craft.CRAFT/upsample_bilinear2d_2: aten.upsample_bilinear2d.vecJY
+pkg.torch.onnx.class_hierarchy7['easyocr.craft.CRAFT', 'aten.upsample_bilinear2d.vec']J…
+pkg.torch.onnx.fx_nodeÆ%upsample_bilinear2d_2 : [num_users=1] = call_function[target=torch.ops.aten.upsample_bilinear2d.vec](args = (%relu_16, [%floordiv_9, %floordiv_8], False, None), kwargs = {})J;
+pkg.torch.onnx.name_scopes['', 'upsample_bilinear2d_2']JÔ
+pkg.torch.onnx.stack_trace–File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 74, in forward
+    y = F.interpolate(y, size=sources[4].size()[2:], mode='bilinear', align_corners=False)
+„
+upsample_bilinear2d_2
+relu_3cat_3
+node_cat_3"Concat*
+axis†J:
+	namespace-: easyocr.craft.CRAFT/cat_3: aten.cat.defaultJM
+pkg.torch.onnx.class_hierarchy+['easyocr.craft.CRAFT', 'aten.cat.default']J†
+pkg.torch.onnx.fx_nodeÖ%cat_3 : [num_users=1] = call_function[target=torch.ops.aten.cat.default](args = ([%upsample_bilinear2d_2, %relu_3], 1), kwargs = {})J+
+pkg.torch.onnx.name_scopes['', 'cat_3']Jæ
+pkg.torch.onnx.stack_traceüFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 75, in forward
+    y = torch.cat([y, sources[4]], dim=1)
+º
+cat_3
+upconv4.conv.0.weight
+upconv4.conv.0.bias
+getitem_54node_Conv_177"Conv*
+kernel_shape@@†*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †Jå
+	namespace˛: easyocr.craft.CRAFT/upconv4: easyocr.craft.double_conv/upconv4.conv: torch.nn.modules.container.Sequential/upconv4.conv.1: torch.nn.modules.batchnorm.BatchNorm2d/_native_batch_norm_legit_no_training_18: aten._native_batch_norm_legit_no_training.defaultJ:
+!pkg.onnxscript.rewriter.rule_nameFuseBatchNormIntoConvJﬂ
+pkg.torch.onnx.class_hierarchyº['easyocr.craft.CRAFT', 'easyocr.craft.double_conv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.batchnorm.BatchNorm2d', 'aten._native_batch_norm_legit_no_training.default']J∆
+pkg.torch.onnx.fx_node´%_native_batch_norm_legit_no_training_18 : [num_users=1] = call_function[target=torch.ops.aten._native_batch_norm_legit_no_training.default](args = (%conv2d_20, %p_upconv4_conv_1_weight, %p_upconv4_conv_1_bias, %b_upconv4_conv_1_running_mean, %b_upconv4_conv_1_running_var, 0.1, 1e-05), kwargs = {})Jz
+pkg.torch.onnx.name_scopes\['', 'upconv4', 'upconv4.conv', 'upconv4.conv.1', '_native_batch_norm_legit_no_training_18']J˛
+pkg.torch.onnx.stack_traceﬂFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 76, in forward
+    feature = self.upconv4(y)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 26, in forward
+    x = self.conv(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\batchnorm.py", line 210, in forward
+    return F.batch_norm(
+Ø
+
+
+getitem_54relu_17node_relu_17"ReluJ∆
+	namespace∏: easyocr.craft.CRAFT/upconv4: easyocr.craft.double_conv/upconv4.conv: torch.nn.modules.container.Sequential/upconv4.conv.2: torch.nn.modules.activation.ReLU/relu_17: aten.relu.defaultJπ
+pkg.torch.onnx.class_hierarchyñ['easyocr.craft.CRAFT', 'easyocr.craft.double_conv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.ReLU', 'aten.relu.default']Jä
+pkg.torch.onnx.fx_nodep%relu_17 : [num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%getitem_54,), kwargs = {})JZ
+pkg.torch.onnx.name_scopes<['', 'upconv4', 'upconv4.conv', 'upconv4.conv.2', 'relu_17']Jï
+pkg.torch.onnx.stack_traceˆFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 76, in forward
+    feature = self.upconv4(y)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 26, in forward
+    x = self.conv(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\activation.py", line 143, in forward
+    return F.relu(input, inplace=self.inplace)
+æ
+relu_17
+upconv4.conv.3.weight
+upconv4.conv.3.bias
+getitem_57node_Conv_178"Conv*
+kernel_shape@@†*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@@@@†Jå
+	namespace˛: easyocr.craft.CRAFT/upconv4: easyocr.craft.double_conv/upconv4.conv: torch.nn.modules.container.Sequential/upconv4.conv.4: torch.nn.modules.batchnorm.BatchNorm2d/_native_batch_norm_legit_no_training_19: aten._native_batch_norm_legit_no_training.defaultJ:
+!pkg.onnxscript.rewriter.rule_nameFuseBatchNormIntoConvJﬂ
+pkg.torch.onnx.class_hierarchyº['easyocr.craft.CRAFT', 'easyocr.craft.double_conv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.batchnorm.BatchNorm2d', 'aten._native_batch_norm_legit_no_training.default']J∆
+pkg.torch.onnx.fx_node´%_native_batch_norm_legit_no_training_19 : [num_users=1] = call_function[target=torch.ops.aten._native_batch_norm_legit_no_training.default](args = (%conv2d_21, %p_upconv4_conv_4_weight, %p_upconv4_conv_4_bias, %b_upconv4_conv_4_running_mean, %b_upconv4_conv_4_running_var, 0.1, 1e-05), kwargs = {})Jz
+pkg.torch.onnx.name_scopes\['', 'upconv4', 'upconv4.conv', 'upconv4.conv.4', '_native_batch_norm_legit_no_training_19']J˛
+pkg.torch.onnx.stack_traceﬂFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 76, in forward
+    feature = self.upconv4(y)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 26, in forward
+    x = self.conv(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\batchnorm.py", line 210, in forward
+    return F.batch_norm(
+Ø
+
+
+getitem_57featurenode_relu_18"ReluJ∆
+	namespace∏: easyocr.craft.CRAFT/upconv4: easyocr.craft.double_conv/upconv4.conv: torch.nn.modules.container.Sequential/upconv4.conv.5: torch.nn.modules.activation.ReLU/relu_18: aten.relu.defaultJπ
+pkg.torch.onnx.class_hierarchyñ['easyocr.craft.CRAFT', 'easyocr.craft.double_conv', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.ReLU', 'aten.relu.default']Jä
+pkg.torch.onnx.fx_nodep%relu_18 : [num_users=2] = call_function[target=torch.ops.aten.relu.default](args = (%getitem_57,), kwargs = {})JZ
+pkg.torch.onnx.name_scopes<['', 'upconv4', 'upconv4.conv', 'upconv4.conv.5', 'relu_18']Jï
+pkg.torch.onnx.stack_traceˆFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 76, in forward
+    feature = self.upconv4(y)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 26, in forward
+    x = self.conv(x)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\activation.py", line 143, in forward
+    return F.relu(input, inplace=self.inplace)
+§
+
+feature
+conv_cls.0.weight
+conv_cls.0.bias	conv2d_22node_conv2d_22"Conv*
+kernel_shape@@†*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@@@@†Jõ
+	namespaceç: easyocr.craft.CRAFT/conv_cls: torch.nn.modules.container.Sequential/conv_cls.0: torch.nn.modules.conv.Conv2d/conv2d_22: aten.conv2d.defaultJô
+pkg.torch.onnx.class_hierarchyw['easyocr.craft.CRAFT', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.conv.Conv2d', 'aten.conv2d.default']J≈
+pkg.torch.onnx.fx_node™%conv2d_22 : [num_users=1] = call_function[target=torch.ops.aten.conv2d.default](args = (%relu_18, %p_conv_cls_0_weight, %p_conv_cls_0_bias, [1, 1], [1, 1]), kwargs = {})JI
+pkg.torch.onnx.name_scopes+['', 'conv_cls', 'conv_cls.0', 'conv2d_22']Jë
+pkg.torch.onnx.stack_traceÚFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 78, in forward
+    y = self.conv_cls(feature)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\conv.py", line 565, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+≈
+	conv2d_22relu_19node_relu_19"ReluJõ
+	namespaceç: easyocr.craft.CRAFT/conv_cls: torch.nn.modules.container.Sequential/conv_cls.1: torch.nn.modules.activation.ReLU/relu_19: aten.relu.defaultJõ
+pkg.torch.onnx.class_hierarchyy['easyocr.craft.CRAFT', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.ReLU', 'aten.relu.default']Jâ
+pkg.torch.onnx.fx_nodeo%relu_19 : [num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%conv2d_22,), kwargs = {})JG
+pkg.torch.onnx.name_scopes)['', 'conv_cls', 'conv_cls.1', 'relu_19']Jâ
+pkg.torch.onnx.stack_traceÍFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 78, in forward
+    y = self.conv_cls(feature)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\activation.py", line 143, in forward
+    return F.relu(input, inplace=self.inplace)
+§
+
+relu_19
+conv_cls.2.weight
+conv_cls.2.bias	conv2d_23node_conv2d_23"Conv*
+kernel_shape@@†*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@@@@†Jõ
+	namespaceç: easyocr.craft.CRAFT/conv_cls: torch.nn.modules.container.Sequential/conv_cls.2: torch.nn.modules.conv.Conv2d/conv2d_23: aten.conv2d.defaultJô
+pkg.torch.onnx.class_hierarchyw['easyocr.craft.CRAFT', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.conv.Conv2d', 'aten.conv2d.default']J≈
+pkg.torch.onnx.fx_node™%conv2d_23 : [num_users=1] = call_function[target=torch.ops.aten.conv2d.default](args = (%relu_19, %p_conv_cls_2_weight, %p_conv_cls_2_bias, [1, 1], [1, 1]), kwargs = {})JI
+pkg.torch.onnx.name_scopes+['', 'conv_cls', 'conv_cls.2', 'conv2d_23']Jë
+pkg.torch.onnx.stack_traceÚFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 78, in forward
+    y = self.conv_cls(feature)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\conv.py", line 565, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+≈
+	conv2d_23relu_20node_relu_20"ReluJõ
+	namespaceç: easyocr.craft.CRAFT/conv_cls: torch.nn.modules.container.Sequential/conv_cls.3: torch.nn.modules.activation.ReLU/relu_20: aten.relu.defaultJõ
+pkg.torch.onnx.class_hierarchyy['easyocr.craft.CRAFT', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.ReLU', 'aten.relu.default']Jâ
+pkg.torch.onnx.fx_nodeo%relu_20 : [num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%conv2d_23,), kwargs = {})JG
+pkg.torch.onnx.name_scopes)['', 'conv_cls', 'conv_cls.3', 'relu_20']Jâ
+pkg.torch.onnx.stack_traceÍFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 78, in forward
+    y = self.conv_cls(feature)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\activation.py", line 143, in forward
+    return F.relu(input, inplace=self.inplace)
+§
+
+relu_20
+conv_cls.4.weight
+conv_cls.4.bias	conv2d_24node_conv2d_24"Conv*
+kernel_shape@@†*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@@@@†Jõ
+	namespaceç: easyocr.craft.CRAFT/conv_cls: torch.nn.modules.container.Sequential/conv_cls.4: torch.nn.modules.conv.Conv2d/conv2d_24: aten.conv2d.defaultJô
+pkg.torch.onnx.class_hierarchyw['easyocr.craft.CRAFT', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.conv.Conv2d', 'aten.conv2d.default']J≈
+pkg.torch.onnx.fx_node™%conv2d_24 : [num_users=1] = call_function[target=torch.ops.aten.conv2d.default](args = (%relu_20, %p_conv_cls_4_weight, %p_conv_cls_4_bias, [1, 1], [1, 1]), kwargs = {})JI
+pkg.torch.onnx.name_scopes+['', 'conv_cls', 'conv_cls.4', 'conv2d_24']Jë
+pkg.torch.onnx.stack_traceÚFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 78, in forward
+    y = self.conv_cls(feature)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\conv.py", line 565, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+≈
+	conv2d_24relu_21node_relu_21"ReluJõ
+	namespaceç: easyocr.craft.CRAFT/conv_cls: torch.nn.modules.container.Sequential/conv_cls.5: torch.nn.modules.activation.ReLU/relu_21: aten.relu.defaultJõ
+pkg.torch.onnx.class_hierarchyy['easyocr.craft.CRAFT', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.ReLU', 'aten.relu.default']Jâ
+pkg.torch.onnx.fx_nodeo%relu_21 : [num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%conv2d_24,), kwargs = {})JG
+pkg.torch.onnx.name_scopes)['', 'conv_cls', 'conv_cls.5', 'relu_21']Jâ
+pkg.torch.onnx.stack_traceÍFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 78, in forward
+    y = self.conv_cls(feature)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\activation.py", line 143, in forward
+    return F.relu(input, inplace=self.inplace)
+î
+
+relu_21
+conv_cls.6.weight
+conv_cls.6.bias	conv2d_25node_conv2d_25"Conv*
+kernel_shape@@†*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †Jõ
+	namespaceç: easyocr.craft.CRAFT/conv_cls: torch.nn.modules.container.Sequential/conv_cls.6: torch.nn.modules.conv.Conv2d/conv2d_25: aten.conv2d.defaultJô
+pkg.torch.onnx.class_hierarchyw['easyocr.craft.CRAFT', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.conv.Conv2d', 'aten.conv2d.default']Jµ
+pkg.torch.onnx.fx_nodeö%conv2d_25 : [num_users=1] = call_function[target=torch.ops.aten.conv2d.default](args = (%relu_21, %p_conv_cls_6_weight, %p_conv_cls_6_bias), kwargs = {})JI
+pkg.torch.onnx.name_scopes+['', 'conv_cls', 'conv_cls.6', 'conv2d_25']Jë
+pkg.torch.onnx.stack_traceÚFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 78, in forward
+    y = self.conv_cls(feature)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\conv.py", line 565, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+≈
+	conv2d_25relu_22node_relu_22"ReluJõ
+	namespaceç: easyocr.craft.CRAFT/conv_cls: torch.nn.modules.container.Sequential/conv_cls.7: torch.nn.modules.activation.ReLU/relu_22: aten.relu.defaultJõ
+pkg.torch.onnx.class_hierarchyy['easyocr.craft.CRAFT', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.ReLU', 'aten.relu.default']Jâ
+pkg.torch.onnx.fx_nodeo%relu_22 : [num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%conv2d_25,), kwargs = {})JG
+pkg.torch.onnx.name_scopes)['', 'conv_cls', 'conv_cls.7', 'relu_22']Jâ
+pkg.torch.onnx.stack_traceÍFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 78, in forward
+    y = self.conv_cls(feature)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\activation.py", line 143, in forward
+    return F.relu(input, inplace=self.inplace)
+î
+
+relu_22
+conv_cls.8.weight
+conv_cls.8.bias	conv2d_26node_conv2d_26"Conv*
+kernel_shape@@†*
+group†*
+auto_pad"NOTSET†*
+	dilations@@†*
+strides@@†*
+pads@ @ @ @ †Jõ
+	namespaceç: easyocr.craft.CRAFT/conv_cls: torch.nn.modules.container.Sequential/conv_cls.8: torch.nn.modules.conv.Conv2d/conv2d_26: aten.conv2d.defaultJô
+pkg.torch.onnx.class_hierarchyw['easyocr.craft.CRAFT', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.conv.Conv2d', 'aten.conv2d.default']Jµ
+pkg.torch.onnx.fx_nodeö%conv2d_26 : [num_users=1] = call_function[target=torch.ops.aten.conv2d.default](args = (%relu_22, %p_conv_cls_8_weight, %p_conv_cls_8_bias), kwargs = {})JI
+pkg.torch.onnx.name_scopes+['', 'conv_cls', 'conv_cls.8', 'conv2d_26']Jë
+pkg.torch.onnx.stack_traceÚFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 78, in forward
+    y = self.conv_cls(feature)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\container.py", line 253, in forward
+    input = module(input)
+  File "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\torch\nn\modules\conv.py", line 565, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+ÿ
+	conv2d_26ynode_permute"	Transpose*
+perm@ @@@†J@
+	namespace3: easyocr.craft.CRAFT/permute: aten.permute.defaultJQ
+pkg.torch.onnx.class_hierarchy/['easyocr.craft.CRAFT', 'aten.permute.default']Jô
+pkg.torch.onnx.fx_node%permute : [num_users=1] = call_function[target=torch.ops.aten.permute.default](args = (%conv2d_26, [0, 2, 3, 1]), kwargs = {})J-
+pkg.torch.onnx.name_scopes['', 'permute']Jª
+pkg.torch.onnx.stack_traceúFile "C:\Users\Ch√¢u VƒÉn Ph√∫c\AppData\Roaming\Python\Python314\site-packages\easyocr\craft.py", line 80, in forward
+    return y.permute(0,2,3,1), feature
+main_graph*û@Bbasenet.slice1.0.biasJÄæÛœΩE´øèy∑k˝“ΩN˘æ•Ê%Ω©i=µ°ã∏?c πõc3øZΩê= êF∑-˚Ò>≤Ωí®π;V>L’)øŒ >»,“>8âéΩÓ ˛Ωù>(∏÷ ˘ºœó“>©Œ«∑Fv±Ωäπ<è>Ÿ¿Ÿ>›ÔG∑ßΩ_>a ]æ¥‚∂Ωgäg>	u∑∏ª•`∑…ß∑‚¥i>°r6∂RÛæ¬ë??ÌïºÇi«∏ı≈∏@‹ΩÔxãæ˛^æíl?E ùΩè’/ΩàΩ∆È`Ω0ù‡æí¶∑”„æ≤iªÄÏ-øñüæûY€∏lsÊª–Hü= ~-∑+ö™>*û@Bbasenet.slice1.3.biasJÄ^ÿædq?n‰àæèâ?_9æ«¢r>¿Ω)∆®>®\?D3V>˛&?Oh!>‘\¢?å	?åf >&@ë>˛ÜÉæ¨aAΩ—*>Sìx?]Àó>÷¡¨>óû¸>â€ô>R6#>”∆B?‘p?x¥>ÑëúΩÔX,>CY>j‘å>∫? ˆ∫=„mµæHU>sÌæ§pàæ€>Ú-?Áœ—>¸Sî>X? Å∏∏P/ø?'?_Éµt’<À”
+>åπHæ.-øﬁA◊= B]? V>XÜ¶>¥uË=7~?™∑b>U8B?œ°ß>N¢>¯b≥>Ãg>Pmë>*`ÄBbasenet.slice1.7.biasj$
+locationcraft_detector.onnx.dataj
+offset0j
+length512p*cÄBbasenet.slice1.10.biasj$
+locationcraft_detector.onnx.dataj
+offset512j
+length512p*eÄBbasenet.slice2.14.biasj$
+locationcraft_detector.onnx.dataj
+offset2048j
+length1024p*eÄBbasenet.slice2.17.biasj$
+locationcraft_detector.onnx.dataj
+offset3072j
+length1024p*eÄBbasenet.slice3.20.biasj$
+locationcraft_detector.onnx.dataj
+offset4096j
+length1024p*eÄBbasenet.slice3.24.biasj$
+locationcraft_detector.onnx.dataj
+offset8192j
+length2048p*fÄBbasenet.slice3.27.biasj$
+locationcraft_detector.onnx.dataj
+offset10240j
+length2048p*fÄBbasenet.slice4.30.biasj$
+locationcraft_detector.onnx.dataj
+offset12288j
+length2048p*fÄBbasenet.slice4.34.biasj$
+locationcraft_detector.onnx.dataj
+offset14336j
+length2048p*fÄBbasenet.slice4.37.biasj$
+locationcraft_detector.onnx.dataj
+offset16384j
+length2048p*cÄBupconv1.conv.0.biasj$
+locationcraft_detector.onnx.dataj
+offset18432j
+length2048p*bÄBupconv1.conv.3.biasj$
+locationcraft_detector.onnx.dataj
+offset5120j
+length1024p*bÄBupconv2.conv.0.biasj$
+locationcraft_detector.onnx.dataj
+offset6144j
+length1024p*aÄBupconv2.conv.3.biasj$
+locationcraft_detector.onnx.dataj
+offset1024j
+length512p*aÄBupconv3.conv.0.biasj$
+locationcraft_detector.onnx.dataj
+offset1536j
+length512p*ú@Bupconv3.conv.3.biasJÄ>CΩ∞∞ﬁ>ﬂ´vøVÔ>ó˜8?®Õ@Ò*(Ω<>œc?äk>~è$øéD√?Üû©?íöæ¯Y8?áúF? kﬂ>˙Œo?Ñ˜È>jj?Äâ<z¥˜æ5ç<æ{†<?$†Ö>˚`ò>¯€º>tÊ‹>AàÔ>&€æ< ˆΩx°û?•Eµ?ës⁄?ó(î>ÂﬁJ?~n-=àô∏>7î>•¨Ö?¬æ“©Ë>èú?†W4?ÿ≥q>å√é>ruﬂ>˜ä<#zî?2bj??"|>Øb?o∑1?3
+?nÜâ?3éJ?Ω‚—>˘≤?ÃfSøÍ!?ƒß?!ß±øk©‚>ÚÈL?*ú@Bupconv4.conv.0.biasJÄ<¸Ôª§TøuÏï>è7Ø?dÓ?]ƒ?ætJæ›ô<Ø¥?àÌ?áK{æ<ﬁΩ%J‡æ85 ?lY	øê~~?Øz≥=ã∆>DÒ;—Ùµ>øiæÎ£ü>©•y?ÿÜ1øƒXÅ?¡∫æΩ‡.æàˇæ–ˆ>UÌN=∂rΩ}2ørî3?0%?T&=?òy?]Øy?ßR"øO¥¬æc|æÙYóæDÉ ?ıø±¥—æÊY˚<ZR">}a??ÆÆæOò9?Ùe›>HN?≤Ÿíæí?’$@øtuç>¯,Ô>ñ'A?Ke?¨?√„PæáDææû@?‹öæd|jΩ*ú Bupconv4.conv.3.biasJÄT>>Z√K?'(\?πÑ?Y	M?Q›?¡>3?‰f?∑?êæx¯?>¯ÇD?<À»>3a¯æÕπw?iuùæ±y)?™ëJ?|U“>QÕ?êk©>‰K3?à·I?_|Ô>=€L>9qÈ=¬É#?}ÃÉø]Rl?$†Ë=†Åæa~∂=îÖ?*ò Bconv_cls.0.biasJÄ—êB=à´: Ë<q∂mΩˆHºÃcZªôîº¥S/Ω∫ÃB=äK∑<#^‹<Ù‰<rqb=¯ØñΩÉ|ªË…;T…ê;ÒrŸ<$úLΩ∏¶G=w°;“w9Ωêt¥<f60=b≠◊ª—7=ÀÉÎ:/<$í<q(âΩœ“<º∑œ:*ò Bconv_cls.2.biasJÄ…"=Và2<“UB=Úã<:ÃŸ;Ωˇ<ﬂrÁºÖ/=d§rº>S=N∫=.Ÿªje”<ÜìÃ<Ω?=E^ΩH|ΩÉJ=÷ú±Ω@‘¶;’ÁS=‹”d<§N<àÀ< ˆ<æo£<≈â='¶E=ΩJ=c:=¢D=ÈP@Ω*WBconv_cls.4.biasJ@^îˇ;§–[=‡Î=é£=Uì≤<€®
+ΩÏ8=C÷ØºBÍ=Å¥∂<≤Quºƒ$I=\!%=Ã‹x=Œ "æ\"w=*eBconv_cls.6.weightj$
+locationcraft_detector.onnx.dataj
+offset7168j
+length1024p*WBconv_cls.6.biasJ@úªb;5L{º#û˚:!÷b<qXºI9∫≠wÀ;.VºWHl∫ˇEºè¬∫≤Æè8h™1Ω⁄å§ª≠‘”:d√„∏*†Bconv_cls.8.weightJÄK+KΩﬁi<ûyë>œh·æÏÜ>©€±>U\%>Ÿ ´æŒΩ≤>sùæc Fæ(êA;‰>¶><∆æ“"ú><É}>W´>ªÌßæÅ‰PΩ~€€>_[>|†ÏΩ @∏ædd]æ=/π·Óªæ…Ì/æõPB>ﬁæñÔ∏æ>BË=Lä?*Bconv_cls.8.biasJ'Ô´;Ò/õª*l@Bbasenet.slice1.0.weightj$
+locationcraft_detector.onnx.dataj
+offset28672j
+length6912p*o@@Bbasenet.slice1.3.weightj$
+locationcraft_detector.onnx.dataj
+offset250624j
+length147456p*pÄ@Bbasenet.slice1.7.weightj$
+locationcraft_detector.onnx.dataj
+offset594688j
+length294912p*sÄÄBbasenet.slice1.10.weightj$
+locationcraft_detector.onnx.dataj
+offset1184512j
+length589824p*tÄÄBbasenet.slice2.14.weightj$
+locationcraft_detector.onnx.dataj
+offset2621440j
+length1179648p*tÄÄBbasenet.slice2.17.weightj$
+locationcraft_detector.onnx.dataj
+offset4980736j
+length2359296p*tÄÄBbasenet.slice3.20.weightj$
+locationcraft_detector.onnx.dataj
+offset7340032j
+length2359296p*uÄÄBbasenet.slice3.24.weightj$
+locationcraft_detector.onnx.dataj
+offset17039360j
+length4718592p*uÄÄBbasenet.slice3.27.weightj$
+locationcraft_detector.onnx.dataj
+offset26476544j
+length9437184p*uÄÄBbasenet.slice4.30.weightj$
+locationcraft_detector.onnx.dataj
+offset35913728j
+length9437184p*uÄÄBbasenet.slice4.34.weightj$
+locationcraft_detector.onnx.dataj
+offset45350912j
+length9437184p*uÄÄBbasenet.slice4.37.weightj$
+locationcraft_detector.onnx.dataj
+offset54788096j
+length9437184p*uÄÄBbasenet.slice5.1.weightj$
+locationcraft_detector.onnx.dataj
+offset64225280j
+length18874368p*eÄBbasenet.slice5.1.biasj$
+locationcraft_detector.onnx.dataj
+offset20480j
+length4096p*tÄÄBbasenet.slice5.2.weightj$
+locationcraft_detector.onnx.dataj
+offset12845056j
+length4194304p*eÄBbasenet.slice5.2.biasj$
+locationcraft_detector.onnx.dataj
+offset24576j
+length4096p*qÄÄBupconv1.conv.0.weightj$
+locationcraft_detector.onnx.dataj
+offset9699328j
+length3145728p*rÄÄBupconv1.conv.3.weightj$
+locationcraft_detector.onnx.dataj
+offset21757952j
+length4718592p*pÄÄBupconv2.conv.0.weightj$
+locationcraft_detector.onnx.dataj
+offset1774336j
+length786432p*qÄÄBupconv2.conv.3.weightj$
+locationcraft_detector.onnx.dataj
+offset3801088j
+length1179648p*oÄÄBupconv3.conv.0.weightj$
+locationcraft_detector.onnx.dataj
+offset398080j
+length196608p*n@ÄBupconv3.conv.3.weightj$
+locationcraft_detector.onnx.dataj
+offset889600j
+length294912p*m@¿Bupconv4.conv.0.weightj$
+locationcraft_detector.onnx.dataj
+offset127744j
+length49152p*l @Bupconv4.conv.3.weightj$
+locationcraft_detector.onnx.dataj
+offset176896j
+length73728p*g  Bconv_cls.0.weightj$
+locationcraft_detector.onnx.dataj
+offset54016j
+length36864p*g  Bconv_cls.2.weightj$
+locationcraft_detector.onnx.dataj
+offset90880j
+length36864p*g Bconv_cls.4.weightj$
+locationcraft_detector.onnx.dataj
+offset35584j
+length18432p*Bval_5J       *Bval_7J       *Bval_8J       *Bval_102JˇˇˇˇˇˇˇˇZ’
+input&
+$ 
+batch
+
+height
+width"=
+/pkg.torch.export.graph_signature.InputSpec.kind
+USER_INPUT"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"&
+!pkg.torch.onnx.original_node_namexb§
+y0
+.*
+batch
+(height//2)
+
+(width//2)
+"?
+0pkg.torch.export.graph_signature.OutputSpec.kindUSER_OUTPUT",
+!pkg.torch.onnx.original_node_namepermuteb™
+feature0
+.*
+batch
+ 
+(height//2)
+
+(width//2)"?
+0pkg.torch.export.graph_signature.OutputSpec.kindUSER_OUTPUT",
+!pkg.torch.onnx.original_node_namerelu_18j#
+basenet.slice1.0.bias
+
+
+@j#
+basenet.slice1.3.bias
+
+
+@j$
+basenet.slice1.7.bias
+	
+Äj%
+basenet.slice1.10.bias
+	
+Äj%
+basenet.slice2.14.bias
+	
+Äj%
+basenet.slice2.17.bias
+	
+Äj%
+basenet.slice3.20.bias
+	
+Äj%
+basenet.slice3.24.bias
+	
+Äj%
+basenet.slice3.27.bias
+	
+Äj%
+basenet.slice4.30.bias
+	
+Äj%
+basenet.slice4.34.bias
+	
+Äj%
+basenet.slice4.37.bias
+	
+Äj"
+upconv1.conv.0.bias
+	
+Äj"
+upconv1.conv.3.bias
+	
+Äj"
+upconv2.conv.0.bias
+	
+Äj"
+upconv2.conv.3.bias
+	
+Äj"
+upconv3.conv.0.bias
+	
+Äj!
+upconv3.conv.3.bias
+
+
+@j!
+upconv4.conv.0.bias
+
+
+@j!
+upconv4.conv.3.bias
+
+
+ j“
+conv_cls.0.bias
+
+
+ "<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"6
+!pkg.torch.onnx.original_node_namep_conv_cls_0_biasj“
+conv_cls.2.bias
+
+
+ "<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"6
+!pkg.torch.onnx.original_node_namep_conv_cls_2_biasj“
+conv_cls.4.bias
+
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"6
+!pkg.torch.onnx.original_node_namep_conv_cls_4_biasj‚
+conv_cls.6.weight
+
+
+
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"8
+!pkg.torch.onnx.original_node_namep_conv_cls_6_weightj“
+conv_cls.6.bias
+
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"6
+!pkg.torch.onnx.original_node_namep_conv_cls_6_biasj‚
+conv_cls.8.weight
+
+
+
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"8
+!pkg.torch.onnx.original_node_namep_conv_cls_8_weightj“
+conv_cls.8.bias
+
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"6
+!pkg.torch.onnx.original_node_namep_conv_cls_8_biasj1
+basenet.slice1.0.weight
+
+@
+
+
+j1
+basenet.slice1.3.weight
+
+@
+@
+
+j2
+basenet.slice1.7.weight
+
+Ä
+@
+
+j4
+basenet.slice1.10.weight
+
+Ä
+Ä
+
+j4
+basenet.slice2.14.weight
+
+Ä
+Ä
+
+j4
+basenet.slice2.17.weight
+
+Ä
+Ä
+
+j4
+basenet.slice3.20.weight
+
+Ä
+Ä
+
+j4
+basenet.slice3.24.weight
+
+Ä
+Ä
+
+j4
+basenet.slice3.27.weight
+
+Ä
+Ä
+
+j4
+basenet.slice4.30.weight
+
+Ä
+Ä
+
+j4
+basenet.slice4.34.weight
+
+Ä
+Ä
+
+j4
+basenet.slice4.37.weight
+
+Ä
+Ä
+
+j
+basenet.slice5.1.weight
+
+Ä
+Ä
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone">
+!pkg.torch.onnx.original_node_namep_basenet_slice5_1_weightjﬂ
+basenet.slice5.1.bias
+	
+Ä"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"<
+!pkg.torch.onnx.original_node_namep_basenet_slice5_1_biasj
+basenet.slice5.2.weight
+
+Ä
+Ä
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone">
+!pkg.torch.onnx.original_node_namep_basenet_slice5_2_weightjﬂ
+basenet.slice5.2.bias
+	
+Ä"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"<
+!pkg.torch.onnx.original_node_namep_basenet_slice5_2_biasj1
+upconv1.conv.0.weight
+
+Ä
+Ä
+
+j1
+upconv1.conv.3.weight
+
+Ä
+Ä
+
+j1
+upconv2.conv.0.weight
+
+Ä
+Ä
+
+j1
+upconv2.conv.3.weight
+
+Ä
+Ä
+
+j1
+upconv3.conv.0.weight
+
+Ä
+Ä
+
+j0
+upconv3.conv.3.weight
+
+@
+Ä
+
+j0
+upconv4.conv.0.weight
+
+@
+¿
+
+j/
+upconv4.conv.3.weight
+
+ 
+@
+
+j‚
+conv_cls.0.weight
+
+ 
+ 
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"8
+!pkg.torch.onnx.original_node_namep_conv_cls_0_weightj‚
+conv_cls.2.weight
+
+ 
+ 
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"8
+!pkg.torch.onnx.original_node_namep_conv_cls_2_weightj‚
+conv_cls.4.weight
+
+
+ 
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"8
+!pkg.torch.onnx.original_node_namep_conv_cls_4_weightj
+val_5
+ j
+val_7
+ j
+val_8
+ j
+val_102
+
+
+j
+val_1
+
+
+j
+sym_size_int_74
+ j
+val_2
+
+
+j
+sym_size_int_75
+ j
+
+floordiv_8
+ j
+
+floordiv_9
+ j
+floordiv_10
+ j
+floordiv_11
+ j
+floordiv_12
+ j
+floordiv_13
+ j1
+getitem&
+$ 
+batch
+@
+height
+widthj.
+relu&
+$ 
+batch
+@
+height
+widthj3
+	getitem_3&
+$ 
+batch
+@
+height
+widthj0
+relu_1&
+$ 
+batch
+@
+height
+widthj>
+
+max_pool2d0
+.*
+batch
+@
+(height//2)
+
+(width//2)j>
+	getitem_61
+/+
+batch
+Ä
+(height//2)
+
+(width//2)j;
+relu_21
+/+
+batch
+Ä
+(height//2)
+
+(width//2)j>
+	getitem_91
+/+
+batch
+Ä
+(height//2)
+
+(width//2)j;
+relu_31
+/+
+batch
+Ä
+(height//2)
+
+(width//2)jA
+max_pool2d_11
+/+
+batch
+Ä
+(height//4)
+
+(width//4)j?
+
+getitem_121
+/+
+batch
+Ä
+(height//4)
+
+(width//4)j;
+relu_41
+/+
+batch
+Ä
+(height//4)
+
+(width//4)j?
+
+getitem_151
+/+
+batch
+Ä
+(height//4)
+
+(width//4)j;
+relu_51
+/+
+batch
+Ä
+(height//4)
+
+(width//4)j?
+
+getitem_181
+/+
+batch
+Ä
+(height//4)
+
+(width//4)j;
+relu_61
+/+
+batch
+Ä
+(height//4)
+
+(width//4)jA
+max_pool2d_21
+/+
+batch
+Ä
+(height//8)
+
+(width//8)j?
+
+getitem_211
+/+
+batch
+Ä
+(height//8)
+
+(width//8)j;
+relu_71
+/+
+batch
+Ä
+(height//8)
+
+(width//8)j?
+
+getitem_241
+/+
+batch
+Ä
+(height//8)
+
+(width//8)j;
+relu_81
+/+
+batch
+Ä
+(height//8)
+
+(width//8)j?
+
+getitem_271
+/+
+batch
+Ä
+(height//8)
+
+(width//8)j;
+relu_91
+/+
+batch
+Ä
+(height//8)
+
+(width//8)jC
+max_pool2d_33
+1-
+batch
+Ä
+(height//16)
+(width//16)jA
+
+getitem_303
+1-
+batch
+Ä
+(height//16)
+(width//16)j>
+relu_103
+1-
+batch
+Ä
+(height//16)
+(width//16)jA
+
+getitem_333
+1-
+batch
+Ä
+(height//16)
+(width//16)jC
+max_pool2d_43
+1-
+batch
+Ä
+(height//16)
+(width//16)j@
+	conv2d_123
+1-
+batch
+Ä
+(height//16)
+(width//16)j@
+	conv2d_133
+1-
+batch
+Ä
+(height//16)
+(width//16)j:
+cat3
+1-
+batch
+Ä
+(height//16)
+(width//16)jA
+
+getitem_363
+1-
+batch
+Ä
+(height//16)
+(width//16)j>
+relu_113
+1-
+batch
+Ä
+(height//16)
+(width//16)jA
+
+getitem_393
+1-
+batch
+Ä
+(height//16)
+(width//16)j>
+relu_123
+1-
+batch
+Ä
+(height//16)
+(width//16)j
+val_101
+
+
+j
+val_103
+
+
+j
+val_105
+
+
+j
+val_106
+
+
+j
+val_108
+
+
+jH
+upsample_bilinear2d1
+/+
+batch
+Ä
+(height//8)
+
+(width//8)j:
+cat_11
+/+
+batch
+Ä
+(height//8)
+
+(width//8)j?
+
+getitem_421
+/+
+batch
+Ä
+(height//8)
+
+(width//8)j<
+relu_131
+/+
+batch
+Ä
+(height//8)
+
+(width//8)j?
+
+getitem_451
+/+
+batch
+Ä
+(height//8)
+
+(width//8)j<
+relu_141
+/+
+batch
+Ä
+(height//8)
+
+(width//8)j
+val_121
+
+
+j
+val_123
+
+
+j
+val_125
+
+
+j
+val_126
+
+
+j
+val_128
+
+
+jJ
+upsample_bilinear2d_11
+/+
+batch
+Ä
+(height//4)
+
+(width//4)j:
+cat_21
+/+
+batch
+Ä
+(height//4)
+
+(width//4)j?
+
+getitem_481
+/+
+batch
+Ä
+(height//4)
+
+(width//4)j<
+relu_151
+/+
+batch
+Ä
+(height//4)
+
+(width//4)j>
+
+getitem_510
+.*
+batch
+@
+(height//4)
+
+(width//4)j;
+relu_160
+.*
+batch
+@
+(height//4)
+
+(width//4)j
+val_141
+
+
+j
+val_143
+
+
+j
+val_145
+
+
+j
+val_146
+
+
+j
+val_148
+
+
+jI
+upsample_bilinear2d_20
+.*
+batch
+@
+(height//2)
+
+(width//2)j:
+cat_31
+/+
+batch
+¿
+(height//2)
+
+(width//2)j>
+
+getitem_540
+.*
+batch
+@
+(height//2)
+
+(width//2)j;
+relu_170
+.*
+batch
+@
+(height//2)
+
+(width//2)j>
+
+getitem_570
+.*
+batch
+ 
+(height//2)
+
+(width//2)j=
+	conv2d_220
+.*
+batch
+ 
+(height//2)
+
+(width//2)j;
+relu_190
+.*
+batch
+ 
+(height//2)
+
+(width//2)j=
+	conv2d_230
+.*
+batch
+ 
+(height//2)
+
+(width//2)j;
+relu_200
+.*
+batch
+ 
+(height//2)
+
+(width//2)j=
+	conv2d_240
+.*
+batch
+
+(height//2)
+
+(width//2)j;
+relu_210
+.*
+batch
+
+(height//2)
+
+(width//2)j=
+	conv2d_250
+.*
+batch
+
+(height//2)
+
+(width//2)j;
+relu_220
+.*
+batch
+
+(height//2)
+
+(width//2)j=
+	conv2d_260
+.*
+batch
+
+(height//2)
+
+(width//2)Ç‘_
+0pkg.torch.export.ExportedProgram.graph_signatureü_
+# inputs
+p_basenet_slice1_0_weight: PARAMETER target='basenet.slice1.0.weight'
+p_basenet_slice1_0_bias: PARAMETER target='basenet.slice1.0.bias'
+p_basenet_slice1_1_weight: PARAMETER target='basenet.slice1.1.weight'
+p_basenet_slice1_1_bias: PARAMETER target='basenet.slice1.1.bias'
+p_basenet_slice1_3_weight: PARAMETER target='basenet.slice1.3.weight'
+p_basenet_slice1_3_bias: PARAMETER target='basenet.slice1.3.bias'
+p_basenet_slice1_4_weight: PARAMETER target='basenet.slice1.4.weight'
+p_basenet_slice1_4_bias: PARAMETER target='basenet.slice1.4.bias'
+p_basenet_slice1_7_weight: PARAMETER target='basenet.slice1.7.weight'
+p_basenet_slice1_7_bias: PARAMETER target='basenet.slice1.7.bias'
+p_basenet_slice1_8_weight: PARAMETER target='basenet.slice1.8.weight'
+p_basenet_slice1_8_bias: PARAMETER target='basenet.slice1.8.bias'
+p_basenet_slice1_10_weight: PARAMETER target='basenet.slice1.10.weight'
+p_basenet_slice1_10_bias: PARAMETER target='basenet.slice1.10.bias'
+p_basenet_slice1_11_weight: PARAMETER target='basenet.slice1.11.weight'
+p_basenet_slice1_11_bias: PARAMETER target='basenet.slice1.11.bias'
+p_basenet_slice2_14_weight: PARAMETER target='basenet.slice2.14.weight'
+p_basenet_slice2_14_bias: PARAMETER target='basenet.slice2.14.bias'
+p_basenet_slice2_15_weight: PARAMETER target='basenet.slice2.15.weight'
+p_basenet_slice2_15_bias: PARAMETER target='basenet.slice2.15.bias'
+p_basenet_slice2_17_weight: PARAMETER target='basenet.slice2.17.weight'
+p_basenet_slice2_17_bias: PARAMETER target='basenet.slice2.17.bias'
+p_basenet_slice2_18_weight: PARAMETER target='basenet.slice2.18.weight'
+p_basenet_slice2_18_bias: PARAMETER target='basenet.slice2.18.bias'
+p_basenet_slice3_20_weight: PARAMETER target='basenet.slice3.20.weight'
+p_basenet_slice3_20_bias: PARAMETER target='basenet.slice3.20.bias'
+p_basenet_slice3_21_weight: PARAMETER target='basenet.slice3.21.weight'
+p_basenet_slice3_21_bias: PARAMETER target='basenet.slice3.21.bias'
+p_basenet_slice3_24_weight: PARAMETER target='basenet.slice3.24.weight'
+p_basenet_slice3_24_bias: PARAMETER target='basenet.slice3.24.bias'
+p_basenet_slice3_25_weight: PARAMETER target='basenet.slice3.25.weight'
+p_basenet_slice3_25_bias: PARAMETER target='basenet.slice3.25.bias'
+p_basenet_slice3_27_weight: PARAMETER target='basenet.slice3.27.weight'
+p_basenet_slice3_27_bias: PARAMETER target='basenet.slice3.27.bias'
+p_basenet_slice3_28_weight: PARAMETER target='basenet.slice3.28.weight'
+p_basenet_slice3_28_bias: PARAMETER target='basenet.slice3.28.bias'
+p_basenet_slice4_30_weight: PARAMETER target='basenet.slice4.30.weight'
+p_basenet_slice4_30_bias: PARAMETER target='basenet.slice4.30.bias'
+p_basenet_slice4_31_weight: PARAMETER target='basenet.slice4.31.weight'
+p_basenet_slice4_31_bias: PARAMETER target='basenet.slice4.31.bias'
+p_basenet_slice4_34_weight: PARAMETER target='basenet.slice4.34.weight'
+p_basenet_slice4_34_bias: PARAMETER target='basenet.slice4.34.bias'
+p_basenet_slice4_35_weight: PARAMETER target='basenet.slice4.35.weight'
+p_basenet_slice4_35_bias: PARAMETER target='basenet.slice4.35.bias'
+p_basenet_slice4_37_weight: PARAMETER target='basenet.slice4.37.weight'
+p_basenet_slice4_37_bias: PARAMETER target='basenet.slice4.37.bias'
+p_basenet_slice4_38_weight: PARAMETER target='basenet.slice4.38.weight'
+p_basenet_slice4_38_bias: PARAMETER target='basenet.slice4.38.bias'
+p_basenet_slice5_1_weight: PARAMETER target='basenet.slice5.1.weight'
+p_basenet_slice5_1_bias: PARAMETER target='basenet.slice5.1.bias'
+p_basenet_slice5_2_weight: PARAMETER target='basenet.slice5.2.weight'
+p_basenet_slice5_2_bias: PARAMETER target='basenet.slice5.2.bias'
+p_upconv1_conv_0_weight: PARAMETER target='upconv1.conv.0.weight'
+p_upconv1_conv_0_bias: PARAMETER target='upconv1.conv.0.bias'
+p_upconv1_conv_1_weight: PARAMETER target='upconv1.conv.1.weight'
+p_upconv1_conv_1_bias: PARAMETER target='upconv1.conv.1.bias'
+p_upconv1_conv_3_weight: PARAMETER target='upconv1.conv.3.weight'
+p_upconv1_conv_3_bias: PARAMETER target='upconv1.conv.3.bias'
+p_upconv1_conv_4_weight: PARAMETER target='upconv1.conv.4.weight'
+p_upconv1_conv_4_bias: PARAMETER target='upconv1.conv.4.bias'
+p_upconv2_conv_0_weight: PARAMETER target='upconv2.conv.0.weight'
+p_upconv2_conv_0_bias: PARAMETER target='upconv2.conv.0.bias'
+p_upconv2_conv_1_weight: PARAMETER target='upconv2.conv.1.weight'
+p_upconv2_conv_1_bias: PARAMETER target='upconv2.conv.1.bias'
+p_upconv2_conv_3_weight: PARAMETER target='upconv2.conv.3.weight'
+p_upconv2_conv_3_bias: PARAMETER target='upconv2.conv.3.bias'
+p_upconv2_conv_4_weight: PARAMETER target='upconv2.conv.4.weight'
+p_upconv2_conv_4_bias: PARAMETER target='upconv2.conv.4.bias'
+p_upconv3_conv_0_weight: PARAMETER target='upconv3.conv.0.weight'
+p_upconv3_conv_0_bias: PARAMETER target='upconv3.conv.0.bias'
+p_upconv3_conv_1_weight: PARAMETER target='upconv3.conv.1.weight'
+p_upconv3_conv_1_bias: PARAMETER target='upconv3.conv.1.bias'
+p_upconv3_conv_3_weight: PARAMETER target='upconv3.conv.3.weight'
+p_upconv3_conv_3_bias: PARAMETER target='upconv3.conv.3.bias'
+p_upconv3_conv_4_weight: PARAMETER target='upconv3.conv.4.weight'
+p_upconv3_conv_4_bias: PARAMETER target='upconv3.conv.4.bias'
+p_upconv4_conv_0_weight: PARAMETER target='upconv4.conv.0.weight'
+p_upconv4_conv_0_bias: PARAMETER target='upconv4.conv.0.bias'
+p_upconv4_conv_1_weight: PARAMETER target='upconv4.conv.1.weight'
+p_upconv4_conv_1_bias: PARAMETER target='upconv4.conv.1.bias'
+p_upconv4_conv_3_weight: PARAMETER target='upconv4.conv.3.weight'
+p_upconv4_conv_3_bias: PARAMETER target='upconv4.conv.3.bias'
+p_upconv4_conv_4_weight: PARAMETER target='upconv4.conv.4.weight'
+p_upconv4_conv_4_bias: PARAMETER target='upconv4.conv.4.bias'
+p_conv_cls_0_weight: PARAMETER target='conv_cls.0.weight'
+p_conv_cls_0_bias: PARAMETER target='conv_cls.0.bias'
+p_conv_cls_2_weight: PARAMETER target='conv_cls.2.weight'
+p_conv_cls_2_bias: PARAMETER target='conv_cls.2.bias'
+p_conv_cls_4_weight: PARAMETER target='conv_cls.4.weight'
+p_conv_cls_4_bias: PARAMETER target='conv_cls.4.bias'
+p_conv_cls_6_weight: PARAMETER target='conv_cls.6.weight'
+p_conv_cls_6_bias: PARAMETER target='conv_cls.6.bias'
+p_conv_cls_8_weight: PARAMETER target='conv_cls.8.weight'
+p_conv_cls_8_bias: PARAMETER target='conv_cls.8.bias'
+b_basenet_slice1_1_running_mean: BUFFER target='basenet.slice1.1.running_mean' persistent=True
+b_basenet_slice1_1_running_var: BUFFER target='basenet.slice1.1.running_var' persistent=True
+b_basenet_slice1_1_num_batches_tracked: BUFFER target='basenet.slice1.1.num_batches_tracked' persistent=True
+b_basenet_slice1_4_running_mean: BUFFER target='basenet.slice1.4.running_mean' persistent=True
+b_basenet_slice1_4_running_var: BUFFER target='basenet.slice1.4.running_var' persistent=True
+b_basenet_slice1_4_num_batches_tracked: BUFFER target='basenet.slice1.4.num_batches_tracked' persistent=True
+b_basenet_slice1_8_running_mean: BUFFER target='basenet.slice1.8.running_mean' persistent=True
+b_basenet_slice1_8_running_var: BUFFER target='basenet.slice1.8.running_var' persistent=True
+b_basenet_slice1_8_num_batches_tracked: BUFFER target='basenet.slice1.8.num_batches_tracked' persistent=True
+b_basenet_slice1_11_running_mean: BUFFER target='basenet.slice1.11.running_mean' persistent=True
+b_basenet_slice1_11_running_var: BUFFER target='basenet.slice1.11.running_var' persistent=True
+b_basenet_slice1_11_num_batches_tracked: BUFFER target='basenet.slice1.11.num_batches_tracked' persistent=True
+b_basenet_slice2_15_running_mean: BUFFER target='basenet.slice2.15.running_mean' persistent=True
+b_basenet_slice2_15_running_var: BUFFER target='basenet.slice2.15.running_var' persistent=True
+b_basenet_slice2_15_num_batches_tracked: BUFFER target='basenet.slice2.15.num_batches_tracked' persistent=True
+b_basenet_slice2_18_running_mean: BUFFER target='basenet.slice2.18.running_mean' persistent=True
+b_basenet_slice2_18_running_var: BUFFER target='basenet.slice2.18.running_var' persistent=True
+b_basenet_slice2_18_num_batches_tracked: BUFFER target='basenet.slice2.18.num_batches_tracked' persistent=True
+b_basenet_slice3_21_running_mean: BUFFER target='basenet.slice3.21.running_mean' persistent=True
+b_basenet_slice3_21_running_var: BUFFER target='basenet.slice3.21.running_var' persistent=True
+b_basenet_slice3_21_num_batches_tracked: BUFFER target='basenet.slice3.21.num_batches_tracked' persistent=True
+b_basenet_slice3_25_running_mean: BUFFER target='basenet.slice3.25.running_mean' persistent=True
+b_basenet_slice3_25_running_var: BUFFER target='basenet.slice3.25.running_var' persistent=True
+b_basenet_slice3_25_num_batches_tracked: BUFFER target='basenet.slice3.25.num_batches_tracked' persistent=True
+b_basenet_slice3_28_running_mean: BUFFER target='basenet.slice3.28.running_mean' persistent=True
+b_basenet_slice3_28_running_var: BUFFER target='basenet.slice3.28.running_var' persistent=True
+b_basenet_slice3_28_num_batches_tracked: BUFFER target='basenet.slice3.28.num_batches_tracked' persistent=True
+b_basenet_slice4_31_running_mean: BUFFER target='basenet.slice4.31.running_mean' persistent=True
+b_basenet_slice4_31_running_var: BUFFER target='basenet.slice4.31.running_var' persistent=True
+b_basenet_slice4_31_num_batches_tracked: BUFFER target='basenet.slice4.31.num_batches_tracked' persistent=True
+b_basenet_slice4_35_running_mean: BUFFER target='basenet.slice4.35.running_mean' persistent=True
+b_basenet_slice4_35_running_var: BUFFER target='basenet.slice4.35.running_var' persistent=True
+b_basenet_slice4_35_num_batches_tracked: BUFFER target='basenet.slice4.35.num_batches_tracked' persistent=True
+b_basenet_slice4_38_running_mean: BUFFER target='basenet.slice4.38.running_mean' persistent=True
+b_basenet_slice4_38_running_var: BUFFER target='basenet.slice4.38.running_var' persistent=True
+b_basenet_slice4_38_num_batches_tracked: BUFFER target='basenet.slice4.38.num_batches_tracked' persistent=True
+b_upconv1_conv_1_running_mean: BUFFER target='upconv1.conv.1.running_mean' persistent=True
+b_upconv1_conv_1_running_var: BUFFER target='upconv1.conv.1.running_var' persistent=True
+b_upconv1_conv_1_num_batches_tracked: BUFFER target='upconv1.conv.1.num_batches_tracked' persistent=True
+b_upconv1_conv_4_running_mean: BUFFER target='upconv1.conv.4.running_mean' persistent=True
+b_upconv1_conv_4_running_var: BUFFER target='upconv1.conv.4.running_var' persistent=True
+b_upconv1_conv_4_num_batches_tracked: BUFFER target='upconv1.conv.4.num_batches_tracked' persistent=True
+b_upconv2_conv_1_running_mean: BUFFER target='upconv2.conv.1.running_mean' persistent=True
+b_upconv2_conv_1_running_var: BUFFER target='upconv2.conv.1.running_var' persistent=True
+b_upconv2_conv_1_num_batches_tracked: BUFFER target='upconv2.conv.1.num_batches_tracked' persistent=True
+b_upconv2_conv_4_running_mean: BUFFER target='upconv2.conv.4.running_mean' persistent=True
+b_upconv2_conv_4_running_var: BUFFER target='upconv2.conv.4.running_var' persistent=True
+b_upconv2_conv_4_num_batches_tracked: BUFFER target='upconv2.conv.4.num_batches_tracked' persistent=True
+b_upconv3_conv_1_running_mean: BUFFER target='upconv3.conv.1.running_mean' persistent=True
+b_upconv3_conv_1_running_var: BUFFER target='upconv3.conv.1.running_var' persistent=True
+b_upconv3_conv_1_num_batches_tracked: BUFFER target='upconv3.conv.1.num_batches_tracked' persistent=True
+b_upconv3_conv_4_running_mean: BUFFER target='upconv3.conv.4.running_mean' persistent=True
+b_upconv3_conv_4_running_var: BUFFER target='upconv3.conv.4.running_var' persistent=True
+b_upconv3_conv_4_num_batches_tracked: BUFFER target='upconv3.conv.4.num_batches_tracked' persistent=True
+b_upconv4_conv_1_running_mean: BUFFER target='upconv4.conv.1.running_mean' persistent=True
+b_upconv4_conv_1_running_var: BUFFER target='upconv4.conv.1.running_var' persistent=True
+b_upconv4_conv_1_num_batches_tracked: BUFFER target='upconv4.conv.1.num_batches_tracked' persistent=True
+b_upconv4_conv_4_running_mean: BUFFER target='upconv4.conv.4.running_mean' persistent=True
+b_upconv4_conv_4_running_var: BUFFER target='upconv4.conv.4.running_var' persistent=True
+b_upconv4_conv_4_num_batches_tracked: BUFFER target='upconv4.conv.4.num_batches_tracked' persistent=True
+x: USER_INPUT
+
+# outputs
+permute: USER_OUTPUT
+relu_18: USER_OUTPUT
+Çs
+2pkg.torch.export.ExportedProgram.range_constraints={s77: VR[0, int_oo], s53: VR[16, int_oo], s0: VR[16, int_oo]}B
+ 

@@ -2,7 +2,7 @@ import React from 'react';
 
 import InteractiveBlock from '../InteractiveBlock';
 
-import loginBg from '@mobile/assets/background-1.png';
+import loginBg from '@mobile/assets/background-1.webp';
 
 import logo from '@mobile/assets/logo-no-bg.png';
 

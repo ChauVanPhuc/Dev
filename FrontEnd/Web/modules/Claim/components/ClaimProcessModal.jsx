@@ -1,27 +1,12 @@
 import React, { useMemo } from 'react';
 import { FormModal } from './Modal';
-import { extractMultiplierFromPenalty, formatPenaltyValue, getFullImagePath } from '../utils/claimHelpers';
+import { extractMultiplierFromPenalty, formatPenaltyValue, getFullImagePath, getCabinetSalePrice, formatMonthYear } from '../utils/claimHelpers';
 import claimService from '../services/claim.service';
-
-const formatStageTag = (stageVal) => {
-  if (!stageVal) return null;
-  if (Array.isArray(stageVal)) return stageVal.join(', ');
-  if (typeof stageVal === 'string') {
-    const cleaned = stageVal.trim();
-    if (cleaned.startsWith('[')) {
-      try {
-        const parsed = JSON.parse(cleaned);
-        if (Array.isArray(parsed)) return parsed.join(', ');
-      } catch (e) {}
-    }
-    return cleaned.replace(/^\["|"]$/g, '').replace(/","/g, ', ').replace(/"/g, '');
-  }
-  return String(stageVal);
-};
 
 export const ClaimProcessModal = ({
   activeDetailClaim,
   setActiveDetailClaim,
+  cabinetPrices = [],
   modalMode,
   setModalMode,
   exceptionNavMode,
@@ -38,10 +23,17 @@ export const ClaimProcessModal = ({
   processMucPhat, setProcessMucPhat,
   processGiaTriPhat, setProcessGiaTriPhat,
   processHeSoPhat, setProcessHeSoPhat,
+  processTongPhat, setProcessTongPhat,
   getProcessTotalPenaltyPreview,
   processMaLoi, setProcessMaLoi,
+  showProcessDefectCodeSuggestions, setShowProcessDefectCodeSuggestions,
+  uniqueCustomerDefectCodeOptions = [],
+  handleSelectDefectCode,
+  processTenLoiKH, setProcessTenLoiKH,
+  showProcessTenLoiKHSuggestions, setShowProcessTenLoiKHSuggestions,
+  uniqueCustomerDefectNameOptions = [],
+  handleSelectCustomerDefectName,
   processMaLoiCty, setProcessMaLoiCty,
-  g7DefectTypes = [],
   showProcessG7CodeSuggestions, setShowProcessG7CodeSuggestions,
   uniqueCompanyErrorCodeOptions = [],
   handleSelectG7Code,
@@ -107,7 +99,7 @@ export const ClaimProcessModal = ({
             borderRadius: '6px',
             display: 'inline-block'
           }}>
-            {activeDetailClaim.claim_code} · {activeDetailClaim.product_name || activeDetailClaim.sku} · Thời gian Claim: {activeDetailClaim.date || activeDetailClaim.period}
+            {activeDetailClaim.claim_code} · {activeDetailClaim.product_name || activeDetailClaim.sku} · Thời gian Claim: {formatMonthYear(activeDetailClaim.date || activeDetailClaim.period)}
           </div>
         )}
       </div>
@@ -310,18 +302,18 @@ export const ClaimProcessModal = ({
           {/* Row 1: Dòng hàng & Loại claim */}
           <div className="add-claim-row add-claim-grid-2">
             <div className="add-claim-field">
-              <label className="add-claim-label">Dòng hàng</label>
+              <label className="add-claim-label">Loại hàng</label>
               <select
-                value={processDongHang}
+                value={processDongHang || ((processTenSanPham || '').toUpperCase().includes('WOA') ? 'OAK' : 'Pigment')}
                 onChange={(e) => setProcessDongHang(e.target.value)}
                 className="add-claim-select"
-                disabled
-                style={disabledFieldStyle}
+                disabled={modalMode !== 'edit'}
+                style={modalMode !== 'edit' ? disabledFieldStyle : undefined}
               >
-                {['Atlas', 'Oak', 'Maple', 'Pine'].map(opt => (
+                {['Pigment', 'OAK'].map(opt => (
                   <option key={opt} value={opt}>{opt}</option>
                 ))}
-                {processDongHang && !['Atlas', 'Oak', 'Maple', 'Pine'].includes(processDongHang) && (
+                {processDongHang && !['Pigment', 'OAK'].includes(processDongHang) && (
                   <option value={processDongHang}>{processDongHang}</option>
                 )}
               </select>
@@ -373,19 +365,20 @@ export const ClaimProcessModal = ({
             </div>
           </div>
 
-          {/* Row 3: Mức phạt + Giá trị phạt + (X phạt nếu có 'unit') + Tổng phạt */}
+          {/* Row 3: Mức phạt + Giá trị phạt + (X phạt nếu có 'unit') + Đơn giá tủ + Tổng phạt */}
           {(() => {
             const isUnitPenalty = String(processGiaTriPhat || '').toLowerCase().includes('unit');
+            const targetSku = processTenSanPham || activeDetailClaim?.product_name || activeDetailClaim?.sku || '';
+            const currentCabinetSalePrice = getCabinetSalePrice(targetSku, cabinetPrices);
             return (
-              <div className="add-claim-row" style={{ display: 'grid', gridTemplateColumns: isUnitPenalty ? '1fr 1fr 0.9fr 1.3fr' : '1fr 1fr 1.5fr', gap: '16px' }}>
+              <div className="add-claim-row" style={{ display: 'grid', gridTemplateColumns: isUnitPenalty ? '1fr 1fr 0.8fr 1fr 1.2fr' : '1fr 1.2fr 1fr 1.2fr', gap: '16px' }}>
                 <div className="add-claim-field">
                   <label className="add-claim-label">Mức phạt</label>
                   <select
                     value={processMucPhat}
-                    onChange={(e) => setProcessMucPhat(e.target.value)}
+                    disabled
+                    style={disabledFieldStyle}
                     className="add-claim-select"
-                    disabled={modalMode === 'view'}
-                    style={modalMode === 'view' ? disabledFieldStyle : undefined}
                   >
                     {['Nhắc nhở', 'Phạt tiền', 'Hủy đơn'].map(opt => (
                       <option key={opt} value={opt}>{opt}</option>
@@ -402,16 +395,9 @@ export const ClaimProcessModal = ({
                     type="text"
                     placeholder="$0"
                     value={processGiaTriPhat}
-                    onChange={(e) => {
-                      const newVal = e.target.value;
-                      setProcessGiaTriPhat(newVal);
-                      if (newVal.toLowerCase().includes('unit')) {
-                        setProcessHeSoPhat(extractMultiplierFromPenalty(newVal));
-                      }
-                    }}
+                    disabled
+                    style={disabledFieldStyle}
                     className="add-claim-input"
-                    disabled={modalMode === 'view'}
-                    style={modalMode === 'view' ? disabledFieldStyle : undefined}
                   />
                 </div>
 
@@ -420,342 +406,155 @@ export const ClaimProcessModal = ({
                     <label className="add-claim-label" style={{ color: '#B45309', fontWeight: 'bold' }}>X phạt</label>
                     <input
                       type="number"
-                      min="1"
-                      max="100"
-                      step="1"
-                      placeholder="1"
                       value={processHeSoPhat}
-                      onKeyDown={(e) => {
-                        if (e.key === '-' || e.key === 'e' || e.key === 'E' || e.key === '+') {
-                          e.preventDefault();
-                        }
-                      }}
-                      onChange={(e) => {
-                        let val = e.target.value;
-                        if (val !== '') {
-                          const parsed = parseFloat(val);
-                          if (parsed < 1) val = '1';
-                          if (parsed > 100) val = '100';
-                        }
-                        setProcessHeSoPhat(val);
-                        if (val && !isNaN(val) && parseFloat(val) >= 1 && String(processGiaTriPhat).match(/x\s*\d+/i)) {
-                          setProcessGiaTriPhat(String(processGiaTriPhat).replace(/x\s*\d+/i, `X${val}`));
-                        }
-                      }}
+                      disabled
+                      style={{ ...disabledFieldStyle, backgroundColor: '#FFFBEB', color: '#B45309', fontWeight: '700', textAlign: 'center', borderColor: '#FDE68A' }}
                       className="add-claim-input"
-                      disabled={modalMode === 'view'}
-                      style={modalMode === 'view'
-                        ? { ...disabledFieldStyle, backgroundColor: '#FFFBEB', color: '#B45309', fontWeight: '700', textAlign: 'center', borderColor: '#FDE68A' }
-                        : { backgroundColor: '#FFFBEB', borderColor: '#F59E0B', color: '#B45309', fontWeight: '700', textAlign: 'center' }
-                      }
                     />
                   </div>
                 )}
 
                 <div className="add-claim-field">
+                  <label className="add-claim-label">Đơn giá tủ</label>
+                  <input
+                    type="text"
+                    value={currentCabinetSalePrice > 0 ? formatPenaltyValue(currentCabinetSalePrice) : 'Chưa có giá ($0.00)'}
+                    className="add-claim-input"
+                    disabled
+                    title={currentCabinetSalePrice > 0 ? `Đơn giá bán: ${formatPenaltyValue(currentCabinetSalePrice)}` : 'Không tìm thấy đơn giá cho mã sản phẩm này trong bảng giá tủ'}
+                    style={{
+                      ...disabledFieldStyle,
+                      backgroundColor: currentCabinetSalePrice > 0 ? '#F0FDF4' : '#FEF2F2',
+                      color: currentCabinetSalePrice > 0 ? '#15803D' : '#DC2626',
+                      fontWeight: '600'
+                    }}
+                  />
+                </div>
+
+                <div className="add-claim-field">
                   <label className="add-claim-label">Tổng phạt</label>
                   <input
                     type="text"
-                    value={formatPenaltyValue(getProcessTotalPenaltyPreview())}
+                    value={processTongPhat !== undefined && processTongPhat !== '' ? processTongPhat : formatPenaltyValue(getProcessTotalPenaltyPreview())}
+                    onChange={(e) => setProcessTongPhat && setProcessTongPhat(e.target.value)}
                     className="add-claim-input"
-                    disabled
-                    style={{ ...disabledFieldStyle, backgroundColor: '#F5F5F5', color: '#B91C1C', fontWeight: '600' }}
+                    disabled={modalMode !== 'edit'}
+                    style={modalMode !== 'edit' ? disabledFieldStyle : undefined}
                   />
                 </div>
               </div>
             );
           })()}
 
-          {/* Row 4: Mã lỗi KH + Mã lỗi G7 + Tên lỗi G7 */}
-          <div className="add-claim-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.5fr', gap: '16px' }}>
+          {/* Row 4: Mã lỗi KH + Tên lỗi KH + Mã lỗi G7 + Tên lỗi G7 */}
+          <div className="add-claim-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr 1fr 1.5fr', gap: '16px' }}>
+            {/* 1. Mã lỗi KH */}
             <div className="add-claim-field" style={{ position: 'relative' }}>
               <label className="add-claim-label">Mã lỗi KH</label>
               <input
                 type="text"
                 placeholder="Mã lỗi KH..."
                 value={processMaLoi}
-                onChange={(e) => setProcessMaLoi(e.target.value)}
-                className="add-claim-input"
                 disabled
                 style={disabledFieldStyle}
+                className="add-claim-input"
               />
             </div>
+
+            {/* 2. Tên lỗi KH */}
+            <div className="add-claim-field" style={{ position: 'relative' }}>
+              <label className="add-claim-label">Tên lỗi KH</label>
+              <input
+                type="text"
+                placeholder="Tên lỗi KH..."
+                value={processTenLoiKH}
+                disabled
+                style={disabledFieldStyle}
+                className="add-claim-input"
+              />
+            </div>
+
+            {/* 3. Mã lỗi G7 */}
             <div className="add-claim-field" style={{ position: 'relative' }}>
               <label className="add-claim-label">Mã lỗi G7</label>
-              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                <input
-                  type="text"
-                  placeholder="Mã lỗi G7..."
-                  value={processMaLoiCty}
-                  onChange={(e) => {
-                    setProcessMaLoiCty(e.target.value);
-                    setShowProcessG7CodeSuggestions(true);
-                  }}
-                  onFocus={() => setShowProcessG7CodeSuggestions(true)}
-                  onBlur={() => setTimeout(() => setShowProcessG7CodeSuggestions(false), 200)}
-                  className="add-claim-input"
-                  disabled={modalMode !== 'edit'}
-                  style={{
-                    ...(modalMode !== 'edit' ? disabledFieldStyle : {}),
-                    paddingRight: modalMode === 'edit' ? '28px' : '12px'
-                  }}
-                />
-                {modalMode === 'edit' && (
-                  <button
-                    type="button"
-                    tabIndex={-1}
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      setShowProcessG7CodeSuggestions(!showProcessG7CodeSuggestions);
-                    }}
-                    style={{
-                      position: 'absolute',
-                      right: '8px',
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      color: '#7B5233',
-                      display: 'flex',
-                      alignItems: 'center',
-                      padding: '2px'
-                    }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="6 9 12 15 18 9"></polyline>
-                    </svg>
-                  </button>
-                )}
-              </div>
+              <input
+                type="text"
+                placeholder="Mã lỗi G7..."
+                value={processMaLoiCty}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setProcessMaLoiCty(val);
+                  setShowProcessG7CodeSuggestions(true);
+                  const match = (uniqueCompanyErrorCodeOptions || []).find(opt => opt.toLowerCase() === val.trim().toLowerCase());
+                  if (match && handleSelectG7Code) {
+                    handleSelectG7Code(match, true);
+                  }
+                }}
+                onFocus={() => setShowProcessG7CodeSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowProcessG7CodeSuggestions(false), 200)}
+                className="add-claim-input"
+                disabled={modalMode !== 'edit'}
+                style={modalMode !== 'edit' ? disabledFieldStyle : {}}
+              />
               {modalMode === 'edit' && showProcessG7CodeSuggestions && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '100%',
-                    left: 0,
-                    minWidth: '420px',
-                    maxWidth: '560px',
-                    width: 'max-content',
-                    backgroundColor: '#FFFFFF',
-                    border: '1.5px solid #EADCC9',
-                    borderRadius: '10px',
-                    boxShadow: '0 12px 28px rgba(0, 0, 0, 0.15)',
-                    maxHeight: '260px',
-                    overflowY: 'auto',
-                    overflowX: 'hidden',
-                    zIndex: 9999,
-                    marginTop: '4px'
-                  }}
-                >
-                  {g7DefectTypes && g7DefectTypes.length > 0 ? (
-                    g7DefectTypes
-                      .filter(d => {
-                        if (!processMaLoiCty) return true;
-                        const q = processMaLoiCty.toLowerCase();
-                        const stageStr = formatStageTag(d.stage) || '';
-                        return (d.code && d.code.toLowerCase().includes(q)) ||
-                               (d.name && d.name.toLowerCase().includes(q)) ||
-                               (d.category && d.category.toLowerCase().includes(q)) ||
-                               stageStr.toLowerCase().includes(q);
-                      })
-                      .map((defect, idx) => {
-                        const stageTag = formatStageTag(defect.stage || defect.category);
-                        return (
-                          <div
-                            key={defect.id || idx}
-                            className="custom-autocomplete-option"
-                            style={{
-                              padding: '9px 12px',
-                              cursor: 'pointer',
-                              borderBottom: '1px solid #FAF6F0',
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                              gap: '12px'
-                            }}
-                            onMouseDown={() => handleSelectG7Code(defect, true)}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
-                              <span style={{ fontWeight: '700', color: '#7B5233', fontSize: '0.85rem', flexShrink: 0 }}>
-                                {defect.code}
-                              </span>
-                              <span style={{ color: '#2D1A12', fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {defect.name}
-                              </span>
-                            </div>
-                            {stageTag && (
-                              <span style={{
-                                fontSize: '0.72rem',
-                                fontWeight: '500',
-                                padding: '2px 8px',
-                                borderRadius: '12px',
-                                backgroundColor: '#FAF0E6',
-                                color: '#8C6A51',
-                                border: '1px solid #EADCC9',
-                                flexShrink: 0,
-                                whiteSpace: 'nowrap'
-                              }}>
-                                {stageTag}
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })
-                  ) : (
-                    uniqueCompanyErrorCodeOptions
-                      .filter(opt => !processMaLoiCty || opt.toLowerCase().includes(processMaLoiCty.toLowerCase()))
-                      .map((opt, idx) => (
-                        <div
-                          key={idx}
-                          className="custom-autocomplete-option"
-                          onMouseDown={() => handleSelectG7Code(opt, true)}
-                        >
-                          {opt}
-                        </div>
-                      ))
-                  )}
+                <div className="custom-autocomplete-suggestions">
+                  {(uniqueCompanyErrorCodeOptions || [])
+                    .filter(opt => !processMaLoiCty || opt.toLowerCase().includes(processMaLoiCty.toLowerCase()))
+                    .map((opt, idx) => (
+                      <div
+                        key={idx}
+                        className="custom-autocomplete-option"
+                        onMouseDown={() => handleSelectG7Code(opt, true)}
+                      >
+                        {opt}
+                      </div>
+                    ))}
                 </div>
               )}
             </div>
+
+            {/* 4. Tên lỗi G7 */}
             <div className="add-claim-field" style={{ position: 'relative' }}>
               <label className="add-claim-label">Tên lỗi G7</label>
-              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                <input
-                  type="text"
-                  placeholder="Tên lỗi G7..."
-                  value={processTenLoiG7}
-                  onChange={(e) => {
-                    setProcessTenLoiG7(e.target.value);
-                    setShowProcessG7NameSuggestions(true);
-                  }}
-                  onFocus={() => setShowProcessG7NameSuggestions(true)}
-                  onBlur={() => setTimeout(() => setShowProcessG7NameSuggestions(false), 200)}
-                  className="add-claim-input"
-                  disabled={modalMode !== 'edit'}
-                  style={{
-                    ...(modalMode !== 'edit' ? disabledFieldStyle : {}),
-                    paddingRight: modalMode === 'edit' ? '28px' : '12px'
-                  }}
-                />
-                {modalMode === 'edit' && (
-                  <button
-                    type="button"
-                    tabIndex={-1}
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      setShowProcessG7NameSuggestions(!showProcessG7NameSuggestions);
-                    }}
-                    style={{
-                      position: 'absolute',
-                      right: '8px',
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      color: '#7B5233',
-                      display: 'flex',
-                      alignItems: 'center',
-                      padding: '2px'
-                    }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="6 9 12 15 18 9"></polyline>
-                    </svg>
-                  </button>
-                )}
-              </div>
+              <input
+                type="text"
+                placeholder="Tên lỗi G7..."
+                value={processTenLoiG7}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setProcessTenLoiG7(val);
+                  setShowProcessG7NameSuggestions(true);
+                  const match = (uniqueCompanyErrorNameOptions || []).find(opt => opt.toLowerCase() === val.trim().toLowerCase());
+                  if (match && handleSelectG7Name) {
+                    handleSelectG7Name(match, true);
+                  }
+                }}
+                onFocus={() => setShowProcessG7NameSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowProcessG7NameSuggestions(false), 200)}
+                className="add-claim-input"
+                disabled={modalMode !== 'edit'}
+                style={modalMode !== 'edit' ? disabledFieldStyle : {}}
+              />
               {modalMode === 'edit' && showProcessG7NameSuggestions && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '100%',
-                    right: 0,
-                    minWidth: '420px',
-                    maxWidth: '560px',
-                    width: 'max-content',
-                    backgroundColor: '#FFFFFF',
-                    border: '1.5px solid #EADCC9',
-                    borderRadius: '10px',
-                    boxShadow: '0 12px 28px rgba(0, 0, 0, 0.15)',
-                    maxHeight: '260px',
-                    overflowY: 'auto',
-                    overflowX: 'hidden',
-                    zIndex: 9999,
-                    marginTop: '4px'
-                  }}
-                >
-                  {g7DefectTypes && g7DefectTypes.length > 0 ? (
-                    g7DefectTypes
-                      .filter(d => {
-                        if (!processTenLoiG7) return true;
-                        const q = processTenLoiG7.toLowerCase();
-                        const stageStr = formatStageTag(d.stage) || '';
-                        return (d.name && d.name.toLowerCase().includes(q)) ||
-                               (d.code && d.code.toLowerCase().includes(q)) ||
-                               (d.category && d.category.toLowerCase().includes(q)) ||
-                               stageStr.toLowerCase().includes(q);
-                      })
-                      .map((defect, idx) => {
-                        const stageTag = formatStageTag(defect.stage || defect.category);
-                        return (
-                          <div
-                            key={defect.id || idx}
-                            className="custom-autocomplete-option"
-                            style={{
-                              padding: '9px 12px',
-                              cursor: 'pointer',
-                              borderBottom: '1px solid #FAF6F0',
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                              gap: '12px'
-                            }}
-                            onMouseDown={() => handleSelectG7Name(defect, true)}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
-                              <span style={{ color: '#2D1A12', fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {defect.name}
-                              </span>
-                              <span style={{ fontWeight: '700', color: '#7B5233', fontSize: '0.82rem', flexShrink: 0 }}>
-                                ({defect.code})
-                              </span>
-                            </div>
-                            {stageTag && (
-                              <span style={{
-                                fontSize: '0.72rem',
-                                fontWeight: '500',
-                                padding: '2px 8px',
-                                borderRadius: '12px',
-                                backgroundColor: '#FAF0E6',
-                                color: '#8C6A51',
-                                border: '1px solid #EADCC9',
-                                flexShrink: 0,
-                                whiteSpace: 'nowrap'
-                              }}>
-                                {stageTag}
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })
-                  ) : (
-                    uniqueCompanyErrorNameOptions
-                      .filter(opt => !processTenLoiG7 || opt.toLowerCase().includes(processTenLoiG7.toLowerCase()))
-                      .map((opt, idx) => (
-                        <div
-                          key={idx}
-                          className="custom-autocomplete-option"
-                          onMouseDown={() => handleSelectG7Name(opt, true)}
-                        >
-                          {opt}
-                        </div>
-                      ))
-                  )}
+                <div className="custom-autocomplete-suggestions">
+                  {(uniqueCompanyErrorNameOptions || [])
+                    .filter(opt => !processTenLoiG7 || opt.toLowerCase().includes(processTenLoiG7.toLowerCase()))
+                    .map((opt, idx) => (
+                      <div
+                        key={idx}
+                        className="custom-autocomplete-option"
+                        onMouseDown={() => handleSelectG7Name(opt, true)}
+                      >
+                        {opt}
+                      </div>
+                    ))}
                 </div>
               )}
             </div>
           </div>
 
-          {/* Row 5: LPN & Mã cont & Thời gian Claim */}
-          <div className="add-claim-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.5fr', gap: '16px' }}>
+          {/* Row 5: LPN & Mã cont & Thời gian load cont & Thời gian Claim */}
+          <div className="add-claim-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr 1fr', gap: '16px' }}>
             <div className="add-claim-field">
               <label className="add-claim-label">LPN</label>
               <input
@@ -781,13 +580,23 @@ export const ClaimProcessModal = ({
               />
             </div>
             <div className="add-claim-field">
+              <label className="add-claim-label">Thời gian load cont</label>
+              <input
+                type="text"
+                value={formatMonthYear(activeDetailClaim?.date_loading_raw || activeDetailClaim?.date_loading) || 'Chưa có thông tin'}
+                disabled
+                className="add-claim-input"
+                style={disabledFieldStyle}
+                title={activeDetailClaim?.lpn_container_number ? `LPN Container: ${activeDetailClaim.lpn_container_number}` : ''}
+              />
+            </div>
+            <div className="add-claim-field">
               <label className="add-claim-label">Thời gian Claim</label>
               <input
                 type="text"
-                value={processNgayXuat}
-                onChange={(e) => setProcessNgayXuat(e.target.value)}
-                className="add-claim-input"
+                value={formatMonthYear(processNgayXuat || activeDetailClaim?.date || activeDetailClaim?.period)}
                 disabled
+                className="add-claim-input"
                 style={disabledFieldStyle}
                 placeholder="MM/YYYY"
               />
@@ -863,57 +672,56 @@ export const ClaimProcessModal = ({
 
         {/* Right Column: Claim Images */}
         <div className="add-claim-image-col">
-          <div className="filter-section-header" style={{ marginBottom: '12px', paddingBottom: '8px', borderBottom: '1.5px solid #E5E7EB', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                <polyline points="21 15 16 10 5 21"></polyline>
-              </svg>
-              <span>Ảnh minh chứng ({processImages.length})</span>
-            </span>
-            {modalMode === 'edit' && (
-              <button
-                type="button"
-                onClick={handleProcessAddImageClick}
-                style={{
-                  background: '#FAF6F0',
-                  border: '1px solid #EADCC9',
-                  borderRadius: '6px',
-                  padding: '4px 10px',
-                  fontSize: '0.78rem',
-                  fontWeight: 'bold',
-                  color: '#7B5233',
-                  cursor: 'pointer',
-                  transition: 'background-color 0.2s'
-                }}
-              >
-                + Thêm ảnh
-              </button>
-            )}
-          </div>
+          <div className="add-claim-image-col-inner">
+            <div className="filter-section-header" style={{ marginBottom: '12px', paddingBottom: '8px', borderBottom: '1.5px solid #E5E7EB', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                  <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                  <polyline points="21 15 16 10 5 21"></polyline>
+                </svg>
+                <span>Ảnh minh chứng ({processImages.length})</span>
+              </span>
+              {modalMode === 'edit' && (
+                <button
+                  type="button"
+                  onClick={handleProcessAddImageClick}
+                  style={{
+                    background: '#FAF6F0',
+                    border: '1px solid #EADCC9',
+                    borderRadius: '6px',
+                    padding: '4px 10px',
+                    fontSize: '0.78rem',
+                    fontWeight: 'bold',
+                    color: '#7B5233',
+                    cursor: 'pointer',
+                    transition: 'background-color 0.2s'
+                  }}
+                >
+                  + Thêm ảnh
+                </button>
+              )}
+            </div>
 
-          <div className="add-claim-image-scrollbox" style={{
-            flex: 1,
-            overflowY: processImages.length >= 4 ? 'auto' : 'hidden',
-            paddingRight: '4px'
-          }}>
-            <div className="add-claim-image-card-list" style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '12px',
-              height: processImages.length <= 3 ? '100%' : 'auto'
-            }}>
-              {processImages.length > 0 ? (
-                processImages.map((path, index) => {
-                  const num = processImages.length;
-                  const cardStyle = num === 1
-                    ? { flex: 1, height: '100%', position: 'relative', borderRadius: '4px', overflow: 'hidden', border: '1px solid #E5E7EB', backgroundColor: '#F2F0F0' }
-                    : num === 2
-                      ? { flex: 1, height: 'calc(50% - 6px)', position: 'relative', borderRadius: '4px', overflow: 'hidden', border: '1px solid #E5E7EB', backgroundColor: '#F2F0F0' }
-                      : num === 3
-                        ? { flex: 1, height: 'calc(33.33% - 8px)', position: 'relative', borderRadius: '4px', overflow: 'hidden', border: '1px solid #E5E7EB', backgroundColor: '#F2F0F0' }
-                        : { height: '180px', flexShrink: 0, position: 'relative', borderRadius: '4px', overflow: 'hidden', border: '1px solid #E5E7EB', backgroundColor: '#F2F0F0' };
+            <div className="add-claim-image-scrollbox">
+              <div className="add-claim-image-card-list" style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+                flex: 1,
+                height: processImages.length <= 3 ? '100%' : 'auto',
+                minHeight: 0
+              }}>
+                {processImages.length > 0 ? (
+                  processImages.map((path, index) => {
+                    const num = processImages.length;
+                    const cardStyle = num === 1
+                      ? { height: '240px', minHeight: '180px', position: 'relative', borderRadius: '4px', overflow: 'hidden', border: '1px solid #E5E7EB', backgroundColor: '#F2F0F0' }
+                      : num === 2
+                        ? { height: 'calc((100% - 12px) / 2)', minHeight: '160px', position: 'relative', borderRadius: '4px', overflow: 'hidden', border: '1px solid #E5E7EB', backgroundColor: '#F2F0F0' }
+                        : num === 3
+                          ? { height: 'calc((100% - 24px) / 3)', minHeight: '130px', position: 'relative', borderRadius: '4px', overflow: 'hidden', border: '1px solid #E5E7EB', backgroundColor: '#F2F0F0' }
+                          : { height: '170px', minHeight: '170px', flexShrink: 0, position: 'relative', borderRadius: '4px', overflow: 'hidden', border: '1px solid #E5E7EB', backgroundColor: '#F2F0F0' };
 
                   const imgUrl = getFullImagePath(path);
                   const isImageError = !!failedImages[imgUrl];
@@ -1022,6 +830,7 @@ export const ClaimProcessModal = ({
           </div>
         </div>
       </div>
+    </div>
     </FormModal>
   );
 };

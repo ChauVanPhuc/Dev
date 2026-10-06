@@ -1,5 +1,5 @@
-import React, { Suspense, lazy } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
+import React, { Suspense, lazy, useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom';
 import LoginPage from '@modules/Auth/Views/Login/LoginView';
 import PortalLayout from '@webShared/Views/components/layout/PortalLayout';
 import { ToastProvider } from '@webShared/Views/components/feedback/ToastContext';
@@ -90,11 +90,14 @@ const MachineHistory = lazy(() => import('@modules/Equipment/Views/Machine/Machi
 const MachineTraining = lazy(() => import('@modules/Equipment/Views/Machine/MachineTrainingView'));
 const MachineDetail = lazy(() => import('@modules/Equipment/Views/Machine/MachineDetailView'));
 
-// Import Claim module (Tải động)
-const ClaimPortalLayout = lazy(() => import('@modules/Claim/views/Claim/ClaimLayout'));
-const ClaimList = lazy(() => import('@modules/Claim/views/Claim/ClaimListView'));
-const PriceList = lazy(() => import('@modules/Claim/views/Price/PriceListView'));
-const ShipmentList = lazy(() => import('@modules/Claim/views/Claim/ClaimListView'));
+// Import Claim module (Tải động) & Bach modules
+const ClaimPortalLayout = lazy(() => import('@claim/views/ClaimLayout'));
+const ClaimList = lazy(() => import('@claim/views/ClaimListView'));
+const PriceList = lazy(() => import('@price/views/PriceListView'));
+const ShipmentList = lazy(() => import('@claim/views/ClaimListView'));
+const ClaimDashboard = lazy(() => import('@dashboard/DashboardView'));
+const LpnCrawler = lazy(() => import('@lpn/pages/LpnCrawlerView'));
+const AiOcrTrain = lazy(() => import('@ai-ocr/AiOcrTrainTab'));
 
 // Import Manufacture module (Tải động)
 const ManufactureDashboard = lazy(() => import('@modules/Dashboard/Views/Manufacture/ManufactureDashboardView'));
@@ -402,12 +405,19 @@ const PermissionEnforcer = ({ permission, children }) => {
           text.includes('duyệt') ||
           text.includes('phê duyệt') ||
           text.includes('approve') ||
+          text.includes('xác nhận') ||
           title.includes('duyệt') ||
           title.includes('phê duyệt') ||
           title.includes('approve') ||
+          title.includes('xác nhận') ||
           ariaLabel.includes('duyệt') ||
           ariaLabel.includes('phê duyệt') ||
-          ariaLabel.includes('approve');
+          ariaLabel.includes('approve') ||
+          ariaLabel.includes('xác nhận') ||
+          className.includes('btn-confirm') ||
+          className.includes('confirm-btn') ||
+          className.includes('btn-quick-confirm') ||
+          className.includes('btn-approve');
 
         const isExportImport =
           text.includes('nhập') ||
@@ -420,23 +430,31 @@ const PermissionEnforcer = ({ permission, children }) => {
         const hasMutatePerm = isCreationMode ? allowedActions.has('create') : allowedActions.has('edit');
 
         let shouldHide = false;
-        if (!hasMutatePerm) {
-          shouldHide = true;
-        } else {
-          if (isAdd && !allowedActions.has('create')) {
-            shouldHide = true;
-          } else if (isEdit) {
-            const reqPerm = isCreationMode ? 'create' : 'edit';
-            if (!allowedActions.has(reqPerm)) {
-              shouldHide = true;
-            }
-          } else if (isDelete && !allowedActions.has('delete')) {
-            shouldHide = true;
-          } else if (isApprove && !allowedActions.has('approve')) {
-            shouldHide = true;
-          } else if (isExportImport && !allowedActions.has('export_import')) {
+        // Ưu tiên kiểm tra theo từng loại hành động cụ thể
+        if (isApprove) {
+          if (!allowedActions.has('approve')) {
             shouldHide = true;
           }
+        } else if (isDelete) {
+          if (!allowedActions.has('delete')) {
+            shouldHide = true;
+          }
+        } else if (isAdd) {
+          if (!allowedActions.has('create')) {
+            shouldHide = true;
+          }
+        } else if (isEdit) {
+          const reqPerm = isCreationMode ? 'create' : 'edit';
+          if (!allowedActions.has(reqPerm)) {
+            shouldHide = true;
+          }
+        } else if (isExportImport) {
+          if (!allowedActions.has('export_import')) {
+            shouldHide = true;
+          }
+        } else if (!hasMutatePerm) {
+          // Chỉ kiểm tra hasMutatePerm cho các nút không thuộc các nhóm hành động trên
+          shouldHide = true;
         }
 
         if (shouldHide) {
@@ -479,7 +497,7 @@ const PermissionEnforcer = ({ permission, children }) => {
     if (!containerRef.current) return;
 
     // Observe changes inside page container
-    const observer = new MutationObserver((mutations) => {
+    const observer = new MutationObserver(() => {
       enforce();
     });
 
@@ -497,6 +515,15 @@ const PermissionEnforcer = ({ permission, children }) => {
 };
 
 const ProtectedRoute = ({ permissionKey, children }) => {
+  const location = useLocation();
+  const [, setPermTick] = useState(0);
+
+  useEffect(() => {
+    const handleUpdated = () => setPermTick(t => t + 1);
+    window.addEventListener('smartflow_permissions_updated', handleUpdated);
+    return () => window.removeEventListener('smartflow_permissions_updated', handleUpdated);
+  }, []);
+
   if (!isUserLoggedIn()) {
     return <Navigate to="/login" replace />;
   }
@@ -522,7 +549,26 @@ const ProtectedRoute = ({ permissionKey, children }) => {
     if (activePermsStr) {
       const perms = JSON.parse(activePermsStr);
       if (perms) {
-        const keys = Array.isArray(permissionKey) ? permissionKey : [permissionKey];
+        const rawKeys = Array.isArray(permissionKey) ? permissionKey : (permissionKey ? [permissionKey] : []);
+        const keys = [];
+        // Ưu tiên chính xác pathname hiện tại (route đang truy cập) lên đầu
+        if (location?.pathname) {
+          keys.push(location.pathname);
+          const rel = location.pathname.replace(/^\/admin\//, '');
+          if (rel) keys.push(rel);
+        }
+        for (const k of rawKeys) {
+          if (k) {
+            if (!keys.includes(k)) keys.push(k);
+            const withAdmin = k.startsWith('/') ? k : `/admin/${k}`;
+            if (!keys.includes(withAdmin)) keys.push(withAdmin);
+            if (k.startsWith('/admin/')) {
+              const stripped = k.replace(/^\/admin\//, '');
+              if (!keys.includes(stripped)) keys.push(stripped);
+            }
+          }
+        }
+
         // Tìm quyền hạn đầu tiên khác 'none' trong danh sách các khóa quyền được yêu cầu
         for (const key of keys) {
           if (perms[key] !== undefined && perms[key] !== 'none') {
@@ -681,7 +727,7 @@ function App() {
 
                 <Route path="reports" element={<ProtectedRoute permissionKey="reports"><InspectionReports /></ProtectedRoute>} />
                 <Route path="reports/detail/:type/:id" element={<ProtectedRoute permissionKey="reports"><InspectionDetail /></ProtectedRoute>} />
-                <Route path="quality" element={<ProtectedRoute permissionKey="quality-records"><QualityOverview /></ProtectedRoute>} />
+                <Route path="quality" element={<ProtectedRoute permissionKey={["/admin/quality", "quality"]}><QualityOverview /></ProtectedRoute>} />
                 <Route path="quality-targets" element={<Navigate to="/admin/kpi/dashboard" replace />} />
                 <Route path="quality-records" element={<ProtectedRoute permissionKey="quality-records"><QualityRecords /></ProtectedRoute>} />
                 <Route path="quality-records/:id" element={<ProtectedRoute permissionKey="quality-records"><QualityRecordsDetail /></ProtectedRoute>} />
@@ -763,30 +809,18 @@ function App() {
                 <Route path="purchase-requisitions/:id" element={<ProtectedRoute permissionKey="purchase-requisitions"><PurchaseRequisitionDetail /></ProtectedRoute>} />
                 <Route path="purchase-order-items" element={<Navigate to="/admin/purchase-requisitions" replace />} />
                 <Route path="order-shipping-monitoring" element={<ProtectedRoute permissionKey="order-shipping-monitoring"><OrderShippingMonitoring /></ProtectedRoute>} />
-              </Route>
 
-              {/* Route Claim (Root level but with PortalLayout) */}
-              <Route path="/admin/claims" element={<ProtectedRoute permissionKey="claim"><PortalLayout /></ProtectedRoute>}>
-                <Route element={<ClaimPortalLayout />}>
-                  <Route index element={<ClaimList />} />
-                </Route>
+                {/* Các module Claim, Giá tủ, Crawl LPN & Train AI tích hợp từ Bach */}
+                <Route path="claim-dashboard" element={<ProtectedRoute permissionKey={["claim", "quality-records"]}><ClaimDashboard /></ProtectedRoute>} />
+                <Route path="claims" element={<ProtectedRoute permissionKey={["claim", "quality-records"]}><ClaimPortalLayout><ClaimList /></ClaimPortalLayout></ProtectedRoute>} />
+                <Route path="prices" element={<ProtectedRoute permissionKey={["prices", "customers"]}><ClaimPortalLayout><PriceList /></ClaimPortalLayout></ProtectedRoute>} />
+                <Route path="shipments" element={<ProtectedRoute permissionKey="shipments"><ClaimPortalLayout><ShipmentList /></ClaimPortalLayout></ProtectedRoute>} />
+                <Route path="lpn-crawler" element={<ProtectedRoute><LpnCrawler /></ProtectedRoute>} />
+                <Route path="ai-ocr-train" element={<ProtectedRoute><AiOcrTrain /></ProtectedRoute>} />
               </Route>
 
               {/* Route ChatBot - redirects to claims with chat open */}
               <Route path="/admin/chatbot" element={<Navigate to="/admin/claims?chat=true" />} />
-              {/* Route Prices */}
-              <Route path="/admin/prices" element={<ProtectedRoute permissionKey="prices"><PortalLayout /></ProtectedRoute>}>
-                <Route element={<ClaimPortalLayout />}>
-                  <Route index element={<PriceList />} />
-                </Route>
-              </Route>
-
-              {/* Route Shipments */}
-              <Route path="/admin/shipments" element={<ProtectedRoute permissionKey="shipments"><PortalLayout /></ProtectedRoute>}>
-                <Route element={<ClaimPortalLayout />}>
-                  <Route index element={<ShipmentList />} />
-                </Route>
-              </Route>
 
               {/* Legacy Redirects */}
               <Route path="/claim/*" element={<Navigate to="/admin/claims" />} />

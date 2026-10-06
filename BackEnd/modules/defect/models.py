@@ -2,7 +2,7 @@
 from sqlalchemy import Column, Integer, Boolean, ForeignKey
 from sqlalchemy.dialects.mssql import NVARCHAR
 from sqlalchemy.orm import relationship
-from app.core.database import Base
+from config.database import Base
 
 class DefectType(Base):
     """

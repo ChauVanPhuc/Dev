@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@shared/hooks/useAuth';
-import loginBg from '@mobile/assets/background-1.png';
+import loginBg from '@mobile/assets/background-1.webp';
 import logo from '@mobile/assets/logo-no-bg.png';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 

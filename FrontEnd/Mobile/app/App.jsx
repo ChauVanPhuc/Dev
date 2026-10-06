@@ -1,65 +1,96 @@
-import { useEffect } from 'react'
+import { useEffect, Suspense, lazy } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { App as CapApp } from '@capacitor/app'
 import Login from '@modules/auth/Views/LoginView'
-import DeliveryInfo from '@modules/delivery/Views/DeliveryInfoView'
-import DeliveryCreate from '@modules/delivery/Views/DeliveryCreateView'
-import DeliveryReceive from '@modules/delivery/Views/DeliveryReceiveView'
-import DeliveryHistory from '@modules/delivery/Views/DeliveryHistoryView'
-import DeliveryDetail from '@modules/delivery/Views/DeliveryDetailView'
-import PlanTracking from '@modules/production/Views/PlanTrackingView'
-import DailyInspection from '@modules/inspection/Views/DailyInspectionView'
-import StageInspection from '@modules/inspection/Views/StageInspectionView'
-import FirstArticleInspection from '@modules/inspection/Views/FirstArticleInspectionView'
-import InspectionLogs from '@modules/inspection/Views/InspectionLogsView'
-import ThermalPrint from '@modules/delivery/Views/components/ThermalPrint'
-import AwardDiscipline from '@modules/kpi/Views/AwardDisciplineView'
-import KPITracking from '@modules/kpi/Views/KPITrackingView'
-import StaffEvaluation from '@modules/kpi/Views/StaffEvaluationView'
-import QualityInspectionDetail from '@modules/inspection/Views/QualityInspectionDetailView'
 import ProtectedRoute from '@mobile/Shared/Views/components/layout/ProtectedRoute'
 import AppUpdateModal from '@mobile/Shared/Views/components/feedback/AppUpdateModal'
 import ErrorBoundary from '@mobile/Shared/Views/components/feedback/ErrorBoundary'
-import InputInspection from '@modules/inspection/Views/InputInspectionView'
-import EquipmentList from '@modules/equipment/Views/EquipmentListView'
-import KPIStaffList from '@modules/kpi/Views/KPIStaffListView'
-import QualityEmployeeListMobileView from '@modules/kpi/Views/QualityEmployeeListMobileView'
-import QualityKPIDashboardMobileView from '@modules/kpi/Views/QualityKPIDashboardMobileView'
-import QualityOverviewMobileView from '@modules/inspection/Views/QualityOverviewMobileView'
-import CAPAList from '@modules/capa/Views/CAPAListView'
-import CAPAReport from '@modules/capa/Views/CAPAReportView'
-import CAPADetail from '@modules/capa/Views/CAPADetailView'
-import QuickReportCreate from '@modules/quick_report/Views/QuickReportCreateView'
-import QuickReportList from '@modules/quick_report/Views/QuickReportListView'
-import DashboardView from '@modules/production/Views/DashboardView'
-import ProductionDashboard from '@modules/production/Views/ProductionDashboardView'
-import ProductionOrders from '@modules/production/Views/ProductionOrdersView'
-import ProductionOrderDetail from '@modules/production/Views/ProductionOrderDetailView'
-import ProductionPlanSchedule from '@modules/production/Views/ProductionPlanScheduleView'
-import ProductionTransferHistory from '@modules/production/Views/ProductionTransferHistoryView'
-import FeedbackView from '@modules/inspection/Views/FeedbackView'
-import CtqSosView from '@modules/inspection/Views/CtqSosView'
-import WarningsView from '@modules/inspection/Views/WarningsView'
-import StageAdhesionView from '@modules/inspection/Views/StageAdhesionView'
-import StagePackagingView from '@modules/inspection/Views/StagePackagingView'
-import StageMoistureView from '@modules/inspection/Views/StageMoistureView'
-import StageProcessView from '@modules/inspection/Views/StageProcessView'
-import ShapingInspectionView from '@modules/inspection/Views/ShapingInspectionView'
-import AssemblyInspectionView from '@modules/inspection/Views/AssemblyInspectionView'
-import PaintingInspectionView from '@modules/inspection/Views/PaintingInspectionView'
-import PackagingInspectionView from '@modules/inspection/Views/PackagingInspectionView'
+
+// Lazy loading các màn hình để tối ưu hóa thời gian tải ứng dụng di động
+const DeliveryInfo = lazy(() => import('@modules/delivery/Views/DeliveryInfoView'))
+const DeliveryCreate = lazy(() => import('@modules/delivery/Views/DeliveryCreateView'))
+const DeliveryReceive = lazy(() => import('@modules/delivery/Views/DeliveryReceiveView'))
+const DeliveryHistory = lazy(() => import('@modules/delivery/Views/DeliveryHistoryView'))
+const DeliveryDetail = lazy(() => import('@modules/delivery/Views/DeliveryDetailView'))
+const PlanTracking = lazy(() => import('@modules/production/Views/PlanTrackingView'))
+const DailyInspection = lazy(() => import('@modules/inspection/Views/DailyInspectionView'))
+const StageInspection = lazy(() => import('@modules/inspection/Views/StageInspectionView'))
+const FirstArticleInspection = lazy(() => import('@modules/inspection/Views/FirstArticleInspectionView'))
+const InspectionLogs = lazy(() => import('@modules/inspection/Views/InspectionLogsView'))
+const ThermalPrint = lazy(() => import('@modules/delivery/Views/components/ThermalPrint'))
+const AwardDiscipline = lazy(() => import('@modules/kpi/Views/AwardDisciplineView'))
+const KPITracking = lazy(() => import('@modules/kpi/Views/KPITrackingView'))
+const StaffEvaluation = lazy(() => import('@modules/kpi/Views/StaffEvaluationView'))
+const QualityInspectionDetail = lazy(() => import('@modules/inspection/Views/QualityInspectionDetailView'))
+const InputInspection = lazy(() => import('@modules/inspection/Views/InputInspectionView'))
+const EquipmentList = lazy(() => import('@modules/equipment/Views/EquipmentListView'))
+const KPIStaffList = lazy(() => import('@modules/kpi/Views/KPIStaffListView'))
+const QualityEmployeeListMobileView = lazy(() => import('@modules/kpi/Views/QualityEmployeeListMobileView'))
+const QualityKPIDashboardMobileView = lazy(() => import('@modules/kpi/Views/QualityKPIDashboardMobileView'))
+const QualityOverviewMobileView = lazy(() => import('@modules/inspection/Views/QualityOverviewMobileView'))
+const CAPAList = lazy(() => import('@modules/capa/Views/CAPAListView'))
+const CAPAReport = lazy(() => import('@modules/capa/Views/CAPAReportView'))
+const CAPADetail = lazy(() => import('@modules/capa/Views/CAPADetailView'))
+const QuickReportCreate = lazy(() => import('@modules/quick_report/Views/QuickReportCreateView'))
+const QuickReportList = lazy(() => import('@modules/quick_report/Views/QuickReportListView'))
+const DashboardView = lazy(() => import('@modules/production/Views/DashboardView'))
+const ProductionDashboard = lazy(() => import('@modules/production/Views/ProductionDashboardView'))
+const ProductionOrders = lazy(() => import('@modules/production/Views/ProductionOrdersView'))
+const ProductionOrderDetail = lazy(() => import('@modules/production/Views/ProductionOrderDetailView'))
+const ProductionPlanSchedule = lazy(() => import('@modules/production/Views/ProductionPlanScheduleView'))
+const ProductionTransferHistory = lazy(() => import('@modules/production/Views/ProductionTransferHistoryView'))
+const FeedbackView = lazy(() => import('@modules/inspection/Views/FeedbackView'))
+const CtqSosView = lazy(() => import('@modules/inspection/Views/CtqSosView'))
+const WarningsView = lazy(() => import('@modules/inspection/Views/WarningsView'))
+const StageAdhesionView = lazy(() => import('@modules/inspection/Views/StageAdhesionView'))
+const StagePackagingView = lazy(() => import('@modules/inspection/Views/StagePackagingView'))
+const StageMoistureView = lazy(() => import('@modules/inspection/Views/StageMoistureView'))
+const StageProcessView = lazy(() => import('@modules/inspection/Views/StageProcessView'))
+const ShapingInspectionView = lazy(() => import('@modules/inspection/Views/ShapingInspectionView'))
+const AssemblyInspectionView = lazy(() => import('@modules/inspection/Views/AssemblyInspectionView'))
+const PaintingInspectionView = lazy(() => import('@modules/inspection/Views/PaintingInspectionView'))
+const PackagingInspectionView = lazy(() => import('@modules/inspection/Views/PackagingInspectionView'))
 
 // Module Production V2 (CL06, CL07, CL08, CL09)
-import CL06_TransferListView from '@modules/production_v2/Views/CL06_TransferListView'
-import CL07_TransferCreateView from '@modules/production_v2/Views/CL07_TransferCreateView'
-import CL07_BackupQRTicketView from '@modules/production_v2/Views/CL07_BackupQRTicketView'
-import CL08_InspectionListView from '@modules/production_v2/Views/CL08_InspectionListView'
-import CL09A_FirstSampleView from '@modules/production_v2/Views/CL09A_FirstSampleView'
-import CL09B_ReInspectView from '@modules/production_v2/Views/CL09B_ReInspectView'
-import CL09C_ParameterView from '@modules/production_v2/Views/CL09C_ParameterView'
-import CL09D_ProcessView from '@modules/production_v2/Views/CL09D_ProcessView'
-import CL09E_QAView from '@modules/production_v2/Views/CL09E_QAView'
-import CL09F_DailyInspectionView from '@modules/production_v2/Views/CL09F_DailyInspectionView'
+const CL06_TransferListView = lazy(() => import('@modules/production_v2/Views/CL06_TransferListView'))
+const CL07_TransferCreateView = lazy(() => import('@modules/production_v2/Views/CL07_TransferCreateView'))
+const CL07_BackupQRTicketView = lazy(() => import('@modules/production_v2/Views/CL07_BackupQRTicketView'))
+const CL08_InspectionListView = lazy(() => import('@modules/production_v2/Views/CL08_InspectionListView'))
+const CL09A_FirstSampleView = lazy(() => import('@modules/production_v2/Views/CL09A_FirstSampleView'))
+const CL09B_ReInspectView = lazy(() => import('@modules/production_v2/Views/CL09B_ReInspectView'))
+const CL09C_ParameterView = lazy(() => import('@modules/production_v2/Views/CL09C_ParameterView'))
+const CL09D_ProcessView = lazy(() => import('@modules/production_v2/Views/CL09D_ProcessView'))
+const CL09E_QAView = lazy(() => import('@modules/production_v2/Views/CL09E_QAView'))
+const CL09F_DailyInspectionView = lazy(() => import('@modules/production_v2/Views/CL09F_DailyInspectionView'))
+const CheckPalletView = lazy(() => import('@modules/pallet_check/Views/CheckPalletView'))
+const CheckPalletV1View = lazy(() => import('@modules/pallet_check/Views/CheckPalletV1View'))
+const CheckCabinetBoxView = lazy(() => import('@modules/cabinet_box_check/Views/CheckCabinetBoxView'))
+
+/**
+ * Hiệu ứng tải trang nhẹ cho Mobile
+ */
+const MobilePageLoader = () => (
+  <div style={{
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '60vh',
+    width: '100%',
+    gap: '12px'
+  }}>
+    <div style={{
+      width: '32px',
+      height: '32px',
+      border: '3px solid #e5e7eb',
+      borderTop: '3px solid #2563eb',
+      borderRadius: '50%',
+      animation: 'sfMobileSpin 0.7s linear infinite'
+    }} />
+    <span style={{ fontSize: '13px', color: '#6b7280', fontWeight: '500' }}>Đang tải...</span>
+    <style>{`@keyframes sfMobileSpin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+  </div>
+);
 
 /**
  * Component xử lý nút Back vật lý của Android
@@ -70,8 +101,8 @@ const BackButtonHandler = ({ children }) => {
 
   useEffect(() => {
     const handleBackButton = async (event) => {
-      // Nếu đang ở trang login hoặc trang chủ, cho phép thoát app
-      if (location.pathname === '/login' || location.pathname === '/') {
+      // Nếu đang ở trang login, trang chủ hoặc các màn hình chính kiểm tra, cho phép thoát app
+      if (location.pathname === '/login' || location.pathname === '/' || location.pathname === '/pallet-check' || location.pathname === '/pallet-check-v1' || location.pathname === '/cabinet-box-check') {
         CapApp.exitApp();
       } else {
         // Ngược lại, quay lại trang trước đó trong lịch sử router
@@ -95,9 +126,15 @@ function App() {
       <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <BackButtonHandler>
           <AppUpdateModal />
-        <Routes>
+          <Suspense fallback={<MobilePageLoader />}>
+            <Routes>
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/pallet-check" element={<CheckPalletView />} />
+          <Route path="/pallet-check-v1" element={<CheckPalletV1View />} />
+          <Route path="/cabinet-box-check" element={<CheckCabinetBoxView />} />
+          <Route path="/kiem-tra-tu-thung" element={<Navigate to="/cabinet-box-check" replace />} />
+          <Route path="/check-pallet" element={<Navigate to="/pallet-check" replace />} />
           
           {/* Các route yêu cầu đăng nhập */}
           <Route element={<ProtectedRoute />}>
@@ -204,6 +241,7 @@ function App() {
 
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
+        </Suspense>
       </BackButtonHandler>
     </Router>
   </ErrorBoundary>

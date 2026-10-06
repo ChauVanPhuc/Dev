@@ -166,7 +166,7 @@ export const ControlPanel = ({
       {/* 1. BỘ 4 KPI THEO TRƯỢT 7 NGÀY GẦN NHẤT */}
       {(() => {
         return (
-          <div className="lpn-metrics-row" style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}>
+          <div className="lpn-metrics-row">
             {/* KPI 1: Số lượng Container (7 ngày gần nhất) */}
             <div className="lpn-summary-card">
               <div className="lpn-card-info">
@@ -226,7 +226,7 @@ export const ControlPanel = ({
                 transition: 'border-color 0.2s, box-shadow 0.2s',
                 position: 'relative'
               }}
-              title="Bấm để mở danh sách các dòng thiếu thông tin"
+              title="Bấm để mở danh sách các dòng thiếu hoặc lệch mã"
               onMouseEnter={(e) => {
                 e.currentTarget.style.borderColor = '#EF4444';
                 e.currentTarget.style.boxShadow = '0 4px 12px rgba(220, 38, 38, 0.12)';
@@ -239,7 +239,7 @@ export const ControlPanel = ({
               <div className="lpn-card-info">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span className="lpn-card-label" style={{ color: '#DC2626', fontWeight: '800' }}>
-                    Số lượng dòng thiếu
+                    Số lượng dòng thiếu / lệch mã
                   </span>
                   {missingCount > 0 && <AlertTriangle size={14} color="#DC2626" />}
                 </div>
@@ -297,19 +297,11 @@ export const ControlPanel = ({
           transition: 'all 0.2s ease'
         }}
       >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            width: '100%',
-            height: '38px'
-          }}
-        >
-        {/* Left Side: Search + Sort (A↓Z) + Filter (Funnel) */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
-          {/* Search Input Box */}
-          <div className="search-wrapper" style={{ margin: 0, height: '36px', width: '320px' }}>
+        <div className="lpn-toolbar-main-row">
+          {/* Left Side: Search + Sort (A↓Z) + Filter (Funnel) */}
+          <div className="lpn-toolbar-left">
+            {/* Search Input Box */}
+            <div className="search-wrapper" style={{ margin: 0, height: '36px' }}>
             <Search size={16} className="search-icon" />
             <input
               type="text"
@@ -451,6 +443,7 @@ export const ControlPanel = ({
 
           {/* Switch Chế độ xem: Dạng Bảng vs Dạng Thẻ Container */}
           <div
+            className="lpn-viewmode-switch"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -511,7 +504,7 @@ export const ControlPanel = ({
         </div>
 
         {/* Right Side Actions: Khác, Xuất dữ liệu, + Bắt đầu Crawl */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div className="lpn-toolbar-right">
 
 
           {/* Nút Khác (Dropdown) */}

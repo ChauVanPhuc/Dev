@@ -1,0 +1,550 @@
+/* ==========================================================================
+   CLAIM ANALYTICS DASHBOARD - MATCHING SMARTFLOW WOOD/BROWN THEME
+   ========================================================================== */
+
+.dash-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 12px;
+  background-color: #FAF6F0;
+  color: #2D1A12;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  height: 100%;
+  max-height: 100%;
+  box-sizing: border-box;
+  overflow: hidden; /* Vừa khít 1 màn hình duy nhất, KHÔNG BỊ SCROLL DỌC */
+  border-radius: 10px;
+  position: relative;
+}
+
+/* ==========================================================================
+   HORIZONTAL FILTER BAR (THANH LỌC NGANG CHUẨN GIAO DIỆN CLAIM)
+   ========================================================================== */
+.dash-filter-horizontal-bar {
+  animation: filterBarSlideDown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes filterBarSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dash-filter-pill-btn {
+  transition: all 0.15s ease-in-out;
+  user-select: none;
+}
+
+.dash-filter-pill-btn:hover {
+  background-color: #F5EFE6 !important;
+  border-color: #B59E86 !important;
+}
+
+.dash-filter-pill-btn.active {
+  background-color: #EADCC9 !important;
+  border-color: #9C7D5D !important;
+  color: #2D1A12 !important;
+  box-shadow: inset 0 1px 2px rgba(45, 26, 18, 0.08);
+}
+
+.dash-filter-item-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #FFFFFF;
+  border: 1px solid #EADCC9;
+  color: #2D1A12;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  height: 34px;
+  outline: none;
+  transition: all 0.15s ease;
+}
+
+.dash-filter-item-btn:hover {
+  background: #FAF6F0;
+  border-color: #7B5233;
+  color: #7B5233;
+}
+
+.dash-filter-item-btn:focus {
+  border-color: #7B5233;
+}
+
+/* Nút gạt Data Mẫu */
+.dash-demo-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #FFFFFF;
+  border: 1px solid #EADCC9;
+  border-radius: 8px;
+  padding: 4px 10px;
+  height: 34px;
+  box-sizing: border-box;
+  font-size: 12px;
+  font-weight: 600;
+  color: #7B5233;
+  cursor: pointer;
+  user-select: none;
+}
+
+.dash-demo-toggle {
+  position: relative;
+  display: inline-block;
+  width: 32px;
+  height: 18px;
+}
+
+.dash-demo-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.dash-demo-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: #D7CCC8;
+  transition: .3s;
+  border-radius: 18px;
+}
+
+.dash-demo-slider:before {
+  position: absolute;
+  content: "";
+  height: 12px;
+  width: 12px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .3s;
+  border-radius: 50%;
+}
+
+input:checked + .dash-demo-slider {
+  background-color: #7B5233;
+}
+
+input:checked + .dash-demo-slider:before {
+  transform: translateX(14px);
+}
+
+/* Switch Theo Tháng vs Tổng Quan trong Header */
+.dash-header-switch {
+  display: inline-flex;
+  background: #EDE0D4;
+  border: 1.5px solid #EADCC9;
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+  height: 34px;
+  box-sizing: border-box;
+}
+
+.dash-header-switch-btn {
+  border: none;
+  background: transparent;
+  color: #7B5233;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.dash-header-switch-btn:hover {
+  color: #4A2E1B;
+}
+
+.dash-header-switch-btn.active {
+  background: #7B5233;
+  color: #FFFFFF;
+  box-shadow: 0 2px 5px rgba(123, 82, 51, 0.25);
+}
+
+/* Nút Phễu Lọc cạnh chuông */
+.dash-header-filter-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: #FFFFFF;
+  border: 1.5px solid #EADCC9;
+  color: #7B5233;
+  padding: 0 12px;
+  height: 34px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 2px 5px rgba(123, 82, 51, 0.06);
+}
+
+.dash-header-filter-trigger:hover {
+  background: #FAF6F0;
+  border-color: #7B5233;
+  color: #4A2E1B;
+}
+
+.dash-header-filter-trigger.active {
+  background: #7B5233;
+  color: #FFFFFF;
+  border-color: #5D3D25;
+  box-shadow: 0 2px 6px rgba(123, 82, 51, 0.3);
+}
+
+.dash-header-filter-trigger.active svg {
+  stroke: #FFFFFF;
+}
+
+/* ==========================================================================
+   METRIC KPI CARDS (CHUẨN GIAO DIỆN BÊN CLAIM KHÁCH HÀNG)
+   ========================================================================== */
+.dash-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+
+.dash-kpi-card {
+  background: #FFFFFF;
+  border: 1px solid #F3EAE0;
+  border-radius: 10px;
+  padding: 10px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 1px 3px rgba(123, 82, 51, 0.05);
+  position: relative;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  min-height: 64px;
+  height: 64px;
+  box-sizing: border-box;
+}
+
+.dash-kpi-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(123, 82, 51, 0.08);
+  border-color: #EADCC9;
+}
+
+.dash-kpi-card-left {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding-right: 10px;
+  min-width: 0;
+}
+
+.dash-kpi-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #7B5233;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dash-kpi-trend {
+  font-size: 0.76rem;
+  font-weight: 700;
+  font-style: italic;
+  margin-top: 4px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dash-kpi-card-right {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.dash-kpi-value {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #2D1A12;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.dash-kpi-unit {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #8D6E63;
+}
+
+
+/* ==========================================================================
+   CHART PANELS (TỰ ĐỘNG CHIA ĐỀU CHIỀU CAO - VỪA KHÍT MÀN HÌNH - NO SCROLL)
+   ========================================================================== */
+.dash-chart-row-1 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+}
+
+.dash-chart-row-2 {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr 1fr;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+  align-items: stretch;
+}
+
+@media (max-width: 1200px) {
+  .dash-chart-row-1,
+  .dash-chart-row-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dash-chart-panel {
+  background: #FFFFFF;
+  border: 1px solid #EADCC9;
+  border-radius: 10px;
+  padding: 8px 14px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: 0 2px 5px rgba(123, 82, 51, 0.04);
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.dash-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.dash-panel-title {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: #2D1A12;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dash-panel-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dash-micro-switch {
+  display: inline-flex;
+  background: #FAF6F0;
+  border: 1px solid #EADCC9;
+  border-radius: 6px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.dash-micro-btn {
+  border: none;
+  background: transparent;
+  color: #8D6E63;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.dash-micro-btn.active {
+  background: #7B5233;
+  color: #FFFFFF;
+}
+
+.dash-chart-body {
+  width: 100%;
+  height: 100%;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.dash-custom-tooltip {
+  background: #FFFFFF;
+  border: 1px solid #EADCC9;
+  border-radius: 8px;
+  padding: 8px 12px;
+  box-shadow: 0 4px 14px rgba(123, 82, 51, 0.12);
+  font-size: 11.5px;
+  color: #2D1A12;
+}
+
+.dash-tooltip-title {
+  font-weight: 800;
+  margin-bottom: 4px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid #EADCC9;
+  color: #7B5233;
+}
+
+.dash-tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 2px 0;
+}
+
+.dash-tooltip-label {
+  color: #8D6E63;
+}
+
+.dash-tooltip-val {
+  font-weight: 700;
+  color: #2D1A12;
+}
+
+.dash-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #EDE0D4;
+  color: #7B5233;
+  border: 1px solid #EADCC9;
+}
+
+/* Layout Donut Chart kèm Bảng Thống Kê theo ảnh mẫu */
+.dash-donut-layout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 10px;
+  height: 100%;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+@media (max-width: 900px) {
+  .dash-donut-layout {
+    flex-direction: column;
+  }
+}
+
+.dash-donut-chart-side {
+  flex: 0 0 160px;
+  height: 190px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dash-donut-table-side {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dash-stage-table-card {
+  width: 100%;
+  border: 1px solid #EADCC9;
+  border-radius: 6px;
+  background: #FFFFFF;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(45, 26, 18, 0.04);
+}
+
+.dash-stage-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+
+.dash-stage-table th {
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #576574;
+  background: #FAF7F2;
+  border-bottom: 1px solid #EADCC9;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.dash-stage-table th.col-num {
+  text-align: right;
+}
+
+.dash-stage-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid #F5ECE2;
+  color: #2D1A12;
+  font-size: 11.5px;
+  line-height: 1.25;
+}
+
+.dash-stage-table td.col-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 105px;
+}
+
+.dash-stage-table td.col-num {
+  text-align: right;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.dash-stage-table td.col-pct {
+  text-align: right;
+  color: #576574;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.dash-stage-table tfoot td {
+  padding: 5px 8px;
+  font-weight: 800;
+  color: #0A192F;
+  background: #FCFBF9;
+  border-top: 1.5px solid #EADCC9;
+  border-bottom: none;
+  font-size: 11.5px;
+}
+
+

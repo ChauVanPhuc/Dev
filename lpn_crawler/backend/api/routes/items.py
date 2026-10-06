@@ -6,6 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, and_, desc, asc, text
 
+from pydantic import BaseModel
+
 from app.core.database import get_db
 from lpn_crawler.backend.config.settings import settings
 from lpn_crawler.backend.models.models import (
@@ -20,6 +22,60 @@ from lpn_crawler.backend.services.storage import download_image_authenticated
 from lpn_crawler.backend.utils.formatters import format_date_mdy
 
 router = APIRouter()
+
+
+class ResolveItemRequest(BaseModel):
+    status: str = "resolved"  # "resolved" | "unresolved"
+    note: Optional[str] = None
+    resolved_by: Optional[str] = "Nguyễn A"
+
+
+@router.post("/items/{item_id}/resolve")
+def resolve_item(item_id: int, req: ResolveItemRequest, db: Session = Depends(get_db)):
+    """
+    Xử lý dòng dữ liệu thiếu / sai mã:
+    - status = 'resolved': Đã xử lý -> Ẩn khỏi danh sách cần kiểm tra
+    - status = 'unresolved': Không xử lý được (kèm lý do ghi chú) -> Chuyển sang danh sách 'Không xử lý được'
+    """
+    item = db.query(LpnItem).filter(LpnItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    item.resolution_status = req.status
+    item.resolution_note = req.note
+    item.resolved_at = datetime.utcnow()
+    item.resolved_by = req.resolved_by or "Nguyễn A"
+
+    # Nếu người dùng đánh dấu đã xử lý và có kết quả OCR mismatch, cập nhật is_lpn_match / is_sku_match
+    if req.status == "resolved":
+        db.execute(text("""
+            UPDATE lpn_ai_ocr_results 
+            SET is_lpn_match = 1, is_sku_match = 1
+            WHERE item_id = :item_id
+        """), {"item_id": item_id})
+
+    db.commit()
+    return {
+        "success": True,
+        "message": "Đã cập nhật trạng thái xử lý thành công.",
+        "item_id": item_id,
+        "resolution_status": req.status
+    }
+
+
+@router.post("/items/{item_id}/unresolve")
+def unresolve_item(item_id: int, db: Session = Depends(get_db)):
+    """Đưa dòng dữ liệu quay trở lại danh sách cần xử lý."""
+    item = db.query(LpnItem).filter(LpnItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    item.resolution_status = None
+    item.resolution_note = None
+    item.resolved_at = None
+    item.resolved_by = None
+    db.commit()
+    return {"success": True, "message": "Đã đưa dòng dữ liệu quay lại danh sách cần xử lý."}
 
 
 @router.get("/items/{item_id}")
@@ -54,6 +110,10 @@ def get_item_detail(item_id: int, db: Session = Depends(get_db)):
         "batch_resolved": item.batch_resolved,
         "lpn": item.lpn,
         "sku": item.sku,
+        "resolution_status": item.resolution_status,
+        "resolution_note": item.resolution_note,
+        "resolved_at": item.resolved_at.isoformat() if item.resolved_at else None,
+        "resolved_by": item.resolved_by,
         "images": [
             {
                 "id": img.id,
@@ -157,14 +217,14 @@ def get_missing_rows(
     startDate: Optional[str] = None,
     end_date: Optional[str] = None,
     endDate: Optional[str] = None,
+    tab: str = Query("active"),  # "active" (cần kiểm tra) | "unresolved" (không xử lý được)
     page: int = Query(1, ge=1),
     page_size: int = Query(15, ge=1, le=100),
     db: Session = Depends(get_db)
 ):
     """
-    Lấy danh sách các dòng dữ liệu bị thiếu trường thông tin (phục vụ Popup Danh Sách Dòng Thiếu).
-    Hỗ trợ lọc theo khoảng thời gian hiển thị (start_date/end_date) khớp với KPI trượt trên màn hình.
-    Tối ưu hóa phân trang Server-Side (SQL Paging & NOLOCK) tốc độ cao.
+    Lấy danh sách các dòng dữ liệu bị thiếu trường thông tin (phục vụ Popup Danh Sách Dòng Thiếu/Lệch).
+    Hỗ trợ tab='active' (chưa xử lý) và tab='unresolved' (danh sách không xử lý được kèm ghi chú).
     """
     try:
         db.execute(text("SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;"))
@@ -202,41 +262,63 @@ def get_missing_rows(
     if date_where_clauses:
         where_clauses.extend(date_where_clauses)
 
-    if missing_type and missing_type != "all":
-        mt = missing_type.lower().strip()
-        if mt in ("image", "picture", "anh", "hinh_anh"):
-            where_clauses.append("""NOT EXISTS (
-                SELECT 1 FROM lpn_images img WITH (NOLOCK) 
-                WHERE img.lpn_item_id = i.id AND (
-                    (img.local_path IS NOT NULL AND LTRIM(RTRIM(img.local_path)) != '' AND img.local_path != 'None')
-                    OR (img.source_url IS NOT NULL AND LTRIM(RTRIM(img.source_url)) != '' AND img.source_url != 'None')
+    if tab == "unresolved":
+        # Danh sách không xử lý được
+        where_clauses.append("i.resolution_status = 'unresolved'")
+    else:
+        # Danh sách cần xử lý (loại bỏ các dòng đã xử lý hoặc không xử lý được)
+        where_clauses.append("(i.resolution_status IS NULL OR i.resolution_status = '')")
+
+        if missing_type and missing_type != "all":
+            mt = missing_type.lower().strip()
+            if mt in ("image", "picture", "anh", "hinh_anh"):
+                where_clauses.append("""NOT EXISTS (
+                    SELECT 1 FROM lpn_images img WITH (NOLOCK) 
+                    WHERE img.lpn_item_id = i.id AND (
+                        (img.local_path IS NOT NULL AND LTRIM(RTRIM(img.local_path)) != '' AND img.local_path != 'None')
+                        OR (img.source_url IS NOT NULL AND LTRIM(RTRIM(img.source_url)) != '' AND img.source_url != 'None')
+                    )
+                )""")
+            elif mt in ("lpn",):
+                where_clauses.append("(i.lpn IS NULL OR LTRIM(RTRIM(i.lpn)) = '' OR i.lpn = 'None' OR i.lpn = '0')")
+            elif mt in ("sku",):
+                where_clauses.append("(i.sku IS NULL OR LTRIM(RTRIM(i.sku)) = '' OR i.sku = 'None' OR i.sku = '0')")
+            elif mt in ("date", "ngay"):
+                where_clauses.append("(c.date_loading IS NULL AND (c.date_loading_raw IS NULL OR LTRIM(RTRIM(c.date_loading_raw)) = ''))")
+            elif mt in ("timestamp", "gio"):
+                where_clauses.append("(c.timestamp_raw IS NULL OR LTRIM(RTRIM(c.timestamp_raw)) = '')")
+            elif mt in ("container",):
+                where_clauses.append("(c.container_number IS NULL OR LTRIM(RTRIM(c.container_number)) = '')")
+            elif mt in ("mismatch", "sai_ma", "lech_ma", "wrong_code"):
+                where_clauses.append("""EXISTS (
+                    SELECT 1 FROM lpn_ai_ocr_results o WITH (NOLOCK)
+                    WHERE o.item_id = i.id AND (
+                        (o.detected_lpn IS NOT NULL AND LTRIM(RTRIM(o.detected_lpn)) != '' AND o.is_lpn_match = 0)
+                        OR (o.detected_sku IS NOT NULL AND LTRIM(RTRIM(o.detected_sku)) != '' AND o.is_sku_match = 0)
+                    )
+                )""")
+        else:
+            where_clauses.append("""(
+                c.container_number IS NULL OR LTRIM(RTRIM(c.container_number)) = ''
+                OR (c.date_loading IS NULL AND (c.date_loading_raw IS NULL OR LTRIM(RTRIM(c.date_loading_raw)) = ''))
+                OR c.timestamp_raw IS NULL OR LTRIM(RTRIM(c.timestamp_raw)) = ''
+                OR i.lpn IS NULL OR LTRIM(RTRIM(i.lpn)) = '' OR i.lpn = 'None' OR i.lpn = '0'
+                OR i.sku IS NULL OR LTRIM(RTRIM(i.sku)) = '' OR i.sku = 'None' OR i.sku = '0'
+                OR NOT EXISTS (
+                    SELECT 1 FROM lpn_images img WITH (NOLOCK) 
+                    WHERE img.lpn_item_id = i.id AND (
+                        (img.local_path IS NOT NULL AND LTRIM(RTRIM(img.local_path)) != '' AND img.local_path != 'None')
+                        OR (img.source_url IS NOT NULL AND LTRIM(RTRIM(img.source_url)) != '' AND img.source_url != 'None')
+                    )
+                )
+                OR EXISTS (
+                    SELECT 1 FROM lpn_ai_ocr_results o WITH (NOLOCK)
+                    WHERE o.item_id = i.id AND (
+                        (o.detected_lpn IS NOT NULL AND LTRIM(RTRIM(o.detected_lpn)) != '' AND o.is_lpn_match = 0)
+                        OR (o.detected_sku IS NOT NULL AND LTRIM(RTRIM(o.detected_sku)) != '' AND o.is_sku_match = 0)
+                    )
                 )
             )""")
-        elif mt in ("lpn",):
-            where_clauses.append("(i.lpn IS NULL OR LTRIM(RTRIM(i.lpn)) = '' OR i.lpn = 'None' OR i.lpn = '0')")
-        elif mt in ("sku",):
-            where_clauses.append("(i.sku IS NULL OR LTRIM(RTRIM(i.sku)) = '' OR i.sku = 'None' OR i.sku = '0')")
-        elif mt in ("date", "ngay"):
-            where_clauses.append("(c.date_loading IS NULL AND (c.date_loading_raw IS NULL OR LTRIM(RTRIM(c.date_loading_raw)) = ''))")
-        elif mt in ("timestamp", "gio"):
-            where_clauses.append("(c.timestamp_raw IS NULL OR LTRIM(RTRIM(c.timestamp_raw)) = '')")
-        elif mt in ("container",):
-            where_clauses.append("(c.container_number IS NULL OR LTRIM(RTRIM(c.container_number)) = '')")
-    else:
-        where_clauses.append("""(
-            c.container_number IS NULL OR LTRIM(RTRIM(c.container_number)) = ''
-            OR (c.date_loading IS NULL AND (c.date_loading_raw IS NULL OR LTRIM(RTRIM(c.date_loading_raw)) = ''))
-            OR c.timestamp_raw IS NULL OR LTRIM(RTRIM(c.timestamp_raw)) = ''
-            OR i.lpn IS NULL OR LTRIM(RTRIM(i.lpn)) = '' OR i.lpn = 'None' OR i.lpn = '0'
-            OR i.sku IS NULL OR LTRIM(RTRIM(i.sku)) = '' OR i.sku = 'None' OR i.sku = '0'
-            OR NOT EXISTS (
-                SELECT 1 FROM lpn_images img WITH (NOLOCK) 
-                WHERE img.lpn_item_id = i.id AND (
-                    (img.local_path IS NOT NULL AND LTRIM(RTRIM(img.local_path)) != '' AND img.local_path != 'None')
-                    OR (img.source_url IS NOT NULL AND LTRIM(RTRIM(img.source_url)) != '' AND img.source_url != 'None')
-                )
-            )
-        )""")
 
     if search and search.strip():
         s = f"%{search.strip()}%"
@@ -287,9 +369,23 @@ def get_missing_rows(
             COALESCE(i.lpn, '') as lpn,
             COALESCE(i.sku, '') as sku,
             i.suffix_key,
-            i.record_type
+            i.record_type,
+            i.resolution_status,
+            i.resolution_note,
+            i.resolved_at,
+            i.resolved_by,
+            ocr.detected_lpn,
+            ocr.detected_sku,
+            ocr.is_lpn_match,
+            ocr.is_sku_match
         FROM lpn_items i WITH (NOLOCK)
         JOIN lpn_containers c WITH (NOLOCK) ON i.container_id = c.id
+        OUTER APPLY (
+            SELECT TOP 1 detected_lpn, detected_sku, is_lpn_match, is_sku_match
+            FROM lpn_ai_ocr_results o WITH (NOLOCK)
+            WHERE o.item_id = i.id
+            ORDER BY o.id DESC
+        ) ocr
         WHERE {where_sql}
         ORDER BY 
             c.date_loading DESC,
@@ -330,6 +426,14 @@ def get_missing_rows(
         if not r.sku or not str(r.sku).strip() or str(r.sku).strip() == "None" or str(r.sku).strip() == "0":
             missing_fields.append("SKU Pallet")
 
+        # Phát hiện sai mã / lệch CSDL từ kết quả quét AI OCR
+        has_lpn_mismatch = bool(r.detected_lpn and str(r.detected_lpn).strip() and r.is_lpn_match is False)
+        has_sku_mismatch = bool(r.detected_sku and str(r.detected_sku).strip() and r.is_sku_match is False)
+        if has_lpn_mismatch:
+            missing_fields.append(f"Sai mã LPN (Đọc: {str(r.detected_lpn).strip()})")
+        if has_sku_mismatch:
+            missing_fields.append(f"Sai mã SKU (Đọc: {str(r.detected_sku).strip()})")
+
         item_imgs = images_by_item.get(r.item_id, [])
         valid_paths = [im[1] for im in item_imgs if im[1] and str(im[1]).strip() and str(im[1]).strip() != "None"]
         urls = [im[2] for im in item_imgs if im[2] and str(im[2]).strip() and str(im[2]).strip() != "None"]
@@ -353,6 +457,15 @@ def get_missing_rows(
             "sku": r.sku or "—",
             "suffix_key": r.suffix_key,
             "record_type": r.record_type,
+            "resolution_status": r.resolution_status,
+            "resolution_note": r.resolution_note,
+            "resolved_at": r.resolved_at.isoformat() if hasattr(r, 'resolved_at') and r.resolved_at else None,
+            "resolved_by": r.resolved_by if hasattr(r, 'resolved_by') else None,
+            "detected_lpn": r.detected_lpn,
+            "detected_sku": r.detected_sku,
+            "is_lpn_match": r.is_lpn_match,
+            "is_sku_match": r.is_sku_match,
+            "has_mismatch": bool(has_lpn_mismatch or has_sku_mismatch),
             "image_count": len(all_imgs),
             "has_image": len(all_imgs) > 0,
             "first_image": first_image,
@@ -364,10 +477,13 @@ def get_missing_rows(
         "total_missing": total,
         "missing_lpn": 0,
         "missing_sku": 0,
-        "missing_image": 0
+        "missing_image": 0,
+        "mismatch_code": 0,
+        "unresolved_count": 0
     }
     try:
-        summary_where_sql = f"WHERE {' AND '.join(date_where_clauses)}" if date_where_clauses else ""
+        summary_where_sql_parts = list(date_where_clauses)
+        summary_where_sql = f"WHERE {' AND '.join(summary_where_sql_parts)}" if summary_where_sql_parts else ""
         summary_params = {}
         if "s_date" in params:
             summary_params["s_date"] = params["s_date"]
@@ -388,27 +504,51 @@ def get_missing_rows(
                         )
                     ) THEN 1 ELSE 0 END as no_img,
                     CASE WHEN (c.container_number IS NULL OR LTRIM(RTRIM(c.container_number)) = '') THEN 1 ELSE 0 END as no_container,
-                    CASE WHEN ((c.date_loading IS NULL AND (c.date_loading_raw IS NULL OR LTRIM(RTRIM(c.date_loading_raw)) = '')) OR (c.timestamp_raw IS NULL OR LTRIM(RTRIM(c.timestamp_raw)) = '')) THEN 1 ELSE 0 END as no_datetime
+                    CASE WHEN ((c.date_loading IS NULL AND (c.date_loading_raw IS NULL OR LTRIM(RTRIM(c.date_loading_raw)) = '')) OR (c.timestamp_raw IS NULL OR LTRIM(RTRIM(c.timestamp_raw)) = '')) THEN 1 ELSE 0 END as no_datetime,
+                    CASE WHEN EXISTS (
+                        SELECT 1 FROM lpn_ai_ocr_results o WITH (NOLOCK)
+                        WHERE o.item_id = i.id AND (
+                            (o.detected_lpn IS NOT NULL AND LTRIM(RTRIM(o.detected_lpn)) != '' AND o.is_lpn_match = 0)
+                            OR (o.detected_sku IS NOT NULL AND LTRIM(RTRIM(o.detected_sku)) != '' AND o.is_sku_match = 0)
+                        )
+                    ) THEN 1 ELSE 0 END as is_mismatch
                 FROM lpn_items i WITH (NOLOCK)
                 JOIN lpn_containers c WITH (NOLOCK) ON i.container_id = c.id
                 {summary_where_sql}
+                {"AND" if summary_where_sql else "WHERE"} (i.resolution_status IS NULL OR i.resolution_status = '')
             )
             SELECT 
                 COUNT(*) as total_missing,
                 SUM(no_lpn) as missing_lpn,
                 SUM(no_sku) as missing_sku,
-                SUM(no_img) as missing_img
+                SUM(no_img) as missing_img,
+                SUM(is_mismatch) as mismatch_code
             FROM ItemStats
-            WHERE no_lpn = 1 OR no_sku = 1 OR no_img = 1 OR no_container = 1 OR no_datetime = 1
+            WHERE no_lpn = 1 OR no_sku = 1 OR no_img = 1 OR no_container = 1 OR no_datetime = 1 OR is_mismatch = 1
         """)
         sum_row = db.execute(summary_query, summary_params).fetchone()
+
+        # Đếm số lượng item Không Xử Lý Được trong phạm vi ngày
+        unres_sql = text(f"""
+            SELECT COUNT(*) 
+            FROM lpn_items i WITH (NOLOCK)
+            JOIN lpn_containers c WITH (NOLOCK) ON i.container_id = c.id
+            {summary_where_sql}
+            {"AND" if summary_where_sql else "WHERE"} i.resolution_status = 'unresolved'
+        """)
+        unres_cnt = db.execute(unres_sql, summary_params).scalar() or 0
+
         if sum_row:
             summary = {
                 "total_missing": sum_row[0] or 0,
                 "missing_lpn": sum_row[1] or 0,
                 "missing_sku": sum_row[2] or 0,
-                "missing_image": sum_row[3] or 0
+                "missing_image": sum_row[3] or 0,
+                "mismatch_code": sum_row[4] or 0,
+                "unresolved_count": unres_cnt
             }
+        else:
+            summary["unresolved_count"] = unres_cnt
     except Exception:
         pass
 

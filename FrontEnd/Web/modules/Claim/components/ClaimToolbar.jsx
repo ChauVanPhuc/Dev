@@ -70,8 +70,6 @@ export const ClaimToolbar = ({
 
   return (
     <div className="mgmt-toolbar card" style={{ 
-      position: 'relative',
-      zIndex: 100,
       marginBottom: isFilterBarOpen ? '6px' : '10px', 
       flexShrink: 0, 
       padding: '6px 14px',

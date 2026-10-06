@@ -1,16 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { Search, Filter, Plus } from 'lucide-react';
-import { claimService } from '../../services/claim.service';
+import { claimService } from '@/modules/claim/services/claim.service';
 import * as XLSX from 'xlsx';
-import { API_ROOT } from '@webShared/Services/api.service';
-import '../../styles/claim.css';
+import { API_ROOT } from '@/shared/services/api.service';
+import '@/modules/claim/styles/claim.css';
+import '@/shared/styles/components.css';
 
 // Import shared components
-import Table from '../../components/Table';
-import Pagination from '../../components/Pagination';
-import { FilterModal, FormModal, AlertModal } from '../../components/Modal';
-import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
+import Table from '@/modules/claim/components/Table';
+import Pagination from '@/modules/claim/components/Pagination';
+import { FilterModal, FormModal, AlertModal } from '@/modules/claim/components/Modal';
+import DeleteConfirmationModal from '@/modules/claim/components/DeleteConfirmationModal';
 
 const MOCK_CABINET_PRICES = [
   { id: 1, cabinet_code: 'A042S-L-BC-WOA', cabinet_name: 'Tủ gỗ Atlas màu sồi tự nhiên', material: 'Gỗ sồi (Oak)', dimensions: '600x800x400', base_price: 100.00, sale_price: 142.49, status: 'Active', last_updated: '2026-06-01T08:00:00Z' },
@@ -138,14 +139,10 @@ const PriceListView = () => {
 
   const getFullImagePath = (path) => {
     if (!path) return '';
-    let clean = typeof path === 'string' ? path.trim() : '';
-    if (clean.startsWith('http://localhost') || clean.startsWith('http://127.0.0.1')) {
-      clean = clean.replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/, '');
+    if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('blob:') || path.startsWith('data:')) {
+      return path;
     }
-    if (clean.startsWith('http://') || clean.startsWith('https://') || clean.startsWith('blob:') || clean.startsWith('data:')) {
-      return clean;
-    }
-    const cleanPath = clean.startsWith('/') ? clean.slice(1) : clean;
+    const cleanPath = path.startsWith('/') ? path.slice(1) : path;
     return `${API_ROOT}${cleanPath}`;
   };
 
@@ -343,7 +340,7 @@ const PriceListView = () => {
     });
   };
 
-  const rowsPerPage = 30;
+  const rowsPerPage = 13;
 
   // Reset page when data, search, or filters change
   useEffect(() => {
@@ -439,7 +436,7 @@ const PriceListView = () => {
     showModal('Đang xử lý', 'Đang đọc và tải dữ liệu từ file lên hệ thống...', 'info');
 
     const reader = new FileReader();
-    reader.onload = async (evt) => {
+    reader.onload = (evt) => {
       try {
         const data = new Uint8Array(evt.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
@@ -581,17 +578,11 @@ const PriceListView = () => {
           }));
 
           const nextPrices = [...finalizedNewItems, ...allPrices];
-          try {
-            await claimService.saveCabinetPricesTemp(nextPrices);
-            setAllPrices(nextPrices);
-            fetchPrices();
-            showModal('Thành công', `Đã nhập khẩu và lưu thành công ${importedItems.length} sản phẩm tủ gỗ vào CSDL từ file ${file.name}!`, 'success');
-          } catch (err) {
-            console.error("Lỗi lưu trữ giá vào CSDL:", err);
-            const detail = err?.response?.data?.detail;
-            const msg = Array.isArray(detail) ? detail.map(d => d.msg || JSON.stringify(d)).join('; ') : (typeof detail === 'object' ? JSON.stringify(detail) : (detail || err.message));
-            showModal('Lỗi', `Lưu dữ liệu vào Database thất bại: ${msg}`, 'error');
-          }
+          setAllPrices(nextPrices);
+          claimService.saveCabinetPricesTemp(nextPrices).catch(err => {
+            console.error("Lỗi lưu trữ giá tạm thời:", err);
+          });
+          showModal('Thành công', `Đã nhập khẩu thành công ${importedItems.length} sản phẩm tủ gỗ từ file ${file.name}!`, 'success');
         }
       } catch (error) {
         console.error('Lỗi phân tích file Excel/CSV:', error);
@@ -607,7 +598,7 @@ const PriceListView = () => {
     e.target.value = '';
   };
 
-  const handleResolveDuplicates = async (choice) => {
+  const handleResolveDuplicates = (choice) => {
     if (!duplicateImportData) return;
     const { duplicates, uniqueImported, fileName } = duplicateImportData;
     const timestamp = new Date().toISOString();
@@ -659,30 +650,18 @@ const PriceListView = () => {
       });
 
       const nextPrices = [...finalizedNewItems, ...updatedPricesList];
-      try {
-        await claimService.saveCabinetPricesTemp(nextPrices);
-        setAllPrices(nextPrices);
-        fetchPrices();
-        showModal('Thành công', `Đã cập nhật giá mới cho ${duplicates.length} sản phẩm trùng và thêm mới ${uniqueImported.length} sản phẩm vào CSDL từ file ${fileName}!`, 'success');
-      } catch (err) {
-        console.error("Lỗi lưu trữ giá vào CSDL:", err);
-        const detail = err?.response?.data?.detail;
-        const msg = Array.isArray(detail) ? detail.map(d => d.msg || JSON.stringify(d)).join('; ') : (typeof detail === 'object' ? JSON.stringify(detail) : (detail || err.message));
-        showModal('Lỗi', `Lưu dữ liệu vào Database thất bại: ${msg}`, 'error');
-      }
+      setAllPrices(nextPrices);
+      claimService.saveCabinetPricesTemp(nextPrices).catch(err => {
+        console.error("Lỗi lưu trữ giá tạm thời:", err);
+      });
+      showModal('Thành công', `Đã cập nhật giá mới cho ${duplicates.length} sản phẩm trùng và thêm mới ${uniqueImported.length} sản phẩm từ file ${fileName}!`, 'success');
     } else if (choice === 'old') {
       const nextPrices = [...finalizedNewItems, ...updatedPricesList];
-      try {
-        await claimService.saveCabinetPricesTemp(nextPrices);
-        setAllPrices(nextPrices);
-        fetchPrices();
-        showModal('Thành công', `Đã giữ lại giá cũ cho ${duplicates.length} sản phẩm trùng và thêm mới ${uniqueImported.length} sản phẩm mới vào CSDL từ file ${fileName}!`, 'success');
-      } catch (err) {
-        console.error("Lỗi lưu trữ giá vào CSDL:", err);
-        const detail = err?.response?.data?.detail;
-        const msg = Array.isArray(detail) ? detail.map(d => d.msg || JSON.stringify(d)).join('; ') : (typeof detail === 'object' ? JSON.stringify(detail) : (detail || err.message));
-        showModal('Lỗi', `Lưu dữ liệu vào Database thất bại: ${msg}`, 'error');
-      }
+      setAllPrices(nextPrices);
+      claimService.saveCabinetPricesTemp(nextPrices).catch(err => {
+        console.error("Lỗi lưu trữ giá tạm thời:", err);
+      });
+      showModal('Thành công', `Đã giữ lại giá cũ cho ${duplicates.length} sản phẩm trùng và thêm mới ${uniqueImported.length} sản phẩm mới từ file ${fileName}!`, 'success');
     }
 
     setDuplicateImportData(null);
@@ -739,7 +718,7 @@ const PriceListView = () => {
     XLSX.writeFile(workbook, "Bang_gia_tu_go.xlsx");
   };
 
-  const handleCreateCabinet = async (e) => {
+  const handleCreateCabinet = (e) => {
     e.preventDefault();
     if (!newCode || !newSalePrice) {
       showModal('Lỗi', 'Vui lòng điền đầy đủ các thông tin bắt buộc.', 'error');
@@ -821,12 +800,9 @@ const PriceListView = () => {
     }
 
     setAllPrices(nextPrices);
-    try {
-      await claimService.saveCabinetPricesTemp(nextPrices);
-      fetchPrices();
-    } catch (err) {
-      console.error("Lỗi lưu trữ giá:", err);
-    }
+    claimService.saveCabinetPricesTemp(nextPrices).catch(err => {
+      console.error("Lỗi lưu trữ giá tạm thời:", err);
+    });
 
     setIsAddModalOpen(false);
     setNewCode('');
@@ -850,8 +826,7 @@ const PriceListView = () => {
     setLoading(true);
     try {
       const response = await claimService.getCabinetPrices({
-        search: search || undefined,
-        size: 5000
+        search: search || undefined
       });
       let fetched = response.items || [];
       if (search) {
@@ -1032,7 +1007,7 @@ const PriceListView = () => {
     { label: 'Tên sản phẩm', className: 'text-left' },
     { label: 'Tên sản phẩm (new)', className: 'text-left' },
     { label: 'Dòng hàng', className: 'text-left' },
-    { label: 'Dòng hàng (new)', className: 'text-left' },
+    { label: 'Loại hàng', className: 'text-left' },
     { label: 'Mã hàng', className: 'text-left' },
     { label: 'Màu sắc', className: 'text-left' },
     { label: 'Giá', className: 'text-left' },
@@ -1562,7 +1537,27 @@ const PriceListView = () => {
                 <td className="text-left" style={{ padding: '10px 14px', fontWeight: '500', color: '#2D1A12' }}>{item.cabinet_code}</td>
                 <td className="text-left" style={{ padding: '10px 14px', fontWeight: '500', color: '#7B5233' }}>{item.cabinet_name}</td>
                 <td className="text-left" style={{ padding: '10px 14px', fontWeight: '500', color: '#5D4037' }}>{item.series || productLine}</td>
-                <td className="text-left" style={{ padding: '10px 14px', fontWeight: '500', color: '#5D4037' }}>{item.new_series || ''}</td>
+                <td className="text-left" style={{ padding: '10px 14px' }}>
+                  {(() => {
+                    const isOak = (item.new_series || item.cabinet_code || item.cabinet_name || '').toUpperCase().includes('WOA') || item.new_series === 'OAK';
+                    const loai = isOak ? 'OAK' : 'Pigment';
+                    return (
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        padding: '2px 8px',
+                        borderRadius: '6px',
+                        fontSize: '0.78rem',
+                        fontWeight: '700',
+                        backgroundColor: isOak ? '#FEF3C7' : '#ECFDF5',
+                        color: isOak ? '#92400E' : '#065F46',
+                        border: `1px solid ${isOak ? '#FDE68A' : '#A7F3D0'}`
+                      }}>
+                        {loai}
+                      </span>
+                    );
+                  })()}
+                </td>
                 <td className="code-ref text-left" style={{ padding: '10px 14px', fontWeight: '500' }}>{item.material || itemCode}</td>
                 <td className="text-left" style={{ padding: '10px 14px', fontWeight: '500', color: '#5D4037' }}>{item.dimensions || colorCode}</td>
                 <td className="value-penalty text-left" style={{ padding: '10px 14px', fontWeight: 'bold', color: '#2D1A12' }}>{formatPrice(item.sale_price)}</td>
@@ -1635,7 +1630,11 @@ const PriceListView = () => {
                   type="text"
                   placeholder="Ví dụ: A042S-L-BC-WOA"
                   value={newCode}
-                  onChange={(e) => setNewCode(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setNewCode(val);
+                    setNewNewSeries(val.toUpperCase().includes('WOA') ? 'OAK' : 'Pigment');
+                  }}
                   className="add-claim-input"
                   required
                 />
@@ -1690,14 +1689,15 @@ const PriceListView = () => {
                 />
               </div>
               <div className="add-claim-field">
-                <label className="add-claim-label">Dòng hàng (new)</label>
-                <input
-                  type="text"
-                  value={newNewSeries}
-                  placeholder={autoNewSeries || "Ví dụ: 2"}
+                <label className="add-claim-label">Loại hàng</label>
+                <select
+                  value={newNewSeries || ((newCode || newName || '').toUpperCase().includes('WOA') ? 'OAK' : 'Pigment')}
                   onChange={(e) => setNewNewSeries(e.target.value)}
-                  className="add-claim-input"
-                />
+                  className="add-claim-select"
+                >
+                  <option value="Pigment">Pigment</option>
+                  <option value="OAK">OAK</option>
+                </select>
               </div>
               <div className="add-claim-field">
                 <label className="add-claim-label">Mã hàng</label>

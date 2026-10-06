@@ -21,12 +21,12 @@ echo ======================================================
 echo           ERP G7 - GLOBAL STARTUP SYSTEM
 echo ======================================================
 echo  [MENU] Please select an action:
-echo  1. Start All Systems (Local Development Mode)
-echo  2. Start Internet Server (Cloudflare Tunnel Mode - Global Access)
+echo  1. Start Local Development Mode (Cho Lap Trinh Vien - Doc truc tiep source code)
+echo  2. Start Internet Server (Cloudflare Mode - Phuc vu tu dist/ da Build)
 echo  3. Build and Sync Android APK (Mobile)
 echo  4. Sync Mobile Code to Android (Capacitor Sync)
-echo  5. Build All Apps for Production (One-time only)
-echo  6. Run Production Mode (Ultimate Speed - Single Port)
+echo  5. Build All Apps for Production (Dong goi ban moi vao dist/)
+echo  6. Build All & Start Internet Server (Dong goi moi va Chay Production)
 echo  7. Rebuild Database Indexes (Performance Optimization)
 echo  8. Exit
 echo.
@@ -34,7 +34,7 @@ set /p choice="Enter choice (1-8) and press Enter: "
 
 if "%choice%"=="8" exit
 if "%choice%"=="7" goto rebuild_indexes
-if "%choice%"=="6" goto run_production
+if "%choice%"=="6" goto build_and_start_cloud
 if "%choice%"=="5" goto build_all
 if "%choice%"=="4" goto sync_android
 if "%choice%"=="3" goto build_apk
@@ -79,6 +79,8 @@ if %errorlevel% neq 0 (
 )
 :: Open specialized window for Backend
 start "Backend - ERP G7" cmd /k "cd /d %~dp0 && call start_server.bat"
+echo [*] Waiting for Backend to initialize and connect to SQL Server...
+powershell -NoProfile -Command "for ($i=0; $i -lt 30; $i++) { try { $r = (Invoke-WebRequest -Uri 'http://127.0.0.1:8000/docs' -UseBasicParsing -TimeoutSec 1).StatusCode; if ($r -eq 200) { Write-Host ' [OK] Backend is LIVE and READY on port 8000!' -ForegroundColor Green; break } } catch { Start-Sleep -Milliseconds 400 } }"
 
 :: --- 2. FRONTEND (Vite Web Dashboard) ---
 echo [2/3] Processing Frontend (Vite)...
@@ -89,8 +91,8 @@ if not exist node_modules (
 ) else (
     echo [OK] Frontend dependencies are already satisfied.
 )
-:: Open specialized window for Frontend
-start "Frontend - ERP G7" cmd /k "cd /d %~dp0FrontEnd && npm run dev"
+:: Open specialized window for Frontend with anti-freeze mode
+start "Frontend - ERP G7" cmd /k "cd /d %~dp0 && call start_frontend.bat"
 
 :: --- 3. MOBILE (Vite/Capacitor App) ---
 echo [3/3] Processing Mobile (Vite)...
@@ -186,18 +188,53 @@ echo ======================================================
 pause
 goto main_menu
 
+:build_and_start_cloud
+cls
+echo ======================================================
+echo  BUILD & DEPLOY: Compiling fresh apps for Production...
+echo ======================================================
+echo.
+echo [1/2] Building Mobile App...
+cd /d %~dp0FrontEnd\Mobile
+call npm run build
+echo.
+echo [2/2] Building Dashboard...
+cd /d %~dp0FrontEnd
+call npm run build
+echo.
+echo [OK] Build complete. Launching Production Server...
+timeout /t 2 >nul
+goto start_cloud
+
 :start_cloud
 cls
-echo  [CLOUD MODE] Preparing system for Internet access...
+echo ======================================================
+echo  ERP G7 - CLOUDFLARE INTERNET PRODUCTION SERVER
+echo ======================================================
 echo.
-echo  [1/2] Starting Backend (FastAPI)...
+echo [*] Cleaning up lingering processes on Port 3000 and 5173...
+powershell -NoProfile -Command "Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -in 3000, 5173 } | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }"
+
+echo  [1/4] Starting Backend (FastAPI)...
 start "Backend (Cloud) - ERP G7" cmd /k "cd /d %~dp0 && call start_server.bat"
+echo [*] Waiting for Backend to initialize and connect to SQL Server...
+powershell -NoProfile -Command "for ($i=0; $i -lt 30; $i++) { try { $r = (Invoke-WebRequest -Uri 'http://127.0.0.1:8000/docs' -UseBasicParsing -TimeoutSec 1).StatusCode; if ($r -eq 200) { Write-Host ' [OK] Backend is LIVE and READY on port 8000!' -ForegroundColor Green; break } } catch { Start-Sleep -Milliseconds 400 } }"
 
-echo  [2/3] Starting Mobile App (Vite)...
-start "Mobile Frontend (Cloud) - ERP G7" cmd /k "cd /d %~dp0FrontEnd\Mobile && npm run dev -- --port 3000 --host 0.0.0.0 --no-open"
+:: Kiem tra neu chua build thi tu dong build production
+if not exist "%~dp0FrontEnd\Mobile\dist" (
+    echo [*] Mobile dist missing. Compiling optimized production bundle...
+    cd /d %~dp0FrontEnd\Mobile && call npm run build
+)
+if not exist "%~dp0FrontEnd\dist" (
+    echo [*] Dashboard dist missing. Compiling optimized production bundle...
+    cd /d %~dp0FrontEnd && call npm run build
+)
 
-echo  [3/3] Starting Dashboard (Vite)...
-start "Dashboard (Cloud) - ERP G7" cmd /k "cd /d %~dp0FrontEnd && npm run dev -- --host 0.0.0.0 --no-open"
+echo  [2/4] Starting Mobile App (Isolated Production Preview - Port 3000)...
+start "Mobile Frontend (Cloud) - ERP G7" cmd /k "cd /d %~dp0FrontEnd\Mobile && npm run preview -- --port 3000 --host 0.0.0.0"
+
+echo  [3/4] Starting Dashboard (Isolated Production Preview - Port 5173)...
+start "Dashboard (Cloud) - ERP G7" cmd /k "cd /d %~dp0FrontEnd && npm run preview -- --port 5173 --host 0.0.0.0"
 
 echo  [4/4] Starting Gemini Web2API AI Server...
 start "Gemini Web2API - AI Server" cmd /k "cd /d %~dp0AI\gemini-web2api && call run.bat"
@@ -205,9 +242,13 @@ start "Gemini Web2API - AI Server" cmd /k "cd /d %~dp0AI\gemini-web2api && call 
 echo.
 echo ======================================================
 echo  SUCCESS: System is now LIVE on the Internet via Cloudflare.
-echo  App: https://smartflowg7.cloud
+echo  Mode: 100%% Isolated Production (Serves from dist/ folder)
+echo  [NOTE] Editing source code will NOT affect users until
+echo         you run Option 5 (Build) or Option 6 (Build & Start).
+echo.
+echo  App:       https://smartflowg7.cloud
 echo  Dashboard: https://dashboard.smartflowg7.cloud
-echo  API: https://api.smartflowg7.cloud
+echo  API:       https://api.smartflowg7.cloud
 echo ======================================================
 pause
 goto main_menu
@@ -235,7 +276,8 @@ if not exist node_modules (
 call npm run build
 echo.
 echo ======================================================
-echo  BUILD COMPLETE! Ready to run in Production Mode.
+echo  BUILD COMPLETE! New versions saved to dist/ folders.
+echo  Run Option 2 or Option 6 to start Production Server.
 echo ======================================================
 pause
 goto main_menu

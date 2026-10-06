@@ -13,9 +13,9 @@ của mã LPN và mã SKU trên toàn bộ dự án:
 import re
 from typing import Optional
 
-# Pattern LPN chuẩn kho vận VINA G7 (chủ đạo là 9 chữ số bắt đầu bằng 06, 05 hoặc 60)
-WAREHOUSE_LPN_REGEX = re.compile(r"^(?:06|05|60)\d{7}$")
-PURE_NUMERIC_LPN_REGEX = re.compile(r"^\d{8,10}$")
+# Pattern LPN: Bất kỳ chuỗi số nào từ 8 đến 12 chữ số (không giới hạn tiền tố 06/05/60)
+WAREHOUSE_LPN_REGEX = re.compile(r"^\d{8,12}$")
+PURE_NUMERIC_LPN_REGEX = re.compile(r"^\d{8,12}$")
 
 CARTON_PREFIXES = (
     "VOM", "VOL", "MEAS", "CTN", "BOX", "QTY", "PCS", "NW", "GW",
@@ -61,11 +61,11 @@ def clean_warehouse_lpn(text: Optional[str]) -> str:
     return s
 
 
-def is_valid_warehouse_lpn(text: Optional[str], strict_warehouse: bool = True) -> bool:
+def is_valid_warehouse_lpn(text: Optional[str], strict_warehouse: bool = False) -> bool:
     """
-    Kiểm tra một chuỗi có phải mã LPN hợp lệ của kho không.
-    - strict_warehouse=True: Bắt buộc chuẩn 9 chữ số (bắt đầu bằng 06, 05, 60 như trong CSDL thực tế)
-    - strict_warehouse=False: Chấp nhận chuỗi số 8-10 chữ số
+    Kiểm tra một chuỗi có phải mã LPN hợp lệ không:
+    - Bất kỳ chuỗi số nào từ 8 đến 12 chữ số đều được chấp nhận (không lọc theo đầu số 06/05/60).
+    - Đọc có là hiển thị đầy đủ.
     """
     if not text:
         return False
@@ -77,9 +77,7 @@ def is_valid_warehouse_lpn(text: Optional[str], strict_warehouse: bool = True) -
     if len(set(cleaned)) <= 1:
         return False
 
-    if strict_warehouse:
-        return bool(WAREHOUSE_LPN_REGEX.match(cleaned))
-    return bool(PURE_NUMERIC_LPN_REGEX.match(cleaned))
+    return bool(WAREHOUSE_LPN_REGEX.match(cleaned))
 
 
 def is_valid_warehouse_sku(cand: Optional[str]) -> bool:

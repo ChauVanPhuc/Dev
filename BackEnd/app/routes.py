@@ -28,6 +28,7 @@ from modules.system.routes import system_router, screen_router, screen_bug_route
 
 from modules.claim.routes.claim_routes import router as claim_router
 from modules.price.routes.price_routes import router as price_router
+from modules.defect.router import router as defect_router
 
 from modules.purchasing.routes import purchase_requisition_router, purchase_order_item_router
 from modules.inspection.routes.iso_router import router as iso_router
@@ -118,6 +119,7 @@ api_router.include_router(quick_report_router.router, prefix="/quick-reports", t
 
 api_router.include_router(claim_router, prefix="/claims", tags=["claim"])
 api_router.include_router(price_router, prefix="/claims", tags=["cabinet-prices"])
+api_router.include_router(defect_router, prefix="/inspections", tags=["defects"])
 
 api_router.include_router(purchase_requisition_router.router, prefix="/purchase-requisitions", tags=["purchase-requisitions"])
 
@@ -128,6 +130,28 @@ api_router.include_router(inspection_form_type_router, prefix="/inspection-form-
 api_router.include_router(iso_router, prefix="/iso-documents", tags=["iso-documents"])
 api_router.include_router(hr_router.router, prefix="/hr", tags=["hr"])
 api_router.include_router(routing_router.router)
+
+from modules.pallet_check.routes.pallet_check_router import router as pallet_check_router
+api_router.include_router(pallet_check_router, prefix="/pallet-check", tags=["pallet-check"])
+
+import sys
+import os
+
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+try:
+    from lpn_crawler.backend.api.router import router as lpn_router
+    api_router.include_router(lpn_router, prefix="/lpn-crawler", tags=["lpn-crawler"])
+except Exception as e:
+    print(f"Warning: Failed to load lpn_crawler router: {e}")
+
+try:
+    from dashboard.backend.api.router import router as dashboard_router
+    api_router.include_router(dashboard_router, prefix="/dashboard", tags=["dashboard"])
+except Exception as e:
+    print(f"Warning: Failed to load dashboard router: {e}")
 
 
 
@@ -157,3 +181,5 @@ def delete_department_mapping(dept_id: int, db: Session = Depends(get_db)):
 
     return {"message": "Xóa liên kết phòng ban thành công"}
 
+
+# reload trigger

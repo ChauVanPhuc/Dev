@@ -451,6 +451,30 @@ const PortalLayout = () => {
     };
   }, [layoutMode]);
 
+  // Tự động đồng bộ quyền hạn thực tế mới nhất từ Server khi vào Portal
+  useEffect(() => {
+    const syncPermissions = async () => {
+      try {
+        const userStr = localStorage.getItem('smartflow_user');
+        if (!userStr) return;
+        const user = JSON.parse(userStr);
+        if (!user?.id) return;
+        const res = await api.get(`/accounts/${user.id}/permissions?resolved=true`);
+        if (res?.permissions) {
+          const currentStr = localStorage.getItem('smartflow_active_permissions') || '{}';
+          const newStr = JSON.stringify(res.permissions);
+          if (currentStr !== newStr) {
+            localStorage.setItem('smartflow_active_permissions', newStr);
+            window.dispatchEvent(new CustomEvent('smartflow_permissions_updated', { detail: res.permissions }));
+          }
+        }
+      } catch (err) {
+        console.warn('Lỗi tự động đồng bộ phân quyền:', err);
+      }
+    };
+    syncPermissions();
+  }, []);
+
   const toggleSidebarCollapse = () => {
     setSidebarCollapsed(prev => {
       const next = !prev;
@@ -1514,8 +1538,8 @@ const PortalLayout = () => {
                 onClick={toggleLayoutMode}
                 title={layoutMode === 'responsive' ? "Chuyển sang chế độ Vừa màn hình (Fit to Screen)" : "Chuyển sang chế độ Co giãn (Responsive)"}
                 style={{
-                  background: '#FAF6F0',
-                  border: '1.5px solid #EADCC9',
+                  background: layoutMode === 'fit-to-screen' ? '#EFE6DC' : '#FAF6F0',
+                  border: layoutMode === 'fit-to-screen' ? '1.5px solid #7B5233' : '1.5px solid #EADCC9',
                   color: '#7B5233',
                   padding: '8px 12px',
                   borderRadius: '8px',
@@ -1530,10 +1554,11 @@ const PortalLayout = () => {
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.borderColor = '#7B5233';
-                  e.currentTarget.style.backgroundColor = '#FAF6F0';
+                  e.currentTarget.style.backgroundColor = layoutMode === 'fit-to-screen' ? '#E8DDD1' : '#FAF6F0';
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = '#EADCC9';
+                  e.currentTarget.style.borderColor = layoutMode === 'fit-to-screen' ? '#7B5233' : '#EADCC9';
+                  e.currentTarget.style.backgroundColor = layoutMode === 'fit-to-screen' ? '#EFE6DC' : '#FAF6F0';
                 }}
               >
                 <Monitor size={16} />
@@ -2176,7 +2201,7 @@ const PortalLayout = () => {
           overflow-y: auto !important;
           height: calc(100vh - 60px) !important;
         }
-        .dashboard-content > div,
+        .dashboard-content > div:not(.gold-layout),
         .dashboard-content .purchase-requisition-detail-container,
         .dashboard-content .detail-view-container,
         .dashboard-content .product-detail-container,
@@ -2185,15 +2210,160 @@ const PortalLayout = () => {
         .dashboard-content .user-edit-container,
         .dashboard-content .sidebar-management-container,
         .dashboard-content .system-config-container,
-        .dashboard-content .production-routing-container,
-        .dashboard-content .mgmt-container,
-        .dashboard-content .manufacture-plan-container,
-        .dashboard-content .quality-records-container {
+        .dashboard-content .production-routing-container {
           overflow-y: visible !important;
           height: auto !important;
           min-height: 100% !important;
           flex: 1 0 auto !important;
         }
+
+        /* ── QUẢN LÝ CHẤT LƯỢNG (.gold-layout) FULL-HEIGHT & CUỘN BẢNG NỘI BỘ TRÊN DESKTOP ── */
+        @media (min-width: 769px) {
+          .dashboard-content .gold-layout {
+            height: 100% !important;
+            max-height: 100% !important;
+            min-height: 0 !important;
+            overflow: hidden !important;
+            display: flex !important;
+            flex-direction: column !important;
+            flex: 1 1 0% !important;
+          }
+          .dashboard-content .gold-layout .quality-main-nav-wrapper {
+            flex-shrink: 0 !important;
+            margin-bottom: 6px !important;
+          }
+          .dashboard-content .gold-layout .sticky-top-zone {
+            flex-shrink: 0 !important;
+            margin-bottom: 6px !important;
+          }
+          .dashboard-content .gold-layout .admin-list-layout {
+            flex: 1 1 0% !important;
+            height: 100% !important;
+            max-height: 100% !important;
+            min-height: 0 !important;
+            overflow: hidden !important;
+            display: flex !important;
+            flex-direction: column !important;
+          }
+          .dashboard-content .gold-layout .admin-table-card {
+            flex: 1 1 0% !important;
+            height: 100% !important;
+            max-height: 100% !important;
+            min-height: 0 !important;
+            overflow: hidden !important;
+            display: flex !important;
+            flex-direction: column !important;
+          }
+          .dashboard-content .gold-layout .admin-table-scroll {
+            flex: 1 1 0% !important;
+            height: 100% !important;
+            min-height: 0 !important;
+            overflow-y: auto !important;
+            overflow-x: auto !important;
+            display: block !important;
+          }
+          .dashboard-content .gold-layout .admin-pagination-desktop {
+            flex-shrink: 0 !important;
+            margin-top: auto !important;
+          }
+        }
+
+        /* ── CHẾ ĐỘ VỪA MÀN HÌNH (FIT-TO-SCREEN ACTIVE) ── */
+        .admin-layout.fit-to-screen-active {
+          height: calc(100vh / var(--scale-factor, 1)) !important;
+          min-height: calc(100vh / var(--scale-factor, 1)) !important;
+          max-height: none !important;
+          width: calc(100% / var(--scale-factor, 1)) !important;
+          max-width: none !important;
+          overflow: hidden !important;
+        }
+        .admin-layout.fit-to-screen-active .admin-main {
+          height: 100% !important;
+          max-height: 100% !important;
+          min-height: 0 !important;
+          overflow: hidden !important;
+        }
+        .admin-layout.fit-to-screen-active .dashboard-content,
+        .admin-layout.fit-to-screen-active .dashboard-content.allow-y-scroll {
+          height: calc(100% - 60px) !important;
+          max-height: calc(100% - 60px) !important;
+          min-height: 0 !important;
+          overflow-y: hidden !important;
+          overflow-x: hidden !important;
+          display: flex !important;
+          flex-direction: column !important;
+        }
+        .admin-layout.fit-to-screen-active .dashboard-content > div,
+        .admin-layout.fit-to-screen-active .gold-layout,
+        .admin-layout.fit-to-screen-active .mgmt-container,
+        .admin-layout.fit-to-screen-active .manufacture-plan-container,
+        .admin-layout.fit-to-screen-active .quality-records-container {
+          flex: 1 1 0% !important;
+          height: 100% !important;
+          max-height: 100% !important;
+          min-height: 0 !important;
+          display: flex !important;
+          flex-direction: column !important;
+          overflow: hidden !important;
+        }
+        .admin-layout.fit-to-screen-active .mgmt-main {
+          flex: 1 1 0% !important;
+          display: flex !important;
+          flex-direction: column !important;
+          min-height: 0 !important;
+          height: 100% !important;
+          max-height: 100% !important;
+          overflow: hidden !important;
+        }
+        .admin-layout.fit-to-screen-active .main-tabs,
+        .admin-layout.fit-to-screen-active .defect-mgmt-tabs,
+        .admin-layout.fit-to-screen-active .quality-main-nav-wrapper,
+        .admin-layout.fit-to-screen-active .sticky-top-zone {
+          flex-shrink: 0 !important;
+          margin-bottom: 6px !important;
+        }
+        .admin-layout.fit-to-screen-active .analytics-view,
+        .admin-layout.fit-to-screen-active .list-view {
+          flex: 1 1 0% !important;
+          min-height: 0 !important;
+          overflow-y: auto !important;
+          display: flex !important;
+          flex-direction: column !important;
+        }
+        .admin-layout.fit-to-screen-active .admin-list-layout,
+        .admin-layout.fit-to-screen-active .defect-list-layout {
+          flex: 1 1 0% !important;
+          height: 100% !important;
+          max-height: 100% !important;
+          min-height: 0 !important;
+          display: flex !important;
+          flex-direction: column !important;
+          overflow: hidden !important;
+        }
+        .admin-layout.fit-to-screen-active .mgmt-table,
+        .admin-layout.fit-to-screen-active .admin-table-card {
+          flex: 1 1 0% !important;
+          height: 100% !important;
+          max-height: 100% !important;
+          min-height: 0 !important;
+          display: flex !important;
+          flex-direction: column !important;
+          overflow: hidden !important;
+        }
+        .admin-layout.fit-to-screen-active .table-responsive,
+        .admin-layout.fit-to-screen-active .admin-table-scroll {
+          flex: 1 1 0% !important;
+          height: 100% !important;
+          min-height: 0 !important;
+          overflow-y: auto !important;
+          overflow-x: auto !important;
+          display: block !important;
+        }
+        .admin-layout.fit-to-screen-active .admin-pagination-desktop {
+          flex-shrink: 0 !important;
+          margin-top: auto !important;
+        }
+
         .mgmt-main {
           flex: 1 0 auto !important;
           display: flex !important;

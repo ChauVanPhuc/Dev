@@ -96,6 +96,11 @@ export const ClaimListView = () => {
           image_paths: item.image_paths || [],
           image_captions: item.image_captions || [],
           customer_name: item.customer_name || 'N/A',
+          loai_hang: item.loai_hang || ((item.product_name || item.sku || '').toUpperCase().includes('WOA') ? 'OAK' : 'Pigment'),
+          date_loading: item.date_loading,
+          date_loading_raw: item.date_loading_raw,
+          lpn_container_number: item.lpn_container_number,
+          lpn_container_id: item.lpn_container_id,
           severity: item.severity || 'Medium'
         }));
         setClaims(dbMapped);
@@ -328,6 +333,7 @@ export const ClaimListView = () => {
     showAddG7NameSuggestions, setShowAddG7NameSuggestions,
     addLpn, setAddLpn,
     addMaCont, setAddMaCont,
+    addDateLoading, setAddDateLoading,
     addNgayXuat, setAddNgayXuat,
     addTrangThaiXuLy, setAddTrangThaiXuLy,
     addLinkCapa, setAddLinkCapa,
@@ -352,6 +358,7 @@ export const ClaimListView = () => {
     processMucPhat, setProcessMucPhat,
     processGiaTriPhat, setProcessGiaTriPhat,
     processHeSoPhat, setProcessHeSoPhat,
+    processTongPhat, setProcessTongPhat,
     processMaLoi, setProcessMaLoi,
     processTenLoiKH, setProcessTenLoiKH,
     processMaLoiCty, setProcessMaLoiCty,
@@ -1089,6 +1096,7 @@ export const ClaimListView = () => {
         handleSelectG7Name={handleSelectG7Name}
         addLpn={addLpn} setAddLpn={setAddLpn}
         addMaCont={addMaCont} setAddMaCont={setAddMaCont}
+        addDateLoading={addDateLoading} setAddDateLoading={setAddDateLoading}
         addNgayXuat={addNgayXuat} setAddNgayXuat={setAddNgayXuat}
         addTrangThaiXuLy={addTrangThaiXuLy} setAddTrangThaiXuLy={setAddTrangThaiXuLy}
         addLinkCapa={addLinkCapa} setAddLinkCapa={setAddLinkCapa}
@@ -1100,12 +1108,14 @@ export const ClaimListView = () => {
         handleEditAddImageClick={handleEditAddImageClick}
         handleDeleteAddImageClick={handleDeleteAddImageClick}
         onPreviewImage={setPreviewImage}
+        cabinetPrices={cabinetPrices}
       />
 
       {/* Xử lý / Xem chi tiết khiếu nại Modal */}
       <ClaimProcessModal
         activeDetailClaim={activeDetailClaim}
         setActiveDetailClaim={setActiveDetailClaim}
+        cabinetPrices={cabinetPrices}
         modalMode={modalMode}
         setModalMode={setModalMode}
         exceptionNavMode={exceptionNavMode}
@@ -1122,6 +1132,7 @@ export const ClaimListView = () => {
         processMucPhat={processMucPhat} setProcessMucPhat={setProcessMucPhat}
         processGiaTriPhat={processGiaTriPhat} setProcessGiaTriPhat={setProcessGiaTriPhat}
         processHeSoPhat={processHeSoPhat} setProcessHeSoPhat={setProcessHeSoPhat}
+        processTongPhat={processTongPhat} setProcessTongPhat={setProcessTongPhat}
         getProcessTotalPenaltyPreview={getProcessTotalPenaltyPreview}
         processMaLoi={processMaLoi} setProcessMaLoi={setProcessMaLoi}
         showProcessDefectCodeSuggestions={showProcessDefectCodeSuggestions} setShowProcessDefectCodeSuggestions={setShowProcessDefectCodeSuggestions}

@@ -35,7 +35,7 @@ export const useClaimForm = ({
 
   // State form thêm mới Claim
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [addDongHang, setAddDongHang] = useState('Atlas');
+  const [addDongHang, setAddDongHang] = useState('Pigment');
   const [addLoaiClaim, setAddLoaiClaim] = useState('Khách nhắc nhở');
   const [addMaThamChieu, setAddMaThamChieu] = useState('');
   const [addTenSanPham, setAddTenSanPham] = useState('');
@@ -43,12 +43,14 @@ export const useClaimForm = ({
   const [addGiaTriPhat, setAddGiaTriPhat] = useState('');
   const [addHeSoPhat, setAddHeSoPhat] = useState(2);
   const [addMaLoi, setAddMaLoi] = useState('');
+  const [addTenLoiKH, setAddTenLoiKH] = useState('');
   const [addMaLoiCty, setAddMaLoiCty] = useState('');
   const [addTenLoiG7, setAddTenLoiG7] = useState('');
   const [showAddG7CodeSuggestions, setShowAddG7CodeSuggestions] = useState(false);
   const [showAddG7NameSuggestions, setShowAddG7NameSuggestions] = useState(false);
   const [addLpn, setAddLpn] = useState('');
   const [addMaCont, setAddMaCont] = useState('');
+  const [addDateLoading, setAddDateLoading] = useState('');
   const [addNgayXuat, setAddNgayXuat] = useState('');
   const [addTrangThaiXuLy, setAddTrangThaiXuLy] = useState('Mới');
   const [addLinkCapa, setAddLinkCapa] = useState('');
@@ -59,6 +61,7 @@ export const useClaimForm = ({
   const [editingAddImageIndex, setEditingAddImageIndex] = useState(null);
   const [showAddSuggestions, setShowAddSuggestions] = useState(false);
   const [showAddDefectSuggestions, setShowAddDefectSuggestions] = useState(false);
+  const [showAddTenLoiKHSuggestions, setShowAddTenLoiKHSuggestions] = useState(false);
 
   // Modal 1: Process / Detail Claim state variables
   const [processDongHang, setProcessDongHang] = useState('');
@@ -68,9 +71,13 @@ export const useClaimForm = ({
   const [processMucPhat, setProcessMucPhat] = useState('');
   const [processGiaTriPhat, setProcessGiaTriPhat] = useState('');
   const [processHeSoPhat, setProcessHeSoPhat] = useState(1);
+  const [processTongPhat, setProcessTongPhat] = useState('');
   const [processMaLoi, setProcessMaLoi] = useState('');
+  const [processTenLoiKH, setProcessTenLoiKH] = useState('');
   const [processMaLoiCty, setProcessMaLoiCty] = useState('');
   const [processTenLoiG7, setProcessTenLoiG7] = useState('');
+  const [showProcessDefectCodeSuggestions, setShowProcessDefectCodeSuggestions] = useState(false);
+  const [showProcessTenLoiKHSuggestions, setShowProcessTenLoiKHSuggestions] = useState(false);
   const [showProcessG7CodeSuggestions, setShowProcessG7CodeSuggestions] = useState(false);
   const [showProcessG7NameSuggestions, setShowProcessG7NameSuggestions] = useState(false);
   const [processLpn, setProcessLpn] = useState('');
@@ -86,7 +93,8 @@ export const useClaimForm = ({
   // Auto populate Process Claim Form when activeDetailClaim changes
   useEffect(() => {
     if (activeDetailClaim) {
-      setProcessDongHang(activeDetailClaim.line || activeDetailClaim.dong_hang || 'AD2');
+      const autoLoai = activeDetailClaim.loai_hang || ((activeDetailClaim.product_name || activeDetailClaim.sku || '').toUpperCase().includes('WOA') ? 'OAK' : 'Pigment');
+      setProcessDongHang(autoLoai);
       setProcessLoaiClaim(activeDetailClaim.claim_type || activeDetailClaim.loai_claim || 'Claim Thường');
       setProcessMaThamChieu(activeDetailClaim.claim_code || activeDetailClaim.ma_tham_chieu || '');
       setProcessTenSanPham(activeDetailClaim.product_name || activeDetailClaim.sku || '');
@@ -98,6 +106,8 @@ export const useClaimForm = ({
         ? activeDetailClaim.penalty_multiplier
         : extractMultiplierFromPenalty(rawPenalty);
       setProcessHeSoPhat(initMult);
+      const initTotal = calculateTotalPenalty(activeDetailClaim, initMult, cabinetPrices);
+      setProcessTongPhat(formatPenaltyValue(initTotal));
       const custCode = activeDetailClaim.order_code || activeDetailClaim.defect_code || '';
       const resolvedG7Code = activeDetailClaim.company_error_code || resolveG7ErrorCode(custCode, defectCatalog) || '';
       const resolvedG7Name = activeDetailClaim.company_error_name || resolveG7ErrorName(resolvedG7Code, custCode, g7DefectTypes, defectCatalog) || '';
@@ -122,7 +132,8 @@ export const useClaimForm = ({
       setProcessNgayXuat(formattedDate);
       setProcessTrangThaiXuLy(activeDetailClaim.status === 'Đã xử lý' || activeDetailClaim.status === 'Chấp nhận' ? 'Đã xử lý' : activeDetailClaim.status === 'Đang xem xét' ? 'Đang xem xét' : 'Mới');
       setProcessLinkCapa(activeDetailClaim.capa_link || activeDetailClaim.link_capa || '');
-      setProcessGhiChu(activeDetailClaim.claim_description || activeDetailClaim.description || '');
+      setProcessTenLoiKH(activeDetailClaim.claim_description || activeDetailClaim.description || '');
+      setProcessGhiChu(activeDetailClaim.note || activeDetailClaim.ghi_chu || '');
     }
   }, [activeDetailClaim, defectCatalog, g7DefectTypes]);
 
@@ -135,42 +146,104 @@ export const useClaimForm = ({
     return resolveG7ErrorName(g7Code, custCode, g7DefectTypes, defectCatalog);
   };
 
-  const handleSelectG7Code = (codeOrObj, isProcess = false) => {
-    let code = typeof codeOrObj === 'object' ? codeOrObj.code : codeOrObj;
-    let name = typeof codeOrObj === 'object' ? codeOrObj.name : null;
-    
-    if (!name) {
-      const match = (g7DefectTypes || []).find(gt => (gt.code || '').toLowerCase() === (code || '').toLowerCase());
-      name = match ? match.name : resolveG7ErrorName(code, null, g7DefectTypes, defectCatalog);
-    }
-    
+  const handleSelectDefectCode = (code, isProcess = false) => {
+    const cleanCode = (code || '').trim().toLowerCase();
+    const match = (defectCatalog || []).find(d => 
+      (d.code || d.client_defect_code || d.defect_code || '').trim().toLowerCase() === cleanCode
+    );
+    const claimMatch = (claims || []).find(c => 
+      (c.order_code || c.defect_code || '').trim().toLowerCase() === cleanCode && 
+      (c.claim_description || c.description)
+    );
+    const defectName = (match && (match.name || match.name_en)) || (claimMatch && (claimMatch.claim_description || claimMatch.description)) || '';
+    const g7Code = (match && match.g7_code) || resolveG7ErrorCode(code, defectCatalog);
+    const g7Name = resolveG7ErrorName(g7Code, code, g7DefectTypes, defectCatalog);
+
     if (isProcess) {
-      setProcessMaLoiCty(code || '');
+      setProcessMaLoi(code);
+      if (defectName) setProcessTenLoiKH(defectName);
+      if (g7Code) setProcessMaLoiCty(g7Code);
+      if (g7Name) setProcessTenLoiG7(g7Name);
+      setShowProcessDefectCodeSuggestions(false);
+    } else {
+      setAddMaLoi(code);
+      if (defectName) setAddTenLoiKH(defectName);
+      if (g7Code) setAddMaLoiCty(g7Code);
+      if (g7Name) setAddTenLoiG7(g7Name);
+      setShowAddDefectSuggestions(false);
+    }
+  };
+
+  const handleSelectCustomerDefectName = (name, isProcess = false) => {
+    const cleanName = (name || '').trim().toLowerCase();
+    const match = (defectCatalog || []).find(d => 
+      (d.name || '').trim().toLowerCase() === cleanName || 
+      (d.name_en || '').trim().toLowerCase() === cleanName
+    );
+    const claimMatch = (claims || []).find(c => 
+      (c.claim_description || c.description || '').trim().toLowerCase() === cleanName
+    );
+    const matchedCode = (match && (match.code || match.client_defect_code || match.defect_code)) || 
+                        (claimMatch && (claimMatch.order_code || claimMatch.defect_code)) || '';
+    const g7Code = (match && match.g7_code) || (matchedCode ? resolveG7ErrorCode(matchedCode, defectCatalog) : '');
+    const g7Name = resolveG7ErrorName(g7Code, matchedCode, g7DefectTypes, defectCatalog);
+
+    if (isProcess) {
+      setProcessTenLoiKH(name);
+      if (matchedCode) setProcessMaLoi(matchedCode);
+      if (g7Code) setProcessMaLoiCty(g7Code);
+      if (g7Name) setProcessTenLoiG7(g7Name);
+      setShowProcessTenLoiKHSuggestions(false);
+    } else {
+      setAddTenLoiKH(name);
+      if (matchedCode) setAddMaLoi(matchedCode);
+      if (g7Code) setAddMaLoiCty(g7Code);
+      if (g7Name) setAddTenLoiG7(g7Name);
+      setShowAddTenLoiKHSuggestions(false);
+    }
+  };
+
+  const handleSelectG7Code = (code, isProcess = false) => {
+    const name = resolveG7ErrorName(code, null, g7DefectTypes, defectCatalog);
+    const clientMatch = (defectCatalog || []).find(cd => (cd.g7_code || '').trim().toLowerCase() === (code || '').trim().toLowerCase());
+    if (isProcess) {
+      setProcessMaLoiCty(code);
       if (name) setProcessTenLoiG7(name);
+      if (clientMatch && !processMaLoi) {
+        setProcessMaLoi(clientMatch.code || clientMatch.client_defect_code || clientMatch.defect_code || '');
+        if (clientMatch.name || clientMatch.name_en) setProcessTenLoiKH(clientMatch.name || clientMatch.name_en);
+      }
       setShowProcessG7CodeSuggestions(false);
     } else {
-      setAddMaLoiCty(code || '');
+      setAddMaLoiCty(code);
       if (name) setAddTenLoiG7(name);
+      if (clientMatch && !addMaLoi) {
+        setAddMaLoi(clientMatch.code || clientMatch.client_defect_code || clientMatch.defect_code || '');
+        if (clientMatch.name || clientMatch.name_en) setAddTenLoiKH(clientMatch.name || clientMatch.name_en);
+      }
       setShowAddG7CodeSuggestions(false);
     }
   };
 
-  const handleSelectG7Name = (nameOrObj, isProcess = false) => {
-    let name = typeof nameOrObj === 'object' ? nameOrObj.name : nameOrObj;
-    let code = typeof nameOrObj === 'object' ? nameOrObj.code : null;
-
-    if (!code) {
-      const match = (g7DefectTypes || []).find(gt => (gt.name || gt.short_description || '').toLowerCase() === (name || '').toLowerCase());
-      if (match && match.code) code = match.code;
-    }
-
+  const handleSelectG7Name = (name, isProcess = false) => {
+    const match = (g7DefectTypes || []).find(gt => (gt.name || gt.short_description || '') === name);
+    const g7Code = match ? match.code : '';
+    const clientMatch = g7Code ? (defectCatalog || []).find(cd => (cd.g7_code || '').trim().toLowerCase() === g7Code.trim().toLowerCase()) : null;
     if (isProcess) {
-      setProcessTenLoiG7(name || '');
-      if (code) setProcessMaLoiCty(code);
+      setProcessTenLoiG7(name);
+      if (g7Code) setProcessMaLoiCty(g7Code);
+      if (clientMatch && !processMaLoi) {
+        setProcessMaLoi(clientMatch.code || clientMatch.client_defect_code || clientMatch.defect_code || '');
+        if (clientMatch.name || clientMatch.name_en) setProcessTenLoiKH(clientMatch.name || clientMatch.name_en);
+      }
       setShowProcessG7NameSuggestions(false);
     } else {
-      setAddTenLoiG7(name || '');
-      if (code) setAddMaLoiCty(code);
+      setAddTenLoiG7(name);
+      if (g7Code) setAddMaLoiCty(g7Code);
+      if (clientMatch && !addMaLoi) {
+        setAddMaLoi(clientMatch.code || clientMatch.client_defect_code || clientMatch.defect_code || '');
+        if (clientMatch.name || clientMatch.name_en) setAddTenLoiKH(clientMatch.name || clientMatch.name_en);
+      }
       setShowAddG7NameSuggestions(false);
     }
   };
@@ -285,7 +358,7 @@ export const useClaimForm = ({
 
   // Open add new claim modal
   const handleOpenAddNewClaim = () => {
-    setAddDongHang('Atlas');
+    setAddDongHang('Pigment');
     setAddLoaiClaim('Khách nhắc nhở');
     setAddMaThamChieu('');
     setAddTenSanPham('');
@@ -293,10 +366,12 @@ export const useClaimForm = ({
     setAddGiaTriPhat('');
     setAddHeSoPhat(2);
     setAddMaLoi('');
+    setAddTenLoiKH('');
     setAddMaLoiCty('');
     setAddTenLoiG7('');
     setAddLpn('');
     setAddMaCont('');
+    setAddDateLoading('');
 
     const today = new Date();
     const formattedToday = today.toISOString().split('T')[0];
@@ -349,7 +424,7 @@ export const useClaimForm = ({
         order_code: addMaLoi,
         company_error_code: addMaLoiCty,
         company_error_name: addTenLoiG7,
-        description: addGhiChu,
+        description: addTenLoiKH || addGhiChu || '',
         severity: addMucPhat === 'Hủy đơn' ? 'High' : addMucPhat === 'Phạt tiền' ? 'Medium' : 'Low',
         status: backendStatus
       };
@@ -507,10 +582,10 @@ export const useClaimForm = ({
         order_code: processMaLoi,
         company_error_code: processMaLoiCty,
         company_error_name: processTenLoiG7,
-        description: processGhiChu,
+        description: processTenLoiKH || '',
         severity: processMucPhat === 'Hủy đơn' ? 'High' : processMucPhat === 'Phạt tiền' ? 'Medium' : 'Low',
         status: backendStatus,
-        action: processGiaTriPhat,
+        action: processTongPhat || processGiaTriPhat,
         lpn: processLpn,
         container_no: processMaCont,
         image_paths: processImages,
@@ -520,48 +595,25 @@ export const useClaimForm = ({
       const result = await claimService.updateClaim(activeDetailClaim.id, claimData);
 
       if (result && result.id) {
-        const updatedStatus = (result.status === 'Resolved' || result.status === 'Đã xử lý') ? 'Đã xử lý' : (result.status === 'Processing' || result.status === 'Đang xem xét') ? 'Đang xem xét' : 'Mới';
-        const updatedItem = {
-          ...activeDetailClaim,
+        setClaims(prev => prev.map(c => c.id === activeDetailClaim.id ? {
+          ...c,
           product_name: result.product_name,
           claim_code: result.claim_code,
           order_code: result.order_code,
           company_error_code: result.company_error_code,
           company_error_name: result.company_error_name || processTenLoiG7,
-          penalty: normalizePenaltyValue(processGiaTriPhat),
+          loai_hang: processDongHang,
+          penalty: normalizePenaltyValue(processTongPhat || processGiaTriPhat),
           lpn: processLpn,
           cont: processMaCont,
-          status: updatedStatus,
+          status: (result.status === 'Resolved' || result.status === 'Đã xử lý') ? 'Đã xử lý' : (result.status === 'Processing' || result.status === 'Đang xem xét') ? 'Đang xem xét' : 'Mới',
           claim_description: result.description,
           capa_link: processLinkCapa,
           image_paths: processImages,
           image_captions: processImageCaptions,
           customer_name: result.customer_name || processDongHang,
           severity: result.severity || (processMucPhat === 'Hủy đơn' ? 'High' : processMucPhat === 'Phạt tiền' ? 'Medium' : 'Low')
-        };
-
-        setClaims(prev => prev.map(c => c.id === activeDetailClaim.id ? updatedItem : c));
-
-        if (exceptionNavMode) {
-          if (updatedStatus === 'Đã xử lý') {
-            const remainingNavClaims = exceptionNavClaims.filter(c => c.id !== activeDetailClaim.id);
-            setExceptionNavClaims(remainingNavClaims);
-
-            if (remainingNavClaims.length > 0) {
-              const currentIdx = exceptionNavClaims.findIndex(c => c.id === activeDetailClaim.id);
-              const nextClaim = remainingNavClaims[currentIdx] || remainingNavClaims[currentIdx - 1] || remainingNavClaims[0];
-              setActiveDetailClaim(nextClaim);
-              showModal('Thành công', `Cập nhật thành công ${processTenSanPham}! Chuyển sang khiếu nại chưa xử lý tiếp theo.`, 'success');
-              return;
-            } else {
-              setActiveDetailClaim(null);
-              setExceptionNavMode(false);
-              showModal('Thành công', 'Chúc mừng! Đã hoàn tất xử lý tất cả các khiếu nại.', 'success');
-              return;
-            }
-          }
-        }
-
+        } : c));
         setActiveDetailClaim(null);
         setExceptionNavMode(false);
         setExceptionNavClaims([]);
@@ -620,12 +672,14 @@ export const useClaimForm = ({
     addGiaTriPhat, setAddGiaTriPhat,
     addHeSoPhat, setAddHeSoPhat,
     addMaLoi, setAddMaLoi,
+    addTenLoiKH, setAddTenLoiKH,
     addMaLoiCty, setAddMaLoiCty,
     addTenLoiG7, setAddTenLoiG7,
     showAddG7CodeSuggestions, setShowAddG7CodeSuggestions,
     showAddG7NameSuggestions, setShowAddG7NameSuggestions,
     addLpn, setAddLpn,
     addMaCont, setAddMaCont,
+    addDateLoading, setAddDateLoading,
     addNgayXuat, setAddNgayXuat,
     addTrangThaiXuLy, setAddTrangThaiXuLy,
     addLinkCapa, setAddLinkCapa,
@@ -635,6 +689,7 @@ export const useClaimForm = ({
     addModalError, setAddModalError,
     showAddSuggestions, setShowAddSuggestions,
     showAddDefectSuggestions, setShowAddDefectSuggestions,
+    showAddTenLoiKHSuggestions, setShowAddTenLoiKHSuggestions,
     handleOpenAddNewClaim,
     handleSaveNewClaim,
     getAddTotalPenaltyPreview,
@@ -651,9 +706,13 @@ export const useClaimForm = ({
     processMucPhat, setProcessMucPhat,
     processGiaTriPhat, setProcessGiaTriPhat,
     processHeSoPhat, setProcessHeSoPhat,
+    processTongPhat, setProcessTongPhat,
     processMaLoi, setProcessMaLoi,
+    processTenLoiKH, setProcessTenLoiKH,
     processMaLoiCty, setProcessMaLoiCty,
     processTenLoiG7, setProcessTenLoiG7,
+    showProcessDefectCodeSuggestions, setShowProcessDefectCodeSuggestions,
+    showProcessTenLoiKHSuggestions, setShowProcessTenLoiKHSuggestions,
     showProcessG7CodeSuggestions, setShowProcessG7CodeSuggestions,
     showProcessG7NameSuggestions, setShowProcessG7NameSuggestions,
     processLpn, setProcessLpn,
@@ -676,6 +735,8 @@ export const useClaimForm = ({
     // Mapping & Selection
     mapCustomerDefectsToCompany,
     mapCustomerDefectsToG7Name,
+    handleSelectDefectCode,
+    handleSelectCustomerDefectName,
     handleSelectG7Code,
     handleSelectG7Name
   };

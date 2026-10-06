@@ -2,15 +2,15 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from app.core.database import get_db
-from app.modules.defect.models import DefectType, ClientDefect, DefectGlossary
-from app.modules.defect.schemas import (
+from config.database import get_db
+from modules.inspection.models.defect_type import DefectType, ClientDefect, DefectGlossary
+from modules.defect.schemas import (
     DefectType as DefectTypeSchema,
     DefectTypeCreate,
     ClientDefect as ClientDefectSchema,
     ClientDefectCreate
 )
-from app.shared.utils import clean_and_standardize_name
+from shared.utils.string_cleaner import clean_and_standardize_name
 
 router = APIRouter()
 

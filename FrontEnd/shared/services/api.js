@@ -13,22 +13,18 @@ const getBaseURL = () => {
     const hostname = window.location.hostname
     const port = window.location.port
     
-    // Nếu là môi trường Cloudflare với tách biệt subdomain
-    if (hostname.includes('smartflowg7.cloud')) {
-      if (hostname.startsWith('dev_')) {
-        return 'https://dev_api.smartflowg7.cloud';
-      }
-      return 'https://api.smartflowg7.cloud';
+    // Nếu là môi trường Cloudflare (smartflowq7.cloud hoặc smartflowg7.cloud)
+    if (hostname.includes('smartflowq7.cloud') || hostname.includes('smartflowg7.cloud')) {
+      return window.location.origin
     } 
     
     // Nếu là môi trường phát triển trên máy tính (Web browser localhost hoặc IP cục bộ)
-    if (port === '1333' || port === '1222' || port === '3000' || port === '5173' || hostname === 'localhost' || hostname.startsWith('192.168.')) {
+    if (port === '1333' || port === '1222' || port === '3000' || port === '5173' || hostname === 'localhost' || hostname.startsWith('192.168.') || hostname === '127.0.0.1') {
       return `http://${hostname}:8000`
     }
 
     // Mọi trường hợp khác (App Android, iOS, truy cập từ xa)
-    // Luôn ưu tiên dùng tên miền Production đã cấu hình Cloudflare
-    url = 'https://smartflowg7.cloud'
+    url = window.location.origin || 'https://smartflowq7.cloud'
   }
   return url.replace(/\/api\/v1\/?$/, '').replace(/\/$/, '')
 }

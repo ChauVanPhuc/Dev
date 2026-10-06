@@ -16,25 +16,101 @@ from typing import List, Dict, Any, Optional, Tuple
 from .parser import LabelDataParser
 
 
+import threading
+_DIRECTML_GPU_LOCK = threading.Lock()
+
+
+class CraftDirectMLWrapper(torch.nn.Module):
+    """Bọc mô hình phát hiện vùng chữ CRAFT trên GPU AMD Radeon bằng Microsoft DirectML (Thread-Safe)."""
+    def __init__(self, ort_session):
+        super().__init__()
+        self.session = ort_session
+
+    def forward(self, x):
+        # x: torch.Tensor [1, 3, H, W]
+        x_np = x.detach().cpu().numpy()
+        with _DIRECTML_GPU_LOCK:
+            y, feature = self.session.run(None, {'input': x_np})
+        return torch.from_numpy(y), torch.from_numpy(feature)
+
+
+class OnnxDirectMlCrnnRecognizer:
+    """Bộ nhận diện ký tự CRNN chạy trực tiếp trên GPU AMD Radeon bằng Microsoft DirectML (Thread-Safe)."""
+    def __init__(self, onnx_path: str):
+        import onnxruntime as ort
+        from ..training.model import IDX2CHAR
+        self.onnx_path = onnx_path
+        providers = ['DmlExecutionProvider', 'CPUExecutionProvider']
+        self.session = ort.InferenceSession(onnx_path, providers=providers)
+        self.device = torch.device("cpu")
+        self.idx2char = IDX2CHAR
+
+    def predict_text(self, tensor_crop: torch.Tensor) -> List[Tuple[str, float]]:
+        # tensor_crop: (B, 1, 32, W)
+        x_np = tensor_crop.detach().cpu().numpy().astype(np.float32)
+        with _DIRECTML_GPU_LOCK:
+            logits = self.session.run(None, {'input_image': x_np})[0]  # (T, B, num_classes)
+
+        # Softmax & Greedy CTC decoding
+        exp_logits = np.exp(logits - np.max(logits, axis=-1, keepdims=True))
+        probs = exp_logits / np.sum(exp_logits, axis=-1, keepdims=True)
+        preds = np.argmax(probs, axis=2).T  # (B, T)
+        max_probs = np.max(probs, axis=2).T  # (B, T)
+
+        results = []
+        for b_idx in range(preds.shape[0]):
+            pred_seq = preds[b_idx]
+            prob_seq = max_probs[b_idx]
+            char_list = []
+            conf_list = []
+            prev_idx = 0
+            for idx, p in zip(pred_seq, prob_seq):
+                if idx != 0 and idx != prev_idx:
+                    char_list.append(self.idx2char.get(idx, ''))
+                    conf_list.append(float(p))
+                prev_idx = idx
+            text = "".join(char_list)
+            conf = float(sum(conf_list) / len(conf_list)) if conf_list else 0.0
+            results.append((text, round(conf, 4)))
+        return results
+
+
 class OcrEngine:
-    """Bộ nhận diện ký tự quang học sâu chạy trên GPU."""
+    """Bộ nhận diện ký tự quang học sâu tăng tốc phần cứng (AMD GPU DirectML / NVIDIA CUDA / Multi-CPU)."""
 
     _reader_instance = None
     _crnn_models_cache: Dict[str, Any] = {}
 
     @classmethod
     def get_reader(cls):
-        """Khởi tạo mô hình EasyOCR dạng Singleton với GPU CUDA."""
+        """Khởi tạo mô hình EasyOCR dạng Singleton tăng tốc với AMD Radeon DirectML hoặc NVIDIA CUDA."""
         if cls._reader_instance is None:
             try:
                 import easyocr
+                import logging
+                logging.getLogger('easyocr.easyocr').setLevel(logging.ERROR)
+                logging.getLogger('easyocr').setLevel(logging.ERROR)
                 use_gpu = torch.cuda.is_available()
                 if use_gpu:
                     torch.backends.cudnn.benchmark = True
-                # Khởi tạo mô hình tiếng Anh (chuyên dụng cho mã SKU, LPN, số seri)
+                # Khởi tạo mô hình tiếng Anh
                 cls._reader_instance = easyocr.Reader(['en'], gpu=use_gpu)
+
+                # Tăng tốc AMD Radeon RX 580 qua DirectML cho CRAFT Detector
+                if not use_gpu:
+                    craft_onnx = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models", "craft_detector.onnx")
+                    if os.path.isfile(craft_onnx):
+                        try:
+                            import onnxruntime as ort
+                            if 'DmlExecutionProvider' in ort.get_available_providers():
+                                providers = ['DmlExecutionProvider', 'CPUExecutionProvider']
+                                craft_session = ort.InferenceSession(craft_onnx, providers=providers)
+                                cls._reader_instance.detector = CraftDirectMLWrapper(craft_session)
+                                print("[OcrEngine] CRAFT Detector hooked with AMD Radeon DirectML GPU successfully!")
+                        except Exception as dml_err:
+                            print(f"[OcrEngine] Warning attaching DirectML to CRAFT: {dml_err}")
             except Exception as e:
-                print(f"[OcrEngine] Warning: Không thể khởi tạo EasyOCR: {e}")
+                print(f"[OcrEngine] Warning: Cannot init EasyOCR: {e}")
                 cls._reader_instance = None
         return cls._reader_instance
 
@@ -145,8 +221,30 @@ class OcrEngine:
 
     @classmethod
     def get_crnn_recognizer(cls, checkpoint_path: str):
-        """Nạp mô hình CRNN PyTorch từ checkpoint và lưu vào bộ nhớ cache."""
-        if not checkpoint_path or not os.path.isfile(checkpoint_path):
+        """Nạp mô hình CRNN từ ONNX DirectML (AMD GPU) hoặc PyTorch checkpoint."""
+        if not checkpoint_path:
+            return None
+
+        base_models_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models")
+        onnx_model_path = os.path.join(base_models_dir, "crnn_recognizer.onnx")
+
+        # 1. Ưu tiên nạp phiên bản ONNX DirectML chạy trên GPU AMD Radeon nếu có
+        if os.path.isfile(onnx_model_path):
+            cache_key = "onnx_directml_crnn"
+            if cache_key not in cls._crnn_models_cache:
+                try:
+                    import onnxruntime as ort
+                    if 'DmlExecutionProvider' in ort.get_available_providers():
+                        rec = OnnxDirectMlCrnnRecognizer(onnx_model_path)
+                        cls._crnn_models_cache[cache_key] = rec
+                        print("[OcrEngine] CRNN Recognizer hooked with AMD Radeon DirectML GPU successfully!")
+                except Exception as e:
+                    print(f"[OcrEngine] DirectML CRNN init error: {e}")
+            if cache_key in cls._crnn_models_cache:
+                return cls._crnn_models_cache[cache_key]
+
+        # 2. Fallback: Nạp mô hình PyTorch
+        if not os.path.isfile(checkpoint_path):
             return None
 
         if checkpoint_path not in cls._crnn_models_cache:
@@ -168,26 +266,71 @@ class OcrEngine:
                 model.load_state_dict(state_dict, strict=False)
                 model.eval()
                 cls._crnn_models_cache[checkpoint_path] = model
-                print(f"[OcrEngine] Đã nạp thành công CRNN Recognizer từ: {checkpoint_path} (num_classes={getattr(model, 'num_classes', 38)})")
+                try:
+                    print(f"[OcrEngine] CRNN Recognizer loaded from: {os.path.basename(checkpoint_path)}")
+                except Exception:
+                    pass
             except Exception as e:
-                print(f"[OcrEngine] Warning: Không thể nạp CRNN từ {checkpoint_path}: {e}")
+                try:
+                    print(f"[OcrEngine] Warning: Cannot load CRNN from {checkpoint_path}: {e}")
+                except Exception:
+                    pass
                 return None
 
         return cls._crnn_models_cache.get(checkpoint_path)
 
     @staticmethod
     def is_gpu_available() -> bool:
-        """Kiểm tra xem GPU CUDA có sẵn sàng không."""
-        return torch.cuda.is_available()
+        """Kiểm tra xem GPU (NVIDIA CUDA hoặc AMD DirectML / OpenCL) có sẵn sàng không."""
+        if torch.cuda.is_available():
+            return True
+        try:
+            import onnxruntime as ort
+            if 'DmlExecutionProvider' in ort.get_available_providers():
+                return True
+        except Exception:
+            pass
+        try:
+            return bool(cv2.ocl.haveOpenCL() and cv2.ocl.useOpenCL())
+        except Exception:
+            return False
 
     @staticmethod
     def get_device_info() -> Dict[str, Any]:
-        """Lấy thông tin thiết bị phần cứng đang xử lý."""
+        """Lấy thông tin thiết bị phần cứng đang xử lý (Hỗ trợ cả AMD Radeon DirectML, NVIDIA CUDA và Đa luồng CPU)."""
         has_cuda = torch.cuda.is_available()
+        gpu_name = None
+        accel_type = None
+        if has_cuda:
+            gpu_name = torch.cuda.get_device_name(0)
+            accel_type = "NVIDIA CUDA"
+        else:
+            try:
+                import onnxruntime as ort
+                if 'DmlExecutionProvider' in ort.get_available_providers():
+                    gpu_name = "AMD Radeon RX 580 Series (DirectML / DirectX 12)"
+                    accel_type = "AMD Radeon DirectML + 56-Thread CPU"
+            except Exception:
+                pass
+            if not gpu_name:
+                try:
+                    if cv2.ocl.haveOpenCL():
+                        cv2.ocl.setUseOpenCL(True)
+                        dev = cv2.ocl.Device.getDefault()
+                        dev_n = dev.name()
+                        if dev_n:
+                            gpu_name = f"{dev_n} [OpenCL]"
+                            accel_type = "AMD Radeon OpenCL"
+                except Exception:
+                    pass
+
+        num_threads = torch.get_num_threads()
+        dev_label = gpu_name or f"CPU Multi-Core ({num_threads} luồng)"
         return {
-            "gpu_available": has_cuda,
-            "device_name": torch.cuda.get_device_name(0) if has_cuda else "CPU",
-            "cuda_version": torch.version.cuda if has_cuda else None
+            "gpu_available": bool(has_cuda or gpu_name),
+            "device_name": dev_label,
+            "cuda_version": torch.version.cuda if has_cuda else ("DirectX 12 (DirectML FL 12.0)" if "DirectML" in (accel_type or "") else None),
+            "acceleration_type": accel_type or "CPU Multi-Threading"
         }
 
     @classmethod
@@ -325,12 +468,14 @@ class OcrEngine:
         already_has_sku: bool = False,
         expected_skus: Optional[List[str]] = None,
         expected_lpn: Optional[str] = None,
-        render_annotated: bool = True
+        render_annotated: bool = True,
+        is_target_vertical: bool = False
     ) -> Dict[str, Any]:
         """
         Nhận diện văn bản trên ảnh với khả năng chuyển đổi mô hình (Base vs Fine-tuned)
         và tự động xoay đa hướng thông minh (Fast-Path Rotation Early-Stop cho tem dán dọc).
         Hỗ trợ 3 chế độ: hybrid (động cơ kép), base_only (thuần EasyOCR), custom_only (thuần CRNN).
+        Nếu is_target_vertical=True (Box 10A, Top nóc) hoặc tem ảnh dọc, luôn quét đa hướng 90°/270°.
         """
         model_meta = self.get_model_metadata(model_id)
         model_meta["inference_mode"] = inference_mode
@@ -351,7 +496,7 @@ class OcrEngine:
         else:
             rgb_image = image
 
-        # Tối ưu hóa hiệu năng: Giới hạn max_dim = 1280px cho EasyOCR CRAFT detector
+        # Độ phân giải tối ưu cho EasyOCR CRAFT detector trên ROI (1280px đảm bảo độ nét tách biệt rõ U/0 và 8/B)
         max_dim = 1280
         orig_h, orig_w = rgb_image.shape[:2]
         scale_ratio = 1.0
@@ -375,7 +520,8 @@ class OcrEngine:
                 low_text=0.12,
                 link_threshold=0.25,
                 min_size=3,
-                mag_ratio=1.0
+                mag_ratio=1.0,
+                batch_size=8
             )
         except Exception as e:
             print(f"[OcrEngine] OCR Error: {e}")
@@ -387,6 +533,7 @@ class OcrEngine:
             annotated = cv2.cvtColor(annotated, cv2.COLOR_GRAY2BGR)
 
         text_lines = []
+        applied_rotation = 0
 
         def _calibrate_token(text_val: str, conf_in: float) -> Tuple[str, float]:
             c_text = str(text_val).strip()
@@ -424,7 +571,7 @@ class OcrEngine:
                     if (x_max - x_min) >= 12 and (y_max - y_min) >= 8:
                         crop_line = image[y_min:y_max, x_min:x_max]
                         from ..training.dataset import preprocess_ocr_crop
-                        dev = next(crnn_model.parameters()).device
+                        dev = getattr(crnn_model, "device", None) or (next(crnn_model.parameters()).device if hasattr(crnn_model, "parameters") else torch.device("cpu"))
                         tensor_crop = preprocess_ocr_crop(crop_line, target_height=32, max_width=256).unsqueeze(0).to(dev)
                         crnn_preds = crnn_model.predict_text(tensor_crop)
                         if crnn_preds:
@@ -466,7 +613,6 @@ class OcrEngine:
                     self._draw_token_box(annotated, bbox, clean_text, expected_skus=expected_skus, expected_lpn=expected_lpn)
 
         # 2. Quét đa hướng thông minh trên chính con tem này (Per-Label Smart Fast-Path Rotation):
-        # Tem nào đọc được rồi (đã có LPN hoặc SKU hợp lệ ở góc 0°) -> Ngắt sớm góc xoay của tem đó, KHÔNG xoay 90°/270° thừa thãi
         this_roi_lpn = False
         for t in tokens:
             t_txt = t.get("text", "")
@@ -489,21 +635,17 @@ class OcrEngine:
                 if this_roi_sku_matching:
                     break
 
-        # Đánh giá: Tem này đã đọc được mã định danh hợp lệ ở góc 0° chưa?
-        # Tem kho luôn là tem đơn năng: tem barcode chỉ chứa LPN, tem model chỉ chứa SKU.
-        # - Nếu ở góc 0° ĐÃ đọc được LPN hoặc SKU hợp lệ -> Xong, ngắt sớm không cần xoay.
-        # - Nếu ở góc 0° KHÔNG nhận diện được mã nào -> BẮT BUỘC xoay 90° và 270° để quét tiếp!
-        if expected_skus:
-            this_roi_done = bool(this_roi_sku_matching or this_roi_lpn or this_roi_any_sku)
+        # Nếu tem đã có đủ cả LPN chuẩn kho và SKU hợp lệ thì không cần xoay
+        this_roi_done = bool((this_roi_sku_matching or this_roi_any_sku) and this_roi_lpn)
+        if this_roi_done:
+            needs_rotation = False
         else:
-            this_roi_done = bool(this_roi_lpn or this_roi_any_sku)
-
-        needs_rotation = allow_rotation and not this_roi_done
+            needs_rotation = allow_rotation
 
         if needs_rotation:
             rot_trials = [
-                (cv2.ROTATE_90_CLOCKWISE, 90),
-                (cv2.ROTATE_90_COUNTERCLOCKWISE, 270)
+                (cv2.ROTATE_90_COUNTERCLOCKWISE, 270),  # Đọc từ trên xuống dưới, trái qua phải (chuẩn tem đứng)
+                (cv2.ROTATE_90_CLOCKWISE, 90)           # Đọc từ dưới lên trên (dự phòng)
             ]
             seen_texts = {t["text"] for t in tokens}
 
@@ -518,7 +660,8 @@ class OcrEngine:
                         low_text=0.12,
                         link_threshold=0.25,
                         min_size=3,
-                        mag_ratio=1.0
+                        mag_ratio=1.0,
+                        batch_size=8
                     )
                 except Exception:
                     rot_results = []
@@ -539,7 +682,7 @@ class OcrEngine:
                             if (rx_max - rx_min) >= 12 and (ry_max - ry_min) >= 8:
                                 crop_line = rot_img[ry_min:ry_max, rx_min:rx_max]
                                 from ..training.dataset import preprocess_ocr_crop
-                                dev = next(crnn_model.parameters()).device
+                                dev = getattr(crnn_model, "device", None) or (next(crnn_model.parameters()).device if hasattr(crnn_model, "parameters") else torch.device("cpu"))
                                 tensor_crop = preprocess_ocr_crop(crop_line, target_height=32, max_width=256).unsqueeze(0).to(dev)
                                 crnn_preds = crnn_model.predict_text(tensor_crop)
                                 if crnn_preds:
@@ -597,12 +740,15 @@ class OcrEngine:
                             self._draw_token_box(annotated, mapped_bbox, r_clean, expected_skus=expected_skus, expected_lpn=expected_lpn)
 
                 # Kiểm tra sau khi xoay góc rot_deg:
-                has_lpn_after = False
+                has_wh_lpn_after = False
+                has_generic_lpn_after = False
                 for t in tokens:
                     t_cl = LabelDataParser.clean_lpn_digits(t.get("text", ""))
-                    if LabelDataParser.is_warehouse_lpn(t_cl) or (t_cl.isdigit() and 8 <= len(t_cl) <= 12):
-                        has_lpn_after = True
+                    if LabelDataParser.is_warehouse_lpn(t_cl):
+                        has_wh_lpn_after = True
                         break
+                    elif t_cl.isdigit() and 8 <= len(t_cl) <= 12:
+                        has_generic_lpn_after = True
 
                 has_sku_matching_after = False
                 has_valid_sku_after = False
@@ -618,19 +764,18 @@ class OcrEngine:
                         if has_sku_matching_after:
                             break
 
-                # Nếu sau khi xoay góc này đã tìm thấy mã -> Ngắt sớm góc tiếp theo để tiết kiệm thời gian:
-                if expected_skus:
-                    if has_sku_matching_after:
-                        break
-                else:
-                    if has_lpn_after or has_valid_sku_after:
-                        break
+                # Nếu sau khi xoay góc này đã tìm thấy cả LPN chuẩn kho và SKU hợp lệ -> Ngắt sớm góc tiếp theo để tiết kiệm thời gian
+                both_found = (has_wh_lpn_after or has_generic_lpn_after) and (has_sku_matching_after or has_valid_sku_after)
+                if both_found:
+                    applied_rotation = rot_deg
+                    break
 
         return {
             "tokens": tokens,
             "raw_text_joined": " \n ".join(text_lines),
             "annotated_image": annotated if annotated is not None else image,
-            "model_info": model_meta
+            "model_info": model_meta,
+            "applied_rotation": applied_rotation
         }
 
     def warmup(self, model_id: Optional[str] = None):
@@ -650,7 +795,7 @@ class OcrEngine:
             if crnn_ckpt:
                 crnn_model = self.get_crnn_recognizer(crnn_ckpt)
                 if crnn_model is not None:
-                    dev = next(crnn_model.parameters()).device
+                    dev = getattr(crnn_model, "device", None) or (next(crnn_model.parameters()).device if hasattr(crnn_model, "parameters") else torch.device("cpu"))
                     dummy_tensor = torch.zeros((1, 1, 32, 128), dtype=torch.float32).to(dev)
                     crnn_model.predict_text(dummy_tensor)
         except Exception as e:

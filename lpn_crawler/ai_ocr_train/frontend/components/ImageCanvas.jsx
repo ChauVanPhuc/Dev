@@ -117,13 +117,13 @@ export const ImageCanvas = ({
     <div className="ai-ocr-card" style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', padding: '8px 12px', boxSizing: 'border-box', gap: '6px' }}>
       {/* 1. Header & 5 Workflow Tabs */}
       <div className="ai-ocr-card-header" style={{ flexShrink: 0, paddingBottom: '5px', borderBottom: '1px solid #EADCC9' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'nowrap', gap: '6px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '6px' }}>
           <span className="ai-ocr-card-title" style={{ fontSize: '0.80rem', fontWeight: '800', color: '#4E3629', whiteSpace: 'nowrap', flexShrink: 0 }}>
             Trực Quan Hóa Hình Ảnh
           </span>
 
-          {/* 5 Main Pipeline Step Buttons (Giữ trên 1 hàng không xuống dòng) */}
-          <div className="ai-canvas-tabs" style={{ display: 'flex', background: '#F4ECE1', borderRadius: '6px', padding: '2px', gap: '2px', flexWrap: 'nowrap', flexShrink: 0 }}>
+          {/* 5 Main Pipeline Step Buttons (Cuộn ngang mượt mà trên mobile) */}
+          <div className="ai-canvas-tabs" style={{ display: 'flex', background: '#F4ECE1', borderRadius: '6px', padding: '2px', gap: '2px', flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%', WebkitOverflowScrolling: 'touch' }}>
             <button
               type="button"
               className={`ai-canvas-tab-btn ${activeTab === 'original' ? 'active' : ''}`}

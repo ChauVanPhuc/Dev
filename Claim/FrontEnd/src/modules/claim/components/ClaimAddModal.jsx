@@ -1,11 +1,12 @@
 import React from 'react';
 import { FormModal } from './Modal';
-import { extractMultiplierFromPenalty, formatPenaltyValue, getFullImagePath } from '../utils/claimHelpers';
+import { extractMultiplierFromPenalty, formatPenaltyValue, getFullImagePath, getCabinetSalePrice } from '../utils/claimHelpers';
 
 export const ClaimAddModal = ({
   isOpen,
   onClose,
   onSave,
+  cabinetPrices = [],
   addDongHang, setAddDongHang,
   addLoaiClaim, setAddLoaiClaim,
   addMaThamChieu, setAddMaThamChieu,
@@ -35,6 +36,7 @@ export const ClaimAddModal = ({
   handleSelectG7Name,
   addLpn, setAddLpn,
   addMaCont, setAddMaCont,
+  addDateLoading, setAddDateLoading,
   addNgayXuat, setAddNgayXuat,
   addTrangThaiXuLy, setAddTrangThaiXuLy,
   addLinkCapa, setAddLinkCapa,
@@ -70,16 +72,14 @@ export const ClaimAddModal = ({
           {/* Row 1: Dòng hàng & Loại claim */}
           <div className="add-claim-row add-claim-grid-2">
             <div className="add-claim-field">
-              <label className="add-claim-label">Dòng hàng</label>
+              <label className="add-claim-label">Loại hàng</label>
               <select
                 value={addDongHang}
                 onChange={(e) => setAddDongHang(e.target.value)}
                 className="add-claim-select"
               >
-                <option value="Atlas">Atlas</option>
-                <option value="Oak">Oak</option>
-                <option value="Maple">Maple</option>
-                <option value="Pine">Pine</option>
+                <option value="Pigment">Pigment</option>
+                <option value="OAK">OAK</option>
               </select>
             </div>
             <div className="add-claim-field">
@@ -116,18 +116,23 @@ export const ClaimAddModal = ({
                 type="text"
                 placeholder="Nhập tên sản phẩm..."
                 value={addTenSanPham}
-                onChange={(e) => setAddTenSanPham(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setAddTenSanPham(val);
+                  setAddDongHang(val.toUpperCase().includes('WOA') ? 'OAK' : 'Pigment');
+                }}
                 className="add-claim-input"
                 required
               />
             </div>
           </div>
 
-          {/* Row 3: Mức phạt + Giá trị phạt + (X phạt nếu chứa 'unit') + Tổng phạt */}
+          {/* Row 3: Mức phạt + Giá trị phạt + (X phạt nếu chứa 'unit') + Đơn giá tủ + Tổng phạt */}
           {(() => {
             const isUnitPenalty = String(addGiaTriPhat || '').toLowerCase().includes('unit');
+            const currentAddCabinetSalePrice = getCabinetSalePrice(addTenSanPham, cabinetPrices);
             return (
-              <div className="add-claim-row" style={{ display: 'grid', gridTemplateColumns: isUnitPenalty ? '1fr 1fr 0.9fr 1.3fr' : '1fr 1fr 1.5fr', gap: '16px' }}>
+              <div className="add-claim-row" style={{ display: 'grid', gridTemplateColumns: isUnitPenalty ? '1fr 1fr 0.8fr 1fr 1.2fr' : '1fr 1.2fr 1fr 1.2fr', gap: '16px' }}>
                 <div className="add-claim-field">
                   <label className="add-claim-label">Mức phạt</label>
                   <select
@@ -215,13 +220,30 @@ export const ClaimAddModal = ({
                 )}
 
                 <div className="add-claim-field">
+                  <label className="add-claim-label">Đơn giá tủ</label>
+                  <input
+                    type="text"
+                    value={currentAddCabinetSalePrice > 0 ? formatPenaltyValue(currentAddCabinetSalePrice) : 'Chưa có giá ($0.00)'}
+                    className="add-claim-input"
+                    disabled
+                    title={currentAddCabinetSalePrice > 0 ? `Đơn giá bán: ${formatPenaltyValue(currentAddCabinetSalePrice)}` : 'Không tìm thấy đơn giá cho mã sản phẩm này trong bảng giá tủ'}
+                    style={{
+                      ...disabledFieldStyle,
+                      backgroundColor: currentAddCabinetSalePrice > 0 ? '#F0FDF4' : '#FEF2F2',
+                      color: currentAddCabinetSalePrice > 0 ? '#15803D' : '#DC2626',
+                      fontWeight: '600'
+                    }}
+                  />
+                </div>
+
+                <div className="add-claim-field">
                   <label className="add-claim-label">Tổng phạt</label>
                   <input
                     type="text"
                     value={formatPenaltyValue(getAddTotalPenaltyPreview())}
                     className="add-claim-input"
                     disabled
-                    style={{ ...disabledFieldStyle, color: '#B91C1C', fontWeight: '600' }}
+                    style={disabledFieldStyle}
                   />
                 </div>
               </div>
@@ -379,8 +401,8 @@ export const ClaimAddModal = ({
             </div>
           </div>
 
-          {/* Row 4: LPN & Mã cont & Thời gian Claim */}
-          <div className="add-claim-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.5fr', gap: '16px' }}>
+          {/* Row 4: LPN & Mã cont & Thời gian load cont & Thời gian Claim */}
+          <div className="add-claim-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr 1fr', gap: '16px' }}>
             <div className="add-claim-field">
               <label className="add-claim-label">LPN</label>
               <input
@@ -398,6 +420,16 @@ export const ClaimAddModal = ({
                 placeholder="Nhập cont"
                 value={addMaCont}
                 onChange={(e) => setAddMaCont(e.target.value)}
+                className="add-claim-input"
+              />
+            </div>
+            <div className="add-claim-field">
+              <label className="add-claim-label">Thời gian load cont</label>
+              <input
+                type="text"
+                placeholder="MM/YYYY"
+                value={addDateLoading || ''}
+                onChange={(e) => setAddDateLoading && setAddDateLoading(e.target.value)}
                 className="add-claim-input"
               />
             </div>
@@ -487,55 +519,54 @@ export const ClaimAddModal = ({
 
         {/* Right Column: Claim Images */}
         <div className="add-claim-image-col">
-          <div className="filter-section-header" style={{ marginBottom: '12px', paddingBottom: '8px', borderBottom: '1.5px solid #E5E7EB', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                <polyline points="21 15 16 10 5 21"></polyline>
-              </svg>
-              <span>Ảnh minh chứng <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span> ({addImages.length})</span>
-            </span>
-            <button
-              type="button"
-              onClick={handleAddImageClick}
-              style={{
-                background: '#FAF6F0',
-                border: '1px solid #EADCC9',
-                borderRadius: '6px',
-                padding: '4px 10px',
-                fontSize: '0.78rem',
-                fontWeight: 'bold',
-                color: '#7B5233',
-                cursor: 'pointer',
-                transition: 'background-color 0.2s'
-              }}
-            >
-              + Thêm ảnh
-            </button>
-          </div>
+          <div className="add-claim-image-col-inner">
+            <div className="filter-section-header" style={{ marginBottom: '12px', paddingBottom: '8px', borderBottom: '1.5px solid #E5E7EB', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                  <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                  <polyline points="21 15 16 10 5 21"></polyline>
+                </svg>
+                <span>Ảnh minh chứng <span style={{ color: '#EF4444', marginLeft: '2px' }}>*</span> ({addImages.length})</span>
+              </span>
+              <button
+                type="button"
+                onClick={handleAddImageClick}
+                style={{
+                  background: '#FAF6F0',
+                  border: '1px solid #EADCC9',
+                  borderRadius: '6px',
+                  padding: '4px 10px',
+                  fontSize: '0.78rem',
+                  fontWeight: 'bold',
+                  color: '#7B5233',
+                  cursor: 'pointer',
+                  transition: 'background-color 0.2s'
+                }}
+              >
+                + Thêm ảnh
+              </button>
+            </div>
 
-          <div className="add-claim-image-scrollbox" style={{
-            flex: 1,
-            overflowY: addImages.length >= 4 ? 'auto' : 'hidden',
-            paddingRight: '4px'
-          }}>
-            <div className="add-claim-image-card-list" style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '12px',
-              height: addImages.length <= 3 ? '100%' : 'auto'
-            }}>
-              {addImages.length > 0 ? (
-                addImages.map((path, index) => {
-                  const num = addImages.length;
-                  const cardStyle = num === 1
-                    ? { flex: 1, height: '100%', position: 'relative', borderRadius: '4px', overflow: 'hidden', border: '1px solid #E5E7EB', backgroundColor: '#F2F0F0' }
-                    : num === 2
-                      ? { flex: 1, height: 'calc(50% - 6px)', position: 'relative', borderRadius: '4px', overflow: 'hidden', border: '1px solid #E5E7EB', backgroundColor: '#F2F0F0' }
-                      : num === 3
-                        ? { flex: 1, height: 'calc(33.33% - 8px)', position: 'relative', borderRadius: '4px', overflow: 'hidden', border: '1px solid #E5E7EB', backgroundColor: '#F2F0F0' }
-                        : { height: '180px', flexShrink: 0, position: 'relative', borderRadius: '4px', overflow: 'hidden', border: '1px solid #E5E7EB', backgroundColor: '#F2F0F0' };
+            <div className="add-claim-image-scrollbox">
+              <div className="add-claim-image-card-list" style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+                flex: 1,
+                height: addImages.length <= 3 ? '100%' : 'auto',
+                minHeight: 0
+              }}>
+                {addImages.length > 0 ? (
+                  addImages.map((path, index) => {
+                    const num = addImages.length;
+                    const cardStyle = num === 1
+                      ? { height: '240px', minHeight: '180px', position: 'relative', borderRadius: '4px', overflow: 'hidden', border: '1px solid #E5E7EB', backgroundColor: '#F2F0F0' }
+                      : num === 2
+                        ? { height: 'calc((100% - 12px) / 2)', minHeight: '160px', position: 'relative', borderRadius: '4px', overflow: 'hidden', border: '1px solid #E5E7EB', backgroundColor: '#F2F0F0' }
+                        : num === 3
+                          ? { height: 'calc((100% - 24px) / 3)', minHeight: '130px', position: 'relative', borderRadius: '4px', overflow: 'hidden', border: '1px solid #E5E7EB', backgroundColor: '#F2F0F0' }
+                          : { height: '170px', minHeight: '170px', flexShrink: 0, position: 'relative', borderRadius: '4px', overflow: 'hidden', border: '1px solid #E5E7EB', backgroundColor: '#F2F0F0' };
 
                   return (
                     <div key={index} className="add-claim-image-card-wrapper" style={cardStyle}>
@@ -635,6 +666,8 @@ export const ClaimAddModal = ({
           </div>
         </div>
       </div>
+    </div>
     </FormModal>
   );
 };
+

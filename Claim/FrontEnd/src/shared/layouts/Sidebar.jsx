@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import "@styles/sidebar.css";
+import "@assets/sidebar.css";
 import amandaPhoto from '@assets/Logo remove bg.png';
 
 /**
@@ -30,6 +30,19 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
         </svg>
       ),
       children: [
+        { 
+          id: 'dashboard', 
+          path: '/admin/dashboard', 
+          text: 'Dashboard Thống Kê',
+          icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="7" height="9" />
+              <rect x="14" y="3" width="7" height="5" />
+              <rect x="14" y="12" width="7" height="9" />
+              <rect x="3" y="16" width="7" height="5" />
+            </svg>
+          )
+        },
         { 
           id: 'defects', 
           path: '/admin/defects', 

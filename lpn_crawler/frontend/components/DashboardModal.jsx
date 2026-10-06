@@ -25,6 +25,7 @@ export const DashboardModal = ({
       >
         {/* Header - Sạch sẽ, không còn dòng subtitle dài */}
         <div
+          className="lpn-dashboard-header"
           style={{
             padding: '16px 28px',
             display: 'flex',
@@ -87,6 +88,7 @@ export const DashboardModal = ({
 
         {/* Body Content */}
         <div
+          className="lpn-dashboard-body"
           style={{
             padding: '24px 28px',
             overflowY: 'auto',
@@ -98,6 +100,7 @@ export const DashboardModal = ({
         >
           {/* Bộ 4 Thẻ KPI - Thiết kế To, Cân Đối, Không Có Subtitle */}
           <div
+            className="lpn-dashboard-kpi-grid"
             style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',

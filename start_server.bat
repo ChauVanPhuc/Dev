@@ -44,6 +44,6 @@ if not defined PYTHON_EXE (
     exit /b 1
 )
 
-:: Khoi dong Backend Server
+:: Khoi dong Backend Server (Che do Production co dinh - Fixed Mode, khong tu dong reload)
 cd /d %~dp0BackEnd
-"%PYTHON_EXE%" -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+"%PYTHON_EXE%" -m uvicorn app.main:app --host 0.0.0.0 --port 8000

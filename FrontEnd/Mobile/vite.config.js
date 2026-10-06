@@ -8,8 +8,11 @@ const pkg = JSON.parse(readFileSync('./package.json', 'utf-8'))
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react()
+  ],
   resolve: {
+    dedupe: ['react', 'react-dom', 'react-router-dom'],
     alias: {
       '@shared': path.resolve(__dirname, '../shared'),
       '@mobile': path.resolve(__dirname, '.'),
@@ -29,7 +32,6 @@ export default defineConfig({
       '@modules/production_v2': path.resolve(__dirname, './modules/production_v2'),
       '@modules/report': path.resolve(__dirname, './modules/report'),
       'axios': path.resolve(__dirname, '../node_modules/axios'),
-      'zustand': path.resolve(__dirname, '../node_modules/zustand'),
       '@capacitor/core': path.resolve(__dirname, '../node_modules/@capacitor/core'),
       '@capacitor/push-notifications': path.resolve(__dirname, '../node_modules/@capacitor/push-notifications'),
       'exceljs': path.resolve(__dirname, '../node_modules/exceljs'),
@@ -45,15 +47,15 @@ export default defineConfig({
     allowedHosts: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true
       },
       '/static': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true
       },
       '/uploads': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true
       }
     },
@@ -64,10 +66,50 @@ export default defineConfig({
       ]
     }
   },
+  preview: {
+    port: 3000,
+    host: "0.0.0.0",
+    allowedHosts: true,
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true
+      },
+      '/static': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true
+      },
+      '/uploads': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true
+      }
+    }
+  },
   build: {
-    chunkSizeWarningLimit: 3000,
+    chunkSizeWarningLimit: 1500,
     rollupOptions: {
-      output: {}
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('xlsx') || id.includes('exceljs')) {
+              return 'vendor-excel';
+            }
+            if (id.includes('jspdf') || id.includes('html2canvas')) {
+              return 'vendor-pdf';
+            }
+            if (id.includes('framer-motion')) {
+              return 'vendor-motion';
+            }
+            if (id.includes('lucide-react')) {
+              return 'vendor-icons';
+            }
+            if (id.includes('html5-qrcode') || id.includes('qrcode.react')) {
+              return 'vendor-qr';
+            }
+            return 'vendor';
+          }
+        }
+      }
     }
   },
   // Nhúng version vào bundle - đảm bảo luôn đồng bộ với package.json

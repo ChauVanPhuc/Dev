@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import claimService from '../services/claim.service';
 import { API_ROOT } from '../utils/claimHelpers';
-import useUiStore from '@shared/store/uiStore';
+import useUiStore from '@/shared/store/uiStore';
 
 export const useClaimImport = ({ fetchClaims, setLoading, showModal }) => {
   const { setClaimIngestionProgress, setClaimSuccessSummary, setClaimImportError } = useUiStore();

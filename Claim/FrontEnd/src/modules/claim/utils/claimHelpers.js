@@ -2,8 +2,26 @@
  * Utility helper functions for Frontend Claim module
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
-export const API_ROOT = API_BASE_URL.replace('/api/v1', '');
+export const getBaseURL = () => {
+  if (typeof window === 'undefined') return '';
+  const { hostname, port } = window.location;
+
+  if (hostname.includes('smartflowg7.cloud')) {
+    if (hostname.startsWith('dev_')) {
+      return 'https://dev_api.smartflowg7.cloud';
+    }
+    return 'https://api.smartflowg7.cloud';
+  }
+
+  if (port === '5173' || port === '5174' || port === '5175' || port === '3000' || port === '1222' || port === '1333') {
+    return `http://${hostname}:8000`;
+  }
+  
+  return window.location.origin;
+};
+
+export const API_ROOT = `${getBaseURL()}/`;
+const API_BASE_URL = `${API_ROOT}api/v1`;
 
 export const normalizePenaltyValue = (val) => {
   if (!val) return '';
@@ -65,12 +83,19 @@ export const parseDate = (dateStr) => {
 
 export const getFullImagePath = (path) => {
   if (!path) return '';
-  if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('blob:')) {
-    return path;
+  let cleanPath = typeof path === 'string' ? path.trim() : '';
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(cleanPath)) {
+    cleanPath = cleanPath.replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i, '');
   }
-  const root = API_ROOT.endsWith('/') ? API_ROOT.slice(0, -1) : API_ROOT;
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  return `${root}${normalizedPath}`;
+  if (cleanPath.startsWith('blob:') || cleanPath.startsWith('data:') || cleanPath.startsWith('http://') || cleanPath.startsWith('https://')) {
+    return cleanPath;
+  }
+  const baseUrl = getBaseURL() || (typeof window !== 'undefined' ? window.location.origin : '');
+  const root = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+  const normalizedPath = cleanPath.startsWith('/') ? cleanPath : `/${cleanPath}`;
+  const finalUrl = `${root}${normalizedPath}`;
+  console.log('[SmartFlow Image Path]', { input: path, output: finalUrl });
+  return finalUrl;
 };
 
 export const formatPenaltyValue = (number) => {
@@ -91,8 +116,11 @@ export const extractMultiplierFromPenalty = (penaltyStr) => {
 
 export const getCabinetSalePrice = (sku, cabinetPrices = []) => {
   if (!sku) return 0;
-  const cleanSku = sku.trim().toLowerCase();
-  const match = cabinetPrices.find(p => p.cabinet_code && p.cabinet_code.trim().toLowerCase() === cleanSku);
+  const cleanSku = String(sku).trim().toLowerCase();
+  const match = cabinetPrices.find(p => 
+    (p.cabinet_code && String(p.cabinet_code).trim().toLowerCase() === cleanSku) ||
+    (p.cabinet_name && String(p.cabinet_name).trim().toLowerCase() === cleanSku)
+  );
   if (match) return match.sale_price || 0;
   return 0;
 };
@@ -249,4 +277,23 @@ export const resolveG7ErrorName = (g7Code, custCode, g7DefectTypes = [], clientD
   }).filter(Boolean);
 
   return Array.from(new Set(names)).join(', ');
+};
+
+export const formatMonthYear = (val) => {
+  if (!val) return '';
+  const s = String(val).trim();
+  const parts = s.split(/[-/]/);
+  if (parts.length === 3) {
+    if (parts[0].length === 4) {
+      // YYYY-MM-DD
+      return `${parts[1].padStart(2, '0')}/${parts[0]}`;
+    } else {
+      // MM/DD/YYYY
+      return `${parts[0].padStart(2, '0')}/${parts[2]}`;
+    }
+  }
+  if (parts.length === 2) {
+    return `${parts[0].padStart(2, '0')}/${parts[1]}`;
+  }
+  return s;
 };

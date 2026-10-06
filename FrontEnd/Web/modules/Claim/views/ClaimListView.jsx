@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import claimService from '../services/claim.service';
-import '../styles/claim.css';
 
 import { useClaimFilter } from '../hooks/useClaimFilter';
 import { useClaimStatistics } from '../hooks/useClaimStatistics';
@@ -97,6 +96,11 @@ export const ClaimListView = () => {
           image_paths: item.image_paths || [],
           image_captions: item.image_captions || [],
           customer_name: item.customer_name || 'N/A',
+          loai_hang: item.loai_hang || ((item.product_name || item.sku || '').toUpperCase().includes('WOA') ? 'OAK' : 'Pigment'),
+          date_loading: item.date_loading,
+          date_loading_raw: item.date_loading_raw,
+          lpn_container_number: item.lpn_container_number,
+          lpn_container_id: item.lpn_container_id,
           severity: item.severity || 'Medium'
         }));
         setClaims(dbMapped);
@@ -122,7 +126,7 @@ export const ClaimListView = () => {
       else if (Array.isArray(res)) setG7DefectTypes(res);
     }).catch(err => console.error('Lỗi tải danh mục mã lỗi G7:', err));
 
-    claimService.getCabinetPrices({ size: 5000 }).then(res => {
+    claimService.getCabinetPrices().then(res => {
       if (res && res.items) setCabinetPrices(res.items);
       else if (Array.isArray(res)) setCabinetPrices(res);
     }).catch(err => console.error('Lỗi tải bảng giá tủ:', err));
@@ -322,12 +326,14 @@ export const ClaimListView = () => {
     addGiaTriPhat, setAddGiaTriPhat,
     addHeSoPhat, setAddHeSoPhat,
     addMaLoi, setAddMaLoi,
+    addTenLoiKH, setAddTenLoiKH,
     addMaLoiCty, setAddMaLoiCty,
     addTenLoiG7, setAddTenLoiG7,
     showAddG7CodeSuggestions, setShowAddG7CodeSuggestions,
     showAddG7NameSuggestions, setShowAddG7NameSuggestions,
     addLpn, setAddLpn,
     addMaCont, setAddMaCont,
+    addDateLoading, setAddDateLoading,
     addNgayXuat, setAddNgayXuat,
     addTrangThaiXuLy, setAddTrangThaiXuLy,
     addLinkCapa, setAddLinkCapa,
@@ -337,6 +343,7 @@ export const ClaimListView = () => {
     addModalError,
     showAddSuggestions, setShowAddSuggestions,
     showAddDefectSuggestions, setShowAddDefectSuggestions,
+    showAddTenLoiKHSuggestions, setShowAddTenLoiKHSuggestions,
     handleOpenAddNewClaim,
     handleSaveNewClaim,
     getAddTotalPenaltyPreview,
@@ -351,9 +358,13 @@ export const ClaimListView = () => {
     processMucPhat, setProcessMucPhat,
     processGiaTriPhat, setProcessGiaTriPhat,
     processHeSoPhat, setProcessHeSoPhat,
+    processTongPhat, setProcessTongPhat,
     processMaLoi, setProcessMaLoi,
+    processTenLoiKH, setProcessTenLoiKH,
     processMaLoiCty, setProcessMaLoiCty,
     processTenLoiG7, setProcessTenLoiG7,
+    showProcessDefectCodeSuggestions, setShowProcessDefectCodeSuggestions,
+    showProcessTenLoiKHSuggestions, setShowProcessTenLoiKHSuggestions,
     showProcessG7CodeSuggestions, setShowProcessG7CodeSuggestions,
     showProcessG7NameSuggestions, setShowProcessG7NameSuggestions,
     processLpn, setProcessLpn,
@@ -372,9 +383,41 @@ export const ClaimListView = () => {
     handleDeleteProcessImageClick,
     handlePrevClaim,
     handleNextClaim,
+    handleSelectDefectCode,
+    handleSelectCustomerDefectName,
     handleSelectG7Code,
     handleSelectG7Name
   } = formProps;
+
+  // Compute unified customer defect suggestions (codes & names)
+  const customerDefectCodeSuggestions = useMemo(() => {
+    const set = new Set();
+    (defectCatalog || []).forEach(d => {
+      const code = (d.code || d.client_defect_code || d.defect_code || '').trim();
+      if (code) set.add(code);
+    });
+    (claims || []).forEach(c => {
+      const code = (c.order_code || c.defect_code || '').trim();
+      if (code) set.add(code);
+    });
+    if (set.size === 0) {
+      ['DVA_08', 'DVA_11', 'DVA_14', 'DVA_01', 'DVA_05', 'DVA_06', 'DVA_12', 'DVA_15'].forEach(code => set.add(code));
+    }
+    return Array.from(set).filter(Boolean).sort();
+  }, [defectCatalog, claims]);
+
+  const customerDefectNameSuggestions = useMemo(() => {
+    const set = new Set();
+    (defectCatalog || []).forEach(d => {
+      if (d.name) set.add(d.name.trim());
+      if (d.name_en) set.add(d.name_en.trim());
+    });
+    (claims || []).forEach(c => {
+      if (c.claim_description) set.add(c.claim_description.trim());
+      if (c.description) set.add(c.description.trim());
+    });
+    return Array.from(set).filter(Boolean).sort();
+  }, [defectCatalog, claims]);
 
   // Review Modal State
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
@@ -691,6 +734,10 @@ export const ClaimListView = () => {
                     <span style={{ color: textColor, wordBreak: 'break-all' }}>{claim.order_code || claim.defect_code || 'N/A'}</span>
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                    <span style={{ color: textColor, fontWeight: 'bold', minWidth: '110px' }}>Tên lỗi KH:</span>
+                    <span style={{ color: textColor, wordBreak: 'break-all' }}>{claim.claim_description || claim.description || 'N/A'}</span>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                     <span style={{ color: textColor, fontWeight: 'bold', minWidth: '110px' }}>Tên lỗi G7:</span>
                     <span style={{ color: textColor, wordBreak: 'break-all' }}>{claim.company_error_name || 'N/A'}</span>
                   </div>
@@ -770,54 +817,7 @@ export const ClaimListView = () => {
   };
 
   return (
-    <div className="claim-list-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', height: '100%', minHeight: 0 }}>
-      <style dangerouslySetInnerHTML={{
-        __html: `
-        .dashboard-content {
-          height: calc(100dvh - 60px) !important;
-          max-height: calc(100dvh - 60px) !important;
-          min-height: 0 !important;
-          padding: 8px 16px 8px 16px !important;
-          overflow: hidden !important;
-          display: flex !important;
-          flex-direction: column !important;
-          box-sizing: border-box !important;
-        }
-        .dashboard-content > div {
-          height: 100% !important;
-          max-height: 100% !important;
-          min-height: 0 !important;
-          flex: 1 1 auto !important;
-          display: flex !important;
-          flex-direction: column !important;
-          overflow: hidden !important;
-        }
-        .claim-list-container {
-          height: 100% !important;
-          max-height: 100% !important;
-          min-height: 0 !important;
-          display: flex !important;
-          flex-direction: column !important;
-          align-items: stretch !important;
-          overflow: hidden !important;
-          gap: 0 !important;
-          margin: 0 !important;
-        }
-        .admin-table-card {
-          flex: 1 1 auto !important;
-          min-height: 0 !important;
-          display: flex !important;
-          flex-direction: column !important;
-          overflow: hidden !important;
-        }
-        .admin-table-scroll {
-          flex: 1 1 auto !important;
-          min-height: 0 !important;
-          overflow-y: auto !important;
-          overflow-x: auto !important;
-        }
-        `
-      }} />
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', height: '100%', minHeight: 0 }}>
       {/* 4 KPI Overview Cards */}
       <div style={{ flexShrink: 0 }}>
         <ClaimStatsCards
@@ -869,18 +869,10 @@ export const ClaimListView = () => {
           isOtherDropdownOpen={isOtherDropdownOpen}
           setIsOtherDropdownOpen={setIsOtherDropdownOpen}
           onProcessSelectedClaim={() => {
-            let targetList = claims;
-            if (selectedClaimIds && selectedClaimIds.length > 0) {
-              targetList = claims.filter(c => selectedClaimIds.includes(c.id));
-            }
-            const unprocessed = targetList.filter(c => c.status !== 'Đã xử lý');
-            if (unprocessed.length > 0) {
-              setExceptionNavClaims(unprocessed);
-              setExceptionNavMode(true);
+            if (claims.length > 0) {
+              setExceptionNavMode(false);
               setModalMode('edit');
-              setActiveDetailClaim(unprocessed[0]);
-            } else {
-              showModal('Thông báo', 'Tất cả các khiếu nại trong danh sách đã được xử lý!', 'info');
+              setActiveDetailClaim(claims[0]);
             }
           }}
           onOpenPdfFolderModal={handleOpenPdfFolderModal}
@@ -1086,10 +1078,15 @@ export const ClaimListView = () => {
         uniquePenaltyOptions={penaltySuggestions}
         getAddTotalPenaltyPreview={getAddTotalPenaltyPreview}
         addMaLoi={addMaLoi} setAddMaLoi={setAddMaLoi}
+        addTenLoiKH={addTenLoiKH} setAddTenLoiKH={setAddTenLoiKH}
         showAddDefectSuggestions={showAddDefectSuggestions} setShowAddDefectSuggestions={setShowAddDefectSuggestions}
+        showAddTenLoiKHSuggestions={showAddTenLoiKHSuggestions} setShowAddTenLoiKHSuggestions={setShowAddTenLoiKHSuggestions}
+        uniqueCustomerDefectCodeOptions={customerDefectCodeSuggestions}
+        uniqueCustomerDefectNameOptions={customerDefectNameSuggestions}
+        handleSelectDefectCode={handleSelectDefectCode}
+        handleSelectCustomerDefectName={handleSelectCustomerDefectName}
         defectCatalog={defectCatalog}
         addMaLoiCty={addMaLoiCty} setAddMaLoiCty={setAddMaLoiCty}
-        g7DefectTypes={g7DefectTypes}
         showAddG7CodeSuggestions={showAddG7CodeSuggestions} setShowAddG7CodeSuggestions={setShowAddG7CodeSuggestions}
         uniqueCompanyErrorCodeOptions={companyErrorCodeSuggestions}
         handleSelectG7Code={handleSelectG7Code}
@@ -1099,6 +1096,7 @@ export const ClaimListView = () => {
         handleSelectG7Name={handleSelectG7Name}
         addLpn={addLpn} setAddLpn={setAddLpn}
         addMaCont={addMaCont} setAddMaCont={setAddMaCont}
+        addDateLoading={addDateLoading} setAddDateLoading={setAddDateLoading}
         addNgayXuat={addNgayXuat} setAddNgayXuat={setAddNgayXuat}
         addTrangThaiXuLy={addTrangThaiXuLy} setAddTrangThaiXuLy={setAddTrangThaiXuLy}
         addLinkCapa={addLinkCapa} setAddLinkCapa={setAddLinkCapa}
@@ -1110,12 +1108,14 @@ export const ClaimListView = () => {
         handleEditAddImageClick={handleEditAddImageClick}
         handleDeleteAddImageClick={handleDeleteAddImageClick}
         onPreviewImage={setPreviewImage}
+        cabinetPrices={cabinetPrices}
       />
 
       {/* Xử lý / Xem chi tiết khiếu nại Modal */}
       <ClaimProcessModal
         activeDetailClaim={activeDetailClaim}
         setActiveDetailClaim={setActiveDetailClaim}
+        cabinetPrices={cabinetPrices}
         modalMode={modalMode}
         setModalMode={setModalMode}
         exceptionNavMode={exceptionNavMode}
@@ -1132,10 +1132,17 @@ export const ClaimListView = () => {
         processMucPhat={processMucPhat} setProcessMucPhat={setProcessMucPhat}
         processGiaTriPhat={processGiaTriPhat} setProcessGiaTriPhat={setProcessGiaTriPhat}
         processHeSoPhat={processHeSoPhat} setProcessHeSoPhat={setProcessHeSoPhat}
+        processTongPhat={processTongPhat} setProcessTongPhat={setProcessTongPhat}
         getProcessTotalPenaltyPreview={getProcessTotalPenaltyPreview}
         processMaLoi={processMaLoi} setProcessMaLoi={setProcessMaLoi}
+        showProcessDefectCodeSuggestions={showProcessDefectCodeSuggestions} setShowProcessDefectCodeSuggestions={setShowProcessDefectCodeSuggestions}
+        uniqueCustomerDefectCodeOptions={customerDefectCodeSuggestions}
+        handleSelectDefectCode={handleSelectDefectCode}
+        processTenLoiKH={processTenLoiKH} setProcessTenLoiKH={setProcessTenLoiKH}
+        showProcessTenLoiKHSuggestions={showProcessTenLoiKHSuggestions} setShowProcessTenLoiKHSuggestions={setShowProcessTenLoiKHSuggestions}
+        uniqueCustomerDefectNameOptions={customerDefectNameSuggestions}
+        handleSelectCustomerDefectName={handleSelectCustomerDefectName}
         processMaLoiCty={processMaLoiCty} setProcessMaLoiCty={setProcessMaLoiCty}
-        g7DefectTypes={g7DefectTypes}
         showProcessG7CodeSuggestions={showProcessG7CodeSuggestions} setShowProcessG7CodeSuggestions={setShowProcessG7CodeSuggestions}
         uniqueCompanyErrorCodeOptions={companyErrorCodeSuggestions}
         handleSelectG7Code={handleSelectG7Code}
@@ -1290,6 +1297,10 @@ export const ClaimListView = () => {
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                     <span style={{ color: '#7B5233', fontWeight: 'bold', minWidth: '120px' }}>Mã lỗi KH:</span>
                     <span style={{ color: '#2D1A12', wordBreak: 'break-all' }}>{item.order_code || item.defect_code || 'N/A'}</span>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    <span style={{ color: '#7B5233', fontWeight: 'bold', minWidth: '120px' }}>Tên lỗi KH:</span>
+                    <span style={{ color: '#2D1A12', wordBreak: 'break-all' }}>{item.claim_description || item.description || 'N/A'}</span>
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                     <span style={{ color: '#7B5233', fontWeight: 'bold', minWidth: '120px' }}>Tên lỗi G7:</span>
