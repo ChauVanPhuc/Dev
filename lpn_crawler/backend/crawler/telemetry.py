@@ -119,7 +119,7 @@ class CrawlerTelemetryMixin:
     def send_progress(
         self, current_container: str, current_status: str, processed: int, total: int, 
         items_crawled: int, images_downloaded: int, current_action: str = "", 
-        sku_crawled: int = 0, is_active_download: bool = False
+        sku_crawled: int = 0, is_active_download: bool = False, **kwargs
     ):
         """Gửi tiến độ SSE kèm trạng thái thao tác, thời gian đã chạy, ETA ước tính mượt mà và tốc độ tức thời/toàn trình"""
         if current_container:
@@ -300,13 +300,13 @@ class CrawlerTelemetryMixin:
             except Exception:
                 pass
 
-    def snap(self, page: Page, action: str = "", container: str = "", processed: int = 0, total: int = 0, items: int = 0, images: int = 0, sku: int = 0):
+    def snap(self, page: Page, action: str = "", container: str = "", processed: int = 0, total: int = 0, items: int = 0, images: int = 0, sku: int = 0, is_active_download: bool = False, **kwargs):
         """Cập nhật tiến độ nhanh mà không chụp màn hình để tiết kiệm 100% CPU"""
-        self.send_progress(container, "CRAWLING", processed, total, items, images, current_action=action, sku_crawled=sku)
+        self.send_progress(container, "CRAWLING", processed, total, items, images, current_action=action, sku_crawled=sku, is_active_download=is_active_download, **kwargs)
 
-    def capture_and_send_progress(self, page: Optional[Page], current_container: str, current_status: str, processed: int, total: int, items_crawled: int, images_downloaded: int, current_action: str = "", sku_crawled: int = 0):
+    def capture_and_send_progress(self, page: Optional[Page], current_container: str, current_status: str, processed: int, total: int, items_crawled: int, images_downloaded: int, current_action: str = "", sku_crawled: int = 0, is_active_download: bool = False, **kwargs):
         """Gửi tiến độ SSE nhẹ nhàng mà không chụp màn hình"""
-        self.send_progress(current_container, current_status, processed, total, items_crawled, images_downloaded, current_action=current_action, sku_crawled=sku_crawled)
+        self.send_progress(current_container, current_status, processed, total, items_crawled, images_downloaded, current_action=current_action, sku_crawled=sku_crawled, is_active_download=is_active_download, **kwargs)
 
     def _start_screenshot_stream(self, page: Page):
         pass

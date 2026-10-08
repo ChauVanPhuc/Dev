@@ -2581,7 +2581,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
   const currentPartsDetails = useMemo(() => {
     // 1. Ưu tiên hàng đầu: Lấy chi tiết từ danh sách quy cách và loại tủ đã chọn (selectedSpecs)
     if (selectedSpecs && selectedSpecs.length > 0) {
-      return selectedSpecs.map((specVal, idx) => {
+      const list = selectedSpecs.map((specVal, idx) => {
         const opt = (specOptions || []).find((o) => o.value?.toString() === specVal?.toString())
         const pName = opt?.partName || selectedProducts[0] || product || 'Chi tiết'
         const rawSpec = opt?.rawSpec || opt?.label || spec || 'Tiêu chuẩn'
@@ -2602,6 +2602,37 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
           qty: itemQty
         }
       })
+
+      // Tự động bổ sung các chi tiết trong selectedProducts chưa có dòng quy cách riêng
+      if (selectedProducts && selectedProducts.length > 0) {
+        const existingNames = list.map(it => (it.part_name || '').toLowerCase().trim())
+        selectedProducts.forEach((pName) => {
+          const pLower = (pName || '').toLowerCase().trim()
+          if (pLower && !existingNames.includes(pLower)) {
+            const partObj = (bomData || []).find((b) => b.part_name === pName)
+            const matchedSpec = (partObj?.specs?.[0]?.specification) || spec || 'Tiêu chuẩn'
+            const effective = getEffectiveSpec(matchedSpec, pName)
+            const rawCab = partObj?.specs?.[0]?.badge || partObj?.specs?.[0]?.product_label || partObj?.specs?.[0]?.product_name || partObj?.product_name || ''
+            const cab = cleanCabinetTag(rawCab)
+            const pQty = partObj?.total_qty ? convertQuantityToPiecesIfNeeded(pName, partObj.total_qty, partObj.unit) : 0
+            list.push({
+              stt: String(list.length + 1).padStart(2, '0'),
+              part_name: pName,
+              name: pName,
+              specification: effective,
+              spec: effective,
+              cabinet: cab,
+              product_label: cab,
+              badge: cab,
+              order_code: partObj?.specs?.[0]?.order_code || '',
+              plan_qty: pQty,
+              qty: pQty
+            })
+          }
+        })
+      }
+
+      return list
     }
 
     // 2. Nếu không có selectedSpecs riêng, lấy theo danh sách chi tiết được chọn

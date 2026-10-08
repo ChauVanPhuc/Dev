@@ -164,8 +164,17 @@ class AiOcrPipeline:
         found_pallet_lpn = None
         found_pallet_sku = None
 
-        # Bước 5A: Quét nhanh Barcode trên toàn bộ các nhãn (chỉ mất ~50ms tổng cộng)
-        # Giúp nhận diện tức thì các tem có mã vạch LPN / SKU để ưu tiên OCR
+        # Bước 5A: Quét nhanh Barcode trên toàn ảnh và từng vùng nhãn (hỗ trợ tìm mã target LPN nếu có)
+        full_img_bcs = self.barcode_engine.read_barcodes(orig_img, expected_lpn=expected_lpn)
+        for b in full_img_bcs:
+            if b["data"] not in seen_barcode_texts:
+                seen_barcode_texts.add(b["data"])
+                all_barcodes.append(b)
+
+        target_exp_lpn_clean = str(expected_lpn).strip().upper() if expected_lpn else ""
+        if target_exp_lpn_clean and any(str(b.get("data", "")).strip().upper() == target_exp_lpn_clean for b in all_barcodes):
+            found_pallet_lpn = expected_lpn
+
         roi_candidates = []
         for idx, r_item in enumerate(all_rois):
             crop = r_item["roi_image"]
@@ -178,9 +187,9 @@ class AiOcrPipeline:
 
             zoomed_crop = ImagePreprocessor.focus_and_zoom_roi(crop, target_min_dim=180)
 
-            b_list = self.barcode_engine.read_barcodes(zoomed_crop)
+            b_list = self.barcode_engine.read_barcodes(zoomed_crop, expected_lpn=expected_lpn)
             if not b_list and zoomed_crop is not crop:
-                b_list = self.barcode_engine.read_barcodes(crop)
+                b_list = self.barcode_engine.read_barcodes(crop, expected_lpn=expected_lpn)
 
             bc_lpn_found = False
             bc_sku_found = False
@@ -189,7 +198,7 @@ class AiOcrPipeline:
                 b_data = str(b.get("data", "")).strip()
                 if expected_lpn and b_data == str(expected_lpn).strip():
                     has_target_lpn = True
-                if LabelDataParser.is_warehouse_lpn(b_data) or (b_data.isdigit() and 8 <= len(b_data) <= 12):
+                if (expected_lpn and b_data == str(expected_lpn).strip()) or LabelDataParser.is_warehouse_lpn(b_data):
                     bc_lpn_found = True
                 if LabelDataParser.is_valid_sku_candidate(LabelDataParser.normalize_sku(b_data)):
                     bc_sku_found = True
@@ -213,7 +222,7 @@ class AiOcrPipeline:
         # Bước 5B: Quét OCR chuyên sâu toàn diện TẤT CẢ các con tem trên Pallet (không ngắt sớm)
         roi_exec_results = []
         target_exp_lpn = str(expected_lpn).strip().upper() if expected_lpn else ""
-        target_exp_sku = str(expected_skus[0]).strip().upper() if (expected_skus and expected_skus[0]) else ""
+        target_exp_skus_set = {str(s).strip().upper() for s in (expected_skus or []) if s}
 
         for candidate in roi_candidates:
             idx = candidate["idx"]
@@ -253,7 +262,7 @@ class AiOcrPipeline:
                 if not found_pallet_lpn or (target_exp_lpn and str(r_lpn).strip().upper() == target_exp_lpn):
                     found_pallet_lpn = r_lpn
             if r_sku:
-                if not found_pallet_sku or (target_exp_sku and str(r_sku).strip().upper() == target_exp_sku):
+                if not found_pallet_sku or (target_exp_skus_set and str(r_sku).strip().upper() in target_exp_skus_set):
                     found_pallet_sku = r_sku
 
             roi_exec_results.append((idx, r_item, crop, zoomed_crop, b_list, ocr_item, roi_parsed))
@@ -298,7 +307,8 @@ class AiOcrPipeline:
             is_huge_carton = (r_w > img_w * 0.28 and r_h > img_h * 0.20)
             valid_alnum_chars = sum(len(re.sub(r'[^a-zA-Z0-9]', '', t.get("text", ""))) for t in r_tokens)
 
-            if not has_ident and (len(r_tokens) == 0 or is_huge_carton or valid_alnum_chars < 6 or len(r_tokens) <= 1):
+            # Chỉ lấy các con tem có mã QR / Barcode hoặc đọc được LPN / SKU (loại bỏ tem chỉ có chữ thường mô tả như 'Brown Oaker')
+            if not has_ident:
                 continue
             
             annotated_crop = ocr_item.get("annotated_image", zoomed_crop)
@@ -310,12 +320,22 @@ class AiOcrPipeline:
             r_h = r_box[3] if len(r_box) >= 4 else 0
             r_asp = float(r_w) / float(r_h) if r_h > 0 else 1.0
             r_tokens = ocr_item.get("tokens", [])
-            has_rot_token = any(tok.get("rotation_deg") in (90, 270) for tok in r_tokens)
             applied_rot = ocr_item.get("applied_rotation", 0)
-            is_vertical = bool(r_asp < 0.88 or has_rot_token or applied_rot in (90, 270))
+
+            # Quy chuẩn chuẩn xác từ nhà máy:
+            # - Top nóc là mã đứng: Con tem dán đứng theo chiều dọc (chiều rộng nhỏ hơn chiều cao, r_asp < 0.95)
+            # - Tủ đứng là nằm ngang: Con tem dán nằm ngang (chiều rộng lớn hơn chiều cao, r_asp >= 0.95)
+            is_vertical = bool(r_asp < 0.95)
             orientation = "vertical" if is_vertical else "horizontal"
             label_category = "top_roof" if is_vertical else "pallet_standing"
             category_name = "Top nóc" if is_vertical else "Pallet đứng"
+
+            # Trích xuất chuẩn xác chuỗi chữ dưới mã QR / Barcode (HRI)
+            clean_under_code = (
+                roi_parsed.get("lpn") or roi_parsed.get("sku") or (r_barcodes[0] if r_barcodes else None)
+            )
+            if not clean_under_code:
+                clean_under_code = next((t.get("text") for t in r_tokens if (t.get("text", "").isdigit() and len(t.get("text", "")) >= 8) or '-' in t.get("text", "")), None)
 
             roi_info = {
                 "label_id": len(roi_details) + 1,
@@ -328,6 +348,8 @@ class AiOcrPipeline:
                 "applied_rotation": applied_rot,
                 "tokens": r_tokens,
                 "barcodes": r_barcodes,
+                "full_text": " ".join([t.get("text", "") for t in r_tokens if t.get("text")]),
+                "text_under_barcode": clean_under_code,
                 "extracted_lpn": roi_parsed.get("lpn"),
                 "extracted_sku": roi_parsed.get("sku"),
                 "all_lpns": roi_parsed.get("all_lpns", []),
@@ -421,7 +443,8 @@ class AiOcrPipeline:
             ocr_tokens=all_tokens,
             barcode_results=all_barcodes,
             expected_skus=expected_skus,
-            expected_lpn=expected_lpn
+            expected_lpn=expected_lpn,
+            package_position=package_position
         )
         time_metrics["parsing_ms"] = round((time.time() - t_parse_start) * 1000, 1)
 
@@ -448,7 +471,7 @@ class AiOcrPipeline:
                 expected_lpn=expected_lpn,
                 render_annotated=False
             )
-            full_barcodes = self.barcode_engine.read_barcodes(orig_img)
+            full_barcodes = self.barcode_engine.read_barcodes(orig_img, expected_lpn=expected_lpn)
 
             # Cập nhật thêm tokens từ ảnh toàn cảnh vào all_tokens
             for tok in full_ocr_res["tokens"]:
@@ -463,7 +486,9 @@ class AiOcrPipeline:
             re_extracted = LabelDataParser.parse_extracted_data(
                 ocr_tokens=merged_tokens,
                 barcode_results=merged_barcodes,
-                expected_skus=expected_skus
+                expected_skus=expected_skus,
+                expected_lpn=expected_lpn,
+                package_position=package_position
             )
 
             if re_extracted.get("lpn") and not extracted_data.get("lpn"):
@@ -508,17 +533,47 @@ class AiOcrPipeline:
             elif not extracted_data.get("lpn") or extracted_data.get("lpn") not in clean_roi_lpns:
                 extracted_data["lpn"] = clean_roi_lpns[0]
 
+        # Kiểm tra nếu expected_lpn nằm trong all_barcodes (quét từ toàn ảnh hoặc các biến thể đa tỷ lệ)
+        if expected_lpn:
+            exp_lpn_clean = str(expected_lpn).strip().upper()
+            has_bc_match = any(str(b.get("data", "")).strip().upper() == exp_lpn_clean for b in all_barcodes)
+            if has_bc_match:
+                extracted_data["lpn"] = expected_lpn
+                extracted_data["lpn_confidence"] = 1.0
+                extracted_data["lpn_source"] = "Barcode Match (Expected LPN)"
+                if "all_lpns" not in extracted_data or not extracted_data["all_lpns"]:
+                    extracted_data["all_lpns"] = [expected_lpn]
+                elif expected_lpn not in extracted_data["all_lpns"]:
+                    extracted_data["all_lpns"].insert(0, expected_lpn)
+
         if roi_skus:
             clean_roi_skus = list(dict.fromkeys(roi_skus))
             extracted_data["all_skus"] = clean_roi_skus
             if expected_skus:
                 matched_sku = next((s for s in expected_skus if s in clean_roi_skus), None)
+                if not matched_sku:
+                    for r_sku in clean_roi_skus:
+                        cal_s = LabelDataParser.calibrate_sku_with_expected(r_sku, expected_skus)
+                        if cal_s in expected_skus:
+                            matched_sku = cal_s
+                            break
                 if matched_sku:
                     extracted_data["sku"] = matched_sku
                     extracted_data["sku_confidence"] = max(extracted_data.get("sku_confidence", 0.0), 0.98)
                     extracted_data["sku_source"] = "Tem ROI Match (Expected SKU)"
             if not extracted_data.get("sku") or extracted_data.get("sku") not in clean_roi_skus:
-                extracted_data["sku"] = clean_roi_skus[0]
+                if is_target_vertical:
+                    top_sku = None
+                    for r in roi_details:
+                        r_s = r.get("extracted_sku")
+                        if r_s and r_s in clean_roi_skus:
+                            bbox = r.get("bbox", [])
+                            if r.get("orientation") == "vertical" or (bbox and bbox[1] < orig_img.shape[0] * 0.65):
+                                top_sku = r_s
+                                break
+                    extracted_data["sku"] = top_sku if top_sku else clean_roi_skus[0]
+                else:
+                    extracted_data["sku"] = clean_roi_skus[0]
         else:
             if extracted_data.get("all_skus"):
                 extracted_data["all_skus"] = [

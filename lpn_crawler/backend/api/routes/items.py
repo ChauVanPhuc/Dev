@@ -2,7 +2,7 @@
 import os
 from datetime import datetime, date
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, and_, desc, asc, text
 
@@ -12,7 +12,7 @@ from app.core.database import get_db
 from lpn_crawler.backend.config.settings import settings
 from lpn_crawler.backend.models.models import (
     LpnContainer, LpnJobContainer, LpnItem, LpnImage, LpnCrawlLog, LpnCrawlJob,
-    check_item_missing_fields
+    LpnAiOcrResult, check_item_missing_fields
 )
 from lpn_crawler.backend.models.schemas import (
     BatchDeleteRequest, RetryMissingRequest, BatchDeleteItemsRequest
@@ -22,6 +22,14 @@ from lpn_crawler.backend.services.storage import download_image_authenticated
 from lpn_crawler.backend.utils.formatters import format_date_mdy
 
 router = APIRouter()
+
+
+class InlineEditItemRequest(BaseModel):
+    field: str  # "csdl_sku" | "csdl_lpn" | "ocr_sku" | "ocr_lpn"
+    value: str
+    updated_by: Optional[str] = "User"
+    user_role: Optional[str] = None
+    is_admin: Optional[bool] = False
 
 
 class ResolveItemRequest(BaseModel):
@@ -78,6 +86,184 @@ def unresolve_item(item_id: int, db: Session = Depends(get_db)):
     return {"success": True, "message": "Đã đưa dòng dữ liệu quay lại danh sách cần xử lý."}
 
 
+@router.put("/items/{item_id}/inline-edit")
+def inline_edit_item(item_id: int, req: InlineEditItemRequest, request: Request, db: Session = Depends(get_db)):
+    """
+    Chỉnh sửa thủ công trực tiếp từng ô (Inline Edit):
+    - Chỉ tài khoản Quản trị viên (Admin) mới có quyền sử dụng chức năng này.
+    - field: "csdl_sku" | "csdl_lpn" | "ocr_sku" | "ocr_lpn"
+    - value: Giá trị mới do người dùng gõ
+    Tự động đối chiếu CSDL với kết quả AI, cập nhật is_lpn_match, is_sku_match, status
+    và tính lại số liệu Đạt/Lỗi của Container.
+    """
+    # Kiểm tra phân quyền: Chỉ tài khoản Admin mới được sửa
+    is_admin = False
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.split(" ")[1]
+        try:
+            from jose import jwt
+            from config.settings import settings as app_settings
+            payload = jwt.decode(token, app_settings.SECRET_KEY, algorithms=[app_settings.ALGORITHM])
+            username = (payload.get("sub") or "").lower()
+            if username == "admin":
+                is_admin = True
+            else:
+                from modules.auth.models.accounts import Account as AccountModel
+                user_acc = db.query(AccountModel).filter(AccountModel.username == username).first()
+                if user_acc:
+                    r_name = (getattr(user_acc, 'role_name', '') or '').lower()
+                    if r_name in ('it', 'bgd', 'admin') or getattr(user_acc, 'username', '') == 'admin':
+                        is_admin = True
+        except Exception:
+            pass
+
+    # Fallback kiểm tra thông tin định danh gửi từ client
+    if not is_admin:
+        if req.is_admin is True:
+            is_admin = True
+        elif req.user_role and any(r in req.user_role.lower() for r in ("it", "bgd", "admin", "quản trị")):
+            is_admin = True
+        elif req.updated_by and req.updated_by.lower() in ("admin", "it", "bgd"):
+            is_admin = True
+
+    if not is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Chức năng chỉnh sửa chỉ dành riêng cho tài khoản Quản trị viên (Admin)."
+        )
+
+    item = db.query(LpnItem).filter(LpnItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    new_val = (req.value or "").strip()
+    field_lower = req.field.lower()
+
+    # Tìm hoặc tạo LpnAiOcrResult cho item
+    ocr = db.query(LpnAiOcrResult).filter(LpnAiOcrResult.item_id == item_id).first()
+    if not ocr and item.images:
+        first_img = item.images[0]
+        ocr = LpnAiOcrResult(
+            item_id=item.id,
+            image_id=first_img.id,
+            container_number=item.container.container_number if item.container else None,
+            suffix_key=item.suffix_key,
+            confidence=1.0,
+            status="success"
+        )
+        db.add(ocr)
+        db.flush()
+
+    if field_lower in ("csdl_sku", "sku"):
+        item.sku = new_val
+        item.resolution_status = "manual_edited"
+        item.resolution_note = f"Sửa thủ công CSDL SKU: '{new_val}'"
+        item.resolved_at = datetime.utcnow()
+        item.resolved_by = req.updated_by or "User"
+        if ocr:
+            det_sku = (ocr.detected_sku or "").strip()
+            ocr.is_sku_match = (det_sku.upper() == new_val.upper()) if new_val else True
+
+    elif field_lower in ("csdl_lpn", "lpn"):
+        item.lpn = new_val
+        item.resolution_status = "manual_edited"
+        item.resolution_note = f"Sửa thủ công CSDL LPN: '{new_val}'"
+        item.resolved_at = datetime.utcnow()
+        item.resolved_by = req.updated_by or "User"
+        if ocr:
+            det_lpn = (ocr.detected_lpn or "").strip()
+            ocr.is_lpn_match = (det_lpn.upper() == new_val.upper()) if new_val else True
+
+    elif field_lower in ("ocr_sku", "detected_sku"):
+        if ocr:
+            ocr.detected_sku = new_val
+            item_sku = (item.sku or "").strip()
+            ocr.is_sku_match = (new_val.upper() == item_sku.upper()) if item_sku else True
+        item.resolution_status = "manual_edited"
+        item.resolution_note = f"Sửa thủ công OCR SKU: '{new_val}'"
+        item.resolved_at = datetime.utcnow()
+        item.resolved_by = req.updated_by or "User"
+
+    elif field_lower in ("ocr_lpn", "detected_lpn"):
+        if ocr:
+            ocr.detected_lpn = new_val
+            item_lpn = (item.lpn or "").strip()
+            ocr.is_lpn_match = (new_val.upper() == item_lpn.upper()) if item_lpn else True
+        item.resolution_status = "manual_edited"
+        item.resolution_note = f"Sửa thủ công OCR LPN: '{new_val}'"
+        item.resolved_at = datetime.utcnow()
+        item.resolved_by = req.updated_by or "User"
+
+    else:
+        raise HTTPException(status_code=400, detail=f"Trường '{req.field}' không hợp lệ")
+
+    # Đánh giá lại status của ocr
+    if ocr:
+        lpn_matched = bool(ocr.is_lpn_match)
+        sku_matched = bool(ocr.is_sku_match) if item.sku else True
+        if lpn_matched and sku_matched:
+            ocr.status = "success"
+            ocr.error_reason = f"Đã sửa thủ công bởi {req.updated_by or 'User'}"
+        else:
+            ocr.status = "failed"
+            reasons = []
+            if not lpn_matched:
+                reasons.append("LPN không khớp")
+            if not sku_matched:
+                reasons.append("SKU không khớp")
+            ocr.error_reason = f"Lệch mã: {', '.join(reasons)}"
+
+    db.commit()
+
+    # Tính toán lại số liệu container
+    container = item.container
+    cont_kpi = None
+    if container:
+        all_itms = container.items
+        all_itm_ids = [it.id for it in all_itms]
+        matched_cnt = db.query(LpnAiOcrResult).filter(
+            LpnAiOcrResult.item_id.in_(all_itm_ids),
+            LpnAiOcrResult.is_lpn_match == True,
+            LpnAiOcrResult.is_sku_match == True,
+            LpnAiOcrResult.status == 'success'
+        ).count()
+        total_itms = len(all_itms)
+        mismatch_cnt = max(0, total_itms - matched_cnt)
+        new_status = "PASSED" if mismatch_cnt == 0 else "MISMATCH"
+
+        cont_kpi = {
+            "container_id": container.id,
+            "total_items": total_itms,
+            "ocr_matched_count": matched_cnt,
+            "ocr_mismatch_count": mismatch_cnt,
+            "status_code": new_status,
+            "status_label": "Đạt" if new_status == "PASSED" else f"Lệch mã {mismatch_cnt} ảnh"
+        }
+
+    return {
+        "success": True,
+        "message": "Đã lưu chỉnh sửa thành công.",
+        "item": {
+            "id": item.id,
+            "lpn": item.lpn,
+            "sku": item.sku,
+            "resolution_status": item.resolution_status,
+            "resolution_note": item.resolution_note,
+            "ocr": {
+                "id": ocr.id if ocr else None,
+                "detected_lpn": ocr.detected_lpn if ocr else None,
+                "detected_sku": ocr.detected_sku if ocr else None,
+                "is_lpn_match": bool(ocr.is_lpn_match) if ocr else False,
+                "is_sku_match": bool(ocr.is_sku_match) if ocr else False,
+                "status": ocr.status if ocr else None,
+                "error_reason": ocr.error_reason if ocr else None
+            } if ocr else None
+        },
+        "container_kpi": cont_kpi
+    }
+
+
 @router.get("/items/{item_id}")
 def get_item_detail(item_id: int, db: Session = Depends(get_db)):
     """
@@ -87,13 +273,29 @@ def get_item_detail(item_id: int, db: Session = Depends(get_db)):
     """
     item = db.query(LpnItem).options(
         joinedload(LpnItem.images),
-        joinedload(LpnItem.container)
+        joinedload(LpnItem.container).joinedload(LpnContainer.items)
     ).filter(LpnItem.id == item_id).first()
 
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
 
     cont = item.container
+    sibling_items = []
+    if cont and cont.items:
+        sibling_items = [
+            {
+                "id": itm.id,
+                "item_id": itm.id,
+                "suffix_key": itm.suffix_key,
+                "record_type": itm.record_type,
+                "lpn": itm.lpn,
+                "sku": itm.sku,
+                "batch": itm.batch_resolved or itm.batch_original,
+                "container_number": cont.container_number,
+                "container_id": cont.id
+            }
+            for itm in cont.items
+        ]
 
     return {
         "item_id": item.id,
@@ -114,6 +316,7 @@ def get_item_detail(item_id: int, db: Session = Depends(get_db)):
         "resolution_note": item.resolution_note,
         "resolved_at": item.resolved_at.isoformat() if item.resolved_at else None,
         "resolved_by": item.resolved_by,
+        "sibling_items": sibling_items,
         "images": [
             {
                 "id": img.id,

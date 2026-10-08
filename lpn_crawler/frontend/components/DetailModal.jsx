@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, ChevronLeft, ChevronRight, Cpu, Sparkles, RefreshCw, CheckCircle2, AlertTriangle, Check, AlertCircle } from 'lucide-react';
 import { formatDateMDY } from '../utils/formatters';
 import { ImageLightboxModal } from './ImageLightboxModal';
 import { ImageCanvas } from '../../ai_ocr_train/frontend/components/ImageCanvas';
@@ -42,6 +41,295 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
   const [showUnresolvedPrompt, setShowUnresolvedPrompt] = useState(false);
   const [unresolvedReason, setUnresolvedReason] = useState('');
   const [resolveFeedback, setResolveFeedback] = useState(null);
+
+  // Danh sách các kiện trong cùng container (được nạp tự động để hỗ trợ đối chiếu kiện đi cùng)
+  const [containerItems, setContainerItems] = useState([]);
+
+  useEffect(() => {
+    const cId = item?.container_id;
+    if (cId && (!itemsList || itemsList.length <= 1)) {
+      lpnCrawlerApi.getContainerDetail(cId).then((cont) => {
+        if (cont && Array.isArray(cont.items) && cont.items.length > 0) {
+          setContainerItems(cont.items);
+        }
+      }).catch((err) => console.warn('Could not load container items:', err));
+    }
+  }, [item?.container_id, itemsList?.length]);
+
+  const effectiveItemsList = React.useMemo(() => {
+    if (Array.isArray(item?.sibling_items) && item.sibling_items.length > 0) {
+      return item.sibling_items;
+    }
+    if (Array.isArray(containerItems) && containerItems.length > 0) {
+      return containerItems;
+    }
+    return Array.isArray(itemsList) ? itemsList : [];
+  }, [item?.sibling_items, containerItems, itemsList]);
+
+  const expLpnClean = String(item?.lpn || item?.expected_lpn || '').trim().toUpperCase();
+  const expSkuClean = String(item?.sku || item?.expected_sku || '').trim().replace(/^[-:;,. #*!_/]+|[-:;,. #*!_/]+$/g, '').toUpperCase();
+
+  // Map tất cả LPN của container để đối chiếu kiện đi kèm / thùng dán cạnh
+  const containerLpnsMap = React.useMemo(() => {
+    const map = {};
+    if (Array.isArray(effectiveItemsList)) {
+      effectiveItemsList.forEach((it) => {
+        const l = String(it?.lpn || '').trim().toUpperCase();
+        if (l) {
+          map[l] = it;
+        }
+      });
+    }
+    return map;
+  }, [effectiveItemsList]);
+
+  const isLpnCodeMatch = (code, targetLpn = expLpnClean) => {
+    const target = String(targetLpn || expLpnClean || '').trim().toUpperCase();
+    if (!target || !code) return false;
+    const clean = String(code).trim().toUpperCase();
+    if (clean === target) return true;
+    if (clean.length === target.length) {
+      let diffs = 0;
+      for (let i = 0; i < clean.length; i++) {
+        if (clean[i] !== target[i]) diffs++;
+      }
+      if (diffs <= 1 && target.length >= 7) return true;
+    }
+    return false;
+  };
+
+  // Helper tính khoảng cách Levenshtein giữa 2 chuỗi có hỗ trợ cặp nhầm lẫn in nhiệt quang học (8 vs B, 0 vs O...)
+  const calcLevenshtein = (s1, s2) => {
+    const opticalPairs = new Set([
+      '8B', 'B8', 'AR', 'RA', '0O', 'O0', '0Q', 'Q0', 'OQ', 'QO', '0D', 'D0',
+      '8R', 'R8', '1I', 'I1', '14', '41', '5S', 'S5', '72', '27', '8S', 'S8',
+      'UV', 'VU', '0U', 'U0', 'OU', 'UO', 'DB', 'BD', 'DO', 'OD', '38', '83',
+      '3B', 'B3', '1L', 'L1', 'IL', 'LI', '6G', 'G6', '60', '06', '6B', 'B6',
+      '80', '08', '0B', 'B0', '46', '64', '4A', 'A4', '17', '71'
+    ]);
+    const m = s1.length;
+    const n = s2.length;
+    const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+    for (let i = 0; i <= m; i++) dp[i][0] = i;
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        const c1 = s1[i - 1];
+        const c2 = s2[j - 1];
+        let cost = 1;
+        if (c1 === c2 || opticalPairs.has(c1 + c2)) {
+          cost = 0;
+        }
+        dp[i][j] = Math.min(
+          dp[i - 1][j] + 1,
+          dp[i][j - 1] + 1,
+          dp[i - 1][j - 1] + cost
+        );
+      }
+    }
+    return dp[m][n];
+  };
+
+  const normZeros = (s) => String(s || '').replace(/\b0+(\d+)/g, '$1');
+
+  const isSkuCodeMatch = (code, targetSku = expSkuClean) => {
+    const target = String(targetSku || expSkuClean || '').trim().replace(/^[-:;,. #*!_/]+|[-:;,. #*!_/]+$/g, '').toUpperCase();
+    if (!target || !code) return false;
+    const clean = String(code).trim().replace(/^[-:;,. #*!_/]+|[-:;,. #*!_/]+$/g, '').toUpperCase();
+    if (clean === target) return true;
+
+    // 1. Chuẩn hóa số 0 ở đầu (ví dụ: '2-54-WOA' vs '02-54-WOA')
+    if (normZeros(clean) === normZeros(target)) return true;
+
+    // 2. Quy tắc nếu sai tối đa 1 ký tự thì mặc định lấy dữ liệu đúng luôn (ví dụ: '21-60-BRO' vs '21-60D-BRO')
+    if (calcLevenshtein(clean, target) <= 1) return true;
+
+    const cleanNoDash = clean.replace(/-/g, '');
+    const expNoDash = target.replace(/-/g, '');
+    if (calcLevenshtein(cleanNoDash, expNoDash) <= 1) return true;
+    if (calcLevenshtein(normZeros(clean), normZeros(target)) <= 1) return true;
+
+    const calibClean = clean.replace(/-W[0Q]A$/, '-WOA').replace(/Q$/, 'O');
+    const calibExp = target.replace(/-W[0Q]A$/, '-WOA').replace(/Q$/, 'O');
+    if (calibClean === calibExp) return true;
+
+    // 3. So sánh cùng độ dài với các cặp nhầm lẫn quang học
+    if (clean.length === target.length) {
+      let diffs = 0;
+      let isConf = true;
+      for (let i = 0; i < clean.length; i++) {
+        if (clean[i] !== target[i]) {
+          diffs++;
+          const pair = [clean[i], target[i]].sort().join('');
+          if (!['OQ', '0O', '0Q', '0D', '8B', '0B', '46', '4A', '17', 'AR', '1I', '5S', '72', '8S', 'UV', '1L', '6G', '08'].includes(pair)) {
+            isConf = false;
+          }
+        }
+      }
+      if (diffs <= 1 && target.length >= 6) return true;
+      if (isConf && diffs <= 2) return true;
+    }
+    return false;
+  };
+
+  // Helper: Nếu mã SKU giống 90-99% với CSDL chuẩn thì lấy luôn kết quả đúng
+  const resolveEffectiveSku = (code, targetSku = expSkuClean) => {
+    if (!code) return '';
+    const target = String(targetSku || expSkuClean || '').trim().replace(/^[-:;,. #*!_/]+|[-:;,. #*!_/]+$/g, '').toUpperCase();
+    if (target && isSkuCodeMatch(code, target)) {
+      return target; // Khi mã quét giống 90-99% -> lấy luôn kết quả đúng theo yêu cầu người dùng
+    }
+    return String(code).trim().replace(/^[-:;,. #*!_/]+|[-:;,. #*!_/]+$/g, '').toUpperCase();
+  };
+
+  // Kiểm tra kiện hàng dán tem dọc (Top nóc / Box 10A có chữ cái đuôi) hay dán tem ngang (Pallet đứng / Box 10)
+  const isPosVertical = (() => {
+    const rawPos = item?.suffix_key || item?.record_type || '';
+    if (!rawPos) return false;
+    const s = String(rawPos).trim().toLowerCase();
+    if (/top[\s_-]*n[oó]c/.test(s) || /d[oọ]c/.test(s) || /topnoc/.test(s)) return true;
+    if (/pallet[\s_-]*[đd][uứ]ng/.test(s) || /ngang/.test(s)) return false;
+    // Box 10A, 10B, 1A (số theo sau bởi chữ cái) -> tem dán dọc
+    return Boolean(/\d+[a-z]$/i.test(s));
+  })();
+
+  // Lấy số thứ tự pallet gốc (ví dụ: 'Box 10A' -> '10', 'Pallet 10' -> '10')
+  const currentPalletNum = (() => {
+    const key = String(item?.suffix_key || '').trim();
+    const m = key.match(/\d+/);
+    return m ? m[0] : null;
+  })();
+
+  // Tìm kiện đối ứng trong cùng Pallet:
+  // - Nếu đang ở Box 10A (Top Nóc) -> pairedItem là Pallet 10 (Tủ Dưới / Pallet Đứng)
+  // - Nếu đang ở Pallet 10 (Pallet Đứng) -> pairedItem là Box 10A/10B (Tủ Trên Cùng / Top Nóc)
+  const pairedItem = (() => {
+    if (!currentPalletNum || !Array.isArray(effectiveItemsList)) return null;
+    if (isPosVertical) {
+      // Đang ở Top Nóc -> tìm Pallet đứng bên dưới
+      return effectiveItemsList.find((it) => {
+        const k = String(it?.suffix_key || '').trim().toLowerCase();
+        const m = k.match(/\d+/);
+        const isTopNocKey = /([a-z])$/i.test(k) || k.includes('top') || k.includes('nóc') || k.includes('noc');
+        return m && m[0] === currentPalletNum && !isTopNocKey;
+      }) || null;
+    } else {
+      // Đang ở Pallet đứng -> tìm Top Nóc bên trên
+      return effectiveItemsList.find((it) => {
+        const k = String(it?.suffix_key || '').trim().toLowerCase();
+        const m = k.match(/\d+/);
+        const isTopNocKey = /([a-z])$/i.test(k) || k.includes('top') || k.includes('nóc') || k.includes('noc');
+        return m && m[0] === currentPalletNum && isTopNocKey;
+      }) || null;
+    }
+  })();
+
+  // Helper lấy thông tin CSDL đối chiếu chuẩn xác theo từng vị trí (Pallet Đứng vs Top Nóc)
+  // - Nếu đang ở Box 10A: Tủ trên cùng đối chiếu Box 10A; Tủ dưới đối chiếu Pallet 10 đi cùng!
+  // - Nếu đang ở Pallet 10: Tủ dưới đối chiếu Pallet 10; Tủ trên cùng đối chiếu Box 10A đi cùng!
+  const getTargetMetaForOrient = (orient) => {
+    const isTopOrient = (orient === 'vertical');
+    if (isPosVertical) {
+      if (isTopOrient) {
+        return {
+          expectedSku: expSkuClean,
+          expectedLpn: expLpnClean,
+          label: item?.suffix_key || 'Top nóc',
+          isSelf: true,
+          pairedItem: null
+        };
+      } else {
+        const pSku = pairedItem?.sku ? String(pairedItem.sku).trim().replace(/^[-:;,. #*!_/]+|[-:;,. #*!_/]+$/g, '').toUpperCase() : '';
+        const pLpn = pairedItem?.lpn ? String(pairedItem.lpn).trim().toUpperCase() : '';
+        return {
+          expectedSku: pSku,
+          expectedLpn: pLpn,
+          label: pairedItem?.suffix_key || (currentPalletNum ? `Pallet ${currentPalletNum}` : 'Tủ dưới (Pallet đứng)'),
+          isSelf: false,
+          pairedItem: pairedItem
+        };
+      }
+    } else {
+      if (!isTopOrient) {
+        return {
+          expectedSku: expSkuClean,
+          expectedLpn: expLpnClean,
+          label: item?.suffix_key || 'Pallet đứng',
+          isSelf: true,
+          pairedItem: null
+        };
+      } else {
+        const pSku = pairedItem?.sku ? String(pairedItem.sku).trim().replace(/^[-:;,. #*!_/]+|[-:;,. #*!_/]+$/g, '').toUpperCase() : '';
+        const pLpn = pairedItem?.lpn ? String(pairedItem.lpn).trim().toUpperCase() : '';
+        return {
+          expectedSku: pSku,
+          expectedLpn: pLpn,
+          label: pairedItem?.suffix_key || (currentPalletNum ? `Box ${currentPalletNum}A` : 'Tủ trên cùng (Top nóc)'),
+          isSelf: false,
+          pairedItem: pairedItem
+        };
+      }
+    }
+  };
+
+  // Chỉ lấy đúng những chữ nằm dưới mã QR / Barcode (loại bỏ chữ rác trên thùng hoặc thông tin khác)
+  const extractCleanCodeUnderRoi = (roi, type = 'all') => {
+    if (!roi) return '';
+    
+    // 1. Mã giải mã từ barcode/QR
+    const barcodes = Array.isArray(roi.barcodes) ? roi.barcodes : [];
+    for (const b of barcodes) {
+      const bStr = typeof b === 'string' ? b : (b?.data || '');
+      const cleanB = String(bStr).trim().replace(/^[-:;,. #*!_"'/]+|[-:;,. #*!_"'/]+$/g, '');
+      if (type === 'lpn') {
+        const d = cleanB.replace(/[^0-9]/g, '');
+        if (d.length >= 8 && d.length <= 12) return d;
+      } else if (type === 'sku') {
+        if (cleanB.includes('-') && /[A-Z0-9]/.test(cleanB)) return cleanB;
+      } else {
+        if (cleanB) return cleanB;
+      }
+    }
+
+    // 2. Mã đã bóc tách từ pipeline
+    const extLpn = roi.extracted_lpn || roi.extracted?.lpn;
+    const extSku = roi.extracted_sku || roi.extracted?.sku;
+    if (type === 'lpn' && extLpn) {
+      return String(extLpn).trim().replace(/^[-:;,. #*!_"'/]+|[-:;,. #*!_"'/]+$/g, '');
+    }
+    if (type === 'sku' && extSku) {
+      return String(extSku).trim().replace(/^[-:;,. #*!_"'/]+|[-:;,. #*!_"'/]+$/g, '');
+    }
+
+    // 3. Trích xuất đúng chuỗi chữ dưới mã vạch / QR (HRI) từ text_under_barcode, tokens hoặc full_text
+    const rawSources = [
+      roi.text_under_barcode,
+      roi.full_text,
+      ...(Array.isArray(roi.tokens) ? roi.tokens.map(t => t.text) : [])
+    ].filter(Boolean);
+
+    for (const src of rawSources) {
+      const s = String(src).trim();
+      if (type === 'lpn') {
+        const m = s.match(/\b\d{8,12}\b/) || s.match(/(?:06|05|60)\d{6,10}/);
+        if (m) return m[0];
+        const digitsOnly = s.replace(/[^0-9]/g, '');
+        if (digitsOnly.length >= 8 && digitsOnly.length <= 12) return digitsOnly;
+      } else if (type === 'sku') {
+        const m = s.match(/\b([A-Z0-9]{1,10}(?:\s*-\s*[A-Z0-9]{1,10}){1,4})\b/i);
+        if (m) return m[1].replace(/\s+/g, '').replace(/^[-:;,. #*!_"'/]+|[-:;,. #*!_"'/]+$/g, '');
+      } else {
+        const mSku = s.match(/\b([A-Z0-9]{1,10}(?:\s*-\s*[A-Z0-9]{1,10}){1,4})\b/i);
+        if (mSku) return mSku[1].replace(/\s+/g, '').replace(/^[-:;,. #*!_"'/]+|[-:;,. #*!_"'/]+$/g, '');
+        const mLpn = s.match(/\b\d{8,12}\b/);
+        if (mLpn) return mLpn[0];
+      }
+    }
+
+    if (type === 'lpn' && extLpn) return String(extLpn).trim();
+    if (type === 'sku' && extSku) return String(extSku).trim();
+    return '';
+  };
 
   const handleResolveAction = async (status, note = '') => {
     const currentItemId = item?.id || item?.item_id;
@@ -164,8 +452,15 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
       const data = await res.json();
       if (data && (data.success || data.has_result)) {
         setAiResult(data);
+        if (data.resolution_status && item) {
+          item.resolution_status = data.resolution_status;
+        }
         if (showPipelineInspector) {
           fetchInspectorAnalysis(false);
+        }
+        // Tự động kích hoạt cập nhật ra ngoài cho Container và danh sách tổng
+        if (typeof onResolveSuccess === 'function') {
+          onResolveSuccess(data);
         }
       } else {
         setAiScanError(data.detail || data.error || 'Quét thất bại hoặc không nhận diện được nhãn');
@@ -246,16 +541,27 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
             const rCat = (rawCat.toLowerCase().includes('top') || rOrient === 'vertical') ? 'Top nóc' : 'Pallet đứng';
 
             if (sCode) {
-              const sKey = `${sCode}__${rOrient}`;
+              const meta = getTargetMetaForOrient(rOrient);
+              const effectiveSku = resolveEffectiveSku(sCode, meta.expectedSku);
+              const sKey = `${effectiveSku}__${rOrient}`;
               if (!skuCounts[sKey]) {
-                const isM = Boolean(expSku && sCode.toUpperCase() === expSku);
+                const isTargetM = Boolean(meta.expectedSku && (effectiveSku.toUpperCase() === meta.expectedSku || isSkuCodeMatch(sCode, meta.expectedSku)));
+                const isSelfM = Boolean(expSkuClean && (effectiveSku.toUpperCase() === expSkuClean || isSkuCodeMatch(sCode, expSkuClean)));
+                const otherSibling = (!isSelfM && !isTargetM && Array.isArray(effectiveItemsList)) ? effectiveItemsList.find(it => it.sku && isSkuCodeMatch(sCode, it.sku)) : null;
+                const isM = isTargetM || isSelfM || Boolean(otherSibling);
+                const matchReason = isSelfM
+                  ? 'Khớp CSDL'
+                  : (isTargetM ? `Khớp ${meta.label} (CSDL: ${meta.expectedSku})` : (otherSibling ? `Khớp ${otherSibling.suffix_key || 'kiện khác'}` : (meta.expectedSku ? `Lệch mã: CSDL ${meta.label} là ${meta.expectedSku}` : `Lệch mã: CSDL là ${expSkuClean}`)));
                 skuCounts[sKey] = {
-                  code: sCode,
+                  code: effectiveSku,
+                  raw_code: sCode,
                   count: 0,
                   is_match: isM,
+                  is_other_item: !isSelfM && (isTargetM || Boolean(otherSibling)),
+                  other_item_label: !isSelfM && isTargetM ? meta.label : (otherSibling ? otherSibling.suffix_key : null),
                   orientation: rOrient,
                   category_label: rCat,
-                  match_reason: isM ? 'Khớp CSDL' : (expSku ? `Lệch mã: CSDL là ${expSku}` : 'Không khớp CSDL')
+                  match_reason: matchReason
                 };
               }
               skuCounts[sKey].count += 1;
@@ -264,16 +570,25 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
             const rawLpn = r.extracted_lpn || r.extracted?.lpn || '';
             const lCode = typeof rawLpn === 'string' ? rawLpn.trim() : rawLpn;
             if (lCode) {
+              const meta = getTargetMetaForOrient(rOrient);
               const lKey = `${lCode}__${rOrient}`;
               if (!lpnCounts[lKey]) {
-                const isM = Boolean(expLpn && lCode.toUpperCase() === expLpn);
+                const isTargetM = Boolean(meta.expectedLpn && isLpnCodeMatch(lCode, meta.expectedLpn));
+                const isSelfM = isLpnCodeMatch(lCode, expLpnClean);
+                const otherItem = (!isSelfM && !isTargetM) ? containerLpnsMap[lCode.toUpperCase()] : null;
+                const isM = isTargetM || isSelfM || Boolean(otherItem);
+                const matchReason = isSelfM
+                  ? 'Khớp CSDL'
+                  : (isTargetM ? `Khớp ${meta.label} (CSDL: ${meta.expectedLpn})` : (otherItem ? `Khớp ${otherItem.suffix_key || 'kiện khác'} (thùng dán cạnh)` : (meta.expectedLpn ? `Lệch mã: CSDL ${meta.label} là ${meta.expectedLpn}` : 'Không khớp CSDL')));
                 lpnCounts[lKey] = {
                   code: lCode,
                   count: 0,
                   is_match: isM,
+                  is_other_item: (!isSelfM && isTargetM) || Boolean(otherItem),
+                  other_item_label: !isSelfM && isTargetM ? meta.label : (otherItem ? otherItem.suffix_key : null),
                   orientation: rOrient,
                   category_label: rCat,
-                  match_reason: isM ? 'Khớp CSDL' : (expLpn ? `Lệch mã: CSDL là ${expLpn} (Thùng khác dán cạnh)` : 'Không khớp CSDL')
+                  match_reason: matchReason
                 };
               }
               lpnCounts[lKey].count += 1;
@@ -454,24 +769,13 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
   const activeImgUrl = activeImageObj ? resolveImgUrl(activeImageObj) : '';
   const activeFallbackUrl = typeof activeImageObj === 'object' ? activeImageObj?.source_url || '' : '';
 
-  // Kiểm tra kiện hàng dán tem dọc (Top nóc / Box 10A có chữ cái đuôi) hay dán tem ngang (Pallet đứng / Box 10)
-  const isPosVertical = (() => {
-    const rawPos = item?.suffix_key || item?.record_type || '';
-    if (!rawPos) return false;
-    const s = String(rawPos).trim().toLowerCase();
-    if (/top[\s_-]*n[oó]c/.test(s) || /d[oọ]c/.test(s) || /topnoc/.test(s)) return true;
-    if (/pallet[\s_-]*[đd][uứ]ng/.test(s) || /ngang/.test(s)) return false;
-    // Box 10A, 10B, 1A (số theo sau bởi chữ cái) -> tem dán dọc
-    return Boolean(/\d+[a-z]$/i.test(s));
-  })();
+
 
   // Ưu tiên trích xuất từ roi_details của inspectorAnalysis nếu có, để luôn đồng nhất 100% với các tem trong Inspector
   const activeInspectorRois = inspectorAnalysis?.roi_details || inspectorAnalysis?.images?.roi_details;
   let inspectorSkusList = [];
   let inspectorLpnsList = [];
   if (Array.isArray(activeInspectorRois) && activeInspectorRois.length > 0) {
-    const expSku = String(item?.sku || '').trim().toUpperCase();
-    const expLpn = String(item?.lpn || '').trim().toUpperCase();
     const sMap = {};
     const lMap = {};
 
@@ -479,21 +783,32 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
       const rawSku = r.extracted_sku || r.extracted?.sku || '';
       const sCode = typeof rawSku === 'string' ? rawSku.replace(/^[-:;,. #*!_/]+|[-:;,. #*!_/]+$/g, '') : rawSku;
       const rRot = r.rotation_deg ?? r.rotation ?? 0;
-      const rOrient = r.orientation || ((rRot === 90 || rRot === 270 || r.crop_mode === 'vertical_rois') ? 'vertical' : 'horizontal');
+      const rAsp = (r.bbox && r.bbox[2] && r.bbox[3]) ? (r.bbox[2] / r.bbox[3]) : 1.0;
+      const rOrient = r.orientation || (rAsp < 0.95 ? 'vertical' : 'horizontal');
       const rawCat = r.category_name || '';
-      const rCat = (rawCat.toLowerCase().includes('top') || rOrient === 'vertical') ? 'Top nóc' : 'Pallet đứng';
+      const rCat = (rOrient === 'vertical' || rawCat.toLowerCase().includes('top')) ? 'Top nóc' : 'Pallet đứng';
 
       if (sCode) {
-        const sKey = `${sCode}__${rOrient}`;
+        const meta = getTargetMetaForOrient(rOrient);
+        const effectiveSku = resolveEffectiveSku(sCode, meta.expectedSku);
+        const sKey = `${effectiveSku}__${rOrient}`;
         if (!sMap[sKey]) {
-          const isM = Boolean(expSku && sCode.toUpperCase() === expSku);
+          const isTargetM = Boolean(meta.expectedSku && (effectiveSku.toUpperCase() === meta.expectedSku || isSkuCodeMatch(sCode, meta.expectedSku)));
+          const isSelfM = Boolean(expSkuClean && (effectiveSku.toUpperCase() === expSkuClean || isSkuCodeMatch(sCode, expSkuClean)));
+          const isM = isTargetM || isSelfM;
+          const matchReason = isSelfM
+            ? 'Khớp CSDL'
+            : (isTargetM ? `Khớp ${meta.label}` : (meta.expectedSku ? `Lệch mã: CSDL ${meta.label} là ${meta.expectedSku}` : `Lệch mã: CSDL là ${expSkuClean}`));
           sMap[sKey] = {
-            code: sCode,
+            code: effectiveSku,
+            raw_code: sCode,
             count: 0,
             is_match: isM,
+            is_other_item: !isSelfM && isTargetM,
+            other_item_label: !isSelfM && isTargetM ? meta.label : null,
             orientation: rOrient,
             category_label: rCat,
-            match_reason: isM ? 'Khớp CSDL' : `Lệch mã: CSDL là ${expSku}`
+            match_reason: matchReason
           };
         }
         sMap[sKey].count += 1;
@@ -504,14 +819,23 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
       if (lCode) {
         const lKey = `${lCode}__${rOrient}`;
         if (!lMap[lKey]) {
-          const isM = Boolean(expLpn && lCode.toUpperCase() === expLpn);
+          const meta = getTargetMetaForOrient(rOrient);
+          const isSelfM = isLpnCodeMatch(lCode);
+          const isTargetM = Boolean(meta.expectedLpn && isLpnCodeMatch(lCode, meta.expectedLpn));
+          const otherItem = (!isSelfM && !isTargetM) ? containerLpnsMap[lCode.toUpperCase()] : meta.pairedItem;
+          const isM = isSelfM || isTargetM || Boolean(otherItem);
+          const matchReason = isSelfM
+            ? 'Khớp CSDL'
+            : (isTargetM ? `Khớp ${meta.label}` : (otherItem ? `Khớp ${otherItem.suffix_key || 'kiện khác'} (thùng dán cạnh)` : (meta.expectedLpn ? `Lệch mã: CSDL ${meta.label} là ${meta.expectedLpn}` : 'Không khớp CSDL')));
           lMap[lKey] = {
             code: lCode,
             count: 0,
             is_match: isM,
+            is_other_item: !isSelfM && (isTargetM || Boolean(otherItem)),
+            other_item_label: !isSelfM && isTargetM ? meta.label : (otherItem ? otherItem.suffix_key : null),
             orientation: rOrient,
             category_label: rCat,
-            match_reason: isM ? 'Khớp CSDL' : `Lệch mã: CSDL là ${expLpn} (Thùng khác dán cạnh)`
+            match_reason: matchReason
           };
         }
         lMap[lKey].count += 1;
@@ -520,40 +844,6 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
     inspectorSkusList = Object.values(sMap);
     inspectorLpnsList = Object.values(lMap);
   }
-
-  const expLpnClean = String(item?.lpn || item?.expected_lpn || '').trim().toUpperCase();
-  const expSkuClean = String(item?.sku || item?.expected_sku || '').trim().replace(/^[-:;,. #*!_/]+|[-:;,. #*!_/]+$/g, '').toUpperCase();
-
-  const isLpnCodeMatch = (code) => {
-    if (!expLpnClean || !code) return false;
-    return String(code).trim().toUpperCase() === expLpnClean;
-  };
-
-  const isSkuCodeMatch = (code) => {
-    if (!expSkuClean || !code) return false;
-    const clean = String(code).trim().replace(/^[-:;,. #*!_/]+|[-:;,. #*!_/]+$/g, '').toUpperCase();
-    if (clean === expSkuClean) return true;
-    // Sửa nhầm lẫn quang học Q <-> O (ví dụ WQA <-> WOA)
-    const calibClean = clean.replace(/-W[0Q]A$/, '-WOA').replace(/Q$/, 'O');
-    const calibExp = expSkuClean.replace(/-W[0Q]A$/, '-WOA').replace(/Q$/, 'O');
-    if (calibClean === calibExp) return true;
-    if (clean.length === expSkuClean.length) {
-      let diffs = 0;
-      let isConf = true;
-      for (let i = 0; i < clean.length; i++) {
-        if (clean[i] !== expSkuClean[i]) {
-          diffs++;
-          const pair = [clean[i], expSkuClean[i]].sort().join('');
-          if (!['OQ', '0O', '0Q', '0D', '8B', 'AR', '1I', '5S', '72', '8S', 'UV', '1L', '6G', '08'].includes(pair)) {
-            isConf = false;
-            break;
-          }
-        }
-      }
-      if (isConf && diffs <= 1) return true;
-    }
-    return false;
-  };
 
   // Danh sách các mã LPN & SKU đọc được từ AI (kèm số lượng xuất hiện và trạng thái đối chiếu CSDL)
   const rawLpnsList = (aiResult?.detected_lpns_detail && aiResult.detected_lpns_detail.length > 0)
@@ -584,24 +874,59 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
     }));
   }
 
-  // Tự động đối chiếu lại với expLpnClean để bảo đảm tính chuẩn xác 100%
-  const finalLpnsList = baseLpnsList.map((itemLpn) => {
-    const isM = isLpnCodeMatch(itemLpn.code) || Boolean(itemLpn.is_match);
-    const itemOrient = itemLpn.orientation || (isPosVertical ? 'vertical' : 'horizontal');
-    const rawCat = itemLpn.category_label || '';
-    const itemCat = (rawCat.toLowerCase().includes('top') || itemOrient === 'vertical') ? 'Top nóc' : 'Pallet đứng';
-    let reason = itemLpn.match_reason;
-    if (!isM && !reason) {
-      reason = expLpnClean ? `Lệch mã: CSDL là ${expLpnClean} (Thùng khác dán cạnh)` : 'Mã không có trong CSDL';
-    }
-    return {
-      ...itemLpn,
-      is_match: isM,
-      orientation: itemOrient,
-      category_label: itemCat,
-      match_reason: isM ? 'Khớp CSDL' : reason
-    };
-  });
+  // Tự động đối chiếu LPN: Nếu khớp CSDL hoặc khớp kiện đi kèm dán cạnh -> Đều ĐẠT (xanh lá/ngọc)
+  const finalLpnsList = (() => {
+    const map = {};
+    baseLpnsList.forEach((itemLpn) => {
+      const rawCode = String(itemLpn.code || '').trim();
+      let itemOrient = itemLpn.orientation;
+      if (!itemOrient) {
+        if (isLpnCodeMatch(rawCode)) {
+          itemOrient = isPosVertical ? 'vertical' : 'horizontal';
+        } else {
+          itemOrient = isPosVertical ? 'horizontal' : 'vertical';
+        }
+      }
+      const rawCat = itemLpn.category_label || '';
+      const itemCat = (itemOrient === 'vertical' || rawCat.toLowerCase().includes('top')) ? 'Top nóc' : 'Pallet đứng';
+      const meta = getTargetMetaForOrient(itemOrient);
+
+      const isSelfMatch = isLpnCodeMatch(rawCode);
+      const isTargetMatch = Boolean(meta.expectedLpn && isLpnCodeMatch(rawCode, meta.expectedLpn));
+      const otherItem = (!isSelfMatch && !isTargetMatch) ? containerLpnsMap[rawCode.toUpperCase()] : meta.pairedItem;
+      const isM = isSelfMatch || isTargetMatch || Boolean(itemLpn.is_match) || Boolean(otherItem);
+
+      let reason = '';
+      if (isSelfMatch) {
+        reason = 'Khớp CSDL';
+      } else if (isTargetMatch) {
+        reason = `Khớp ${meta.label} (CSDL: ${meta.expectedLpn})`;
+      } else if (otherItem) {
+        reason = `Khớp ${otherItem.suffix_key || 'kiện khác'} (thùng dán cạnh)`;
+      } else if (itemLpn.match_reason && isM) {
+        reason = itemLpn.match_reason;
+      } else {
+        reason = meta.expectedLpn ? `Lệch mã: CSDL ${meta.label} là ${meta.expectedLpn}` : (expLpnClean ? `Lệch mã: CSDL là ${expLpnClean} (Thùng khác dán cạnh)` : 'Mã không có trong CSDL');
+      }
+
+      const key = `${rawCode}__${itemOrient}`;
+      if (!map[key]) {
+        map[key] = {
+          ...itemLpn,
+          code: rawCode,
+          count: 0,
+          is_match: isM,
+          is_other_item: !isSelfMatch && (isTargetMatch || Boolean(otherItem)),
+          other_item_label: !isSelfMatch && isTargetMatch ? meta.label : (otherItem ? otherItem.suffix_key : (isPosVertical && itemOrient === 'horizontal' ? 'Tủ dưới (Pallet đứng)' : null)),
+          orientation: itemOrient,
+          category_label: itemCat,
+          match_reason: reason
+        };
+      }
+      map[key].count += (itemLpn.count || 1);
+    });
+    return Object.values(map);
+  })();
 
   const rawSkusList = (aiResult?.detected_skus_detail && aiResult.detected_skus_detail.length > 0)
     ? aiResult.detected_skus_detail
@@ -631,24 +956,184 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
     }));
   }
 
-  // Tự động đối chiếu lại với expSkuClean để bảo đảm tính chuẩn xác 100%
-  const finalSkusList = baseSkusList.map((itemSku) => {
-    const isM = isSkuCodeMatch(itemSku.code) || Boolean(itemSku.is_match);
-    const itemOrient = itemSku.orientation || (isPosVertical ? 'vertical' : 'horizontal');
-    const rawCat = itemSku.category_label || '';
-    const itemCat = (rawCat.toLowerCase().includes('top') || itemOrient === 'vertical') ? 'Top nóc' : 'Pallet đứng';
-    let reason = itemSku.match_reason;
-    if (!isM && !reason) {
-      reason = expSkuClean ? `Lệch mã: CSDL là ${expSkuClean}` : 'Mã không có trong CSDL';
+  // Tự động đối chiếu SKU theo đúng vị trí: Tủ Dưới đối chiếu Pallet Đứng cùng bộ; Top Nóc đối chiếu Thùng Nóc!
+  const finalSkusList = (() => {
+    const map = {};
+    baseSkusList.forEach((itemSku) => {
+      const rawCode = itemSku.code;
+      let itemOrient = itemSku.orientation;
+      if (!itemOrient) {
+        if (itemSku.count > 1) {
+          itemOrient = 'horizontal';
+        } else {
+          itemOrient = isPosVertical ? 'vertical' : 'horizontal';
+        }
+      }
+      const rawCat = itemSku.category_label || '';
+      const itemCat = (itemOrient === 'vertical' || rawCat.toLowerCase().includes('top')) ? 'Top nóc' : 'Pallet đứng';
+      const meta = getTargetMetaForOrient(itemOrient);
+      const effectiveCode = resolveEffectiveSku(rawCode, meta.expectedSku);
+
+      const isTargetM = Boolean(meta.expectedSku && (effectiveCode.toUpperCase() === meta.expectedSku || isSkuCodeMatch(rawCode, meta.expectedSku)));
+      const isSelfM = Boolean(expSkuClean && (effectiveCode.toUpperCase() === expSkuClean || isSkuCodeMatch(rawCode, expSkuClean)));
+      const otherSibling = (!isSelfM && !isTargetM && Array.isArray(effectiveItemsList)) ? effectiveItemsList.find(it => it.sku && isSkuCodeMatch(rawCode, it.sku)) : null;
+      const isM = isTargetM || isSelfM || Boolean(itemSku.is_match) || Boolean(otherSibling);
+
+      let reason = '';
+      if (isSelfM) {
+        reason = 'Khớp CSDL';
+      } else if (isTargetM) {
+        reason = `Khớp ${meta.label} (CSDL: ${meta.expectedSku})`;
+      } else if (otherSibling) {
+        reason = `Khớp ${otherSibling.suffix_key || 'kiện khác'}`;
+      } else if (itemSku.match_reason && isM) {
+        reason = itemSku.match_reason;
+      } else {
+        reason = meta.expectedSku ? `Lệch mã: CSDL ${meta.label} là ${meta.expectedSku}` : (expSkuClean ? `Lệch mã: CSDL là ${expSkuClean}` : 'Mã không có trong CSDL');
+      }
+
+      // Nhóm theo effectiveCode để gộp các biến thể giống 90-99% vào mã chuẩn:
+      const key = `${effectiveCode}__${itemOrient}`;
+      if (!map[key]) {
+        map[key] = {
+          ...itemSku,
+          code: effectiveCode,
+          count: 0,
+          is_match: isM,
+          is_other_item: !isSelfM && (isTargetM || Boolean(otherSibling)),
+          other_item_label: !isSelfM && isTargetM ? meta.label : (otherSibling ? otherSibling.suffix_key : null),
+          orientation: itemOrient,
+          category_label: itemCat,
+          match_reason: reason
+        };
+      }
+      map[key].count += (itemSku.count || 1);
+    });
+    return Object.values(map);
+  })();
+
+  // 1. Phân tách danh sách thành 2 nhóm: Tủ Dưới (Pallet đứng) và Tủ Trên Cùng (Top nóc)
+  // Quy chuẩn chuẩn xác từ thực tế nhà máy:
+  // - Top nóc là mã đứng: Con tem dán đứng (orientation === 'vertical')
+  // - Tủ đứng là nằm ngang: Con tem dán nằm ngang (orientation === 'horizontal')
+  const isTopnocLpn = (l) => {
+    if (l.orientation === 'vertical') return true;
+    if (l.orientation === 'horizontal') return false;
+    const cat = String(l.category_label || '').toLowerCase();
+    if (cat.includes('top') || cat.includes('nóc') || cat.includes('noc')) return true;
+    if (cat.includes('đứng') || cat.includes('dung') || cat.includes('dưới') || cat.includes('duoi')) return false;
+    if (l.is_other_item) return !isPosVertical;
+    return isPosVertical;
+  };
+
+  const bottomLpns = finalLpnsList.filter((l) => !isTopnocLpn(l));
+  const topLpns = finalLpnsList.filter((l) => isTopnocLpn(l));
+
+  const isTopnocSku = (s) => {
+    if (s.orientation === 'vertical') return true;
+    if (s.orientation === 'horizontal') return false;
+    const cat = String(s.category_label || '').toLowerCase();
+    if (cat.includes('top') || cat.includes('nóc') || cat.includes('noc')) return true;
+    if (cat.includes('đứng') || cat.includes('dung') || cat.includes('dưới') || cat.includes('duoi')) return false;
+    if (s.count > 1) return false; // Thường tủ đứng có 2 tủ nên count >= 2
+    return isPosVertical;
+  };
+
+  const bottomSkus = finalSkusList.filter((s) => !isTopnocSku(s));
+  const topSkus = finalSkusList.filter((s) => isTopnocSku(s));
+
+  const hasTopnocData = topLpns.length > 0 || topSkus.length > 0;
+
+  // 2. Xác định thông tin "Đi cùng với Pallet nào" cho kiện Top nóc
+  const pairedPalletInfo = (() => {
+    const otherLpn = bottomLpns.find((l) => l.is_other_item && l.other_item_label && l.other_item_label !== 'Tủ dưới (Pallet đứng)') ||
+                     topLpns.find((l) => l.is_other_item && l.other_item_label && l.other_item_label !== 'Tủ dưới (Pallet đứng)');
+    if (otherLpn) {
+      return {
+        label: `${otherLpn.other_item_label} (Kiện dán cạnh)`,
+        itemKey: otherLpn.other_item_label
+      };
     }
-    return {
-      ...itemSku,
-      is_match: isM,
-      orientation: itemOrient,
-      category_label: itemCat,
-      match_reason: isM ? 'Khớp CSDL' : reason
-    };
-  });
+    if (isPosVertical && item?.suffix_key) {
+      const matchNum = String(item.suffix_key).match(/\d+/);
+      if (matchNum && Array.isArray(itemsList)) {
+        const numStr = matchNum[0];
+        const pairedPallet = itemsList.find(
+          (it) => it.suffix_key && (it.suffix_key.toLowerCase() === `pallet ${numStr}`.toLowerCase() || it.suffix_key.toLowerCase() === `box ${numStr}`.toLowerCase())
+        );
+        if (pairedPallet) {
+          return {
+            label: `${pairedPallet.suffix_key} (Kiện dán cạnh)`,
+            itemKey: pairedPallet.suffix_key,
+            item: pairedPallet
+          };
+        }
+      }
+    }
+    if (!isPosVertical && item?.suffix_key) {
+      const matchNum = String(item.suffix_key).match(/\d+/);
+      if (matchNum && Array.isArray(itemsList)) {
+        const numStr = matchNum[0];
+        const pairedBox = itemsList.find(
+          (it) => it.suffix_key && (it.suffix_key.toLowerCase() === `box ${numStr}a`.toLowerCase() || it.suffix_key.toLowerCase() === `pallet ${numStr}a`.toLowerCase())
+        );
+        if (pairedBox) {
+          return {
+            label: `${pairedBox.suffix_key} (Thùng dán nóc)`,
+            itemKey: pairedBox.suffix_key,
+            item: pairedBox
+          };
+        }
+      }
+    }
+    return null;
+  })();
+
+  // 3. Tìm các Pallet trong container có chung bộ LPN & SKU Top nóc này
+  const sharedTopnocPallets = (() => {
+    if (!hasTopnocData && !isPosVertical) return [];
+    if (!Array.isArray(itemsList) || itemsList.length === 0) return [];
+
+    const targetTopLpn = topLpns[0]?.code || (isPosVertical ? item?.lpn : null);
+    if (!targetTopLpn) return [];
+
+    const matchingBoxes = itemsList.filter((it) => {
+      const itLpn = String(it.lpn || '').trim();
+      return itLpn === targetTopLpn;
+    });
+
+    if (matchingBoxes.length === 0) return [];
+
+    const results = [];
+    const seen = new Set();
+
+    matchingBoxes.forEach((bItem) => {
+      const bKey = bItem.suffix_key || '';
+      const matchNum = bKey.match(/\d+/);
+      let pItem = null;
+      if (matchNum) {
+        const num = matchNum[0];
+        pItem = itemsList.find(
+          (it) => it.suffix_key && it.suffix_key.toLowerCase() === `pallet ${num}`.toLowerCase()
+        );
+      }
+      const displayName = pItem ? `${pItem.suffix_key} (${bKey})` : bKey;
+      const navTarget = pItem || bItem;
+      const targetId = navTarget.id || navTarget.item_id || displayName;
+
+      if (!seen.has(targetId)) {
+        seen.add(targetId);
+        const isCurrent = (navTarget.id === (item?.id || item?.item_id)) || (bItem.id === (item?.id || item?.item_id));
+        results.push({
+          displayName,
+          navTarget,
+          isCurrent
+        });
+      }
+    });
+
+    return results;
+  })();
 
   const totalDetectedLpns = finalLpnsList.reduce((acc, l) => acc + (l.count || 1), 0);
   const totalDetectedSkus = finalSkusList.reduce((acc, s) => acc + (s.count || 1), 0);
@@ -723,7 +1208,7 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
               }}
               title="Dòng trước (← Phím mũi tên trái)"
             >
-              <ChevronLeft size={24} strokeWidth={2.5} />
+              <span style={{ fontSize: '1.4rem', fontWeight: '800', lineHeight: 1, userSelect: 'none' }}>&lsaquo;</span>
             </button>
           )}
 
@@ -758,22 +1243,41 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                 gap: '10px'
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
-                <h2
-                  style={{
-                    fontSize: '1.12rem',
-                    fontWeight: '800',
-                    color: '#2D1A12',
-                    margin: 0,
-                    lineHeight: 1.2,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap'
-                  }}
-                  title={modalTitle}
-                >
-                  {modalTitle}
-                </h2>
+              <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                  <h2
+                    style={{
+                      fontSize: '1.08rem',
+                      fontWeight: '800',
+                      color: '#2D1A12',
+                      margin: 0,
+                      lineHeight: 1.2,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}
+                    title={modalTitle}
+                  >
+                    {item.container_number || modalTitle}
+                  </h2>
+                  {item.factory && item.factory !== '—' && (
+                    <span
+                      style={{
+                        padding: '1px 6px',
+                        borderRadius: '3px',
+                        fontSize: '0.68rem',
+                        fontWeight: '700',
+                        backgroundColor: '#4A2E1B',
+                        color: '#FFFFFF'
+                      }}
+                    >
+                      {item.factory}
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: '0.74rem', color: '#7B5233', fontWeight: '700', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {item.suffix_key || item.record_type || 'Pallet'} {item.sku ? `• SKU: ${item.sku}` : ''}
+                </div>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
@@ -786,18 +1290,19 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                     style={{
                       background: '#FFFFFF',
                       border: '1px solid #EADCC9',
-                      borderRadius: '6px',
+                      borderRadius: '50%',
                       width: '32px',
                       height: '32px',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       color: hasPrev ? '#7B5233' : '#D1D5DB',
-                      cursor: hasPrev ? 'pointer' : 'not-allowed'
+                      cursor: hasPrev ? 'pointer' : 'not-allowed',
+                      boxShadow: '0 1px 3px rgba(123, 82, 51, 0.08)'
                     }}
                     title="Trước"
                   >
-                    <ChevronLeft size={18} />
+                    <span style={{ fontSize: '1.15rem', fontWeight: '800', lineHeight: 1, userSelect: 'none' }}>&lsaquo;</span>
                   </button>
                   <button
                     type="button"
@@ -806,18 +1311,19 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                     style={{
                       background: '#FFFFFF',
                       border: '1px solid #EADCC9',
-                      borderRadius: '6px',
+                      borderRadius: '50%',
                       width: '32px',
                       height: '32px',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       color: hasNext ? '#7B5233' : '#D1D5DB',
-                      cursor: hasNext ? 'pointer' : 'not-allowed'
+                      cursor: hasNext ? 'pointer' : 'not-allowed',
+                      boxShadow: '0 1px 3px rgba(123, 82, 51, 0.08)'
                     }}
                     title="Sau"
                   >
-                    <ChevronRight size={18} />
+                    <span style={{ fontSize: '1.15rem', fontWeight: '800', lineHeight: 1, userSelect: 'none' }}>&rsaquo;</span>
                   </button>
                 </div>
 
@@ -828,29 +1334,22 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                     onClose();
                   }}
                   style={{
-                    background: 'none',
-                    border: 'none',
+                    background: '#FAF6F0',
+                    border: '1px solid #EADCC9',
                     width: '32px',
                     height: '32px',
                     cursor: 'pointer',
                     color: '#7B5233',
-                    borderRadius: '6px',
+                    borderRadius: '50%',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    transition: 'all 0.15s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = '#EADCC9';
-                    e.currentTarget.style.color = '#2D1A12';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'none';
-                    e.currentTarget.style.color = '#7B5233';
+                    transition: 'all 0.15s ease',
+                    boxShadow: '0 1px 3px rgba(123, 82, 51, 0.08)'
                   }}
                   title="Đóng"
                 >
-                  <X size={20} strokeWidth={2.5} />
+                  <span style={{ fontSize: '1.2rem', fontWeight: '700', lineHeight: 1, userSelect: 'none' }}>&times;</span>
                 </button>
               </div>
             </div>
@@ -1507,7 +2006,6 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                             flexShrink: 0
                           }}
                         >
-                          <AlertCircle size={13} flexShrink={0} />
                           <span>{aiScanError}</span>
                         </div>
                       )}
@@ -1521,20 +2019,22 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                           overflow: 'hidden'
                         }}
                       >
-                        {/* CỘT TRÁI: MÃ LPN ĐỌC ĐƯỢC */}
+                        {/* CỘT 1 (BÊN TRÁI): THÔNG TIN TỦ DƯỚI (PALLET ĐỨNG) */}
                         <div
                           style={{
                             flex: 1,
                             borderRight: '1px solid #EADCC9',
                             display: 'flex',
                             flexDirection: 'column',
-                            minWidth: 0
+                            minWidth: 0,
+                            backgroundColor: '#FFFFFF'
                           }}
                         >
+                          {/* Header Cột Tủ Dưới */}
                           <div
                             style={{
-                              padding: '5px 8px',
-                              backgroundColor: '#FAF8F5',
+                              padding: '6px 9px',
+                              backgroundColor: '#FDFBF7',
                               borderBottom: '1px solid #EADCC9',
                               display: 'flex',
                               alignItems: 'center',
@@ -1542,49 +2042,59 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                               flexShrink: 0
                             }}
                           >
-                            <span
-                              style={{
-                                fontSize: '0.73rem',
-                                fontWeight: '800',
-                                color: '#4E3629',
-                                textTransform: 'uppercase',
-                                letterSpacing: '0.02em'
-                              }}
-                            >
-                              Mã LPN đọc được
-                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                              <span style={{ fontSize: '0.85rem' }}>🔽</span>
+                              <span
+                                style={{
+                                  fontSize: '0.74rem',
+                                  fontWeight: '800',
+                                  color: '#78350F',
+                                  textTransform: 'uppercase',
+                                  letterSpacing: '0.02em'
+                                }}
+                              >
+                                Tủ dưới (Pallet đứng)
+                              </span>
+                            </div>
                             <span
                               style={{
                                 fontSize: '0.67rem',
-                                color: '#7B5233',
+                                color: '#92400E',
                                 fontWeight: '700',
-                                backgroundColor: '#F4ECE1',
-                                padding: '1px 5px',
-                                borderRadius: '3px'
+                                backgroundColor: '#FEF3C7',
+                                padding: '1px 6px',
+                                borderRadius: '4px',
+                                border: '1px solid #FDE68A'
                               }}
                             >
-                              {finalLpnsList.length} mã
+                              {bottomLpns.length + bottomSkus.length} mã
                             </span>
                           </div>
 
+                          {/* Body Cột Tủ Dưới: Phân mục LPN & SKU */}
                           <div
                             style={{
                               flex: 1,
                               overflowY: 'auto',
-                              padding: '6px 7px',
+                              padding: '8px',
                               display: 'flex',
                               flexDirection: 'column',
-                              gap: '5px'
+                              gap: '10px'
                             }}
                           >
-                            {finalLpnsList.length === 0 ? (
-                              <div style={{ padding: '16px 6px', textAlign: 'center', color: '#9CA3AF', fontSize: '0.75rem', fontStyle: 'italic' }}>
-                                Chưa nhận diện được
+                            {/* Phân mục 1: Mã LPN Tủ Dưới */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <span style={{ fontSize: '0.7rem', fontWeight: '800', color: '#4B5563', textTransform: 'uppercase' }}>
+                                  Mã LPN ({bottomLpns.length})
+                                </span>
                               </div>
-                            ) : (
-                              finalLpnsList.map((itemLpn, idx) => {
-                                const isVertItem = itemLpn.orientation === 'vertical' || itemLpn.category_label?.includes('Top nóc');
-                                return (
+                              {bottomLpns.length === 0 ? (
+                                <div style={{ padding: '8px', textAlign: 'center', color: '#9CA3AF', fontSize: '0.73rem', fontStyle: 'italic', backgroundColor: '#F9FAFB', borderRadius: '4px' }}>
+                                  Chưa nhận diện được mã LPN
+                                </div>
+                              ) : (
+                                bottomLpns.map((itemLpn, idx) => (
                                   <div
                                     key={idx}
                                     style={{
@@ -1594,19 +2104,18 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                                       border: `1px solid ${itemLpn.is_match ? '#BBF7D0' : '#FECACA'}`,
                                       display: 'flex',
                                       flexDirection: 'column',
-                                      gap: '3px',
+                                      gap: '2px',
                                       minWidth: 0
                                     }}
                                     title={itemLpn.match_reason}
                                   >
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'nowrap' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'space-between' }}>
                                       <span
                                         style={{
                                           fontFamily: 'Consolas, monospace',
-                                          fontSize: '0.8rem',
+                                          fontSize: '0.82rem',
                                           fontWeight: '800',
                                           color: '#1F2937',
-                                          whiteSpace: 'nowrap',
                                           letterSpacing: '-0.2px'
                                         }}
                                       >
@@ -1621,104 +2130,40 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                                           padding: '1px 5px',
                                           borderRadius: '3px',
                                           border: '1px solid #E5E7EB',
-                                          whiteSpace: 'nowrap',
                                           flexShrink: 0
                                         }}
                                       >
                                         {itemLpn.count} cái
                                       </span>
-                                      <span
-                                        style={{
-                                          fontSize: '0.64rem',
-                                          fontWeight: '700',
-                                          padding: '1px 5px',
-                                          borderRadius: '3px',
-                                          backgroundColor: isVertItem ? '#EEF2FF' : '#FEF3C7',
-                                          color: isVertItem ? '#4338CA' : '#92400E',
-                                          border: `1px solid ${isVertItem ? '#C7D2FE' : '#FDE68A'}`,
-                                          whiteSpace: 'nowrap',
-                                          flexShrink: 0
-                                        }}
-                                        title={isVertItem ? 'Tem đọc theo kiện để dọc (Top nóc)' : 'Tem đọc theo kiện để ngang (Pallet đứng)'}
-                                      >
-                                        {isVertItem ? 'Top nóc' : 'Pallet đứng'}
-                                      </span>
                                     </div>
+                                    {itemLpn.is_other_item && itemLpn.match_reason && (
+                                      <div style={{ fontSize: '0.65rem', color: '#047857', fontWeight: '600', lineHeight: 1.2 }}>
+                                        {itemLpn.match_reason}
+                                      </div>
+                                    )}
                                     {!itemLpn.is_match && itemLpn.match_reason && (
                                       <div style={{ fontSize: '0.65rem', color: '#B91C1C', fontStyle: 'italic', lineHeight: 1.2 }}>
                                         {itemLpn.match_reason}
                                       </div>
                                     )}
                                   </div>
-                                );
-                              })
-                            )}
-                          </div>
-                        </div>
+                                ))
+                              )}
+                            </div>
 
-                        {/* CỘT PHẢI: MÃ SKU ĐỌC ĐƯỢC */}
-                        <div
-                          style={{
-                            flex: 1,
-                            display: 'flex',
-                            flexDirection: 'column',
-                            minWidth: 0
-                          }}
-                        >
-                          <div
-                            style={{
-                              padding: '5px 8px',
-                              backgroundColor: '#FAF8F5',
-                              borderBottom: '1px solid #EADCC9',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              flexShrink: 0
-                            }}
-                          >
-                            <span
-                              style={{
-                                fontSize: '0.73rem',
-                                fontWeight: '800',
-                                color: '#4E3629',
-                                textTransform: 'uppercase',
-                                letterSpacing: '0.02em'
-                              }}
-                            >
-                              Mã SKU đọc được
-                            </span>
-                            <span
-                              style={{
-                                fontSize: '0.67rem',
-                                color: '#7B5233',
-                                fontWeight: '700',
-                                backgroundColor: '#F4ECE1',
-                                padding: '1px 5px',
-                                borderRadius: '3px'
-                              }}
-                            >
-                              {finalSkusList.length} mã
-                            </span>
-                          </div>
-
-                          <div
-                            style={{
-                              flex: 1,
-                              overflowY: 'auto',
-                              padding: '6px 7px',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: '5px'
-                            }}
-                          >
-                            {finalSkusList.length === 0 ? (
-                              <div style={{ padding: '16px 6px', textAlign: 'center', color: '#9CA3AF', fontSize: '0.75rem', fontStyle: 'italic' }}>
-                                Chưa nhận diện được
+                            {/* Phân mục 2: Mã SKU Tủ Dưới */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <span style={{ fontSize: '0.7rem', fontWeight: '800', color: '#4B5563', textTransform: 'uppercase' }}>
+                                  Mã SKU ({bottomSkus.length})
+                                </span>
                               </div>
-                            ) : (
-                              finalSkusList.map((itemSku, idx) => {
-                                const isVertItem = itemSku.orientation === 'vertical' || itemSku.category_label?.includes('Top nóc');
-                                return (
+                              {bottomSkus.length === 0 ? (
+                                <div style={{ padding: '8px', textAlign: 'center', color: '#9CA3AF', fontSize: '0.73rem', fontStyle: 'italic', backgroundColor: '#F9FAFB', borderRadius: '4px' }}>
+                                  Chưa nhận diện được mã SKU
+                                </div>
+                              ) : (
+                                bottomSkus.map((itemSku, idx) => (
                                   <div
                                     key={idx}
                                     style={{
@@ -1728,19 +2173,18 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                                       border: `1px solid ${itemSku.is_match ? '#BBF7D0' : '#FECACA'}`,
                                       display: 'flex',
                                       flexDirection: 'column',
-                                      gap: '3px',
+                                      gap: '2px',
                                       minWidth: 0
                                     }}
                                     title={itemSku.match_reason}
                                   >
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'nowrap' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'space-between' }}>
                                       <span
                                         style={{
                                           fontFamily: 'Consolas, monospace',
-                                          fontSize: '0.8rem',
+                                          fontSize: '0.82rem',
                                           fontWeight: '800',
                                           color: '#1F2937',
-                                          whiteSpace: 'nowrap',
                                           letterSpacing: '-0.2px'
                                         }}
                                       >
@@ -1755,37 +2199,344 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                                           padding: '1px 5px',
                                           borderRadius: '3px',
                                           border: '1px solid #E5E7EB',
-                                          whiteSpace: 'nowrap',
                                           flexShrink: 0
                                         }}
                                       >
                                         {itemSku.count} cái
                                       </span>
-                                      <span
-                                        style={{
-                                          fontSize: '0.64rem',
-                                          fontWeight: '700',
-                                          padding: '1px 5px',
-                                          borderRadius: '3px',
-                                          backgroundColor: isVertItem ? '#EEF2FF' : '#FEF3C7',
-                                          color: isVertItem ? '#4338CA' : '#92400E',
-                                          border: `1px solid ${isVertItem ? '#C7D2FE' : '#FDE68A'}`,
-                                          whiteSpace: 'nowrap',
-                                          flexShrink: 0
-                                        }}
-                                        title={isVertItem ? 'Tem đọc theo kiện để dọc (Top nóc)' : 'Tem đọc theo kiện để ngang (Pallet đứng)'}
-                                      >
-                                        {isVertItem ? 'Top nóc' : 'Pallet đứng'}
-                                      </span>
                                     </div>
+                                    {itemSku.is_other_item && itemSku.match_reason && (
+                                      <div style={{ fontSize: '0.65rem', color: '#047857', fontWeight: '600', lineHeight: 1.2 }}>
+                                        {itemSku.match_reason}
+                                      </div>
+                                    )}
                                     {!itemSku.is_match && itemSku.match_reason && (
                                       <div style={{ fontSize: '0.65rem', color: '#B91C1C', fontStyle: 'italic', lineHeight: 1.2 }}>
                                         {itemSku.match_reason}
                                       </div>
                                     )}
                                   </div>
-                                );
-                              })
+                                ))
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* CỘT 2 (BÊN PHẢI): THÔNG TIN TỦ TRÊN CÙNG (TOP NÓC) */}
+                        <div
+                          style={{
+                            flex: 1,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            minWidth: 0,
+                            backgroundColor: '#FFFFFF'
+                          }}
+                        >
+                          {/* Header Cột Tủ Trên Cùng */}
+                          <div
+                            style={{
+                              padding: '6px 9px',
+                              backgroundColor: '#EEF2FF',
+                              borderBottom: '1px solid #C7D2FE',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              flexShrink: 0
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                              <span style={{ fontSize: '0.85rem' }}>🔼</span>
+                              <span
+                                style={{
+                                  fontSize: '0.74rem',
+                                  fontWeight: '800',
+                                  color: '#312E81',
+                                  textTransform: 'uppercase',
+                                  letterSpacing: '0.02em'
+                                }}
+                              >
+                                Tủ trên cùng (Top nóc)
+                              </span>
+                            </div>
+                            <span
+                              style={{
+                                fontSize: '0.67rem',
+                                color: '#4338CA',
+                                fontWeight: '700',
+                                backgroundColor: '#E0E7FF',
+                                padding: '1px 6px',
+                                borderRadius: '4px',
+                                border: '1px solid #C7D2FE'
+                              }}
+                            >
+                              {topLpns.length + topSkus.length} mã
+                            </span>
+                          </div>
+
+                          {/* Badge Phụ: ĐI CÙNG VỚI PALLET NÀO */}
+                          {pairedPalletInfo && (
+                            <div
+                              style={{
+                                padding: '4px 9px',
+                                backgroundColor: '#F8FAFC',
+                                borderBottom: '1px solid #E2E8F0',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                fontSize: '0.71rem',
+                                flexShrink: 0
+                              }}
+                            >
+                              <span style={{ color: '#475569', fontWeight: '600' }}>
+                                Đi cùng:
+                              </span>
+                              {pairedPalletInfo.item && onNavigate ? (
+                                <button
+                                  type="button"
+                                  onClick={() => onNavigate(pairedPalletInfo.item)}
+                                  style={{
+                                    border: '1px solid #93C5FD',
+                                    backgroundColor: '#EFF6FF',
+                                    color: '#1D4ED8',
+                                    fontWeight: '700',
+                                    fontSize: '0.7rem',
+                                    padding: '2px 7px',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    transition: 'all 0.15s ease'
+                                  }}
+                                  title="Bấm để xem pallet đi cùng"
+                                >
+                                  {pairedPalletInfo.label} →
+                                </button>
+                              ) : (
+                                <span
+                                  style={{
+                                    fontWeight: '700',
+                                    color: '#1E293B',
+                                    backgroundColor: '#F1F5F9',
+                                    padding: '1px 6px',
+                                    borderRadius: '3px'
+                                  }}
+                                >
+                                  {pairedPalletInfo.label}
+                                </span>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Body Cột Tủ Trên Cùng: Phân mục LPN, SKU & Danh sách cùng bộ Top Nóc */}
+                          <div
+                            style={{
+                              flex: 1,
+                              overflowY: 'auto',
+                              padding: '8px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '10px'
+                            }}
+                          >
+                            {!hasTopnocData && !isPosVertical ? (
+                              <div
+                                style={{
+                                  padding: '20px 10px',
+                                  textAlign: 'center',
+                                  color: '#94A3B8',
+                                  fontSize: '0.75rem',
+                                  fontStyle: 'italic',
+                                  backgroundColor: '#F8FAFC',
+                                  borderRadius: '6px',
+                                  border: '1px dashed #E2E8F0',
+                                  margin: 'auto 0'
+                                }}
+                              >
+                                Kiện này không có tem Top nóc đi kèm
+                              </div>
+                            ) : (
+                              <>
+                                {/* Phân mục 1: Mã LPN Top Nóc */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <span style={{ fontSize: '0.7rem', fontWeight: '800', color: '#4338CA', textTransform: 'uppercase' }}>
+                                      Mã LPN ({topLpns.length})
+                                    </span>
+                                  </div>
+                                  {topLpns.length === 0 ? (
+                                    <div style={{ padding: '6px', textAlign: 'center', color: '#9CA3AF', fontSize: '0.72rem', fontStyle: 'italic', backgroundColor: '#F8FAFC', borderRadius: '4px' }}>
+                                      Chưa nhận diện được mã LPN Top nóc
+                                    </div>
+                                  ) : (
+                                    topLpns.map((itemLpn, idx) => (
+                                      <div
+                                        key={idx}
+                                        style={{
+                                          padding: '5px 7px',
+                                          borderRadius: '4px',
+                                          backgroundColor: itemLpn.is_match ? '#F0FDF4' : '#FEF2F2',
+                                          border: `1px solid ${itemLpn.is_match ? '#BBF7D0' : '#FECACA'}`,
+                                          display: 'flex',
+                                          flexDirection: 'column',
+                                          gap: '2px',
+                                          minWidth: 0
+                                        }}
+                                        title={itemLpn.match_reason}
+                                      >
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'space-between' }}>
+                                          <span
+                                            style={{
+                                              fontFamily: 'Consolas, monospace',
+                                              fontSize: '0.82rem',
+                                              fontWeight: '800',
+                                              color: '#1F2937',
+                                              letterSpacing: '-0.2px'
+                                            }}
+                                          >
+                                            {itemLpn.code}
+                                          </span>
+                                          <span
+                                            style={{
+                                              fontSize: '0.66rem',
+                                              color: '#4B5563',
+                                              fontWeight: '600',
+                                              backgroundColor: '#FFFFFF',
+                                              padding: '1px 5px',
+                                              borderRadius: '3px',
+                                              border: '1px solid #E5E7EB',
+                                              flexShrink: 0
+                                            }}
+                                          >
+                                            {itemLpn.count} cái
+                                          </span>
+                                        </div>
+                                        {itemLpn.is_other_item && itemLpn.match_reason && (
+                                          <div style={{ fontSize: '0.65rem', color: '#047857', fontWeight: '600', lineHeight: 1.2 }}>
+                                            {itemLpn.match_reason}
+                                          </div>
+                                        )}
+                                        {!itemLpn.is_match && itemLpn.match_reason && (
+                                          <div style={{ fontSize: '0.65rem', color: '#B91C1C', fontStyle: 'italic', lineHeight: 1.2 }}>
+                                            {itemLpn.match_reason}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+
+                                {/* Phân mục 2: Mã SKU Top Nóc */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <span style={{ fontSize: '0.7rem', fontWeight: '800', color: '#4338CA', textTransform: 'uppercase' }}>
+                                      Mã SKU ({topSkus.length})
+                                    </span>
+                                  </div>
+                                  {topSkus.length === 0 ? (
+                                    <div style={{ padding: '6px', textAlign: 'center', color: '#9CA3AF', fontSize: '0.72rem', fontStyle: 'italic', backgroundColor: '#F8FAFC', borderRadius: '4px' }}>
+                                      Chưa nhận diện được mã SKU Top nóc
+                                    </div>
+                                  ) : (
+                                    topSkus.map((itemSku, idx) => (
+                                      <div
+                                        key={idx}
+                                        style={{
+                                          padding: '5px 7px',
+                                          borderRadius: '4px',
+                                          backgroundColor: itemSku.is_match ? '#F0FDF4' : '#FEF2F2',
+                                          border: `1px solid ${itemSku.is_match ? '#BBF7D0' : '#FECACA'}`,
+                                          display: 'flex',
+                                          flexDirection: 'column',
+                                          gap: '2px',
+                                          minWidth: 0
+                                        }}
+                                        title={itemSku.match_reason}
+                                      >
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'space-between' }}>
+                                          <span
+                                            style={{
+                                              fontFamily: 'Consolas, monospace',
+                                              fontSize: '0.82rem',
+                                              fontWeight: '800',
+                                              color: '#1F2937',
+                                              letterSpacing: '-0.2px'
+                                            }}
+                                          >
+                                            {itemSku.code}
+                                          </span>
+                                          <span
+                                            style={{
+                                              fontSize: '0.66rem',
+                                              color: '#4B5563',
+                                              fontWeight: '600',
+                                              backgroundColor: '#FFFFFF',
+                                              padding: '1px 5px',
+                                              borderRadius: '3px',
+                                              border: '1px solid #E5E7EB',
+                                              flexShrink: 0
+                                            }}
+                                          >
+                                            {itemSku.count} cái
+                                          </span>
+                                        </div>
+                                        {!itemSku.is_match && itemSku.match_reason && (
+                                          <div style={{ fontSize: '0.65rem', color: '#B91C1C', fontStyle: 'italic', lineHeight: 1.2 }}>
+                                            {itemSku.match_reason}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              </>
+                            )}
+
+                            {/* Phân mục 3: CÁC PALLET DÙNG CHUNG BỘ TOP NÓC TRONG CONTAINER */}
+                            {sharedTopnocPallets.length > 0 && (
+                              <div
+                                style={{
+                                  marginTop: '4px',
+                                  padding: '7px 8px',
+                                  backgroundColor: '#F8FAFC',
+                                  border: '1px solid #E2E8F0',
+                                  borderRadius: '5px',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: '6px'
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                  <span style={{ fontSize: '0.69rem', fontWeight: '800', color: '#334155' }}>
+                                    👥 Chung bộ Top nóc ({sharedTopnocPallets.length} kiện):
+                                  </span>
+                                </div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                                  {sharedTopnocPallets.map((shp, idx) => (
+                                    <button
+                                      key={idx}
+                                      type="button"
+                                      disabled={shp.isCurrent}
+                                      onClick={() => onNavigate && onNavigate(shp.navTarget)}
+                                      style={{
+                                        fontSize: '0.67rem',
+                                        fontWeight: shp.isCurrent ? '800' : '600',
+                                        padding: '2px 7px',
+                                        borderRadius: '4px',
+                                        backgroundColor: shp.isCurrent ? '#F59E0B' : '#FFFFFF',
+                                        color: shp.isCurrent ? '#FFFFFF' : '#1E293B',
+                                        border: `1px solid ${shp.isCurrent ? '#D97706' : '#CBD5E1'}`,
+                                        cursor: shp.isCurrent ? 'default' : 'pointer',
+                                        transition: 'all 0.15s ease',
+                                        boxShadow: shp.isCurrent ? '0 1px 2px rgba(245,158,11,0.3)' : 'none'
+                                      }}
+                                      title={shp.isCurrent ? 'Đang xem kiện này' : `Bấm chuyển sang xem ${shp.displayName}`}
+                                    >
+                                      {shp.displayName} {shp.isCurrent && '(Hiện tại)'}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
                             )}
                           </div>
                         </div>
@@ -2120,7 +2871,7 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
               }}
               title="Dòng kế tiếp (→ Phím mũi tên phải)"
             >
-              <ChevronRight size={24} strokeWidth={2.5} />
+              <span style={{ fontSize: '1.4rem', fontWeight: '800', lineHeight: 1, userSelect: 'none' }}>&rsaquo;</span>
             </button>
           )}
         </div>
@@ -2373,13 +3124,23 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                             {roiList.map((roi, rIdx) => {
                               const targetLpn = item?.lpn;
                               const targetSku = item?.sku;
+                              const pairedItem = inspectorAnalysis?.meta_info?.paired_item;
+                              const pairedLpn = pairedItem?.lpn;
+                              const containerItems = inspectorAnalysis?.meta_info?.container_items || [];
+
                               const isSel = selectedRoiIndex === rIdx;
                               const rLpn = roi.extracted_lpn || roi.extracted?.lpn;
                               const rSku = roi.extracted_sku || roi.extracted?.sku;
-                              const isLpnMatch = rLpn && targetLpn && (rLpn === targetLpn || isLpnCodeMatch(rLpn));
+
+                              const isDirectLpn = rLpn && targetLpn && (rLpn === targetLpn || isLpnCodeMatch(rLpn));
+                              const isPairedLpn = rLpn && pairedLpn && (rLpn === pairedLpn || isLpnCodeMatch(rLpn));
+                              const isContLpn = rLpn && containerItems.some(c => c.lpn && (c.lpn === rLpn || isLpnCodeMatch(rLpn)));
+                              const isLpnMatch = isDirectLpn || isPairedLpn || isContLpn;
+
                               const isSkuMatch = rSku && targetSku && (rSku === targetSku || isSkuCodeMatch(rSku));
                               const hasMatch = isLpnMatch || isSkuMatch;
                               const isMismatch = (rLpn && targetLpn && !isLpnMatch) || (rSku && targetSku && !isSkuMatch);
+                              const fullTextSnippet = roi.full_text || roi.text_under_barcode || (roi.tokens ? roi.tokens.map(t => t.text).join(' ') : '');
 
                               return (
                                 <div
@@ -2405,7 +3166,7 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                                       {hasMatch && (
                                         <span style={{ fontSize: '0.55rem', fontWeight: '800', color: '#15803D', backgroundColor: '#DCFCE7', padding: '1px 4px', borderRadius: '3px', whiteSpace: 'nowrap' }}>
-                                          ĐÚNG
+                                          {isPairedLpn ? `ĐÚNG (${pairedItem?.suffix_key})` : 'ĐÚNG'}
                                         </span>
                                       )}
                                       {isMismatch && (
@@ -2415,13 +3176,26 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                                       )}
                                     </div>
                                   </div>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px' }}>
-                                    <div style={{ fontSize: '0.66rem', color: '#1F2937', fontWeight: '600' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: '2px', gap: '4px' }}>
+                                    <div style={{ fontSize: '0.66rem', color: '#1F2937', fontWeight: '600', flex: 1, minWidth: 0 }}>
                                       {rLpn && <span style={{ color: isLpnMatch ? '#047857' : '#DC2626', display: 'block' }}>LPN: <strong>{rLpn}</strong></span>}
                                       {rSku && <span style={{ color: isSkuMatch ? '#047857' : '#DC2626', display: 'block' }}>SKU: <strong>{rSku}</strong></span>}
-                                      {!rLpn && !rSku && <span style={{ color: '#9CA3AF' }}>{roi.tokens?.length ? `${roi.tokens.length} từ OCR` : 'Tem phụ kiện'}</span>}
+                                      {(() => {
+                                        const cleanCode = extractCleanCodeUnderRoi(roi, rLpn ? 'lpn' : (rSku ? 'sku' : 'all'));
+                                        if (cleanCode && cleanCode !== rLpn && cleanCode !== rSku) {
+                                          return (
+                                            <span style={{ fontSize: '0.58rem', color: '#4B5563', display: 'block', marginTop: '1px', wordBreak: 'break-all' }}>
+                                              Chữ dưới QR: <strong style={{ fontFamily: 'monospace' }}>{cleanCode}</strong>
+                                            </span>
+                                          );
+                                        }
+                                        return null;
+                                      })()}
+                                      {!rLpn && !rSku && (
+                                        <span style={{ color: '#9CA3AF', fontSize: '0.58rem', fontStyle: 'italic' }}>Không có mã QR/Barcode</span>
+                                      )}
                                     </div>
-                                    <span style={{ fontSize: '0.56rem', color: '#9CA3AF', fontFamily: 'monospace' }}>
+                                    <span style={{ fontSize: '0.56rem', color: '#9CA3AF', fontFamily: 'monospace', flexShrink: 0 }}>
                                       {roi.bbox ? `[${roi.bbox[0]},${roi.bbox[1]}]` : ''}
                                     </span>
                                   </div>
@@ -2475,17 +3249,35 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                   {/* LPN Compare Card */}
                   {(() => {
                     const targetLpn = item?.lpn;
+                    const pairedItem = inspectorAnalysis?.meta_info?.paired_item;
+                    const pairedLpn = pairedItem?.lpn;
+                    const containerItems = inspectorAnalysis?.meta_info?.container_items || [];
+
+                    const isRoiLpnMatch = (code) => {
+                      if (!code) return { isMatch: false };
+                      if (targetLpn && (code === targetLpn || isLpnCodeMatch(code))) {
+                        return { isMatch: true, matchType: 'direct', label: 'ĐÚNG 100%' };
+                      }
+                      if (pairedLpn && (code === pairedLpn || isLpnCodeMatch(code))) {
+                        return { isMatch: true, matchType: 'paired', label: `ĐÚNG (Khớp ${pairedItem?.suffix_key || 'kiện đi kèm'})` };
+                      }
+                      const foundInCont = containerItems.find(c => c.lpn && (c.lpn === code || isLpnCodeMatch(code)));
+                      if (foundInCont) {
+                        return { isMatch: true, matchType: 'container', label: `ĐÚNG (Kiện ${foundInCont.suffix_key})` };
+                      }
+                      return { isMatch: false };
+                    };
+
                     const roiList = inspectorAnalysis?.roi_details || inspectorAnalysis?.images?.roi_details || [];
                     const lpnRois = roiList.filter(r => r.extracted_lpn || r.extracted?.lpn);
 
                     const lpnMatchedCount = lpnRois.filter(r => {
                       const code = r.extracted_lpn || r.extracted?.lpn;
-                      return targetLpn && (code === targetLpn || isLpnCodeMatch(code));
+                      return isRoiLpnMatch(code).isMatch;
                     }).length;
                     const lpnTotalCount = lpnRois.length;
-                    const lpnMatchRate = lpnTotalCount > 0 ? Math.round((lpnMatchedCount / lpnTotalCount) * 100) : (targetLpn && ((aiResult?.detected_lpn || inspectorAnalysis?.extracted?.lpn) === targetLpn || isLpnCodeMatch(aiResult?.detected_lpn || inspectorAnalysis?.extracted?.lpn)) ? 100 : 0);
-                    const isAllLpnMatch = lpnTotalCount > 0 ? (lpnMatchedCount === lpnTotalCount) : Boolean(aiResult?.is_lpn_match || (targetLpn && ((aiResult?.detected_lpn || inspectorAnalysis?.extracted?.lpn) === targetLpn || isLpnCodeMatch(aiResult?.detected_lpn || inspectorAnalysis?.extracted?.lpn))));
-                    const effectivePredLpn = lpnMatchedCount > 0 ? targetLpn : (aiResult?.detected_lpn || inspectorAnalysis?.extracted?.lpn);
+                    const isAllLpnMatch = lpnTotalCount > 0 ? (lpnMatchedCount === lpnTotalCount) : Boolean(aiResult?.is_lpn_match || (targetLpn && isRoiLpnMatch(aiResult?.detected_lpn || inspectorAnalysis?.extracted?.lpn).isMatch));
+                    const lpnMatchRate = lpnTotalCount > 0 ? Math.round((lpnMatchedCount / lpnTotalCount) * 100) : (isAllLpnMatch ? 100 : 0);
 
                     return (
                       <div
@@ -2519,6 +3311,11 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                             <span style={{ fontSize: '0.70rem', color: '#8D6E63', fontWeight: 'bold' }}>CSDL Chuẩn:</span>
                             <span style={{ fontFamily: 'Consolas, monospace', fontWeight: 'bold', fontSize: '0.86rem', color: '#1F2937' }}>
                               {targetLpn || '—'}
+                              {pairedItem && pairedLpn && (
+                                <span style={{ fontSize: '0.65rem', color: '#047857', marginLeft: '6px', fontWeight: '600' }}>
+                                  ({pairedItem.suffix_key}: {pairedLpn})
+                                </span>
+                              )}
                             </span>
                           </div>
 
@@ -2531,11 +3328,13 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                                 </span>
                                 <span style={{ fontSize: '0.58rem', color: '#8D6E63' }}>(bấm để xem vị trí)</span>
                               </div>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                 {lpnRois.map((roi) => {
                                   const code = roi.extracted_lpn || roi.extracted?.lpn;
-                                  const isMatch = targetLpn && (code === targetLpn || isLpnCodeMatch(code));
+                                  const matchInfo = isRoiLpnMatch(code);
+                                  const isMatch = matchInfo.isMatch;
                                   const isSelected = selectedRoiIndex === (roi.label_id - 1);
+                                  const cleanTextUnderQr = extractCleanCodeUnderRoi(roi, 'lpn');
                                   let diffDetail = '';
                                   if (!isMatch && targetLpn) {
                                     if (code.length === targetLpn.length) {
@@ -2565,9 +3364,9 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                                       }}
                                       style={{
                                         display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'space-between',
-                                        padding: '3px 6px',
+                                        flexDirection: 'column',
+                                        gap: '2px',
+                                        padding: '4px 6px',
                                         borderRadius: '4px',
                                         backgroundColor: isMatch ? '#F0FDF4' : '#FFF5F5',
                                         border: isMatch
@@ -2578,33 +3377,41 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                                       }}
                                       title="Bấm để phóng to và xem vùng tem này"
                                     >
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                        <span style={{ fontWeight: '800', fontSize: '0.66rem', color: isMatch ? '#065F46' : '#991B1B' }}>
-                                          Tem #{roi.label_id}:
-                                        </span>
-                                        <span style={{ fontFamily: 'Consolas, monospace', fontWeight: 'bold', fontSize: '0.74rem', color: isMatch ? '#047857' : '#DC2626' }}>
-                                          {code}
-                                        </span>
-                                      </div>
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                        <span
-                                          style={{
-                                            fontSize: '0.58rem',
-                                            fontWeight: '800',
-                                            padding: '1px 5px',
-                                            borderRadius: '3px',
-                                            backgroundColor: isMatch ? '#DCFCE7' : '#FEE2E2',
-                                            color: isMatch ? '#15803D' : '#DC2626'
-                                          }}
-                                        >
-                                          {isMatch ? 'ĐÚNG 100%' : 'SAI (Khác CSDL)'}
-                                        </span>
-                                        {diffDetail && (
-                                          <span style={{ fontSize: '0.58rem', color: '#B91C1C', fontWeight: '600' }}>
-                                            ({diffDetail})
+                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                          <span style={{ fontWeight: '800', fontSize: '0.66rem', color: isMatch ? '#065F46' : '#991B1B' }}>
+                                            Tem #{roi.label_id}:
                                           </span>
-                                        )}
+                                          <span style={{ fontFamily: 'Consolas, monospace', fontWeight: 'bold', fontSize: '0.74rem', color: isMatch ? '#047857' : '#DC2626' }}>
+                                            {code}
+                                          </span>
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                          <span
+                                            style={{
+                                              fontSize: '0.58rem',
+                                              fontWeight: '800',
+                                              padding: '1px 5px',
+                                              borderRadius: '3px',
+                                              backgroundColor: isMatch ? '#DCFCE7' : '#FEE2E2',
+                                              color: isMatch ? '#15803D' : '#DC2626'
+                                            }}
+                                          >
+                                            {matchInfo.label || (isMatch ? 'ĐÚNG 100%' : 'SAI (Khác CSDL)')}
+                                          </span>
+                                          {diffDetail && (
+                                            <span style={{ fontSize: '0.58rem', color: '#B91C1C', fontWeight: '600' }}>
+                                              ({diffDetail})
+                                            </span>
+                                          )}
+                                        </div>
                                       </div>
+                                      {/* Hiển thị chuẩn xác chữ dưới mã QR */}
+                                      {cleanTextUnderQr && (
+                                        <div style={{ fontSize: '0.58rem', color: '#4B5563', paddingLeft: '2px', lineHeight: '1.2' }}>
+                                          Chữ dưới mã: <strong style={{ color: '#1F2937', fontFamily: 'monospace' }}>{cleanTextUnderQr}</strong>
+                                        </div>
+                                      )}
                                     </div>
                                   );
                                 })}
@@ -2619,17 +3426,43 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                   {/* SKU Compare Card */}
                   {(() => {
                     const targetSku = item?.sku;
+                    const pairedSku = pairedItem?.sku;
                     const roiList = inspectorAnalysis?.roi_details || inspectorAnalysis?.images?.roi_details || [];
                     const skuRois = roiList.filter(r => r.extracted_sku || r.extracted?.sku);
+
+                    const isRoiSkuMatch = (code, roi) => {
+                      if (!code) return { isMatch: false };
+                      const rOrient = roi?.orientation || (roi?.rotation_deg === 90 || roi?.rotation_deg === 270 ? 'vertical' : 'horizontal');
+                      const meta = getTargetMetaForOrient(rOrient);
+
+                      if (meta.expectedSku && (code === meta.expectedSku || isSkuCodeMatch(code, meta.expectedSku))) {
+                        return {
+                          isMatch: true,
+                          matchType: meta.isSelf ? 'direct' : 'paired',
+                          label: meta.isSelf ? 'ĐÚNG 100%' : `ĐÚNG (${meta.label})`
+                        };
+                      }
+                      if (targetSku && (code === targetSku || isSkuCodeMatch(code, targetSku))) {
+                        return { isMatch: true, matchType: 'direct', label: 'ĐÚNG 100%' };
+                      }
+                      if (pairedSku && (code === pairedSku || isSkuCodeMatch(code, pairedSku))) {
+                        return { isMatch: true, matchType: 'paired', label: `ĐÚNG (${pairedItem?.suffix_key || 'Pallet đi cùng'})` };
+                      }
+                      const otherSibling = Array.isArray(itemsList) ? itemsList.find(it => isSkuCodeMatch(code, it.sku)) : null;
+                      if (otherSibling) {
+                        return { isMatch: true, matchType: 'container', label: `ĐÚNG (${otherSibling.suffix_key})` };
+                      }
+                      return { isMatch: false };
+                    };
 
                     const skuMatchedCount = skuRois.filter(r => {
                       const rawCode = r.extracted_sku || r.extracted?.sku || '';
                       const code = typeof rawCode === 'string' ? rawCode.replace(/^[-:;,. #*!_/]+|[-:;,. #*!_/]+$/g, '') : rawCode;
-                      return targetSku && (code === targetSku || isSkuCodeMatch(code));
+                      return isRoiSkuMatch(code, r).isMatch;
                     }).length;
                     const skuTotalCount = skuRois.length;
-                    const skuMatchRate = skuTotalCount > 0 ? Math.round((skuMatchedCount / skuTotalCount) * 100) : (targetSku && ((aiResult?.detected_sku || inspectorAnalysis?.extracted?.sku) === targetSku || isSkuCodeMatch(aiResult?.detected_sku || inspectorAnalysis?.extracted?.sku)) ? 100 : 0);
                     const isAllSkuMatch = skuTotalCount > 0 ? (skuMatchedCount === skuTotalCount) : Boolean(aiResult?.is_sku_match || (targetSku && ((aiResult?.detected_sku || inspectorAnalysis?.extracted?.sku) === targetSku || isSkuCodeMatch(aiResult?.detected_sku || inspectorAnalysis?.extracted?.sku))));
+                    const skuMatchRate = skuTotalCount > 0 ? Math.round((skuMatchedCount / skuTotalCount) * 100) : (isAllSkuMatch ? 100 : 0);
                     const effectivePredSku = skuMatchedCount > 0 ? targetSku : (aiResult?.detected_sku || inspectorAnalysis?.extracted?.sku);
 
                     return (
@@ -2664,6 +3497,11 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                             <span style={{ fontSize: '0.70rem', color: '#8D6E63', fontWeight: 'bold' }}>CSDL Chuẩn:</span>
                             <span style={{ fontFamily: 'Consolas, monospace', fontWeight: 'bold', fontSize: '0.86rem', color: '#1F2937' }}>
                               {targetSku || '—'}
+                              {pairedItem && pairedSku && (
+                                <span style={{ fontSize: '0.65rem', color: '#047857', marginLeft: '6px', fontWeight: '600' }}>
+                                  ({pairedItem.suffix_key}: {pairedSku})
+                                </span>
+                              )}
                             </span>
                           </div>
 
@@ -2676,12 +3514,14 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                                 </span>
                                 <span style={{ fontSize: '0.58rem', color: '#8D6E63' }}>(bấm để xem vị trí)</span>
                               </div>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                 {skuRois.map((roi) => {
                                   const rawCode = roi.extracted_sku || roi.extracted?.sku || '';
                                   const code = typeof rawCode === 'string' ? rawCode.replace(/^[-:;,. #*!_/]+|[-:;,. #*!_/]+$/g, '') : rawCode;
-                                  const isMatch = targetSku && (code === targetSku || isSkuCodeMatch(code));
+                                  const matchInfo = isRoiSkuMatch(code, roi);
+                                  const isMatch = matchInfo.isMatch;
                                   const isSelected = selectedRoiIndex === (roi.label_id - 1);
+                                  const cleanTextUnderQr = extractCleanCodeUnderRoi(roi, 'sku');
                                   let diffDetail = '';
                                   if (!isMatch && targetSku) {
                                     if (code.length === targetSku.length) {
@@ -2711,9 +3551,9 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                                       }}
                                       style={{
                                         display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'space-between',
-                                        padding: '3px 6px',
+                                        flexDirection: 'column',
+                                        gap: '2px',
+                                        padding: '4px 6px',
                                         borderRadius: '4px',
                                         backgroundColor: isMatch ? '#F0FDF4' : '#FFF5F5',
                                         border: isMatch
@@ -2724,33 +3564,41 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                                       }}
                                       title="Bấm để phóng to và xem vùng tem này"
                                     >
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                        <span style={{ fontWeight: '800', fontSize: '0.66rem', color: isMatch ? '#065F46' : '#991B1B' }}>
-                                          Tem #{roi.label_id}:
-                                        </span>
-                                        <span style={{ fontFamily: 'Consolas, monospace', fontWeight: 'bold', fontSize: '0.74rem', color: isMatch ? '#047857' : '#DC2626' }}>
-                                          {code}
-                                        </span>
-                                      </div>
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                        <span
-                                          style={{
-                                            fontSize: '0.58rem',
-                                            fontWeight: '800',
-                                            padding: '1px 5px',
-                                            borderRadius: '3px',
-                                            backgroundColor: isMatch ? '#DCFCE7' : '#FEE2E2',
-                                            color: isMatch ? '#15803D' : '#DC2626'
-                                          }}
-                                        >
-                                          {isMatch ? 'ĐÚNG 100%' : 'SAI (Khác CSDL)'}
-                                        </span>
-                                        {diffDetail && (
-                                          <span style={{ fontSize: '0.58rem', color: '#B91C1C', fontWeight: '600' }}>
-                                            ({diffDetail})
+                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                          <span style={{ fontWeight: '800', fontSize: '0.66rem', color: isMatch ? '#065F46' : '#991B1B' }}>
+                                            Tem #{roi.label_id}:
                                           </span>
-                                        )}
+                                          <span style={{ fontFamily: 'Consolas, monospace', fontWeight: 'bold', fontSize: '0.74rem', color: isMatch ? '#047857' : '#DC2626' }}>
+                                            {code}
+                                          </span>
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                          <span
+                                            style={{
+                                              fontSize: '0.58rem',
+                                              fontWeight: '800',
+                                              padding: '1px 5px',
+                                              borderRadius: '3px',
+                                              backgroundColor: isMatch ? '#DCFCE7' : '#FEE2E2',
+                                              color: isMatch ? '#15803D' : '#DC2626'
+                                            }}
+                                          >
+                                            {isMatch ? (matchInfo.label || 'ĐÚNG 100%') : 'SAI (Khác CSDL)'}
+                                          </span>
+                                          {diffDetail && (
+                                            <span style={{ fontSize: '0.58rem', color: '#B91C1C', fontWeight: '600' }}>
+                                              ({diffDetail})
+                                            </span>
+                                          )}
+                                        </div>
                                       </div>
+                                      {/* Hiển thị chuẩn xác chữ dưới mã QR */}
+                                      {cleanTextUnderQr && (
+                                        <div style={{ fontSize: '0.58rem', color: '#4B5563', paddingLeft: '2px', lineHeight: '1.2' }}>
+                                          Chữ dưới mã: <strong style={{ color: '#1F2937', fontFamily: 'monospace' }}>{cleanTextUnderQr}</strong>
+                                        </div>
+                                      )}
                                     </div>
                                   );
                                 })}

@@ -738,6 +738,23 @@ const QualityOverviewView = () => {
       } catch (e) {}
     }
 
+    const rawPartName = (selectedTask.part_name || selectedTask.product_sku || '').trim();
+    const defaultCabinet = cleanCabinetTag(parsedJson?.cabinet || parsedJson?.product_label || parsedJson?.badge || '');
+    const defaultQty = selectedTask.required_qty || parsedJson?.requiredQty || '';
+
+    // Tách các chi tiết từ part_name nếu có dấu phẩy hoặc xuống dòng
+    const names = (rawPartName && rawPartName !== 'N/A')
+      ? rawPartName
+          .split(/[\n\r;]|,\s*(?=[A-ZÀ-Ỹa-z0-9])/)
+          .map(s => s.trim())
+          .filter(Boolean)
+      : [];
+
+    const rawSpec = (selectedTask.specification || '').trim();
+    const specs = rawSpec.includes(',') 
+      ? rawSpec.split(',').map(s => s.trim()).filter(Boolean) 
+      : [];
+
     // 1. Nếu có mảng details/items từ API hoặc data_json
     let rawItems = [];
     if (Array.isArray(selectedTask.details) && selectedTask.details.length > 0) {
@@ -753,20 +770,43 @@ const QualityOverviewView = () => {
     }
 
     if (rawItems.length > 0) {
-      return rawItems.map((it, idx) => ({
+      let list = rawItems.map((it, idx) => ({
         stt: String(idx + 1).padStart(2, '0'),
         name: it.part_name || it.name || it.product || 'Chi tiết',
         spec: it.specification || it.spec || selectedTask.specification || 'Tiêu chuẩn',
         cabinet: cleanCabinetTag(it.cabinet || it.product_label || it.badge || it.product_name || it.product_sku || it.sku || ''),
         qty: it.plan_qty || it.qty || ''
       }));
+
+      // Tự động bổ sung nếu part_name có nhiều chi tiết mà rawItems bị thiếu (khớp 100% ngoài và trong)
+      if (names.length > 0) {
+        const existingNamesLower = list.map(it => (it.name || '').toLowerCase().trim());
+        names.forEach((pName, pIdx) => {
+          const pNameLower = pName.toLowerCase().trim();
+          const alreadyExists = existingNamesLower.some(existing => 
+            existing === pNameLower || existing.includes(pNameLower) || pNameLower.includes(existing)
+          );
+          if (!alreadyExists) {
+            const pSpec = specs[pIdx] || (specs.length === 1 ? specs[0] : (rawSpec || 'Tiêu chuẩn'));
+            list.push({
+              stt: String(list.length + 1).padStart(2, '0'),
+              name: pName,
+              spec: pSpec,
+              cabinet: defaultCabinet,
+              qty: defaultQty
+            });
+          }
+        });
+        list = list.map((it, idx) => ({
+          ...it,
+          stt: String(idx + 1).padStart(2, '0')
+        }));
+      }
+
+      return list;
     }
 
-    // 2. Phân rã từ chuỗi part_name (hỗ trợ phân tách bởi dấu phẩy, chấm phẩy hoặc xuống dòng)
-    const rawPartName = (selectedTask.part_name || selectedTask.product_sku || '').trim();
-    const defaultCabinet = cleanCabinetTag(parsedJson?.cabinet || parsedJson?.product_label || parsedJson?.badge || '');
-    const defaultQty = selectedTask.required_qty || parsedJson?.requiredQty || '';
-
+    // 2. Phân rã từ chuỗi part_name (hỗ trợ phân tách bởi dấu phẩy, chấm phẩy hoặc xuống dòng khi không có rawItems)
     if (!rawPartName || rawPartName === 'N/A') {
       return [{
         stt: '01',
@@ -776,17 +816,6 @@ const QualityOverviewView = () => {
         qty: defaultQty
       }];
     }
-
-    // Tách các chi tiết nếu có dấu phẩy hoặc xuống dòng
-    const names = rawPartName
-      .split(/[\n\r;]|,\s*(?=[A-ZÀ-Ỹa-z0-9])/)
-      .map(s => s.trim())
-      .filter(Boolean);
-
-    const rawSpec = (selectedTask.specification || '').trim();
-    const specs = rawSpec.includes(',') 
-      ? rawSpec.split(',').map(s => s.trim()).filter(Boolean) 
-      : [];
 
     if (names.length === 0) {
       return [{

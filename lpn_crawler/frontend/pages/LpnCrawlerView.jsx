@@ -2,8 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { lpnCrawlerApi } from '../services/api';
 import { ControlPanel } from '../components/ControlPanel';
-import { DataTable } from '../components/DataTable';
-import { ContainerCardView } from '../components/ContainerCardView';
+import { ContainerTableView } from '../components/ContainerTableView';
 import { ContainerDetailModal } from '../components/ContainerDetailModal';
 import { DetailModal } from '../components/DetailModal';
 import { LogModal } from '../components/LogModal';
@@ -14,6 +13,7 @@ import { MissingRowsModal } from '../components/MissingRowsModal';
 import { ConfirmDialogModal } from '../components/ConfirmDialogModal';
 import { Toast } from '../components/Toast';
 import { AiOcrScanModal } from '../components/AiOcrScanModal';
+import { BatchContainerScanModal } from '../components/BatchContainerScanModal';
 import { DashboardModal } from '../components/DashboardModal';
 import { LayoutDashboard } from 'lucide-react';
 import useUiStore from '@shared/store/uiStore';
@@ -26,6 +26,9 @@ export default function LpnCrawlerView() {
   const setHeaderRightExtra = outletContext.setHeaderRightExtra || (() => {});
 
   const { isLpnDashboardOpen, setLpnDashboardOpen } = useUiStore();
+
+  const [showBatchScanModal, setShowBatchScanModal] = useState(false);
+  const [unscannedCount, setUnscannedCount] = useState(null);
 
   // Master Data & KPI States
   const [kpiStats, setKpiStats] = useState({
@@ -414,29 +417,20 @@ export default function LpnCrawlerView() {
       const activeSort = sortOptionRef.current || sortOption;
       const activePage = pageRef.current || page;
       const activePageSize = pageSizeRef.current || pageSize;
-      const currentMode = viewModeRef.current || viewMode;
 
-      if (currentMode === 'cards') {
-        const res = await lpnCrawlerApi.getContainerCards({
-          ...activeFilters,
-          sort: activeSort,
-          page: activePage,
-          page_size: activePageSize || 24
-        });
-        if (viewModeRef.current !== 'cards') return;
-        setItems(res.items || []);
-        setTotal(res.total || 0);
-      } else {
-        const res = await lpnCrawlerApi.getContainers({
-          ...activeFilters,
-          sort: activeSort,
-          page: activePage,
-          page_size: activePageSize || 15
-        });
-        if (viewModeRef.current !== 'table') return;
-        setItems(res.items || []);
-        setTotal(res.total || 0);
-      }
+      const res = await lpnCrawlerApi.getContainerCards({
+        ...activeFilters,
+        sort: activeSort,
+        page: activePage,
+        page_size: activePageSize || 15
+      });
+      setItems(res.items || []);
+      setTotal(res.total || 0);
+
+      // Cập nhật số lượng Container chưa quét
+      lpnCrawlerApi.getUnscannedContainers({ ...activeFilters, limit: 1 }).then((uRes) => {
+        setUnscannedCount(uRes.total_containers);
+      }).catch(() => {});
     } catch (e) {
       console.error(e);
     } finally {
@@ -795,39 +789,25 @@ export default function LpnCrawlerView() {
         onStartSync={() => handleStartSync(false)}
         onStopSync={handleStopSync}
         onOpenSyncMonitor={() => setShowSyncMonitorModal(true)}
+        onOpenBatchScan={() => setShowBatchScanModal(true)}
+        unscannedCount={unscannedCount}
         viewMode={viewMode}
         onViewModeChange={handleViewModeChange}
       />
 
-      {/* Main Data Display: Table View OR Container Card View */}
-      {viewMode === 'cards' ? (
-        <ContainerCardView
-          items={items}
-          total={total}
-          page={page}
-          pageSize={pageSize}
-          onPageChange={(newPage) => setPage(newPage)}
-          onSelectContainer={handleSelectContainer}
-          onSelectItem={handleSelectItem}
-          selectedItemIds={selectedItemIds}
-          onToggleSelectRow={handleToggleSelectRow}
-          onToggleSelectAll={handleToggleSelectAll}
-          loading={loading}
-        />
-      ) : (
-        <DataTable
-          items={items}
-          total={total}
-          page={page}
-          pageSize={pageSize}
-          onPageChange={(newPage) => setPage(newPage)}
-          onSelectItem={handleSelectItem}
-          selectedItemIds={selectedItemIds}
-          onToggleSelectRow={handleToggleSelectRow}
-          onToggleSelectAll={handleToggleSelectAll}
-          loading={loading}
-        />
-      )}
+      {/* Main Data Display: Bảng Danh Sách Container */}
+      <ContainerTableView
+        items={items}
+        total={total}
+        page={page}
+        pageSize={pageSize}
+        onPageChange={(newPage) => setPage(newPage)}
+        onSelectContainer={handleSelectContainer}
+        selectedContainerIds={selectedItemIds}
+        onToggleSelectRow={handleToggleSelectRow}
+        onToggleSelectAll={handleToggleSelectAll}
+        loading={loading}
+      />
 
       {/* Custom Styled Confirm / Alert Dialog */}
       <ConfirmDialogModal
@@ -890,7 +870,31 @@ export default function LpnCrawlerView() {
             setSelectedItem(item);
             setSelectedItemsList(itemsList || selectedContainer.items || []);
           }}
-          onClose={() => setSelectedContainer(null)}
+          onClose={() => {
+            setSelectedContainer(null);
+            fetchContainers(true);
+            fetchKpiStats();
+          }}
+          onContainerUpdate={(updatedContainer) => {
+            setSelectedContainer(updatedContainer);
+            // Cập nhật ngay dòng tương ứng ngoài bảng để badge đổi tức thì mà không cần F5
+            setItems((prevItems) =>
+              prevItems.map((c) =>
+                (c.container_id === updatedContainer.container_id || c.id === updatedContainer.id || c.container_id === updatedContainer.id)
+                  ? {
+                      ...c,
+                      status_code: updatedContainer.status_code,
+                      status_label: updatedContainer.status_label,
+                      ocr_scanned_count: updatedContainer.ocr_scanned_count,
+                      ocr_matched_count: updatedContainer.ocr_matched_count,
+                      ocr_mismatch_count: updatedContainer.ocr_mismatch_count,
+                      is_valid: updatedContainer.status_code === 'PASSED'
+                    }
+                  : c
+              )
+            );
+            fetchKpiStats();
+          }}
         />
       )}
 
@@ -904,10 +908,63 @@ export default function LpnCrawlerView() {
             setSelectedItem(null);
             setSelectedItemsList([]);
             fetchKpiStats();
+            const cId = selectedContainer?.container_id || selectedContainer?.id;
+            if (cId) {
+              lpnCrawlerApi.getContainerDetail(cId).then((fresh) => {
+                if (fresh && fresh.items) setSelectedContainer({ ...fresh });
+              }).catch(() => {});
+            }
           }}
-          onResolveSuccess={() => {
+          onResolveSuccess={(scanData) => {
             fetchKpiStats();
             fetchContainers(true);
+            // Cập nhật tức thì item trong selectedContainer ngay lập tức (zero delay)
+            if (scanData && scanData.item_id) {
+              setSelectedContainer((prev) => {
+                if (!prev || !prev.items) return prev;
+                const newItems = prev.items.map((it) => {
+                  if (it.id === scanData.item_id) {
+                    const hasItemSku = Boolean(
+                      it.sku &&
+                      String(it.sku).trim() !== '' &&
+                      String(it.sku).trim() !== 'None' &&
+                      String(it.sku).trim() !== '0' &&
+                      String(it.sku).trim() !== '—'
+                    );
+                    const isPassed = Boolean(
+                      scanData.status === 'success' &&
+                      scanData.is_lpn_match &&
+                      (!hasItemSku || scanData.is_sku_match)
+                    );
+                    return {
+                      ...it,
+                      resolution_status: scanData.resolution_status || (isPassed ? 'resolved' : it.resolution_status),
+                      ocr: {
+                        ...(it.ocr || {}),
+                        id: scanData.id || it.ocr?.id,
+                        image_id: scanData.image_id,
+                        status: scanData.status,
+                        is_lpn_match: Boolean(scanData.is_lpn_match),
+                        is_sku_match: Boolean(scanData.is_sku_match),
+                        detected_lpn: scanData.detected_lpn,
+                        detected_sku: scanData.detected_sku,
+                        confidence: scanData.confidence,
+                        error_reason: scanData.error_reason,
+                        scanned_at: scanData.scanned_at
+                      }
+                    };
+                  }
+                  return it;
+                });
+                return { ...prev, items: newItems };
+              });
+            }
+            const cId = selectedContainer?.container_id || selectedContainer?.id;
+            if (cId) {
+              lpnCrawlerApi.getContainerDetail(cId).then((fresh) => {
+                if (fresh && fresh.items) setSelectedContainer({ ...fresh });
+              }).catch(() => {});
+            }
           }}
         />
       )}
@@ -946,6 +1003,18 @@ export default function LpnCrawlerView() {
       <AiOcrScanModal
         isOpen={showAiOcrScanModal}
         onClose={() => setShowAiOcrScanModal(false)}
+      />
+
+      {/* Batch Container Scan Modal (Quét Hàng Loạt Container Chưa Quét) */}
+      <BatchContainerScanModal
+        isOpen={showBatchScanModal}
+        onClose={() => setShowBatchScanModal(false)}
+        currentFilters={filters}
+        selectedContainerIds={selectedItemIds}
+        onScanComplete={() => {
+          fetchContainers(true);
+          fetchKpiStats();
+        }}
       />
 
       {/* Dashboard Modal (All-Time Data & Upcoming Charts) */}

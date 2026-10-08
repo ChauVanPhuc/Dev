@@ -10,7 +10,8 @@ HEADER_FIELD_KEYS = {
     "factory": ["factory", "nha may", "nhà máy"],
     "date_loading_raw": ["date loading", "dateloading", "date_loading", "ngay loading"],
     "timestamp_raw": ["timestamp", "time stamp", "thoi gian"],
-    "operator_name": ["operator name", "operatorname", "operator_name", "nguoi thao tac", "operator"]
+    "operator_name": ["operator name", "operatorname", "operator_name", "nguoi thao tac", "operator"],
+    "container_image": ["picture container", "container picture", "picture_container", "image container", "anh container", "ảnh container", "photo container", "picture", "hình container", "hinh container"]
 }
 
 ITEM_FIELD_REGEX = re.compile(r"^(Batch|LPN|SKU|Picture)\s+(.+)$", re.IGNORECASE)
@@ -141,7 +142,8 @@ def process_raw_container_data(raw_fields: Dict[str, Any], raw_images_map: Dict[
         "factory": "",
         "date_loading_raw": "",
         "timestamp_raw": "",
-        "operator_name": ""
+        "operator_name": "",
+        "container_image": ""
     }
 
     item_groups: Dict[str, Dict[str, Any]] = {}
@@ -206,6 +208,13 @@ def process_raw_container_data(raw_fields: Dict[str, Any], raw_images_map: Dict[
     for img_field_name, urls in raw_images_map.items():
         if not urls:
             continue
+        # Nếu là ảnh cấp Container (Container picture / Picture Container)
+        lower_img_name = img_field_name.lower().strip()
+        if any(cp in lower_img_name for cp in ("container picture", "picture container", "container image", "ảnh container")):
+            if urls and not header.get("container_image"):
+                header["container_image"] = urls[0]
+            continue
+
         # Chuẩn hóa field name ảnh: "Picture LPN Pallet 1" -> "Pallet 1", "Picture Box 1A" -> "Box 1A", "Picture 1" -> "Pallet 1"
         clean_img_key = re.sub(r"^(picture|ảnh|image)\s+(lpn\s+)?", "", img_field_name, flags=re.IGNORECASE).strip()
         
@@ -266,6 +275,7 @@ def process_raw_container_data(raw_fields: Dict[str, Any], raw_images_map: Dict[
             "timestamp_raw": header["timestamp_raw"],
             "timestamp_val": parsed_dt,
             "operator_name": header["operator_name"],
+            "container_image": header.get("container_image", ""),
             "record_fingerprint": fingerprint,
             "content_hash": content_hash
         },
@@ -292,23 +302,31 @@ def process_api_row_data(row: Dict[str, Any], app_name: str = "", table_name: st
 
         raw_fields[k_str] = v_str
 
-        # Nếu là trường Picture
-        if ITEM_FIELD_REGEX.match(k_str) and k_str.lower().startswith("picture"):
+        k_lower = k_str.lower()
+        # Nếu là trường Container Picture hoặc Item Picture
+        is_cont_pic = any(cp in k_lower for cp in ("container picture", "picture container", "container_picture", "picture_container", "container image"))
+        is_item_pic = ITEM_FIELD_REGEX.match(k_str) and k_lower.startswith("picture")
+        is_any_pic = is_cont_pic or is_item_pic or ("picture" in k_lower and ("pallet" in k_lower or "box" in k_lower or "cont" in k_lower))
+
+        if is_any_pic:
             urls = []
+            target_tbl = "CONTAINER" if is_cont_pic else (table_name or "LPN NEW")
             if isinstance(v, list):
                 for item_val in v:
                     iv_str = str(item_val).strip()
                     if iv_str.startswith("http"):
                         urls.append(iv_str)
                     elif app_name and iv_str:
-                        urls.append(f"https://www.appsheet.com/template/gettablefileurl?appName={app_name}&tableName={table_name or 'LPN NEW'}&fileName={iv_str}")
+                        urls.append(f"https://www.appsheet.com/template/gettablefileurl?appName={app_name}&tableName={target_tbl}&fileName={iv_str}")
             elif v_str.startswith("http"):
                 urls.append(v_str)
-            elif app_name and v_str and any(v_str.lower().endswith(ext) for ext in ('.jpg', '.jpeg', '.png', '.webp', '.gif')) or '/' in v_str:
-                urls.append(f"https://www.appsheet.com/template/gettablefileurl?appName={app_name}&tableName={table_name or 'LPN NEW'}&fileName={v_str}")
+            elif app_name and v_str and (any(v_str.lower().endswith(ext) for ext in ('.jpg', '.jpeg', '.png', '.webp', '.gif')) or '/' in v_str or 'images/' in v_str.lower()):
+                urls.append(f"https://www.appsheet.com/template/gettablefileurl?appName={app_name}&tableName={target_tbl}&fileName={v_str}")
 
             if urls:
                 raw_images_map[k_str] = urls
+                if is_cont_pic:
+                    raw_fields["container_image"] = urls[0]
 
     return process_raw_container_data(raw_fields, raw_images_map)
 

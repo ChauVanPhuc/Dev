@@ -254,6 +254,28 @@ export const lpnCrawlerApi = {
   },
 
 
+  // Lấy danh sách các container chưa quét hoặc chưa quét đủ ảnh
+  async getUnscannedContainers(params = {}) {
+    try {
+      const q = new URLSearchParams();
+      if (params.startDate) q.append('startDate', params.startDate);
+      if (params.endDate) q.append('endDate', params.endDate);
+      if (params.search) q.append('search', params.search);
+      if (params.factory) q.append('factory', params.factory);
+      if (params.container_ids) q.append('container_ids', params.container_ids);
+      if (params.include_mismatched) q.append('include_mismatched', 'true');
+      if (params.limit) q.append('limit', params.limit);
+
+      const qs = q.toString() ? `?${q.toString()}` : '';
+      const res = await fetch(`${API_BASE}/containers/unscanned${qs}`);
+      if (!res.ok) throw new Error('Không thể tải danh sách container chưa quét');
+      return await res.json();
+    } catch (e) {
+      console.error('[API] getUnscannedContainers failed:', e);
+      return { total_containers: 0, total_unscanned_images: 0, items: [] };
+    }
+  },
+
   // Get single container detail
   async getContainerDetail(containerId) {
     try {
@@ -263,6 +285,84 @@ export const lpnCrawlerApi = {
       return text ? JSON.parse(text) : null;
     } catch (e) {
       return null;
+    }
+  },
+
+  // Đối soát chéo thông minh giữa Pallet Đứng và Top Nóc (Tự động gỡ các ca hoán đổi và tem dính chéo)
+  async resolveCrossMatches(containerId) {
+    try {
+      const res = await fetch(`${API_BASE}/containers/${containerId}/resolve-cross-matches`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (!res.ok) return { success: false };
+      return await res.json();
+    } catch (e) {
+      return { success: false, message: e.message };
+    }
+  },
+
+  // Quét chuyên sâu đồng thời tất cả ảnh trong 1 Container (SSE Stream)
+  async scanContainerDeepStream(containerId, options = {}, onEvent = () => {}, signal = null) {
+    const payload = {
+      only_unprocessed: Boolean(options.only_unprocessed),
+      model_id: options.model_id || null
+    };
+
+    const res = await fetch(`${API_BASE}/containers/${containerId}/deep-scan-stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: signal || undefined
+    });
+
+    if (!res.ok) {
+      let errDetail = `Lỗi HTTP ${res.status}`;
+      try {
+        const errJson = await res.json();
+        errDetail = errJson.detail || errDetail;
+      } catch (e) {}
+      throw new Error(errDetail);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+
+    const processBuffer = (flushAll = false) => {
+      // Tách các khối SSE theo cặp dấu xuống dòng (\r\n\r\n hoặc \n\n)
+      const parts = buffer.split(/\r?\n\r?\n/);
+      // Giữ lại phần chưa hoàn chỉnh cuối cùng trừ khi flushAll = true
+      buffer = flushAll ? '' : (parts.pop() || '');
+
+      for (const part of parts) {
+        const lines = part.split(/\r?\n/);
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith('data:')) {
+            const jsonStr = trimmed.slice(5).trim();
+            if (jsonStr) {
+              try {
+                const ev = JSON.parse(jsonStr);
+                onEvent(ev);
+              } catch (jsonErr) {
+                console.warn('[scanContainerDeepStream] JSON parse error:', jsonErr, jsonStr);
+              }
+            }
+          }
+        }
+      }
+    };
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        processBuffer(true);
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+      processBuffer(false);
     }
   },
 
@@ -339,6 +439,58 @@ export const lpnCrawlerApi = {
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         return { success: false, message: err.detail || 'Lỗi khi hủy trạng thái xử lý' };
+      }
+      return await res.json();
+    } catch (e) {
+      return { success: false, message: e.message };
+    }
+  },
+
+  // Inline edit item (Sửa nhanh LPN/SKU CSDL hoặc OCR trực tiếp trên bảng - Chỉ Admin)
+  async inlineEditItem(itemId, field, value, updatedBy = null) {
+    try {
+      let user = null;
+      try {
+        const raw = localStorage.getItem('smartflow_user');
+        if (raw) user = JSON.parse(raw);
+      } catch (e) {}
+
+      const token = localStorage.getItem('token');
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const username = (user?.username || '').toLowerCase();
+      const roleName = (user?.role_name || user?.roleName || user?.role || '').toLowerCase();
+      const roleDesc = (user?.role_description || '').toLowerCase();
+      const permName = (user?.permission_name || '').toLowerCase();
+      const deptName = (user?.department_name || '').toLowerCase();
+
+      const isAdmin = Boolean(
+        user?.is_admin === true ||
+        user?.isAdmin === true ||
+        username === 'admin' ||
+        roleName === 'it' || roleName === 'bgd' || roleName === 'admin' ||
+        roleDesc.includes('admin') || roleDesc.includes('quản trị') ||
+        permName.includes('admin') ||
+        deptName === 'it' || deptName === 'bgd' || deptName.includes('admin')
+      );
+
+      const resolvedUpdatedBy = updatedBy || user?.username || user?.full_name || 'User';
+
+      const res = await fetch(`${API_BASE}/items/${itemId}/inline-edit`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({
+          field,
+          value,
+          updated_by: resolvedUpdatedBy,
+          user_role: user?.role_name || user?.permission_name || '',
+          is_admin: isAdmin
+        })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        return { success: false, message: err.detail || 'Lỗi khi lưu chỉnh sửa thủ công' };
       }
       return await res.json();
     } catch (e) {

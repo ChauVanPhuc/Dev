@@ -602,6 +602,11 @@ const InspectionDetailView = () => {
   } catch (e) {}
 
   let inspectedPartsList = [];
+  const rawProd = (item.product_sku || item.part_name || parsedData.product || '').trim();
+  const rawSpec = (item.specification || parsedData.spec || '').trim();
+  const prodItems = rawProd ? rawProd.split(/,\s*(?=[^,]+)/).map(s => s.trim()).filter(Boolean) : [];
+  const specItems = rawSpec ? rawSpec.split(/,\s*(?=[^,]+)/).map(s => s.trim()).filter(Boolean) : [];
+
   if (Array.isArray(parsedData.parts_details) && parsedData.parts_details.length > 0) {
     inspectedPartsList = parsedData.parts_details.map(p => ({
       name: p.part_name || p.name || '',
@@ -621,11 +626,7 @@ const InspectionDetailView = () => {
       qty: p.plan_qty || p.qty || ''
     }));
   } else {
-    const rawProd = (item.product_sku || item.part_name || parsedData.product || '').trim();
-    const rawSpec = (item.specification || parsedData.spec || '').trim();
     if (rawProd) {
-      const prodItems = rawProd.split(/,\s*(?=[^,]+)/).map(s => s.trim()).filter(Boolean);
-      const specItems = rawSpec ? rawSpec.split(/,\s*(?=[^,]+)/).map(s => s.trim()).filter(Boolean) : [];
       inspectedPartsList = prodItems.map((prodName, idx) => {
         let assignedSpec = specItems[idx] || (specItems.length === 1 ? specItems[0] : '');
         const dimMatch = prodName.match(/(\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?(?:\s*[*xX×]\s*\d+(?:[.,]\d+)?)?(?:\s*mm|\s*cm)?)/i);
@@ -639,6 +640,19 @@ const InspectionDetailView = () => {
         return { name: cleanName, spec: assignedSpec, qty: '' };
       });
     }
+  }
+
+  // Tự động bổ sung chi tiết bị thiếu từ rawProd nếu inspectedPartsList chỉ có một phần
+  if (inspectedPartsList.length > 0 && prodItems.length > 0) {
+    const existingLower = inspectedPartsList.map(p => (p.name || '').toLowerCase().trim());
+    prodItems.forEach((pName, idx) => {
+      const pNameLower = pName.toLowerCase().trim();
+      const exists = existingLower.some(e => e === pNameLower || e.includes(pNameLower) || pNameLower.includes(e));
+      if (!exists) {
+        let assignedSpec = specItems[idx] || (specItems.length === 1 ? specItems[0] : (rawSpec || ''));
+        inspectedPartsList.push({ name: pName, spec: assignedSpec, qty: '' });
+      }
+    });
   }
   inspectedPartsList = inspectedPartsList.filter(p => p.name || p.spec);
   const hasMultipleParts = inspectedPartsList.length > 1;

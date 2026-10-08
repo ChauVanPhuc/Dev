@@ -33,6 +33,45 @@ class ImagePreprocessor:
         if isinstance(image_input, np.ndarray):
             return image_input.copy()
         if isinstance(image_input, str):
+            # Nếu là đường dẫn URL online (http / https), tải bytes về bộ nhớ và decode
+            if image_input.startswith(("http://", "https://")):
+                try:
+                    import urllib.request
+                    import ssl
+                    import json
+                    import os
+                    ssl_ctx = ssl._create_unverified_context()
+                    cookie_header = ""
+                    try:
+                        from lpn_crawler.backend.config.settings import settings as app_settings
+                        if os.path.exists(app_settings.STORAGE_STATE_FILE):
+                            with open(app_settings.STORAGE_STATE_FILE, "r", encoding="utf-8") as sf:
+                                st_data = json.load(sf)
+                                st_cookies = st_data.get("cookies", [])
+                                cookie_header = "; ".join([f"{c['name']}={c['value']}" for c in st_cookies if 'name' in c and 'value' in c])
+                    except Exception:
+                        pass
+
+                    req = urllib.request.Request(
+                        image_input,
+                        headers={
+                            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                            "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+                            "Referer": "https://www.appsheet.com/",
+                            "Cookie": cookie_header
+                        }
+                    )
+                    with urllib.request.urlopen(req, timeout=30, context=ssl_ctx) as resp:
+                        raw_bytes = resp.read()
+                        if raw_bytes and len(raw_bytes) > 10:
+                            file_bytes = np.frombuffer(raw_bytes, dtype=np.uint8)
+                            img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+                            if img is not None:
+                                return img
+                except Exception:
+                    pass
+                return None
+
             # Load from file path (hỗ trợ đường dẫn Unicode / tiếng Việt trên Windows và ảnh JPEG có EXIF bất thường)
             try:
                 with open(image_input, "rb") as f:

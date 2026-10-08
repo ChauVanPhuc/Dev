@@ -47,6 +47,7 @@ class LpnContainer(Base):
     crawl_count = Column(Integer, default=1)
     status = Column(String(50), default="success")
     error_detail = Column(Text, nullable=True)
+    container_image = Column(String(500), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

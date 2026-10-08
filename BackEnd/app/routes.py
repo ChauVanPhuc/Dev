@@ -146,6 +146,7 @@ try:
     api_router.include_router(lpn_router, prefix="/lpn-crawler", tags=["lpn-crawler"])
 except Exception as e:
     print(f"Warning: Failed to load lpn_crawler router: {e}")
+# Reload trigger for fixed 21-prefix SKU normalization and bidirectional dính tem
 
 try:
     from dashboard.backend.api.router import router as dashboard_router

@@ -477,13 +477,14 @@ class LabelDetector:
 
         for idx, item in enumerate(boxes_with_conf):
             bx, by, bw, bh, conf = item
-            # Padding 6% vừa vặn cho viền tem nhãn
-            pad_x = max(6, int(bw * 0.06))
-            pad_y = max(6, int(bh * 0.06))
+            # Padding hào phóng tối đa để bảo đảm ôm trọn 100% con tem và toàn bộ dòng chữ in người đọc (HRI) phía dưới mã (kể cả tem xoay dọc)
+            pad_x = max(35, int(bw * 0.35))
+            pad_y_top = max(30, int(bh * 0.25))
+            pad_y_bottom = max(35, int(bh * 0.35))
             x1 = max(0, bx - pad_x)
-            y1 = max(0, by - pad_y)
+            y1 = max(0, by - pad_y_top)
             x2 = min(w, bx + bw + pad_x)
-            y2 = min(h, by + bh + pad_y)
+            y2 = min(h, by + bh + pad_y_bottom)
 
             crop = image[y1:y2, x1:x2].copy()
             crop_images.append(crop)
@@ -627,9 +628,10 @@ class LabelDetector:
         if bc_val_p < 22.0 and (lap_p < 140.0 or mean_p < 145.0):
             return []
 
-        # Nếu là tem nhãn đơn lẻ chuẩn (bề ngang <= 130px và chiều cao <= 135px trên thumbnail),
-        # giữ nguyên trực tiếp không cần bóc tách con bên trong.
-        if bw <= 130 and bh <= 135:
+        # Nếu là tem nhãn đơn lẻ chuẩn (bề ngang <= 260px và chiều cao <= 155px trên thumbnail, aspect 0.35 - 5.0),
+        # giữ nguyên trực tiếp 100% khung tem, tuyệt đối không bóc tách mảnh con để tránh cắt đứt mã vạch hoặc dòng chữ in bên dưới.
+        aspect_box = float(bw) / float(bh) if bh > 0 else 1.0
+        if bw <= 260 and bh <= 155 and 0.35 <= aspect_box <= 5.0 and mean_p >= 135.0:
             return [(x, y, bw, bh, default_conf)]
 
         # 1. Tìm các mảng giấy trắng con bên trong (White Sub-Contours)

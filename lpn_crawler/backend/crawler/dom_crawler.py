@@ -414,10 +414,13 @@ class CrawlerDomMixin:
                             }
 
                             // Trích xuất triệt để URL hình ảnh (Lazy-Load + Data attributes + AppSheet Resolver)
-                            const isPicCol = colName.toLowerCase().startsWith('picture') || colName.toLowerCase().startsWith('ảnh') || colName.toLowerCase().startsWith('image');
+                            const colLower = colName.toLowerCase();
+                            const isPicCol = colLower.includes('picture') || colLower.includes('ảnh') || colLower.includes('image') || colLower.includes('photo');
+                            const isContainerPic = colLower.includes('container picture') || colLower.includes('picture container') || colLower === 'container image';
+                            const targetTable = isContainerPic ? 'CONTAINER' : (tableName || 'LPN NEW');
                             const urls = [];
 
-                            const imgEls = el.querySelectorAll('img, [data-testid*="image"], .SlideshowPage__image, a[href*="http"], a[href*="gettablefileurl"]');
+                            const imgEls = el.querySelectorAll('img, [data-testid*="image"], .SlideshowPage__image, .SlideshowPage__value-display, .ASTappable, a[href*="http"], a[href*="gettablefileurl"]');
                             imgEls.forEach(img => {
                                 const candidates = [
                                     img.src,
@@ -435,13 +438,23 @@ class CrawlerDomMixin:
                                     }
                                 });
 
-                                if (img.style && img.style.backgroundImage) {
-                                    const match = img.style.backgroundImage.match(/url\\(['"]?(.*?)['"]?\\)/);
-                                    if (match && match[1] && match[1].startsWith('http') && !urls.includes(match[1])) {
-                                        urls.push(match[1]);
+                                const allBgEls = [img, ...img.querySelectorAll('*')];
+                                allBgEls.forEach(bEl => {
+                                    if (bEl.style && bEl.style.backgroundImage) {
+                                        const match = bEl.style.backgroundImage.match(/url\\(['"]?(.*?)['"]?\\)/);
+                                        if (match && match[1] && match[1].startsWith('http') && !urls.includes(match[1])) {
+                                            urls.push(match[1]);
+                                        }
                                     }
-                                }
+                                });
                             });
+
+                            if (el.style && el.style.backgroundImage) {
+                                const match = el.style.backgroundImage.match(/url\\(['"]?(.*?)['"]?\\)/);
+                                if (match && match[1] && match[1].startsWith('http') && !urls.includes(match[1])) {
+                                    urls.push(match[1]);
+                                }
+                            }
 
                             const testSrc = el.getAttribute('data-testonly-src');
                             if (testSrc && testSrc.startsWith('http') && !urls.includes(testSrc)) {
@@ -451,11 +464,11 @@ class CrawlerDomMixin:
                             // Nếu là cột Picture nhưng DOM chưa tải xong img tag mà text là file ảnh -> Tự resolve URL
                             if (isPicCol && urls.length === 0 && val) {
                                 const lowerVal = val.toLowerCase();
-                                if (lowerVal.endsWith('.jpg') || lowerVal.endsWith('.jpeg') || lowerVal.endsWith('.png') || lowerVal.endsWith('.webp') || lowerVal.includes('images/') || lowerVal.includes('lpn_images/')) {
+                                if (lowerVal.endsWith('.jpg') || lowerVal.endsWith('.jpeg') || lowerVal.endsWith('.png') || lowerVal.endsWith('.webp') || lowerVal.includes('images/') || lowerVal.includes('lpn_images/') || isContainerPic) {
                                     if (val.startsWith('http')) {
                                         urls.push(val);
-                                    } else if (appName) {
-                                        urls.push(`https://www.appsheet.com/template/gettablefileurl?appName=${appName}&tableName=${encodeURIComponent(tableName || 'LPN NEW')}&fileName=${encodeURIComponent(val)}`);
+                                    } else if (appName && val.length > 3) {
+                                        urls.push(`https://www.appsheet.com/template/gettablefileurl?appName=${appName}&tableName=${encodeURIComponent(targetTable)}&fileName=${encodeURIComponent(val)}`);
                                     }
                                 }
                             }
@@ -535,16 +548,26 @@ class CrawlerDomMixin:
                 const cols = Array.from(document.querySelectorAll('[data-testonly-column]')).filter(el => {
                     const rect = el.getBoundingClientRect();
                     const cName = (el.getAttribute('data-testonly-column') || '').toLowerCase();
-                    return rect.left >= 300 && (cName.startsWith('picture') || cName.startsWith('ảnh') || cName.startsWith('image'));
+                    return rect.left >= 300 && (cName.includes('picture') || cName.includes('ảnh') || cName.includes('image'));
                 });
                 cols.forEach(el => {
                     const colName = el.getAttribute('data-testonly-column');
+                    const cLower = (colName || '').toLowerCase();
+                    const isContPic = cLower.includes('container picture') || cLower.includes('picture container') || cLower === 'container image';
+                    const targetTable = isContPic ? 'CONTAINER' : (tableName || 'LPN NEW');
                     const urls = [];
-                    el.querySelectorAll('img, [data-testid*="image"], a[href*="http"]').forEach(img => {
+                    el.querySelectorAll('img, [data-testid*="image"], .SlideshowPage__image, .SlideshowPage__value-display, .ASTappable, a[href*="http"]').forEach(img => {
                         const candidates = [img.src, img.getAttribute('src'), img.getAttribute('data-src'), img.getAttribute('data-image-url'), img.currentSrc, img.href];
                         candidates.forEach(src => {
                             if (src && typeof src === 'string' && src.startsWith('http') && !src.includes('loading') && !src.startsWith('data:') && src.length > 20) {
                                 if (!urls.includes(src)) urls.push(src);
+                            }
+                        });
+                        const allBg = [img, ...img.querySelectorAll('*')];
+                        allBg.forEach(b => {
+                            if (b.style && b.style.backgroundImage) {
+                                const m = b.style.backgroundImage.match(/url\\(['"]?(.*?)['"]?\\)/);
+                                if (m && m[1] && m[1].startsWith('http') && !urls.includes(m[1])) urls.push(m[1]);
                             }
                         });
                     });
@@ -554,9 +577,9 @@ class CrawlerDomMixin:
                     if (urls.length === 0) {
                         const val = (el.textContent || '').trim();
                         const lowerVal = val.toLowerCase();
-                        if (lowerVal.endsWith('.jpg') || lowerVal.endsWith('.jpeg') || lowerVal.endsWith('.png') || lowerVal.endsWith('.webp') || lowerVal.includes('images/')) {
+                        if (lowerVal.endsWith('.jpg') || lowerVal.endsWith('.jpeg') || lowerVal.endsWith('.png') || lowerVal.endsWith('.webp') || lowerVal.includes('images/') || isContPic) {
                             if (val.startsWith('http')) urls.push(val);
-                            else if (appName) urls.push(`https://www.appsheet.com/template/gettablefileurl?appName=${appName}&tableName=${encodeURIComponent(tableName || 'LPN NEW')}&fileName=${encodeURIComponent(val)}`);
+                            else if (appName && val.length > 3) urls.push(`https://www.appsheet.com/template/gettablefileurl?appName=${appName}&tableName=${encodeURIComponent(targetTable)}&fileName=${encodeURIComponent(val)}`);
                         }
                     }
 
@@ -615,7 +638,11 @@ class CrawlerDomMixin:
                 existing_cont.timestamp_raw = header_data["timestamp_raw"]
                 existing_cont.timestamp_val = header_data["timestamp_val"]
                 existing_cont.operator_name = header_data["operator_name"]
+                if header_data.get("container_image"):
+                    existing_cont.container_image = header_data["container_image"]
                 is_updated = True
+            elif header_data.get("container_image") and not existing_cont.container_image:
+                existing_cont.container_image = header_data["container_image"]
 
             db_cont = existing_cont
         else:
@@ -628,12 +655,32 @@ class CrawlerDomMixin:
                 timestamp_raw=header_data["timestamp_raw"],
                 timestamp_val=header_data["timestamp_val"],
                 operator_name=header_data["operator_name"],
+                container_image=header_data.get("container_image"),
                 content_hash=content_hash,
                 last_crawl_job_id=self.job_id
             )
             self.db.add(db_cont)
             self.db.flush()
             is_updated = True
+
+        # Tải ảnh đại diện Container nếu có URL và chưa lưu đĩa
+        if db_cont.container_image and str(db_cont.container_image).startswith("http"):
+            try:
+                from lpn_crawler.backend.services.storage import download_single_image
+                cont_task = {
+                    "source_url": db_cont.container_image,
+                    "container_number": db_cont.container_number,
+                    "suffix_key": "container",
+                    "sort_order": 0,
+                    "lpn_item_id": 0,
+                    "container_id": db_cont.id,
+                    "image_type": "Container"
+                }
+                c_res = download_single_image(page, cont_task)
+                if c_res.get("local_path"):
+                    db_cont.container_image = c_res["local_path"]
+            except Exception as c_err:
+                pass
 
         job_link = LpnJobContainer(
             crawl_job_id=self.job_id,
@@ -643,102 +690,56 @@ class CrawlerDomMixin:
         self.db.add(job_link)
         self.db.commit()
 
-        # STEP B8: Lưu danh sách Items và tải hình ảnh
+        # STEP B8: Smart Upsert danh sách Items và tải hình ảnh (Bảo toàn ID & AI OCR)
         downloaded_imgs_count = 0
-
-        if existing_cont:
-            self.db.query(LpnImage).filter(LpnImage.container_id == db_cont.id).delete()
-            self.db.query(LpnItem).filter(LpnItem.container_id == db_cont.id).delete()
-            self.db.commit()
-
-        image_tasks = []
-        item_objects = []
-
-        for idx, item in enumerate(items_data, start=1):
-            if crawl_job_manager.is_cancelled(self.job_id):
-                break
-
-            db_item = LpnItem(
-                container_id=db_cont.id,
-                record_type=item["record_type"],
-                suffix_key=item["suffix_key"],
-                item_index=idx,
-                batch_original=item["batch_original"],
-                batch_resolved=item["batch_resolved"],
-                lpn=item["lpn"],
-                sku=item["sku"],
-                raw_group_key=item["raw_group_key"]
-            )
-            self.db.add(db_item)
-            self.db.flush()
-            item_objects.append((db_item, item))
-
-            img_urls = item.get("image_urls", [])
-            for sort_idx, url in enumerate(img_urls, start=1):
-                image_tasks.append({
-                    "source_url": url,
-                    "container_number": db_cont.container_number,
-                    "suffix_key": item["suffix_key"],
-                    "sort_order": sort_idx,
-                    "lpn_item_id": db_item.id,
-                    "container_id": db_cont.id,
-                    "image_type": item["record_type"]
-                })
-
-        # Tải toàn bộ ảnh của container bằng cơ chế song song (Parallel)
-        created_db_imgs = []
-        if image_tasks:
-            self.check_paused(page, clean_num, f"Tải đồng thời {len(image_tasks)} ảnh")
-            img_results = download_images_parallel(page, image_tasks, max_workers=10)
-            for r in img_results:
-                db_img = LpnImage(
-                    lpn_item_id=r.get("lpn_item_id"),
-                    container_id=r.get("container_id"),
-                    image_type=r.get("image_type", "Pallet"),
-                    sort_order=r.get("sort_order", 1),
-                    source_url=r.get("source_url"),
-                    local_path=r.get("local_path"),
-                    image_hash=r.get("image_hash"),
-                    file_mime=r.get("file_mime"),
-                    file_size=r.get("file_size", 0)
+        if hasattr(self, "_upsert_container_items_and_images"):
+            downloaded_imgs_count, _ = self._upsert_container_items_and_images(page, db_cont, items_data, clean_num)
+        else:
+            image_tasks = []
+            item_objects = []
+            for idx, item in enumerate(items_data, start=1):
+                db_item = LpnItem(
+                    container_id=db_cont.id,
+                    record_type=item["record_type"],
+                    suffix_key=item["suffix_key"],
+                    item_index=idx,
+                    batch_original=item["batch_original"],
+                    batch_resolved=item["batch_resolved"],
+                    lpn=item["lpn"],
+                    sku=item["sku"],
+                    raw_group_key=item["raw_group_key"]
                 )
-                self.db.add(db_img)
-                created_db_imgs.append((db_img, r))
-                if r.get("local_path"):
-                    downloaded_imgs_count += 1
-                else:
-                    err_msg = str(r.get("error", "Lỗi tải ảnh"))
-                    self.log(
-                        f"{idx_label} Cảnh báo: Không thể tải ảnh {r.get('suffix_key', '')} #{r.get('sort_order', 1)} ({err_msg})",
-                        level="WARNING", container_number=clean_num
+                self.db.add(db_item)
+                self.db.flush()
+                item_objects.append((db_item, item))
+                for sort_idx, url in enumerate(item.get("image_urls", []), start=1):
+                    image_tasks.append({
+                        "source_url": url,
+                        "container_number": db_cont.container_number,
+                        "suffix_key": item["suffix_key"],
+                        "sort_order": sort_idx,
+                        "lpn_item_id": db_item.id,
+                        "container_id": db_cont.id,
+                        "image_type": item["record_type"]
+                    })
+            if image_tasks:
+                img_results = download_images_parallel(page, image_tasks, max_workers=10)
+                for r in img_results:
+                    db_img = LpnImage(
+                        lpn_item_id=r.get("lpn_item_id"),
+                        container_id=r.get("container_id"),
+                        image_type=r.get("image_type", "Pallet"),
+                        sort_order=r.get("sort_order", 1),
+                        source_url=r.get("source_url"),
+                        local_path=r.get("local_path"),
+                        image_hash=r.get("image_hash"),
+                        file_mime=r.get("file_mime"),
+                        file_size=r.get("file_size", 0)
                     )
-
-        # Log tổng kết từng item
-        for db_item, item in item_objects:
-            pic_detected = len(item.get("image_urls", []))
-            if pic_detected > 0:
-                self.log(
-                    f"{idx_label} {item['suffix_key']} | LPN: {item.get('lpn','—')} | SKU: {item.get('sku','—')} | Ảnh: {pic_detected} ảnh",
-                    container_number=clean_num
-                )
-            else:
-                self.log(
-                    f"{idx_label} {item['suffix_key']} | LPN: {item.get('lpn','—')} | SKU: {item.get('sku','—')} | Không có ảnh",
-                    container_number=clean_num
-                )
-
-        self.db.flush()
-        queued_img_meta = []
-        for db_img_inst, r in created_db_imgs:
-            queued_img_meta.append({
-                "image_id": getattr(db_img_inst, "id", None),
-                "lpn_item_id": r.get("lpn_item_id") if isinstance(r, dict) else getattr(db_img_inst, "lpn_item_id", None),
-                "local_path": r.get("local_path") if isinstance(r, dict) else getattr(db_img_inst, "local_path", None),
-                "image_type": r.get("image_type", "Pallet") if isinstance(r, dict) else getattr(db_img_inst, "image_type", "Pallet")
-            })
-        self.db.commit()
-        if hasattr(self, "_enqueue_images_for_sync_ocr"):
-            self._enqueue_images_for_sync_ocr(queued_img_meta, items_data, clean_num, image_tasks)
+                    self.db.add(db_img)
+                    if r.get("local_path"):
+                        downloaded_imgs_count += 1
+            self.db.commit()
 
         self.log(f"{idx_label} Saved DB: {clean_num}", container_number=clean_num)
 

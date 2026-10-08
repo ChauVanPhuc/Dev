@@ -33,6 +33,15 @@ const Sidebar = () => {
   const [loading, setLoading] = useState(true)
   const [expandedItems, setExpandedItems] = useState([])
 
+// Chỉ loại bỏ 3 mục này nếu xuất hiện ở ngoài cấp 1 (root level) của sidebar, vẫn giữ ở trong menu con
+const ROOT_EXCLUDED_ROUTES = new Set(['/pallet-check-v1', '/pallet-check', '/cabinet-box-check']);
+
+const filterRootMenuItems = (items) => {
+  if (!Array.isArray(items)) return [];
+  // Chỉ lọc ở cấp ngoài cùng (cấp 1), không lọc children bên trong
+  return items.filter(item => !ROOT_EXCLUDED_ROUTES.has(item.route_path));
+};
+
   useEffect(() => {
     const fetchSidebar = async () => {
       try {
@@ -40,37 +49,7 @@ const Sidebar = () => {
         let items = Array.isArray(response.data) ? [...response.data] : [];
 
         if (items && items.length > 0) {
-          if (!items.some(it => it.route_path === '/pallet-check-v1')) {
-            const homeIdx = items.findIndex(it => it.route_path === '/dashboard' || it.id === 'm-home');
-            items.splice(homeIdx >= 0 ? homeIdx + 1 : 1, 0, {
-              id: 'm-pallet-check-v1',
-              title: 'Kiểm tra Pallet v1',
-              route_path: '/pallet-check-v1',
-              icon: 'Barcode',
-              is_active: true
-            });
-          }
-          if (!items.some(it => it.route_path === '/pallet-check')) {
-            const v1Idx = items.findIndex(it => it.route_path === '/pallet-check-v1');
-            items.splice(v1Idx >= 0 ? v1Idx + 1 : 1, 0, {
-              id: 'm-pallet-check',
-              title: 'Kiểm tra Pallet (AI)',
-              route_path: '/pallet-check',
-              icon: 'ScanLine',
-              is_active: true
-            });
-          }
-          if (!items.some(it => it.route_path === '/cabinet-box-check')) {
-            const palIdx = items.findIndex(it => it.route_path === '/pallet-check' || it.route_path === '/pallet-check-v1');
-            items.splice(palIdx >= 0 ? palIdx + 1 : 1, 0, {
-              id: 'm-cabinet-box-check',
-              title: 'Kiểm tra Tủ thùng',
-              route_path: '/cabinet-box-check',
-              icon: 'Boxes',
-              is_active: true
-            });
-          }
-          setMenuList(items);
+          setMenuList(filterRootMenuItems(items));
         } else {
           throw new Error('Empty sidebar list from server');
         }
@@ -82,27 +61,6 @@ const Sidebar = () => {
             title: 'Trang chủ',
             route_path: '/dashboard',
             icon: 'LayoutGrid',
-            is_active: true
-          },
-          {
-            id: 'm-cabinet-box-check',
-            title: 'Kiểm tra Tủ thùng',
-            route_path: '/cabinet-box-check',
-            icon: 'Boxes',
-            is_active: true
-          },
-          {
-            id: 'm-pallet-check-v1',
-            title: 'Kiểm tra Pallet v1',
-            route_path: '/pallet-check-v1',
-            icon: 'Barcode',
-            is_active: true
-          },
-          {
-            id: 'm-pallet-check',
-            title: 'Kiểm tra Pallet (AI)',
-            route_path: '/pallet-check',
-            icon: 'ScanLine',
             is_active: true
           },
           {

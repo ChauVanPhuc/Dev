@@ -23,7 +23,7 @@ api_router.include_router(price_router, prefix="/claims", tags=["price"])
 api_router.include_router(lpn_router, prefix="/lpn-crawler", tags=["lpn-crawler"])
 api_router.include_router(dashboard_router, prefix="/dashboard", tags=["dashboard"])
 
-# Reload trigger for LPN crawler filter options
+# Reload trigger for LPN crawler filter options and top noc pallet grouping v2
 
 
 

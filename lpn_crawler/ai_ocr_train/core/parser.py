@@ -181,7 +181,10 @@ class LabelDataParser:
         # Thay thế dấu chấm, gạch dưới, dấu thăng, dấu cộng giữa các từ/số thành gạch nối
         s = re.sub(r"(?<=[0-9A-Z])[\.#_\+](?=[0-9A-Z])", "-", s)
         s = s.replace("+", "-")
+        # Khử sạch dấu chấm, phẩy hoặc gạch dưới đứng cạnh dấu gạch nối (ví dụ: '1-.48-WOA' -> '1-48-WOA', '1.-48' -> '1-48')
+        s = re.sub(r"[\-\s]*[\.#_\+]+[\-\s]*", "-", s)
         s = re.sub(r"\s*-\s*", "-", s)
+        s = re.sub(r"-+", "-", s)
         s = s.strip("-:;,. #*!_/")
         s = re.sub(r"[-:;,. #*!_/]+$", "", s)
         s = re.sub(r"^[-:;,. #*!_/]+", "", s)
@@ -244,9 +247,10 @@ class LabelDataParser:
         s = re.sub(r"-W[I1|l!]T$", "-WHT", s)
         s = re.sub(r"-BL[C0]$", "-BLK", s)
 
-        # 7. Khử ký tự số rác dính vào đầu SKU (ví dụ: '41-72D-WOA' -> '1-72D-WOA', '5452-60-WHT' -> '2-60-WHT')
-        s = re.sub(r"^(?:545|P65|65|\d{1,4})([1239]-\d{2}[A-Z0-9]?-[A-Z0-9]+(?:-[A-Z0-9]+)?)$", r"\1", s)
-        s = re.sub(r"^\d+([1239]-\d{2}[A-Z0-9]?-[A-Z0-9]+(?:-[A-Z0-9]+)?)$", r"\1", s)
+        # 7. Khử ký tự rác cảnh báo dán dính vào đầu SKU (ví dụ: 'P65-2-60-WHT', '545-2-60-WHT' -> '2-60-WHT')
+        # TUYỆT ĐỐI KHÔNG cắt bừa số đầu nếu tiền tố là 2 chữ số hợp lệ (như 21-36L-BRO, 19-48-SAN, 22-...)
+        s = re.sub(r"^(?:545|P65|PROP65|WARNING)-?([1239]-\d{2}[A-Z0-9]?-[A-Z0-9]+(?:-[A-Z0-9]+)?)$", r"\1", s)
+        s = re.sub(r"^\d{3,}-?([1239]-\d{2}[A-Z0-9]?-[A-Z0-9]+(?:-[A-Z0-9]+)?)$", r"\1", s)
         s = s.strip("-:;,. #*!_/")
         s = re.sub(r"[-:;,. #*!_/]+$", "", s)
         s = re.sub(r"^[-:;,. #*!_/]+", "", s)
@@ -296,8 +300,15 @@ class LabelDataParser:
             frozenset({'3', '8'}),  # Số 3 và số 8
             frozenset({'3', 'B'}),  # Số 3 và chữ B
             frozenset({'1', 'L'}),  # Số 1 và chữ L
+            frozenset({'I', 'L'}),  # Chữ I và chữ L
             frozenset({'6', 'G'}),  # Số 6 và chữ G
-            frozenset({'8', '0'})   # Số 8 và số 0
+            frozenset({'6', '0'}),  # Số 6 nét in mờ/nhạt nhầm thành số 0 (36L vs 30L)
+            frozenset({'6', 'B'}),  # Số 6 và chữ B
+            frozenset({'8', '0'}),  # Số 8 và số 0
+            frozenset({'0', 'B'}),  # Số 0 và chữ B (in nhòe nét giữa: 0RO vs BRO)
+            frozenset({'4', '6'}),  # Số 4 và số 6 (in nhiệt nét đóng: 54 vs 56)
+            frozenset({'4', 'A'}),  # Số 4 và chữ A
+            frozenset({'1', '7'})   # Số 1 và số 7
         }
 
         cand_nodash = cand_clean.replace('-', '')
@@ -324,7 +335,7 @@ class LabelDataParser:
                             if frozenset({c1, c2}) not in valid_confusion_pairs:
                                 is_conf = False
                                 break
-                    if is_conf and diffs <= 1:
+                    if (is_conf and diffs <= 1) or (diffs <= 1 and len(exp_rest) >= 5):
                         return exp_clean
 
             # Hiệu chỉnh '4-' thành '1-' khi exp_clean bắt đầu bằng '1-'
@@ -338,7 +349,20 @@ class LabelDataParser:
                 if pfx.isdigit() or pfx in ("P65", "PROP65", "WARNING", "545", "65"):
                     return exp_clean
 
-            # 1. Cùng độ dài ký tự: Cho phép lệch tối đa 2 (hoặc 3 đối với chuỗi dài >= 10) ký tự nhầm lẫn quang học
+            # Hiệu chỉnh quang học cụm kích thước cabinet phổ biến:
+            # '301', '30L', '361' -> '36L' (ví dụ 2-301-WOA -> 2-36L-WOA)
+            if "36L" in exp_clean:
+                cand_fixed = re.sub(r"3[06oO][1ILl|!]", "36L", cand_clean)
+                if cand_fixed == exp_clean:
+                    return exp_clean
+            if "42R" in exp_clean:
+                cand_fixed = re.sub(r"42[8B]", "42R", cand_clean)
+                if cand_fixed == exp_clean:
+                    return exp_clean
+
+            # 1. Cùng độ dài ký tự:
+            # - Cho phép lệch tối đa 2-3 ký tự nếu là các cặp nhầm lẫn quang học
+            # - Nếu giống nhau 90-99% (chỉ lệch đúng 1 ký tự trong chuỗi >= 6 ký tự): lấy luôn kết quả đúng
             max_allowed_diffs = 3 if len(exp_clean) >= 10 else 2
             if len(cand_clean) == len(exp_clean):
                 diffs = 0
@@ -348,11 +372,10 @@ class LabelDataParser:
                         diffs += 1
                         if frozenset({c1, c2}) not in valid_confusion_pairs:
                             is_conf = False
-                            break
-                if is_conf and diffs <= max_allowed_diffs:
+                if (is_conf and diffs <= max_allowed_diffs) or (diffs <= 1 and len(exp_clean) >= 6):
                     return exp_clean
 
-            # 2. Sai khác dấu gạch nối (ví dụ '21-428BRO' vs '21-42R-BRO'): Cho phép lệch tối đa 2-3 ký tự
+            # 2. Sai khác dấu gạch nối (ví dụ '21-428BRO' vs '21-42R-BRO'):
             exp_nodash = exp_clean.replace('-', '')
             if len(cand_nodash) == len(exp_nodash):
                 diffs = 0
@@ -362,9 +385,48 @@ class LabelDataParser:
                         diffs += 1
                         if frozenset({c1, c2}) not in valid_confusion_pairs:
                             is_conf = False
-                            break
-                if is_conf and diffs <= max_allowed_diffs:
+                if (is_conf and diffs <= max_allowed_diffs) or (diffs <= 1 and len(exp_nodash) >= 5):
                     return exp_clean
+
+            # 3. Chuẩn hóa số 0 ở đầu (Zero-Padding: ví dụ '2-54-WOA' vs '02-54-WOA'):
+            def _norm_zeros(s: str) -> str:
+                return re.sub(r'\b0+(\d+)', r'\1', s)
+
+            if _norm_zeros(cand_clean) == _norm_zeros(exp_clean):
+                return exp_clean
+
+            # 4. Quy tắc sai tối đa 1 ký tự (Optical Edit Distance <= 1): Mặc định lấy dữ liệu đúng luôn
+            # Hỗ trợ cả trường hợp thiếu/thừa 1 ký tự (ví dụ: '21-60-8RO' / '21-60-BRO' vs '21-60D-BRO')
+            def _optical_levenshtein(s1: str, s2: str) -> int:
+                m, n = len(s1), len(s2)
+                dp = [[0] * (n + 1) for _ in range(m + 1)]
+                for i in range(m + 1):
+                    dp[i][0] = i
+                for j in range(n + 1):
+                    dp[0][j] = j
+                for i in range(1, m + 1):
+                    for j in range(1, n + 1):
+                        c1, c2 = s1[i-1], s2[j-1]
+                        if c1 == c2:
+                            cost = 0
+                        elif frozenset({c1, c2}) in valid_confusion_pairs:
+                            cost = 0  # Cặp nhầm lẫn in nhiệt quang học được coi là trùng
+                        else:
+                            cost = 1
+                        dp[i][j] = min(
+                            dp[i-1][j] + 1,      # deletion
+                            dp[i][j-1] + 1,      # insertion
+                            dp[i-1][j-1] + cost  # substitution
+                        )
+                return dp[m][n]
+
+            # Kiểm tra khoảng cách quang học:
+            if _optical_levenshtein(cand_clean, exp_clean) <= 1:
+                return exp_clean
+            if _optical_levenshtein(cand_nodash, exp_nodash) <= 1:
+                return exp_clean
+            if _optical_levenshtein(_norm_zeros(cand_clean), _norm_zeros(exp_clean)) <= 1:
+                return exp_clean
 
         return sku_cand
 
@@ -422,6 +484,9 @@ class LabelDataParser:
         sku_is_predicted: bool = False
         sku_is_validated: bool = False
 
+        exp_lpn_clean = (expected_lpn or "").strip().upper()
+        exp_lpn_digits = cls.clean_lpn_digits(exp_lpn_clean) if exp_lpn_clean else ""
+
         # 1. ƯU TIÊN 1: Kiểm tra kết quả từ Barcode
         warehouse_lpn_barcodes: List[Tuple[str, float, str]] = []
         product_upc_barcodes: List[Tuple[str, float, str]] = []
@@ -439,12 +504,17 @@ class LabelDataParser:
             if not text:
                 continue
 
-            # Kiểm tra nếu Barcode là mã LPN kho chuẩn (9 số 06/05/60...)
-            if cls.is_warehouse_lpn(text):
+            # Kiểm tra nếu Barcode là mã LPN kho chuẩn (9 số 06/05/60/07... hoặc khớp expected_lpn)
+            is_wh_cand = (
+                (exp_lpn_digits and text == exp_lpn_digits) or
+                text.startswith(('06', '05', '60', '07', '00')) or
+                (len(text) in (9, 10) and not text.startswith(('11', '10', '12', '99')))
+            )
+            if is_wh_cand and cls.is_warehouse_lpn(text):
                 warehouse_lpn_barcodes.append((text, 1.0, f"Barcode ({bc_type})"))
-            elif cls.UPC_BARCODE_PATTERN.match(text):
-                # Mã vạch sản phẩm UPC (8 số như UPC-E hoặc 12 số như UPC-A) -> Không gán làm LPN kho
-                product_upc_barcodes.append((text, 0.40, f"Barcode UPC ({bc_type})"))
+            elif cls.UPC_BARCODE_PATTERN.match(text) or text.startswith(('11', '10', '12', '99')):
+                # Mã vạch đơn hàng PO / thùng carton (như 11010425, 11012528) hoặc UPC -> Không gán làm LPN kho
+                product_upc_barcodes.append((text, 0.40, f"Barcode Carton/PO ({bc_type})"))
             elif "-" in text and len(text) >= 4 and not extracted_sku:
                 norm = cls.normalize_sku(text)
                 if norm not in cls.IGNORED_SKU_WORDS and cls.is_valid_sku_candidate(norm):
@@ -496,8 +566,12 @@ class LabelDataParser:
                 c2 = cls.clean_lpn_digits(t2)
                 if not c1 or not c2:
                     continue
+                # Mã LPN nhà kho chuẩn luôn có đúng 9 chữ số (06xxxxxxx...).
+                # Tuyệt đối KHÔNG ghép nếu 1 trong 2 token đã đủ >= 9 số, hoặc tổng độ dài > 9 số!
+                if len(c1) >= 9 or len(c2) >= 9 or (len(c1) + len(c2)) > 9:
+                    continue
                 merged_pair = c1 + c2
-                if 8 <= len(merged_pair) <= 12:
+                if len(merged_pair) in (8, 9):
                     if exp_lpn_digits and merged_pair == exp_lpn_digits:
                         all_candidate_lpns.append((merged_pair, 0.98, "OCR (Adjacent Tokens Match Expected)"))
                     elif cls.is_warehouse_lpn(merged_pair) and merged_pair.startswith(('060', '050', '600', '06', '05')):
@@ -516,28 +590,37 @@ class LabelDataParser:
                 base_c = float(t.get("confidence", 0.8))
                 if exp_lpn_digits and (clean_val == exp_lpn_digits):
                     all_candidate_lpns.append((clean_val, 1.0, "OCR (Expected LPN Match)"))
+                elif exp_lpn_digits and len(clean_val) < len(exp_lpn_digits) and len(clean_val) >= 7 and exp_lpn_digits.startswith(clean_val):
+                    # Hiệu chỉnh khi bị thiếu chữ số cuối do OCR / viền tem cắt ngắn (ví dụ: '06007953' -> '060079539')
+                    all_candidate_lpns.append((exp_lpn_digits, 0.98, "OCR (Calibrated with Expected LPN)"))
                 elif cls.is_warehouse_lpn(clean_val):
                     # Nếu đã là mã LPN kho hợp lệ (9 chữ số, vd 060078860), giữ nguyên chính xác giá trị thực tế
                     all_candidate_lpns.append((clean_val, base_c, "OCR (Warehouse LPN Pattern)"))
-                elif exp_lpn_digits and len(clean_val) < len(exp_lpn_digits) and len(clean_val) >= 7 and exp_lpn_digits.startswith(clean_val):
-                    # Chỉ hiệu chỉnh khi bị thiếu chữ số do OCR cắt ngắn
-                    all_candidate_lpns.append((exp_lpn_digits, 0.95, "OCR (Calibrated with Expected LPN)"))
                 elif cls.is_warehouse_lpn(clean_val) and (clean_val.startswith(('06', '05', '60', '00', '07')) or len(clean_val) in (9, 10)):
                     all_candidate_lpns.append((clean_val, base_c, "OCR (Warehouse LPN Pattern)"))
 
-        # Bổ sung mã barcode sản phẩm nếu chưa có ứng viên LPN
-        if not all_candidate_lpns and product_upc_barcodes:
-            all_candidate_lpns.extend(product_upc_barcodes)
+        # Không bổ sung product_upc_barcodes vào all_candidate_lpns vì đây là mã PO / UPC vỏ thùng carton, không phải mã LPN kho
+        # Giúp tránh nhận diện nhầm mã PO (11013426, 30913417...) thành mã LPN khi ảnh không có tem LPN thật
 
         # Nếu đang parse 1 tem riêng lẻ và có barcode LPN kho chuẩn -> Luôn ưu tiên tuyệt đối mã Barcode thực tế của tem đó
         if is_single_label and warehouse_lpn_barcodes:
-            extracted_lpn, lpn_conf, lpn_source = warehouse_lpn_barcodes[0]
+            exp_match = next((b for b in warehouse_lpn_barcodes if exp_lpn_digits and b[0] == exp_lpn_digits), None)
+            if exp_match:
+                extracted_lpn, lpn_conf, lpn_source = exp_match
+            else:
+                wh_match = next((b for b in warehouse_lpn_barcodes if b[0].startswith(('06', '05', '60', '07', '00'))), None)
+                if wh_match:
+                    extracted_lpn, lpn_conf, lpn_source = wh_match
+                else:
+                    extracted_lpn, lpn_conf, lpn_source = warehouse_lpn_barcodes[0]
         elif all_candidate_lpns:
             from collections import Counter
             lpn_counts = Counter([cand for cand, _, _ in all_candidate_lpns])
             all_candidate_lpns.sort(
                 key=lambda x: (
-                    1 if (exp_lpn_digits and x[0] == exp_lpn_digits) else 0,
+                    10 if (exp_lpn_digits and x[0] == exp_lpn_digits) else 0,
+                    8 if len(x[0]) == 9 else (4 if len(x[0]) == 8 else 0),  # Ưu tiên tuyệt đối mã chuẩn đúng 9 chữ số của nhà kho!
+                    5 if x[0].startswith(('06', '05', '60', '07', '00')) else 0,
                     lpn_counts[x[0]],
                     x[1]
                 ),
@@ -646,10 +729,20 @@ class LabelDataParser:
             if match_full_desc or has_any_desc:
                 # 1. Trích xuất size
                 raw_size = ""
-                if match_full_desc:
+                # Ưu tiên: nếu expected_skus có kích thước cụ thể xuất hiện trong text:
+                if expected_skus:
+                    for exp in expected_skus:
+                        m_exp_sz = re.search(r'\b(?:[129]-)?(\d{2})[DCS]?-', str(exp))
+                        if m_exp_sz:
+                            sz_val = m_exp_sz.group(1)
+                            if re.search(rf'\b{sz_val}\b|{sz_val}["\']', t_upper):
+                                raw_size = sz_val
+                                break
+
+                if not raw_size and match_full_desc:
                     raw_size = (match_full_desc.group(1) or "").upper()
                 if not raw_size:
-                    m_sz = re.search(r'\b(84|73|72|60|48|42|36|30|24|80|C0|CO|GO|E0|\{0|<0)\b|(\d{2})["\']', t_upper)
+                    m_sz = re.search(r'\b(84|73|72|60|54|48|42|36|30|24|80|C0|CO|GO|E0|\{0|<0)\b|(\d{2})["\']', t_upper)
                     if m_sz:
                         raw_size = m_sz.group(1) or m_sz.group(2) or ""
 
@@ -674,11 +767,12 @@ class LabelDataParser:
                 else:
                     side_code = "D"
 
-                # 3. Xác định màu sắc
+                # 3. Xác định màu sắc (Ưu tiên cụm từ ghép trước từ đơn để tránh 'BROWN OAK' bị nhận nhầm thành 'OAK' -> 'WOA')
                 color_map = {
-                    "WHITE OAK": "WOA", "OAK": "WOA", "WHITE": "WHT", "BLACK": "BLK",
-                    "GREY": "GRY", "GRAY": "GRY", "ESPRESSO": "ESP", "BROWN": "BRO",
-                    "MIDNIGHT BLUE": "MNB", "BLUE": "BL", "VINTAGE GREEN": "VGN"
+                    "BROWN OAK": "BRO", "WHITE OAK": "WOA", "MIDNIGHT BLUE": "MNB", "VINTAGE GREEN": "VGN",
+                    "BROWN": "BRO", "OAK": "WOA", "WHITE": "WHT", "BLACK": "BLK",
+                    "GREY": "GRY", "GRAY": "GRY", "ESPRESSO": "ESP",
+                    "BLUE": "BL"
                 }
                 color_code = None
                 for c_k, c_v in color_map.items():
@@ -686,7 +780,7 @@ class LabelDataParser:
                         color_code = c_v
                         break
                 if not color_code:
-                    color_code = "WOA" if "OAK" in t_upper else ("WHT" if "WHITE" in t_upper else "GRY")
+                    color_code = "BRO" if "BROWN" in t_upper else ("WOA" if "OAK" in t_upper else ("WHT" if "WHITE" in t_upper else "GRY"))
 
                 has_cabinet = bool(re.search(r'\b(?:CABINET|BASE)\b', full_joined_text, re.IGNORECASE))
                 type_code = "BC" if has_cabinet else "BF"
@@ -700,8 +794,11 @@ class LabelDataParser:
                     # Mã DOUBLE (2 chậu) theo catalogue: 2-{size}D-{color} (ví dụ: 2-60D-GRY)
                     inferred_sku = f"2-{size_clean}D-{color_code}"
                 elif is_desc_center:
-                    # Mã CENTER (1 chậu giữa) theo catalogue: 9-{size}-{color} (ví dụ: 9-60-GRY)
-                    inferred_sku = f"9-{size_clean}-{color_code}"
+                    # Mã CENTER (1 chậu giữa): size 54 có tiền tố 2- theo catalogue VINA G7 (2-54-BRO), các size khác thường 9-
+                    if size_clean == "54":
+                        inferred_sku = f"2-{size_clean}-{color_code}"
+                    else:
+                        inferred_sku = f"9-{size_clean}-{color_code}"
                 else:
                     inferred_sku = f"1-{size_clean}{side_code}-{color_code}"
 
@@ -714,6 +811,7 @@ class LabelDataParser:
                         sku_is_validated = True
                         desc_conf = 0.95
                         src_desc = "OCR (Descriptor Validated vs Master)"
+                        all_candidate_skus.append((inferred_sku, desc_conf, src_desc))
                     elif expected_skus:
                         # Đối chiếu thông minh với expected_skus qua kích thước và khử nhầm lẫn quang học (8 <-> 6, 7 <-> 2)
                         possible_sizes = {size_clean}
@@ -736,24 +834,29 @@ class LabelDataParser:
                             if not matched_exp:
                                 matched_exp = matching_skus[0]
 
+                        # Nếu chưa match được qua size, thử match qua màu sắc nếu container có SKU tương ứng
+                        if not matched_exp and color_code:
+                            color_matches = [exp for exp in expected_skus if color_code in exp.upper()]
+                            if len(color_matches) == 1:
+                                matched_exp = color_matches[0]
+                        if not matched_exp and len(expected_skus) == 1:
+                            matched_exp = expected_skus[0]
+
                         if matched_exp:
                             inferred_sku = matched_exp
                             validated_sku = matched_exp
                             sku_is_validated = True
                             desc_conf = 0.95
                             src_desc = "OCR (Descriptor Validated vs Master SKU)"
-                        else:
-                            validated_sku = None
-                            sku_is_validated = False
-                            desc_conf = 0.70
-                            src_desc = "OCR (Descriptor Prediction Unvalidated)"
+                            all_candidate_skus.append((inferred_sku, desc_conf, src_desc))
+                        # Lưu ý: Nếu expected_skus tồn tại nhưng không khớp với SKU nào,
+                        # TUYỆT ĐỐI KHÔNG thêm inferred_sku ảo vào all_candidate_skus để tránh báo lệch mã sai!
                     else:
                         validated_sku = None
                         sku_is_validated = False
                         desc_conf = 0.70  # Chưa kiểm chứng với Master: không được gán 95-100%
                         src_desc = "OCR (Descriptor Prediction Unvalidated)"
-
-                    all_candidate_skus.append((inferred_sku, desc_conf, src_desc))
+                        all_candidate_skus.append((inferred_sku, desc_conf, src_desc))
 
         # Chọn SKU có điểm cao nhất
         if not extracted_sku and all_candidate_skus:

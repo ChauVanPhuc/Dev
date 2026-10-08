@@ -50,8 +50,10 @@ export default defineConfig({
     port: 5173,
     open: false,
     allowedHosts: true,
-    hmr: false,
-    watch: null,
+    watch: {
+      usePolling: true,
+      interval: 800
+    },
     fs: {
       strict: false,
       allow: [

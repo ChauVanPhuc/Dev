@@ -25,6 +25,9 @@ from app.core.database import get_db
 from lpn_crawler.backend.models.models import LpnImage, LpnItem, LpnContainer, LpnAiOcrResult
 from lpn_crawler.backend.api.routes.images import resolve_image_file_path
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 def fetch_scan_target_images(
     query,
@@ -645,6 +648,27 @@ def analyze_image(
             c_date = container_rec.date_loading.strftime("%Y-%m-%d") if container_rec.date_loading else (container_rec.date_loading_raw or (container_rec.created_at.strftime("%Y-%m-%d") if container_rec.created_at else None))
             meta_info["date_loading"] = c_date
             meta_info["factory"] = container_rec.factory or "VINA G7"
+
+            # Nạp toàn bộ danh sách items của container để nhận biết các kiện hợp lệ trong cùng container
+            cont_items = db.query(LpnItem).filter(LpnItem.container_id == container_rec.id).all()
+            meta_info["container_items"] = [
+                {"suffix_key": ci.suffix_key, "lpn": ci.lpn, "sku": ci.sku}
+                for ci in cont_items if ci.lpn
+            ]
+            # Tự động tìm kiện đi kèm (Top Nóc đi kèm Pallet sàn hoặc ngược lại)
+            if item_rec and item_rec.suffix_key:
+                import re as _re_p
+                curr_k = (item_rec.suffix_key or "").strip().lower()
+                m_num = _re_p.search(r'(?:pallet|box|b)\s*(\d+)', curr_k)
+                if m_num:
+                    p_val = m_num.group(1)
+                    is_top_box = bool(('box' in curr_k or 'b' in curr_k) and any(ch in curr_k for ch in 'ab'))
+                    paired_keys = [f"box {p_val}a", f"box {p_val}b", f"b{p_val}a", f"b{p_val}b"] if not is_top_box else [f"pallet {p_val}", f"p{p_val}"]
+                    for ci in cont_items:
+                        ci_k = (ci.suffix_key or "").strip().lower()
+                        if any(pk in ci_k for pk in paired_keys):
+                            meta_info["paired_item"] = {"suffix_key": ci.suffix_key, "lpn": ci.lpn, "sku": ci.sku}
+                            break
 
     # 2. Nếu truyền image_base64
     elif payload.image_base64:
@@ -1506,6 +1530,32 @@ def get_item_ocr_result(
     try:
         res = db.query(LpnAiOcrResult).filter(LpnAiOcrResult.item_id == item_id).order_by(LpnAiOcrResult.scanned_at.desc()).first()
         item_rec = db.query(LpnItem).filter(LpnItem.id == item_id).first()
+
+        # Fallback thông minh: Nếu không tìm thấy theo item_id (do container được sync/cào lại và cấp ID mới)
+        if not res and item_rec:
+            # 1. Tìm theo image_id liên kết với item
+            img_ids = [im.id for im in db.query(LpnImage.id).filter(LpnImage.lpn_item_id == item_id).all()]
+            if img_ids:
+                res = db.query(LpnAiOcrResult).filter(LpnAiOcrResult.image_id.in_(img_ids)).order_by(LpnAiOcrResult.scanned_at.desc()).first()
+
+            # 2. Tìm theo số Container và vị trí kiện hàng (Pallet/Box suffix_key)
+            if not res and item_rec.container:
+                c_num = item_rec.container.container_number
+                s_key = item_rec.suffix_key
+                if c_num and s_key:
+                    res = db.query(LpnAiOcrResult).filter(
+                        LpnAiOcrResult.container_number == c_num,
+                        LpnAiOcrResult.suffix_key == s_key
+                    ).order_by(LpnAiOcrResult.scanned_at.desc()).first()
+
+            # Tự động cập nhật lại item_id mới để tối ưu truy vấn các lần tiếp theo
+            if res:
+                try:
+                    res.item_id = item_id
+                    db.commit()
+                except Exception:
+                    db.rollback()
+
         exp_lpn_clean = (item_rec.lpn or "").strip().upper() if item_rec else ""
         exp_sku_clean = (item_rec.sku or "").strip().upper() if item_rec else ""
         pos_key = (item_rec.suffix_key or item_rec.record_type or (res.suffix_key if res else "")) or ""
@@ -1608,25 +1658,77 @@ def get_item_ocr_result(
                 "match_reason": "Khớp CSDL" if res.is_sku_match else f"Lệch mã: CSDL là {exp_sku_clean}"
             }]
 
-        # Tự động hiệu chỉnh đối chiếu lại is_match cho các mã LPN và SKU
-        is_any_lpn_match = bool(res.is_lpn_match)
-        if exp_lpn_clean:
-            for l_item in detected_lpns_detail:
-                if str(l_item.get("code", "")).strip().upper() == exp_lpn_clean:
-                    l_item["is_match"] = True
-                    is_any_lpn_match = True
-            if res.detected_lpn and str(res.detected_lpn).strip().upper() == exp_lpn_clean:
-                is_any_lpn_match = True
-
-        is_any_sku_match = bool(res.is_sku_match)
-        if exp_sku_clean:
+        # 4. Tự động chuẩn hóa và gộp SKU nếu giống 90-99% CSDL chuẩn (lấy luôn kết quả đúng)
+        if exp_sku_clean and detected_skus_detail:
+            merged_sku_map = {}
             for s_item in detected_skus_detail:
-                code_c = str(s_item.get("code", "")).strip("-:;,. #*!_/").upper()
-                if code_c == exp_sku_clean:
+                raw_code = str(s_item.get("code", "")).strip("-:;,. #*!_/").upper()
+                calibrated_code = LabelDataParser.calibrate_sku_with_expected(raw_code, [exp_sku_clean])
+                is_m = bool(calibrated_code == exp_sku_clean)
+                orient = s_item.get("orientation") or ("vertical" if is_vert else "horizontal")
+                cat_lbl = s_item.get("category_label") or ("Top nóc" if is_vert else "Pallet đứng")
+
+                key = f"{calibrated_code}__{orient}"
+                if key not in merged_sku_map:
+                    merged_sku_map[key] = {
+                        "code": calibrated_code,
+                        "count": 0,
+                        "is_match": is_m,
+                        "orientation": orient,
+                        "category_label": cat_lbl,
+                        "match_reason": "Khớp CSDL" if is_m else f"Lệch mã: CSDL là {exp_sku_clean}"
+                    }
+                merged_sku_map[key]["count"] += s_item.get("count", 1)
+            detected_skus_detail = list(merged_sku_map.values())
+
+        # 5. Tự động đối chiếu LPN: Kiểm tra cả CSDL chuẩn và các kiện đi kèm trong cùng container
+        container_lpn_map = {}
+        if item_rec and item_rec.container_id:
+            all_c_items = db.query(LpnItem.lpn, LpnItem.suffix_key).filter(LpnItem.container_id == item_rec.container_id).all()
+            for l_val, s_val in all_c_items:
+                if l_val:
+                    container_lpn_map[str(l_val).strip().upper()] = s_val
+
+        if detected_lpns_detail:
+            for l_item in detected_lpns_detail:
+                l_code = str(l_item.get("code", "")).strip().upper()
+                if exp_lpn_clean and l_code == exp_lpn_clean:
+                    l_item["is_match"] = True
+                    l_item["match_reason"] = "Khớp CSDL"
+                    # Nếu kiện hiện tại là Pallet đứng -> tem chính này là Tủ đứng (nằm ngang)
+                    # Nếu kiện hiện tại là Top nóc -> tem chính này là Top nóc (mã đứng)
+                    if not is_vert:
+                        l_item["orientation"] = "horizontal"
+                        l_item["category_label"] = "Pallet đứng"
+                    else:
+                        l_item["orientation"] = "vertical"
+                        l_item["category_label"] = "Top nóc"
+                elif l_code in container_lpn_map:
+                    l_item["is_match"] = True
+                    l_item["is_other_item"] = True
+                    l_item["other_item_label"] = container_lpn_map[l_code]
+                    l_item["match_reason"] = f"Khớp {container_lpn_map[l_code]} (thùng dán cạnh)"
+                    # Thùng dán cạnh đối diện: nếu kiện là Pallet đứng thì thùng dán cạnh là Top nóc (mã đứng)
+                    if not is_vert:
+                        l_item["orientation"] = "vertical"
+                        l_item["category_label"] = "Top nóc"
+                    else:
+                        l_item["orientation"] = "horizontal"
+                        l_item["category_label"] = "Pallet đứng"
+
+        if detected_skus_detail:
+            for s_item in detected_skus_detail:
+                s_code = str(s_item.get("code", "")).strip().upper()
+                if exp_sku_clean and s_code == exp_sku_clean:
                     s_item["is_match"] = True
-                    is_any_sku_match = True
-            if res.detected_sku and str(res.detected_sku).strip("-:;,. #*!_/").upper() == exp_sku_clean:
-                is_any_sku_match = True
+                    s_item["match_reason"] = "Khớp CSDL"
+                    # Mã SKU chính của Pallet đứng luôn thuộc về Tủ dưới (Pallet đứng)
+                    if not is_vert and s_item.get("count", 1) >= 2:
+                        s_item["orientation"] = "horizontal"
+                        s_item["category_label"] = "Pallet đứng"
+
+        is_any_lpn_match = any(l.get("is_match") for l in detected_lpns_detail) if detected_lpns_detail else bool(res.is_lpn_match)
+        is_any_sku_match = any(s.get("is_match") for s in detected_skus_detail) if detected_skus_detail else bool(res.is_sku_match)
 
         res.is_lpn_match = is_any_lpn_match
         res.is_sku_match = is_any_sku_match
@@ -1679,6 +1781,29 @@ def scan_single_item(
     c_num = container.container_number if container else ""
 
     abs_p = resolve_image_file_path(img.local_path)
+    if not abs_p or not os.path.isfile(abs_p):
+        if img.source_url and img.source_url.startswith("http"):
+            try:
+                from lpn_crawler.backend.services.storage import download_image_authenticated
+                dl_res = download_image_authenticated(
+                    source_url=img.source_url,
+                    container_number=c_num or "unknown_container",
+                    suffix_key=item.suffix_key or "general",
+                    sort_order=getattr(img, 'sort_order', 1) or 1
+                )
+                if dl_res and dl_res.get("local_path"):
+                    img.local_path = dl_res["local_path"]
+                    if dl_res.get("image_hash"):
+                        img.image_hash = dl_res["image_hash"]
+                    if dl_res.get("file_mime"):
+                        img.file_mime = dl_res["file_mime"]
+                    if dl_res.get("file_size"):
+                        img.file_size = dl_res["file_size"]
+                    db.commit()
+                    abs_p = resolve_image_file_path(dl_res["local_path"])
+            except Exception as dl_err:
+                logger.warning(f"Lỗi tải ảnh authenticated cho item {item.id}: {dl_err}")
+
     img_target = abs_p if (abs_p and os.path.isfile(abs_p)) else img.source_url
     if not img_target:
         raise HTTPException(status_code=400, detail="Không tìm thấy file ảnh cục bộ hoặc URL")
@@ -1867,10 +1992,15 @@ def scan_single_item(
     raw_ocr_str = json.dumps(raw_payload, ensure_ascii=False)
 
     try:
-        existing = db.query(LpnAiOcrResult).filter(
-            LpnAiOcrResult.item_id == item.id,
-            LpnAiOcrResult.image_id == img.id
-        ).first()
+        # Lấy tất cả bản ghi OCR đã có của item này để cập nhật bản ghi mới nhất và dọn dẹp trùng lặp
+        existing_list = db.query(LpnAiOcrResult).filter(
+            LpnAiOcrResult.item_id == item.id
+        ).order_by(LpnAiOcrResult.id.desc()).all()
+
+        existing = existing_list[0] if existing_list else None
+        if len(existing_list) > 1:
+            for old_dup in existing_list[1:]:
+                db.delete(old_dup)
 
         now = datetime.utcnow()
         if not existing:
@@ -1894,6 +2024,9 @@ def scan_single_item(
             )
             db.add(existing)
         else:
+            existing.image_id = img.id
+            existing.container_number = c_num
+            existing.suffix_key = item.suffix_key
             existing.model_id = payload.model_id or "hybrid_epoch15"
             existing.detected_lpn = det_lpn
             existing.detected_sku = det_sku
@@ -1906,14 +2039,69 @@ def scan_single_item(
             existing.raw_ocr_text = raw_ocr_str
             existing.processing_time_ms = duration_ms
             existing.scanned_at = now
+
+        # Nếu item này đã quét khớp mã và không còn lỗi: cập nhật resolution_status
+        has_sku = bool(item.sku and str(item.sku).strip() not in ('', 'None', '0', '—'))
+        is_clean_match = bool(is_lpn_match and (not has_sku or is_sku_match))
+        if is_clean_match:
+            item.resolution_status = "resolved"
+            item.resolution_note = "Đã quét AI OCR khớp mã thành công (Không còn lỗi)"
+            item.resolved_at = datetime.utcnow()
+            item.resolved_by = "AI OCR"
+
+        # Tự động tính toán lại và cập nhật thống kê Đạt/Lỗi cho Container
+        cont_kpi = None
+        if container:
+            all_itms = container.items
+            all_itm_ids = [it.id for it in all_itms]
+            total_itms = len(all_itms)
+
+            # Tính số lượng item đạt chuẩn (khớp LPN và khớp SKU nếu CSDL có SKU)
+            matched_items_q = db.query(LpnAiOcrResult.item_id).join(
+                LpnItem, LpnAiOcrResult.item_id == LpnItem.id
+            ).filter(
+                LpnAiOcrResult.item_id.in_(all_itm_ids),
+                LpnAiOcrResult.status == 'success',
+                LpnAiOcrResult.is_lpn_match == True,
+                or_(
+                    LpnAiOcrResult.is_sku_match == True,
+                    LpnItem.sku.is_(None),
+                    LpnItem.sku == '',
+                    LpnItem.sku == 'None',
+                    LpnItem.sku == '—'
+                )
+            ).distinct()
+            matched_cnt = matched_items_q.count()
+            mismatch_cnt = max(0, total_itms - matched_cnt)
+            new_status = "PASSED" if mismatch_cnt == 0 else "MISMATCH"
+
+            if hasattr(container, "ocr_matched_count"):
+                container.ocr_matched_count = matched_cnt
+            if hasattr(container, "ocr_mismatch_count"):
+                container.ocr_mismatch_count = mismatch_cnt
+            if hasattr(container, "status_code"):
+                container.status_code = new_status
+            if hasattr(container, "status_label"):
+                container.status_label = "Đạt" if new_status == "PASSED" else f"Lệch mã {mismatch_cnt} ảnh"
+
+            cont_kpi = {
+                "container_id": container.id,
+                "total_items": total_itms,
+                "ocr_matched_count": matched_cnt,
+                "ocr_mismatch_count": mismatch_cnt,
+                "status_code": new_status,
+                "status_label": "Đạt" if new_status == "PASSED" else f"Lệch mã {mismatch_cnt} ảnh"
+            }
         
         db.commit()
-    except Exception:
+    except Exception as e:
+        logger.error(f"[scan_single_item] DB error: {e}")
         db.rollback()
 
     return {
         "success": True,
         "has_result": True,
+        "id": existing.id if 'existing' in locals() and existing else None,
         "item_id": item.id,
         "image_id": img.id,
         "container_number": c_num,
@@ -1933,6 +2121,8 @@ def scan_single_item(
         "is_sku_match": is_sku_match,
         "status": status_val,
         "error_reason": error_reason,
+        "resolution_status": getattr(item, "resolution_status", None),
+        "container_kpi": cont_kpi if 'cont_kpi' in locals() else None,
         "processing_time_ms": duration_ms,
         "scanned_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
     }

@@ -616,6 +616,30 @@ const InspectionReportsView = () => {
   const reportPartsList = useMemo(() => {
     if (!activeReportItem) return [];
 
+    let parsedJson = null;
+    if (activeReportItem.data_json) {
+      try {
+        parsedJson = typeof activeReportItem.data_json === 'string' ? JSON.parse(activeReportItem.data_json) : activeReportItem.data_json;
+      } catch (e) {}
+    }
+
+    const rawPartName = (activeReportItem.part_name || activeReportItem.product_sku || '').trim();
+    const defaultCabinet = cleanCabinetTag(parsedReportData?.cabinet || parsedReportData?.product_label || parsedReportData?.badge || '');
+    const defaultQty = activeReportItem.required_qty || parsedReportData?.requiredQty || activeReportItem.total_products || '';
+
+    // Tách các chi tiết từ part_name nếu có dấu phẩy hoặc xuống dòng
+    const names = (rawPartName && rawPartName !== 'N/A')
+      ? rawPartName
+          .split(/[\n\r;]|,\s*(?=[A-ZÀ-Ỹa-z0-9])/)
+          .map(s => s.trim())
+          .filter(Boolean)
+      : [];
+
+    const rawSpec = (activeReportItem.specification || '').trim();
+    const specs = rawSpec.includes(',') 
+      ? rawSpec.split(',').map(s => s.trim()).filter(Boolean) 
+      : [];
+
     let rawItems = [];
     if (Array.isArray(activeReportItem.details) && activeReportItem.details.length > 0) {
       rawItems = activeReportItem.details;
@@ -630,18 +654,41 @@ const InspectionReportsView = () => {
     }
 
     if (rawItems.length > 0) {
-      return rawItems.map((it, idx) => ({
+      let list = rawItems.map((it, idx) => ({
         stt: String(idx + 1).padStart(2, '0'),
         name: it.part_name || it.name || it.product || 'Chi tiết',
         spec: it.specification || it.spec || activeReportItem.specification || 'Tiêu chuẩn',
         cabinet: cleanCabinetTag(it.cabinet || it.product_label || it.badge || it.product_name || it.product_sku || it.sku || ''),
         qty: it.plan_qty || it.qty || ''
       }));
-    }
 
-    const rawPartName = (activeReportItem.part_name || activeReportItem.product_sku || '').trim();
-    const defaultCabinet = cleanCabinetTag(parsedReportData?.cabinet || parsedReportData?.product_label || parsedReportData?.badge || '');
-    const defaultQty = activeReportItem.required_qty || parsedReportData?.requiredQty || activeReportItem.total_products || '';
+      // Tự động bổ sung nếu part_name có nhiều chi tiết mà rawItems bị thiếu
+      if (names.length > 0) {
+        const existingNamesLower = list.map(it => (it.name || '').toLowerCase().trim());
+        names.forEach((pName, pIdx) => {
+          const pNameLower = pName.toLowerCase().trim();
+          const alreadyExists = existingNamesLower.some(existing => 
+            existing === pNameLower || existing.includes(pNameLower) || pNameLower.includes(existing)
+          );
+          if (!alreadyExists) {
+            const pSpec = specs[pIdx] || (specs.length === 1 ? specs[0] : (rawSpec || 'Tiêu chuẩn'));
+            list.push({
+              stt: String(list.length + 1).padStart(2, '0'),
+              name: pName,
+              spec: pSpec,
+              cabinet: defaultCabinet,
+              qty: defaultQty
+            });
+          }
+        });
+        list = list.map((it, idx) => ({
+          ...it,
+          stt: String(idx + 1).padStart(2, '0')
+        }));
+      }
+
+      return list;
+    }
 
     if (!rawPartName || rawPartName === 'N/A') {
       return [{
@@ -652,16 +699,6 @@ const InspectionReportsView = () => {
         qty: defaultQty
       }];
     }
-
-    const names = rawPartName
-      .split(/[\n\r;]|,\s*(?=[A-ZÀ-Ỹa-z0-9])/)
-      .map(s => s.trim())
-      .filter(Boolean);
-
-    const rawSpec = (activeReportItem.specification || '').trim();
-    const specs = rawSpec.includes(',') 
-      ? rawSpec.split(',').map(s => s.trim()).filter(Boolean) 
-      : [];
 
     if (names.length === 0) {
       return [{

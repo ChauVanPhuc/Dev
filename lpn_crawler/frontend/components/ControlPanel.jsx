@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, AlertTriangle, Trash2, List, LayoutGrid, Sparkles, X, RefreshCw, Play, Pause, Square, Maximize2, Eye } from 'lucide-react';
+import { Search, Filter, AlertTriangle, Trash2, List, LayoutGrid, Sparkles, X, RefreshCw, Play, Pause, Square, Maximize2, Eye, Zap } from 'lucide-react';
 import { LpnFilterBar } from './LpnFilterBar';
 
 export const ControlPanel = ({
@@ -31,7 +31,9 @@ export const ControlPanel = ({
   isSyncing = false,
   onStartSync = () => {},
   onStopSync = () => {},
-  onOpenSyncMonitor = () => {}
+  onOpenSyncMonitor = () => {},
+  onOpenBatchScan = () => {},
+  unscannedCount = null
 }) => {
   const activePaused = isPaused || progressData?.current_status === 'PAUSED';
 
@@ -161,7 +163,7 @@ export const ControlPanel = ({
   const missingCount = Number(stats7d.total_missing_rows || 0);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flexShrink: 0 }}>
+    <div className="lpn-control-panel-wrapper" style={{ display: 'flex', flexDirection: 'column', gap: '6px', flexShrink: 0 }}>
 
       {/* 1. BỘ 4 KPI THEO TRƯỢT 7 NGÀY GẦN NHẤT */}
       {(() => {
@@ -241,7 +243,6 @@ export const ControlPanel = ({
                   <span className="lpn-card-label" style={{ color: '#DC2626', fontWeight: '800' }}>
                     Số lượng dòng thiếu / lệch mã
                   </span>
-                  {missingCount > 0 && <AlertTriangle size={14} color="#DC2626" />}
                 </div>
                 {rangeText && (
                   <span className="lpn-card-subtext" style={{ fontSize: '0.68rem', color: '#DC2626', fontWeight: '600' }}>
@@ -316,8 +317,8 @@ export const ControlPanel = ({
             />
           </div>
 
-          {/* Sort Button (A↓Z) */}
-          <div className="lpn-sort-container" style={{ position: 'relative', display: 'inline-block' }}>
+          {/* Sort Button (A↓Z) - Desktop only (trên mobile tích hợp vào mục Khác) */}
+          <div className="lpn-sort-container lpn-desktop-only" style={{ position: 'relative', display: 'inline-block' }}>
             <button
               type="button"
               onClick={(e) => {
@@ -393,8 +394,8 @@ export const ControlPanel = ({
             )}
           </div>
 
-          {/* Filter Funnel Icon Button */}
-          <div style={{ position: 'relative', display: 'inline-block' }}>
+          {/* Filter Funnel Icon Button - Desktop only (trên mobile tích hợp vào mục Khác) */}
+          <div className="lpn-desktop-only" style={{ position: 'relative', display: 'inline-block' }}>
             <button
               type="button"
               onClick={() => setIsFilterBarOpen(!isFilterBarOpen)}
@@ -441,71 +442,61 @@ export const ControlPanel = ({
             </button>
           </div>
 
-          {/* Switch Chế độ xem: Dạng Bảng vs Dạng Thẻ Container */}
-          <div
-            className="lpn-viewmode-switch"
+          </div>
+
+        {/* Right Side Actions: Quét Cont Chưa Quét, Khác, Xuất dữ liệu, Đồng bộ */}
+        <div className="lpn-toolbar-right">
+
+          {/* Nút Quét Cont Chưa Quét - Desktop only (trên mobile tích hợp vào mục Khác) */}
+          <button
+            type="button"
+            className="lpn-desktop-only"
+            onClick={onOpenBatchScan}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              backgroundColor: '#FAF6F0',
-              border: '1px solid #EADCC9',
-              borderRadius: '8px',
-              padding: '2px',
-              height: '32px',
-              marginLeft: '4px'
+              gap: '6px',
+              height: '34px',
+              padding: '0 12px',
+              borderRadius: '6px',
+              fontWeight: '700',
+              fontSize: '0.82rem',
+              cursor: 'pointer',
+              background: 'linear-gradient(135deg, #D97706 0%, #B45309 100%)',
+              color: '#FFFFFF',
+              border: 'none',
+              boxShadow: '0 2px 5px rgba(217, 119, 6, 0.3)',
+              transition: 'all 0.15s ease',
+              whiteSpace: 'nowrap'
             }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-1px)';
+              e.currentTarget.style.boxShadow = '0 4px 10px rgba(217, 119, 6, 0.4)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 2px 5px rgba(217, 119, 6, 0.3)';
+            }}
+            title="Tự động quét AI OCR cho toàn bộ các Container chưa hoàn tất hoặc chưa quét đủ ảnh"
           >
-            <button
-              type="button"
-              onClick={() => onViewModeChange('table')}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '5px',
-                padding: '3px 9px',
-                borderRadius: '6px',
-                border: 'none',
-                backgroundColor: viewMode === 'table' ? '#4A2E1B' : 'transparent',
-                color: viewMode === 'table' ? '#FFFFFF' : '#7B5233',
-                fontWeight: viewMode === 'table' ? '700' : '600',
-                fontSize: '0.76rem',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
-              }}
-              title="Chế độ xem Bảng dữ liệu chi tiết"
-            >
-              <List size={13} strokeWidth={2.5} />
-              <span>Dạng Bảng</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => onViewModeChange('cards')}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '5px',
-                padding: '3px 9px',
-                borderRadius: '6px',
-                border: 'none',
-                backgroundColor: viewMode === 'cards' ? '#4A2E1B' : 'transparent',
-                color: viewMode === 'cards' ? '#FFFFFF' : '#7B5233',
-                fontWeight: viewMode === 'cards' ? '700' : '600',
-                fontSize: '0.76rem',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
-              }}
-              title="Chế độ xem Thẻ Container (Hiển thị LPN & Ngày xếp hàng)"
-            >
-              <LayoutGrid size={13} strokeWidth={2.5} />
-              <span>Thẻ Container</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Right Side Actions: Khác, Xuất dữ liệu, + Bắt đầu Crawl */}
-        <div className="lpn-toolbar-right">
-
+            <Zap size={14} fill="#FFFFFF" />
+            <span>Quét Cont chưa quét</span>
+            {unscannedCount !== null && unscannedCount > 0 && (
+              <span
+                style={{
+                  backgroundColor: 'rgba(255,255,255,0.25)',
+                  color: '#FFFFFF',
+                  borderRadius: '10px',
+                  padding: '1px 6px',
+                  fontSize: '0.70rem',
+                  fontWeight: '800',
+                  marginLeft: '2px'
+                }}
+              >
+                {unscannedCount}
+              </span>
+            )}
+          </button>
 
           {/* Nút Khác (Dropdown) */}
           <div className="lpn-other-container" style={{ position: 'relative' }}>
@@ -541,6 +532,22 @@ export const ControlPanel = ({
                 <rect x="3" y="14" width="7" height="7" rx="1"></rect>
               </svg>
               <span>Khác</span>
+              {/* Badge số trên Mobile nếu có filter active hoặc cont chưa quét */}
+              {((unscannedCount !== null && unscannedCount > 0) || activeFiltersCount > 0) && (
+                <span
+                  className="lpn-mobile-only"
+                  style={{
+                    backgroundColor: '#D97706',
+                    color: '#FFFFFF',
+                    borderRadius: '10px',
+                    padding: '1px 5px',
+                    fontSize: '0.65rem',
+                    fontWeight: '800'
+                  }}
+                >
+                  {unscannedCount > 0 ? unscannedCount : activeFiltersCount}
+                </span>
+              )}
               {isRunning && (
                 <span
                   style={{
@@ -577,6 +584,161 @@ export const ControlPanel = ({
                   transformOrigin: 'top right'
                 }}
               >
+                {/* [Mobile] Quét Cont Chưa Quét */}
+                <button
+                  type="button"
+                  className="import-dropdown-item lpn-mobile-only"
+                  onClick={() => {
+                    setIsOtherDropdownOpen(false);
+                    onOpenBatchScan();
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    width: '100%',
+                    padding: '10px 16px',
+                    border: 'none',
+                    background: 'none',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    fontWeight: '700',
+                    fontSize: '0.85rem',
+                    color: '#B45309',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <Zap size={14} fill="#B45309" color="#B45309" />
+                    <span>Quét Cont chưa quét</span>
+                  </div>
+                  {unscannedCount !== null && unscannedCount > 0 && (
+                    <span
+                      style={{
+                        backgroundColor: '#FEF3C7',
+                        color: '#B45309',
+                        border: '1px solid #FDE68A',
+                        borderRadius: '10px',
+                        padding: '1px 6px',
+                        fontSize: '0.70rem',
+                        fontWeight: '800'
+                      }}
+                    >
+                      {unscannedCount}
+                    </span>
+                  )}
+                </button>
+
+                {/* [Mobile] Xuất dữ liệu Excel */}
+                <button
+                  type="button"
+                  className="import-dropdown-item lpn-mobile-only"
+                  onClick={() => {
+                    setIsOtherDropdownOpen(false);
+                    onExportExcel();
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    width: '100%',
+                    padding: '10px 16px',
+                    border: 'none',
+                    background: 'none',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    fontWeight: '600',
+                    fontSize: '0.85rem',
+                    color: '#2D1A12',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="17 8 12 3 7 8"></polyline>
+                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                  </svg>
+                  <span>Xuất dữ liệu Excel</span>
+                </button>
+
+                {/* [Mobile] Bộ lọc nâng cao */}
+                <button
+                  type="button"
+                  className="import-dropdown-item lpn-mobile-only"
+                  onClick={() => {
+                    setIsOtherDropdownOpen(false);
+                    setIsFilterBarOpen((prev) => !prev);
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    width: '100%',
+                    padding: '10px 16px',
+                    border: 'none',
+                    background: 'none',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    fontWeight: '600',
+                    fontSize: '0.85rem',
+                    color: '#2D1A12',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <Filter size={14} strokeWidth={2.5} color="#2D1A12" />
+                    <span>Bộ lọc nâng cao</span>
+                  </div>
+                  {activeFiltersCount > 0 && (
+                    <span
+                      style={{
+                        backgroundColor: '#7B5233',
+                        color: '#FFFFFF',
+                        borderRadius: '10px',
+                        padding: '1px 6px',
+                        fontSize: '0.70rem',
+                        fontWeight: '800'
+                      }}
+                    >
+                      {activeFiltersCount}
+                    </span>
+                  )}
+                </button>
+
+                {/* [Mobile] Sắp xếp danh sách */}
+                <button
+                  type="button"
+                  className="import-dropdown-item lpn-mobile-only"
+                  onClick={() => {
+                    setIsOtherDropdownOpen(false);
+                    setShowSortDropdown(true);
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    width: '100%',
+                    padding: '10px 16px',
+                    border: 'none',
+                    background: 'none',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    fontWeight: '600',
+                    fontSize: '0.85rem',
+                    color: '#2D1A12',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="15" y1="4" x2="15" y2="20" />
+                    <polyline points="11 16 15 20 19 16" />
+                    <text x="3" y="10" fontFamily="sans-serif" fontSize="10" fontWeight="bold" fill="currentColor">A</text>
+                    <text x="3" y="20" fontFamily="sans-serif" fontSize="10" fontWeight="bold" fill="currentColor">Z</text>
+                  </svg>
+                  <span>Sắp xếp danh sách</span>
+                </button>
+
+                <div className="lpn-mobile-only" style={{ height: '1px', backgroundColor: '#F0E6D8', margin: '4px 0' }}></div>
                 {/* Tiến trình Crawl */}
                 {!isRunning ? (
                   <button
@@ -862,8 +1024,8 @@ export const ControlPanel = ({
             )}
           </div>
 
-          {/* Nút Xuất dữ liệu (Dropdown) */}
-          <div className="lpn-export-container" style={{ position: 'relative' }}>
+          {/* Nút Xuất dữ liệu (Dropdown) - Desktop only (trên mobile tích hợp vào mục Khác) */}
+          <div className="lpn-export-container lpn-desktop-only" style={{ position: 'relative' }}>
             <button
               type="button"
               onClick={(e) => {
@@ -951,7 +1113,7 @@ export const ControlPanel = ({
           </div>
 
           {/* Nút Đồng bộ (Sync) */}
-          <div className="lpn-sync-container" style={{ position: 'relative', display: 'inline-block' }}>
+          <div className="lpn-sync-container" style={{ position: 'relative' }}>
             <button
               type="button"
               onClick={() => {

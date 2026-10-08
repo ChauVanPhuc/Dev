@@ -725,6 +725,10 @@ class OcrEngine:
                     ])
                     r_token_min_conf = 0.015 if r_is_key_token else effective_min_conf
 
+                    # Lọc bỏ nhiễu quang học 1 ký tự (như viền mã vạch, vệt đen đọc nhầm thành '1', 'I') khi xoay ảnh
+                    if len(r_clean) <= 1 and r_conf_val < 0.45:
+                        continue
+
                     if r_conf_val >= r_token_min_conf and r_clean and r_clean not in seen_texts:
                         seen_texts.add(r_clean)
                         tokens.append({

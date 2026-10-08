@@ -67,7 +67,7 @@ class CrawlerApiMixin:
         for idx, (img_id, lp, i_id, img_type) in enumerate(valid_entries, 1):
             s_key = item_map.get(i_id, {}).get("suffix_key")
             matched_it = next((it for it in (items_data or []) if it.get("suffix_key") == s_key), None)
-            self.ocr_queue.put({
+            ocr_task = {
                 "image_id": img_id,
                 "lpn_item_id": i_id,
                 "container_number": c_num,
@@ -79,7 +79,206 @@ class CrawlerApiMixin:
                 "container_img_idx": idx,
                 "container_img_total": total_cnt_imgs,
                 "container_total_items": total_cnt_items
-            })
+            }
+            if hasattr(self, "enqueue_ocr_task"):
+                self.enqueue_ocr_task(ocr_task, priority=1)
+            else:
+                self.ocr_queue.put(ocr_task)
+
+    def _upsert_container_items_and_images(self, page, db_cont, items_data, c_num):
+        """
+        Smart Upsert bảo toàn ID và toàn vẹn liên kết AI OCR (Giai đoạn 1):
+        - Giữ nguyên LpnItem.id khi cập nhật (không xóa làm mồ côi kết quả AI OCR).
+        - Kiểm tra ảnh đã tải trên đĩa: nếu đã có file hợp lệ thì không tải lại từ CDN.
+        - Tự động nạp các ảnh chưa có kết quả AI OCR vào hàng đợi OCR.
+        """
+        from lpn_crawler.backend.api.routes.images import resolve_image_file_path
+
+        # 1. Lấy danh sách LpnItem hiện có trong DB của container này
+        existing_items = self.db.query(LpnItem).filter(LpnItem.container_id == db_cont.id).all()
+        item_by_suffix = {it.suffix_key: it for it in existing_items if it.suffix_key}
+
+        # 2. Lấy danh sách LpnImage hiện có trong DB của container này
+        existing_images = self.db.query(LpnImage).filter(LpnImage.container_id == db_cont.id).all()
+        img_by_item_sort = {(im.lpn_item_id, im.sort_order): im for im in existing_images}
+
+        c_sku = 0
+        image_tasks = []
+        db_items_processed = []
+        seen_suffixes = set()
+        existing_valid_imgs = []
+
+        for idx, item in enumerate(items_data, start=1):
+            s_key = item.get("suffix_key")
+            if s_key:
+                seen_suffixes.add(s_key)
+
+            db_item = item_by_suffix.get(s_key) if s_key else None
+            if db_item:
+                # Cập nhật thông tin item hiện có (BẢO TOÀN ID)
+                db_item.record_type = item["record_type"]
+                db_item.item_index = idx
+                db_item.batch_original = item["batch_original"]
+                db_item.batch_resolved = item["batch_resolved"]
+                db_item.raw_group_key = item["raw_group_key"]
+                if item.get("lpn"):
+                    db_item.lpn = item["lpn"]
+                if item.get("sku"):
+                    db_item.sku = item["sku"]
+            else:
+                # Thêm mới item
+                db_item = LpnItem(
+                    container_id=db_cont.id,
+                    record_type=item["record_type"],
+                    suffix_key=item["suffix_key"],
+                    item_index=idx,
+                    batch_original=item["batch_original"],
+                    batch_resolved=item["batch_resolved"],
+                    lpn=item["lpn"],
+                    sku=item["sku"],
+                    raw_group_key=item["raw_group_key"]
+                )
+                self.db.add(db_item)
+                self.db.flush()
+
+            db_items_processed.append(db_item)
+            if item.get("sku"):
+                c_sku += 1
+
+            # Kiểm tra ảnh của item này
+            for sort_idx, u in enumerate(item.get("image_urls", []), start=1):
+                existing_img = img_by_item_sort.get((db_item.id, sort_idx))
+                need_download = True
+                if existing_img and existing_img.local_path:
+                    abs_p = resolve_image_file_path(existing_img.local_path)
+                    if abs_p and os.path.isfile(abs_p):
+                        need_download = False
+                        existing_valid_imgs.append(existing_img)
+
+                if need_download:
+                    image_tasks.append({
+                        "source_url": u,
+                        "container_number": db_cont.container_number,
+                        "suffix_key": item["suffix_key"],
+                        "sort_order": sort_idx,
+                        "lpn_item_id": db_item.id,
+                        "container_id": db_cont.id,
+                        "image_type": item["record_type"]
+                    })
+
+        # 3. Dọn dẹp các item cũ không còn tồn tại trên AppSheet (nếu có)
+        for s_key, old_item in item_by_suffix.items():
+            if s_key not in seen_suffixes:
+                self.db.query(LpnImage).filter(LpnImage.lpn_item_id == old_item.id).delete()
+                self.db.query(LpnItem).filter(LpnItem.id == old_item.id).delete()
+
+        # 4. Tải các ảnh mới hoặc ảnh bị thiếu tệp
+        # 4a. Tải ảnh đại diện Container nếu có URL và chưa lưu đĩa
+        if db_cont.container_image and str(db_cont.container_image).startswith("http"):
+            try:
+                from lpn_crawler.backend.services.storage import download_single_image
+                cont_task = {
+                    "source_url": db_cont.container_image,
+                    "container_number": db_cont.container_number,
+                    "suffix_key": "container",
+                    "sort_order": 0,
+                    "lpn_item_id": 0,
+                    "container_id": db_cont.id,
+                    "image_type": "Container"
+                }
+                c_res = download_single_image(page, cont_task)
+                if c_res.get("local_path"):
+                    db_cont.container_image = c_res["local_path"]
+            except Exception as c_err:
+                pass
+
+        downloaded_imgs = 0
+        newly_saved_imgs = []
+        if image_tasks:
+            effective_workers = getattr(settings, "IMAGE_DOWNLOAD_WORKERS", 30)
+            img_results = download_images_parallel(
+                page, image_tasks,
+                max_workers=effective_workers,
+                job_id=self.job_id
+            )
+            for r in img_results:
+                l_id = r.get("lpn_item_id")
+                s_ord = r.get("sort_order", 1)
+                existing_img = img_by_item_sort.get((l_id, s_ord))
+                if existing_img:
+                    existing_img.local_path = r.get("local_path")
+                    existing_img.image_hash = r.get("image_hash")
+                    existing_img.file_mime = r.get("file_mime")
+                    existing_img.file_size = r.get("file_size", 0)
+                    newly_saved_imgs.append(existing_img)
+                else:
+                    db_img = LpnImage(
+                        lpn_item_id=l_id,
+                        container_id=r.get("container_id"),
+                        image_type=r.get("image_type", "Pallet"),
+                        sort_order=s_ord,
+                        source_url=r.get("source_url"),
+                        local_path=r.get("local_path"),
+                        image_hash=r.get("image_hash"),
+                        file_mime=r.get("file_mime"),
+                        file_size=r.get("file_size", 0)
+                    )
+                    self.db.add(db_img)
+                    newly_saved_imgs.append(db_img)
+
+                if r.get("local_path"):
+                    downloaded_imgs += 1
+
+            seen_task_keys = {(r.get("lpn_item_id"), r.get("sort_order", 1)) for r in img_results}
+            for task in image_tasks:
+                t_key = (task.get("lpn_item_id"), task.get("sort_order", 1))
+                if t_key not in seen_task_keys and t_key not in img_by_item_sort:
+                    db_img = LpnImage(
+                        lpn_item_id=task.get("lpn_item_id"),
+                        container_id=task.get("container_id"),
+                        image_type=task.get("image_type", "Pallet"),
+                        sort_order=task.get("sort_order", 1),
+                        source_url=task.get("source_url"),
+                        local_path=None,
+                        file_size=0
+                    )
+                    self.db.add(db_img)
+
+        self.db.flush()
+        self.db.commit()
+
+        # 5. Đẩy vào hàng đợi AI OCR:
+        # Cả ảnh vừa tải mới + ảnh cũ chưa từng được quét AI OCR trong bảng lpn_ai_ocr_results
+        queued_img_meta = []
+        for im in newly_saved_imgs:
+            if im.local_path:
+                queued_img_meta.append({
+                    "image_id": im.id,
+                    "lpn_item_id": im.lpn_item_id,
+                    "local_path": im.local_path,
+                    "image_type": im.image_type
+                })
+
+        # Với các ảnh đã tồn tại từ trước: chỉ nạp nếu chưa có kết quả AI OCR
+        if existing_valid_imgs and getattr(self, "auto_ocr", False):
+            existing_img_ids = [im.id for im in existing_valid_imgs]
+            scanned_img_ids = set([
+                row[0] for row in self.db.query(LpnAiOcrResult.image_id).filter(
+                    LpnAiOcrResult.image_id.in_(existing_img_ids)
+                ).all()
+            ])
+            for im in existing_valid_imgs:
+                if im.id not in scanned_img_ids:
+                    queued_img_meta.append({
+                        "image_id": im.id,
+                        "lpn_item_id": im.lpn_item_id,
+                        "local_path": im.local_path,
+                        "image_type": im.image_type
+                    })
+
+        self._enqueue_images_for_sync_ocr(queued_img_meta, items_data, c_num, image_tasks)
+
+        return downloaded_imgs, c_sku
 
     def fetch_appsheet_template_api_direct(self, page: Page, context: Any, force_fresh: bool = False) -> Optional[Dict[str, Any]]:
         """
@@ -518,7 +717,7 @@ class CrawlerApiMixin:
                                 )
                                 total_u = len(unscanned_imgs)
                                 for u_idx, (img_obj, itm_obj) in enumerate(unscanned_imgs, 1):
-                                    self.ocr_queue.put({
+                                    ocr_t = {
                                         "image_id": img_obj.id,
                                         "lpn_item_id": itm_obj.id,
                                         "container_number": c_num,
@@ -530,7 +729,11 @@ class CrawlerApiMixin:
                                         "container_img_idx": u_idx,
                                         "container_img_total": total_u,
                                         "container_total_items": total_u
-                                    })
+                                    }
+                                    if hasattr(self, "enqueue_ocr_task"):
+                                        self.enqueue_ocr_task(ocr_t, priority=2)
+                                    else:
+                                        self.ocr_queue.put(ocr_t)
                                 self.send_progress(
                                     c_num, "CRAWLING", processed_count, display_total_q,
                                     total_items_count, total_images_count,
@@ -601,7 +804,11 @@ class CrawlerApiMixin:
                             db_cont.timestamp_raw = header_data["timestamp_raw"]
                             db_cont.timestamp_val = header_data["timestamp_val"]
                             db_cont.operator_name = header_data["operator_name"]
+                            if header_data.get("container_image"):
+                                db_cont.container_image = header_data["container_image"]
                             is_updated = True
+                        elif header_data.get("container_image") and not db_cont.container_image:
+                            db_cont.container_image = header_data["container_image"]
                     else:
                         db_cont = LpnContainer(
                             record_fingerprint=fingerprint,
@@ -612,6 +819,7 @@ class CrawlerApiMixin:
                             timestamp_raw=header_data["timestamp_raw"],
                             timestamp_val=header_data["timestamp_val"],
                             operator_name=header_data["operator_name"],
+                            container_image=header_data.get("container_image"),
                             content_hash=content_hash,
                             last_crawl_job_id=self.job_id
                         )
@@ -627,96 +835,10 @@ class CrawlerApiMixin:
                     self.db.add(job_link)
                     self.db.commit()
 
-                    # Xoá toàn bộ items/images cũ của container này trước khi lưu bộ items mới (ngăn chặn chèn trùng lặp)
-                    self.db.query(LpnImage).filter(LpnImage.container_id == db_cont.id).delete()
-                    self.db.query(LpnItem).filter(LpnItem.container_id == db_cont.id).delete()
-                    self.db.commit()
-
-                    # Lưu items & chuẩn bị image download tasks
-                    image_tasks = []
-                    c_sku = 0
-                    for idx, item in enumerate(items_data, start=1):
-                        db_item = LpnItem(
-                            container_id=db_cont.id,
-                            record_type=item["record_type"],
-                            suffix_key=item["suffix_key"],
-                            item_index=idx,
-                            batch_original=item["batch_original"],
-                            batch_resolved=item["batch_resolved"],
-                            lpn=item["lpn"],
-                            sku=item["sku"],
-                            raw_group_key=item["raw_group_key"]
-                        )
-                        self.db.add(db_item)
-                        self.db.flush()
-
-                        if item.get("sku"):
-                            c_sku += 1
-
-                        for sort_idx, u in enumerate(item.get("image_urls", []), start=1):
-                            image_tasks.append({
-                                "source_url": u,
-                                "container_number": db_cont.container_number,
-                                "suffix_key": item["suffix_key"],
-                                "sort_order": sort_idx,
-                                "lpn_item_id": db_item.id,
-                                "container_id": db_cont.id,
-                                "image_type": item["record_type"]
-                            })
-
-                    # Tải ảnh song song có connection pooling và check cancellation
-                    downloaded_imgs = 0
-                    created_db_imgs = []
-                    if image_tasks:
-                        effective_workers = getattr(settings, "IMAGE_DOWNLOAD_WORKERS", 30)
-                        img_results = download_images_parallel(
-                            page, image_tasks,
-                            max_workers=effective_workers,
-                            job_id=self.job_id
-                        )
-                        for r in img_results:
-                            db_img = LpnImage(
-                                lpn_item_id=r.get("lpn_item_id"),
-                                container_id=r.get("container_id"),
-                                image_type=r.get("image_type", "Pallet"),
-                                sort_order=r.get("sort_order", 1),
-                                source_url=r.get("source_url"),
-                                local_path=r.get("local_path"),
-                                image_hash=r.get("image_hash"),
-                                file_mime=r.get("file_mime"),
-                                file_size=r.get("file_size", 0)
-                            )
-                            self.db.add(db_img)
-                            created_db_imgs.append((db_img, r))
-                            if r.get("local_path"):
-                                downloaded_imgs += 1
-
-                        seen_task_keys = {(r.get("lpn_item_id"), r.get("sort_order", 1)) for r in img_results}
-                        for task in image_tasks:
-                            t_key = (task.get("lpn_item_id"), task.get("sort_order", 1))
-                            if t_key not in seen_task_keys:
-                                db_img = LpnImage(
-                                    lpn_item_id=task.get("lpn_item_id"),
-                                    container_id=task.get("container_id"),
-                                    image_type=task.get("image_type", "Pallet"),
-                                    sort_order=task.get("sort_order", 1),
-                                    source_url=task.get("source_url"),
-                                    local_path=None,
-                                    file_size=0
-                                )
-                                self.db.add(db_img)
-
-                    self.db.flush()
-                    queued_img_meta = []
-                    for db_img_inst, r in created_db_imgs:
-                        queued_img_meta.append({
-                            "image_id": getattr(db_img_inst, "id", None),
-                            "lpn_item_id": r.get("lpn_item_id"),
-                            "local_path": r.get("local_path"),
-                            "image_type": r.get("image_type", "Pallet")
-                        })
-                    self.db.commit()
-                    self._enqueue_images_for_sync_ocr(queued_img_meta, items_data, c_num, image_tasks)
+                    # Smart Upsert: Bảo toàn LpnItem.id và liên kết kết quả AI OCR, không tải lại ảnh đã có trên đĩa
+                    downloaded_imgs, c_sku = self._upsert_container_items_and_images(
+                        page, db_cont, items_data, c_num
+                    )
 
                     success_count += 1
                     total_items_count += len(items_data)
@@ -934,67 +1056,10 @@ class CrawlerApiMixin:
                                     self.db.add(db_c)
                                 self.db.flush()
 
-                                self.db.query(LpnImage).filter(LpnImage.container_id == db_c.id).delete()
-                                self.db.query(LpnItem).filter(LpnItem.container_id == db_c.id).delete()
-                                self.db.commit()
-
-                                c_sku_new = 0
-                                new_img_tasks = []
-                                for idx, itm in enumerate(c_its, start=1):
-                                    db_item = LpnItem(
-                                        container_id=db_c.id,
-                                        record_type=itm["record_type"],
-                                        suffix_key=itm["suffix_key"],
-                                        item_index=idx,
-                                        batch_original=itm["batch_original"],
-                                        batch_resolved=itm["batch_resolved"],
-                                        lpn=itm["lpn"],
-                                        sku=itm["sku"],
-                                        raw_group_key=itm["raw_group_key"]
-                                    )
-                                    self.db.add(db_item)
-                                    self.db.flush()
-                                    if itm.get("sku"):
-                                        c_sku_new += 1
-                                    for sort_idx, u in enumerate(itm.get("image_urls", []), start=1):
-                                        new_img_tasks.append({
-                                            "source_url": u,
-                                            "container_number": db_c.container_number,
-                                            "suffix_key": itm["suffix_key"],
-                                            "sort_order": sort_idx,
-                                            "lpn_item_id": db_item.id,
-                                            "container_id": db_c.id,
-                                            "image_type": itm["record_type"]
-                                        })
-
-                                downloaded_n = 0
-                                if new_img_tasks:
-                                    img_results = download_images_parallel(page, new_img_tasks, max_workers=getattr(settings, "IMAGE_DOWNLOAD_WORKERS", 30), job_id=self.job_id)
-                                    queued_meta = []
-                                    for r in img_results:
-                                        db_img = LpnImage(
-                                            lpn_item_id=r.get("lpn_item_id"),
-                                            container_id=r.get("container_id"),
-                                            image_type=r.get("image_type", "Pallet"),
-                                            sort_order=r.get("sort_order", 1),
-                                            source_url=r.get("source_url"),
-                                            local_path=r.get("local_path"),
-                                            image_hash=r.get("image_hash"),
-                                            file_mime=r.get("file_mime"),
-                                            file_size=r.get("file_size", 0)
-                                        )
-                                        self.db.add(db_img)
-                                        self.db.flush()
-                                        if r.get("local_path"):
-                                            downloaded_n += 1
-                                        queued_meta.append({
-                                            "image_id": db_img.id,
-                                            "lpn_item_id": r.get("lpn_item_id"),
-                                            "local_path": r.get("local_path"),
-                                            "image_type": r.get("image_type", "Pallet")
-                                        })
-                                    self.db.commit()
-                                    self._enqueue_images_for_sync_ocr(queued_meta, c_its, c_num_new, new_img_tasks)
+                                # Smart Upsert: Bảo toàn LpnItem.id và liên kết kết quả AI OCR
+                                downloaded_n, c_sku_new = self._upsert_container_items_and_images(
+                                    page, db_c, c_its, c_num_new
+                                )
 
                                 success_count += 1
                                 total_images_count += downloaded_n
@@ -1403,7 +1468,7 @@ class CrawlerApiMixin:
                                     )
                                     total_u = len(unscanned_imgs)
                                     for u_idx, (img_obj, itm_obj) in enumerate(unscanned_imgs, 1):
-                                        self.ocr_queue.put({
+                                        ocr_t = {
                                             "image_id": img_obj.id,
                                             "lpn_item_id": itm_obj.id,
                                             "container_number": c_num,
@@ -1415,7 +1480,11 @@ class CrawlerApiMixin:
                                             "container_img_idx": u_idx,
                                             "container_img_total": total_u,
                                             "container_total_items": total_u
-                                        })
+                                        }
+                                        if hasattr(self, "enqueue_ocr_task"):
+                                            self.enqueue_ocr_task(ocr_t, priority=2)
+                                        else:
+                                            self.ocr_queue.put(ocr_t)
                                     self.send_progress(
                                         c_num, "CRAWLING", processed_count, total_q,
                                         total_items_count, total_images_count,
@@ -1512,81 +1581,10 @@ class CrawlerApiMixin:
                     self.db.add(job_link)
                     self.db.commit()
 
-                    # Xoá toàn bộ items/images cũ của container này trước khi lưu bộ items mới (ngăn chặn chèn trùng lặp)
-                    self.db.query(LpnImage).filter(LpnImage.container_id == db_cont.id).delete()
-                    self.db.query(LpnItem).filter(LpnItem.container_id == db_cont.id).delete()
-                    self.db.commit()
-
-                    # Lưu items & chuẩn bị tasks tải ảnh song song
-                    image_tasks = []
-                    c_sku = 0
-                    for idx, item in enumerate(items_data, start=1):
-                        db_item = LpnItem(
-                            container_id=db_cont.id,
-                            record_type=item["record_type"],
-                            suffix_key=item["suffix_key"],
-                            item_index=idx,
-                            batch_original=item["batch_original"],
-                            batch_resolved=item["batch_resolved"],
-                            lpn=item["lpn"],
-                            sku=item["sku"],
-                            raw_group_key=item["raw_group_key"]
-                        )
-                        self.db.add(db_item)
-                        self.db.flush()
-
-                        if item.get("sku"):
-                            c_sku += 1
-
-                        for sort_idx, u in enumerate(item.get("image_urls", []), start=1):
-                            image_tasks.append({
-                                "source_url": u,
-                                "container_number": db_cont.container_number,
-                                "suffix_key": item["suffix_key"],
-                                "sort_order": sort_idx,
-                                "lpn_item_id": db_item.id,
-                                "container_id": db_cont.id,
-                                "image_type": item["record_type"]
-                            })
-
-                    # Tải ảnh song song
-                    downloaded_imgs = 0
-                    created_db_imgs = []
-                    if image_tasks:
-                        effective_workers = getattr(settings, "IMAGE_DOWNLOAD_WORKERS", 30)
-                        img_results = download_images_parallel(
-                            page, image_tasks,
-                            max_workers=effective_workers,
-                            job_id=self.job_id
-                        )
-                        for r in img_results:
-                            db_img = LpnImage(
-                                lpn_item_id=r.get("lpn_item_id"),
-                                container_id=r.get("container_id"),
-                                image_type=r.get("image_type", "Pallet"),
-                                sort_order=r.get("sort_order", 1),
-                                source_url=r.get("source_url"),
-                                local_path=r.get("local_path"),
-                                image_hash=r.get("image_hash"),
-                                file_mime=r.get("file_mime"),
-                                file_size=r.get("file_size", 0)
-                            )
-                            self.db.add(db_img)
-                            created_db_imgs.append((db_img, r))
-                            if r.get("local_path"):
-                                downloaded_imgs += 1
-
-                    self.db.flush()
-                    queued_img_meta = []
-                    for db_img_inst, r in created_db_imgs:
-                        queued_img_meta.append({
-                            "image_id": getattr(db_img_inst, "id", None),
-                            "lpn_item_id": r.get("lpn_item_id"),
-                            "local_path": r.get("local_path"),
-                            "image_type": r.get("image_type", "Pallet")
-                        })
-                    self.db.commit()
-                    self._enqueue_images_for_sync_ocr(queued_img_meta, items_data, c_num, image_tasks)
+                    # Smart Upsert: Bảo toàn LpnItem.id và liên kết kết quả AI OCR, không tải lại ảnh đã có trên đĩa
+                    downloaded_imgs, c_sku = self._upsert_container_items_and_images(
+                        page, db_cont, items_data, c_num
+                    )
 
                     success_count += 1
                     total_items_count += len(items_data)

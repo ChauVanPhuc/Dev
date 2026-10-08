@@ -1,14 +1,31 @@
 # -*- coding: utf-8 -*-
-from typing import Optional
+import os
+import json
+import time
+import concurrent.futures
+from datetime import datetime
+from typing import Optional, List
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, and_, desc, asc, extract, text, func
 
-from app.core.database import get_db
-from lpn_crawler.backend.models.models import LpnContainer, LpnItem
+from app.core.database import get_db, SessionLocal
+from lpn_crawler.backend.models.models import LpnContainer, LpnItem, LpnImage, LpnAiOcrResult
 from lpn_crawler.backend.utils.formatters import format_date_mdy
+from lpn_crawler.backend.api.routes.images import resolve_image_file_path
+from lpn_crawler.backend.services.storage import download_image_authenticated
+from lpn_crawler.ai_ocr_train.core.pipeline import get_default_pipeline
+from lpn_crawler.ai_ocr_train.core.parser import LabelDataParser
+from lpn_crawler.backend.services.pallet_grouping import group_container_pallets, get_base_pallet_index, is_top_noc_item
 
 router = APIRouter()
+
+
+class ContainerDeepScanRequest(BaseModel):
+    only_unprocessed: bool = False
+    model_id: Optional[str] = None
 
 
 @router.get("/containers")
@@ -370,6 +387,7 @@ def get_containers_cards(
             c.date_loading_raw,
             c.timestamp_raw,
             c.operator_name,
+            c.container_image,
             (SELECT COUNT(DISTINCT i.lpn) FROM lpn_items i WITH (NOLOCK) WHERE i.container_id = c.id AND i.lpn IS NOT NULL AND LTRIM(RTRIM(i.lpn)) != '' AND i.lpn != 'None' AND i.lpn != '0') as lpn_count,
             (SELECT COUNT(DISTINCT i.sku) FROM lpn_items i WITH (NOLOCK) WHERE i.container_id = c.id AND i.sku IS NOT NULL AND LTRIM(RTRIM(i.sku)) != '' AND i.sku != 'None' AND i.sku != '0') as sku_count,
             (SELECT COUNT(*) FROM lpn_items i WITH (NOLOCK) WHERE i.container_id = c.id) as total_items,
@@ -387,7 +405,27 @@ def get_containers_cards(
                 )
             )) as items_without_image,
             (SELECT TOP 1 local_path FROM lpn_images img WITH (NOLOCK) WHERE img.container_id = c.id AND img.local_path IS NOT NULL AND LTRIM(RTRIM(img.local_path)) != '' AND img.local_path != 'None' ORDER BY img.sort_order, img.id) as first_image,
-            (SELECT TOP 1 source_url FROM lpn_images img WITH (NOLOCK) WHERE img.container_id = c.id AND img.source_url IS NOT NULL AND LTRIM(RTRIM(img.source_url)) != '' AND img.source_url != 'None' ORDER BY img.sort_order, img.id) as first_image_url
+            (SELECT TOP 1 source_url FROM lpn_images img WITH (NOLOCK) WHERE img.container_id = c.id AND img.source_url IS NOT NULL AND LTRIM(RTRIM(img.source_url)) != '' AND img.source_url != 'None' ORDER BY img.sort_order, img.id) as first_image_url,
+            (SELECT COUNT(DISTINCT o.item_id) FROM lpn_ai_ocr_results o WITH (NOLOCK) 
+             JOIN lpn_items i WITH (NOLOCK) ON o.item_id = i.id
+             WHERE i.container_id = c.id
+            ) as ocr_scanned_count,
+            (SELECT COUNT(DISTINCT o.item_id) FROM lpn_ai_ocr_results o WITH (NOLOCK) 
+             JOIN lpn_items i WITH (NOLOCK) ON o.item_id = i.id
+             WHERE i.container_id = c.id
+               AND o.is_lpn_match = 1
+               AND (i.sku IS NULL OR LTRIM(RTRIM(i.sku)) IN ('', 'None', '0', '—') OR o.is_sku_match = 1)
+               AND o.status = 'success'
+            ) as ocr_matched_count,
+            (SELECT COUNT(DISTINCT o.item_id) FROM lpn_ai_ocr_results o WITH (NOLOCK) 
+             JOIN lpn_items i WITH (NOLOCK) ON o.item_id = i.id
+             WHERE i.container_id = c.id
+               AND (
+                 o.is_lpn_match = 0
+                 OR (i.sku IS NOT NULL AND LTRIM(RTRIM(i.sku)) NOT IN ('', 'None', '0', '—') AND o.is_sku_match = 0)
+                 OR o.status != 'success'
+               )
+            ) as ocr_mismatch_count
         FROM lpn_containers c WITH (NOLOCK)
         {where_sql}
         ORDER BY {order_by}
@@ -403,6 +441,9 @@ def get_containers_cards(
         no_img = r.items_without_image if r.items_without_image is not None else max(0, tot_itms - tot_imgs)
         no_sku = r.items_without_sku or 0
         no_lpn = r.items_without_lpn or 0
+        ocr_scanned = r.ocr_scanned_count or 0
+        ocr_matched = r.ocr_matched_count or 0
+        ocr_mismatch = r.ocr_mismatch_count or 0
 
         # Kiểm tra ảnh (nếu số ảnh < số Pallet/Box hoặc có kiện thiếu ảnh)
         if tot_imgs < tot_itms or no_img > 0 or tot_imgs == 0:
@@ -428,6 +469,28 @@ def get_containers_cards(
         if missing_reasons:
             missing_label = f"Thiếu {', '.join(missing_reasons)}"
 
+        # Tiêu chuẩn NGHIỆM THU: Đạt là TẤT CẢ kiện trong Container đều đạt AI OCR
+        if missing_reasons:
+            status_code = "MISSING"
+            status_label = missing_label
+        elif tot_imgs == 0:
+            status_code = "NO_IMAGE"
+            status_label = "Chưa có ảnh"
+        elif ocr_mismatch > 0:
+            status_code = "MISMATCH"
+            status_label = f"Lệch mã {ocr_mismatch} kiện"
+        elif tot_itms > 0 and ocr_scanned < tot_itms:
+            status_code = "SCANNING"
+            status_label = f"Chưa quét đủ ({ocr_scanned}/{tot_itms})"
+        elif tot_itms > 0 and ocr_matched >= tot_itms and ocr_mismatch == 0:
+            status_code = "PASSED"
+            status_label = "Đạt"
+        else:
+            status_code = "UNRESOLVED"
+            status_label = f"Chưa đạt ({ocr_matched}/{tot_itms})"
+
+        container_img = r.container_image
+
         cards.append({
             "container_id": r.container_id,
             "container_number": r.container_number,
@@ -443,9 +506,16 @@ def get_containers_cards(
             "items_without_image": no_img,
             "items_without_sku": no_sku,
             "items_without_lpn": no_lpn,
-            "first_image": r.first_image or r.first_image_url,
+            "container_image": container_img,
+            "first_image": container_img,
+            "first_pallet_image": r.first_image or r.first_image_url,
+            "ocr_scanned_count": ocr_scanned,
+            "ocr_matched_count": ocr_matched,
+            "ocr_mismatch_count": ocr_mismatch,
+            "status_code": status_code,
+            "status_label": status_label,
             "missing_label": missing_label,
-            "is_valid": len(missing_reasons) == 0
+            "is_valid": (status_code == "PASSED")
         })
 
     return {
@@ -494,10 +564,148 @@ def get_filter_options(db: Session = Depends(get_db)):
         }
 
 
+@router.get("/containers/unscanned")
+def get_unscanned_containers(
+    search: Optional[str] = None,
+    factory: Optional[str] = None,
+    startDate: Optional[str] = None,
+    endDate: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    container_ids: Optional[str] = None,
+    include_mismatched: bool = False,
+    limit: int = Query(200, ge=1, le=1000),
+    db: Session = Depends(get_db)
+):
+    """
+    Lấy danh sách các Container chưa quét hoặc chưa quét đủ ảnh AI OCR.
+    Hỗ trợ lọc theo ngày, nhà máy, tìm kiếm hoặc danh sách container_ids được chọn.
+    """
+    try:
+        db.execute(text("SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;"))
+    except Exception:
+        pass
+
+    s_date = start_date or startDate
+    e_date = end_date or endDate
+
+    where_clauses = [
+        "(SELECT COUNT(*) FROM lpn_images img WITH (NOLOCK) WHERE img.container_id = c.id) > 0"
+    ]
+    params = {"limit": limit}
+
+    if include_mismatched:
+        where_clauses.append("""(
+            (SELECT COUNT(*) FROM lpn_images img WITH (NOLOCK) WHERE img.container_id = c.id) > 
+            (SELECT COUNT(DISTINCT o.image_id) FROM lpn_ai_ocr_results o WITH (NOLOCK) WHERE o.image_id IN (SELECT img2.id FROM lpn_images img2 WITH (NOLOCK) WHERE img2.container_id = c.id))
+            OR
+            (SELECT COUNT(DISTINCT o.image_id) FROM lpn_ai_ocr_results o WITH (NOLOCK) WHERE o.image_id IN (SELECT img2.id FROM lpn_images img2 WITH (NOLOCK) WHERE img2.container_id = c.id) AND (o.is_lpn_match = 0 OR o.is_sku_match = 0 OR o.status != 'success')) > 0
+        )""")
+    else:
+        where_clauses.append("""(
+            (SELECT COUNT(*) FROM lpn_images img WITH (NOLOCK) WHERE img.container_id = c.id) > 
+            (SELECT COUNT(DISTINCT o.image_id) FROM lpn_ai_ocr_results o WITH (NOLOCK) WHERE o.image_id IN (SELECT img2.id FROM lpn_images img2 WITH (NOLOCK) WHERE img2.container_id = c.id))
+        )""")
+
+    if container_ids:
+        c_id_list = [int(x.strip()) for x in container_ids.split(",") if x.strip().isdigit()]
+        if c_id_list:
+            where_clauses.append(f"c.id IN ({','.join(str(i) for i in c_id_list)})")
+
+    if search and search.strip():
+        s_clean = search.strip()
+        params["search"] = f"%{s_clean}%"
+        params["search_ns"] = f"%{s_clean.replace(' ', '')}%"
+        where_clauses.append("""(
+            c.container_number LIKE :search
+            OR REPLACE(c.container_number, ' ', '') LIKE :search_ns
+            OR c.factory LIKE :search
+        )""")
+
+    if factory and factory.strip():
+        params["factory"] = f"%{factory.strip()}%"
+        where_clauses.append("c.factory LIKE :factory")
+
+    if s_date:
+        params["s_date"] = s_date
+        where_clauses.append("(c.date_loading >= :s_date OR c.date_loading_raw >= :s_date)")
+
+    if e_date:
+        params["e_date"] = e_date
+        where_clauses.append("(c.date_loading <= :e_date OR c.date_loading_raw <= :e_date)")
+
+    where_sql = f"WHERE {' AND '.join(where_clauses)}"
+
+    sql = text(f"""
+        SELECT TOP (:limit)
+            c.id as container_id,
+            c.container_number,
+            c.factory,
+            c.date_loading,
+            c.date_loading_raw,
+            c.timestamp_raw,
+            c.operator_name,
+            (SELECT COUNT(*) FROM lpn_items i WITH (NOLOCK) WHERE i.container_id = c.id) as total_items,
+            (SELECT COUNT(*) FROM lpn_images img WITH (NOLOCK) WHERE img.container_id = c.id) as total_images,
+            (SELECT COUNT(DISTINCT o.item_id) FROM lpn_ai_ocr_results o WITH (NOLOCK) 
+             JOIN lpn_items i WITH (NOLOCK) ON o.item_id = i.id
+             WHERE i.container_id = c.id
+            ) as ocr_scanned_count,
+            (SELECT COUNT(DISTINCT o.item_id) FROM lpn_ai_ocr_results o WITH (NOLOCK) 
+             JOIN lpn_items i WITH (NOLOCK) ON o.item_id = i.id
+             WHERE i.container_id = c.id
+               AND o.is_lpn_match = 1
+               AND (i.sku IS NULL OR LTRIM(RTRIM(i.sku)) IN ('', 'None', '0', '—') OR o.is_sku_match = 1)
+               AND o.status = 'success'
+            ) as ocr_matched_count,
+            (SELECT COUNT(DISTINCT o.item_id) FROM lpn_ai_ocr_results o WITH (NOLOCK) 
+             JOIN lpn_items i WITH (NOLOCK) ON o.item_id = i.id
+             WHERE i.container_id = c.id
+               AND (
+                 o.is_lpn_match = 0
+                 OR (i.sku IS NOT NULL AND LTRIM(RTRIM(i.sku)) NOT IN ('', 'None', '0', '—') AND o.is_sku_match = 0)
+                 OR o.status != 'success'
+               )
+            ) as ocr_mismatch_count
+        FROM lpn_containers c WITH (NOLOCK)
+        {where_sql}
+        ORDER BY c.date_loading DESC, c.timestamp_val DESC, c.id DESC
+    """)
+    rows = db.execute(sql, params).fetchall()
+
+    results = []
+    tot_unscanned_imgs = 0
+    for r in rows:
+        tot_imgs = r.total_images or 0
+        scanned = r.ocr_scanned_count or 0
+        unscanned_imgs = max(0, tot_imgs - scanned)
+        tot_unscanned_imgs += unscanned_imgs
+        results.append({
+            "container_id": r.container_id,
+            "container_number": r.container_number,
+            "factory": r.factory or "—",
+            "date_loading": format_date_mdy(r.date_loading, r.date_loading_raw) or (r.date_loading_raw or "—"),
+            "date_loading_raw": r.date_loading_raw,
+            "total_items": r.total_items or 0,
+            "total_images": tot_imgs,
+            "ocr_scanned_count": scanned,
+            "ocr_matched_count": r.ocr_matched_count or 0,
+            "ocr_mismatch_count": r.ocr_mismatch_count or 0,
+            "unscanned_images": unscanned_imgs,
+            "status_label": f"Chưa quét đủ ({scanned}/{tot_imgs})" if scanned < tot_imgs else ("Lệch mã" if r.ocr_mismatch_count > 0 else "Đạt")
+        })
+
+    return {
+        "total_containers": len(results),
+        "total_unscanned_images": tot_unscanned_imgs,
+        "items": results
+    }
+
+
 @router.get("/containers/{container_id}")
 def get_container_detail(container_id: int, db: Session = Depends(get_db)):
     """
-    Xem chi tiết 1 Container kèm toàn bộ danh sách items và hình ảnh
+    Xem chi tiết 1 Container kèm toàn bộ danh sách items, hình ảnh và kết quả OCR từng kiện
     """
     try:
         db.execute(text("SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;"))
@@ -514,6 +722,37 @@ def get_container_detail(container_id: int, db: Session = Depends(get_db)):
     sorted_items = sorted(cont.items, key=lambda x: (x.item_index or 0, x.id))
     valid_lpns = set([i.lpn for i in sorted_items if i.lpn and i.lpn.strip() and i.lpn != 'None'])
     valid_skus = set([i.sku for i in sorted_items if i.sku and i.sku.strip() and i.sku != 'None'])
+
+    # Tự động đồng bộ và đối soát chéo thông minh cho các kiện hoán đổi / cụm Pallet Nóc
+    try:
+        from lpn_crawler.backend.services.pallet_grouping import resolve_cross_item_matches
+        resolve_cross_item_matches(container_id, db)
+    except Exception:
+        pass
+
+    # Nạp kết quả OCR cho các items trong Container
+    item_ids = [i.id for i in sorted_items]
+    ocr_map = {}
+    if item_ids:
+        ocr_results = db.query(LpnAiOcrResult).filter(
+            LpnAiOcrResult.item_id.in_(item_ids)
+        ).order_by(LpnAiOcrResult.id.asc()).all()
+        for r in ocr_results:
+            curr = ocr_map.get(r.item_id)
+            # Ưu tiên ghi nhận kết quả mới nhất, hoặc nếu đã có bản ghi success thì không bị bản ghi lỗi cũ đè
+            if not curr or r.status == 'success' or curr.get('status') != 'success':
+                ocr_map[r.item_id] = {
+                    "id": r.id,
+                    "image_id": r.image_id,
+                    "status": r.status,
+                    "is_lpn_match": bool(r.is_lpn_match),
+                    "is_sku_match": bool(r.is_sku_match),
+                    "detected_lpn": r.detected_lpn,
+                    "detected_sku": r.detected_sku,
+                    "confidence": r.confidence,
+                    "error_reason": r.error_reason,
+                    "scanned_at": r.scanned_at.isoformat() if r.scanned_at else None
+                }
 
     formatted_items = []
     total_imgs = 0
@@ -533,6 +772,7 @@ def get_container_detail(container_id: int, db: Session = Depends(get_db)):
                 "sort_order": img.sort_order
             })
         total_imgs += len(imgs)
+        itm_ocr = ocr_map.get(itm.id)
         formatted_items.append({
             "id": itm.id,
             "item_id": itm.id,
@@ -552,8 +792,56 @@ def get_container_detail(container_id: int, db: Session = Depends(get_db)):
             "sku": itm.sku,
             "images_count": len(imgs),
             "images": imgs,
-            "first_image": imgs[0]["local_path"] or imgs[0]["source_url"] if imgs else None
+            "first_image": imgs[0]["local_path"] or imgs[0]["source_url"] if imgs else None,
+            "ocr": itm_ocr
         })
+
+    # Tính toán chính xác trạng thái Container theo tiêu chuẩn hệ thống (yêu cầu khớp cả LPN và SKU)
+    def _is_itm_ocr_passed(item_dict):
+        ocr_obj = item_dict.get("ocr")
+        if not ocr_obj or ocr_obj.get("status") != "success":
+            return False
+        if not ocr_obj.get("is_lpn_match"):
+            return False
+        item_sku = str(item_dict.get("sku") or "").strip()
+        if item_sku and item_sku not in ('None', '0', '—') and not ocr_obj.get("is_sku_match"):
+            return False
+        return True
+
+    tot_itms = len(formatted_items)
+    ocr_scanned = len([itm for itm in formatted_items if itm.get("ocr")])
+    ocr_matched = len([itm for itm in formatted_items if _is_itm_ocr_passed(itm)])
+    ocr_mismatch = len([itm for itm in formatted_items if itm.get("ocr") and not _is_itm_ocr_passed(itm)])
+
+    missing_reasons = []
+    if total_imgs < tot_itms or total_imgs == 0:
+        missing_reasons.append("ảnh")
+    if len(valid_skus) == 0:
+        missing_reasons.append("SKU")
+    if len(valid_lpns) == 0:
+        missing_reasons.append("LPN")
+
+    if missing_reasons:
+        status_code = "MISSING"
+        status_label = f"Thiếu {', '.join(missing_reasons)}"
+    elif total_imgs == 0:
+        status_code = "NO_IMAGE"
+        status_label = "Chưa có ảnh"
+    elif ocr_mismatch > 0:
+        status_code = "MISMATCH"
+        status_label = f"Lệch mã {ocr_mismatch} kiện"
+    elif tot_itms > 0 and ocr_scanned < tot_itms:
+        status_code = "SCANNING"
+        status_label = f"Chưa quét đủ ({ocr_scanned}/{tot_itms})"
+    elif tot_itms > 0 and ocr_matched >= tot_itms and ocr_scanned >= tot_itms and ocr_mismatch == 0:
+        status_code = "PASSED"
+        status_label = "Đạt"
+    else:
+        status_code = "UNRESOLVED"
+        status_label = f"Chưa đạt ({ocr_matched}/{tot_itms})"
+
+    # Phân tích gom nhóm Tủ Top Nóc và tính số Pallet thực tế
+    pallet_grouping_res = group_container_pallets(formatted_items)
 
     return {
         "id": cont.id,
@@ -567,6 +855,361 @@ def get_container_detail(container_id: int, db: Session = Depends(get_db)):
         "lpn_count": len(valid_lpns),
         "sku_count": len(valid_skus),
         "total_items": len(formatted_items),
+        "total_pallets": pallet_grouping_res["total_pallets"],
+        "base_pallet_count": pallet_grouping_res["base_pallet_count"],
+        "top_noc_pallet_count": pallet_grouping_res["top_noc_pallet_count"],
+        "top_noc_item_count": pallet_grouping_res["top_noc_item_count"],
+        "top_noc_pallet_groups": pallet_grouping_res["top_noc_pallet_groups"],
+        "has_top_noc_irregularity": pallet_grouping_res["has_top_noc_irregularity"],
         "total_images": total_imgs,
+        "ocr_scanned_count": ocr_scanned,
+        "ocr_matched_count": ocr_matched,
+        "ocr_mismatch_count": ocr_mismatch,
+        "status_code": status_code,
+        "status_label": status_label,
         "items": formatted_items
     }
+
+
+@router.post("/containers/{container_id}/deep-scan-stream")
+def run_container_deep_scan_stream(
+    container_id: int,
+    payload: Optional[ContainerDeepScanRequest] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Quét chuyên sâu đồng thời tất cả ảnh trong 1 Container qua ThreadPool song song.
+    Truyền stream sự kiện realtime (SSE) cập nhật trạng thái từng ảnh, báo lỗi và tính Đạt.
+    """
+    only_unproc = payload.only_unprocessed if payload else False
+    sel_model = payload.model_id if payload else None
+
+    cont = db.query(LpnContainer).options(
+        joinedload(LpnContainer.items).joinedload(LpnItem.images)
+    ).filter(LpnContainer.id == container_id).first()
+
+    if not cont:
+        raise HTTPException(status_code=404, detail="Container không tồn tại")
+
+    def event_stream():
+        stream_db = SessionLocal()
+        try:
+            # 1. Bản đồ tra cứu LPN Top Nóc và Pallet đứng theo chỉ số Pallet (để nhận biết ảnh chụp dính tem chéo)
+            top_noc_lpn_map = {}
+            base_pallet_lpn_map = {}
+            for itm in cont.items:
+                s_k = itm.suffix_key or ""
+                if not itm.lpn:
+                    continue
+                p_idx = get_base_pallet_index(s_k)
+                if not p_idx:
+                    continue
+                if is_top_noc_item(s_k):
+                    top_noc_lpn_map[p_idx] = itm.lpn.strip().upper()
+                else:
+                    base_pallet_lpn_map[p_idx] = itm.lpn.strip().upper()
+
+            # 2. Thu thập danh sách ảnh cần quét
+            target_tasks = []
+            for itm in sorted(cont.items, key=lambda x: (x.item_index or 0, x.id)):
+                for img in sorted(itm.images, key=lambda x: (x.sort_order or 1, x.id)):
+                    # Nếu bật only_unprocessed: kiểm tra xem ảnh này đã có kết quả OCR chưa
+                    if only_unproc:
+                        has_ocr = stream_db.query(LpnAiOcrResult.id).filter(
+                            LpnAiOcrResult.item_id == itm.id,
+                            LpnAiOcrResult.image_id == img.id
+                        ).first()
+                        if has_ocr:
+                            continue
+
+                    target_tasks.append({
+                        "item_id": itm.id,
+                        "image_id": img.id,
+                        "suffix_key": itm.suffix_key,
+                        "expected_lpn": itm.lpn.strip().upper() if itm.lpn else None,
+                        "expected_skus": [itm.sku.strip().upper()] if itm.sku else None,
+                        "local_path": img.local_path,
+                        "source_url": img.source_url,
+                        "sort_order": img.sort_order or 1
+                    })
+
+            total = len(target_tasks)
+            if total == 0:
+                yield f"data: {json.dumps({'type': 'empty', 'message': 'Không có ảnh nào cần quét trong container này.'}, ensure_ascii=False)}\n\n"
+                return
+
+            yield f"data: {json.dumps({'type': 'start', 'total': total, 'container_number': cont.container_number}, ensure_ascii=False)}\n\n"
+
+            pipeline = get_default_pipeline()
+            pipeline.ocr_engine.warmup()
+
+            # Hàm worker chạy song song (độc lập, không ghi DB để bảo đảm thread-safety tuyệt đối)
+            def _process_single_task(task):
+                t0 = time.time()
+                abs_p = resolve_image_file_path(task["local_path"])
+                
+                # Tự động tải ảnh nếu chưa có trên ổ đĩa
+                if not abs_p or not os.path.isfile(abs_p):
+                    if task["source_url"] and task["source_url"].startswith("http"):
+                        try:
+                            dl_res = download_image_authenticated(
+                                source_url=task["source_url"],
+                                container_number=cont.container_number,
+                                suffix_key=task["suffix_key"],
+                                sort_order=task["sort_order"]
+                            )
+                            if dl_res and dl_res.get("local_path"):
+                                task["local_path"] = dl_res["local_path"]
+                                abs_p = resolve_image_file_path(dl_res["local_path"])
+                        except Exception:
+                            pass
+
+                target_input = abs_p if (abs_p and os.path.isfile(abs_p)) else task["source_url"]
+                if not target_input:
+                    return {
+                        "task": task,
+                        "pipeline_res": None,
+                        "duration_ms": 0,
+                        "error": "Không tìm thấy file ảnh cục bộ hoặc URL nguồn"
+                    }
+
+                try:
+                    p_res = pipeline.process(
+                        image_input=target_input,
+                        model_id=sel_model,
+                        auto_crop=True,
+                        auto_rotate=True,
+                        apply_super_res=True,
+                        return_images_base64=False,
+                        expected_skus=task["expected_skus"],
+                        expected_lpn=task["expected_lpn"],
+                        package_position=task["suffix_key"]
+                    )
+                    dur = round((time.time() - t0) * 1000, 1)
+                    return {
+                        "task": task,
+                        "pipeline_res": p_res,
+                        "duration_ms": dur,
+                        "error": None
+                    }
+                except Exception as ex:
+                    dur = round((time.time() - t0) * 1000, 1)
+                    return {
+                        "task": task,
+                        "pipeline_res": None,
+                        "duration_ms": dur,
+                        "error": str(ex)
+                    }
+
+            # 2. Xử lý song song qua ThreadPool 6 Workers
+            processed_count = 0
+            passed_count = 0
+            failed_count = 0
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
+                future_to_task = {executor.submit(_process_single_task, t): t for t in target_tasks}
+
+                for future in concurrent.futures.as_completed(future_to_task):
+                    out = future.result()
+                    processed_count += 1
+                    t_info = out["task"]
+                    p_res = out["pipeline_res"]
+                    p_err = out["error"]
+
+                    if p_err:
+                        det_lpn, det_sku = None, None
+                        status_val = "failed"
+                        error_reason = f"Lỗi OCR: {p_err}"
+                        is_lpn_match = False
+                        is_sku_match = False
+                        conf = 0.0
+                    elif not p_res:
+                        det_lpn, det_sku = None, None
+                        status_val = "failed"
+                        error_reason = "Không tìm thấy file ảnh hợp lệ"
+                        is_lpn_match = False
+                        is_sku_match = False
+                        conf = 0.0
+                    else:
+                        det_lpn = p_res.get("lpn")
+                        det_sku = p_res.get("sku")
+                        conf = p_res.get("confidence", 0.0)
+                        extracted = p_res.get("extracted", {})
+                        overall_c = extracted.get("overall_confidence", conf)
+
+                        exp_lpn = t_info["expected_lpn"]
+                        exp_sku = t_info["expected_skus"][0] if t_info["expected_skus"] else None
+
+                        is_lpn_match = (det_lpn.strip().upper() == exp_lpn) if (det_lpn and exp_lpn) else False
+                        
+                        # Hiệu chỉnh SKU: Nếu sai tối đa 1 ký tự hoặc lệch tiền tố 0 -> Lấy luôn exp_sku và coi là khớp!
+                        if det_sku and exp_sku:
+                            cal_sku = LabelDataParser.calibrate_sku_with_expected(det_sku, [exp_sku])
+                            if cal_sku == exp_sku:
+                                det_sku = exp_sku
+                                is_sku_match = True
+                            else:
+                                is_sku_match = (det_sku.strip().upper() == exp_sku.strip().upper())
+                        else:
+                            is_sku_match = False
+
+                        # Phân loại đạt/lệch (yêu cầu khớp cả LPN và SKU)
+                        if is_lpn_match and (is_sku_match or not exp_sku):
+                            status_val = "success"
+                            error_reason = None
+                        elif is_lpn_match:
+                            status_val = "review"
+                            error_reason = f"LPN khớp nhưng SKU đọc '{det_sku or '—'}' khác CSDL '{exp_sku}'"
+                        elif det_lpn:
+                            status_val = "review"
+                            reasons = []
+                            if exp_lpn and not is_lpn_match:
+                                s_key = t_info.get("suffix_key") or ""
+                                p_idx = get_base_pallet_index(s_key)
+                                if not is_top_noc_item(s_key) and p_idx and p_idx in top_noc_lpn_map and det_lpn.strip().upper() == top_noc_lpn_map[p_idx]:
+                                    reasons.append(f"Ảnh chụp dính tem Top Nóc Box {p_idx}A ('{det_lpn}') thay vì tem 4 tủ dưới ('{exp_lpn}')")
+                                elif is_top_noc_item(s_key) and p_idx and p_idx in base_pallet_lpn_map and det_lpn.strip().upper() == base_pallet_lpn_map[p_idx]:
+                                    reasons.append(f"Ảnh chụp dính tem Pallet {p_idx} đứng sàn ('{det_lpn}') thay vì tem Top Nóc ('{exp_lpn}')")
+                                else:
+                                    reasons.append(f"LPN đọc '{det_lpn}' khác CSDL '{exp_lpn}'")
+                            if exp_sku and not is_sku_match:
+                                reasons.append(f"SKU đọc '{det_sku or '—'}' khác CSDL '{exp_sku}'")
+                            error_reason = "; ".join(reasons) if reasons else "Cần kiểm tra đối chiếu"
+                        else:
+                            status_val = "failed"
+                            error_reason = "Không nhận diện được mã tem nhãn LPN trên ảnh"
+
+                    if status_val == "success":
+                        passed_count += 1
+                    else:
+                        failed_count += 1
+
+                    # 3. Lưu vào CSDL an toàn trên luồng chính
+                    try:
+                        ocr_rec = stream_db.query(LpnAiOcrResult).filter(
+                            LpnAiOcrResult.item_id == t_info["item_id"],
+                            LpnAiOcrResult.image_id == t_info["image_id"]
+                        ).first()
+
+                        now_dt = datetime.utcnow()
+                        raw_ocr_payload = json.dumps({
+                            "detected_lpns_detail": p_res.get("detected_lpns_detail", []) if p_res else [],
+                            "detected_skus_detail": p_res.get("detected_skus_detail", []) if p_res else [],
+                            "all_lpns": p_res.get("all_lpns", []) if p_res else [],
+                            "all_skus": p_res.get("all_skus", []) if p_res else [],
+                            "barcodes": p_res.get("barcodes", []) if p_res else []
+                        }, ensure_ascii=False)
+                        barcodes_str = json.dumps(p_res.get("barcodes", [])) if (p_res and p_res.get("barcodes")) else None
+
+                        if not ocr_rec:
+                            ocr_rec = LpnAiOcrResult(
+                                item_id=t_info["item_id"],
+                                image_id=t_info["image_id"],
+                                container_number=cont.container_number,
+                                suffix_key=t_info["suffix_key"],
+                                model_id=sel_model or "hybrid_default",
+                                detected_lpn=det_lpn,
+                                detected_sku=det_sku,
+                                detected_barcodes=barcodes_str,
+                                confidence=conf,
+                                is_lpn_match=is_lpn_match,
+                                is_sku_match=is_sku_match,
+                                status=status_val,
+                                error_reason=error_reason,
+                                raw_ocr_text=raw_ocr_payload,
+                                processing_time_ms=out["duration_ms"],
+                                scanned_at=now_dt
+                            )
+                            stream_db.add(ocr_rec)
+                        else:
+                            ocr_rec.model_id = sel_model or "hybrid_default"
+                            ocr_rec.detected_lpn = det_lpn
+                            ocr_rec.detected_sku = det_sku
+                            ocr_rec.detected_barcodes = barcodes_str
+                            ocr_rec.confidence = conf
+                            ocr_rec.is_lpn_match = is_lpn_match
+                            ocr_rec.is_sku_match = is_sku_match
+                            ocr_rec.status = status_val
+                            ocr_rec.error_reason = error_reason
+                            ocr_rec.raw_ocr_text = raw_ocr_payload
+                            ocr_rec.processing_time_ms = out["duration_ms"]
+                            ocr_rec.scanned_at = now_dt
+
+                        # Nếu vừa tải được local_path mới cho ảnh, cập nhật vào lpn_images
+                        if t_info.get("local_path"):
+                            img_db = stream_db.query(LpnImage).filter(LpnImage.id == t_info["image_id"]).first()
+                            if img_db and not img_db.local_path:
+                                img_db.local_path = t_info["local_path"]
+
+                        stream_db.commit()
+                    except Exception as db_err:
+                        stream_db.rollback()
+
+                    # Gửi sự kiện SSE cho frontend cập nhật card Pallet ngay lập tức
+                    event_data = {
+                        "type": "item_scanned",
+                        "item_id": t_info["item_id"],
+                        "image_id": t_info["image_id"],
+                        "suffix_key": t_info["suffix_key"],
+                        "status": status_val,
+                        "is_lpn_match": is_lpn_match,
+                        "is_sku_match": is_sku_match,
+                        "detected_lpn": det_lpn,
+                        "detected_sku": det_sku,
+                        "expected_lpn": t_info["expected_lpn"],
+                        "expected_sku": t_info["expected_skus"][0] if t_info["expected_skus"] else None,
+                        "confidence": conf,
+                        "error_reason": error_reason,
+                        "processed": processed_count,
+                        "total": total,
+                        "passed_count": passed_count,
+                        "failed_count": failed_count
+                    }
+                    yield f"data: {json.dumps(event_data, ensure_ascii=False)}\n\n"
+
+            # 4. Tự động đối soát chéo thông minh (Pallet Đứng <-> Top Nóc)
+            try:
+                from lpn_crawler.backend.services.pallet_grouping import resolve_cross_item_matches
+                cross_res = resolve_cross_item_matches(cont.id, stream_db)
+                if cross_res.get("success"):
+                    passed_count = cross_res.get("passed_count", passed_count)
+                    failed_count = cross_res.get("failed_count", failed_count)
+            except Exception as res_err:
+                print(f"[DeepScan] resolve_cross_item_matches error: {res_err}")
+
+            # 5. Tính toán kết quả tổng kết cuối cùng
+            all_imgs_count = sum(len(itm.images) for itm in cont.items)
+            all_passed = stream_db.query(LpnAiOcrResult).filter(
+                LpnAiOcrResult.item_id.in_([itm.id for itm in cont.items]),
+                LpnAiOcrResult.status == 'success',
+                LpnAiOcrResult.is_lpn_match == True
+            ).count()
+
+            if all_passed >= all_imgs_count and all_imgs_count > 0:
+                final_code = "PASSED"
+                final_label = "Đạt"
+            else:
+                final_code = "MISMATCH" if failed_count > 0 else "SCANNING"
+                final_label = f"Lệch mã {failed_count} ảnh" if failed_count > 0 else f"Chưa quét đủ ({all_passed}/{all_imgs_count})"
+
+            summary_event = {
+                "type": "complete",
+                "total": total,
+                "passed_count": passed_count,
+                "failed_count": failed_count,
+                "status_code": final_code,
+                "status_label": final_label
+            }
+            yield f"data: {json.dumps(summary_event, ensure_ascii=False)}\n\n"
+        finally:
+            stream_db.close()
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@router.post("/containers/{container_id}/resolve-cross-matches")
+def trigger_resolve_cross_matches(container_id: int, db: Session = Depends(get_db)):
+    """API đối soát chéo thông minh giữa Pallet Đứng và Top Nóc."""
+    from lpn_crawler.backend.services.pallet_grouping import resolve_cross_item_matches
+    res = resolve_cross_item_matches(container_id, db)
+    return res

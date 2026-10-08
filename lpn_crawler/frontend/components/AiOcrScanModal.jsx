@@ -143,6 +143,61 @@ export const AiOcrScanModal = ({ isOpen, onClose }) => {
     }
   };
 
+  // Chỉ lấy đúng những chữ nằm dưới mã QR / Barcode (loại bỏ chữ rác trên thùng hoặc thông tin khác)
+  const extractCleanCodeUnderRoi = (roi, type = 'all') => {
+    if (!roi) return '';
+    const barcodes = Array.isArray(roi.barcodes) ? roi.barcodes : [];
+    for (const b of barcodes) {
+      const bStr = typeof b === 'string' ? b : (b?.data || '');
+      const cleanB = String(bStr).trim().replace(/^[-:;,. #*!_"'/]+|[-:;,. #*!_"'/]+$/g, '');
+      if (type === 'lpn') {
+        const d = cleanB.replace(/[^0-9]/g, '');
+        if (d.length >= 8 && d.length <= 12) return d;
+      } else if (type === 'sku') {
+        if (cleanB.includes('-') && /[A-Z0-9]/.test(cleanB)) return cleanB;
+      } else {
+        if (cleanB) return cleanB;
+      }
+    }
+
+    const extLpn = roi.extracted_lpn || roi.extracted?.lpn;
+    const extSku = roi.extracted_sku || roi.extracted?.sku;
+    if (type === 'lpn' && extLpn) {
+      return String(extLpn).trim().replace(/^[-:;,. #*!_"'/]+|[-:;,. #*!_"'/]+$/g, '');
+    }
+    if (type === 'sku' && extSku) {
+      return String(extSku).trim().replace(/^[-:;,. #*!_"'/]+|[-:;,. #*!_"'/]+$/g, '');
+    }
+
+    const rawSources = [
+      roi.text_under_barcode,
+      roi.full_text,
+      ...(Array.isArray(roi.tokens) ? roi.tokens.map(t => t.text) : [])
+    ].filter(Boolean);
+
+    for (const src of rawSources) {
+      const s = String(src).trim();
+      if (type === 'lpn') {
+        const m = s.match(/\b\d{8,12}\b/) || s.match(/(?:06|05|60)\d{6,10}/);
+        if (m) return m[0];
+        const digitsOnly = s.replace(/[^0-9]/g, '');
+        if (digitsOnly.length >= 8 && digitsOnly.length <= 12) return digitsOnly;
+      } else if (type === 'sku') {
+        const m = s.match(/\b([A-Z0-9]{1,10}(?:\s*-\s*[A-Z0-9]{1,10}){1,4})\b/i);
+        if (m) return m[1].replace(/\s+/g, '').replace(/^[-:;,. #*!_"'/]+|[-:;,. #*!_"'/]+$/g, '');
+      } else {
+        const mSku = s.match(/\b([A-Z0-9]{1,10}(?:\s*-\s*[A-Z0-9]{1,10}){1,4})\b/i);
+        if (mSku) return mSku[1].replace(/\s+/g, '').replace(/^[-:;,. #*!_"'/]+|[-:;,. #*!_"'/]+$/g, '');
+        const mLpn = s.match(/\b\d{8,12}\b/);
+        if (mLpn) return mLpn[0];
+      }
+    }
+
+    if (type === 'lpn' && extLpn) return String(extLpn).trim();
+    if (type === 'sku' && extSku) return String(extSku).trim();
+    return '';
+  };
+
   // Hàm Dừng Quét
   const handleStopScan = () => {
     if (abortControllerRef.current) {
@@ -1699,13 +1754,23 @@ export const AiOcrScanModal = ({ isOpen, onClose }) => {
                             {roiList.map((roi, rIdx) => {
                               const targetLpn = inspectingItem.expected_lpn || inspectingItem.lpn;
                               const targetSku = inspectingItem.expected_sku || inspectingItem.sku;
+                              const pairedItem = inspectorAnalysis?.meta_info?.paired_item;
+                              const pairedLpn = pairedItem?.lpn;
+                              const containerItems = inspectorAnalysis?.meta_info?.container_items || [];
+
                               const isSel = selectedRoiIndex === rIdx;
                               const rLpn = roi.extracted_lpn || roi.extracted?.lpn;
                               const rSku = roi.extracted_sku || roi.extracted?.sku;
-                              const isLpnMatch = rLpn && targetLpn && (rLpn === targetLpn || isLpnCodeMatch(rLpn));
+
+                              const isDirectLpn = rLpn && targetLpn && (rLpn === targetLpn || isLpnCodeMatch(rLpn));
+                              const isPairedLpn = rLpn && pairedLpn && (rLpn === pairedLpn || isLpnCodeMatch(rLpn));
+                              const isContLpn = rLpn && containerItems.some(c => c.lpn && (c.lpn === rLpn || isLpnCodeMatch(rLpn)));
+                              const isLpnMatch = isDirectLpn || isPairedLpn || isContLpn;
+
                               const isSkuMatch = rSku && targetSku && (rSku === targetSku || isSkuCodeMatch(rSku));
                               const hasMatch = isLpnMatch || isSkuMatch;
                               const isMismatch = (rLpn && targetLpn && !isLpnMatch) || (rSku && targetSku && !isSkuMatch);
+                              const fullTextSnippet = roi.full_text || roi.text_under_barcode || (roi.tokens ? roi.tokens.map(t => t.text).join(' ') : '');
 
                               return (
                                 <div
@@ -1733,7 +1798,7 @@ export const AiOcrScanModal = ({ isOpen, onClose }) => {
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                                       {hasMatch && (
                                         <span style={{ fontSize: '0.55rem', fontWeight: '800', color: '#15803D', backgroundColor: '#DCFCE7', padding: '1px 4px', borderRadius: '3px', whiteSpace: 'nowrap' }}>
-                                          ĐÚNG
+                                          {isPairedLpn ? `ĐÚNG (${pairedItem?.suffix_key})` : 'ĐÚNG'}
                                         </span>
                                       )}
                                       {isMismatch && (
@@ -1743,13 +1808,26 @@ export const AiOcrScanModal = ({ isOpen, onClose }) => {
                                       )}
                                     </div>
                                   </div>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px' }}>
-                                    <div style={{ fontSize: '0.66rem', color: '#1F2937', fontWeight: '600' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: '2px', gap: '4px' }}>
+                                    <div style={{ fontSize: '0.66rem', color: '#1F2937', fontWeight: '600', flex: 1, minWidth: 0 }}>
                                       {rLpn && <span style={{ color: isLpnMatch ? '#047857' : '#DC2626', display: 'block' }}>LPN: <strong>{rLpn}</strong></span>}
                                       {rSku && <span style={{ color: isSkuMatch ? '#047857' : '#DC2626', display: 'block' }}>SKU: <strong>{rSku}</strong></span>}
-                                      {!rLpn && !rSku && <span style={{ color: '#9CA3AF' }}>{roi.tokens?.length ? `${roi.tokens.length} từ OCR` : 'Tem phụ kiện'}</span>}
+                                      {(() => {
+                                        const cleanCode = extractCleanCodeUnderRoi(roi, rLpn ? 'lpn' : (rSku ? 'sku' : 'all'));
+                                        if (cleanCode && cleanCode !== rLpn && cleanCode !== rSku) {
+                                          return (
+                                            <span style={{ fontSize: '0.58rem', color: '#4B5563', display: 'block', marginTop: '1px', wordBreak: 'break-all' }}>
+                                              Chữ dưới QR: <strong style={{ fontFamily: 'monospace' }}>{cleanCode}</strong>
+                                            </span>
+                                          );
+                                        }
+                                        return null;
+                                      })()}
+                                      {!rLpn && !rSku && (
+                                        <span style={{ color: '#9CA3AF', fontSize: '0.58rem', fontStyle: 'italic' }}>Không có mã QR/Barcode</span>
+                                      )}
                                     </div>
-                                    <span style={{ fontSize: '0.56rem', color: '#9CA3AF', fontFamily: 'monospace' }}>
+                                    <span style={{ fontSize: '0.56rem', color: '#9CA3AF', fontFamily: 'monospace', flexShrink: 0 }}>
                                       {roi.bbox ? `[${roi.bbox[0]},${roi.bbox[1]}]` : ''}
                                     </span>
                                   </div>
@@ -1803,17 +1881,35 @@ export const AiOcrScanModal = ({ isOpen, onClose }) => {
                   {/* LPN Compare Card */}
                   {(() => {
                     const targetLpn = inspectingItem.expected_lpn || inspectingItem.lpn;
+                    const pairedItem = inspectorAnalysis?.meta_info?.paired_item;
+                    const pairedLpn = pairedItem?.lpn;
+                    const containerItems = inspectorAnalysis?.meta_info?.container_items || [];
+
+                    const isRoiLpnMatch = (code) => {
+                      if (!code) return { isMatch: false };
+                      if (targetLpn && (code === targetLpn || isLpnCodeMatch(code))) {
+                        return { isMatch: true, matchType: 'direct', label: 'ĐÚNG 100%' };
+                      }
+                      if (pairedLpn && (code === pairedLpn || isLpnCodeMatch(code))) {
+                        return { isMatch: true, matchType: 'paired', label: `ĐÚNG (Khớp ${pairedItem?.suffix_key || 'kiện đi kèm'})` };
+                      }
+                      const foundInCont = containerItems.find(c => c.lpn && (c.lpn === code || isLpnCodeMatch(code)));
+                      if (foundInCont) {
+                        return { isMatch: true, matchType: 'container', label: `ĐÚNG (Kiện ${foundInCont.suffix_key})` };
+                      }
+                      return { isMatch: false };
+                    };
+
                     const roiList = inspectorAnalysis?.roi_details || inspectorAnalysis?.images?.roi_details || [];
                     const lpnRois = roiList.filter(r => r.extracted_lpn || r.extracted?.lpn);
 
                     const lpnMatchedCount = lpnRois.filter(r => {
                       const code = r.extracted_lpn || r.extracted?.lpn;
-                      return targetLpn && (code === targetLpn || isLpnCodeMatch(code));
+                      return isRoiLpnMatch(code).isMatch;
                     }).length;
                     const lpnTotalCount = lpnRois.length;
-                    const lpnMatchRate = lpnTotalCount > 0 ? Math.round((lpnMatchedCount / lpnTotalCount) * 100) : (targetLpn && ((inspectingItem.detected_lpn || inspectorAnalysis?.extracted?.lpn) === targetLpn || isLpnCodeMatch(inspectingItem.detected_lpn || inspectorAnalysis?.extracted?.lpn)) ? 100 : 0);
-                    const isAllLpnMatch = lpnTotalCount > 0 ? (lpnMatchedCount === lpnTotalCount) : Boolean(inspectingItem.is_lpn_match || (targetLpn && ((inspectingItem.detected_lpn || inspectorAnalysis?.extracted?.lpn) === targetLpn || isLpnCodeMatch(inspectingItem.detected_lpn || inspectorAnalysis?.extracted?.lpn))));
-                    const effectivePredLpn = lpnMatchedCount > 0 ? targetLpn : (inspectingItem.detected_lpn || inspectorAnalysis?.extracted?.lpn);
+                    const isAllLpnMatch = lpnTotalCount > 0 ? (lpnMatchedCount === lpnTotalCount) : Boolean(inspectingItem.is_lpn_match || (targetLpn && isRoiLpnMatch(inspectingItem.detected_lpn || inspectorAnalysis?.extracted?.lpn).isMatch));
+                    const lpnMatchRate = lpnTotalCount > 0 ? Math.round((lpnMatchedCount / lpnTotalCount) * 100) : (isAllLpnMatch ? 100 : 0);
 
                     return (
                       <div
@@ -1847,6 +1943,11 @@ export const AiOcrScanModal = ({ isOpen, onClose }) => {
                             <span style={{ fontSize: '0.70rem', color: '#8D6E63', fontWeight: 'bold' }}>CSDL Chuẩn:</span>
                             <span style={{ fontFamily: 'Consolas, monospace', fontWeight: 'bold', fontSize: '0.86rem', color: '#1F2937' }}>
                               {targetLpn || '—'}
+                              {pairedItem && pairedLpn && (
+                                <span style={{ fontSize: '0.65rem', color: '#047857', marginLeft: '6px', fontWeight: '600' }}>
+                                  ({pairedItem.suffix_key}: {pairedLpn})
+                                </span>
+                              )}
                             </span>
                           </div>
 
@@ -1859,11 +1960,13 @@ export const AiOcrScanModal = ({ isOpen, onClose }) => {
                                 </span>
                                 <span style={{ fontSize: '0.58rem', color: '#8D6E63' }}>(bấm để xem vị trí)</span>
                               </div>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                 {lpnRois.map((roi) => {
                                   const code = roi.extracted_lpn || roi.extracted?.lpn;
-                                  const isMatch = targetLpn && (code === targetLpn || isLpnCodeMatch(code));
+                                  const matchInfo = isRoiLpnMatch(code);
+                                  const isMatch = matchInfo.isMatch;
                                   const isSelected = selectedRoiIndex === (roi.label_id - 1);
+                                  const rawFullText = roi.full_text || roi.text_under_barcode || (roi.tokens ? roi.tokens.map(t => t.text).join(' ') : '');
                                   let diffDetail = '';
                                   if (!isMatch && targetLpn) {
                                     if (code.length === targetLpn.length) {
@@ -1893,9 +1996,9 @@ export const AiOcrScanModal = ({ isOpen, onClose }) => {
                                       }}
                                       style={{
                                         display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'space-between',
-                                        padding: '3px 6px',
+                                        flexDirection: 'column',
+                                        gap: '2px',
+                                        padding: '4px 6px',
                                         borderRadius: '4px',
                                         backgroundColor: isMatch ? '#F0FDF4' : '#FFF5F5',
                                         border: isMatch
@@ -1906,33 +2009,47 @@ export const AiOcrScanModal = ({ isOpen, onClose }) => {
                                       }}
                                       title="Bấm để phóng to và xem vùng tem này"
                                     >
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                        <span style={{ fontWeight: '800', fontSize: '0.66rem', color: isMatch ? '#065F46' : '#991B1B' }}>
-                                          Tem #{roi.label_id}:
-                                        </span>
-                                        <span style={{ fontFamily: 'Consolas, monospace', fontWeight: 'bold', fontSize: '0.74rem', color: isMatch ? '#047857' : '#DC2626' }}>
-                                          {code}
-                                        </span>
-                                      </div>
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                        <span
-                                          style={{
-                                            fontSize: '0.58rem',
-                                            fontWeight: '800',
-                                            padding: '1px 5px',
-                                            borderRadius: '3px',
-                                            backgroundColor: isMatch ? '#DCFCE7' : '#FEE2E2',
-                                            color: isMatch ? '#15803D' : '#DC2626'
-                                          }}
-                                        >
-                                          {isMatch ? 'ĐÚNG 100%' : 'SAI (Khác CSDL)'}
-                                        </span>
-                                        {diffDetail && (
-                                          <span style={{ fontSize: '0.58rem', color: '#B91C1C', fontWeight: '600' }}>
-                                            ({diffDetail})
+                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                          <span style={{ fontWeight: '800', fontSize: '0.66rem', color: isMatch ? '#065F46' : '#991B1B' }}>
+                                            Tem #{roi.label_id}:
                                           </span>
-                                        )}
+                                          <span style={{ fontFamily: 'Consolas, monospace', fontWeight: 'bold', fontSize: '0.74rem', color: isMatch ? '#047857' : '#DC2626' }}>
+                                            {code}
+                                          </span>
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                          <span
+                                            style={{
+                                              fontSize: '0.58rem',
+                                              fontWeight: '800',
+                                              padding: '1px 5px',
+                                              borderRadius: '3px',
+                                              backgroundColor: isMatch ? '#DCFCE7' : '#FEE2E2',
+                                              color: isMatch ? '#15803D' : '#DC2626'
+                                            }}
+                                          >
+                                            {matchInfo.label || (isMatch ? 'ĐÚNG 100%' : 'SAI (Khác CSDL)')}
+                                          </span>
+                                          {diffDetail && (
+                                            <span style={{ fontSize: '0.58rem', color: '#B91C1C', fontWeight: '600' }}>
+                                              ({diffDetail})
+                                            </span>
+                                          )}
+                                        </div>
                                       </div>
+                                      {/* Hiển thị chuẩn xác chữ dưới mã QR */}
+                                      {(() => {
+                                        const cleanCode = extractCleanCodeUnderRoi(roi, 'lpn');
+                                        if (cleanCode) {
+                                          return (
+                                            <div style={{ fontSize: '0.58rem', color: '#4B5563', paddingLeft: '2px', lineHeight: '1.2' }}>
+                                              Chữ dưới mã: <strong style={{ color: '#1F2937', fontFamily: 'monospace' }}>{cleanCode}</strong>
+                                            </div>
+                                          );
+                                        }
+                                        return null;
+                                      })()}
                                     </div>
                                   );
                                 })}
@@ -1950,10 +2067,57 @@ export const AiOcrScanModal = ({ isOpen, onClose }) => {
                     const roiList = inspectorAnalysis?.roi_details || inspectorAnalysis?.images?.roi_details || [];
                     const skuRois = roiList.filter(r => r.extracted_sku || r.extracted?.sku);
 
+                    const isPosVertical = (() => {
+                      const rawPos = inspectingItem.suffix_key || inspectingItem.record_type || inspectingItem.package_position || '';
+                      const s = String(rawPos).trim().toLowerCase();
+                      if (/top[\s_-]*n[oó]c/.test(s) || /d[oọ]c/.test(s)) return true;
+                      if (/pallet[\s_-]*[đd][uứ]ng/.test(s) || /ngang/.test(s)) return false;
+                      return Boolean(/\d+[a-z]$/i.test(s));
+                    })();
+
+                    const currentPalletNum = (() => {
+                      const key = String(inspectingItem.suffix_key || '').trim();
+                      const m = key.match(/\d+/);
+                      return m ? m[0] : null;
+                    })();
+
+                    const pairedItem = (() => {
+                      const allItems = Array.isArray(scanReport?.results) ? scanReport.results : (Array.isArray(inspectingItem?.sibling_items) ? inspectingItem.sibling_items : []);
+                      if (!currentPalletNum || allItems.length === 0) return null;
+                      if (isPosVertical) {
+                        return allItems.find(it => {
+                          const k = String(it.suffix_key || '').trim().toLowerCase();
+                          const m = k.match(/\d+/);
+                          const isTopNoc = /([a-z])$/i.test(k) || k.includes('top') || k.includes('nóc');
+                          return m && m[0] === currentPalletNum && !isTopNoc;
+                        }) || null;
+                      } else {
+                        return allItems.find(it => {
+                          const k = String(it.suffix_key || '').trim().toLowerCase();
+                          const m = k.match(/\d+/);
+                          const isTopNoc = /([a-z])$/i.test(k) || k.includes('top') || k.includes('nóc');
+                          return m && m[0] === currentPalletNum && isTopNoc;
+                        }) || null;
+                      }
+                    })();
+
+                    const pairedSku = pairedItem?.expected_sku || pairedItem?.sku;
+
+                    const checkRoiSkuMatch = (code, roi) => {
+                      if (!code) return { isMatch: false };
+                      if (targetSku && (code === targetSku || isSkuCodeMatch(code, targetSku))) {
+                        return { isMatch: true, label: 'ĐÚNG 100%' };
+                      }
+                      if (pairedSku && (code === pairedSku || isSkuCodeMatch(code, pairedSku))) {
+                        return { isMatch: true, label: `ĐÚNG (${pairedItem?.suffix_key || 'Pallet đi cùng'})` };
+                      }
+                      return { isMatch: false };
+                    };
+
                     const skuMatchedCount = skuRois.filter(r => {
                       const rawCode = r.extracted_sku || r.extracted?.sku || '';
                       const code = typeof rawCode === 'string' ? rawCode.replace(/^[-:;,. #*!_/]+|[-:;,. #*!_/]+$/g, '') : rawCode;
-                      return targetSku && (code === targetSku || isSkuCodeMatch(code));
+                      return checkRoiSkuMatch(code, r).isMatch;
                     }).length;
                     const skuTotalCount = skuRois.length;
                     const skuMatchRate = skuTotalCount > 0 ? Math.round((skuMatchedCount / skuTotalCount) * 100) : (targetSku && ((inspectingItem.detected_sku || inspectorAnalysis?.extracted?.sku) === targetSku || isSkuCodeMatch(inspectingItem.detected_sku || inspectorAnalysis?.extracted?.sku)) ? 100 : 0);
@@ -1992,6 +2156,11 @@ export const AiOcrScanModal = ({ isOpen, onClose }) => {
                             <span style={{ fontSize: '0.70rem', color: '#8D6E63', fontWeight: 'bold' }}>CSDL Chuẩn:</span>
                             <span style={{ fontFamily: 'Consolas, monospace', fontWeight: 'bold', fontSize: '0.86rem', color: '#1F2937' }}>
                               {targetSku || '—'}
+                              {pairedSku && (
+                                <span style={{ fontSize: '0.65rem', color: '#047857', marginLeft: '6px', fontWeight: '600' }}>
+                                  ({pairedItem?.suffix_key || 'Pallet đi cùng'}: {pairedSku})
+                                </span>
+                              )}
                             </span>
                           </div>
 
@@ -2008,7 +2177,8 @@ export const AiOcrScanModal = ({ isOpen, onClose }) => {
                                 {skuRois.map((roi) => {
                                   const rawCode = roi.extracted_sku || roi.extracted?.sku || '';
                                   const code = typeof rawCode === 'string' ? rawCode.replace(/^[-:;,. #*!_/]+|[-:;,. #*!_/]+$/g, '') : rawCode;
-                                  const isMatch = targetSku && (code === targetSku || isSkuCodeMatch(code));
+                                  const matchRes = checkRoiSkuMatch(code, roi);
+                                  const isMatch = matchRes.isMatch;
                                   const isSelected = selectedRoiIndex === (roi.label_id - 1);
                                   let diffDetail = '';
                                   if (!isMatch && targetSku) {

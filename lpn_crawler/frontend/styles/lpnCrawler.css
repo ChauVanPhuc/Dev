@@ -545,63 +545,80 @@
   .lpn-container {
     gap: 6px;
     padding: 0;
+    overflow: visible !important;
   }
 
-  /* 1. Tối ưu 4 thẻ KPI: Dàn lưới 2x2, xếp dọc gọn gàng không bao giờ đè chữ */
+  /* Neo phần ở ảnh 2 lại khi scroll lên (Sticky Header khớp sát đỉnh nội dung) */
+  .lpn-control-panel-wrapper {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 80 !important;
+    background-color: #FAF6F0 !important;
+    padding: 4px 2px 6px 2px !important;
+    margin: 0 !important;
+    box-shadow: 0 4px 14px rgba(123, 82, 51, 0.08) !important;
+  }
+
+  /* 1. Tối ưu 4 thẻ KPI: Ngắn nhỏ gọn lại, giảm chiều cao tối đa */
   .lpn-metrics-row {
     grid-template-columns: repeat(2, 1fr) !important;
-    gap: 8px !important;
+    gap: 6px !important;
   }
   .lpn-summary-card {
-    padding: 8px 10px !important;
-    flex-direction: column !important;
-    align-items: flex-start !important;
-    justify-content: flex-start !important;
-    gap: 3px !important;
+    padding: 6px 10px !important;
+    min-height: 44px !important;
+    border-radius: 8px !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 6px !important;
   }
   .lpn-summary-card .lpn-card-info {
-    width: 100% !important;
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
   }
   .lpn-card-label {
-    font-size: 0.74rem !important;
-    line-height: 1.25 !important;
+    font-size: 0.72rem !important;
+    line-height: 1.2 !important;
+    font-weight: 700 !important;
     white-space: normal !important;
     display: block !important;
   }
   .lpn-card-subtext {
-    font-size: 0.64rem !important;
-    display: block !important;
-    margin-top: 1px !important;
+    display: none !important; /* Ẩn ngày dài dòng trên Mobile để thẻ ngắn nhỏ gọn */
   }
   .lpn-card-number {
-    font-size: 1.25rem !important;
-    line-height: 1.1 !important;
+    font-size: 1.15rem !important;
+    line-height: 1 !important;
     font-weight: 800 !important;
-    margin-top: 2px !important;
-    align-self: flex-start !important;
+    margin: 0 !important;
+    flex-shrink: 0 !important;
   }
 
-  /* 2. Tối ưu Toolbar: 2 tầng rõ ràng, ô tìm kiếm co giãn 100% */
+  /* 2. Tối ưu Toolbar: Ô tìm kiếm hàng trên, Đồng bộ & Khác NẰM CHUNG 1 HÀNG ở dưới */
   .mgmt-toolbar {
-    padding: 8px 10px !important;
+    padding: 6px 8px !important;
+    border-radius: 8px !important;
   }
   .lpn-toolbar-main-row {
+    display: flex !important;
     flex-direction: column !important;
     align-items: stretch !important;
-    gap: 8px !important;
+    gap: 6px !important;
     height: auto !important;
   }
   .lpn-toolbar-left {
     display: flex !important;
     align-items: center !important;
-    gap: 6px !important;
+    gap: 0 !important;
     width: 100% !important;
   }
   .lpn-toolbar-left .search-wrapper {
-    flex: 1 1 auto !important;
-    width: auto !important;
+    flex: 1 1 100% !important;
+    width: 100% !important;
     min-width: 0 !important;
     margin: 0 !important;
+    height: 34px !important;
   }
   .lpn-toolbar-left .search-wrapper input {
     font-size: 0.78rem !important;
@@ -609,17 +626,37 @@
   }
   .lpn-toolbar-right {
     display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
     align-items: center !important;
-    justify-content: space-between !important;
+    justify-content: stretch !important;
     width: 100% !important;
-    gap: 6px !important;
+    gap: 8px !important;
   }
-  .lpn-viewmode-switch {
-    margin-left: 0 !important;
+  /* Đồng bộ nằm trước (bên trái), Khác nằm sau (bên phải), nằm chung 1 hàng 50-50 */
+  .lpn-toolbar-right .lpn-sync-container {
+    order: 1 !important;
+    flex: 1 1 0 !important;
+    width: auto !important;
+    min-width: 0 !important;
+    display: block !important;
   }
-  .lpn-viewmode-switch button {
-    padding: 3px 7px !important;
-    font-size: 0.72rem !important;
+  .lpn-toolbar-right .lpn-other-container {
+    order: 2 !important;
+    flex: 1 1 0 !important;
+    width: auto !important;
+    min-width: 0 !important;
+    display: block !important;
+  }
+  .lpn-toolbar-right .lpn-sync-container button,
+  .lpn-toolbar-right .lpn-other-container button {
+    width: 100% !important;
+    height: 36px !important;
+    justify-content: center !important;
+    font-size: 0.82rem !important;
+    padding: 0 6px !important;
+    white-space: nowrap !important;
+    box-sizing: border-box !important;
   }
 
   /* 3. Tối ưu Bảng Dữ Liệu -> Card List trên Mobile */
@@ -755,29 +792,251 @@
     gap: 8px !important;
   }
 
-  /* 5. Phân trang trên Mobile */
-  .lpn-pagination-container {
-    flex-direction: column !important;
-    gap: 6px !important;
-    align-items: center !important;
-    text-align: center !important;
-    padding: 8px 10px !important;
-    font-size: 0.74rem !important;
-    position: sticky !important;
+  /* 5. Phân trang ghim cố định ở cuối màn hình trên Mobile (Sleek, Modern & Premium) */
+  .lpn-pagination-container,
+  .lpn-pagination {
+    position: fixed !important;
     bottom: 0 !important;
-    background-color: #FAF6F0 !important;
-    border-top: 1px solid #EADCC9 !important;
-    flex-shrink: 0 !important;
-    z-index: 10 !important;
-  }
-  .lpn-pagination-container > div:last-child {
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    height: 52px !important;
+    z-index: 99 !important;
     display: flex !important;
-    flex-wrap: wrap !important;
-    justify-content: center !important;
-    gap: 4px !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    padding: 0 12px !important;
+    padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    border-top: 1.5px solid #EADCC9 !important;
+    background-color: rgba(255, 255, 255, 0.96) !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+    box-shadow: 0 -4px 20px rgba(123, 82, 51, 0.08) !important;
+    box-sizing: border-box !important;
   }
 
-  /* 6. DetailModal & Item Detail Popup trên Mobile */
+  .lpn-pagination-info {
+    display: flex !important;
+    align-items: center !important;
+    flex-shrink: 0 !important;
+  }
+
+  .lpn-pagination-info-pill {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    background: #FAF6F0 !important;
+    border: 1px solid #EADCC9 !important;
+    border-radius: 20px !important;
+    padding: 4px 10px !important;
+    font-size: 0.74rem !important;
+    font-weight: 700 !important;
+    color: #7B5233 !important;
+    box-shadow: 0 1px 3px rgba(123, 82, 51, 0.05) !important;
+    white-space: nowrap !important;
+  }
+
+  .lpn-pagination-info-pill .lpn-pill-range {
+    color: #4A2E1B !important;
+    font-weight: 800 !important;
+  }
+
+  .lpn-pagination-info-pill .lpn-pill-sep {
+    color: #D7CCC8 !important;
+    font-weight: 600 !important;
+  }
+
+  .lpn-pagination-info-pill .lpn-pill-total {
+    color: #8D6E63 !important;
+    font-weight: 700 !important;
+  }
+
+  .lpn-pagination-controls {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    gap: 4px !important;
+    flex-wrap: nowrap !important;
+    flex-shrink: 0 !important;
+  }
+
+  .lpn-page-btn {
+    min-width: 30px !important;
+    height: 32px !important;
+    padding: 0 6px !important;
+    border-radius: 8px !important;
+    border: 1px solid #EADCC9 !important;
+    background-color: #FAF6F0 !important;
+    color: #4A2E1B !important;
+    font-size: 0.8rem !important;
+    font-weight: 700 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    cursor: pointer !important;
+    transition: all 0.15s ease !important;
+    box-sizing: border-box !important;
+  }
+
+  .lpn-page-btn:hover {
+    background-color: #F0E6D8 !important;
+    border-color: #BCAAA4 !important;
+  }
+
+  .lpn-page-btn.active {
+    background: linear-gradient(135deg, #7B5233 0%, #5D3A20 100%) !important;
+    color: #FFFFFF !important;
+    border-color: #5D3A20 !important;
+    box-shadow: 0 2px 6px rgba(93, 58, 32, 0.35) !important;
+    font-weight: 800 !important;
+  }
+
+  .lpn-page-btn:disabled {
+    opacity: 0.35 !important;
+    cursor: not-allowed !important;
+    background-color: #F8F5F2 !important;
+    border-color: #EFEBE7 !important;
+    color: #BCAAA4 !important;
+  }
+
+  .lpn-page-nav-btn {
+    font-size: 1.15rem !important;
+    line-height: 1 !important;
+    font-weight: 800 !important;
+    color: #7B5233 !important;
+  }
+
+  .pagination-ellipsis,
+  .lpn-page-dots {
+    color: #A88E79 !important;
+    font-weight: 800 !important;
+    font-size: 0.85rem !important;
+    padding: 0 1px !important;
+    min-width: 14px !important;
+    text-align: center !important;
+    user-select: none !important;
+  }
+
+  /* 6A. ContainerDetailModal (Chi tiết Container) trên Mobile */
+  .lpn-container-detail-overlay {
+    padding: 4px !important;
+  }
+  .lpn-container-detail-dialog {
+    width: 98vw !important;
+    max-width: 98vw !important;
+    height: 98vh !important;
+    max-height: 98vh !important;
+    border-radius: 12px !important;
+  }
+  .lpn-cdm-header {
+    padding: 8px 12px !important;
+    gap: 4px !important;
+  }
+  .lpn-cdm-title {
+    font-size: 1.05rem !important;
+  }
+  .lpn-cdm-top-row {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    width: 100% !important;
+  }
+  .lpn-cdm-meta-row {
+    display: flex !important;
+    align-items: center !important;
+    gap: 5px !important;
+    flex-wrap: wrap !important;
+    font-size: 0.70rem !important;
+  }
+  .lpn-cdm-chips-row {
+    display: flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    flex-wrap: wrap !important;
+  }
+  .lpn-cdm-chip {
+    background: #FAF6F0 !important;
+    border: 1px solid #EADCC9 !important;
+    border-radius: 10px !important;
+    padding: 1px 6px !important;
+    font-size: 0.68rem !important;
+    color: #7B5233 !important;
+    font-weight: 600 !important;
+  }
+  .lpn-cdm-toolbar {
+    padding: 6px 10px !important;
+    gap: 6px !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .lpn-cdm-scan-row {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 4px !important;
+    width: 100% !important;
+  }
+  .lpn-cdm-scan-btn {
+    width: 100% !important;
+    padding: 6px 10px !important;
+    font-size: 0.78rem !important;
+    height: 32px !important;
+    justify-content: center !important;
+  }
+  .lpn-cdm-filter-pills {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 4px !important;
+    width: 100% !important;
+  }
+  .lpn-cdm-filter-pills button {
+    padding: 5px 2px !important;
+    font-size: 0.68rem !important;
+    min-width: 0 !important;
+    text-align: center !important;
+    justify-content: center !important;
+  }
+  .lpn-cdm-search-view-row {
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    width: 100% !important;
+  }
+  .lpn-cdm-search-input {
+    flex: 1 !important;
+    min-width: 0 !important;
+    height: 32px !important;
+    font-size: 0.76rem !important;
+    box-sizing: border-box !important;
+  }
+  .lpn-cdm-tabs {
+    padding: 2px 6px 0 6px !important;
+    gap: 4px !important;
+  }
+  .lpn-cdm-tab-btn {
+    flex: 1 1 0 !important;
+    padding: 6px 4px !important;
+    font-size: 0.76rem !important;
+    text-align: center !important;
+    white-space: nowrap !important;
+  }
+  .lpn-cdm-content {
+    padding: 8px 8px 18px 8px !important;
+  }
+  .lpn-cdm-table-wrapper {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    border-radius: 8px !important;
+    border: 1px solid #EADCC9 !important;
+    width: 100% !important;
+  }
+  .lpn-cdm-table-wrapper table {
+    min-width: 860px !important;
+  }
+
+  /* 6B. DetailModal & Item Detail Popup trên Mobile */
   .lpn-detail-overlay {
     padding: 6px !important;
   }
@@ -786,7 +1045,7 @@
     width: 98vw !important;
     max-width: 98vw !important;
     max-height: 96vh !important;
-    border-radius: 10px !important;
+    border-radius: 12px !important;
   }
 
   .lpn-detail-grid {
@@ -798,25 +1057,29 @@
   .lpn-detail-col-info {
     height: auto !important;
     min-height: auto !important;
+    gap: 10px !important;
   }
 
   .lpn-detail-col-info > div {
     height: auto !important;
+    border-radius: 10px !important;
   }
 
   .lpn-detail-col-pic {
     width: 100% !important;
     height: auto !important;
+    border-radius: 10px !important;
   }
 
   .lpn-detail-pic-box {
-    height: 300px !important;
+    height: 280px !important;
     width: 100% !important;
   }
 
   .lpn-detail-col-ocr {
     height: auto !important;
-    min-height: 320px !important;
+    min-height: auto !important;
+    border-radius: 10px !important;
   }
 
   .lpn-modal-nav-btn {
@@ -824,24 +1087,37 @@
   }
 
   .lpn-detail-footer {
+    position: sticky !important;
+    bottom: 0 !important;
+    background: #FFFFFF !important;
+    border-top: 1.5px solid #EADCC9 !important;
+    box-shadow: 0 -4px 16px rgba(123, 82, 51, 0.08) !important;
     flex-direction: column !important;
     align-items: stretch !important;
     gap: 8px !important;
-    padding: 10px 14px !important;
+    padding: 10px 12px !important;
+    z-index: 10 !important;
   }
 
   .lpn-detail-footer-actions {
     display: flex !important;
     width: 100% !important;
-    gap: 6px !important;
+    gap: 8px !important;
   }
 
   .lpn-detail-footer-actions button {
     flex: 1 1 0 !important;
-    padding: 8px 6px !important;
-    font-size: 0.76rem !important;
+    height: 38px !important;
+    padding: 0 4px !important;
+    font-size: 0.78rem !important;
+    font-weight: 700 !important;
+    border-radius: 8px !important;
     text-align: center !important;
+    display: inline-flex !important;
+    align-items: center !important;
     justify-content: center !important;
+    white-space: nowrap !important;
+    box-sizing: border-box !important;
   }
 
   /* 7. SyncDualMonitorModal trên Mobile */

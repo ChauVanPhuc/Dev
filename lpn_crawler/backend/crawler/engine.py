@@ -60,7 +60,10 @@ class AppSheetCrawlerEngine(
         self.table_name = "LPN NEW"
 
         if self.auto_ocr:
-            self.ocr_queue = queue.Queue()
+            import queue
+            import itertools
+            self.ocr_queue = queue.PriorityQueue()
+            self._task_counter = itertools.count()
             self.ocr_stop_event = threading.Event()
             self.ocr_thread = None
             self.ocr_stats = {
@@ -69,6 +72,20 @@ class AppSheetCrawlerEngine(
                 "total_ms": 0.0,
                 "avg_ms": 0.0
             }
+
+    def enqueue_ocr_task(self, task: dict, priority: int = 1):
+        """Đẩy task vào PriorityQueue:
+        - 0: Interactive / Khẩn cấp (Quét ưu tiên / Người dùng bấm xem popup)
+        - 1: Streaming Sync (Các ảnh vừa tải về của container hiện tại)
+        - 2: Background Backfill (Quét bù ảnh cũ / thiếu trong CSDL)
+        """
+        if not (getattr(self, "auto_ocr", False) and hasattr(self, "ocr_queue")):
+            return
+        if not hasattr(self, "_task_counter"):
+            import itertools
+            self._task_counter = itertools.count()
+        cnt = next(self._task_counter)
+        self.ocr_queue.put((priority, cnt, task))
 
     def _ocr_worker_loop(self):
         """Worker loop ngầm tiêu thụ ảnh từ ocr_queue, xử lý AI OCR và broadcast SSE."""
@@ -103,9 +120,18 @@ class AppSheetCrawlerEngine(
         try:
             while not self.ocr_stop_event.is_set():
                 try:
-                    task = self.ocr_queue.get(timeout=1.0)
+                    raw_item = self.ocr_queue.get(timeout=1.0)
                 except Exception:
                     continue
+
+                if raw_item is None:
+                    self.ocr_queue.task_done()
+                    break
+
+                if isinstance(raw_item, tuple) and len(raw_item) == 3:
+                    priority, _, task = raw_item
+                else:
+                    task = raw_item
 
                 if task is None:
                     self.ocr_queue.task_done()
@@ -416,6 +442,7 @@ class AppSheetCrawlerEngine(
                     .filter(
                         or_(LpnItem.resolution_status == None, LpnItem.resolution_status == ''),
                         or_(
+                            LpnAiOcrResult.id == None,
                             LpnItem.lpn == None, LpnItem.lpn == '',
                             LpnItem.sku == None, LpnItem.sku == '',
                             and_(LpnAiOcrResult.id != None, or_(LpnAiOcrResult.is_lpn_match == 0, LpnAiOcrResult.is_sku_match == 0))
@@ -436,8 +463,8 @@ class AppSheetCrawlerEngine(
 
             if valid_candidates:
                 self.log(
-                    f"[Danh Sách Thiếu/Lệch] Phát hiện {len(valid_candidates)} ảnh từ các dòng thiếu / sai lệch mã. "
-                    f"Đang tự động nạp vào luồng AI OCR để đọc và nhận diện lại...",
+                    f"[Smart Backfill AI OCR] Phát hiện {len(valid_candidates)} ảnh chưa quét hoặc từ các dòng thiếu/lệch mã. "
+                    f"Đang nạp vào hàng đợi AI OCR ưu tiên nền (Priority 2)...",
                     source="ai_ocr"
                 )
                 tot = len(valid_candidates)
@@ -456,9 +483,12 @@ class AppSheetCrawlerEngine(
                         "container_total_items": tot,
                         "is_missing_recheck": True
                     }
-                    self.ocr_queue.put(task)
+                    if hasattr(self, "enqueue_ocr_task"):
+                        self.enqueue_ocr_task(task, priority=2)
+                    else:
+                        self.ocr_queue.put(task)
             else:
-                self.log("[Danh Sách Thiếu/Lệch] Không có ảnh thiếu hoặc lệch mã nào cần quét lại.", source="ai_ocr")
+                self.log("[Smart Backfill AI OCR] Toàn bộ ảnh trong CSDL đã được nhận diện AI OCR đầy đủ 100%.", source="ai_ocr")
 
         except Exception as e:
             self.log(f"[Danh Sách Thiếu/Lệch] Lỗi khi nạp ảnh quét lại: {e}", level="WARNING", source="ai_ocr")
@@ -967,7 +997,10 @@ class AppSheetCrawlerEngine(
 
                 if self.auto_ocr and hasattr(self, "ocr_queue") and self.ocr_thread:
                     self.log("Đang đợi hoàn tất các ảnh còn lại trong hàng đợi AI OCR...")
-                    self.ocr_queue.put(None)
+                    if hasattr(self, "enqueue_ocr_task"):
+                        self.enqueue_ocr_task(None, priority=0)
+                    else:
+                        self.ocr_queue.put(None)
                     self.ocr_thread.join(timeout=45)
 
                 # Job Completed
