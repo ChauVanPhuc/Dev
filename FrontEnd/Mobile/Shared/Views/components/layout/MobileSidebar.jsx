@@ -33,13 +33,49 @@ const Sidebar = () => {
   const [loading, setLoading] = useState(true)
   const [expandedItems, setExpandedItems] = useState([])
 
+// 8 mục chuẩn của nhóm "Khởi tạo phiếu" theo đúng giao diện chuẩn SmartFlow Mobile
+const CANONICAL_KHOI_TAO_PHIEU = {
+  id: 'm-create-ticket',
+  title: 'Khởi tạo phiếu',
+  route_path: '#',
+  icon: 'MessageSquare',
+  is_active: true,
+  children: [
+    { id: 'sub-pv2-transfer', title: 'Tạo phiếu luân chuyển', route_path: '/production_v2/transfer', icon: 'FilePlus' },
+    { id: 'sub-pv2-pallet-v1', title: 'Kiểm tra Pallet v1', route_path: '/pallet-check-v1', icon: 'Barcode' },
+    { id: 'sub-pv2-pallet-ai', title: 'Kiểm tra Pallet (AI)', route_path: '/pallet-check', icon: 'ScanLine' },
+    { id: 'sub-pv2-transfer-list', title: 'Danh sách luân chuyển', route_path: '/production_v2/transfer-list', icon: 'ListOrdered' },
+    { id: 'sub-pv2-inspection-create', title: 'Tạo phiếu kiểm tra', route_path: '/production_v2/inspection', icon: 'ClipboardCheck' },
+    { id: 'sub-pv2-box', title: 'Kiểm tra Tủ thùng', route_path: '/cabinet-box-check', icon: 'Boxes' },
+    { id: 'sub-pv2-inspection-list', title: 'Danh sách kiểm tra', route_path: '/production_v2/inspection-list', icon: 'ClipboardList' },
+    { id: 'sub-pv2-backup-qr', title: 'Quản lý mã QR tạm', route_path: '/production_v2/backup-qr', icon: 'QrCode' }
+  ]
+};
+
 // Chỉ loại bỏ 3 mục này nếu xuất hiện ở ngoài cấp 1 (root level) của sidebar, vẫn giữ ở trong menu con
 const ROOT_EXCLUDED_ROUTES = new Set(['/pallet-check-v1', '/pallet-check', '/cabinet-box-check']);
 
 const filterRootMenuItems = (items) => {
-  if (!Array.isArray(items)) return [];
-  // Chỉ lọc ở cấp ngoài cùng (cấp 1), không lọc children bên trong
-  return items.filter(item => !ROOT_EXCLUDED_ROUTES.has(item.route_path));
+  if (!Array.isArray(items)) return [CANONICAL_KHOI_TAO_PHIEU];
+  // 1. Chỉ lọc ở cấp ngoài cùng (cấp 1), không lọc children bên trong
+  let filtered = items.filter(item => !ROOT_EXCLUDED_ROUTES.has(item.route_path));
+
+  // 2. Đảm bảo nhóm "Khởi tạo phiếu" luôn tồn tại và có đủ 8 mục con theo thứ tự chuẩn
+  const createTicketIdx = filtered.findIndex(it => it.title === 'Khởi tạo phiếu');
+  if (createTicketIdx === -1) {
+    // Chèn vào vị trí sau Trang chủ hoặc đầu danh sách
+    const homeIdx = filtered.findIndex(it => it.route_path === '/dashboard' || it.id === 'm-home');
+    filtered.splice(homeIdx >= 0 ? homeIdx + 1 : 1, 0, CANONICAL_KHOI_TAO_PHIEU);
+  } else {
+    // Chuẩn hóa nhóm Khởi tạo phiếu hiện có để luôn có đủ 8 mục con
+    filtered[createTicketIdx] = {
+      ...filtered[createTicketIdx],
+      icon: filtered[createTicketIdx].icon || 'MessageSquare',
+      children: CANONICAL_KHOI_TAO_PHIEU.children
+    };
+  }
+
+  return filtered;
 };
 
   useEffect(() => {
@@ -63,28 +99,13 @@ const filterRootMenuItems = (items) => {
             icon: 'LayoutGrid',
             is_active: true
           },
+          CANONICAL_KHOI_TAO_PHIEU,
           {
             id: 'm-quality-management',
             title: 'Quản lý chất lượng',
             route_path: '/admin/kpi/dashboard',
             icon: 'Target',
             is_active: true
-          },
-          {
-            id: 'm-create-ticket',
-            title: 'Khởi tạo phiếu',
-            route_path: '#',
-            icon: 'FolderPlus',
-            is_active: true,
-            children: [
-              { id: 'sub-pv2-box', title: 'Kiểm tra Tủ thùng', route_path: '/cabinet-box-check', icon: 'Boxes' },
-              { id: 'sub-pv2-v1', title: 'Kiểm tra Pallet v1', route_path: '/pallet-check-v1', icon: 'Barcode' },
-              { id: 'sub-pv2-5', title: 'Kiểm tra Pallet (AI)', route_path: '/pallet-check', icon: 'ScanLine' },
-              { id: 'sub-pv2-1', title: 'Tạo phiếu luân chuyển', route_path: '/production_v2/transfer', icon: 'FilePlus' },
-              { id: 'sub-pv2-2', title: 'Danh sách luân chuyển', route_path: '/production_v2/transfer-list', icon: 'ListOrdered' },
-              { id: 'sub-pv2-3', title: 'Tạo phiếu kiểm tra', route_path: '/production_v2/inspection', icon: 'ClipboardCheck' },
-              { id: 'sub-pv2-4', title: 'Danh sách kiểm tra', route_path: '/production_v2/inspection-list', icon: 'ClipboardList' }
-            ]
           },
           {
             id: 'm-prod-info',

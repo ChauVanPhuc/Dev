@@ -61,27 +61,48 @@ class ErrorBoundary extends React.Component {
             {this.state.error?.message || 'Hệ thống gặp sự cố không mong muốn. Vui lòng tải lại trang hoặc kiểm tra kết nối mạng.'}
           </p>
 
-          <button
-            type="button"
-            onClick={this.handleReload}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '10px 20px',
-              backgroundColor: '#7B5233',
-              color: '#FFFFFF',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '14px',
-              fontWeight: 700,
-              cursor: 'pointer',
-              boxShadow: '0 2px 6px rgba(123, 82, 51, 0.25)'
-            }}
-          >
-            <RotateCcw size={16} />
-            <span>Tải lại trang</span>
-          </button>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              type="button"
+              onClick={this.handleReload}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 18px',
+                backgroundColor: '#7B5233',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '13px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                boxShadow: '0 2px 6px rgba(123, 82, 51, 0.25)'
+              }}
+            >
+              <RotateCcw size={15} />
+              <span>Tải lại trang</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => { window.location.href = '/pallet-check'; }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 18px',
+                backgroundColor: '#FFFFFF',
+                color: '#7B5233',
+                border: '1.5px solid #EADCC9',
+                borderRadius: '8px',
+                fontSize: '13px',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+            >
+              <span>Về Kiểm tra Pallet</span>
+            </button>
+          </div>
         </div>
       )
     }
