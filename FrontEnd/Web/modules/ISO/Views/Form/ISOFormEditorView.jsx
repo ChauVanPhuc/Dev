@@ -4,6 +4,8 @@ import { useParams, useNavigate, useLocation, useOutletContext } from 'react-rou
 import { AlertCircle, FileText, GitBranch, ChevronUp, ChevronDown, Search, Filter, Download, ExternalLink, Eye, Printer, RefreshCw, BookOpen, Settings } from 'lucide-react';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
+import ApprovalSignatureSection from '@modules/ISO/components/ApprovalSignatureSection';
+import DocumentBottomSignatures from '@modules/ISO/components/DocumentBottomSignatures';
 import '@styles/components.css';
 
 const getCurrentFormattedDate = () => {
@@ -52,10 +54,12 @@ const ISOFormEditorView = () => {
     id: null,
     code: '',
     name: '',
+    process_id: null,
     version: '01',
     issue_date: new Date().toISOString().split('T')[0],
     issuer: '',
     approver: '',
+    approver_bgd: '',
     file_path: '',
     status: 'Nháp',
     folder: '',
@@ -77,6 +81,14 @@ const ISOFormEditorView = () => {
   const [symbolPlaceholder, setSymbolPlaceholder] = useState("QT: Quy trình");
   const [namePlaceholder, setNamePlaceholder] = useState("Nhập tên tài liệu...");
   const [contentClassified, setContentClassified] = useState(false);
+
+  // Danh sách toàn bộ quy trình nghiệp vụ phục vụ liên kết
+  const [allProcessesList, setAllProcessesList] = useState([]);
+  useEffect(() => {
+    api.get('/iso-documents/processes').then(data => {
+      setAllProcessesList(Array.isArray(data) ? data : []);
+    }).catch(err => console.error('Lỗi khi tải danh sách quy trình:', err));
+  }, []);
 
   // Tab management & Tab 3 States
   const [activeFormTab, setActiveFormTab] = useState('config'); // 'config' | 'preview' | 'processes'
@@ -283,11 +295,13 @@ const ISOFormEditorView = () => {
         issue_date: stripTime(data.issue_date || getCurrentFormattedDate()),
         issuer: loggedInUser.full_name || data.issuer || '',
         approver: data.approver || '',
+        approver_bgd: data.approver_bgd || '',
         file_path: data.file_path || '',
         status: data.status || 'Đang lưu hành',
         folder: data.folder || data.display_at || '',
         doc_type: data.doc_type || data.notes || '',
         document_level: data.document_level || '',
+        process_id: data.process_id || null,
         notes: data.notes || '',
         revision_logs: data.revision_logs || [],
         sections: receivedSections,
@@ -613,7 +627,20 @@ const ISOFormEditorView = () => {
               </div>
 
               {/* Row 2 */}
-              <div style={{ gridColumn: 'span 3' }}>
+              <div style={{ gridColumn: 'span 4' }}>
+                <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#4B5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Thuộc quy trình nghiệp vụ</label>
+                <select
+                  value={formData.process_id || ''}
+                  onChange={(e) => handleInputChange('process_id', e.target.value ? parseInt(e.target.value) : null)}
+                  style={{ width: '100%', height: '36px', padding: '8px 12px', border: '1px solid #D1D5DB', borderRadius: '6px', fontSize: '0.82rem', outline: 'none', backgroundColor: 'white', cursor: 'pointer', color: '#1F2937' }}
+                >
+                  <option value="">-- Chưa gán quy trình --</option>
+                  {allProcessesList.map(p => (
+                    <option key={p.id} value={p.id}>{p.code} - {p.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ gridColumn: 'span 2' }}>
                 <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#4B5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Người cập nhật</label>
                 <input
                   type="text"
@@ -623,7 +650,7 @@ const ISOFormEditorView = () => {
                   style={{ width: '100%', height: '36px', padding: '8px 12px', border: '1px solid #E5E7EB', borderRadius: '6px', fontSize: '0.82rem', outline: 'none', fontWeight: '600', backgroundColor: '#F3F4F6', color: '#4B5563', cursor: 'not-allowed' }}
                 />
               </div>
-              <div style={{ gridColumn: 'span 3' }}>
+              <div style={{ gridColumn: 'span 2' }}>
                 <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#4B5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ngày cập nhật</label>
                 <input
                   type="text"
@@ -633,19 +660,21 @@ const ISOFormEditorView = () => {
                   style={{ width: '100%', height: '36px', padding: '8px 12px', border: '1px solid #E5E7EB', borderRadius: '6px', fontSize: '0.82rem', outline: 'none', fontWeight: '600', backgroundColor: '#F3F4F6', color: '#4B5563', cursor: 'not-allowed' }}
                 />
               </div>
-              <div style={{ gridColumn: 'span 3' }}>
+              <div style={{ gridColumn: 'span 2' }}>
                 <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#4B5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Cấp duyệt</label>
                 <select
-                  value={formData.document_level}
-                  onChange={(e) => handleInputChange('document_level', e.target.value)}
+                  value={formData.document_level || 'Cấp phòng'}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    handleInputChange('document_level', val);
+                  }}
                   style={{ width: '100%', height: '36px', padding: '8px 12px', border: '1px solid #D1D5DB', borderRadius: '6px', fontSize: '0.82rem', outline: 'none', backgroundColor: 'white', cursor: 'pointer', color: '#1F2937' }}
                 >
-                  <option value="">Cấp phòng</option>
                   <option value="Cấp phòng">Cấp phòng</option>
                   <option value="Cấp công ty">Cấp công ty</option>
                 </select>
               </div>
-              <div style={{ gridColumn: 'span 3' }}>
+              <div style={{ gridColumn: 'span 2' }}>
                 <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#4B5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Trạng thái</label>
                 <input
                   type="text"
@@ -656,16 +685,56 @@ const ISOFormEditorView = () => {
               </div>
             </div>
 
-            {/* Row 3: Ghi chú (Full Width) */}
-            <div style={{ marginTop: '16px' }}>
-              <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#4B5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ghi chú</label>
-              <textarea
-                value={formData.notes}
-                onChange={(e) => handleInputChange('notes', e.target.value)}
-                placeholder="Nhập ghi chú hoặc mô tả ngắn..."
-                rows={3}
-                style={{ width: '100%', padding: '8px 12px', border: '1px solid #D1D5DB', borderRadius: '6px', fontSize: '0.82rem', outline: 'none', resize: 'none', fontFamily: 'inherit', color: '#1F2937', lineHeight: '1.4' }}
-              />
+            {/* Row 3: Chữ ký phê duyệt (Bên trái, nhỏ gọn) + Ghi chú (Bên phải, kéo dài) */}
+            <div style={{
+              display: 'flex',
+              gap: '16px',
+              marginTop: '12px',
+              alignItems: 'stretch'
+            }}>
+              {/* Bên trái: Chữ ký phê duyệt hình vuông nhỏ gọn */}
+              <div style={{ flexShrink: 0 }}>
+                <ApprovalSignatureSection
+                  documentLevel={formData.document_level || 'Cấp phòng'}
+                  author={formData.issuer || formData.editor || formData.owner || loggedInUser.full_name || loggedInUser.username || ''}
+                  approver={formData.approver || ''}
+                  approverBgd={formData.approver_bgd || ''}
+                  approverCustomer={formData.approver_customer || ''}
+                  department={getDeptAbbrev(formData.symbol, formData.code)}
+                  status={formData.status}
+                />
+              </div>
+
+              {/* Bên phải: Ghi chú kéo dài chiếm trọn không gian còn lại */}
+              <div style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column'
+              }}>
+                <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#4B5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Ghi chú
+                </label>
+                <textarea
+                  value={formData.notes}
+                  onChange={(e) => handleInputChange('notes', e.target.value)}
+                  placeholder="Nhập ghi chú hoặc mô tả ngắn..."
+                  style={{
+                    width: '100%',
+                    flex: 1,
+                    minHeight: '84px',
+                    padding: '8px 10px',
+                    border: '1px solid #D1D5DB',
+                    borderRadius: '6px',
+                    fontSize: '0.82rem',
+                    outline: 'none',
+                    resize: 'none',
+                    fontFamily: 'inherit',
+                    color: '#1F2937',
+                    lineHeight: '1.4',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
             </div>
 
             {/* Checkbox: Đã phân loại nội dung */}
@@ -1119,15 +1188,23 @@ const ISOFormEditorView = () => {
                         <tr>
                           <td style={{ fontWeight: 'bold' }}>Biên soạn</td>
                           <td>{formData.issuer || '---'}</td>
-                          <td>TP. QLCL</td>
-                          <td></td>
+                          <td>Người soạn thảo</td>
+                          <td style={{ height: '36px' }}></td>
                         </tr>
                         <tr>
-                          <td style={{ fontWeight: 'bold' }}>Phê duyệt</td>
+                          <td style={{ fontWeight: 'bold' }}>Trưởng phòng duyệt</td>
                           <td>{formData.approver || '---'}</td>
-                          <td>PHÓ TGĐ</td>
-                          <td></td>
+                          <td>Trưởng phòng</td>
+                          <td style={{ height: '36px' }}></td>
                         </tr>
+                        {formData.document_level === 'Cấp công ty' && (
+                          <tr>
+                            <td style={{ fontWeight: 'bold' }}>BGĐ phê duyệt</td>
+                            <td>{formData.approver_bgd || '---'}</td>
+                            <td>Ban Giám Đốc</td>
+                            <td style={{ height: '36px' }}></td>
+                          </tr>
+                        )}
                       </tbody>
                     </table>
                   </div>
@@ -1224,6 +1301,18 @@ const ISOFormEditorView = () => {
                         );
                       })}
                   </div>
+
+                  {/* Khung chữ ký phê duyệt hàng ngang căn đều ở dưới cùng tài liệu */}
+                  <DocumentBottomSignatures
+                    documentLevel={formData.document_level || 'Cấp phòng'}
+                    author={formData.issuer || formData.editor || formData.owner || loggedInUser.full_name || loggedInUser.username || ''}
+                    approver={formData.approver || ''}
+                    approverBgd={formData.approver_bgd || ''}
+                    approverCustomer={formData.approver_customer || ''}
+                    department={getDeptAbbrev(formData.symbol, formData.code)}
+                    status={formData.status}
+                    issueDate={formData.issue_date}
+                  />
                 </div>
 
                 {/* Footer page 3 */}

@@ -114,6 +114,27 @@ try:
 except Exception:
     pass
 
+# [MIGRATION] Add approver_bgd column to iso_documents & iso_processes
+try:
+    from database.migrations.add_approver_bgd_column import run_migration as migrate_approver_bgd
+    migrate_approver_bgd()
+except Exception as err:
+    print(f"[MIGRATION] ISO approver_bgd warning: {err}")
+
+# [MIGRATION] Create iso_master_records table & seed initial data
+try:
+    from database.migrations.create_iso_master_records_table import migrate_and_seed
+    migrate_and_seed()
+except Exception as err:
+    print(f"[MIGRATION] ISO Master records warning: {err}")
+
+# [MIGRATION] Seed all 5 ISO items into system_sidebars
+try:
+    from database.migrations.seed_all_iso_sidebars import seed_iso_sidebars
+    seed_iso_sidebars()
+except Exception as err:
+    print(f"[MIGRATION] ISO sidebars warning: {err}")
+
 # [MIGRATION] Check/Create defect_categories table & seed
 try:
     from database.migrations.create_defect_categories_table import migrate_and_seed_defect_categories
@@ -818,6 +839,14 @@ async def serve_ui(request: Request, full_path: str):
         if stat_res is not None:
             return FileResponse(full_p)
         raise HTTPException(status_code=404)
+
+    # Hỗ trợ phục vụ uploads kể cả khi đi kèm prefix api/v1 hoặc double slash
+    if "uploads/" in full_path_clean:
+        sub_path = full_path_clean.split("uploads/", 1)[-1]
+        ssf = SmartStaticFiles(directory=UPLOADS_DIR)
+        full_p, stat_res = ssf.lookup_path(sub_path)
+        if stat_res is not None:
+            return FileResponse(full_p)
 
     # Loại trừ các đường dẫn hệ thống
     if full_path_clean.startswith(("api/", "accounts/")):

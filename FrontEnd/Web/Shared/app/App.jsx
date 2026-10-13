@@ -137,8 +137,11 @@ const OrderShippingMonitoring = lazy(() => import('@modules/Purchasing/Views/Mon
 
 // Import ISO module (Tải động)
 const ISODocumentList = lazy(() => import('@modules/ISO/Views/Document/ISODocumentListView'));
+const ISOMasterRecordList = lazy(() => import('@modules/ISO/Views/MasterRecord/ISOMasterRecordListView'));
 const ISOFormEditor = lazy(() => import('@modules/ISO/Views/Form/ISOFormEditorView'));
 const ISOProcessEditor = lazy(() => import('@modules/ISO/Views/Process/ISOProcessEditorView'));
+const ISOApprovalListView = lazy(() => import('@modules/ISOApproval/views/ISOApprovalListView'));
+const ISOSignatureListView = lazy(() => import('@modules/ISOSignature/views/ISOSignatureListView'));
 
 import { authService } from '@modules/Auth/Models/auth.service';
 import { ScreenProvider } from '@shared/context/ScreenContext';
@@ -733,8 +736,12 @@ function App() {
                 <Route path="quality-records/:id" element={<ProtectedRoute permissionKey="quality-records"><QualityRecordsDetail /></ProtectedRoute>} />
                 <Route path="iso-documents" element={<ProtectedRoute permissionKey="iso-documents"><ISODocumentList mode="documents" /></ProtectedRoute>} />
                 <Route path="iso-processes" element={<ProtectedRoute permissionKey="iso-processes"><ISODocumentList mode="processes" /></ProtectedRoute>} />
+                <Route path="iso-records" element={<ProtectedRoute permissionKey={["iso-documents", "iso-records"]}><ISOMasterRecordList /></ProtectedRoute>} />
+                <Route path="iso-master-records" element={<Navigate to="/admin/iso-records" replace />} />
                 <Route path="iso-documents/edit/:id" element={<ProtectedRoute permissionKey={["iso-documents", "iso-processes"]}><ISOFormEditor /></ProtectedRoute>} />
                 <Route path="iso-processes/edit/:id" element={<ProtectedRoute permissionKey="iso-processes"><ISOProcessEditor /></ProtectedRoute>} />
+                <Route path="iso-approvals" element={<ProtectedRoute permissionKey={["iso-approvals", "/admin/iso-approvals", "iso-processes", "iso-documents"]}><ISOApprovalListView /></ProtectedRoute>} />
+                <Route path="iso-signatures" element={<ProtectedRoute permissionKey={["iso-processes", "iso-documents", "users"]}><ISOSignatureListView /></ProtectedRoute>} />
                 <Route path="kpi" element={<ProtectedRoute permissionKey="kpi"><KPIReports /></ProtectedRoute>} />
                 <Route path="kpi/dashboard" element={<ProtectedRoute permissionKey="kpi"><QualityKPIDashboard /></ProtectedRoute>} />
                 <Route path="kpi/personnel" element={<ProtectedRoute permissionKey="kpi"><KPIPersonnel /></ProtectedRoute>} />

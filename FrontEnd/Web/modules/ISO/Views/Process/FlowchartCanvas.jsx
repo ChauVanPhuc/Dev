@@ -1,202 +1,162 @@
 import React, { useCallback, useMemo, useEffect, useState, useRef, useImperativeHandle, forwardRef } from "react";
 import {
-  ReactFlow, Background, Controls, MiniMap,
+  ReactFlow, Background, Controls,
   useNodesState, useEdgesState, addEdge,
   Handle, Position, MarkerType,
-  useReactFlow, ReactFlowProvider, Panel,
+  useReactFlow, ReactFlowProvider,
   BaseEdge, EdgeLabelRenderer, getSmoothStepPath,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
-// ─── Custom Minimal Nodes (Black & White, Sharp Corners) ─────────────────────────
+// ─── Custom Minimal Nodes (Black & White, ISO Standard) ─────────────────────────
 const nodeBase = (selected) => ({
   boxShadow: selected
-    ? "0 0 0 2px #000000, 0 4px 10px rgba(0,0,0,0.15)"
-    : "0 1px 3px rgba(0,0,0,0.05)",
-  transition: "box-shadow 0.2s ease, border-color 0.2s ease",
-  cursor: "grab",
+    ? "0 0 0 2px #7B5233, 0 6px 14px rgba(123,82,51,0.25)"
+    : "0 2px 6px rgba(0,0,0,0.06)",
+  transition: "all 0.15s ease",
+  cursor: "pointer",
 });
 
 // ─── Task Node (Rectangle - Process Step) ──────────────────────────────────────
 const TaskNode = ({ data, selected }) => {
-  const hasOutput = data._hasOutput;
-
   return (
     <div style={{
-      width: "140px",
-      height: "54px",
-      border: "1.5px solid #000000",
-      backgroundColor: "#ffffff",
+      width: "185px",
+      minHeight: "58px",
+      border: selected ? "2px solid #7B5233" : "1.5px solid #000000",
+      borderRadius: "3px",
+      backgroundColor: selected ? "#FAF7F2" : "#ffffff",
       display: "flex",
+      flexDirection: "column",
       alignItems: "center",
       justifyContent: "center",
       fontFamily: "Arial, sans-serif",
-      fontSize: "12px",
-      fontWeight: "bold",
-      color: "#000000",
-      textAlign: "center",
       padding: "6px 10px",
       boxSizing: "border-box",
+      position: "relative",
       ...nodeBase(selected)
     }}>
-      {/* Inputs (Top, Left, Right) */}
-      <Handle type="target" position={Position.Top} id="top" style={{ background: "#000000", width: 6, height: 6 }} />
-      <Handle type="target" position={Position.Left} id="left-target" style={{ background: "#000000", width: 6, height: 6, top: "50%" }} />
-      <Handle type="target" position={Position.Right} id="right-target" style={{ background: "#000000", width: 6, height: 6, top: "50%" }} />
+      {/* Target Handles */}
+      <Handle type="target" position={Position.Top} id="top" style={{ background: "#000000", width: 7, height: 7 }} />
+      <Handle type="target" position={Position.Left} id="left-target" style={{ background: "#000000", width: 7, height: 7, top: "50%" }} />
+      <Handle type="target" position={Position.Right} id="right-target" style={{ background: "#000000", width: 7, height: 7, top: "50%" }} />
       
-      <div style={{ wordBreak: "break-word", lineHeight: "1.3" }}>{data.label}</div>
+      {/* Header Badges: Step Number & Role */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", marginBottom: "4px", pointerEvents: "none" }}>
+        <span style={{ fontSize: "8.5px", fontWeight: "bold", background: "#000000", color: "#ffffff", padding: "1px 5px", borderRadius: "2px" }}>
+          B{data.stepNumber}
+        </span>
+        {data.role && (
+          <span style={{ fontSize: "8.5px", color: "#475569", fontWeight: "600", maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={data.role}>
+            {data.role}
+          </span>
+        )}
+      </div>
 
-      {/* Output (Bottom, Left, Right) - Only 1 output allowed */}
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        id="bottom"
-        style={{
-          background: hasOutput ? "#ef4444" : "#000000",
-          width: 6,
-          height: 6,
-          opacity: hasOutput ? 0.3 : 1
-        }}
-        isConnectable={!hasOutput}
-      />
-      <Handle
-        type="source"
-        position={Position.Left}
-        id="left"
-        style={{
-          background: hasOutput ? "#ef4444" : "#000000",
-          width: 6,
-          height: 6,
-          top: "50%",
-          opacity: hasOutput ? 0.3 : 1
-        }}
-        isConnectable={!hasOutput}
-      />
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="right"
-        style={{
-          background: hasOutput ? "#ef4444" : "#000000",
-          width: 6,
-          height: 6,
-          top: "50%",
-          opacity: hasOutput ? 0.3 : 1
-        }}
-        isConnectable={!hasOutput}
-      />
+      {/* Step Name */}
+      <div style={{ fontSize: "11px", fontWeight: "bold", color: "#000000", textAlign: "center", lineHeight: "1.3", wordBreak: "break-word", pointerEvents: "none" }}>
+        {data.label}
+      </div>
+
+      {/* Source Handles */}
+      <Handle type="source" position={Position.Bottom} id="bottom" style={{ background: "#000000", width: 7, height: 7 }} />
+      <Handle type="source" position={Position.Left} id="left" style={{ background: "#000000", width: 7, height: 7, top: "50%" }} />
+      <Handle type="source" position={Position.Right} id="right" style={{ background: "#000000", width: 7, height: 7, top: "50%" }} />
     </div>
   );
 };
 
-// ─── Diamond Node (Decision Step) ──────────────────────────────────────────────
+// ─── Diamond Node (Decision Step - Quyết định) ──────────────────────────────────
 const DiamondNode = ({ data, selected }) => {
   return (
     <div style={{
       position: "relative",
-      width: "86px",
-      height: "86px",
+      width: "124px",
+      height: "124px",
       ...nodeBase(selected)
     }}>
-      {/* Inputs (Top, Left, Right) */}
-      <Handle type="target" position={Position.Top} id="top" style={{ background: "#000000", zIndex: 10, width: 6, height: 6 }} />
-      <Handle type="target" position={Position.Left} id="left-target" style={{ background: "#000000", zIndex: 10, width: 6, height: 6, top: "43px" }} />
-      <Handle type="target" position={Position.Right} id="right-target" style={{ background: "#000000", zIndex: 10, width: 6, height: 6, top: "43px" }} />
+      {/* Target Handles */}
+      <Handle type="target" position={Position.Top} id="top" style={{ background: "#000000", zIndex: 10, width: 7, height: 7, top: "-3px" }} />
+      <Handle type="target" position={Position.Left} id="left-target" style={{ background: "#000000", zIndex: 10, width: 7, height: 7, left: "-3px", top: "62px" }} />
+      <Handle type="target" position={Position.Right} id="right-target" style={{ background: "#000000", zIndex: 10, width: 7, height: 7, right: "-3px", top: "62px" }} />
 
-      <svg width="86" height="86" style={{ position: "absolute", top: 0, left: 0 }}>
+      <svg width="124" height="124" style={{ position: "absolute", top: 0, left: 0 }}>
         <polygon
-          points="43,2 84,43 43,84 2,43"
-          fill="#ffffff"
-          stroke="#000000"
-          strokeWidth="1.5"
+          points="62,3 121,62 62,121 3,62"
+          fill={selected ? "#FAF7F2" : "#ffffff"}
+          stroke={selected ? "#7B5233" : "#000000"}
+          strokeWidth={selected ? "2.5" : "1.5"}
         />
       </svg>
       
       <div style={{
-        position: "absolute", top: 0, left: 0, width: "86px", height: "86px",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontFamily: "Arial, sans-serif", fontSize: "11px", fontWeight: "bold",
-        color: "#000000", textAlign: "center", padding: "10px", boxSizing: "border-box",
-        pointerEvents: "none", wordBreak: "break-word", lineHeight: "1.2"
+        position: "absolute", top: 0, left: 0, width: "124px", height: "124px",
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+        fontFamily: "Arial, sans-serif", padding: "16px", boxSizing: "border-box",
+        pointerEvents: "none", zIndex: 2
       }}>
-        {data.label}
+        <span style={{ fontSize: "8.5px", fontWeight: "bold", background: "#000000", color: "#ffffff", padding: "1px 5px", borderRadius: "2px", marginBottom: "3px" }}>
+          B{data.stepNumber}
+        </span>
+        <div style={{ fontSize: "10.5px", fontWeight: "bold", color: "#000000", textAlign: "center", lineHeight: "1.2", wordBreak: "break-word" }}>
+          {data.label}
+        </div>
+        {data.role && (
+          <span style={{ fontSize: "8px", color: "#475569", fontWeight: "600", marginTop: "2px", maxWidth: "90px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={data.role}>
+            {data.role}
+          </span>
+        )}
       </div>
 
-      {/* Outputs (Bottom, Left, Right) */}
-      <Handle type="source" position={Position.Bottom} id="bottom" style={{ background: "#000000", zIndex: 10, width: 6, height: 6 }} />
-      <Handle type="source" position={Position.Left} id="left" style={{ background: "#000000", zIndex: 10, width: 6, height: 6, top: "43px" }} />
-      <Handle type="source" position={Position.Right} id="right" style={{ background: "#000000", zIndex: 10, width: 6, height: 6, top: "43px" }} />
+      {/* Source Handles */}
+      <Handle type="source" position={Position.Bottom} id="bottom" style={{ background: "#000000", zIndex: 10, width: 7, height: 7, bottom: "-3px" }} />
+      <Handle type="source" position={Position.Left} id="left" style={{ background: "#000000", zIndex: 10, width: 7, height: 7, left: "-3px", top: "62px" }} />
+      <Handle type="source" position={Position.Right} id="right" style={{ background: "#000000", zIndex: 10, width: 7, height: 7, right: "-3px", top: "62px" }} />
     </div>
   );
 };
 
-// ─── Oval Node (Terminal Step) ──────────────────────────────────────────────────
+// ─── Oval Node (Terminal Step - Bắt đầu / Kết thúc) ────────────────────────────
 const OvalNode = ({ data, selected }) => {
-  const hasOutput = data._hasOutput;
-
   return (
     <div style={{
-      width: "120px",
-      height: "44px",
-      border: "1.5px solid #000000",
-      borderRadius: "24px",
-      backgroundColor: "#ffffff",
+      width: "185px",
+      minHeight: "52px",
+      border: selected ? "2px solid #7B5233" : "1.5px solid #000000",
+      borderRadius: "26px",
+      backgroundColor: selected ? "#FAF7F2" : "#ffffff",
       display: "flex",
+      flexDirection: "column",
       alignItems: "center",
       justifyContent: "center",
       fontFamily: "Arial, sans-serif",
-      fontSize: "12px",
-      fontWeight: "bold",
-      color: "#000000",
-      textAlign: "center",
-      padding: "6px 12px",
+      padding: "6px 14px",
       boxSizing: "border-box",
+      position: "relative",
       ...nodeBase(selected)
     }}>
-      <Handle type="target" position={Position.Top} id="top" style={{ background: "#000000", width: 6, height: 6 }} />
-      <Handle type="target" position={Position.Left} id="left-target" style={{ background: "#000000", width: 6, height: 6, top: "50%" }} />
-      <Handle type="target" position={Position.Right} id="right-target" style={{ background: "#000000", width: 6, height: 6, top: "50%" }} />
+      <Handle type="target" position={Position.Top} id="top" style={{ background: "#000000", width: 7, height: 7 }} />
+      <Handle type="target" position={Position.Left} id="left-target" style={{ background: "#000000", width: 7, height: 7, top: "50%" }} />
+      <Handle type="target" position={Position.Right} id="right-target" style={{ background: "#000000", width: 7, height: 7, top: "50%" }} />
       
-      <div style={{ wordBreak: "break-word", lineHeight: "1.3" }}>{data.label}</div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", marginBottom: "2px", pointerEvents: "none" }}>
+        <span style={{ fontSize: "8.5px", fontWeight: "bold", background: "#000000", color: "#ffffff", padding: "1px 6px", borderRadius: "10px" }}>
+          B{data.stepNumber}
+        </span>
+        {data.role && (
+          <span style={{ fontSize: "8.5px", color: "#475569", fontWeight: "600", maxWidth: "115px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={data.role}>
+            {data.role}
+          </span>
+        )}
+      </div>
 
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        id="bottom"
-        style={{
-          background: hasOutput ? "#ef4444" : "#000000",
-          width: 6,
-          height: 6,
-          opacity: hasOutput ? 0.3 : 1
-        }}
-        isConnectable={!hasOutput}
-      />
-      <Handle
-        type="source"
-        position={Position.Left}
-        id="left"
-        style={{
-          background: hasOutput ? "#ef4444" : "#000000",
-          width: 6,
-          height: 6,
-          top: "50%",
-          opacity: hasOutput ? 0.3 : 1
-        }}
-        isConnectable={!hasOutput}
-      />
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="right"
-        style={{
-          background: hasOutput ? "#ef4444" : "#000000",
-          width: 6,
-          height: 6,
-          top: "50%",
-          opacity: hasOutput ? 0.3 : 1
-        }}
-        isConnectable={!hasOutput}
-      />
+      <div style={{ fontSize: "11px", fontWeight: "bold", color: "#000000", textAlign: "center", lineHeight: "1.3", wordBreak: "break-word", pointerEvents: "none" }}>
+        {data.label}
+      </div>
+
+      <Handle type="source" position={Position.Bottom} id="bottom" style={{ background: "#000000", width: 7, height: 7 }} />
+      <Handle type="source" position={Position.Left} id="left" style={{ background: "#000000", width: 7, height: 7, top: "50%" }} />
+      <Handle type="source" position={Position.Right} id="right" style={{ background: "#000000", width: 7, height: 7, top: "50%" }} />
     </div>
   );
 };
@@ -218,7 +178,7 @@ const MinimalEdge = ({
 
   const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition,
-    borderRadius: 0 // Sharp corners like hand-drawn diagram
+    borderRadius: 4
   });
 
   const handleDoubleClick = (e) => {
@@ -241,7 +201,7 @@ const MinimalEdge = ({
   return (
     <>
       <BaseEdge path={edgePath} markerEnd={markerEnd} style={{ ...style, stroke: "#000000", strokeWidth: 1.5 }} />
-      {label !== undefined && (
+      {label !== undefined && label !== "" && (
         <EdgeLabelRenderer>
           <div
             style={{
@@ -272,25 +232,25 @@ const MinimalEdge = ({
                 }}
               />
             ) : (
-              (labelText || data?.fromDecision) && (
-                <div
-                  style={{
-                    padding: "1px 5px",
-                    fontSize: "9px",
-                    fontWeight: "bold",
-                    backgroundColor: "#ffffff",
-                    border: "1px solid #000000",
-                    color: "#000000",
-                    cursor: "pointer",
-                    userSelect: "none",
-                    whiteSpace: "nowrap",
-                    fontFamily: "Arial, sans-serif"
-                  }}
-                  title="Double-click để sửa nhãn"
-                >
-                  {labelText || (data?.fromDecision ? "Yes/No" : "")}
-                </div>
-              )
+              <div
+                style={{
+                  padding: "1px 6px",
+                  fontSize: "9px",
+                  fontWeight: "bold",
+                  backgroundColor: "#ffffff",
+                  border: "1px solid #000000",
+                  borderRadius: "2px",
+                  color: "#000000",
+                  cursor: "pointer",
+                  userSelect: "none",
+                  whiteSpace: "nowrap",
+                  fontFamily: "Arial, sans-serif",
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
+                }}
+                title="Double-click để sửa nhãn"
+              >
+                {labelText}
+              </div>
             )}
           </div>
         </EdgeLabelRenderer>
@@ -305,7 +265,7 @@ const edgeTypes = { minimal: MinimalEdge };
 const PALETTE = [
   {
     type: "task", label: "Bước Xử Lý",
-    icon: <div style={{ width: 44, height: 24, border: "1.5px solid #000000", backgroundColor: "#ffffff" }} />
+    icon: <div style={{ width: 44, height: 24, border: "1.5px solid #000000", backgroundColor: "#ffffff", borderRadius: 2 }} />
   },
   {
     type: "decision", label: "Quyết Định",
@@ -320,8 +280,8 @@ const PALETTE = [
 const ShapePalette = () => {
   const [hovered, setHovered] = useState(null);
   return (
-    <div style={{ width: "94px", flexShrink: 0, backgroundColor: "#ffffff", borderRight: "1px solid #e2e8f0", padding: "16px 4px", display: "flex", flexDirection: "column", gap: "16px", alignItems: "center" }}>
-      <div style={{ fontSize: "9px", fontWeight: "bold", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px" }}>Hình Khối</div>
+    <div style={{ width: "94px", flexShrink: 0, backgroundColor: "#FAF7F2", borderRight: "1px solid #EADCC9", padding: "16px 4px", display: "flex", flexDirection: "column", gap: "16px", alignItems: "center" }}>
+      <div style={{ fontSize: "9px", fontWeight: "bold", color: "#7B5233", textTransform: "uppercase", letterSpacing: "0.5px" }}>Hình Khối</div>
       
       {PALETTE.map((item) => (
         <div
@@ -336,74 +296,285 @@ const ShapePalette = () => {
           style={{
             display: "flex", flexDirection: "column", alignItems: "center", gap: "6px",
             cursor: "grab", padding: "6px 4px", width: "100%", userSelect: "none",
-            backgroundColor: hovered === item.type ? "#f8fafc" : "transparent",
+            backgroundColor: hovered === item.type ? "#FFFFFF" : "transparent",
             borderRadius: "6px", border: "1px dashed transparent",
-            borderColor: hovered === item.type ? "#cbd5e1" : "transparent",
+            borderColor: hovered === item.type ? "#7B5233" : "transparent",
             transition: "all 0.15s ease"
           }}
+          title={`Kéo thả khối ${item.label} vào canvas`}
         >
           {item.icon}
           <span style={{ fontSize: "9px", fontWeight: "bold", color: "#334155", textAlign: "center" }}>{item.label}</span>
         </div>
       ))}
       
-      <div style={{ borderTop: "1px solid #f1f5f9", width: "80%", marginTop: "8px", paddingTop: "8px", textAlign: "center" }}>
+      <div style={{ borderTop: "1px solid #EADCC9", width: "80%", marginTop: "8px", paddingTop: "8px", textAlign: "center" }}>
         <span style={{ fontSize: "8px", color: "#94a3b8" }}>Kéo thả vào canvas</span>
       </div>
     </div>
   );
 };
 
-// ─── Properties Panel ──────────────────────────────────────────────────────────
-const PropertiesPanel = ({ step, stepIndex, onUpdate, onDelete, onClose }) => {
+// ─── Properties Panel (Thanh sửa chi tiết thuộc tính bước) ───────────────────────
+const COMMON_ROLES = [
+  "Bộ phận Hành chính / Nhân sự",
+  "Bộ phận Nhân sự",
+  "Trưởng phòng Nhân sự / Ban BSCI",
+  "Ban Giám đốc",
+  "Bộ phận QLCL (QC)",
+  "Phòng Sản xuất",
+  "Phòng Kinh doanh / Bán hàng",
+  "Phòng Mua hàng / Thu mua"
+];
+
+const PropertiesPanel = ({ step, stepIndex, steps, onUpdate, onDelete, onClose }) => {
   if (!step) return null;
+  const isDecision = step.node_type === "decision";
+  const currentFailPath = (step.fail_path && step.fail_path.length > 0) ? step.fail_path[0] : null;
 
   return (
-    <div style={{ width: "240px", flexShrink: 0, backgroundColor: "#ffffff", borderLeft: "1px solid #cbd5e1", display: "flex", flexDirection: "column" }}>
+    <div style={{
+      width: "270px",
+      flexShrink: 0,
+      backgroundColor: "#ffffff",
+      borderLeft: "1px solid #EADCC9",
+      display: "flex",
+      flexDirection: "column",
+      boxShadow: "-2px 0 8px rgba(0,0,0,0.04)",
+      zIndex: 20
+    }}>
       {/* Header */}
-      <div style={{ padding: "12px 14px", borderBottom: "1px solid #cbd5e1", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ fontSize: "11px", fontWeight: "bold", color: "#000000" }}>
-          Sửa tên khối
-        </span>
-        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "14px", fontWeight: "bold", color: "#94a3b8" }}>✕</button>
+      <div style={{ padding: "12px 14px", borderBottom: "1px solid #EADCC9", backgroundColor: "#FAF7F2", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <span style={{ fontSize: "10px", fontWeight: "bold", background: "#7B5233", color: "#ffffff", padding: "2px 6px", borderRadius: "3px" }}>
+            Bước {step.step_number}
+          </span>
+          <span style={{ fontSize: "11px", fontWeight: "bold", color: "#1E293B" }}>
+            Cấu hình khối
+          </span>
+        </div>
+        <button
+          onClick={onClose}
+          style={{ background: "none", border: "none", cursor: "pointer", fontSize: "15px", fontWeight: "bold", color: "#64748B", padding: "0 4px" }}
+          title="Đóng bảng"
+        >
+          ✕
+        </button>
       </div>
 
       {/* Body */}
-      <div style={{ padding: "14px", flex: 1, display: "flex", flexDirection: "column", gap: "12px" }}>
+      <div style={{ padding: "14px", flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "12px" }}>
+        {/* Tên bước */}
         <div>
-          <label style={{ fontSize: "9px", fontWeight: "bold", color: "#64748b", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
-            Tên hiển thị:
+          <label style={{ fontSize: "9px", fontWeight: "bold", color: "#64748B", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
+            Tên bước thực hiện:
           </label>
-          <input
+          <textarea
+            rows="2"
             value={step.name || ""}
             onChange={(e) => onUpdate(stepIndex, "name", e.target.value)}
-            style={{ width: "100%", padding: "6px 8px", border: "1px solid #cbd5e1", fontSize: "11px", outline: "none", fontFamily: "Arial, sans-serif" }}
+            style={{ width: "100%", padding: "6px 8px", border: "1px solid #CBD5E1", borderRadius: "4px", fontSize: "11px", outline: "none", fontFamily: "Arial, sans-serif", boxSizing: "border-box" }}
           />
         </div>
 
+        {/* Loại hình khối */}
         <div>
-          <label style={{ fontSize: "9px", fontWeight: "bold", color: "#64748b", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
+          <label style={{ fontSize: "9px", fontWeight: "bold", color: "#64748B", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
             Loại hình khối:
           </label>
           <select
             value={step.node_type || "task"}
             onChange={(e) => onUpdate(stepIndex, "node_type", e.target.value)}
-            style={{ width: "100%", padding: "5px 6px", border: "1px solid #cbd5e1", fontSize: "11px", backgroundColor: "white", outline: "none" }}
+            style={{ width: "100%", padding: "6px 8px", border: "1px solid #CBD5E1", borderRadius: "4px", fontSize: "11px", backgroundColor: "white", outline: "none", boxSizing: "border-box" }}
           >
-            <option value="task">▭ Bước Xử Lý</option>
-            <option value="decision">◇ Quyết Định (Yes/No)</option>
-            <option value="terminal">⬭ Oval (Bắt đầu/Kết thúc)</option>
+            <option value="task">▭ Bước Xử Lý (Chữ nhật)</option>
+            <option value="decision">◇ Quyết Định (Hình thoi Yes/No)</option>
+            <option value="terminal">⬭ Oval (Bắt đầu / Kết thúc)</option>
           </select>
+        </div>
+
+        {/* Bộ phận trách nhiệm */}
+        <div>
+          <label style={{ fontSize: "9px", fontWeight: "bold", color: "#64748B", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
+            Bộ phận / Trách nhiệm:
+          </label>
+          <input
+            value={step.assignee_role || ""}
+            onChange={(e) => onUpdate(stepIndex, "assignee_role", e.target.value)}
+            placeholder="Nhập hoặc chọn bộ phận..."
+            style={{ width: "100%", padding: "6px 8px", border: "1px solid #CBD5E1", borderRadius: "4px", fontSize: "11px", outline: "none", boxSizing: "border-box", marginBottom: "6px" }}
+          />
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+            {COMMON_ROLES.map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => onUpdate(stepIndex, "assignee_role", r)}
+                style={{
+                  fontSize: "8px",
+                  padding: "2px 6px",
+                  borderRadius: "3px",
+                  border: "1px solid #E2E8F0",
+                  backgroundColor: step.assignee_role === r ? "#FAF6F0" : "#F8FAFC",
+                  color: step.assignee_role === r ? "#7B5233" : "#475569",
+                  fontWeight: step.assignee_role === r ? "bold" : "normal",
+                  cursor: "pointer"
+                }}
+              >
+                {r.length > 20 ? r.substring(0, 18) + '...' : r}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Bước tiếp theo (Thuận chiều) */}
+        <div>
+          <label style={{ fontSize: "9px", fontWeight: "bold", color: "#64748B", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
+            Bước tiếp theo (Đạt / Thuận chiều):
+          </label>
+          <select
+            value={step.transition?.next_step !== undefined ? step.transition?.next_step : (stepIndex < steps.length - 1 ? steps[stepIndex + 1].step_number : "")}
+            onChange={(e) => {
+              const val = e.target.value ? parseInt(e.target.value) : null;
+              onUpdate(stepIndex, "transition", { ...(step.transition || {}), next_step: val });
+            }}
+            style={{ width: "100%", padding: "6px 8px", border: "1px solid #CBD5E1", borderRadius: "4px", fontSize: "11px", backgroundColor: "white", outline: "none", boxSizing: "border-box" }}
+          >
+            <option value="">(Tự động bước kế tiếp)</option>
+            {steps.filter(s => s.step_number !== step.step_number).map(s => (
+              <option key={s.step_number} value={s.step_number}>
+                Bước {s.step_number}: {s.name ? (s.name.length > 25 ? s.name.substring(0, 22) + '...' : s.name) : `Bước ${s.step_number}`}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Cấu hình Nhánh Quyết định nếu là Diamond */}
+        {isDecision && (
+          <div style={{ backgroundColor: "#FAF7F2", padding: "10px", borderRadius: "4px", border: "1px solid #EADCC9" }}>
+            <label style={{ fontSize: "9px", fontWeight: "bold", color: "#7B5233", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
+              Nhánh Không Đạt (Quay lại):
+            </label>
+            <select
+              value={currentFailPath?.return_to_step || Math.max(1, step.step_number - 1)}
+              onChange={(e) => {
+                const targetStep = parseInt(e.target.value);
+                const updatedFp = [{
+                  return_to_step: targetStep,
+                  edge_label: currentFailPath?.edge_label || (/phê duyệt|quyết định/i.test(step.name || "") ? "Không đồng ý" : "K.Đạt")
+                }];
+                onUpdate(stepIndex, "fail_path", updatedFp);
+                onUpdate(stepIndex, "has_branch", true);
+              }}
+              style={{ width: "100%", padding: "5px 6px", border: "1px solid #CBD5E1", borderRadius: "4px", fontSize: "10.5px", backgroundColor: "white", outline: "none", boxSizing: "border-box", marginBottom: "6px" }}
+            >
+              {steps.filter(s => s.step_number < step.step_number).map(s => (
+                <option key={s.step_number} value={s.step_number}>
+                  Quay lại Bước {s.step_number}
+                </option>
+              ))}
+            </select>
+
+            <label style={{ fontSize: "8.5px", color: "#64748B", display: "block", marginBottom: "2px" }}>
+              Nhãn nhánh lỗi:
+            </label>
+            <input
+              value={currentFailPath?.edge_label || (/phê duyệt|quyết định/i.test(step.name || "") ? "Không đồng ý" : "K.Đạt")}
+              onChange={(e) => {
+                const updatedFp = [{
+                  return_to_step: currentFailPath?.return_to_step || Math.max(1, step.step_number - 1),
+                  edge_label: e.target.value
+                }];
+                onUpdate(stepIndex, "fail_path", updatedFp);
+              }}
+              style={{ width: "100%", padding: "4px 6px", border: "1px solid #CBD5E1", borderRadius: "3px", fontSize: "10.5px", outline: "none", boxSizing: "border-box" }}
+            />
+          </div>
+        )}
+
+        {/* Biểu mẫu đi kèm */}
+        <div>
+          <label style={{ fontSize: "9px", fontWeight: "bold", color: "#64748B", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
+            Biểu mẫu / Hồ sơ:
+          </label>
+          <input
+            value={step.template_files || ""}
+            onChange={(e) => onUpdate(stepIndex, "template_files", e.target.value)}
+            placeholder="Ví dụ: QT07-BM01..."
+            style={{ width: "100%", padding: "6px 8px", border: "1px solid #CBD5E1", borderRadius: "4px", fontSize: "11px", outline: "none", boxSizing: "border-box" }}
+          />
+        </div>
+
+        {/* Diễn giải chi tiết / Hướng dẫn thực hiện bước (Mục 5.2) */}
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+            <label style={{ fontSize: "9px", fontWeight: "bold", color: "#64748B", textTransform: "uppercase" }}>
+              Diễn giải / Giải thích bước (Mục 5.2):
+            </label>
+            <button
+              type="button"
+              onClick={() => {
+                const stepRole = step.assignee_role || "Bộ phận phụ trách";
+                const stepName = step.name || `Bước ${step.step_number}`;
+                const tpl = step.template_files || "---";
+                const defaultSample = `• Trách nhiệm thực hiện: ${stepRole}\n• Nội dung công việc: ${stepRole} chủ trì phối hợp với các phòng ban tiến hành ${stepName.toLowerCase()} theo đúng tiêu chuẩn kỹ thuật và quy định áp dụng.\n• Hồ sơ / Biểu mẫu kiểm soát áp dụng: ${tpl}`;
+                onUpdate(stepIndex, "instructions", defaultSample);
+              }}
+              style={{
+                fontSize: "8.5px",
+                padding: "2px 6px",
+                borderRadius: "3px",
+                border: "1px solid #EADCC9",
+                backgroundColor: "#FAF7F2",
+                color: "#7B5233",
+                cursor: "pointer",
+                fontWeight: "bold"
+              }}
+              title="Điền nội dung gợi ý chuẩn ISO"
+            >
+              + Mẫu gợi ý
+            </button>
+          </div>
+          <textarea
+            rows="4"
+            value={step.instructions ? (
+              step.instructions.startsWith("<") 
+                ? step.instructions.replace(/<p[^>]*>/gi, '').replace(/<\/p>/gi, '\n').replace(/<strong[^>]*>(.*?)<\/strong>/gi, '$1').replace(/&nbsp;/g, ' ').trim()
+                : step.instructions
+            ) : ""}
+            onChange={(e) => onUpdate(stepIndex, "instructions", e.target.value)}
+            placeholder="Nhập hướng dẫn chi tiết cách thức thực hiện bước này (trách nhiệm, thao tác, tiêu chuẩn)..."
+            style={{
+              width: "100%",
+              padding: "6px 8px",
+              border: "1px solid #CBD5E1",
+              borderRadius: "4px",
+              fontSize: "11px",
+              lineHeight: "1.4",
+              outline: "none",
+              fontFamily: "Arial, sans-serif",
+              resize: "vertical",
+              boxSizing: "border-box"
+            }}
+          />
         </div>
       </div>
 
       {/* Footer */}
-      <div style={{ padding: "10px 14px", borderTop: "1px solid #cbd5e1" }}>
+      <div style={{ padding: "10px 14px", borderTop: "1px solid #EADCC9", backgroundColor: "#FAF7F2", display: "flex", gap: "8px" }}>
         <button
+          type="button"
           onClick={() => { onDelete(stepIndex); onClose(); }}
-          style={{ width: "100%", padding: "6px", backgroundColor: "#fff5f5", border: "1px solid #fecaca", color: "#dc2626", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}
+          style={{ flex: 1, padding: "6px", backgroundColor: "#FEE2E2", border: "1px solid #FCA5A5", borderRadius: "4px", color: "#DC2626", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}
         >
           Xóa khối này
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          style={{ padding: "6px 12px", backgroundColor: "#FFFFFF", border: "1px solid #CBD5E1", borderRadius: "4px", color: "#475569", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}
+        >
+          Đóng
         </button>
       </div>
     </div>
@@ -415,52 +586,46 @@ const FlowCanvas = ({ steps, onPositionsChange, onAddStep, onUpdateStep, onDelet
   const { screenToFlowPosition, fitView } = useReactFlow();
   const edgeLabelMapRef = useRef({});
 
-  useImperativeHandle(canvasRef, () => ({
-    triggerAutoLayout: () => {
-      handleAutoLayout();
-    }
-  }));
-
   // Helper to calculate dimensions based on node type
-  const getNodeDimensions = (nodeType) => {
-    if (nodeType === "decision") return { width: 86, height: 86 };
-    if (nodeType === "terminal") return { width: 120, height: 44 };
-    return { width: 140, height: 54 }; // task
-  };
-
-  // Helper to calculate center coordinates for a step
-  const getStepCenter = useCallback((step) => {
-    const x = step.x_pos !== undefined ? step.x_pos : 200;
-    const y = step.y_pos !== undefined ? step.y_pos : 100;
-    const { width, height } = getNodeDimensions(step.node_type);
-    return { x: x + width / 2, y: y + height / 2 };
+  const getNodeDimensions = useCallback((nodeType) => {
+    if (nodeType === "decision") return { width: 124, height: 124 };
+    if (nodeType === "terminal") return { width: 185, height: 52 };
+    return { width: 185, height: 58 }; // task
   }, []);
 
+  // Helper to calculate center coordinates for a step
+  const getStepCenter = useCallback((step, nodeType) => {
+    const x = step.x_pos !== undefined ? step.x_pos : 280;
+    const y = step.y_pos !== undefined ? step.y_pos : 60;
+    const { width, height } = getNodeDimensions(nodeType || step.node_type);
+    return { x: x + width / 2, y: y + height / 2 };
+  }, [getNodeDimensions]);
+
   // Helper to select best handles between two steps
-  const getBestHandles = useCallback((srcStep, tgtStep) => {
+  const getBestHandles = useCallback((srcStep, tgtStep, srcType, tgtType) => {
     if (!srcStep || !tgtStep) return { sourceHandle: "bottom", targetHandle: "top" };
-    const srcCent = getStepCenter(srcStep);
-    const tgtCent = getStepCenter(tgtStep);
+    const srcCent = getStepCenter(srcStep, srcType);
+    const tgtCent = getStepCenter(tgtStep, tgtType);
     
     const dx = tgtCent.x - srcCent.x;
     const dy = tgtCent.y - srcCent.y;
 
-    // If target is above source (loop back)
+    // Target is above source -> Loop back on right side
     if (dy < -20) {
-      return { sourceHandle: "left", targetHandle: "left-target" };
+      return { sourceHandle: "right", targetHandle: "right-target" };
     }
 
-    // If target is significantly to the left
+    // Significantly to the left
     if (dx < -40) {
       return { sourceHandle: "left", targetHandle: "right-target" };
     }
 
-    // If target is significantly to the right
+    // Significantly to the right
     if (dx > 40) {
       return { sourceHandle: "right", targetHandle: "left-target" };
     }
 
-    // Vertically aligned
+    // Vertically aligned -> Top to bottom
     return { sourceHandle: "bottom", targetHandle: "top" };
   }, [getStepCenter]);
 
@@ -468,55 +633,67 @@ const FlowCanvas = ({ steps, onPositionsChange, onAddStep, onUpdateStep, onDelet
   const buildGraph = useCallback((currentEdgeLabels) => {
     const nodes = [];
     const edges = [];
-    const sourceOutputCount = {};
+    const totalSteps = steps.length;
 
-    // 1. Calculate edge connections
-    steps.forEach((step, idx) => {
-      const stepId = `step-${step.step_number}`;
-      if (!sourceOutputCount[stepId]) sourceOutputCount[stepId] = 0;
-
-      // Regular next step connection
-      const nextStepNum = step.transition?.next_step;
-      if (nextStepNum) {
-        sourceOutputCount[stepId]++;
+    // 1. Process steps and auto-deduce node types if unassigned
+    const processedSteps = steps.map((step, idx) => {
+      let nodeType = step.node_type;
+      const stepName = (step.name || "").toLowerCase();
+      if (!nodeType || nodeType === "task") {
+        if (idx === 0 || /bắt đầu|tiếp nhận/i.test(stepName)) {
+          nodeType = "terminal";
+        } else if (/phê duyệt|quyết định|kiểm tra|thẩm định|đối chiếu/i.test(stepName) || (step.fail_path && step.fail_path.length > 0)) {
+          nodeType = "decision";
+        } else if (idx === totalSteps - 1 && /kết thúc|lưu trữ|hoàn tất/i.test(stepName)) {
+          nodeType = "terminal";
+        } else {
+          nodeType = "task";
+        }
       }
-
-      // Decision branch connections
-      if (step.node_type === "decision" && step.has_branch === true) {
-        const fp = step.fail_path || [];
-        sourceOutputCount[stepId] += fp.length;
-      }
+      return { ...step, node_type: nodeType };
     });
 
     // 2. Build Nodes
-    steps.forEach((step, idx) => {
+    processedSteps.forEach((step, idx) => {
       const stepId = `step-${step.step_number}`;
       const isDecision = step.node_type === "decision";
-      const isTerminal = step.node_type === "terminal";
-      let nodeType = step.node_type || "task";
-      
-      const xPos = step.x_pos !== undefined ? step.x_pos : 200;
-      const yPos = step.y_pos !== undefined ? step.y_pos : 60 + idx * 110;
+      const { width } = getNodeDimensions(step.node_type);
+
+      // Default layout: Align down the center at X = 320
+      const xPos = step.x_pos !== undefined ? step.x_pos : (360 - width / 2);
+      const yPos = step.y_pos !== undefined ? step.y_pos : (50 + idx * 130);
 
       nodes.push({
         id: stepId,
-        type: nodeType,
+        type: step.node_type || "task",
         position: { x: xPos, y: yPos },
+        selected: selectedStepNumber === step.step_number,
         data: {
           label: step.name || `Bước ${step.step_number}`,
           stepNumber: step.step_number,
-          _hasOutput: (sourceOutputCount[stepId] || 0) > 0,
+          role: step.assignee_role || "",
+          _hasOutput: true,
         },
         draggable: true,
       });
 
       // 3. Build Edges (transitions)
-      const next = step.transition?.next_step;
+      // Check explicit transition next_step
+      let next = step.transition?.next_step;
+      // If not defined, fallback to sequential next step
+      if (next === undefined || next === null) {
+        if (idx < totalSteps - 1) {
+          next = processedSteps[idx + 1].step_number;
+        }
+      }
+
       if (next) {
-        const nextStep = steps.find(s => s.step_number === next);
-        const { sourceHandle, targetHandle } = getBestHandles(step, nextStep);
+        const nextStep = processedSteps.find(s => s.step_number === next);
+        const { sourceHandle, targetHandle } = getBestHandles(step, nextStep, step.node_type, nextStep?.node_type);
         const edgeId = `e-${step.step_number}-${next}`;
-        const savedLabel = currentEdgeLabels[edgeId] || (isDecision ? "Đúng" : "");
+        const isApproval = /phê duyệt|quyết định/i.test(step.name || "");
+        const defaultLabel = isDecision ? (isApproval ? "Đồng ý" : "Đạt") : "";
+        const savedLabel = currentEdgeLabels[edgeId] !== undefined ? currentEdgeLabels[edgeId] : defaultLabel;
         
         edges.push({
           id: edgeId,
@@ -527,7 +704,7 @@ const FlowCanvas = ({ steps, onPositionsChange, onAddStep, onUpdateStep, onDelet
           type: "minimal",
           data: {
             fromDecision: isDecision,
-            onLabelChange: null, // Set later
+            onLabelChange: null,
           },
           label: savedLabel,
           markerEnd: { type: MarkerType.ArrowClosed, color: "#000000" },
@@ -535,21 +712,25 @@ const FlowCanvas = ({ steps, onPositionsChange, onAddStep, onUpdateStep, onDelet
       }
 
       // 4. Build Decision Fail branch Edges
-      if (isDecision && step.has_branch === true) {
-        const fp = step.fail_path || [];
-        fp.forEach((pn, pi) => {
+      if (isDecision) {
+        const fp = (step.fail_path && step.fail_path.length > 0) ? step.fail_path : [
+          { return_to_step: Math.max(1, step.step_number - 1), edge_label: /phê duyệt|quyết định/i.test(step.name || "") ? "Không đồng ý" : "K.Đạt" }
+        ];
+
+        fp.forEach((pn) => {
           if (pn.return_to_step) {
-            const nextStep = steps.find(s => s.step_number === pn.return_to_step);
-            const { sourceHandle, targetHandle } = getBestHandles(step, nextStep);
+            const targetStep = processedSteps.find(s => s.step_number === pn.return_to_step);
+            const { sourceHandle, targetHandle } = getBestHandles(step, targetStep, step.node_type, targetStep?.node_type);
             const edgeId = `e-fail-${step.step_number}-${pn.return_to_step}`;
-            const savedLabel = currentEdgeLabels[edgeId] || pn.edge_label || "Sai";
+            const defaultFailLabel = pn.edge_label || (/phê duyệt|quyết định/i.test(step.name || "") ? "Không đồng ý" : "K.Đạt");
+            const savedLabel = currentEdgeLabels[edgeId] !== undefined ? currentEdgeLabels[edgeId] : defaultFailLabel;
             
             edges.push({
               id: edgeId,
               source: stepId,
-              sourceHandle: sourceHandle,
+              sourceHandle: sourceHandle || "right",
               target: `step-${pn.return_to_step}`,
-              targetHandle: targetHandle,
+              targetHandle: targetHandle || "right-target",
               type: "minimal",
               data: {
                 fromDecision: true,
@@ -564,7 +745,7 @@ const FlowCanvas = ({ steps, onPositionsChange, onAddStep, onUpdateStep, onDelet
     });
 
     return { nodes, edges };
-  }, [steps, getBestHandles]);
+  }, [steps, selectedStepNumber, getNodeDimensions, getBestHandles]);
 
   const { nodes: iN, edges: iE } = useMemo(() => buildGraph(edgeLabelMapRef.current), [buildGraph]);
   const [nodes, setNodes, onNodesChange] = useNodesState(iN);
@@ -574,7 +755,6 @@ const FlowCanvas = ({ steps, onPositionsChange, onAddStep, onUpdateStep, onDelet
   const handleEdgeLabelChange = useCallback((edgeId, newLabel) => {
     edgeLabelMapRef.current[edgeId] = newLabel;
     
-    // Also sync label back to fail_path list if it's a decision fail edge
     const match = edgeId.match(/^e-fail-(\d+)-(\d+)$/);
     if (match && onUpdateStep) {
       const sourceStepNum = parseInt(match[1]);
@@ -600,8 +780,8 @@ const FlowCanvas = ({ steps, onPositionsChange, onAddStep, onUpdateStep, onDelet
     })));
   }, [handleEdgeLabelChange, setEdges]);
 
-  // Sync state
-  const stepsKey = steps.map(s => `${s.step_number}|${s.node_type}|${s.name}|${s.x_pos}|${s.y_pos}|${JSON.stringify(s.transition || {})}|${JSON.stringify(s.fail_path || [])}`).join(";");
+  // Sync state when steps change
+  const stepsKey = steps.map(s => `${s.step_number}|${s.node_type}|${s.name}|${s.assignee_role}|${s.x_pos}|${s.y_pos}|${JSON.stringify(s.transition || {})}|${JSON.stringify(s.fail_path || [])}`).join(";");
   useEffect(() => {
     const { nodes: n, edges: e } = buildGraph(edgeLabelMapRef.current);
     const edgesWithHandler = e.map(edge => ({
@@ -610,23 +790,13 @@ const FlowCanvas = ({ steps, onPositionsChange, onAddStep, onUpdateStep, onDelet
     }));
     setNodes(n);
     setEdges(edgesWithHandler);
-  }, [stepsKey]);
+  }, [stepsKey, selectedStepNumber]);
 
-  // ─── Connection Validation (Rules) ──────────────────────────────────────────
+  // Connection validation
   const isValidConnection = useCallback((connection) => {
     if (connection.source === connection.target) return false;
-    
-    const sourceNode = nodes.find(n => n.id === connection.source);
-    if (!sourceNode) return false;
-
-    // Rectangle (Task) and Oval (Terminal) -> Exactly 1 output allowed
-    if (sourceNode.type === "task" || sourceNode.type === "terminal") {
-      const existing = edges.filter(e => e.source === connection.source);
-      if (existing.length >= 1) return false;
-    }
-
     return true;
-  }, [nodes, edges]);
+  }, []);
 
   // Sync position drag
   const onNodeDragStop = useCallback((_, node) => {
@@ -646,7 +816,9 @@ const FlowCanvas = ({ steps, onPositionsChange, onAddStep, onUpdateStep, onDelet
     }
   }, [setSelectedStepNumber, onNodeSelect]);
 
-  const onPaneClick = useCallback(() => setSelectedStepNumber(null), [setSelectedStepNumber]);
+  const onPaneClick = useCallback(() => {
+    setSelectedStepNumber(null);
+  }, [setSelectedStepNumber]);
 
   // Connect handler
   const onConnect = useCallback((conn) => {
@@ -657,25 +829,18 @@ const FlowCanvas = ({ steps, onPositionsChange, onAddStep, onUpdateStep, onDelet
 
     if (!sourceStep) return;
 
-    // Save connection into state
     if (sourceStep.node_type === "decision") {
-      // If it's a decision node and we connected to a target:
-      // If it's the bottom handle, set the Yes path (transition.next_step).
-      // Otherwise, set a No/Fail path branch.
       if (conn.sourceHandle === "bottom") {
         onUpdateStep(sourceStepIdx, "transition", { ...(sourceStep.transition || {}), next_step: targetStepNum });
       } else {
         const fp = sourceStep.fail_path || [];
         const isRight = conn.sourceHandle === "right";
-        const label = isRight ? "Sai" : "Không đạt";
-        
-        // Append or update fail path branch
-        const updatedFp = [...fp, { name: "Xử lý lỗi", assignee_role: sourceStep.assignee_role || "QC", edge_label: label, return_to_step: targetStepNum }];
+        const label = isRight ? "K.Đạt" : "Không đạt";
+        const updatedFp = [...fp, { name: "Xử lý lỗi", assignee_role: sourceStep.assignee_role || "", edge_label: label, return_to_step: targetStepNum }];
         onUpdateStep(sourceStepIdx, "fail_path", updatedFp);
         onUpdateStep(sourceStepIdx, "has_branch", true);
       }
     } else {
-      // Normal node: update transition next step
       onUpdateStep(sourceStepIdx, "transition", { ...(sourceStep.transition || {}), next_step: targetStepNum });
     }
   }, [steps, onUpdateStep]);
@@ -688,108 +853,21 @@ const FlowCanvas = ({ steps, onPositionsChange, onAddStep, onUpdateStep, onDelet
     onAddStep(nt, screenToFlowPosition({ x: e.clientX, y: e.clientY }));
   }, [screenToFlowPosition, onAddStep]);
 
+  // Auto Layout implementation
   const handleAutoLayout = useCallback(() => {
-    // 1. Get unique roles in order of appearance
-    const uniqueRoles = [];
-    (steps || []).forEach(s => {
-      const role = s.assignee_role || "";
-      if (role && !uniqueRoles.includes(role)) {
-        uniqueRoles.push(role);
-      }
-    });
-    // If no roles are defined, default to a single empty string role
-    if (uniqueRoles.length === 0) {
-      uniqueRoles.push("");
-    }
-
-    // 2. Identify sidesteps (fail paths)
-    const getSidesteps = () => {
-      const sidesteps = new Set();
-      (steps || []).forEach(s => {
-        if (s.node_type === 'decision') {
-          const failPath = s.fail_path || [];
-          const noStepNum = failPath[0]?.return_to_step;
-          if (noStepNum) {
-            sidesteps.add(noStepNum);
-            let current = noStepNum;
-            while (current) {
-              const currStep = steps.find(st => String(st.step_number) === String(current));
-              const next = currStep?.transition?.next_step || currStep?.next_step;
-              if (next && String(next) !== String(current) && !steps.some(st => String(st.step_number) === String(next) && st.node_type === 'decision')) {
-                sidesteps.add(next);
-                current = next;
-              } else break;
-            }
-          }
-        }
-      });
-      return sidesteps;
-    };
-
-    const sidesteps = getSidesteps();
-    const mainSteps = steps.filter(s => !sidesteps.has(s.step_number));
     const positions = {};
+    const centerCol = 360;
 
-    // 3. Lay out main steps vertically
-    mainSteps.forEach((step, idx) => {
-      const role = step.assignee_role || "";
-      const roleIdx = uniqueRoles.indexOf(role);
-      const colCenter = 300 + (roleIdx >= 0 ? roleIdx : 0) * 280;
-
-      const { width } = getNodeDimensions(step.node_type);
+    steps.forEach((step, idx) => {
+      const isDecision = step.node_type === 'decision' || /phê duyệt|quyết định|kiểm tra|đối chiếu/i.test(step.name || "");
+      const { width } = getNodeDimensions(isDecision ? "decision" : (step.node_type || "task"));
+      
       positions[step.step_number] = {
-        x: colCenter - width / 2,
-        y: 60 + idx * 140
+        x: centerCol - width / 2,
+        y: 50 + idx * 130
       };
     });
 
-    // 4. Lay out sidesteps to the left column relative to their parent decision step
-    mainSteps.forEach((step, idx) => {
-      if (step.node_type === 'decision') {
-        const failPath = step.fail_path || [];
-        const noStepNum = failPath[0]?.return_to_step;
-        if (noStepNum && sidesteps.has(noStepNum)) {
-          const parentY = positions[step.step_number]?.y || (60 + idx * 140);
-          const parentRole = step.assignee_role || "";
-          const parentRoleIdx = uniqueRoles.indexOf(parentRole);
-          const colCenter = 300 + (parentRoleIdx >= 0 ? parentRoleIdx : 0) * 280;
-          const sideCenter = colCenter - 180; // place to the left of the parent column
-          
-          const firstStep = steps.find(st => st.step_number === noStepNum);
-          let startY = parentY;
-          if (firstStep) {
-            const { height: childHeight } = getNodeDimensions(firstStep.node_type);
-            startY = parentY + 43 - childHeight / 2;
-          }
-
-          let current = noStepNum;
-          let chainIdx = 0;
-          const visited = new Set();
-          
-          while (current && !visited.has(current)) {
-            visited.add(current);
-            const currStep = steps.find(st => st.step_number === current);
-            if (currStep) {
-              const { width } = getNodeDimensions(currStep.node_type);
-              positions[current] = {
-                x: sideCenter - width / 2,
-                y: startY + chainIdx * 130
-              };
-            }
-            
-            const next = currStep?.transition?.next_step || currStep?.next_step;
-            if (next && sidesteps.has(next)) {
-              current = next;
-              chainIdx++;
-            } else {
-              break;
-            }
-          }
-        }
-      }
-    });
-
-    // 5. Update ReactFlow nodes state and parent coordinates state
     const updatedNodes = nodes.map(node => {
       if (node.id.startsWith("step-")) {
         const stepNum = parseInt(node.id.replace("step-", ""));
@@ -806,7 +884,13 @@ const FlowCanvas = ({ steps, onPositionsChange, onAddStep, onUpdateStep, onDelet
 
     setNodes(updatedNodes);
     setTimeout(() => fitView({ padding: 0.2, duration: 400 }), 100);
-  }, [nodes, steps, onPositionsChange, fitView, setNodes]);
+  }, [nodes, steps, getNodeDimensions, onPositionsChange, fitView, setNodes]);
+
+  useImperativeHandle(canvasRef, () => ({
+    triggerAutoLayout: () => {
+      handleAutoLayout();
+    }
+  }));
 
   return (
     <div style={{ flex: 1, height: "100%", position: "relative", backgroundColor: "#ffffff" }}>
@@ -831,7 +915,7 @@ const FlowCanvas = ({ steps, onPositionsChange, onAddStep, onUpdateStep, onDelet
         maxZoom={2.0}
         proOptions={{ hideAttribution: true }}
       >
-        <Background color="#f1f5f9" gap={16} size={1} />
+        <Background color="#cbd5e1" gap={20} size={1} />
         <Controls showInteractive={false} />
       </ReactFlow>
     </div>
@@ -840,10 +924,17 @@ const FlowCanvas = ({ steps, onPositionsChange, onAddStep, onUpdateStep, onDelet
 
 // ─── Flowchart Canvas Inner Wrapper ──────────────────────────────────────────────
 const FlowchartCanvasInner = ({ steps, onPositionsChange, onAddStep, onUpdateStep, onDeleteStep, onNodeSelect, selectedStepIdx, canvasRef }) => {
-  const selectedStepNumber = selectedStepIdx !== -1 && steps[selectedStepIdx] ? steps[selectedStepIdx].step_number : null;
+  const [internalSelectedStepNumber, setInternalSelectedStepNumber] = useState(null);
+
+  const selectedStepNumber = internalSelectedStepNumber !== null
+    ? internalSelectedStepNumber
+    : (selectedStepIdx !== -1 && steps[selectedStepIdx] ? steps[selectedStepIdx].step_number : null);
+
+  const selectedStep = steps.find(s => s.step_number === selectedStepNumber);
+  const selectedStepIndex = steps.findIndex(s => s.step_number === selectedStepNumber);
 
   return (
-    <div style={{ display: "flex", width: "100%", height: "100%", backgroundColor: "#ffffff" }}>
+    <div style={{ display: "flex", width: "100%", height: "100%", backgroundColor: "#ffffff", position: "relative", overflow: "hidden" }}>
       <ShapePalette />
       <FlowCanvas
         steps={steps}
@@ -851,18 +942,39 @@ const FlowchartCanvasInner = ({ steps, onPositionsChange, onAddStep, onUpdateSte
         onAddStep={onAddStep}
         onUpdateStep={onUpdateStep}
         onDeleteStep={onDeleteStep}
-        onNodeSelect={onNodeSelect}
+        onNodeSelect={(sn) => {
+          setInternalSelectedStepNumber(sn);
+          if (onNodeSelect) onNodeSelect(sn);
+        }}
         selectedStepNumber={selectedStepNumber}
-        setSelectedStepNumber={() => {}}
+        setSelectedStepNumber={setInternalSelectedStepNumber}
         canvasRef={canvasRef}
       />
+      {selectedStep && (
+        <PropertiesPanel
+          step={selectedStep}
+          stepIndex={selectedStepIndex}
+          steps={steps}
+          onUpdate={onUpdateStep}
+          onDelete={onDeleteStep}
+          onClose={() => setInternalSelectedStepNumber(null)}
+        />
+      )}
     </div>
   );
 };
 
 // ─── Main Exportable FlowchartCanvas ─────────────────────────────────────────────
 const FlowchartCanvas = forwardRef((props, ref) => (
-  <div style={{ width: "100%", height: "640px", border: "1px solid #000000", boxSizing: "border-box" }}>
+  <div style={{
+    width: "100%",
+    height: props.height || "640px",
+    border: "1px solid #cbd5e1",
+    borderRadius: "6px",
+    overflow: "hidden",
+    boxSizing: "border-box",
+    ...props.style
+  }}>
     <ReactFlowProvider>
       <FlowchartCanvasInner {...props} canvasRef={ref} />
     </ReactFlowProvider>

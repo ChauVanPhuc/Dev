@@ -81,6 +81,14 @@ def parse_iso_docx(file_path: str) -> dict:
     code_match = re.search(r"(?:Mã hiệu|Mã quy trình|Mã số)\s*:\s*([^\n]+)", full_text, re.IGNORECASE)
     if code_match:
         result["code"] = code_match.group(1).strip()
+    else:
+        # Thử tìm mã hiệu từ tên tệp (ví dụ: G7.BG.QT02...)
+        base_fn = os.path.basename(file_path)
+        m_code_fn = re.search(r"([A-Z0-9]+(?:\.[A-Z0-9]+)*-[A-Z0-9]+)", base_fn)
+        if not m_code_fn:
+            m_code_fn = re.search(r"(G7\.[A-Z0-9]+(?:\.[A-Z0-9]+)*)", base_fn, re.IGNORECASE)
+        if m_code_fn:
+            result["code"] = m_code_fn.group(1).strip()
     
     # Tìm lần ban hành
     ver_match = re.search(r"(?:Lần ban hành|Phiên bản)\s*:\s*([^\n]+)", full_text, re.IGNORECASE)
@@ -241,7 +249,7 @@ def parse_iso_docx(file_path: str) -> dict:
                     "step_number": step_num,
                     "name": step_name,
                     "instructions_list": [],
-                    "assignee_role": "Kho", # Giá trị mặc định
+                    "assignee_role": "", # Không gán cứng
                     "template_files": "",
                     "node_type": "task"
                 }
@@ -261,32 +269,48 @@ def parse_iso_docx(file_path: str) -> dict:
             "✓" in line
         )
         
-        if not is_step and not is_exclude and len(line) <= 80:
+        is_numbered_heading = bool(re.match(r'^\s*(?:\d+|[IVXLCDM]+)\s*[\.\-\:\s]\s*([a-zA-ZÀ-ỹ\s]{3,60})', line)) and len(line) <= 80
+        is_subbullet_or_sig = (
+            line.startswith(('-', '*', '•')) or 
+            (bool(re.match(r'^\s*\d+[\)\.]', line)) and not is_numbered_heading) or
+            bool(re.match(r'^\s*[a-z][\)\.]', line)) or
+            any(sig in line_lower for sig in ['tổng giám đốc', 'phó giám đốc', 'ngày ban hành', 'đồng nai, ngày'])
+        )
+
+        if not is_step and not is_exclude and not is_subbullet_or_sig and len(line) <= 80:
             # Kiểm tra xem style có phải là Heading
             style_name = p.style.name.lower() if p.style and p.style.name else ""
-            if "heading" in style_name:
+            if "heading" in style_name or is_numbered_heading:
                 is_heading = True
             elif re.match(r'^\s*(?:\d+|[IVXLCDM]+)\s*[\.\-\:\s]\s*[a-zA-ZÀ-ỹ]', line):
                 is_heading = True
             else:
                 keywords = ["mục đích", "phạm vi", "tài liệu viện dẫn", "tài liệu tham khảo", 
-                            "định nghĩa", "từ viết tắt", "nội dung", "biểu mẫu", "phụ lục"]
+                            "định nghĩa", "từ viết tắt", "nội dung", "biểu mẫu", "phụ lục",
+                            "nguyên tắc", "vai trò và trách nhiệm", "cam kết", "biện pháp"]
                 for kw in keywords:
-                    if kw in line_lower and len(line) < 40:
+                    if kw in line_lower and len(line) < 50:
                         is_heading = True
                         break
-                if not is_heading and p.runs and all(run.bold for run in p.runs if run.text.strip()) and len(line) < 40:
+                if not is_heading and p.runs and all(run.bold for run in p.runs if run.text.strip()) and len(line) < 40 and not any(line.strip().endswith(x) for x in ['?', '!', ',']):
                     is_heading = True
                 
         if is_heading:
             if current_section is not None:
-                result["sections"][current_section] = "<p>" + "</p><p>".join(section_content) + "</p>" if section_content else ""
+                filtered_lines = [
+                    c for c in section_content
+                    if not (
+                        re.search(r'ngày\s+\d+\s+tháng\s+\d+\s+năm', c.lower()) or
+                        re.match(r'^(?:p\.?\s*)?(?:tổng\s+)?giám\s+đốc\b', c.lower()) or
+                        c.lower().strip() in ['nguyễn hòa', 'đặng văn nam']
+                    )
+                ]
+                content_p = "<p>" + "</p><p>".join(filtered_lines) + "</p>" if filtered_lines else ""
+                if content_p.replace('<p>', '').replace('</p>', '').strip():
+                    result["sections"][current_section] = content_p
             
-            # Giữ nguyên văn tên mục – bỏ số thứ tự đầu dòng và dấu chấm cuối
-            cleaned_title = re.sub(r'^\s*(?:\d+|[IVXLCDM]+|[A-Z])\s*[\.\-\:\s]\s*', '', line).strip()
-            cleaned_title = re.sub(r'\.$', '', cleaned_title).strip()
-            
-            current_section = cleaned_title if cleaned_title else line.strip()
+            # Giữ nguyên văn tên mục của tài liệu
+            current_section = line.strip()
             section_content = []
             
             if current_step:
@@ -318,7 +342,17 @@ def parse_iso_docx(file_path: str) -> dict:
 
     # Đóng gói mục cuối cùng và bước cuối cùng
     if current_section is not None:
-        result["sections"][current_section] = "<p>" + "</p><p>".join(section_content) + "</p>" if section_content else ""
+        filtered_lines = [
+            c for c in section_content
+            if not (
+                re.search(r'ngày\s+\d+\s+tháng\s+\d+\s+năm', c.lower()) or
+                re.match(r'^(?:p\.?\s*)?(?:tổng\s+)?giám\s+đốc\b', c.lower()) or
+                c.lower().strip() in ['nguyễn hòa', 'đặng văn nam']
+            )
+        ]
+        final_p = "<p>" + "</p><p>".join(filtered_lines) + "</p>" if filtered_lines else ""
+        if final_p.replace('<p>', '').replace('</p>', '').strip():
+            result["sections"][current_section] = final_p
     if current_step:
         extracted_steps.append(current_step)
 
@@ -333,62 +367,78 @@ def parse_iso_docx(file_path: str) -> dict:
                 table_role = roles_list[step_num - 1]
                 table_template = templates_list[step_num - 1]
                 
-            role_lower = table_role.lower()
-            step_name_lower = step["name"].lower()
-            
-            # Xác định phòng ban / vai trò chịu trách nhiệm
-            role_mapped = "Kho"
-            if "qc" in role_lower or "qlcl" in role_lower:
-                role_mapped = "QC"
-            elif "kho" in role_lower or "thủ kho" in role_lower:
-                role_mapped = "Kho"
-            elif "sản xuất" in role_lower or "chuyền" in role_lower or "tổ" in role_lower:
-                role_mapped = "Sản xuất"
-            elif "thu mua" in role_lower or "mua hàng" in role_lower:
-                role_mapped = "Thu mua"
-            elif "bán hàng" in role_lower or "kd" in role_lower or "kinh doanh" in role_lower:
-                role_mapped = "Bán hàng"
+            # Xác định phòng ban / vai trò chịu trách nhiệm nguyên bản từ tài liệu
+            if table_role and table_role.strip():
+                step["assignee_role"] = table_role.strip()
             else:
-                # Fallback dựa theo từ khóa trong tên bước
-                if "qc" in step_name_lower or "kiểm tra chất lượng" in step_name_lower:
-                    role_mapped = "QC"
-                elif "kho" in step_name_lower or "nhập" in step_name_lower:
-                    role_mapped = "Kho"
-                elif "sản xuất" in step_name_lower or "chuyền" in step_name_lower:
-                    role_mapped = "Sản xuất"
-                elif "thu mua" in step_name_lower or "mua hàng" in step_name_lower:
-                    role_mapped = "Thu mua"
+                inst_raw = "\n".join(step.get("instructions_list", []))
+                m_r = re.search(r"Trách nhiệm thực hiện\s*:\s*([^\n\r<]+)", inst_raw, re.IGNORECASE)
+                if m_r:
+                    step["assignee_role"] = m_r.group(1).strip()
+                else:
+                    step["assignee_role"] = "Bộ phận phụ trách"
                     
-            step["assignee_role"] = role_mapped
-            step["template_files"] = table_template.strip()
+            # Xác định biểu mẫu / hồ sơ đi kèm
+            if table_template and table_template.strip():
+                step["template_files"] = table_template.strip()
+            else:
+                inst_raw = "\n".join(step.get("instructions_list", []))
+                m_t = re.search(r"Hồ sơ\s*/\s*Biểu mẫu[^:]*:\s*([^\n\r<]+)", inst_raw, re.IGNORECASE)
+                if m_t:
+                    step["template_files"] = m_t.group(1).strip()
+                else:
+                    step["template_files"] = ""
             
             # Xác định loại Node đồ họa
             name_lower = step["name"].lower()
             step["has_branch"] = False
             if "bắt đầu" in name_lower or "tiếp nhận" in name_lower:
                 step["node_type"] = "start"
-            elif ("kiểm tra" in name_lower and ("chất lượng" in name_lower or "qc" in name_lower or "đạt" in name_lower)) or "quyết định" in name_lower:
+            elif "phê duyệt" in name_lower or "quyết định" in name_lower or ("kiểm tra" in name_lower and ("chất lượng" in name_lower or "qc" in name_lower or "đạt" in name_lower)):
                 step["node_type"] = "decision"
-                # Kiểm tra xem hướng dẫn có chứa từ khoá xử lý hàng lỗi/trả hàng không
-                inst_text = " ".join(step.get("instructions_list", [])).lower()
-                if any(kw in inst_text for kw in ["không đạt", "lỗi", "trả hàng", "không phù hợp"]):
-                    step["has_branch"] = True
+                step["has_branch"] = True
             elif "kết thúc" in name_lower or "hoàn thành" in name_lower:
                 step["node_type"] = "end"
             else:
                 step["node_type"] = "task"
                 
-            # Tạo chuỗi HTML hướng dẫn
+            # Tạo chuỗi HTML hướng dẫn nguyên văn từ file
             step["instructions"] = "<p>" + "</p><p>".join(step["instructions_list"]) + "</p>"
             del step["instructions_list"]
             
         result["steps"] = extracted_steps
     else:
-        # Fallback lấy bước từ bảng nếu Paragraphs không chứa định dạng "Bước X"
         result["steps"] = table_steps
 
-    # 4. Tạo sơ đồ Flowchart (diagram_data) mặc định nếu có danh sách các bước
-    if result["steps"]:
+    # 4. Xác định tài liệu có Lưu đồ hay không (Tuyệt đối không gán cứng)
+    doc_name_lower = (result.get("name") or "").lower()
+    doc_code_upper = (result.get("code") or "").upper()
+    is_policy_doc = (
+        "CS" in doc_code_upper or 
+        "chính sách" in doc_name_lower or 
+        "quy chế" in doc_name_lower
+    )
+
+    # Lọc danh sách các bước hợp lệ (phải có tên rõ ràng và dài hơn 1 ký tự)
+    raw_steps = result.get("steps") or table_steps
+    valid_extracted_steps = [
+        s for s in raw_steps
+        if s and s.get("name") and len(s.get("name", "").strip()) > 1 and s.get("name", "").strip() != ":"
+    ]
+
+    has_flowchart = False
+    if not is_policy_doc and (len(table_steps) >= 2 or len(valid_extracted_steps) >= 2):
+        has_flowchart = True
+        result["steps"] = valid_extracted_steps
+    else:
+        has_flowchart = False
+        result["steps"] = []
+        result["diagram_data"] = ""
+
+    result["has_flowchart"] = has_flowchart
+
+    # 5. Tạo sơ đồ Flowchart (diagram_data) nếu tài liệu thực sự có Lưu đồ
+    if has_flowchart and result["steps"]:
         nodes = []
         links = []
         
@@ -408,39 +458,78 @@ def parse_iso_docx(file_path: str) -> dict:
             
             # Nối link từ node trước sang node sau
             if i > 0:
+                prev_step = result["steps"][i-1]
+                is_prev_decision = prev_step["node_type"] == "decision"
+                is_approval = "phê duyệt" in prev_step["name"].lower()
+                
+                ok_label = "Đồng ý" if is_approval else ("Đạt" if is_prev_decision else "")
                 links.append({
-                    "from": f"node_{result['steps'][i-1]['step_number']}",
+                    "from": f"node_{prev_step['step_number']}",
                     "to": node_id,
-                    "label": "Đạt" if result["steps"][i-1]["node_type"] == "decision" else ""
+                    "label": ok_label
                 })
-                # Nếu là khối kiểm tra/decision, thêm một nhánh rẽ phụ (lỗi/trả hàng) sang bên phải
-                if result["steps"][i-1]["node_type"] == "decision":
-                    # Khối rẽ nhánh báo lỗi
-                    err_node_id = f"node_{result['steps'][i-1]['step_number']}_err"
-                    nodes.append({
-                        "id": err_node_id,
-                        "label": "Xử lý lỗi / Trả hàng",
-                        "type": "task",
-                        "role": result["steps"][i-1]["assignee_role"],
-                        "x": 480,
-                        "y": 80 + (i-1) * 120
-                    })
-                    links.append({
-                        "from": f"node_{result['steps'][i-1]['step_number']}",
-                        "to": err_node_id,
-                        "label": "Không đạt"
-                    })
+                
+                # Nếu là khối kiểm tra/decision, thêm một nhánh rẽ phụ sang bên phải hoặc loop lại
+                if is_prev_decision:
+                    if is_approval and i >= 2:
+                        # Nhánh Không đồng ý quay lại bước trước đó (Bước 2)
+                        loop_to_node = f"node_{result['steps'][i-2]['step_number']}"
+                        links.append({
+                            "from": f"node_{prev_step['step_number']}",
+                            "to": loop_to_node,
+                            "label": "Không đồng ý"
+                        })
+                    else:
+                        err_node_id = f"node_{prev_step['step_number']}_err"
+                        nodes.append({
+                            "id": err_node_id,
+                            "label": "Xử lý lỗi / Trả hàng",
+                            "type": "task",
+                            "role": prev_step["assignee_role"],
+                            "x": 480,
+                            "y": 80 + (i-1) * 120
+                        })
+                        links.append({
+                            "from": f"node_{prev_step['step_number']}",
+                            "to": err_node_id,
+                            "label": "Không đạt"
+                        })
         
         result["diagram_data"] = json.dumps({"nodes": nodes, "links": links})
 
-    # Xoá nội dung bên trong của các mục chính, chỉ giữ lại khung sườn (mục chính)
-    # if "sections" in result:
-    #     for key in list(result["sections"].keys()):
-    #         result["sections"][key] = ""
+        # Trích xuất ảnh sơ đồ lưu đồ đính kèm nếu có
+        try:
+            pub_dir = os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "FrontEnd", "Web", "public")), "flowcharts")
+            os.makedirs(pub_dir, exist_ok=True)
+            for r_id, rel in doc.part.rels.items():
+                if "image" in rel.target_ref:
+                    blob = rel.target_part.blob
+                    if len(blob) > 30000:
+                        safe_code = re.sub(r'[^\w\-]', '_', result["code"] or "qt02")
+                        img_name = f"flowchart_{safe_code}.png"
+                        with open(os.path.join(pub_dir, img_name), "wb") as f_out:
+                            f_out.write(blob)
+                        result["flowchart_image_url"] = f"/flowcharts/{img_name}"
+                        break
+        except Exception:
+            pass
+    
+    # 6. Chỉ giữ lại các mục có nội dung thực tế từ file
+    if "sections" in result:
+        result["sections"] = {
+            k: v for k, v in result["sections"].items()
+            if v and v.replace('<p>', '').replace('</p>', '').strip()
+        }
 
-    # Xoá hướng dẫn chi tiết của các bước lưu đồ
-    # if "steps" in result:
-    #     for step in result["steps"]:
-    #         step["instructions"] = ""
+    # 7. Trích xuất thông tin Trang bìa chuẩn (Phần 1)
+    result["cover_info"] = {
+        "company_name": "CÔNG TY CỔ PHẦN VINA G7",
+        "name": result.get("name", ""),
+        "code": result.get("code", ""),
+        "version": result.get("version", "01"),
+        "issue_date": result.get("issue_date", ""),
+        "issuer": result.get("issuer", ""),
+        "approver": result.get("approver", "")
+    }
 
     return result

@@ -348,6 +348,10 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
         { id: 996, parent_id: group.id, title: 'Train Hình ảnh', route_path: '/admin/ai-ocr-train', icon: 'Cpu' }
       ];
     }
+    if (group.title === 'Hồ sơ ISO' || group.title === 'Hồ sơ chuẩn ISO' || group.title === 'Quản lý ISO') {
+      // Dữ liệu 5 mục con hoàn toàn lấy động từ CSDL (system_sidebars)
+      list = [...list].sort((a, b) => (a.sort_order ?? 99) - (b.sort_order ?? 99));
+    }
     // Đảm bảo không có Quản Lý Góp Ý nằm bên trong bất kỳ group nào (vì đã chuyển lên cấp cao nhất)
     list = list.filter(item => item.route_path !== '/admin/feedback' && item.route_path !== '/admin/quick-reports');
     return list;
@@ -355,6 +359,11 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
 
   // Helper check xem group co child nao dang active ko (bao gom ca sub-children)
   const hasActiveChild = (group) => {
+    if ((group.title === 'Hồ sơ ISO' || group.title === 'Hồ sơ chuẩn ISO' || group.title === 'Quản lý ISO') && (
+      location.pathname.startsWith('/admin/iso-')
+    )) {
+      return true;
+    }
     if (group.title === 'Quản lý hệ thống' && (
       location.pathname === '/admin/monitor' || 
       location.pathname === '/admin/monitor/'

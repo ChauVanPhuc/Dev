@@ -15,7 +15,8 @@ class ISODocument(Base):
     version = Column(NVARCHAR(50), default="01")                         # Lần ban hành
     issue_date = Column(NVARCHAR(50))                                    # Ngày ban hành
     issuer = Column(NVARCHAR(100))                                       # Người soạn thảo / ban hành
-    approver = Column(NVARCHAR(100))                                     # Người phê duyệt
+    approver = Column(NVARCHAR(100))                                     # Người phê duyệt (Cấp phòng / Trưởng phòng)
+    approver_bgd = Column(NVARCHAR(150), nullable=True)                  # Người phê duyệt cấp công ty (Ban Giám Đốc)
     file_path = Column(NVARCHAR(500), nullable=True)                     # Đường dẫn file tải lên
     status = Column(NVARCHAR(50), default="Hiệu lực")                    # Hiệu lực, Hết hiệu lực, Dự thảo
     folder = Column(NVARCHAR(100), nullable=True)                        # Thư mục quản lý (ví dụ: "3/2/1")
@@ -24,6 +25,7 @@ class ISODocument(Base):
     symbol = Column(NVARCHAR(100), nullable=True)                        # Ký hiệu tài liệu (VD: G7.CL-QT01)
     notes = Column(NVARCHAR(None), nullable=True)                         # Ghi chú / Lưu ý
     diagram_data = Column(NVARCHAR(None), nullable=True)                 # Lưu trữ JSON của sơ đồ lưu đồ (nodes & links)
+    process_id = Column(Integer, ForeignKey("iso_processes.id"), nullable=True) # Quy trình cha mà mẫu tài liệu này trực thuộc
     created_at = Column(NVARCHAR(50))
     updated_at = Column(NVARCHAR(50))
 
@@ -31,6 +33,7 @@ class ISODocument(Base):
     revision_logs = relationship("ISORevisionLog", back_populates="document", cascade="all, delete-orphan")
     sections = relationship("ISOSection", back_populates="document", cascade="all, delete-orphan")
     steps = relationship("ISOProcessStep", back_populates="document", cascade="all, delete-orphan")
+    process = relationship("ISOProcess", foreign_keys=[process_id], back_populates="documents")
 
 
 class ISORevisionLog(Base):
@@ -95,10 +98,14 @@ class ISOProcess(Base):
     id = Column(Integer, primary_key=True, index=True)
     code = Column(NVARCHAR(100), unique=True, index=True, nullable=False) # Mã quy trình thực tế (ví dụ: TB001)
     name = Column(NVARCHAR(250), nullable=False)                         # Tên quy trình thực tế (ví dụ: QT01)
-    iso_document_id = Column(Integer, ForeignKey("iso_documents.id", ondelete="CASCADE"), nullable=False) # Khuôn mẫu gốc
+    iso_document_id = Column(Integer, ForeignKey("iso_documents.id"), nullable=True) # Khuôn mẫu gốc (nếu có)
+    department_id = Column(Integer, nullable=True)                      # ID Phòng ban chịu trách nhiệm
+    department_name = Column(NVARCHAR(100), nullable=True)              # Tên Phòng ban chịu trách nhiệm
+    file_path = Column(NVARCHAR(500), nullable=True)                    # Đường dẫn file Word của quy trình (.docx)
     owner = Column(NVARCHAR(100))                                       # Người phụ trách / chịu trách nhiệm
     editor = Column(NVARCHAR(100))                                      # Người biên soạn / thực thi
-    approver = Column(NVARCHAR(100))                                    # Người duyệt
+    approver = Column(NVARCHAR(100))                                    # Người duyệt (Cấp phòng / Trưởng phòng)
+    approver_bgd = Column(NVARCHAR(150), nullable=True)                 # Người phê duyệt cấp công ty (Ban Giám Đốc)
     issue_date = Column(NVARCHAR(50))                                   # Ngày ban hành thực tế
     last_checked_date = Column(NVARCHAR(50), nullable=True)             # Ngày kiểm tra đánh giá gần nhất
     last_result = Column(NVARCHAR(100), nullable=True)                  # Kết quả đánh giá gần nhất (Đạt / Không đạt)
@@ -110,15 +117,35 @@ class ISOProcess(Base):
     role = Column(NVARCHAR(100), nullable=True)                          # Vai trò của người phê duyệt
     diagram_data = Column(NVARCHAR(None), nullable=True)                 # JSON sơ đồ lưu đồ tùy chỉnh riêng cho quy trình này
     inspection_guide_id = Column(Integer, ForeignKey("inspection_guides.id", ondelete="SET NULL"), nullable=True, unique=True)
+    new_code = Column(NVARCHAR(100), nullable=True)                      # Mã quy trình mới (ví dụ: G7.QL.QT.01)
+    doc_type_id = Column(Integer, ForeignKey("iso_document_types.id", ondelete="SET NULL"), nullable=True) # ID Loại hồ sơ
+    doc_type_code = Column(NVARCHAR(50), nullable=True)                  # Viết tắt loại hồ sơ (ví dụ: QT, HD...)
     created_at = Column(NVARCHAR(50))
     updated_at = Column(NVARCHAR(50))
 
     # Mối quan hệ
-    iso_document = relationship("ISODocument")
+    iso_document = relationship("ISODocument", foreign_keys=[iso_document_id])
+    doc_type_rel = relationship("ISODocumentType", foreign_keys=[doc_type_id])
+    documents = relationship("ISODocument", foreign_keys="ISODocument.process_id", back_populates="process", cascade="all, delete-orphan")
     sections = relationship("ISOProcessSection", back_populates="process", cascade="all, delete-orphan")
     steps = relationship("ISOProcessStepInstance", back_populates="process", cascade="all, delete-orphan")
     revision_logs = relationship("ISORevisionLog", back_populates="process", cascade="all, delete-orphan")
     inspection_guide = relationship("InspectionGuide", foreign_keys=[inspection_guide_id], uselist=False, lazy="selectin", post_update=True)
+
+
+class ISODocumentType(Base):
+    """
+    Model lưu trữ danh mục Loại hồ sơ / Loại tài liệu ISO (Tên, Viết tắt, Mô tả).
+    Quản lý CRUD từ /admin/system-config.
+    """
+    __tablename__ = "iso_document_types"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(NVARCHAR(200), nullable=False)                         # Tên loại hồ sơ (ví dụ: Quy trình, Hướng dẫn...)
+    code = Column(NVARCHAR(50), nullable=False, unique=True, index=True) # Mã viết tắt (ví dụ: QT, HD, CS, BM...)
+    description = Column(NVARCHAR(None), nullable=True)                  # Diễn giải mô tả
+    created_at = Column(NVARCHAR(50), nullable=True)
+    updated_at = Column(NVARCHAR(50), nullable=True)
 
 
 class ISOProcessSection(Base):

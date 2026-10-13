@@ -287,7 +287,7 @@ def update_quick_report(report_id: int, payload: QuickReportUpdate, db: Session 
 
 @router.post("/generate-ai", response_model=dict)
 def generate_ai_report(req: AIGenerateRequest, db: Session = Depends(get_db)):
-    """
+    r"""
     Tích hợp Local Gemini AI Proxy Server (C:\AI) để tóm tắt và đề xuất giải pháp cho báo cáo nhanh.
     """
     try:

@@ -1,9 +1,56 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Sparkles, Clock, Building2, Layers, AlertCircle, X, Search, BarChart3 } from 'lucide-react';
+import { 
+  ChevronLeft, ChevronRight, Sparkles, Clock, Building2, Layers, AlertCircle, X, Search, BarChart3,
+  ClipboardCheck, CheckCircle2, Play, Award, Camera, FileText, PenTool, Eye, Check
+} from 'lucide-react';
 import Layout from '@mobile/Shared/Views/components/layout/MobileLayout';
 import PageHeader from '@mobile/Shared/Views/components/layout/MobilePageHeader';
-import apiClient from '@shared/services/api';
+import apiClient, { API_URL, getFullImageUrl } from '@shared/services/api';
 import useAuthStore from '@modules/auth/Models/authModel';
+import MobileChecklistExecutionModal from './components/MobileChecklistExecutionModal';
+
+// Helper phân tách danh sách URL ảnh (hỗ trợ dấu phẩy hoặc mảng JSON)
+const parseImageUrls = (raw) => {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === 'string') {
+    if (raw.trim().startsWith('[')) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed.map(s => String(s).trim()).filter(Boolean);
+      } catch (e) {}
+    }
+    return raw.split(',').map(s => s.trim()).filter(Boolean);
+  }
+  return [];
+};
+
+// Helper lấy badge phân loại bằng chứng Checklist
+const getEvidenceTypeBadge = (evType) => {
+  const type = String(evType || 'NONE').toUpperCase();
+  switch (type) {
+    case 'IMAGE':
+    case 'PHOTO':
+      return { label: 'Chụp ảnh', icon: Camera, bg: '#ECFDF5', color: '#047857', border: '#A7F3D0' };
+    case 'DOCUMENT':
+    case 'FILE':
+      return { label: 'Gửi file', icon: FileText, bg: '#EFF6FF', color: '#1D4ED8', border: '#BFDBFE' };
+    case 'SIGNATURE':
+      return { label: 'Chữ ký', icon: PenTool, bg: '#F5F3FF', color: '#6D28D9', border: '#DDD6FE' };
+    default:
+      return null;
+  }
+};
+
+// Helper phân loại tần suất checklist: Ngày, Tuần, Tháng, Phát sinh
+const getChecklistFrequencyCategory = (freq) => {
+  const f = String(freq || '').toLowerCase().trim();
+  if (f.includes('ngày') || f.includes('ca')) return 'day';
+  if (f.includes('tuần')) return 'week';
+  if (f.includes('tháng')) return 'month';
+  if (f.includes('phát sinh') || f.includes('đột xuất')) return 'adhoc';
+  return 'day';
+};
 
 // Danh sách các tùy chọn Nhà máy
 const FACTORIES = [
@@ -690,6 +737,13 @@ const ProductionDashboardView = () => {
   const [showAllDefectsModal, setShowAllDefectsModal] = useState(false);
   const [dateFilter, setDateFilter] = useState('week');
 
+  // State quản lý Thực hiện & Xem bằng chứng Checklist
+  const [selectedChecklist, setSelectedChecklist] = useState(null);
+  const [showExecutionModal, setShowExecutionModal] = useState(false);
+  const [viewingChecklist, setViewingChecklist] = useState(null);
+  const [previewImageModal, setPreviewImageModal] = useState(null);
+  const [checklistTab, setChecklistTab] = useState('all');
+
   const fetchData = async (factoryCode = selectedFactory, dFilter = dateFilter) => {
     try {
       const resp = await apiClient.get('/production-v2/dashboard', {
@@ -1073,73 +1127,337 @@ const ProductionDashboardView = () => {
           </div>
         )}
 
-        {/* Card 4: CheckList - Tính năng đang phát triển */}
-        <div style={{
-          backgroundColor: '#fff',
-          borderRadius: '16px',
-          padding: '18px 16px',
-          border: '1px solid #e2e8f0',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.03)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '12px'
-        }}>
-          {/* Header Card */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '8px',
-                backgroundColor: '#FEF3C7',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                <Clock size={18} color="#D97706" />
-              </div>
-              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: '900', color: '#432818' }}>
-                CheckList công việc
-              </h3>
-            </div>
-            
-            {/* Badge Tính năng đang phát triển */}
-            <span style={{
-              fontSize: '0.72rem',
-              fontWeight: '800',
-              backgroundColor: '#FEF3C7',
-              color: '#B45309',
-              padding: '4px 10px',
-              borderRadius: '20px',
-              border: '1px solid #FDE68A',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px'
-            }}>
-              <Sparkles size={12} color="#D97706" />
-              Đang phát triển
-            </span>
-          </div>
+        {/* Card 4: CheckList công việc của nhân viên (Nhỏ gọn, chia tab Ngày / Tuần / Tháng) */}
+        {(() => {
+          const actionItems = data.action_items || [];
+          const totalChecklists = actionItems.length;
+          const completedCount = actionItems.filter(i => i.status === 'Đã hoàn thành' || i.status === 'Đã Làm').length;
+          const progressPct = totalChecklists > 0 ? Math.round((completedCount / totalChecklists) * 100) : 0;
 
-          {/* Description & Placeholder UI */}
-          <div style={{
-            backgroundColor: '#F8FAFC',
-            borderRadius: '12px',
-            padding: '14px',
-            border: '1px dashed #CBD5E1',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px'
-          }}>
-            <p style={{ margin: 0, fontSize: '0.82rem', color: '#475569', lineHeight: '1.45' }}>
-              Hệ thống phân bổ và giám sát <strong style={{ color: '#432818' }}>CheckList ca sản xuất</strong> đang được nâng cấp quy trình tự động và kiểm chuẩn chất lượng.
-            </p>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#94A3B8', fontWeight: '600' }}>
-              <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#D97706' }} />
-              Dự kiến phát hành trong phiên bản cập nhật tiếp theo.
+          // Phân loại nhóm tần suất: Ngày, Tuần, Tháng, Phát sinh
+          const dayItems = actionItems.filter(i => getChecklistFrequencyCategory(i.frequency) === 'day');
+          const weekItems = actionItems.filter(i => getChecklistFrequencyCategory(i.frequency) === 'week');
+          const monthItems = actionItems.filter(i => getChecklistFrequencyCategory(i.frequency) === 'month');
+          const adhocItems = actionItems.filter(i => getChecklistFrequencyCategory(i.frequency) === 'adhoc');
+
+          // Xây dựng danh sách các tab động (chỉ hiện tab nào có dữ liệu > 0)
+          const availableTabs = [
+            { id: 'all', label: 'Tất cả', count: actionItems.length },
+            ...(dayItems.length > 0 ? [{ id: 'day', label: 'Ngày', count: dayItems.length }] : []),
+            ...(weekItems.length > 0 ? [{ id: 'week', label: 'Tuần', count: weekItems.length }] : []),
+            ...(monthItems.length > 0 ? [{ id: 'month', label: 'Tháng', count: monthItems.length }] : []),
+            ...(adhocItems.length > 0 ? [{ id: 'adhoc', label: 'Phát sinh', count: adhocItems.length }] : [])
+          ];
+
+          // Tab hợp lệ hiện tại
+          const activeTabId = availableTabs.some(t => t.id === checklistTab) ? checklistTab : 'all';
+
+          // Danh sách items sau khi lọc theo tab
+          let filteredItems = actionItems;
+          if (activeTabId === 'day') filteredItems = dayItems;
+          else if (activeTabId === 'week') filteredItems = weekItems;
+          else if (activeTabId === 'month') filteredItems = monthItems;
+          else if (activeTabId === 'adhoc') filteredItems = adhocItems;
+
+          return (
+            <div style={{
+              backgroundColor: '#fff',
+              borderRadius: '12px',
+              padding: '10px 12px',
+              border: '1px solid #E2E8F0',
+              boxShadow: '0 2px 6px rgba(0,0,0,0.02)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px'
+            }}>
+              {/* Header Card nhỏ gọn */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '6px',
+                    backgroundColor: '#F5EBE1',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <ClipboardCheck size={14} color="#5D3B32" />
+                  </div>
+                  <h3 style={{ margin: 0, fontSize: '0.86rem', fontWeight: '800', color: '#432818' }}>
+                    CheckList công việc
+                  </h3>
+                </div>
+
+                {/* Badge Tiến độ ca nhỏ gọn */}
+                <span style={{
+                  fontSize: '0.66rem',
+                  fontWeight: '700',
+                  backgroundColor: completedCount === totalChecklists && totalChecklists > 0 ? '#DCFCE7' : '#FEF3C7',
+                  color: completedCount === totalChecklists && totalChecklists > 0 ? '#15803D' : '#B45309',
+                  padding: '2px 7px',
+                  borderRadius: '12px',
+                  border: `1px solid ${completedCount === totalChecklists && totalChecklists > 0 ? '#BBF7D0' : '#FDE68A'}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '3px'
+                }}>
+                  <CheckCircle2 size={11} color={completedCount === totalChecklists && totalChecklists > 0 ? '#16A34A' : '#D97706'} />
+                  {completedCount}/{totalChecklists} Hoàn thành
+                </span>
+              </div>
+
+              {/* Progress Bar siêu mỏng */}
+              {totalChecklists > 0 && (
+                <div style={{
+                  width: '100%',
+                  height: '3.5px',
+                  backgroundColor: '#F1F5F9',
+                  borderRadius: '6px',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{
+                    width: `${progressPct}%`,
+                    height: '100%',
+                    backgroundColor: progressPct === 100 ? '#16A34A' : '#5D3B32',
+                    borderRadius: '6px',
+                    transition: 'width 0.3s ease'
+                  }} />
+                </div>
+              )}
+
+              {/* Thanh chuyển Tab: Tất cả / Ngày / Tuần / Tháng / Phát sinh (chỉ hiện nếu có nhiều hơn 1 loại) */}
+              {availableTabs.length > 2 && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  overflowX: 'auto',
+                  WebkitOverflowScrolling: 'touch',
+                  scrollbarWidth: 'none',
+                  msOverflowStyle: 'none',
+                  padding: '1px 0 2px 0'
+                }}>
+                  {availableTabs.map((t) => {
+                    const isActive = activeTabId === t.id;
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => setChecklistTab(t.id)}
+                        style={{
+                          border: isActive ? 'none' : '1px solid #E2E8F0',
+                          backgroundColor: isActive ? '#5D3B32' : '#FFFFFF',
+                          color: isActive ? '#FFFFFF' : '#475569',
+                          borderRadius: '6px',
+                          padding: '3px 8px',
+                          fontSize: '0.68rem',
+                          fontWeight: isActive ? '800' : '600',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          whiteSpace: 'nowrap',
+                          boxShadow: isActive ? '0 1px 3px rgba(93, 59, 50, 0.25)' : 'none',
+                          transition: 'all 0.15s ease',
+                          flexShrink: 0
+                        }}
+                      >
+                        <span>{t.label}</span>
+                        <span style={{
+                          fontSize: '0.60rem',
+                          fontWeight: '700',
+                          backgroundColor: isActive ? 'rgba(255, 255, 255, 0.25)' : '#F1F5F9',
+                          color: isActive ? '#FFFFFF' : '#64748B',
+                          padding: '0 4px',
+                          borderRadius: '8px',
+                          lineHeight: '1.3'
+                        }}>
+                          {t.count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Danh sách các Checklist Items siêu gọn */}
+              {totalChecklists === 0 ? (
+                <div style={{
+                  backgroundColor: '#F8FAFC',
+                  borderRadius: '8px',
+                  padding: '10px',
+                  border: '1px dashed #CBD5E1',
+                  textAlign: 'center',
+                  color: '#64748B',
+                  fontSize: '0.74rem'
+                }}>
+                  Không có checklist nào trong ca này.
+                </div>
+              ) : filteredItems.length === 0 ? (
+                <div style={{
+                  backgroundColor: '#F8FAFC',
+                  borderRadius: '8px',
+                  padding: '10px',
+                  border: '1px dashed #CBD5E1',
+                  textAlign: 'center',
+                  color: '#64748B',
+                  fontSize: '0.74rem'
+                }}>
+                  Không có checklist nào trong mục này.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                  {filteredItems.map((item, idx) => {
+                    const isDone = item.status === 'Đã hoàn thành' || item.status === 'Đã Làm';
+                    const evBadge = getEvidenceTypeBadge(item.evidence_type);
+                    const EvIcon = evBadge?.icon;
+
+                    return (
+                      <div
+                        key={item.id || idx}
+                        style={{
+                          backgroundColor: isDone ? '#FAFAFA' : '#FFFFFF',
+                          borderRadius: '8px',
+                          padding: '6px 8px',
+                          border: '1px solid #E2E8F0',
+                          borderLeft: isDone ? '3px solid #16A34A' : '3px solid #8C5E3C',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '8px'
+                        }}
+                      >
+                        {/* Cột trái: Tên công việc + meta tags */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          {/* Dòng 1: Tên công việc */}
+                          <div style={{
+                            fontSize: '0.76rem',
+                            fontWeight: '700',
+                            color: isDone ? '#64748B' : '#1E293B',
+                            textDecoration: isDone ? 'line-through' : 'none',
+                            lineHeight: '1.25',
+                            marginBottom: '2px',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            {item.content || item.task_name}
+                          </div>
+
+                          {/* Dòng 2: Mã việc • Tần suất • Điểm • Yêu cầu bằng chứng */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                            <span style={{
+                              fontSize: '0.62rem',
+                              fontWeight: '700',
+                              color: isDone ? '#64748B' : '#8C5E3C',
+                              backgroundColor: isDone ? '#F1F5F9' : '#F5EBE1',
+                              padding: '0 4px',
+                              borderRadius: '3px'
+                            }}>
+                              {item.task_code || `CL-${idx + 1}`}
+                            </span>
+
+                            <span style={{
+                              fontSize: '0.62rem',
+                              fontWeight: '700',
+                              color: '#B45309',
+                              backgroundColor: '#FFFBEB',
+                              padding: '0 4px',
+                              borderRadius: '3px'
+                            }}>
+                              +{item.weight_score || 10}đ
+                            </span>
+
+                            <span style={{
+                              fontSize: '0.62rem',
+                              color: '#64748B',
+                              backgroundColor: '#F8FAFC',
+                              padding: '0 4px',
+                              borderRadius: '3px'
+                            }}>
+                              {item.frequency || 'Hàng ngày'}
+                            </span>
+
+                            {evBadge && EvIcon && (
+                              <span style={{
+                                fontSize: '0.60rem',
+                                fontWeight: '700',
+                                color: evBadge.color,
+                                backgroundColor: evBadge.bg,
+                                border: `1px solid ${evBadge.border}`,
+                                padding: '0 4px',
+                                borderRadius: '3px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '2px'
+                              }}>
+                                <EvIcon size={9} />
+                                {evBadge.label}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Cột phải: Nút thực hiện hoặc badge đã xong nhỏ gọn */}
+                        <div style={{ flexShrink: 0 }}>
+                          {isDone ? (
+                            <button
+                              type="button"
+                              onClick={() => setViewingChecklist(item)}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                padding: '3px 7px',
+                                borderRadius: '6px',
+                                border: '1px solid #BBF7D0',
+                                backgroundColor: '#DCFCE7',
+                                color: '#15803D',
+                                fontSize: '0.68rem',
+                                fontWeight: '700',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <Check size={11} />
+                              Đã xong
+                              {item.evidence_url && <Eye size={10} style={{ marginLeft: '1px' }} />}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedChecklist(item);
+                                setShowExecutionModal(true);
+                              }}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                padding: '4px 9px',
+                                borderRadius: '6px',
+                                border: 'none',
+                                backgroundColor: '#5D3B32',
+                                color: '#FFFFFF',
+                                fontSize: '0.70rem',
+                                fontWeight: '700',
+                                cursor: 'pointer',
+                                boxShadow: '0 1px 4px rgba(93, 59, 50, 0.2)'
+                              }}
+                            >
+                              <Play size={9} fill="#FFFFFF" />
+                              Thực hiện
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          </div>
-        </div>
+          );
+        })()}
 
       </div>
 
@@ -1156,6 +1474,278 @@ const ProductionDashboardView = () => {
         }}
         rateComparison={data.rate_comparison}
       />
+
+      {/* Modal Thực Hiện CheckList Động */}
+      <MobileChecklistExecutionModal
+        visible={showExecutionModal}
+        onClose={() => {
+          setShowExecutionModal(false);
+          setSelectedChecklist(null);
+        }}
+        checklist={selectedChecklist}
+        onSuccess={() => {
+          fetchData(selectedFactory);
+        }}
+      />
+
+      {/* Modal Xem lại Bằng chứng Checklist đã hoàn thành (Nhỏ gọn) */}
+      {viewingChecklist && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(2px)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '12px'
+        }}>
+          <div style={{
+            width: '100%',
+            maxWidth: '380px',
+            backgroundColor: '#FFFFFF',
+            borderRadius: '12px',
+            padding: '12px',
+            maxHeight: '82vh',
+            overflowY: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '10px',
+            boxShadow: '0 8px 20px rgba(0,0,0,0.18)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px' }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <span style={{ fontSize: '0.64rem', fontWeight: '800', color: '#15803D', backgroundColor: '#DCFCE7', padding: '1px 6px', borderRadius: '4px' }}>
+                  ✓ ĐÃ HOÀN THÀNH
+                </span>
+                <h4 style={{ margin: '3px 0 0 0', fontSize: '0.82rem', fontWeight: '800', color: '#1E293B', lineHeight: '1.25', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {viewingChecklist.task_code}: {viewingChecklist.content || viewingChecklist.task_name}
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingChecklist(null)}
+                style={{ background: '#F1F5F9', border: 'none', borderRadius: '50%', width: '26px', height: '26px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B', flexShrink: 0 }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            {viewingChecklist.notes && (
+              <div style={{ fontSize: '0.74rem', color: '#334155', backgroundColor: '#F8FAFC', padding: '8px 10px', borderRadius: '6px', border: '1px solid #E2E8F0', lineHeight: '1.35' }}>
+                <strong style={{ color: '#0F172A' }}>Ghi chú:</strong> {viewingChecklist.notes}
+              </div>
+            )}
+
+            {viewingChecklist.evidence_url && (() => {
+              const urls = parseImageUrls(viewingChecklist.evidence_url);
+              const isImage = (url) => url.match(/\.(jpg|jpeg|png|webp)$/i) || url.startsWith('data:image');
+              const imageList = urls.filter(isImage);
+              const docList = urls.filter(u => !isImage(u));
+
+              return (
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <div style={{ fontSize: '0.70rem', fontWeight: '800', color: '#475569' }}>
+                      Bằng chứng nộp:
+                    </div>
+                    {imageList.length > 1 && (
+                      <span style={{ fontSize: '0.64rem', fontWeight: '700', color: '#5D3B32', backgroundColor: '#F5EBE1', padding: '1px 6px', borderRadius: '6px' }}>
+                        {imageList.length} ảnh
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Trường hợp 1 ảnh */}
+                  {imageList.length === 1 && (
+                    <div 
+                      onClick={() => setPreviewImageModal(getFullImageUrl(imageList[0]))}
+                      style={{ borderRadius: '6px', overflow: 'hidden', border: '1px solid #CBD5E1', cursor: 'pointer' }}
+                    >
+                      <img
+                        src={getFullImageUrl(imageList[0])}
+                        alt="Bằng chứng"
+                        style={{ width: '100%', maxHeight: '180px', objectFit: 'contain', display: 'block', backgroundColor: '#F8FAFC' }}
+                      />
+                    </div>
+                  )}
+
+                  {/* Trường hợp nhiều ảnh: Lưới thumbnail gọn gàng */}
+                  {imageList.length > 1 && (
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(4, 1fr)',
+                      gap: '6px'
+                    }}>
+                      {imageList.map((imgUrl, idx) => (
+                        <div
+                          key={idx}
+                          onClick={() => setPreviewImageModal(getFullImageUrl(imgUrl))}
+                          style={{
+                            position: 'relative',
+                            aspectRatio: '1 / 1',
+                            borderRadius: '6px',
+                            overflow: 'hidden',
+                            border: '1px solid #CBD5E1',
+                            backgroundColor: '#0F172A',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <img
+                            src={getFullImageUrl(imgUrl)}
+                            alt={`Ảnh ${idx + 1}`}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                          />
+                          <span style={{
+                            position: 'absolute',
+                            bottom: '2px',
+                            left: '2px',
+                            fontSize: '0.56rem',
+                            fontWeight: '700',
+                            color: '#FFF',
+                            backgroundColor: 'rgba(0,0,0,0.65)',
+                            padding: '0 3px',
+                            borderRadius: '3px'
+                          }}>
+                            #{idx + 1}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Danh sách tệp đính kèm (nếu là tài liệu) */}
+                  {docList.map((docUrl, idx) => (
+                    <a
+                      key={idx}
+                      href={getFullImageUrl(docUrl)}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '8px 10px',
+                        marginTop: '4px',
+                        backgroundColor: '#EFF6FF',
+                        borderRadius: '6px',
+                        border: '1px solid #BFDBFE',
+                        color: '#1D4ED8',
+                        fontSize: '0.72rem',
+                        fontWeight: '700',
+                        textDecoration: 'none'
+                      }}
+                    >
+                      <FileText size={15} />
+                      Mở tệp đính kèm ({docUrl.split('/').pop()})
+                    </a>
+                  ))}
+                </div>
+              );
+            })()}
+
+            <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  const item = viewingChecklist;
+                  setViewingChecklist(null);
+                  setSelectedChecklist(item);
+                  setShowExecutionModal(true);
+                }}
+                style={{
+                  flex: 1,
+                  padding: '7px',
+                  borderRadius: '6px',
+                  border: '1px solid #CBD5E1',
+                  backgroundColor: '#FFFFFF',
+                  color: '#475569',
+                  fontSize: '0.72rem',
+                  fontWeight: '700',
+                  cursor: 'pointer'
+                }}
+              >
+                Làm lại / Sửa
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewingChecklist(null)}
+                style={{
+                  flex: 1,
+                  padding: '7px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  backgroundColor: '#5D3B32',
+                  color: '#FFFFFF',
+                  fontSize: '0.72rem',
+                  fontWeight: '800',
+                  cursor: 'pointer'
+                }}
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lightbox phóng to ảnh khi bấm xem chi tiết */}
+      {previewImageModal && (
+        <div
+          onClick={() => setPreviewImageModal(null)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.88)',
+            zIndex: 100000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+            backdropFilter: 'blur(3px)'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ position: 'relative', maxWidth: '100%', maxHeight: '90%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}
+          >
+            <img
+              src={previewImageModal}
+              alt="Xem ảnh lớn"
+              style={{ maxWidth: '100%', maxHeight: '82vh', borderRadius: '8px', objectFit: 'contain', display: 'block', boxShadow: '0 4px 20px rgba(0,0,0,0.5)' }}
+            />
+            <button
+              type="button"
+              onClick={() => setPreviewImageModal(null)}
+              style={{
+                position: 'absolute',
+                top: '-12px',
+                right: '-12px',
+                backgroundColor: '#FFFFFF',
+                color: '#0F172A',
+                border: 'none',
+                borderRadius: '50%',
+                width: '30px',
+                height: '30px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.4)'
+              }}
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 };

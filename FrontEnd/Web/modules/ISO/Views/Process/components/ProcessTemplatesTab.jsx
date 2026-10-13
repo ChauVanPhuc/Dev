@@ -138,43 +138,72 @@ const ProcessTemplatesTab = ({ editor }) => {
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
                         <div>
                           <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 'bold', color: '#64748b', marginBottom: '6px' }}>
-                            Mã biểu mẫu
+                            Mã biểu mẫu <span style={{ color: '#ef4444' }}>*</span>
                           </label>
-                          <input
-                            type="text"
-                            value={selectedT.code || ''}
-                            onChange={(e) => handleUpdateRelatedTemplate(selectedT.id, 'code', e.target.value)}
-                            placeholder="Nhập mã biểu mẫu..."
-                            style={{
-                              width: '100%',
-                              padding: '8px 12px',
-                              border: '1px solid #cbd5e1',
-                              borderRadius: '6px',
-                              fontSize: '0.85rem',
-                              color: '#1e293b',
-                              outline: 'none'
-                            }}
-                          />
+                          {(() => {
+                            const procCodePrefix = formData.code ? `${formData.code}_` : 'QT_';
+                            let currentSuffix = selectedT.code || '';
+                            if (selectedT.code && selectedT.code.startsWith(procCodePrefix)) {
+                              currentSuffix = selectedT.code.slice(procCodePrefix.length);
+                            } else if (selectedT.code && formData.code && selectedT.code.startsWith(`${formData.code}_`)) {
+                              currentSuffix = selectedT.code.slice(`${formData.code}_`.length);
+                            }
+
+                            const handleSuffixChange = (e) => {
+                              let val = e.target.value.replace(/^[\s_]+/, '');
+                              const newFullCode = `${procCodePrefix}${val}`;
+                              handleUpdateRelatedTemplate(selectedT.id, 'code', newFullCode);
+                            };
+
+                            return (
+                              <div>
+                                <div style={{ display: 'flex', alignItems: 'stretch' }}>
+                                  <span style={{
+                                    backgroundColor: '#FAF6F0',
+                                    color: '#7B5233',
+                                    padding: '8px 10px',
+                                    border: '1px solid #cbd5e1',
+                                    borderRight: 'none',
+                                    borderTopLeftRadius: '6px',
+                                    borderBottomLeftRadius: '6px',
+                                    fontSize: '0.85rem',
+                                    fontWeight: '700',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    userSelect: 'none',
+                                    whiteSpace: 'nowrap'
+                                  }}>
+                                    {procCodePrefix}
+                                  </span>
+                                  <input
+                                    type="text"
+                                    value={currentSuffix}
+                                    onChange={handleSuffixChange}
+                                    placeholder="BM01..."
+                                    style={{
+                                      flex: 1,
+                                      padding: '8px 12px',
+                                      border: '1px solid #cbd5e1',
+                                      borderTopRightRadius: '6px',
+                                      borderBottomRightRadius: '6px',
+                                      fontSize: '0.85rem',
+                                      color: '#1e293b',
+                                      outline: 'none'
+                                    }}
+                                  />
+                                </div>
+                                <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '4px' }}>
+                                  Mã đầy đủ: <strong style={{ color: '#7B5233' }}>{selectedT.code || `${procCodePrefix}...`}</strong>
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </div>
 
                         <div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                            <label style={{ fontSize: '0.78rem', fontWeight: 'bold', color: '#64748b' }}>
-                              Tên biểu mẫu
-                            </label>
-                            <span
-                              onClick={handleOpenSystemTemplatesModal}
-                              style={{
-                                fontSize: '0.78rem',
-                                color: '#7B5233',
-                                cursor: 'pointer',
-                                textDecoration: 'underline',
-                                fontWeight: 'bold'
-                              }}
-                            >
-                              Chọn tài liệu từ hệ thống
-                            </span>
-                          </div>
+                          <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 'bold', color: '#64748b', marginBottom: '6px' }}>
+                            Tên biểu mẫu <span style={{ color: '#ef4444' }}>*</span>
+                          </label>
                           <input
                             type="text"
                             value={selectedT.title || ''}
@@ -212,9 +241,9 @@ const ProcessTemplatesTab = ({ editor }) => {
                             }}
                           >
                             <option value="Tất cả">Tất cả</option>
-                            {systemScreens.map(s => (
-                              <option key={s.route_path} value={s.screen_name}>
-                                {s.screen_name} ({s.route_path})
+                            {(systemScreens || []).map(s => (
+                              <option key={s.route_path} value={s.screen_name || s.title}>
+                                {s.screen_name || s.title} ({s.route_path})
                               </option>
                             ))}
                           </select>
@@ -276,7 +305,9 @@ const ProcessTemplatesTab = ({ editor }) => {
                             
                             <div style={{ display: 'flex', gap: '10px' }}>
                               <a
-                                href={`${api.defaults.baseURL.replace('/api/v1', '')}/${selectedT.file_path}`}
+                                href={selectedT.doc_id 
+                                  ? `${api.defaults.baseURL.replace(/\/$/, '')}/iso-documents/${selectedT.doc_id}/download-raw`
+                                  : `${api.defaults.baseURL.replace('/api/v1', '')}/${selectedT.file_path}`}
                                 target="_blank"
                                 rel="noreferrer"
                                 download
@@ -337,12 +368,12 @@ const ProcessTemplatesTab = ({ editor }) => {
                               type="file"
                               id={`file-upload-input-${selectedT.id}`}
                               style={{ display: 'none' }}
-                              accept=".pdf,.doc,.docx"
+                              accept=".pdf,.doc,.docx,.xlsx,.xls"
                               onChange={(e) => handleUploadAttachment(e, selectedT.id)}
                             />
                             <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                               <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '500' }}>
-                                Tải file từ máy (chấp nhận file PDF, doc, docx)
+                                Tải file từ máy (chấp nhận file PDF, Word .docx, Excel .xlsx)
                               </span>
                               <Upload size={16} style={{ color: '#64748b' }} />
                             </div>

@@ -133,6 +133,11 @@ export default function SystemConfigView() {
   const [paramOrder, setParamOrder] = useState(0);
   const [paramIsActive, setParamIsActive] = useState(true);
 
+  // --- ISO DOCUMENT TYPE (Loại hồ sơ ISO) STATES ---
+  const [isoDocTypeName, setIsoDocTypeName] = useState('');
+  const [isoDocTypeCode, setIsoDocTypeCode] = useState('');
+  const [isoDocTypeDesc, setIsoDocTypeDesc] = useState('');
+
   // --- SIDEBAR TREE STATES ---
   const [sidebarPlatform, setSidebarPlatform] = useState('Web'); // 'Web' or 'Mobile'
   const [collapsedGroupIds, setCollapsedGroupIds] = useState({});
@@ -228,6 +233,9 @@ export default function SystemConfigView() {
         setDataList(Array.isArray(res) ? res : (res?.data || []));
       } else if (activeTab === 'inspection_parameter') {
         const res = await api.get('/inspection-parameters?include_inactive=true');
+        setDataList(Array.isArray(res) ? res : (res?.data || []));
+      } else if (activeTab === 'iso_document_type') {
+        const res = await api.get('/iso-documents/types');
         setDataList(Array.isArray(res) ? res : (res?.data || []));
       }
     } catch (e) {
@@ -574,6 +582,11 @@ export default function SystemConfigView() {
                (item.code || '').toLowerCase().includes(query) ||
                (item.unit || '').toLowerCase().includes(query);
       }
+      if (activeTab === 'iso_document_type') {
+        return (item.name || '').toLowerCase().includes(query) ||
+               (item.code || '').toLowerCase().includes(query) ||
+               (item.description || '').toLowerCase().includes(query);
+      }
       return false;
     });
   }, [dataList, searchQuery, activeTab, sidebarPlatform]);
@@ -674,6 +687,10 @@ export default function SystemConfigView() {
       setParamMax('');
       setParamOrder((dataList || []).length + 1);
       setParamIsActive(true);
+    } else if (activeTab === 'iso_document_type') {
+      setIsoDocTypeName('');
+      setIsoDocTypeCode('');
+      setIsoDocTypeDesc('');
     }
     setIsModalOpen(true);
   };
@@ -779,6 +796,10 @@ export default function SystemConfigView() {
       setParamMax(item.default_max != null ? String(item.default_max) : '');
       setParamOrder(item.display_order ?? 0);
       setParamIsActive(item.is_active !== false);
+    } else if (activeTab === 'iso_document_type') {
+      setIsoDocTypeName(item.name || '');
+      setIsoDocTypeCode(item.code || '');
+      setIsoDocTypeDesc(item.description || '');
     }
     setIsModalOpen(true);
   };
@@ -973,6 +994,19 @@ export default function SystemConfigView() {
           await api.post('/inspection-parameters', payload);
           toast('success', 'Thêm mới thông số kiểm tra thành công!');
         }
+      } else if (activeTab === 'iso_document_type') {
+        const payload = {
+          name: isoDocTypeName.trim(),
+          code: isoDocTypeCode.trim().toUpperCase(),
+          description: isoDocTypeDesc.trim() || null
+        };
+        if (selectedItem) {
+          await api.put(`/iso-documents/types/${selectedItem.id}`, payload);
+          toast('success', 'Cập nhật loại hồ sơ ISO thành công!');
+        } else {
+          await api.post('/iso-documents/types', payload);
+          toast('success', 'Thêm mới loại hồ sơ ISO thành công!');
+        }
       }
       setIsModalOpen(false);
       loadData();
@@ -1021,6 +1055,8 @@ export default function SystemConfigView() {
         await api.delete(`/inspection-form-types/${deletingItem.id}`);
       } else if (activeTab === 'inspection_parameter') {
         await api.delete(`/inspection-parameters/${deletingItem.id}`);
+      } else if (activeTab === 'iso_document_type') {
+        await api.delete(`/iso-documents/types/${deletingItem.id}`);
       }
       toast('success', 'Xóa cấu hình thành công!');
       setIsDeleteModalOpen(false);
@@ -1446,6 +1482,7 @@ export default function SystemConfigView() {
               { id: 'qc_sampling', label: 'Quy tắc lấy mẫu QC', icon: Sliders },
               { id: 'inspection_form_type', label: 'Loại phiếu kiểm tra', icon: ClipboardCheck },
               { id: 'inspection_parameter', label: 'Thông số kiểm tra', icon: Sliders },
+              { id: 'iso_document_type', label: 'Loại hồ sơ (ISO)', icon: FileText },
               { id: 'customer', label: 'Khách hàng', icon: Contact }
             ].map(tab => {
               const IconComp = tab.icon;
@@ -1568,6 +1605,7 @@ export default function SystemConfigView() {
                 {activeTab === 'permission' && 'Danh mục Vị trí'}
                 {activeTab === 'inspection_form_type' && 'Danh mục Loại phiếu kiểm tra'}
                 {activeTab === 'inspection_parameter' && 'Danh mục Thông số đo kiểm tra'}
+                {activeTab === 'iso_document_type' && 'Danh mục Loại hồ sơ / Tài liệu ISO'}
               </h3>
               <p style={{ margin: '4px 0 0 0', fontSize: '0.75rem', color: '#9CA3AF' }}>
                 {activeTab === 'factory' && 'Quản lý sơ đồ các Nhà máy, Phân xưởng và Tổ sản xuất vật lý.'}
@@ -1582,6 +1620,7 @@ export default function SystemConfigView() {
                 {activeTab === 'permission' && 'Thiết lập vị trí, gán công đoạn phụ trách và quyền thao tác.'}
                 {activeTab === 'inspection_form_type' && 'Quản lý danh sách các loại phiếu kiểm tra (Đồng bộ trực tiếp với Mobile dropdown Chọn cách kiểm tra và Quản lý Hướng dẫn).'}
                 {activeTab === 'inspection_parameter' && 'Quản lý danh mục các thông số kỹ thuật đo đạc (Độ ẩm, Nhiệt độ, Ánh sáng, Độ bóng sơn...) áp dụng cho phiếu kiểm tra.'}
+                {activeTab === 'iso_document_type' && 'Quản lý tên, mã viết tắt (QT, HD, CS, BM...) và mô tả các loại hồ sơ quy trình chuẩn.'}
               </p>
             </div>
 
@@ -1784,6 +1823,13 @@ export default function SystemConfigView() {
                           <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800, textAlign: 'center' }}>Khoảng chuẩn mặc định</th>
                           <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800, textAlign: 'center' }}>Thứ tự</th>
                           <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Trạng thái</th>
+                        </>
+                      )}
+                      {activeTab === 'iso_document_type' && (
+                        <>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800, width: '140px' }}>Mã viết tắt</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800, width: '240px' }}>Tên Loại hồ sơ</th>
+                          <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800 }}>Mô tả / Diễn giải</th>
                         </>
                       )}
                       <th style={{ padding: '12px 16px', fontSize: '0.8rem', fontWeight: 800, width: '120px' }}>Ngày tạo</th>
@@ -2132,6 +2178,25 @@ export default function SystemConfigView() {
                                 }}>
                                   {item.is_active ? 'Kích hoạt' : 'Tạm ẩn'}
                                 </span>
+                              </td>
+                            </>
+                          )}
+
+                          {activeTab === 'iso_document_type' && (
+                            <>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1F2937', fontWeight: 'bold' }}>
+                                <span style={{ backgroundColor: '#FAF6F0', color: '#7B5233', border: '1px solid #EADCC9', padding: '3px 10px', borderRadius: '6px', fontWeight: 800, fontSize: '0.8rem', fontFamily: 'monospace' }}>
+                                  {item.code}
+                                </span>
+                              </td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1F2937', fontWeight: 700 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <FileText size={15} style={{ color: '#7B5233' }} />
+                                  <span>{item.name}</span>
+                                </div>
+                              </td>
+                              <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#6B7280' }}>
+                                {item.description || '---'}
                               </td>
                             </>
                           )}
@@ -3613,6 +3678,47 @@ export default function SystemConfigView() {
                           </label>
                         </div>
                       </div>
+                    </div>
+                  </>
+                )}
+
+                {/* ISO DOCUMENT TYPE (LOẠI HỒ SƠ ISO) FIELDS */}
+                {activeTab === 'iso_document_type' && (
+                  <>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '12px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>MÃ VIẾT TẮT *</label>
+                        <input
+                          type="text"
+                          value={isoDocTypeCode}
+                          onChange={(e) => setIsoDocTypeCode(e.target.value.toUpperCase())}
+                          placeholder="VD: QT, HD, CS, BM, QD, TL..."
+                          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none', fontWeight: 700 }}
+                          required
+                        />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>TÊN LOẠI HỒ SƠ *</label>
+                        <input
+                          type="text"
+                          value={isoDocTypeName}
+                          onChange={(e) => setIsoDocTypeName(e.target.value)}
+                          placeholder="VD: Quy trình, Hướng dẫn, Chính sách, Biểu mẫu..."
+                          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none' }}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4B5563' }}>MÔ TẢ / DIỄN GIẢI</label>
+                      <textarea
+                        value={isoDocTypeDesc}
+                        onChange={(e) => setIsoDocTypeDesc(e.target.value)}
+                        placeholder="Mô tả đặc tính, mục đích hoặc hướng dẫn sử dụng loại hồ sơ này..."
+                        rows="3"
+                        style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.85rem', outline: 'none', resize: 'vertical' }}
+                      />
                     </div>
                   </>
                 )}

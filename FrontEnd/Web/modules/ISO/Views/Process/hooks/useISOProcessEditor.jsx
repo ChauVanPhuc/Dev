@@ -903,10 +903,13 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
         }];
       }
 
-      let relatedTemplates = [];
+      let relatedTemplates = (data.related_templates && data.related_templates.length > 0) ? [...data.related_templates] : [];
       if (receivedSections['__metadata_related_templates__']) {
         try {
-          relatedTemplates = JSON.parse(receivedSections['__metadata_related_templates__']);
+          const parsed = JSON.parse(receivedSections['__metadata_related_templates__']);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            relatedTemplates = parsed;
+          }
         } catch (e) {
           console.error('Error parsing related templates metadata:', e);
         }
@@ -957,6 +960,11 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
       });
       if (relatedTemplates && relatedTemplates.length > 0) {
         setSelectedTemplateId(relatedTemplates[0].id);
+      }
+
+      const validSecKeys = Object.keys(receivedSections).filter(k => !k.startsWith('__'));
+      if (validSecKeys.length > 0 && (!activeMenu || !validSecKeys.includes(activeMenu))) {
+        setActiveMenu(validSecKeys[0]);
       }
     } catch (error) {
       console.error('Lß╗ùi khi tß║úi chi tiß║┐t quy tr├¼nh:', error);
@@ -1626,6 +1634,17 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
       }
     });
 
+    const dividers = clone.querySelectorAll('.iso-doc-page-break-divider');
+    dividers.forEach(div => {
+      const br = document.createElement("p");
+      br.style.pageBreakBefore = "always";
+      br.style.clear = "both";
+      br.innerHTML = "&nbsp;";
+      if (div.parentNode) {
+        div.parentNode.replaceChild(br, div);
+      }
+    });
+
     // Extract pages flat inner contents
     const pages = clone.querySelectorAll(".a4-page");
     const pageContents = [];
@@ -1995,13 +2014,13 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
   };
 
   // --- SAVE FORM ---
-  const handleSaveForm = async () => {
+  const handleSaveForm = async (options = {}) => {
     if (!formData.code) {
-      showFeedback('error', 'M├ú quy tr├¼nh kh├┤ng ─æã░ß╗úc ─æß╗â trß╗æng');
+      showFeedback('error', 'Mã quy trình không được để trống');
       return;
     }
     if (!formData.name || !formData.name.trim()) {
-      showFeedback('error', 'T├¬n quy tr├¼nh l├á bß║»t buß╗Öc');
+      showFeedback('error', 'Tên quy trình là bắt buộc');
       return;
     }
 
@@ -2025,7 +2044,7 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
           links.push({
             from: formData.steps[idx-1].flow_node_id,
             to: step.flow_node_id,
-            label: '─Éß║ít'
+            label: 'Đạt'
           });
         }
       });
@@ -2070,15 +2089,26 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
 
       const url = isProcessMode ? '/iso-documents/processes/save' : '/iso-documents/save';
       const res = await api.post(url, finalPayload);
-      showFeedback('success', res.message || 'Lã░u t├ái liß╗çu quy tr├¼nh ISO th├ánh c├┤ng!');
+      showFeedback('success', res?.message || 'Lưu tài liệu quy trình ISO thành công!');
 
-      setTimeout(() => {
-        navigate(backPath);
-      }, 1000);
+      if (res?.revision_logs && res.revision_logs.length > 0) {
+        setFormData(prev => ({
+          ...prev,
+          revision_logs: res.revision_logs
+        }));
+      }
+
+      if (!options?.stayOnPage) {
+        setTimeout(() => {
+          navigate(backPath);
+        }, 1000);
+      }
+      return res;
 
     } catch (error) {
-      console.error('Lß╗ùi khi lã░u quy tr├¼nh:', error);
-      showFeedback('error', error.response?.data?.detail || 'Lß╗ùi hß╗ç thß╗æng khi lã░u trß╗» dß╗» liß╗çu quy tr├¼nh');
+      console.error('Lỗi khi lưu quy trình:', error);
+      showFeedback('error', error.response?.data?.detail || 'Lỗi hệ thống khi lưu trữ dữ liệu quy trình');
+      throw error;
     } finally {
       setLoading(false);
     }

@@ -117,6 +117,15 @@ const PageToolbar = ({
   const showExportBtn = !!onExport;
   const showCreateBtn = (!!onCreate || (Array.isArray(createActions) && createActions.length > 0)) && hasWritePermission;
   const hasRightSection = Boolean(onSync || showOtherBtn || showImportBtn || showExportBtn || showCreateBtn);
+  const renderDropdownIcon = (icon) => {
+    if (!icon) return null;
+    if (React.isValidElement(icon)) return icon;
+    if (typeof icon === 'function' || (typeof icon === 'object' && icon.$$typeof)) {
+      const IconComponent = icon;
+      return <IconComponent size={14} />;
+    }
+    return null;
+  };
 
   return (
     <div className="page-toolbar">
@@ -256,7 +265,7 @@ const PageToolbar = ({
                       style={action.color ? { color: action.color } : undefined}
                     >
                       <div className="page-toolbar__dropdown-item-left">
-                        {action.icon}
+                        {renderDropdownIcon(action.icon)}
                         <span>{action.label}</span>
                       </div>
                       {action.badge > 0 && (
@@ -301,7 +310,7 @@ const PageToolbar = ({
                       onClick={() => { setIsImportDropdownOpen(false); action.onClick(); }}
                     >
                       <div className="page-toolbar__dropdown-item-left">
-                        {action.icon}
+                        {renderDropdownIcon(action.icon)}
                         <span>{action.label}</span>
                       </div>
                     </button>
@@ -353,7 +362,7 @@ const PageToolbar = ({
                         onClick={() => { setIsCreateDropdownOpen(false); action.onClick(); }}
                       >
                         <div className="page-toolbar__dropdown-item-left">
-                          {action.icon}
+                          {renderDropdownIcon(action.icon)}
                           <span>{action.label}</span>
                         </div>
                       </button>

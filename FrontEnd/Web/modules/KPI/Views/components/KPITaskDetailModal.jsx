@@ -60,8 +60,8 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
   const [activeMenuId, setActiveMenuId] = useState(null);
   const [editingKpiId, setEditingKpiId] = useState(null);
   const [editingChecklistId, setEditingChecklistId] = useState(null);
-  const [newKpiForm, setNewKpiForm] = useState({ target: '', operator: '≥', thresholdVal: '95', unitSuffix: '%', weightVal: '20' });
-  const [newChecklistForm, setNewChecklistForm] = useState({ task: '', tracking: 'Hàng ngày' });
+  const [newKpiForm, setNewKpiForm] = useState({ kpi_code: '', target: '', operator: '≥', thresholdVal: '95', unitSuffix: '%', weightVal: '20', category: 'D', calc_method: '' });
+  const [newChecklistForm, setNewChecklistForm] = useState({ task_code: '', task: '', tracking: 'Hàng ngày', evidence_type: 'PHOTO', weight_score: '10' });
 
   const [kpiPool, setKpiPool] = useState([]);
   const [checklistPool, setChecklistPool] = useState([]);
@@ -457,10 +457,16 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
           setChecklist(uniqueList.map((c, idx) => ({
             id: c.id || idx + 1,
             db_id: c.id,
+            task_code: c.task_code,
             task: c.content || 'Kiểm tra quy trình QC',
             tracking: c.frequency || 'Hàng ngày',
-            status: c.status_today || 'Hoàn thành',
-            note: c.result || 'Đạt yêu cầu'
+            status: c.status_today || 'Chưa làm',
+            note: c.result || 'Đạt yêu cầu',
+            evidence_type: c.evidence_type || 'NONE',
+            evidence_url: c.evidence_url || null,
+            performer_note: c.performer_note || null,
+            completed_at: c.completed_at || null,
+            weight_score: c.weight_score || 10
           })));
         } else {
           setChecklist([]);
@@ -735,13 +741,13 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
 
   const handleOpenAddKpiModal = () => {
     setEditingKpiId(null);
-    setNewKpiForm({ target: '', operator: '≥', thresholdVal: '95', unitSuffix: '%', weightVal: '20' });
+    setNewKpiForm({ kpi_code: '', target: '', operator: '≥', thresholdVal: '95', unitSuffix: '%', weightVal: '20', category: 'D', calc_method: '' });
     setSubModalType('kpi');
   };
 
   const handleOpenAddChecklistModal = () => {
     setEditingChecklistId(null);
-    setNewChecklistForm({ task: '', tracking: 'Hàng ngày' });
+    setNewChecklistForm({ task_code: '', task: '', tracking: 'Hàng ngày', evidence_type: 'PHOTO', weight_score: '10' });
     setSubModalType('checklist');
   };
 
@@ -751,11 +757,14 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
     let weightVal = String(item.weight || '20').replace('%', '').trim();
 
     setNewKpiForm({
+      kpi_code: item.kpi_code || '',
       target: item.target || item.content || '',
       operator: parsed.operator,
       thresholdVal: parsed.value,
       unitSuffix: parsed.unitSuffix,
-      weightVal: weightVal || '20'
+      weightVal: weightVal || '20',
+      category: item.category || 'D',
+      calc_method: item.calc_method || ''
     });
     setSubModalType('kpi');
     setActiveMenuId(null);
@@ -783,8 +792,11 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
   const handleEditChecklist = (item) => {
     setEditingChecklistId(item.id);
     setNewChecklistForm({
-      task: item.task,
-      tracking: item.tracking || 'Hàng ngày'
+      task_code: item.task_code || '',
+      task: item.task || item.content || '',
+      tracking: item.tracking || item.frequency || 'Hàng ngày',
+      evidence_type: item.evidence_type || 'PHOTO',
+      weight_score: item.weight_score ? String(item.weight_score) : '10'
     });
     setSubModalType('checklist');
     setActiveMenuId(null);
@@ -844,9 +856,11 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
         if (k.id === editingKpiId) {
           return {
             ...k,
+            kpi_code: newKpiForm.kpi_code || k.kpi_code,
             target: newKpiForm.target,
             threshold: thresholdStr,
-            weight: weightStr
+            weight: weightStr,
+            category: newKpiForm.category || k.category || 'D'
           };
         }
         return k;
@@ -857,13 +871,13 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
       if (dbId) {
         try {
           await api.put(`/kpi-management/employee-items/${dbId}`, {
-            kpi_code: targetItem?.kpi_code || `KPI_${dbId}`,
+            kpi_code: newKpiForm.kpi_code || targetItem?.kpi_code || `KPI_${dbId}`,
             content: newKpiForm.target,
             score: parseInt(newKpiForm.weightVal) || 20,
-            calc_method: weightStr,
+            calc_method: newKpiForm.calc_method || weightStr,
             target: thresholdStr,
             actual: targetItem?.actual || 'Chưa có dữ liệu',
-            status: 'Chưa có dữ liệu'
+            status: targetItem?.status || 'Chưa có dữ liệu'
           });
         } catch (err) {}
       }
@@ -872,14 +886,15 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
       // Chế độ Thêm mới
       let isSaved = false;
       let dbId = null;
+      const assignedKpiCode = newKpiForm.kpi_code || `KPI_${Date.now()}`;
       if (empId) {
         try {
           const res = await api.post('/kpi-management/employee-items', {
             employee_id: empId,
-            kpi_code: `KPI_${Date.now()}`,
+            kpi_code: assignedKpiCode,
             content: newKpiForm.target,
             score: parseInt(newKpiForm.weightVal) || 20,
-            calc_method: weightStr,
+            calc_method: newKpiForm.calc_method || weightStr,
             target: thresholdStr,
             actual: 'Chưa có dữ liệu',
             status: 'Chưa có dữ liệu'
@@ -892,10 +907,12 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
       const newItem = {
         id: dbId || Date.now(),
         db_id: dbId,
+        kpi_code: assignedKpiCode,
         target: newKpiForm.target,
         threshold: thresholdStr,
         actual: 'Chưa có dữ liệu',
         weight: weightStr,
+        category: newKpiForm.category || 'D',
         _isUnsaved: !isSaved
       };
       setKpiList(prev => {
@@ -911,6 +928,8 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
     if (e) e.preventDefault();
     if (!newChecklistForm.task) return;
     const empId = formData.employee_id || taskData?.employee_id;
+    const wScore = parseInt(newChecklistForm.weight_score, 10) || 10;
+    const evType = newChecklistForm.evidence_type || 'PHOTO';
 
     if (editingChecklistId) {
       // Chế độ Sửa (Edit)
@@ -919,7 +938,9 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
           return {
             ...c,
             task: newChecklistForm.task,
-            tracking: newChecklistForm.tracking || 'Hàng ngày'
+            tracking: newChecklistForm.tracking || 'Hàng ngày',
+            evidence_type: evType,
+            weight_score: wScore
           };
         }
         return c;
@@ -930,13 +951,15 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
       if (dbId) {
         try {
           await api.put(`/kpi-management/checklists/${dbId}`, {
-            task_code: targetItem?.task_code || `CV_${dbId}`,
+            task_code: targetItem?.task_code || newChecklistForm.task_code || `CV_${dbId}`,
             content: newChecklistForm.task,
             frequency: newChecklistForm.tracking,
             status_today: targetItem?.status || 'Đang thực hiện',
-            perform_count: 1,
+            perform_count: targetItem?.perform_count || 1,
             last_performed: new Date().toISOString().split('T')[0],
-            result: targetItem?.note || 'Đạt yêu cầu'
+            result: targetItem?.note || 'Đạt yêu cầu',
+            evidence_type: evType,
+            weight_score: wScore
           });
         } catch (err) {}
       }
@@ -945,17 +968,20 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
       // Chế độ Thêm mới
       let isSaved = false;
       let dbId = null;
+      const assignedTaskCode = newChecklistForm.task_code || `CV_${Date.now()}`;
       if (empId) {
         try {
           const res = await api.post('/kpi-management/checklists', {
             employee_id: empId,
-            task_code: `CV_${Date.now()}`,
+            task_code: assignedTaskCode,
             content: newChecklistForm.task,
             frequency: newChecklistForm.tracking,
             status_today: 'Đang thực hiện',
             perform_count: 1,
             last_performed: new Date().toISOString().split('T')[0],
-            result: 'Đạt yêu cầu'
+            result: 'Đạt yêu cầu',
+            evidence_type: evType,
+            weight_score: wScore
           });
           if (res?.id) dbId = res.id;
           isSaved = true;
@@ -965,10 +991,13 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
       const newItem = {
         id: dbId || Date.now(),
         db_id: dbId,
+        task_code: assignedTaskCode,
         task: newChecklistForm.task,
         tracking: newChecklistForm.tracking || 'Hàng ngày',
         status: 'Đang thực hiện',
         note: 'Đạt yêu cầu',
+        evidence_type: evType,
+        weight_score: wScore,
         _isUnsaved: !isSaved
       };
       setChecklist(prev => {
@@ -1027,13 +1056,13 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
           if (kpi._isUnsaved) {
             await api.post('/kpi-management/employee-items', {
               employee_id: empId,
-              kpi_code: `KPI_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+              kpi_code: kpi.kpi_code || `KPI_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
               content: kpi.target || kpi.content,
-              score: parseInt(kpi.weight) || 30,
-              calc_method: kpi.weight || '30%',
+              score: parseInt(kpi.weight) || 20,
+              calc_method: kpi.calc_method || kpi.weight || '20%',
               target: kpi.threshold || '>= 95%',
-              actual: kpi.actual || '95%',
-              status: 'Đang theo dõi'
+              actual: kpi.actual || 'Chưa có dữ liệu',
+              status: 'Chưa có dữ liệu'
             }).catch(() => null);
           }
         }
@@ -1045,13 +1074,15 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
           if (item._isUnsaved) {
             await api.post('/kpi-management/checklists', {
               employee_id: empId,
-              task_code: `CV_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+              task_code: item.task_code || `CV_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
               content: item.task || item.content,
               frequency: item.tracking || 'Hàng ngày',
               status_today: item.status || 'Đang thực hiện',
               perform_count: 1,
               last_performed: new Date().toISOString().split('T')[0],
-              result: item.note || 'Đạt yêu cầu'
+              result: item.note || 'Đạt yêu cầu',
+              evidence_type: item.evidence_type || 'PHOTO',
+              weight_score: item.weight_score || 10
             }).catch(() => null);
           }
         }
@@ -1728,23 +1759,78 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
                     <thead>
                       <tr style={{ backgroundColor: '#7B5233', color: '#FFFFFF', textAlign: 'left' }}>
-                        <th style={{ padding: '6px 10px', fontWeight: '700', width: '50px' }}>STT</th>
+                        <th style={{ padding: '6px 10px', fontWeight: '700', width: '40px', textAlign: 'center' }}>STT</th>
                         <th style={{ padding: '6px 10px', fontWeight: '700' }}>Nhiệm Vụ</th>
-                        <th style={{ padding: '6px 10px', fontWeight: '700', width: '130px' }}>Cách theo dõi</th>
-                        <th style={{ padding: '6px 10px', fontWeight: '700', width: '110px' }}>Trạng thái</th>
-                        <th style={{ padding: '6px 10px', fontWeight: '700', width: '150px' }}>Ghi chú</th>
-                        <th style={{ padding: '6px 10px', fontWeight: '700', width: '90px', textAlign: 'center' }}>Thao tác</th>
+                        <th style={{ padding: '6px 10px', fontWeight: '700', width: '95px' }}>Cách theo dõi</th>
+                        <th style={{ padding: '6px 10px', fontWeight: '700', width: '125px' }}>Yêu cầu xác thực</th>
+                        <th style={{ padding: '6px 10px', fontWeight: '700', width: '95px', textAlign: 'center' }}>Trạng thái</th>
+                        <th style={{ padding: '6px 10px', fontWeight: '700', width: '125px', textAlign: 'center' }}>Bằng chứng</th>
+                        <th style={{ padding: '6px 10px', fontWeight: '700', width: '70px', textAlign: 'center' }}>Thao tác</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredChecklistByMonth.length > 0 ? (
                         filteredChecklistByMonth.map((item, idx) => (
-                          <tr key={item.id} style={{ borderTop: '1px solid #E2E8F0' }}>
-                            <td style={{ padding: '6px 10px', fontWeight: '700', color: '#64748B' }}>{idx + 1}</td>
-                            <td style={{ padding: '6px 10px', color: '#1E293B', fontWeight: '700' }}>{item.task}</td>
-                            <td style={{ padding: '6px 10px', color: '#475569' }}>{item.tracking}</td>
-                            <td style={{ padding: '6px 10px', color: '#15803D', fontWeight: '700' }}>{item.status}</td>
-                            <td style={{ padding: '6px 10px', color: '#64748B' }}>{item.note}</td>
+                          <tr key={item.id} style={{ borderTop: '1px solid #E2E8F0', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAFAFA' }}>
+                            <td style={{ padding: '6px 10px', fontWeight: '700', color: '#64748B', textAlign: 'center' }}>{idx + 1}</td>
+                            <td style={{ padding: '6px 10px', color: '#1E293B', fontWeight: '700' }}>
+                              <div>{item.task}</div>
+                              {item.performer_note && (
+                                <div style={{ fontSize: '0.72rem', color: '#475569', fontWeight: '500', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <span>💬</span> <em>{item.performer_note}</em>
+                                </div>
+                              )}
+                            </td>
+                            <td style={{ padding: '6px 10px', color: '#475569', fontSize: '0.78rem' }}>{item.tracking}</td>
+                            <td style={{ padding: '6px 10px' }}>
+                              {item.evidence_type === 'PHOTO' ? (
+                                <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: '4px', backgroundColor: '#E0F2FE', color: '#0369A1', fontWeight: '700' }}>📷 Chụp camera</span>
+                              ) : item.evidence_type === 'SIGNATURE' ? (
+                                <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: '4px', backgroundColor: '#EDE9FE', color: '#6D28D9', fontWeight: '700' }}>✍️ Ký tên</span>
+                              ) : item.evidence_type === 'FILE' ? (
+                                <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: '4px', backgroundColor: '#FEF3C7', color: '#B45309', fontWeight: '700' }}>📄 Tệp file</span>
+                              ) : (
+                                <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: '4px', backgroundColor: '#F1F5F9', color: '#64748B', fontWeight: '600' }}>➖ Tự xác nhận</span>
+                              )}
+                            </td>
+                            <td style={{ padding: '6px 10px', textAlign: 'center' }}>
+                              <span style={{
+                                fontSize: '0.72rem',
+                                padding: '2px 8px',
+                                borderRadius: '12px',
+                                fontWeight: '700',
+                                backgroundColor: (item.status || '').toLowerCase().includes('hoàn thành') || (item.status || '').toLowerCase().includes('đạt') ? '#DCFCE7' : '#FEF3C7',
+                                color: (item.status || '').toLowerCase().includes('hoàn thành') || (item.status || '').toLowerCase().includes('đạt') ? '#15803D' : '#B45309'
+                              }}>
+                                {item.status}
+                              </span>
+                            </td>
+                            <td style={{ padding: '6px 10px', textAlign: 'center' }}>
+                              {item.evidence_url ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewImage(getFullImageUrl(item.evidence_url))}
+                                  style={{
+                                    border: '1px solid #BAE6FD',
+                                    borderRadius: '4px',
+                                    backgroundColor: '#F0F9FF',
+                                    color: '#0284C7',
+                                    cursor: 'pointer',
+                                    padding: '3px 8px',
+                                    fontSize: '0.72rem',
+                                    fontWeight: '700',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px'
+                                  }}
+                                  title="Bấm để xem ảnh bằng chứng thực tế"
+                                >
+                                  <ImageIcon size={12} /> Xem ảnh
+                                </button>
+                              ) : (
+                                <span style={{ fontSize: '0.72rem', color: '#94A3B8' }}>Chưa nộp</span>
+                              )}
+                            </td>
                             <td style={{ padding: '6px 10px', textAlign: 'center' }}>
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                                 <button
@@ -1769,7 +1855,7 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={6} style={{ padding: '16px', textAlign: 'center', color: '#94A3B8' }}>
+                          <td colSpan={7} style={{ padding: '16px', textAlign: 'center', color: '#94A3B8' }}>
                             Chưa có nhiệm vụ checklist ghi nhận cho tháng này.
                           </td>
                         </tr>
@@ -2106,11 +2192,14 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                           const parsed = parseTargetStringToComponents(found.target);
 
                           setNewKpiForm({
+                            kpi_code: found.kpi_code || '',
                             target: found.content,
                             operator: parsed.operator,
                             thresholdVal: parsed.value,
                             unitSuffix: parsed.unitSuffix,
-                            weightVal: '20'
+                            weightVal: '20',
+                            category: found.category || 'D',
+                            calc_method: found.calc_method || ''
                           });
                         }
                       }}
@@ -2119,7 +2208,7 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                       <option value="">-- Bấm để chọn danh mục KPI mẫu từ DB --</option>
                       {kpiPool.map(item => (
                         <option key={item.id} value={item.id}>
-                          {item.content} (Target: {item.target})
+                          [{item.kpi_code}] {item.content} (Target: {item.target})
                         </option>
                       ))}
                     </select>
@@ -2127,9 +2216,16 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                 )}
 
                 <div style={{ marginBottom: '14px' }}>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#475569', marginBottom: '6px' }}>
-                    Tên mục tiêu KPI <span style={{ color: '#DC2626' }}>*</span>
-                  </label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <label style={{ fontSize: '0.78rem', fontWeight: '700', color: '#475569' }}>
+                      Tên mục tiêu KPI <span style={{ color: '#DC2626' }}>*</span>
+                    </label>
+                    {newKpiForm.kpi_code && (
+                      <span style={{ fontSize: '0.72rem', padding: '1px 8px', borderRadius: '4px', backgroundColor: '#E0F2FE', color: '#0369A1', fontWeight: '700' }}>
+                        Mã chuẩn: {newKpiForm.kpi_code}
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="text"
                     required
@@ -2287,8 +2383,11 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                       const found = checklistPool.find(c => String(c.id) === selectedId);
                       if (found) {
                         setNewChecklistForm({
+                          task_code: found.task_code || `CV_${Date.now()}`,
                           task: found.content,
-                          tracking: found.frequency || 'Hàng ngày'
+                          tracking: found.frequency || 'Hàng ngày',
+                          evidence_type: found.evidence_type || 'PHOTO',
+                          weight_score: found.weight_score ? String(found.weight_score) : '10'
                         });
                       }
                     }}
@@ -2317,21 +2416,61 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                   />
                 </div>
 
-                <div style={{ marginBottom: '20px' }}>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#475569', marginBottom: '6px' }}>
-                    Cách theo dõi
-                  </label>
-                  <select
-                    value={newChecklistForm.tracking}
-                    onChange={(e) => setNewChecklistForm(prev => ({ ...prev, tracking: e.target.value }))}
-                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.83rem', outline: 'none', boxSizing: 'border-box', backgroundColor: '#F8FAFC', fontWeight: '600', color: '#0F172A' }}
-                  >
-                    <option value="Hàng ngày">Hàng ngày</option>
-                    <option value="Theo ca">Theo ca</option>
-                    <option value="Hàng tuần">Hàng tuần</option>
-                    <option value="Hàng tháng">Hàng tháng</option>
-                    <option value="Khi phát sinh">Khi phát sinh</option>
-                  </select>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1.4fr 1fr', gap: '10px', marginBottom: '20px' }}>
+                  {/* Cách theo dõi */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#475569', marginBottom: '6px' }}>
+                      Cách theo dõi
+                    </label>
+                    <select
+                      value={newChecklistForm.tracking}
+                      onChange={(e) => setNewChecklistForm(prev => ({ ...prev, tracking: e.target.value }))}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box', backgroundColor: '#F8FAFC', fontWeight: '600', color: '#0F172A' }}
+                    >
+                      <option value="Hàng ngày">Hàng ngày</option>
+                      <option value="Theo ca">Theo ca</option>
+                      <option value="Hàng tuần">Hàng tuần</option>
+                      <option value="Hàng tháng">Hàng tháng</option>
+                      <option value="Khi phát sinh">Khi phát sinh</option>
+                    </select>
+                  </div>
+
+                  {/* Yêu cầu xác thực */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#475569', marginBottom: '6px' }}>
+                      Yêu cầu xác thực
+                    </label>
+                    <select
+                      value={newChecklistForm.evidence_type}
+                      onChange={(e) => setNewChecklistForm(prev => ({ ...prev, evidence_type: e.target.value }))}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box', backgroundColor: '#F8FAFC', fontWeight: '600', color: '#0F172A' }}
+                    >
+                      <option value="PHOTO">📷 Bắt buộc chụp camera</option>
+                      <option value="SIGNATURE">✍️ Ký tên xác nhận</option>
+                      <option value="FILE">📄 Tệp đính kèm</option>
+                      <option value="NONE">➖ Tự xác nhận</option>
+                    </select>
+                  </div>
+
+                  {/* Trọng số điểm */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#475569', marginBottom: '6px' }}>
+                      Trọng số điểm
+                    </label>
+                    <div style={{ display: 'flex', border: '1px solid #CBD5E1', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#F8FAFC', width: '100%', boxSizing: 'border-box' }}>
+                      <input
+                        type="number"
+                        min="1"
+                        max="100"
+                        value={newChecklistForm.weight_score}
+                        onChange={(e) => setNewChecklistForm(prev => ({ ...prev, weight_score: e.target.value }))}
+                        style={{ flex: 1, width: 0, minWidth: 0, border: 'none', padding: '8px 6px', fontSize: '0.82rem', fontWeight: '800', color: '#0F172A', textAlign: 'center', backgroundColor: 'transparent', outline: 'none' }}
+                      />
+                      <span style={{ padding: '8px 6px', backgroundColor: '#F1F5F9', borderLeft: '1px solid #CBD5E1', fontSize: '0.72rem', fontWeight: '700', color: '#475569', display: 'flex', alignItems: 'center' }}>
+                        điểm
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>

@@ -6,7 +6,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from config.database import get_db
-from modules.inspection.models.iso_models import ISODocument, ISORevisionLog, ISOSection, ISOProcessStep, ISOProcess, ISOProcessSection, ISOProcessStepInstance
+from modules.inspection.models.iso_models import ISODocument, ISORevisionLog, ISOSection, ISOProcessStep, ISOProcess, ISOProcessSection, ISOProcessStepInstance, ISODocumentType
 from modules.inspection.services.iso_parser import parse_iso_docx
 
 from config.settings import get_upload_dir
@@ -24,8 +24,9 @@ async def upload_attachment(
     [POST] Tải lên tài liệu đính kèm (PDF, doc, docx) liên quan đến quy trình.
     """
     filename_lower = file.filename.lower()
-    if not (filename_lower.endswith(".docx") or filename_lower.endswith(".doc") or filename_lower.endswith(".pdf")):
-        raise HTTPException(status_code=400, detail="Chỉ hỗ trợ định dạng file PDF hoặc Word (.doc, .docx)")
+    allowed_exts = (".docx", ".doc", ".pdf", ".xlsx", ".xls")
+    if not any(filename_lower.endswith(ext) for ext in allowed_exts):
+        raise HTTPException(status_code=400, detail="Chỉ hỗ trợ định dạng file PDF, Word (.doc, .docx) hoặc Excel (.xls, .xlsx)")
 
     file_ext = os.path.splitext(file.filename)[1]
     unique_filename = f"{uuid.uuid4()}{file_ext}"
@@ -126,6 +127,7 @@ def save_iso_document(
             issue_date=payload.get("issue_date", now_str[:10]),
             issuer=payload.get("issuer", ""),
             approver=payload.get("approver", ""),
+            approver_bgd=payload.get("approver_bgd", ""),
             file_path=payload.get("file_path", ""),
             status=payload.get("status", "Hiệu lực"),
             folder=payload.get("folder", ""),
@@ -134,6 +136,7 @@ def save_iso_document(
             symbol=payload.get("symbol", ""),
             notes=payload.get("notes", ""),
             diagram_data=payload.get("diagram_data", ""),
+            process_id=payload.get("process_id"),
             created_at=now_str,
             updated_at=now_str
         )
@@ -155,6 +158,7 @@ def save_iso_document(
         doc.issue_date = payload.get("issue_date", doc.issue_date)
         doc.issuer = payload.get("issuer", doc.issuer)
         doc.approver = payload.get("approver", doc.approver)
+        doc.approver_bgd = payload.get("approver_bgd", getattr(doc, "approver_bgd", ""))
         doc.file_path = payload.get("file_path", doc.file_path)
         doc.status = payload.get("status", doc.status)
         doc.folder = payload.get("folder", doc.folder)
@@ -163,6 +167,8 @@ def save_iso_document(
         doc.symbol = payload.get("symbol", doc.symbol)
         doc.notes = payload.get("notes", doc.notes)
         doc.diagram_data = payload.get("diagram_data", doc.diagram_data)
+        if "process_id" in payload:
+            doc.process_id = payload.get("process_id")
         doc.updated_at = now_str
 
         # Xóa các chi tiết cũ để ghi đè cập nhật mới
@@ -243,6 +249,7 @@ def get_iso_documents(db: Session = Depends(get_db)):
             "issue_date": d.issue_date,
             "issuer": d.issuer,
             "approver": d.approver,
+            "approver_bgd": getattr(d, "approver_bgd", "") or "",
             "file_path": d.file_path,
             "status": d.status,
             "folder": d.folder,
@@ -250,6 +257,9 @@ def get_iso_documents(db: Session = Depends(get_db)):
             "document_level": d.document_level,
             "symbol": d.symbol,
             "notes": d.notes,
+            "process_id": d.process_id,
+            "process_code": d.process.code if d.process else None,
+            "process_name": d.process.name if d.process else None,
             "created_at": d.created_at,
             "updated_at": d.updated_at
         })
@@ -318,6 +328,7 @@ def get_iso_document_details(id: int, db: Session = Depends(get_db)):
         "issue_date": doc.issue_date,
         "issuer": doc.issuer,
         "approver": doc.approver,
+        "approver_bgd": getattr(doc, "approver_bgd", "") or "",
         "file_path": doc.file_path,
         "status": doc.status,
         "folder": doc.folder,
@@ -379,33 +390,151 @@ def delete_iso_document(id: int, db: Session = Depends(get_db)):
 # QUẢN LÝ QUY TRÌNH THỰC TẾ (ISO PROCESS INSTANCES) APIS
 # -----------------------------------------------------------------------------
 
+def _resolve_dept_acronym(role_name: str, desc: str = "") -> str:
+    name_upper = (role_name or "").upper().strip()
+    desc_upper = (desc or "").upper().strip()
+    comb = f"{name_upper} {desc_upper}"
+    if "QLCL" in comb or "CHẤT LƯỢNG" in comb or "ISO" in comb:
+        return "QL"
+    if "BGD" in comb or "GIÁM ĐỐC" in comb:
+        return "BG"
+    if "IT" in name_upper or "CÔNG NGHỆ THÔNG TIN" in comb:
+        return "IT"
+    if "HCNS" in comb or "HÀNH CHÍNH" in comb or "NHÂN SỰ" in comb:
+        return "HC"
+    if "SX" in name_upper or "SẢN XUẤT" in comb:
+        return "SX"
+    if "KETOAN" in name_upper or "KẾ TOÁN" in comb:
+        return "KT"
+    if "KỸ THUẬT" in comb or "CƠ ĐIỆN" in comb or name_upper == "KT":
+        return "KT"
+    if "MH" in name_upper or "MUA HÀNG" in comb or "VẬT TƯ" in comb:
+        return "MH"
+    if "KHO" in comb or "KHO VẬN" in comb:
+        return "KH"
+    if "KD" in name_upper or "KINH DOANH" in comb:
+        return "KD"
+    return name_upper[:2] if len(name_upper) >= 2 else "QL"
+
+
+@router.get("/meta/departments")
+def get_iso_meta_departments(db: Session = Depends(get_db)):
+    """
+    [GET] Lấy danh sách phòng ban từ CSDL (bảng roles) phục vụ chọn khi tạo/sửa quy trình mới.
+    """
+    from modules.auth.models.permissions import Permission
+    from modules.auth.models.role import Role
+    
+    roles = db.query(Role).filter(Role.is_active == True).order_by(Role.id).all()
+    result = []
+    skip_roles = ["Quản Lý", "Tổ Trưởng"]
+    for r in roles:
+        if r.name in skip_roles:
+            continue
+        full_name = r.description if r.description and r.description.strip() else r.name
+        code_2 = _resolve_dept_acronym(r.name, r.description or "")
+        result.append({
+            "id": r.id,
+            "name": full_name,
+            "code": code_2,
+            "role_name": r.name
+        })
+    return result
+
+
+@router.get("/approvers/department-heads")
+def get_iso_department_heads(db: Session = Depends(get_db)):
+    """
+    [GET] Lấy danh sách Người duyệt có Vị trí là Trưởng phòng.
+    """
+    from modules.auth.models.accounts import Account
+    from modules.auth.models.permissions import Permission
+    from modules.auth.models.role import Role
+    from modules.auth.models.departments import Department
+    
+    roles_map = {r.id: r.name for r in db.query(Role).all()}
+    depts_map = {d.id: d.name for d in db.query(Department).all()}
+    
+    tp_perms = db.query(Permission).filter(Permission.name.ilike("%Trưởng Phòng%")).all()
+    tp_perm_ids = [p.id for p in tp_perms]
+    
+    query = db.query(Account).filter(
+        (Account.permission_id.in_(tp_perm_ids)) |
+        (Account.permission_level.ilike("%Trưởng Phòng%"))
+    )
+    accounts = query.all()
+    
+    result = []
+    for a in accounts:
+        d_name = depts_map.get(a.department_id, "")
+        r_name = roles_map.get(getattr(a, "role_id", None), "")
+        dept_display = d_name or r_name or "Phòng ban"
+        
+        result.append({
+            "id": a.id,
+            "username": a.username,
+            "full_name": a.full_name,
+            "department_id": a.department_id,
+            "department_name": d_name,
+            "role_name": r_name,
+            "display_name": f"{a.full_name} ({dept_display})" if a.full_name else a.username
+        })
+    return result
+
+
 @router.get("/processes")
-def get_iso_processes(db: Session = Depends(get_db)):
+def get_iso_processes(
+    status: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
     """
-    [GET] Lấy danh sách các quy trình thực tế áp dụng.
+    [GET] Lấy danh sách các quy trình thực tế áp dụng. Có hỗ trợ lọc theo trạng thái (status).
     """
-    procs = db.query(ISOProcess).order_by(ISOProcess.code).all()
+    query = db.query(ISOProcess)
+    if status:
+        query = query.filter(ISOProcess.status.ilike(f"%{status.strip()}%"))
+    procs = query.order_by(ISOProcess.code).all()
     result = []
     for p in procs:
         result.append({
             "id": p.id,
             "code": p.code,
             "name": p.name,
+            "department_id": p.department_id,
+            "department_name": p.department_name,
+            "file_path": p.file_path,
             "iso_document_id": p.iso_document_id,
             "iso_document_code": p.iso_document.code if p.iso_document else "---",
             "iso_document_name": p.iso_document.name if p.iso_document else "---",
+            "documents_count": len(p.documents) if p.documents else 0,
+            "documents": [
+                {
+                    "id": d.id,
+                    "code": d.code,
+                    "name": d.name,
+                    "symbol": d.symbol,
+                    "version": d.version,
+                    "file_path": d.file_path,
+                    "status": d.status
+                }
+                for d in (p.documents or [])
+            ],
             "owner": p.owner,
             "editor": p.editor,
             "approver": p.approver,
+            "approver_bgd": getattr(p, "approver_bgd", "") or "",
             "issue_date": p.issue_date,
             "last_checked_date": p.last_checked_date,
             "last_result": p.last_result,
             "status": p.status,
             "display_at": p.display_at,
             "notes": p.notes,
-            "document_level": p.document_level or (p.iso_document.document_level if p.iso_document else ""),
+            "document_level": p.document_level or (p.iso_document.document_level if p.iso_document else "") or "Cấp phòng",
             "symbol": p.symbol,
             "role": p.role,
+            "new_code": getattr(p, "new_code", "") or "",
+            "doc_type_id": getattr(p, "doc_type_id", None),
+            "doc_type_code": getattr(p, "doc_type_code", "") or "",
             "created_at": p.created_at,
             "updated_at": p.updated_at
         })
@@ -419,22 +548,25 @@ def save_iso_process(
 ):
     """
     [POST] Lưu hoặc Cập nhật Quy trình thực tế. 
-    Nếu tạo mới quy trình và không truyền steps/sections, sẽ tự động clone/copy từ ISODocument gốc sang.
+    1 Quy trình có nhiều Mẫu tài liệu. Có thể tải file Word (.docx) lên trực tiếp.
     """
     proc_id = payload.get("id")
     code = payload.get("code")
     name = payload.get("name")
     iso_doc_id = payload.get("iso_document_id")
 
-    if not code or not name or iso_doc_id is None or iso_doc_id == "":
-        raise HTTPException(status_code=400, detail="Mã quy trình, Tên quy trình và Khuôn mẫu ISO gốc không được bỏ trống")
+    if not code or not name:
+        raise HTTPException(status_code=400, detail="Mã quy trình và Tên quy trình không được bỏ trống")
 
     now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # Kiểm tra khuôn mẫu ISO gốc có tồn tại không
-    iso_doc = db.query(ISODocument).filter(ISODocument.id == int(iso_doc_id)).first()
-    if not iso_doc:
-        raise HTTPException(status_code=404, detail="Không tìm thấy khuôn mẫu ISO gốc được chọn")
+    # Kiểm tra khuôn mẫu ISO gốc (nếu có chọn)
+    iso_doc = None
+    if iso_doc_id is not None and iso_doc_id != "":
+        try:
+            iso_doc = db.query(ISODocument).filter(ISODocument.id == int(iso_doc_id)).first()
+        except:
+            iso_doc = None
 
     # Kiểm tra trùng mã code nếu tạo mới
     is_new_proc = (proc_id is None or proc_id == "" or proc_id == "new")
@@ -446,21 +578,28 @@ def save_iso_process(
         proc = ISOProcess(
             code=code,
             name=name,
-            iso_document_id=iso_doc_id,
+            iso_document_id=int(iso_doc_id) if (iso_doc_id is not None and iso_doc_id != "") else None,
+            department_id=payload.get("department_id"),
+            department_name=payload.get("department_name", ""),
+            file_path=payload.get("file_path", ""),
             owner=payload.get("owner", ""),
             editor=payload.get("editor", ""),
             approver=payload.get("approver", ""),
+            approver_bgd=payload.get("approver_bgd", ""),
             issue_date=payload.get("issue_date", now_str[:10]),
             last_checked_date=payload.get("last_checked_date"),
             last_result=payload.get("last_result", "Chưa đánh giá"),
             status=payload.get("status", "Dự thảo"),
             display_at=payload.get("display_at", ""),
             notes=payload.get("notes", ""),
-            symbol=payload.get("symbol") or iso_doc.symbol or "",
+            symbol=payload.get("symbol") or (iso_doc.symbol if iso_doc else "") or "",
             role=payload.get("role", ""),
-            document_level=payload.get("document_level") or iso_doc.document_level or "",
-            diagram_data=payload.get("diagram_data", iso_doc.diagram_data or ""), # Clone diagram mẫu từ ISO nếu ko truyền
+            document_level=payload.get("document_level") or (iso_doc.document_level if iso_doc else "") or "Cấp phòng",
+            diagram_data=payload.get("diagram_data", (iso_doc.diagram_data if iso_doc else "") or ""),
             inspection_guide_id=payload.get("inspection_guide_id"),
+            new_code=payload.get("new_code", ""),
+            doc_type_id=payload.get("doc_type_id"),
+            doc_type_code=payload.get("doc_type_code", ""),
             created_at=now_str,
             updated_at=now_str
         )
@@ -473,9 +612,9 @@ def save_iso_process(
             if guide_record:
                 guide_record.process_id = proc.id
         
-        # Clone sections mẫu từ ISODocument nhưng để rỗng nội dung (chỉ hiển thị dạng hint, giữ lại metadata cấu hình)
+        # Clone sections mẫu từ ISODocument nếu có
         sections = payload.get("sections")
-        if sections is None:
+        if sections is None and iso_doc:
             for sec in iso_doc.sections:
                 db_sec = ISOProcessSection(
                     process_id=proc.id,
@@ -517,10 +656,24 @@ def save_iso_process(
         # Cập nhật thông tin chung
         proc.code = code
         proc.name = name
-        proc.iso_document_id = iso_doc_id
+        if "iso_document_id" in payload:
+            proc.iso_document_id = int(payload["iso_document_id"]) if payload["iso_document_id"] else None
+        if "department_id" in payload:
+            proc.department_id = payload.get("department_id")
+        if "department_name" in payload:
+            proc.department_name = payload.get("department_name")
+        if "new_code" in payload:
+            proc.new_code = payload.get("new_code")
+        if "doc_type_id" in payload:
+            proc.doc_type_id = payload.get("doc_type_id")
+        if "doc_type_code" in payload:
+            proc.doc_type_code = payload.get("doc_type_code")
+        if "file_path" in payload:
+            proc.file_path = payload.get("file_path")
         proc.owner = payload.get("owner", proc.owner)
         proc.editor = payload.get("editor", proc.editor)
         proc.approver = payload.get("approver", proc.approver)
+        proc.approver_bgd = payload.get("approver_bgd", getattr(proc, "approver_bgd", ""))
         proc.issue_date = payload.get("issue_date", proc.issue_date)
         proc.last_checked_date = payload.get("last_checked_date", proc.last_checked_date)
         proc.last_result = payload.get("last_result", proc.last_result)
@@ -587,43 +740,81 @@ def save_iso_process(
 
     # Ghi nhận nhật ký sửa đổi (Revision Logs) của quy trình
     revision_logs = payload.get("revision_logs", [])
-    
-    # Nếu là cập nhật, tự động tạo thêm một dòng nhật ký sửa đổi đại diện cho lượt chỉnh sửa này
+    now_date = now_str[:10]  # YYYY-MM-DD
+    editor_name = payload.get("editor") or payload.get("owner") or "Hệ thống"
+    steps_list = payload.get("steps")
+    steps_count = len(steps_list) if steps_list is not None else 0
+
+    edit_note = payload.get("revision_note")
+    if not edit_note:
+        if steps_count > 0:
+            edit_note = f"Cập nhật lưu đồ và các bước quy trình ({steps_count} bước)"
+        else:
+            edit_note = "Cập nhật nội dung văn bản quy trình"
+
+    # Nếu là cập nhật quy trình đã có
     if proc_id:
-        now_date = now_str[:10]  # YYYY-MM-DD
-        editor_name = payload.get("editor") or "Hệ thống"
-        
-        # Chỉ append nếu dòng cuối cùng không trùng lặp (modifier, date)
-        should_append = True
-        if revision_logs:
-            last_log = revision_logs[-1]
-            if (last_log.get("rev_date") == now_date and 
-                last_log.get("modifier") == editor_name and 
-                "Cập nhật" in last_log.get("content", "")):
-                should_append = False
-                
-        if should_append:
+        if not revision_logs:
+            if iso_doc and iso_doc.revision_logs:
+                revision_logs = [
+                    {
+                        "seq_no": l.seq_no,
+                        "rev_date": l.rev_date,
+                        "content": l.content,
+                        "page_no": l.page_no,
+                        "modifier": l.modifier or "Hệ thống"
+                    }
+                    for l in sorted(iso_doc.revision_logs, key=lambda x: x.seq_no or 0)
+                ]
+            else:
+                revision_logs = [{
+                    "seq_no": 1,
+                    "rev_date": proc.issue_date or now_date,
+                    "content": "Ban hành lần đầu",
+                    "page_no": "Toàn bộ",
+                    "modifier": editor_name
+                }]
+
+        # Kiểm tra dòng cuối cùng có trùng lặp tuyệt đối với cùng nội dung và ngày sửa không
+        last_log = revision_logs[-1] if revision_logs else None
+        is_exact_dup = (
+            last_log and 
+            last_log.get("rev_date") == now_date and 
+            last_log.get("content") == edit_note and 
+            last_log.get("modifier") == editor_name
+        )
+
+        if not is_exact_dup:
             next_seq = len(revision_logs) + 1
             revision_logs.append({
                 "seq_no": next_seq,
                 "rev_date": now_date,
-                "content": "Cập nhật quy trình",
-                "page_no": "Tất cả",
+                "content": edit_note,
+                "page_no": "Mục 5 / Toàn bộ",
                 "modifier": editor_name
             })
-            
-    # Nếu là tạo mới và không truyền revision_logs, sao chép lịch sử từ mẫu gốc
-    elif not revision_logs and iso_doc:
-        revision_logs = [
-            {
-                "seq_no": l.seq_no,
-                "rev_date": l.rev_date,
-                "content": l.content,
-                "page_no": l.page_no,
-                "modifier": l.modifier or "Hệ thống"
-            }
-            for l in sorted(iso_doc.revision_logs, key=lambda x: x.seq_no or 0)
-        ]
+
+    # Nếu là tạo mới và không truyền revision_logs, sao chép lịch sử từ mẫu gốc hoặc tạo dòng ban hành lần đầu
+    elif not revision_logs:
+        if iso_doc and iso_doc.revision_logs:
+            revision_logs = [
+                {
+                    "seq_no": l.seq_no,
+                    "rev_date": l.rev_date,
+                    "content": l.content,
+                    "page_no": l.page_no,
+                    "modifier": l.modifier or "Hệ thống"
+                }
+                for l in sorted(iso_doc.revision_logs, key=lambda x: x.seq_no or 0)
+            ]
+        else:
+            revision_logs = [{
+                "seq_no": 1,
+                "rev_date": now_date,
+                "content": "Ban hành lần đầu",
+                "page_no": "Toàn bộ",
+                "modifier": editor_name
+            }]
 
     # Lưu lại toàn bộ revision logs vào bảng
     for idx, log in enumerate(revision_logs):
@@ -637,17 +828,124 @@ def save_iso_process(
         )
         db.add(db_log)
 
+    # Đồng bộ danh sách tài liệu / biểu mẫu liên quan vào bảng iso_documents
+    raw_templates = payload.get("related_templates")
+    if raw_templates is None and payload.get("sections"):
+        sec_templates = payload.get("sections", {}).get("__metadata_related_templates__")
+        if sec_templates:
+            try:
+                raw_templates = json.loads(sec_templates)
+            except:
+                raw_templates = None
+
+    if raw_templates is not None:
+        kept_doc_ids = []
+        for tpl in raw_templates:
+            tpl_code = (tpl.get("code") or "").strip()
+            tpl_title = (tpl.get("title") or tpl.get("name") or "").strip()
+            tpl_file = tpl.get("file_path") or ""
+            tpl_note = tpl.get("note") or ""
+            doc_id = tpl.get("doc_id")
+
+            # Chuẩn hóa mã biểu mẫu: luôn lấy theo định dạng (Mã QT_người dùng nhập)
+            if tpl_code and not tpl_code.startswith(f"{proc.code}_"):
+                tpl_code = f"{proc.code}_{tpl_code}"
+
+            if not tpl_code:
+                continue
+
+            existing_doc = None
+            if doc_id:
+                try:
+                    existing_doc = db.query(ISODocument).filter(ISODocument.id == int(doc_id)).first()
+                except:
+                    existing_doc = None
+
+            if not existing_doc and tpl_code:
+                existing_doc = db.query(ISODocument).filter(ISODocument.code == tpl_code).first()
+
+            if existing_doc:
+                existing_doc.code = tpl_code
+                existing_doc.name = tpl_title or existing_doc.name
+                existing_doc.process_id = proc.id
+                existing_doc.file_path = tpl_file or existing_doc.file_path
+                existing_doc.notes = tpl_note
+                existing_doc.folder = proc.department_name or proc.code
+                existing_doc.document_level = proc.document_level or "Cấp phòng"
+                existing_doc.issuer = proc.editor or proc.owner or existing_doc.issuer
+                existing_doc.approver = proc.approver or existing_doc.approver
+                existing_doc.approver_bgd = proc.approver_bgd or getattr(existing_doc, "approver_bgd", "")
+                existing_doc.updated_at = now_str
+                kept_doc_ids.append(existing_doc.id)
+            else:
+                new_doc = ISODocument(
+                    code=tpl_code,
+                    name=tpl_title or f"Biểu mẫu {tpl_code}",
+                    process_id=proc.id,
+                    file_path=tpl_file,
+                    notes=tpl_note,
+                    version="01",
+                    issue_date=proc.issue_date or now_str[:10],
+                    issuer=proc.editor or proc.owner or "Administrator",
+                    approver=proc.approver,
+                    approver_bgd=proc.approver_bgd,
+                    status="Hiệu lực",
+                    folder=proc.department_name or proc.code,
+                    doc_type="Biểu mẫu quy trình",
+                    document_level=proc.document_level or "Cấp phòng",
+                    symbol="BM",
+                    created_at=now_str,
+                    updated_at=now_str
+                )
+                db.add(new_doc)
+                db.flush()
+                kept_doc_ids.append(new_doc.id)
+
+        # Xóa các mẫu tài liệu cũ thuộc quy trình này không còn trong danh sách giữ lại
+        old_docs = db.query(ISODocument).filter(ISODocument.process_id == proc.id).all()
+        for od in old_docs:
+            if od.id not in kept_doc_ids:
+                db.delete(od)
+
     try:
         db.commit()
         return {
             "id": proc.id,
             "code": proc.code,
             "name": proc.name,
+            "revision_logs": [
+                {
+                    "seq_no": idx + 1,
+                    "rev_date": l.get("rev_date", ""),
+                    "content": l.get("content", ""),
+                    "page_no": l.get("page_no", ""),
+                    "modifier": l.get("modifier", "")
+                }
+                for idx, l in enumerate(revision_logs)
+            ],
             "message": "Đã lưu quy trình thực tế thành công!"
         }
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Lỗi khi lưu quy trình thực tế: {str(e)}")
+
+
+def resolve_iso_file_path(file_path: str) -> Optional[str]:
+    if not file_path:
+        return None
+    if os.path.exists(file_path):
+        return file_path
+    from modules.inspection.services.iso_file_service import BASE_ISO_DIR
+    candidates = [
+        os.path.join(BASE_ISO_DIR, file_path),
+        os.path.join("BackEnd", file_path),
+        os.path.join("..", file_path),
+        os.path.join(os.getcwd(), file_path)
+    ]
+    for c in candidates:
+        if os.path.exists(c):
+            return c
+    return None
 
 
 @router.get("/processes/{id}/details")
@@ -658,6 +956,47 @@ def get_iso_process_details(id: int, db: Session = Depends(get_db)):
     proc = db.query(ISOProcess).filter(ISOProcess.id == id).first()
     if not proc:
         raise HTTPException(status_code=404, detail="Không tìm thấy quy trình thực tế")
+
+    # Tự động đồng bộ nội dung ăn theo file nếu quy trình chưa có nội dung thực tế hoặc chỉ có placeholder
+    has_real_sections = False
+    if proc.sections:
+        for s in proc.sections:
+            cnt = (s.content_html or "").strip()
+            if cnt and "Chuẩn bị sẵn sàng" not in cnt:
+                has_real_sections = True
+                break
+
+    if not has_real_sections and proc.file_path:
+        resolved_file = resolve_iso_file_path(proc.file_path)
+        if resolved_file and os.path.exists(resolved_file):
+            try:
+                from modules.inspection.services.iso_parser import parse_iso_docx
+                parsed = parse_iso_docx(resolved_file) if resolved_file.lower().endswith(('.docx', '.doc')) else {}
+                parsed_secs = parsed.get("sections", {})
+                parsed_steps = parsed.get("steps", [])
+                if parsed_secs:
+                    db.query(ISOProcessSection).filter(ISOProcessSection.process_id == proc.id).delete()
+                    for s_name, s_html in parsed_secs.items():
+                        db.add(ISOProcessSection(process_id=proc.id, section_name=s_name, content_html=s_html))
+                    if parsed_steps:
+                        db.query(ISOProcessStepInstance).filter(ISOProcessStepInstance.process_id == proc.id).delete()
+                        for st in parsed_steps:
+                            st_num = st.get("step_number", 1)
+                            db.add(ISOProcessStepInstance(
+                                process_id=proc.id,
+                                step_number=st_num,
+                                name=st.get("name", ""),
+                                assignee_role=st.get("assignee_role", ""),
+                                instructions=st.get("instructions", ""),
+                                checklist_json=json.dumps(st.get("checklist", [])) if st.get("checklist") else "",
+                                transition_json=json.dumps(st.get("transition", {})) if st.get("transition") else "",
+                                flow_node_id=f"node_{st_num}"
+                            ))
+                    db.commit()
+                    db.refresh(proc)
+            except Exception as e:
+                db.rollback()
+                print(f"Lỗi tự động parse file cho quy trình {proc.id}: {e}")
 
     # Nhật ký sửa đổi
     revision_logs = []
@@ -678,13 +1017,24 @@ def get_iso_process_details(id: int, db: Session = Depends(get_db)):
     for s in proc.sections:
         sections[s.section_name] = s.content_html
 
-    # Nếu rỗng, khởi tạo các phần văn bản từ template nhưng để rỗng nội dung (chỉ hiển thị dạng hint, giữ lại metadata cấu hình)
+    # Nếu rỗng, khởi tạo các phần văn bản từ template hoặc bộ khung chuẩn nhưng để rỗng nội dung (mặc định để trống)
     if not sections and proc.iso_document:
         for s in proc.iso_document.sections:
             if s.section_name.startswith("__"):
                 sections[s.section_name] = s.content_html
             else:
                 sections[s.section_name] = ""
+    elif not sections:
+        standard_sec_names = [
+            "1. Mục đích",
+            "2. Phạm vi áp dụng",
+            "3. Tài liệu viện dẫn",
+            "4. Định nghĩa và từ viết tắt",
+            "5. Nội dung quy trình",
+            "6. Hồ sơ lưu trữ"
+        ]
+        for s_name in standard_sec_names:
+            sections[s_name] = ""
 
     # Các phần văn bản của mẫu gốc để làm gợi ý (hints)
     template_sections = {}
@@ -724,16 +1074,87 @@ def get_iso_process_details(id: int, db: Session = Depends(get_db)):
             "flow_node_id": st.flow_node_id
         })
 
+    # Danh sách mẫu biểu mẫu liên quan (ISODocument con) thuộc quy trình này
+    related_templates = []
+    for doc in (proc.documents or []):
+        fname = os.path.basename(doc.file_path) if doc.file_path else ""
+        related_templates.append({
+            "id": f"doc_{doc.id}",
+            "doc_id": doc.id,
+            "code": doc.code,
+            "title": doc.name,
+            "scope": "Tất cả",
+            "note": doc.notes or "",
+            "file_name": fname,
+            "file_path": doc.file_path or ""
+        })
+
+    if not related_templates and sections.get("__metadata_related_templates__"):
+        try:
+            sec_tpls = json.loads(sections.get("__metadata_related_templates__"))
+            if isinstance(sec_tpls, list):
+                related_templates = sec_tpls
+        except:
+            pass
+
+    # Đồng bộ cả vào sections để tương thích hoàn toàn với tất cả frontend client
+    if related_templates:
+        sections["__metadata_related_templates__"] = json.dumps(related_templates, ensure_ascii=False)
+
+    # Xác định tài liệu có Lưu đồ hay không (Tuyệt đối không gán cứng)
+    doc_code_check = (proc.code or proc.new_code or "").upper()
+    doc_name_check = (proc.name or "").lower()
+    doc_type_code_check = (proc.doc_type_code or "").upper()
+    
+    is_policy = (
+        "CS" in doc_type_code_check or
+        "CS" in doc_code_check or
+        doc_name_check.startswith("chính sách") or
+        "quy chế" in doc_name_check
+    )
+    
+    real_steps = [s for s in steps if s.get("name") and len(s.get("name", "").strip()) > 1 and s.get("name", "").strip() != ":"]
+    has_flowchart = False
+    if not is_policy:
+        if len(real_steps) >= 2:
+            has_flowchart = True
+        elif proc.diagram_data and len(proc.diagram_data.strip()) > 10:
+            has_flowchart = True
+
+    # Nếu không có lưu đồ, đảm bảo steps trả về rỗng
+    if not has_flowchart:
+        steps = []
+
+    cover_info = {
+        "company_name": "CÔNG TY CỔ PHẦN VINA G7",
+        "name": proc.name,
+        "code": proc.code or proc.new_code or "",
+        "version": getattr(proc.iso_document, "version", "01") if proc.iso_document else "01",
+        "issue_date": proc.issue_date or "",
+        "department_name": proc.department_name or "",
+        "editor": proc.editor or proc.owner or "",
+        "approver": proc.approver or "",
+        "approver_bgd": getattr(proc, "approver_bgd", "") or ""
+    }
+
     return {
         "id": proc.id,
         "code": proc.code,
         "name": proc.name,
+        "file_path": proc.file_path,
+        "file_name": os.path.basename(proc.file_path) if proc.file_path else "",
         "iso_document_id": proc.iso_document_id,
         "iso_document_code": proc.iso_document.code if proc.iso_document else "---",
         "iso_document_name": proc.iso_document.name if proc.iso_document else "---",
         "owner": proc.owner,
         "editor": proc.editor,
         "approver": proc.approver,
+        "approver_bgd": getattr(proc, "approver_bgd", "") or "",
+        "department_id": proc.department_id,
+        "department_name": proc.department_name or "",
+        "new_code": getattr(proc, "new_code", "") or "",
+        "doc_type_id": getattr(proc, "doc_type_id", None),
+        "doc_type_code": getattr(proc, "doc_type_code", "") or "",
         "issue_date": proc.issue_date,
         "last_checked_date": proc.last_checked_date,
         "last_result": proc.last_result,
@@ -744,10 +1165,13 @@ def get_iso_process_details(id: int, db: Session = Depends(get_db)):
         "symbol": proc.symbol,
         "role": proc.role,
         "diagram_data": proc.diagram_data or (proc.iso_document.diagram_data if proc.iso_document else ""),
+        "has_flowchart": has_flowchart,
+        "cover_info": cover_info,
         "revision_logs": revision_logs,
         "sections": sections,
         "template_sections": template_sections,
         "steps": steps,
+        "related_templates": related_templates,
         "inspection_guide_id": proc.inspection_guide_id,
         "inspection_guide": {
             "id": proc.inspection_guide.id,
@@ -758,6 +1182,94 @@ def get_iso_process_details(id: int, db: Session = Depends(get_db)):
             "steps_count": len(proc.inspection_guide.steps) if proc.inspection_guide and proc.inspection_guide.steps else 0
         } if proc.inspection_guide else None
     }
+
+
+@router.post("/processes/{id}/sync-from-file")
+def sync_iso_process_from_file(id: int, db: Session = Depends(get_db)):
+    """
+    [POST] Ép đọc lại toàn bộ nội dung (Mục lục, văn bản, các bước) từ file nguồn thực tế.
+    """
+    proc = db.query(ISOProcess).filter(ISOProcess.id == id).first()
+    if not proc:
+        raise HTTPException(status_code=404, detail="Không tìm thấy quy trình thực tế")
+    if not proc.file_path:
+        raise HTTPException(status_code=400, detail="Quy trình chưa liên kết đường dẫn tệp tài liệu")
+
+    resolved_file = resolve_iso_file_path(proc.file_path)
+    if not resolved_file or not os.path.exists(resolved_file):
+        raise HTTPException(status_code=404, detail=f"Không tìm thấy tệp tài liệu nguồn: {proc.file_path}")
+
+    from modules.inspection.services.iso_parser import parse_iso_docx
+    try:
+        parsed = {}
+        if resolved_file.lower().endswith(('.docx', '.doc')):
+            parsed = parse_iso_docx(resolved_file)
+        elif resolved_file.lower().endswith('.pdf'):
+            import fitz
+            doc_pdf = fitz.open(resolved_file)
+            lines = []
+            for page in doc_pdf:
+                lines.extend(page.get_text().split("\n"))
+            doc_pdf.close()
+            sec_dict = {}
+            cur_sec = "Nội dung"
+            cur_l = []
+            for l in lines:
+                l_s = l.strip()
+                if not l_s:
+                    continue
+                if any(l_s.lower().startswith(kw) for kw in ["mục đích", "phạm vi", "trách nhiệm", "nguyên tắc", "nội dung"]) and len(l_s) < 50:
+                    if cur_l:
+                        sec_dict[cur_sec] = "<p>" + "</p><p>".join(cur_l) + "</p>"
+                    cur_sec = l_s.rstrip(":").strip()
+                    cur_l = []
+                else:
+                    cur_l.append(l_s)
+            if cur_l:
+                sec_dict[cur_sec] = "<p>" + "</p><p>".join(cur_l) + "</p>"
+            parsed = {"sections": sec_dict, "steps": []}
+
+        parsed_secs = parsed.get("sections", {})
+        parsed_steps = parsed.get("steps", [])
+        if not parsed_secs:
+            raise HTTPException(status_code=400, detail="Không thể bóc tách nội dung văn bản từ tệp này")
+
+        db.query(ISOProcessSection).filter(ISOProcessSection.process_id == proc.id).delete()
+        for s_name, s_html in parsed_secs.items():
+            db.add(ISOProcessSection(process_id=proc.id, section_name=s_name, content_html=s_html))
+
+        if parsed_steps:
+            db.query(ISOProcessStepInstance).filter(ISOProcessStepInstance.process_id == proc.id).delete()
+            for st in parsed_steps:
+                st_num = st.get("step_number", 1)
+                db.add(ISOProcessStepInstance(
+                    process_id=proc.id,
+                    step_number=st_num,
+                    name=st.get("name", ""),
+                    assignee_role=st.get("assignee_role", ""),
+                    instructions=st.get("instructions", ""),
+                    checklist_json=json.dumps(st.get("checklist", [])) if st.get("checklist") else "",
+                    transition_json=json.dumps(st.get("transition", {})) if st.get("transition") else "",
+                    flow_node_id=f"node_{st_num}"
+                ))
+
+        if parsed.get("issuer") and not proc.editor:
+            proc.editor = parsed["issuer"]
+        if parsed.get("approver") and not proc.approver:
+            proc.approver = parsed["approver"]
+
+        db.commit()
+        return {
+            "success": True, 
+            "message": f"Đã đồng bộ {len(parsed_secs)} mục nội dung từ tệp tài liệu gốc!",
+            "sections_count": len(parsed_secs),
+            "steps_count": len(parsed_steps)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Lỗi khi đọc file: {str(e)}")
 
 
 from modules.inspection_guide.schemas.inspection_guide import InspectionGuideOut
@@ -959,10 +1471,14 @@ def download_raw_iso_document(id: int, db: Session = Depends(get_db)):
     if not doc_obj or not doc_obj.file_path:
         raise HTTPException(status_code=404, detail="Không tìm thấy tệp tin gốc của tài liệu này")
 
-    # Tìm đường dẫn file thực tế trên đĩa (hỗ trợ cả chạy từ / hoặc /BackEnd)
+    # Tìm đường dẫn file thực tế trên đĩa (hỗ trợ cả chạy từ /, /BackEnd hoặc ổ Z:)
     resolved_path = doc_obj.file_path
-    if resolved_path:
-        if not os.path.exists(resolved_path):
+    if resolved_path and not os.path.exists(resolved_path):
+        from modules.inspection.services.iso_file_service import BASE_ISO_DIR
+        alt_z = os.path.join(BASE_ISO_DIR, resolved_path)
+        if os.path.exists(alt_z):
+            resolved_path = alt_z
+        else:
             alt_path = os.path.join("BackEnd", resolved_path)
             if os.path.exists(alt_path):
                 resolved_path = alt_path
@@ -978,6 +1494,47 @@ def download_raw_iso_document(id: int, db: Session = Depends(get_db)):
     ext = os.path.splitext(resolved_path)[1]
     safe_code = (doc_obj.code or "ISO").replace("/", "_").replace("\\", "_")
     safe_name = (doc_obj.name or "Tai_lieu").replace("/", "_").replace("\\", "_")
+    download_filename = f"{safe_code}_{safe_name}{ext}"
+
+    return FileResponse(
+        path=resolved_path,
+        filename=download_filename,
+        media_type="application/octet-stream"
+    )
+
+
+@router.get("/processes/{id}/download-raw")
+def download_raw_iso_process(id: int, db: Session = Depends(get_db)):
+    """
+    [GET] Tải tệp tin gốc (raw file Word/PDF) của quy trình ISO thực tế.
+    """
+    from fastapi.responses import FileResponse
+    from modules.inspection.services.iso_file_service import BASE_ISO_DIR
+
+    proc_obj = db.query(ISOProcess).filter(ISOProcess.id == id).first()
+    if not proc_obj or not proc_obj.file_path:
+        raise HTTPException(status_code=404, detail="Không tìm thấy tệp tin gốc của quy trình này")
+
+    resolved_path = proc_obj.file_path
+    if resolved_path and not os.path.exists(resolved_path):
+        alt_z = os.path.join(BASE_ISO_DIR, resolved_path)
+        if os.path.exists(alt_z):
+            resolved_path = alt_z
+        else:
+            alt_path = os.path.join("BackEnd", resolved_path)
+            if os.path.exists(alt_path):
+                resolved_path = alt_path
+            else:
+                alt_path2 = os.path.join("..", resolved_path)
+                if os.path.exists(alt_path2):
+                    resolved_path = alt_path2
+
+    if not resolved_path or not os.path.exists(resolved_path):
+        raise HTTPException(status_code=404, detail="Không tìm thấy tệp tin gốc trên hệ thống đĩa máy chủ")
+
+    ext = os.path.splitext(resolved_path)[1]
+    safe_code = (proc_obj.code or "QT").replace("/", "_").replace("\\", "_")
+    safe_name = (proc_obj.name or "Quy_trinh").replace("/", "_").replace("\\", "_")
     download_filename = f"{safe_code}_{safe_name}{ext}"
 
     return FileResponse(
@@ -1134,4 +1691,215 @@ def download_compiled_iso_document(id: int, db: Session = Depends(get_db)):
         media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         headers=headers
     )
+
+
+# -------------------------------------------------------------
+# PHÂN HỆ QUẢN LÝ LOẠI HỒ SƠ ISO (ISO DOCUMENT TYPES) CRUD
+# -------------------------------------------------------------
+
+@router.get("/types")
+def get_iso_document_types(db: Session = Depends(get_db)):
+    """[GET] Lấy danh mục Loại hồ sơ / Loại tài liệu ISO"""
+    types = db.query(ISODocumentType).order_by(ISODocumentType.id.asc()).all()
+    return [
+        {
+            "id": t.id,
+            "name": t.name,
+            "code": t.code,
+            "description": t.description or "",
+            "created_at": t.created_at or "",
+            "updated_at": t.updated_at or ""
+        }
+        for t in types
+    ]
+
+
+@router.post("/types")
+def create_iso_document_type(payload: dict, db: Session = Depends(get_db)):
+    """[POST] Thêm mới Loại hồ sơ ISO"""
+    name = (payload.get("name") or "").strip()
+    code = (payload.get("code") or "").strip().upper()
+    description = payload.get("description", "")
+    if not name or not code:
+        raise HTTPException(status_code=400, detail="Tên và Mã viết tắt không được bỏ trống")
+    
+    existing = db.query(ISODocumentType).filter(ISODocumentType.code == code).first()
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Mã viết tắt '{code}' đã tồn tại")
+    
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    doc_type = ISODocumentType(
+        name=name,
+        code=code,
+        description=description,
+        created_at=now_str,
+        updated_at=now_str
+    )
+    db.add(doc_type)
+    db.commit()
+    db.refresh(doc_type)
+    return {
+        "id": doc_type.id,
+        "name": doc_type.name,
+        "code": doc_type.code,
+        "description": doc_type.description or "",
+        "created_at": doc_type.created_at,
+        "updated_at": doc_type.updated_at
+    }
+
+
+@router.put("/types/{id}")
+def update_iso_document_type(id: int, payload: dict, db: Session = Depends(get_db)):
+    """[PUT] Cập nhật Loại hồ sơ ISO"""
+    doc_type = db.query(ISODocumentType).filter(ISODocumentType.id == id).first()
+    if not doc_type:
+        raise HTTPException(status_code=404, detail="Không tìm thấy loại hồ sơ")
+    
+    name = (payload.get("name") or "").strip()
+    code = (payload.get("code") or "").strip().upper()
+    description = payload.get("description", "")
+    if not name or not code:
+        raise HTTPException(status_code=400, detail="Tên và Mã viết tắt không được bỏ trống")
+    
+    existing = db.query(ISODocumentType).filter(ISODocumentType.code == code, ISODocumentType.id != id).first()
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Mã viết tắt '{code}' đã tồn tại ở loại hồ sơ khác")
+    
+    doc_type.name = name
+    doc_type.code = code
+    doc_type.description = description
+    doc_type.updated_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    db.commit()
+    db.refresh(doc_type)
+    return {
+        "id": doc_type.id,
+        "name": doc_type.name,
+        "code": doc_type.code,
+        "description": doc_type.description or "",
+        "updated_at": doc_type.updated_at
+    }
+
+
+@router.delete("/types/{id}")
+def delete_iso_document_type(id: int, db: Session = Depends(get_db)):
+    """[DELETE] Xóa Loại hồ sơ ISO"""
+    doc_type = db.query(ISODocumentType).filter(ISODocumentType.id == id).first()
+    if not doc_type:
+        raise HTTPException(status_code=404, detail="Không tìm thấy loại hồ sơ")
+    
+    used_count = db.query(ISOProcess).filter(ISOProcess.doc_type_id == id).count()
+    if used_count > 0:
+        raise HTTPException(status_code=400, detail=f"Không thể xóa vì có {used_count} quy trình đang liên kết loại hồ sơ này")
+    
+    db.delete(doc_type)
+    db.commit()
+    return {"message": "Đã xóa loại hồ sơ thành công"}
+
+
+@router.get("/processes/next-code")
+def get_next_process_code(
+    department_code: str = "QL",
+    doc_type_code: str = "QT",
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Sinh mã quy trình gợi ý tiếp theo dạng G7.xx.yy.zz
+    xx: 2 ký tự viết tắt của phòng ban
+    yy: 2 ký tự viết tắt của loại hồ sơ
+    zz: số tự tăng 2 chữ số (01, 02...)
+    """
+    import re
+    dept = (department_code or "QL").strip().upper()[:2]
+    dtype = (doc_type_code or "QT").strip().upper()[:2]
+    prefix = f"G7.{dept}.{dtype}."
+    
+    existing_codes = db.query(ISOProcess.new_code).filter(
+        ISOProcess.new_code.like(f"{prefix}%")
+    ).all()
+    
+    max_num = 0
+    for (c,) in existing_codes:
+        if c:
+            m = re.search(rf"^{re.escape(prefix)}(\d+)", c)
+            if m:
+                try:
+                    num = int(m.group(1))
+                    if num > max_num:
+                        max_num = num
+                except:
+                    pass
+    
+    next_num_str = f"{max_num + 1:02d}"
+    return {
+        "prefix": prefix,
+        "next_code": f"{prefix}{next_num_str}",
+        "seq": max_num + 1
+    }
+
+
+@router.get("/approvers-list")
+def get_iso_approvers_list(db: Session = Depends(get_db)):
+    """
+    [GET] Lấy danh sách Trưởng phòng và Ban Giám Đốc từ DB để tự động điền Người duyệt.
+    """
+    from sqlalchemy import text
+    manager_list = []
+    try:
+        managers = db.execute(text("SELECT full_name, position, department FROM employees WHERE position LIKE N'%Trưởng%' OR position LIKE N'%Giám%'")).fetchall()
+        for m in managers:
+            manager_list.append({
+                "name": m[0],
+                "position": m[1],
+                "department": m[2] or ""
+            })
+    except Exception:
+        pass
+
+    try:
+        hr_mgrs = db.execute(text("""
+            SELECT e.full_name, p.name as position, d.name as department 
+            FROM hr_employees e 
+            JOIN permissions p ON e.position_id = p.id 
+            LEFT JOIN departments d ON e.department_id = d.id
+            WHERE p.name LIKE N'%Trưởng%' OR p.name LIKE N'%Giám%'
+        """)).fetchall()
+        for hm in hr_mgrs:
+            if not any(m["name"] == hm[0] for m in manager_list):
+                manager_list.append({
+                    "name": hm[0],
+                    "position": hm[1],
+                    "department": hm[2] or ""
+                })
+    except Exception:
+        pass
+    
+    try:
+        from modules.auth.models.role import Role
+        from modules.inspection.services.iso_file_service import get_department_code
+        roles = db.query(Role).filter(Role.is_active == True).order_by(Role.id).all()
+        skip_roles = ["Quản Lý", "Tổ Trưởng"]
+        depts = []
+        for r in roles:
+            if r.name in skip_roles:
+                continue
+            full_name = r.description if r.description and r.description.strip() else r.name
+            code_2 = get_department_code(r.name)
+            if code_2 in ["CL", "QL"] or "QL" in (r.name or "").upper():
+                code_2 = "QL"
+            elif code_2 in ["BG", "BGD"] or (r.name or "").upper() == "BGD":
+                code_2 = "BG"
+            depts.append({
+                "id": r.id,
+                "name": full_name,
+                "code": code_2,
+                "role_name": r.name
+            })
+    except Exception:
+        depts = []
+
+    return {
+        "managers": manager_list,
+        "departments": depts,
+        "default_bgd": "Ban Giám Đốc"
+    }
 

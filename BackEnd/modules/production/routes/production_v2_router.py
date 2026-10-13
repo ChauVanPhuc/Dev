@@ -703,16 +703,28 @@ def get_production_dashboard(
             chk_query_items = db.query(KPIChecklist).order_by(KPIChecklist.id.asc()).limit(6).all()
 
         for idx, c in enumerate(chk_query_items):
-            st_color = "#16a34a" if c.status_today == "Đã hoàn thành" else ("#ea580c" if c.status_today == "Đang thực hiện" else "#dc2626")
-            st_text = "Đã Làm" if c.status_today == "Đã hoàn thành" else ("Đang Làm" if c.status_today == "Đang thực hiện" else "Chưa Làm")
+            is_done = c.status_today == "Đã hoàn thành"
+            is_doing = c.status_today == "Đang thực hiện"
+            st_color = "#16a34a" if is_done else ("#ea580c" if is_doing else "#dc2626")
+            st_text = "Đã hoàn thành" if is_done else ("Đang làm" if is_doing else "Chưa làm")
             action_items.append({
                 "id": c.id,
                 "stt": f"{(idx+1):02d}",
                 "task_code": c.task_code or "",
                 "task_name": c.content,
+                "content": c.content,
+                "frequency": c.frequency or "Hàng ngày",
+                "checklist_type": c.checklist_type or "FIXED",
+                "weight_score": c.weight_score if c.weight_score is not None else 10,
+                "evidence_type": c.evidence_type or "NONE",
+                "guide_code": c.guide_code or "",
+                "result": c.result or "",
                 "status": st_text,
                 "status_color": st_color,
-                "notes": c.result or ""
+                "notes": c.performer_note or c.result or "",
+                "performer_note": c.performer_note or "",
+                "evidence_url": c.evidence_url or "",
+                "completed_at": c.completed_at or ""
             })
 
         return {
@@ -736,6 +748,9 @@ def get_production_dashboard(
 class ChecklistUpdatePayload(BaseModel):
     notes: Optional[str] = None
     status: Optional[str] = None
+    evidence_url: Optional[str] = None
+    performer_note: Optional[str] = None
+    completed_at: Optional[str] = None
 
 
 @router.put("/dashboard/checklist/{checklist_id}")
@@ -746,6 +761,7 @@ def update_dashboard_checklist(
 ):
     """
     [PUT] Cập nhật kết quả ghi chú hoặc trạng thái thực hiện của 1 mục checklist từ Mobile Dashboard.
+    Hỗ trợ lưu bằng chứng ảnh/file, chữ ký, ghi chú thực tế và thời điểm hoàn thành.
     """
     from modules.kpi.models.kpi_management import KPIChecklist
     chk = db.query(KPIChecklist).filter(KPIChecklist.id == checklist_id).first()
@@ -753,10 +769,22 @@ def update_dashboard_checklist(
         raise HTTPException(status_code=404, detail="Không tìm thấy mục checklist")
 
     if payload.notes is not None:
-        chk.result = payload.notes
+        chk.performer_note = payload.notes
+    if payload.performer_note is not None:
+        chk.performer_note = payload.performer_note
+    if payload.evidence_url is not None:
+        chk.evidence_url = payload.evidence_url
+    if payload.completed_at is not None:
+        chk.completed_at = payload.completed_at
+    else:
+        if payload.status in ["Đã Làm", "Đã hoàn thành"]:
+            chk.completed_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
     if payload.status is not None:
         if payload.status in ["Đã Làm", "Đã hoàn thành"]:
             chk.status_today = "Đã hoàn thành"
+            chk.last_performed = datetime.now().strftime("%Y-%m-%d")
+            chk.perform_count = (chk.perform_count or 0) + 1
         elif payload.status in ["Đang Làm", "Đang thực hiện"]:
             chk.status_today = "Đang thực hiện"
         elif payload.status in ["Chưa Làm", "Chưa làm"]:
@@ -770,7 +798,9 @@ def update_dashboard_checklist(
         "message": "Cập nhật thành công",
         "id": chk.id,
         "status_today": chk.status_today,
-        "result": chk.result
+        "evidence_url": chk.evidence_url,
+        "performer_note": chk.performer_note,
+        "completed_at": chk.completed_at
     }
 
 # ----------------------------------------------------------------------
