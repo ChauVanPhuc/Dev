@@ -349,38 +349,6 @@ const CanvasISOEditor = ({
 
   return (
     <div style={{ width: '100%', height: '100%', minHeight: '680px', position: 'relative', overflow: 'hidden' }}>
-      {/* Nút chuyển chế độ Word cơ bản trên góc phải */}
-      {onSwitchToClassic && (
-        <div style={{
-          position: 'absolute',
-          top: '8px',
-          right: '16px',
-          zIndex: 10
-        }}>
-          <button
-            type="button"
-            onClick={onSwitchToClassic}
-            style={{
-              padding: '5px 12px',
-              backgroundColor: 'rgba(255, 255, 255, 0.95)',
-              border: '1px solid #CBD5E1',
-              borderRadius: '5px',
-              color: '#475569',
-              fontSize: '0.8rem',
-              fontWeight: '600',
-              cursor: 'pointer',
-              boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-            title="Chuyển sang giao diện soạn thảo văn bản Word cơ bản"
-          >
-            <span>📝</span> Chế độ Word cơ bản
-          </button>
-        </div>
-      )}
-
       {/* Cảnh báo lỗi kết nối */}
       {loadError && (
         <div style={{
@@ -398,7 +366,7 @@ const CanvasISOEditor = ({
           boxShadow: '0 2px 8px rgba(220, 38, 38, 0.15)'
         }}>
           <span style={{ fontSize: '0.88rem', color: '#991B1B', fontWeight: '500' }}>
-            ⚠️ Chưa thể tải Trình soạn thảo Canvas Editor. Bạn có thể thử bấm "Thử tải lại" hoặc chuyển sang "Chế độ Word chuẩn".
+            ⚠️ Chưa thể tải Trình soạn thảo Canvas Editor. Bạn có thể thử bấm "Thử tải lại".
           </span>
           <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
             <button
@@ -421,24 +389,6 @@ const CanvasISOEditor = ({
             >
               🔄 Thử tải lại
             </button>
-            {onSwitchToClassic && (
-              <button
-                type="button"
-                onClick={onSwitchToClassic}
-                style={{
-                  padding: '5px 12px',
-                  backgroundColor: '#7B5233',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '0.82rem',
-                  fontWeight: 'bold'
-                }}
-              >
-                📝 Chuyển sang Word chuẩn
-              </button>
-            )}
           </div>
         </div>
       )}

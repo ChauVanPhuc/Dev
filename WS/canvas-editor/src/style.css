@@ -47,21 +47,36 @@ ul {
 
 .menu {
   width: 100%;
-  height: 64px;
+  height: 76px;
   top: 0;
   z-index: 9;
   position: fixed;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   background: #f2f4f7;
-  box-shadow: 0 2px 4px 0 transparent;
+  border-bottom: 1px solid #dcdfe6;
+  box-shadow: 0 1px 4px 0 rgba(0, 0, 0, 0.05);
+  box-sizing: border-box;
+}
+
+.menu-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 38px;
+}
+
+.menu-row-1 {
+  border-bottom: 1px solid rgba(207, 210, 216, 0.4);
 }
 
 .menu-divider {
   width: 1px;
-  height: 24px;
-  margin: 0 8px;
+  height: 20px;
+  margin: 0 6px;
   display: inline-block;
   background-color: #cfd2d8;
 }
@@ -1085,7 +1100,7 @@ ul {
   position: fixed;
   left: 0;
   bottom: 0;
-  top: 100px;
+  top: 110px;
   padding: 0 20px 40px 20px;
 }
 
@@ -1181,12 +1196,12 @@ ul {
 }
 
 .editor > div {
-  margin: 85px auto;
+  margin: 95px auto;
 }
 
 /* 标尺滚动吸附时避开固定工具栏 */
 .editor .ce-ruler-x {
-  top: 64px;
+  top: 76px;
 }
 
 .ce-page-container canvas {

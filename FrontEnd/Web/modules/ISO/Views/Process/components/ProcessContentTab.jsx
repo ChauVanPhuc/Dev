@@ -2594,7 +2594,6 @@ const ProcessContentTab = ({ editor }) => {
             handleSaveForm={handleSaveForm}
             onOpenFlowchartModal={() => handleOpenFlowchartModal()}
             showFeedback={showFeedback}
-            onSwitchToClassic={() => setEditorEngine('classic')}
           />
         </div>
       ) : (
