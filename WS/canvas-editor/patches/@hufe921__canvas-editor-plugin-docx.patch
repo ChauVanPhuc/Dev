@@ -1,0 +1,52 @@
+diff --git a/dist/docx.js b/dist/docx.js
+index 98594aade569e51fe9bd0dc3111ecb3a431d93df..0c2708b53b923015f731372b4d8d2ada4f6bdaf3 100644
+--- a/dist/docx.js
++++ b/dist/docx.js
+@@ -17508,10 +17508,17 @@ class Xp {
+       g.getAttribute("w:type") === "paragraph" && g.getAttribute("w:default") === "1" && !this.defaultParagraphStyle && (this.defaultParagraphStyle = Ar(g.getElementsByTagName("w:rPr")[0] || null));
+       const f = (c = (n = g.getElementsByTagName("w:name")[0]) == null ? void 0 : n.getAttribute("w:val")) == null ? void 0 : c.toLowerCase(), y = f == null ? void 0 : f.match(/^toc (\d)$/);
+       y && this.tocLevelByStyleId.set(_, Number(y[1]));
+-      const d = f == null ? void 0 : f.match(/^heading (\d)$/);
+-      if (d)
+-        this.headingByStyleId.set(_, aa[Number(d[1]) - 1]);
+-      else {
++      const _lower = _ ? _.toLowerCase().replace(/[\s_-]+/g, '') : '';
++      let d = f == null ? void 0 : f.match(/^(?:heading|tiêu\s*đề|tieu\s*de)\s*(\d)$/i);
++      if (!d && f) d = f.match(/^h(\d)$/i);
++      if (!d && _lower) {
++        const m = _lower.match(/^(?:heading|tiêuđề|tieude|h)(\d)$/i);
++        if (m) d = m;
++      }
++      if (d) {
++        const lvl = Number(d[1]);
++        if (lvl >= 1 && lvl <= 6) this.headingByStyleId.set(_, aa[lvl - 1]);
++      } else {
+         const p = Number(((w = g.getElementsByTagName("w:outlineLvl")[0]) == null ? void 0 : w.getAttribute("w:val")) ?? -1);
+         p >= 0 && p < 6 && this.headingByStyleId.set(_, aa[p]);
+       }
+@@ -17696,7 +17703,24 @@ class Xp {
+   // 由上层根据下一个块级元素类型决定是否补（列表/表格自带断行时省略）
+   parseParagraph(t, r) {
+     var d, x, p, E, A, N, O;
+-    const i = t.getElementsByTagName("w:pPr")[0] || null, a = ((d = i == null ? void 0 : i.getElementsByTagName("w:pStyle")[0]) == null ? void 0 : d.getAttribute("w:val")) ?? void 0, o = a ? this.headingByStyleId.get(a) : void 0, s = i != null && i.getElementsByTagName("w:pageBreakBefore").length ? [{ value: "", type: gt.PAGE_BREAK }] : [], n = this.parseBorderSeparator(t, i);
++    const i = t.getElementsByTagName("w:pPr")[0] || null, a = ((d = i == null ? void 0 : i.getElementsByTagName("w:pStyle")[0]) == null ? void 0 : d.getAttribute("w:val")) ?? void 0;
++    let o = a ? this.headingByStyleId.get(a) : void 0;
++    if (!o && a) {
++      const aClean = a.toLowerCase().replace(/[\s_-]+/g, '');
++      const aMatch = aClean.match(/^(?:heading|tiêuđề|tieude|h)(\d)$/i);
++      if (aMatch) {
++        const lvl = Number(aMatch[1]);
++        if (lvl >= 1 && lvl <= 6) o = aa[lvl - 1];
++      }
++    }
++    if (!o && i) {
++      const outlineEl = i.getElementsByTagName("w:outlineLvl")[0];
++      if (outlineEl) {
++        const p = Number(outlineEl.getAttribute("w:val") ?? -1);
++        if (p >= 0 && p < 6) o = aa[p];
++      }
++    }
++    const s = i != null && i.getElementsByTagName("w:pageBreakBefore").length ? [{ value: "", type: gt.PAGE_BREAK }] : [], n = this.parseBorderSeparator(t, i);
+     if (n)
+       return { elements: [...s, n], trailingBreak: !1 };
+     const c = this.parseInlineContent(t, r, a), w = i == null ? void 0 : i.getElementsByTagName("w:numPr")[0];

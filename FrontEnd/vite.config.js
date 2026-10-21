@@ -71,8 +71,8 @@ export default defineConfig({
       '@/modules/price': path.resolve(__dirname, '../Claim/FrontEnd/src/modules/price'),
       '@/modules': path.resolve(__dirname, '../Claim/FrontEnd/src/modules'),
       '@/shared': path.resolve(__dirname, '../Claim/FrontEnd/src/shared'),
-      '@hufe921/canvas-editor': 'C:/Tool/WS/canvas-editor/dist/canvas-editor.js',
-      '@hufe921/canvas-editor-plugin-docx': 'C:/Tool/WS/canvas-editor/node_modules/@hufe921/canvas-editor-plugin-docx/dist/docx.js'
+      '@hufe921/canvas-editor': path.resolve(__dirname, '../WS/canvas-editor/dist/canvas-editor.js'),
+      '@hufe921/canvas-editor-plugin-docx': path.resolve(__dirname, '../WS/canvas-editor/node_modules/@hufe921/canvas-editor-plugin-docx/dist/docx.js')
     }
   },
   server: {
@@ -88,7 +88,7 @@ export default defineConfig({
       strict: false,
       allow: [
         path.resolve(__dirname, '..'),
-        'C:/Tool/WS/canvas-editor'
+        path.resolve(__dirname, '../WS/canvas-editor')
       ]
     },
     proxy: {

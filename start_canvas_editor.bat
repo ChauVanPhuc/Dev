@@ -26,5 +26,14 @@ echo   ERP G7 CANVAS EDITOR - Port 1000 Dev Server
 echo ======================================================
 echo.
 
-cd /d C:\Tool\WS\canvas-editor
+if exist "%~dp0WS\canvas-editor" (
+    cd /d "%~dp0WS\canvas-editor"
+) else (
+    cd /d C:\Tool\WS\canvas-editor
+)
+if not exist node_modules (
+    echo [!] node_modules missing in WS/canvas-editor. Running 'npm install'...
+    call npm install
+)
 npm run dev
+

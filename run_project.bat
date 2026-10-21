@@ -122,7 +122,10 @@ if not exist node_modules (
 start "Feedback Portal - ERP G7 (Port 3001)" cmd /k "cd /d %~dp0Feedback\FrontEnd && npm run dev"
 
 :: --- 6. CANVAS EDITOR (Port 1000) ---
-if exist "C:\Tool\WS\canvas-editor" (
+if exist "%~dp0WS\canvas-editor" (
+    echo [6/6] Starting Canvas Editor (Port 1000)...
+    start "Canvas Editor - ERP G7" cmd /k "cd /d %~dp0 && call start_canvas_editor.bat"
+) else if exist "C:\Tool\WS\canvas-editor" (
     echo [6/6] Starting Canvas Editor (Port 1000)...
     start "Canvas Editor - ERP G7" cmd /k "cd /d %~dp0 && call start_canvas_editor.bat"
 )

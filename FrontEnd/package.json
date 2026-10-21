@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:canvas": "cd ../WS/canvas-editor && call build_for_smartflow.bat",
     "lint": "eslint .",
     "preview": "vite preview"
   },

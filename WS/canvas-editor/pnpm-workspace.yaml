@@ -1,0 +1,7 @@
+allowBuilds:
+  cypress: true
+  esbuild: true
+  simple-git-hooks: true
+minimumReleaseAge: 0
+patchedDependencies:
+  '@hufe921/canvas-editor-plugin-docx': patches/@hufe921__canvas-editor-plugin-docx.patch
