@@ -4,11 +4,6 @@ import shutil
 import json
 import datetime
 
-if hasattr(sys.stdout, 'reconfigure'):
-    sys.stdout.reconfigure(encoding='utf-8')
-if hasattr(sys.stderr, 'reconfigure'):
-    sys.stderr.reconfigure(encoding='utf-8')
-
 # Đảm bảo import được các module từ BackEnd
 backend_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if backend_root not in sys.path:

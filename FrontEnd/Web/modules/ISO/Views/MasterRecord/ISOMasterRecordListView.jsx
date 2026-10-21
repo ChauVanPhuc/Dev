@@ -508,66 +508,65 @@ const ISOMasterRecordListView = () => {
       };
     });
 
-    try {
-      const pdfRes = await api.get('/iso-master-records/word-pdf-preview', {
-        params: { path: docItem.relative_path },
-        responseType: 'blob'
-      });
-      const rawBlob = (pdfRes instanceof Blob) ? pdfRes : (pdfRes?.data instanceof Blob ? pdfRes.data : new Blob([pdfRes]));
+    const targetPath = docItem.clean_rel_path || docItem.relative_path || docItem.raw_path;
+    const isWordDoc = (targetPath || '').toLowerCase().endsWith('.docx') || (targetPath || '').toLowerCase().endsWith('.doc');
 
-      if (rawBlob.type && rawBlob.type.includes('json')) {
-        let errDetail = 'Không tìm thấy file hoặc lỗi chuyển đổi Word sang PDF.';
-        try {
-          const txt = await rawBlob.text();
-          const j = JSON.parse(txt);
-          if (j.detail) errDetail = j.detail;
-        } catch (_) {}
-        throw new Error(errDetail);
-      }
+    let blobUrl = '';
+    let headings = docItem.headings || [];
+    let htmlContent = '';
+    let loadError = null;
 
-      const pdfBlob = (rawBlob instanceof Blob && rawBlob.type === 'application/pdf')
-        ? rawBlob
-        : new Blob([rawBlob], { type: 'application/pdf' });
-      const blobUrl = window.URL.createObjectURL(pdfBlob);
-
-      let headings = docItem.headings || [];
-      const relPath = (docItem.clean_rel_path || docItem.relative_path || docItem.raw_path || '').toLowerCase();
-      const isWordDoc = relPath.endsWith('.docx') || relPath.endsWith('.doc');
-      if ((!headings || headings.length === 0) && isWordDoc) {
-        try {
-          const res = await api.get('/iso-master-records/file-preview/docx', {
-            params: { path: docItem.clean_rel_path || docItem.relative_path || docItem.raw_path }
-          });
-          const data = res?.data || res;
-          if (data && data.success && data.headings) {
+    // 1. Nếu là tệp Word (.docx, .doc): Nạp trực tiếp HTML và Mục lục Headings qua python-docx (nhanh, chuẩn xác, không sinh lỗi 404 console)
+    if (isWordDoc) {
+      try {
+        const res = await api.get('/iso-master-records/file-preview/docx', {
+          params: { path: targetPath }
+        });
+        const data = res?.data || res;
+        if (data && data.success) {
+          htmlContent = data.html_content || '';
+          if (data.headings && data.headings.length > 0) {
             headings = data.headings;
           }
-        } catch (hErr) {
-          console.warn('Lỗi khi tải headings Word:', hErr);
         }
+      } catch (hErr) {
+        console.warn('Lỗi khi tải nội dung Word HTML:', hErr);
+        loadError = 'Không thể xem trước tài liệu Word: ' + (hErr?.response?.data?.detail || hErr.message);
       }
-
-      setTab2DocContent({
-        html_content: '',
-        headings: headings,
-        preview_pdf_url: blobUrl,
-        loading: false,
-        error: null
-      });
-
-      if (headings && headings.length > 0) {
-        setActiveHeadingId(headings[0].id);
+    } else {
+      // 2. Nếu là file PDF: Nạp stream PDF preview
+      try {
+        const pdfRes = await api.get('/iso-master-records/word-pdf-preview', {
+          params: { path: docItem.relative_path },
+          responseType: 'blob'
+        });
+        const rawBlob = (pdfRes instanceof Blob) ? pdfRes : (pdfRes?.data instanceof Blob ? pdfRes.data : new Blob([pdfRes]));
+        if (!rawBlob.type || !rawBlob.type.includes('json')) {
+          const pdfBlob = (rawBlob instanceof Blob && rawBlob.type === 'application/pdf')
+            ? rawBlob
+            : new Blob([rawBlob], { type: 'application/pdf' });
+          blobUrl = window.URL.createObjectURL(pdfBlob);
+        }
+      } catch (pdfErr) {
+        console.warn('Lỗi tải PDF preview:', pdfErr);
+        loadError = 'Không thể tải bản xem trước PDF.';
       }
-    } catch (err) {
-      console.error('Lỗi khi tải bản xem trước Word:', err);
-      let errMsg = err.message || 'Không thể xem trước tài liệu Word: Tệp tin không khả dụng hoặc lỗi chuyển đổi.';
-      setTab2DocContent({
-        html_content: '',
-        headings: docItem.headings || [],
-        preview_pdf_url: '',
-        loading: false,
-        error: errMsg
-      });
+    }
+
+    if (!blobUrl && !htmlContent && !loadError) {
+      loadError = 'Không thể xem trước tài liệu Word: Tệp tin không khả dụng hoặc lỗi chuyển đổi.';
+    }
+
+    setTab2DocContent({
+      html_content: htmlContent,
+      headings: headings,
+      preview_pdf_url: blobUrl,
+      loading: false,
+      error: loadError
+    });
+
+    if (headings && headings.length > 0) {
+      setActiveHeadingId(headings[0].id);
     }
   };
 
@@ -612,7 +611,10 @@ const ISOMasterRecordListView = () => {
     const result = [];
     for (const d of wordCandidates) {
       // Giữ riêng từng file nếu khác file_id hoặc đường dẫn hoặc phiên bản
-      const key = (d.file_id || d.clean_rel_path || d.relative_path || d.raw_path || `${d.file_name}_${d.source_row_id || ''}_${d.folder_path || ''}`)
+      const rawKey = (d.file_id !== undefined && d.file_id !== null && d.file_id !== '')
+        ? String(d.file_id) 
+        : (d.clean_rel_path || d.relative_path || d.raw_path || `${d.file_name || ''}_${d.source_row_id || ''}_${d.folder_path || ''}`);
+      const key = String(rawKey || '')
         .replace(/\\/g, '/')
         .toLowerCase()
         .trim();
@@ -637,9 +639,9 @@ const ISOMasterRecordListView = () => {
   useEffect(() => {
     if (uniqueWordDocs && uniqueWordDocs.length > 0) {
       const isCurrentInList = selectedWordDoc && uniqueWordDocs.some(d => {
-        if (selectedWordDoc.file_id && d.file_id) return selectedWordDoc.file_id === d.file_id;
-        const selPath = (selectedWordDoc.relative_path || selectedWordDoc.clean_rel_path || selectedWordDoc.raw_path || selectedWordDoc.file_name || '').replace(/\\/g, '/').toLowerCase();
-        const dPath = (d.relative_path || d.clean_rel_path || d.raw_path || d.file_name || '').replace(/\\/g, '/').toLowerCase();
+        if (selectedWordDoc.file_id && d.file_id) return String(selectedWordDoc.file_id) === String(d.file_id);
+        const selPath = String(selectedWordDoc.relative_path || selectedWordDoc.clean_rel_path || selectedWordDoc.raw_path || selectedWordDoc.file_name || '').replace(/\\/g, '/').toLowerCase();
+        const dPath = String(d.relative_path || d.clean_rel_path || d.raw_path || d.file_name || '').replace(/\\/g, '/').toLowerCase();
         return selPath === dPath;
       });
 
@@ -659,7 +661,7 @@ const ISOMasterRecordListView = () => {
   const getDocFolderContext = (doc) => {
     if (!doc) return '';
     if (doc.folder_path) return doc.folder_path;
-    const rel = (doc.relative_path || doc.clean_rel_path || '').replace(/\\/g, '/');
+    const rel = String(doc.relative_path || doc.clean_rel_path || '').replace(/\\/g, '/');
     const parts = rel.split('/').filter(Boolean);
     if (parts.length > 1) {
       return parts.slice(0, parts.length - 1).slice(-2).join(' / ');
@@ -825,6 +827,97 @@ const ISOMasterRecordListView = () => {
     setConversionError(null);
     setAuditLogs([]);
     setShowDetailModal(true);
+  };
+
+  // Xử lý khi chọn Quy trình ISO hiệu lực từ Tab 1:
+  // Tab 1 lấy thông tin CỦA QUY TRÌNH; các file biểu mẫu được nạp sang Tab 2 để chọn thao tác
+  const handleSelectProcess = (proc) => {
+    if (!proc) return;
+
+    // 1. Chuyển đổi danh sách file biểu mẫu & quy trình để nạp vào Tab 2 (Nội dung)
+    const docItems = [];
+    if (Array.isArray(proc.documents)) {
+      proc.documents.forEach((d, idx) => {
+        if (d.file_path) {
+          docItems.push({
+            file_id: d.id || `proc_doc_${idx}`,
+            file_name: d.file_name || `${d.code} - ${d.name}.docx`,
+            relative_path: d.file_path,
+            clean_rel_path: d.file_path,
+            raw_path: d.file_path,
+            exists: true,
+            usage_status: 'IN_USE',
+            source_code: d.code,
+            document_name: d.name,
+            code: d.code,
+            version: d.version || 'v01'
+          });
+        }
+      });
+    }
+
+    // File Word của chính quy trình nếu có
+    if (proc.file_path) {
+      docItems.push({
+        file_id: `proc_${proc.id}`,
+        file_name: proc.file_name || `${proc.code} - ${proc.name}.docx`,
+        relative_path: proc.file_path,
+        clean_rel_path: proc.file_path,
+        raw_path: proc.file_path,
+        exists: true,
+        usage_status: docItems.length === 0 ? 'IN_USE' : 'NOT_IN_USE',
+        source_code: proc.code,
+        document_name: proc.name,
+        code: proc.code,
+        version: proc.edition || proc.version || '01'
+      });
+    }
+
+    const initialSourceLinks = docItems.map(d => d.relative_path || d.clean_rel_path).filter(Boolean);
+
+    // 2. Cập nhật thông tin chung CỦA QUY TRÌNH vào form (kèm source_link)
+    setEditFormData(prev => ({
+      ...prev,
+      suggested_doc_code: proc.code || '',
+      item_code: proc.code || '',
+      document_name: proc.name || '',
+      classification: proc.document_type || 'Quy trình',
+      department_in_charge: proc.department_name || prev.department_in_charge,
+      document_level: proc.document_level || prev.document_level || 'Cấp phòng',
+      edition: proc.edition || proc.version || '01',
+      management_group: proc.management_group || prev.management_group || proc.code,
+      identified_forms_count: String(proc.documents_count || (proc.documents ? proc.documents.length : 0)),
+      process_id: proc.id,
+      approver: proc.approver || prev.approver,
+      source_link: initialSourceLinks.join('\n')
+    }));
+
+    // 3. Cập nhật realFilesData để uniqueWordDocs ở Tab 2 có dữ liệu
+    setRealFilesData({
+      success: true,
+      files: docItems,
+      word_docs: docItems,
+      total_linked: docItems.length,
+      total_found: docItems.length,
+      total_missing: 0
+    });
+
+    // 4. Quy tắc chọn file cho Tab 2 (Nội dung):
+    // - Nếu có đúng 1 mẫu: Mặc định chọn luôn mẫu đó và nạp preview
+    // - Nếu có >= 2 mẫu: Ở Tab 2 sẽ cho chọn mẫu để thao tác
+    if (docItems.length === 1) {
+      setSelectedWordDoc(docItems[0]);
+      loadTab2Doc(docItems[0]);
+    } else {
+      setSelectedWordDoc(null);
+      setTab2DocContent({
+        html_content: '',
+        headings: [],
+        preview_pdf_url: '',
+        loading: false,
+        error: null
+      });
+    }
   };
 
   const handleStartEdit = () => {
@@ -1131,7 +1224,7 @@ const ISOMasterRecordListView = () => {
   const handleOpenDirectWordEditor = async () => {
     const targetDoc = selectedWordDoc || (uniqueWordDocs.length > 0 ? uniqueWordDocs[0] : null);
     const draftPath = targetDoc?.clean_rel_path || targetDoc?.relative_path || targetDoc?.raw_path || targetDoc?.file_path || acceptedDraft?.draft_rel_path || conversionState.data?.draft_rel_path;
-    if (!draftPath || !detailRecord?.id) {
+    if (!draftPath) {
       if (typeof toast?.warning === 'function') {
         toast.warning('Chưa có tài liệu Word để chỉnh sửa.');
       } else if (typeof toast === 'function') {
@@ -1215,7 +1308,7 @@ const ISOMasterRecordListView = () => {
   const handleSaveDirectWordContent = async () => {
     const targetDoc = selectedWordDoc || (uniqueWordDocs.length > 0 ? uniqueWordDocs[0] : null);
     const draftPath = targetDoc?.clean_rel_path || targetDoc?.relative_path || targetDoc?.raw_path || targetDoc?.file_path || acceptedDraft?.draft_rel_path || conversionState.data?.draft_rel_path;
-    if (!draftPath || !detailRecord?.id || !wordEditorRef.current) return;
+    if (!draftPath || !wordEditorRef.current) return;
 
     const editedHtml = wordEditorRef.current.innerHTML;
     setSavingWordDirect(true);
@@ -1227,7 +1320,10 @@ const ISOMasterRecordListView = () => {
     }
 
     try {
-      const res = await api.post(`/iso-master-records/${detailRecord.id}/save-direct-word-content`, {
+      const endpoint = detailRecord?.id
+        ? `/iso-master-records/${detailRecord.id}/save-direct-word-content`
+        : `/iso-master-records/save-direct-word-content`;
+      const res = await api.post(endpoint, {
         draft_path: draftPath,
         html_content: editedHtml
       });
@@ -1255,8 +1351,10 @@ const ISOMasterRecordListView = () => {
           exists: true,
           headings: data.headings || []
         });
-        fetchAuditLogs(detailRecord.id);
-        fetchRealFilesStatus(detailRecord.id);
+        if (detailRecord?.id) {
+          fetchAuditLogs(detailRecord.id);
+          fetchRealFilesStatus(detailRecord.id);
+        }
       } else {
         throw new Error(data?.detail || 'Lưu tài liệu không thành công');
       }
@@ -1572,9 +1670,21 @@ const ISOMasterRecordListView = () => {
         return;
       }
 
+      // Đồng bộ source_link thực tế từ file đang chọn hoặc danh sách tệp đính kèm
+      const chosenPathDraft = selectedWordDoc?.clean_rel_path || selectedWordDoc?.relative_path;
+      const allFilesDraft = (realFilesData?.files || realFilesData?.word_docs || []).map(f => f.clean_rel_path || f.relative_path).filter(Boolean);
+      let synchedSourceLinkDraft = currentData.source_link || '';
+      if (chosenPathDraft || allFilesDraft.length > 0) {
+        const reordered = [chosenPathDraft, ...allFilesDraft.filter(p => p !== chosenPathDraft)].filter(Boolean);
+        if (reordered.length > 0) {
+          synchedSourceLinkDraft = reordered.join('\n');
+        }
+      }
+
       const payload = {
         ...currentData,
         document_name: docName,
+        source_link: synchedSourceLinkDraft,
         source_status: 'Dự thảo',
         action_chosen: 'Lưu nháp',
         action_type: 'SAVE_DRAFT',
@@ -1638,9 +1748,22 @@ const ISOMasterRecordListView = () => {
       const nowStr = new Date().toLocaleDateString('vi-VN');
       const uName = loggedInUser?.full_name || loggedInUser?.username;
       const uDept = loggedInUser?.department_name || '';
+
+      // Đồng bộ source_link thực tế từ file đang chọn hoặc danh sách tệp đính kèm
+      const chosenPathSubmit = selectedWordDoc?.clean_rel_path || selectedWordDoc?.relative_path;
+      const allFilesSubmit = (realFilesData?.files || realFilesData?.word_docs || []).map(f => f.clean_rel_path || f.relative_path).filter(Boolean);
+      let synchedSourceLinkSubmit = currentData.source_link || '';
+      if (chosenPathSubmit || allFilesSubmit.length > 0) {
+        const reordered = [chosenPathSubmit, ...allFilesSubmit.filter(p => p !== chosenPathSubmit)].filter(Boolean);
+        if (reordered.length > 0) {
+          synchedSourceLinkSubmit = reordered.join('\n');
+        }
+      }
+
       const payload = {
         ...currentData,
         document_name: docName,
+        source_link: synchedSourceLinkSubmit,
         source_status: 'Chờ duyệt',
         action_chosen: 'Gửi duyệt',
         action_type: 'SUBMIT_APPROVAL',
@@ -1650,18 +1773,55 @@ const ISOMasterRecordListView = () => {
         last_modified_date: nowStr
       };
 
-      const targetRecordId = selectedChildDoc?.source_row_id || selectedChildDoc?.id || detailRecord.id;
-      await api.put(`/iso-master-records/${targetRecordId}`, payload);
-      const updated = { ...(selectedChildDoc || detailRecord), ...payload };
-      setSelectedChildDoc(updated);
-      setInitialFormData({ ...updated });
-      setEditFormData({ ...updated });
-      setIsEditing(false);
-      toast.success('Đã gửi hồ sơ đi phê duyệt thành công!');
-      fetchRecords();
-      if (targetRecordId) fetchAuditLogs(targetRecordId);
+      if (isCreateMode) {
+        if (!payload.department_in_charge || !String(payload.department_in_charge).trim()) {
+          toast.warning('Vui lòng chọn hoặc nhập Phòng ban trước khi gửi duyệt hồ sơ mới.');
+          setActionLoading(false);
+          return;
+        }
+        if (!payload.management_group || !String(payload.management_group).trim()) {
+          toast.warning('Vui lòng nhập Nhóm tài liệu quản lý trước khi gửi duyệt hồ sơ mới.');
+          setActionLoading(false);
+          return;
+        }
+        const res = await api.post('/iso-master-records/', payload);
+        const newRecord = res?.data || res;
+        toast.success('Đã tạo mới và gửi hồ sơ đi phê duyệt thành công!');
+        setIsCreateMode(false);
+        setIsEditing(false);
+        setDetailRecord(newRecord);
+        setSelectedChildDoc(newRecord);
+        setInitialFormData(newRecord);
+        setEditFormData(newRecord);
+        fetchRecords();
+        fetchFilterOptions();
+        if (newRecord?.id) fetchAuditLogs(newRecord.id);
+      } else {
+        const targetRecordId = selectedChildDoc?.source_row_id || selectedChildDoc?.id || detailRecord.id;
+        if (!targetRecordId) {
+          toast.warning('Không tìm thấy mã hồ sơ để gửi duyệt.');
+          setActionLoading(false);
+          return;
+        }
+        await api.put(`/iso-master-records/${targetRecordId}`, payload);
+        const updated = { ...(selectedChildDoc || detailRecord), ...payload };
+        setSelectedChildDoc(updated);
+        setInitialFormData({ ...updated });
+        setEditFormData({ ...updated });
+        setIsEditing(false);
+        toast.success('Đã gửi hồ sơ đi phê duyệt thành công!');
+        fetchRecords();
+        if (targetRecordId) fetchAuditLogs(targetRecordId);
+      }
     } catch (err) {
-      toast.error('Không thể gửi duyệt: ' + (err?.response?.data?.detail || err.message));
+      let errMsg = err?.response?.data?.detail;
+      if (Array.isArray(errMsg)) {
+        errMsg = errMsg.map(e => (typeof e === 'object' ? (e.msg || JSON.stringify(e)) : e)).join(', ');
+      } else if (typeof errMsg === 'object') {
+        errMsg = JSON.stringify(errMsg);
+      }
+      errMsg = errMsg || err.message || 'Lỗi không xác định';
+      toast.error('Không thể gửi duyệt: ' + errMsg);
     } finally {
       setActionLoading(false);
     }
@@ -1802,6 +1962,7 @@ const ISOMasterRecordListView = () => {
         showDetailModal={showDetailModal}
         detailRecord={detailRecord}
         isCreateMode={isCreateMode}
+        onSelectProcess={handleSelectProcess}
         selectedChildDoc={selectedChildDoc}
         groupChildDocs={groupChildDocs}
         handleSelectChildDoc={handleSelectChildDoc}
@@ -1877,8 +2038,20 @@ const ISOMasterRecordListView = () => {
         activeHeadingId={activeHeadingId}
         scrollToHeading={(id) => {
           setActiveHeadingId(id);
-          const el = document.getElementById(id);
-          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          const targetEl = document.getElementById(id);
+          if (!targetEl) return;
+          const container = targetEl.closest('.iso-word-html-viewport') || targetEl.closest('.iso-viewer-doc-pane') || targetEl.closest('.iso-pdf-viewport');
+          if (container) {
+            const containerRect = container.getBoundingClientRect();
+            const targetRect = targetEl.getBoundingClientRect();
+            const scrollOffset = targetRect.top - containerRect.top + container.scrollTop - 24;
+            container.scrollTo({
+              top: Math.max(0, scrollOffset),
+              behavior: 'smooth'
+            });
+          } else {
+            targetEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
         }}
         toast={toast}
         

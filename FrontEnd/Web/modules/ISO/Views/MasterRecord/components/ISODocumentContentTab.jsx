@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { 
-  FileText, Search, X, Check, ChevronDown, ZoomIn, ZoomOut, RotateCcw, 
+  FileText, Search, X, Check, ChevronDown, ChevronRight, Layers, ZoomIn, ZoomOut, RotateCcw, 
   Settings, RefreshCw, Sparkles, Columns, FileEdit, Download, Upload, 
   Save, AlertTriangle, List, Folder, CheckCircle2,
   Undo, Redo, Bold, Italic, Underline, Strikethrough, AlignLeft, AlignCenter, AlignRight, AlignJustify,
@@ -333,7 +333,7 @@ export const ISODocumentContentTab = ({
                             const isSelected = (selectedWordDoc?.file_id && docItem?.file_id) 
                               ? selectedWordDoc.file_id === docItem.file_id 
                               : ((selectedWordDoc?.clean_rel_path || selectedWordDoc?.relative_path) && (docItem?.clean_rel_path || docItem?.relative_path))
-                                ? (selectedWordDoc.clean_rel_path || selectedWordDoc.relative_path).replace(/\\/g, '/').toLowerCase() === (docItem.clean_rel_path || docItem.relative_path).replace(/\\/g, '/').toLowerCase()
+                                ? String(selectedWordDoc.clean_rel_path || selectedWordDoc.relative_path || '').replace(/\\/g, '/').toLowerCase() === String(docItem.clean_rel_path || docItem.relative_path || '').replace(/\\/g, '/').toLowerCase()
                                 : selectedWordDoc?.file_name === docItem.file_name;
 
                             const isDuplicateName = hasDuplicateDocName && hasDuplicateDocName(docItem.file_name);
@@ -396,6 +396,32 @@ export const ISODocumentContentTab = ({
                     </div>
                   )}
                 </div>
+
+                {uniqueWordDocs.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedWordDoc(null)}
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: '0.76rem',
+                      height: '32px',
+                      borderRadius: '6px',
+                      border: '1px solid #D9C7B6',
+                      backgroundColor: '#FFFFFF',
+                      color: '#7B5233',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      fontWeight: 600,
+                      whiteSpace: 'nowrap'
+                    }}
+                    title="Mở bảng chọn biểu mẫu để chuyển sang biểu mẫu khác"
+                  >
+                    <Layers size={13} color="#7B5233" />
+                    <span>Đổi biểu mẫu</span>
+                  </button>
+                )}
 
                 {acceptedDraft && (
                   <span className="iso-conversion-working-badge" title="Tài liệu đang làm việc từ bản chuyển đổi">
@@ -674,6 +700,88 @@ export const ISODocumentContentTab = ({
             <span>{uploadingWord ? 'Đang tải lên...' : 'Tải lên tài liệu Word (.docx)'}</span>
           </button>
         </div>
+      ) : uniqueWordDocs.length >= 2 && !selectedWordDoc ? (
+        <div className="iso-empty-word-pane" style={{ maxWidth: '680px', margin: '30px auto', padding: '28px', backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1.5px solid #EADCC9', boxShadow: '0 8px 24px rgba(45, 26, 18, 0.08)', textAlign: 'left' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', borderBottom: '1px solid #FAF0E6', paddingBottom: '14px' }}>
+            <div style={{ width: '40px', height: '40px', borderRadius: '8px', backgroundColor: '#FAF7F2', border: '1px solid #EADCC9', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <FileText size={22} color="#7B5233" />
+            </div>
+            <div>
+              <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#2D1A12' }}>
+                Chọn biểu mẫu để thao tác
+              </h4>
+              <span style={{ fontSize: '0.8rem', color: '#64748B' }}>
+                Quy trình này có <strong>{uniqueWordDocs.length} biểu mẫu</strong>. Vui lòng bấm chọn biểu mẫu bạn muốn xem và thao tác bên dưới:
+              </span>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {uniqueWordDocs.map((docItem, idx) => (
+              <div
+                key={docItem.file_id || docItem.relative_path || idx}
+                onClick={() => {
+                  setSelectedWordDoc(docItem);
+                  loadTab2Doc(docItem);
+                }}
+                style={{
+                  padding: '14px 16px',
+                  borderRadius: '8px',
+                  border: '1.5px solid #EADCC9',
+                  backgroundColor: '#FFFFFF',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: '12px',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = '#7B5233';
+                  e.currentTarget.style.backgroundColor = '#FAF7F2';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = '#EADCC9';
+                  e.currentTarget.style.backgroundColor = '#FFFFFF';
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0 }}>
+                  <FileText size={18} color="#7B5233" style={{ flexShrink: 0 }} />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <span style={{
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        backgroundColor: '#FAF7F2',
+                        border: '1px solid #EADCC9',
+                        color: '#7B5233',
+                        fontSize: '0.78rem',
+                        fontWeight: 700
+                      }}>
+                        {docItem.code || docItem.source_code || 'BIỂU MẪU'}
+                      </span>
+                      <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#1E293B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {docItem.document_name || docItem.file_name}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '3px' }}>
+                      Phiên bản: {docItem.version ? `v${docItem.version}` : 'v01'} • Tệp tin: {docItem.file_name}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  className="iso-btn-brown"
+                  style={{ padding: '7px 14px', fontSize: '0.8rem', whiteSpace: 'nowrap', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '4px' }}
+                >
+                  <span>Mở thao tác</span>
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
       ) : (
         <div className="iso-viewer-split" style={{ flex: 1, minHeight: 0 }}>
           {/* Cột trái: Mục lục */}
@@ -749,9 +857,39 @@ export const ISODocumentContentTab = ({
               </div>
             ) : tab2DocContent.html_content ? (
               <div 
-                className="iso-viewer-page"
-                dangerouslySetInnerHTML={{ __html: tab2DocContent.html_content }}
-              />
+                className="iso-word-html-viewport" 
+                style={{ 
+                  flex: 1, 
+                  height: '100%', 
+                  minHeight: 0, 
+                  overflowY: 'auto', 
+                  overflowX: 'auto', 
+                  padding: '28px 16px 80px 16px', 
+                  backgroundColor: '#FAF7F2', 
+                  display: 'flex', 
+                  justifyContent: 'center', 
+                  alignItems: 'flex-start' 
+                }}
+              >
+                <div 
+                  className="iso-viewer-page"
+                  style={{
+                    backgroundColor: '#FFFFFF',
+                    color: '#1E293B',
+                    boxShadow: '0 4px 20px rgba(45, 26, 18, 0.08), 0 1px 4px rgba(0, 0, 0, 0.05)',
+                    border: '1px solid #EADCC9',
+                    borderRadius: '6px',
+                    padding: '40px 48px',
+                    margin: '0 auto',
+                    maxWidth: '860px',
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    transform: docViewerZoom !== 100 ? `scale(${docViewerZoom / 100})` : 'none',
+                    transformOrigin: 'top center'
+                  }}
+                  dangerouslySetInnerHTML={{ __html: tab2DocContent.html_content }}
+                />
+              </div>
             ) : (
               <div style={{ padding: '80px 20px', textAlign: 'center', color: '#94A3B8' }}>
                 Chưa có nội dung hiển thị

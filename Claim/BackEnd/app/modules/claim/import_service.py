@@ -176,7 +176,19 @@ def process_pdf_import(file_bytes: bytes = None, filename: str = "", db=None, pd
             pdf_path, batch_id, images_batch_dir, seen_keys.copy(), normalize_penalty_value
         )
         logger.info(f"File {filename}: Sử dụng {mechanism_info['name']} — {len(claims)} claims, period={period}")
-        
+    except Exception as parse_err:
+        logger.exception("PDF parsing process failed critically.")
+        if os.path.exists(pdf_path):
+            os.remove(pdf_path)
+        if os.path.exists(images_batch_dir):
+            import shutil
+            shutil.rmtree(images_batch_dir)
+        if isinstance(parse_err, ValueError):
+            raise parse_err
+        raise RuntimeError(f"Lỗi phân tích cú pháp PDF: {str(parse_err)}")
+
+    # 3. Check duplicate claims against DB and generate unique claim codes
+    try:
         # Check duplicate claims against DB
         if seen_keys and claims:
             dup_count = 0
@@ -223,16 +235,16 @@ def process_pdf_import(file_bytes: bytes = None, filename: str = "", db=None, pd
         for c in claims:
             if not c.get("claim_code") and (c.get("cabinet_no") is not None or c.get("claim_no") is not None):
                 c["claim_code"] = generate_unique_claim_code(c, period, db, local_seen_codes, c_mech_id)
-    except Exception as parse_err:
-        logger.exception("PDF parsing process failed critically.")
+    except ValueError as ve:
+        raise ve
+    except Exception as db_prep_err:
+        logger.exception("Database error while checking duplicate or generating claim code.")
         if os.path.exists(pdf_path):
             os.remove(pdf_path)
         if os.path.exists(images_batch_dir):
             import shutil
             shutil.rmtree(images_batch_dir)
-        if isinstance(parse_err, ValueError):
-            raise parse_err
-        raise RuntimeError(f"Lỗi phân tích cú pháp PDF: {str(parse_err)}")
+        raise RuntimeError(f"Lỗi kết nối cơ sở dữ liệu: {str(db_prep_err)}")
         
     # 3. Save each claim to Database
     db_saved_count = 0

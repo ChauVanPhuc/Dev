@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import api from '@webShared/Services/api.service';
 import { useOutletContext, useNavigate, Link } from 'react-router-dom';
-import { Plus, Trash2, Edit, Search, Filter, Upload, FileText, Download, AlertCircle, CheckCircle, ExternalLink, RefreshCw, ChevronLeft, ChevronRight, FolderArchive, Layers } from 'lucide-react';
+import { Plus, Trash2, Edit, Search, Filter, Upload, FileText, Download, AlertCircle, CheckCircle, ExternalLink, RefreshCw, ChevronLeft, ChevronRight, FolderArchive, Layers, X, Building, User, ShieldCheck, Calendar, Loader2 } from 'lucide-react';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import '@styles/components.css';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
@@ -38,6 +38,26 @@ const getTemplateAbbreviation = (templateSymbol) => {
   return 'QT';
 };
 
+// Hàm sinh mã tài liệu tự động theo định dạng chuẩn G7.{Mã_PB}.{Mã_Loại}{Số_TT}
+const generateProcessCode = (deptCode, docTypeCode, processesList = []) => {
+  const dCode = (deptCode || 'QL').trim().toUpperCase();
+  const tCode = (docTypeCode || 'QT').trim().toUpperCase();
+  const prefix = `G7.${dCode}.${tCode}`;
+  let maxZz = 0;
+  (processesList || []).forEach(p => {
+    const pCode = (p.code || '').toUpperCase();
+    if (pCode.startsWith(prefix)) {
+      const suffix = pCode.slice(prefix.length);
+      const num = parseInt(suffix, 10);
+      if (!isNaN(num) && num > maxZz) {
+        maxZz = num;
+      }
+    }
+  });
+  const zz = String(maxZz + 1).padStart(2, '0');
+  return `G7.${dCode}.${tCode}${zz}`;
+};
+
 const findApprover = (level, deptAbbr, accountsList) => {
   if (!accountsList || accountsList.length === 0) return '';
   // Cả Cấp phòng và Cấp công ty (Bước 1) đều đưa cho Trưởng phòng ký trước
@@ -64,42 +84,49 @@ const getCurrentFormattedDate = () => {
 };
 
 const renderDocStatusBadge = (status, documentLevel) => {
-  const s = (status || '').toLowerCase();
-  if (s.includes('từ chối') || s.includes('rejected')) {
+  const rawStatus = (status || '').trim();
+  const s = rawStatus.toLowerCase();
+
+  // 1. Chỉnh sửa
+  if (s === 'chỉnh sửa' || s.includes('chỉnh sửa') || s.includes('chinh sua')) {
     return (
       <span style={{
         padding: '2px 8px',
         borderRadius: '12px',
         fontSize: '0.72rem',
         fontWeight: 'bold',
-        backgroundColor: '#FEE2E2',
-        color: '#991B1B',
-        border: '1px solid #FECACA',
+        backgroundColor: '#FFF7ED',
+        color: '#C2410C',
+        border: '1px solid #FDBA74',
         display: 'inline-block',
         whiteSpace: 'nowrap'
       }}>
-        Từ chối
+        Chỉnh sửa
       </span>
     );
   }
-  if (s.includes('chờ bgđ') || s.includes('cho bgd')) {
+
+  // 2. Chờ xem xét
+  if (s === 'chờ xem xét' || s.includes('xem xét') || s.includes('xem xet')) {
     return (
       <span style={{
         padding: '2px 8px',
         borderRadius: '12px',
         fontSize: '0.72rem',
         fontWeight: 'bold',
-        backgroundColor: '#EDE9FE',
-        color: '#6D28D9',
-        border: '1px solid #DDD6FE',
+        backgroundColor: '#EFF6FF',
+        color: '#1D4ED8',
+        border: '1px solid #BFDBFE',
         display: 'inline-block',
         whiteSpace: 'nowrap'
       }}>
-        Chờ BGĐ duyệt
+        Chờ xem xét
       </span>
     );
   }
-  if (s.includes('chờ trưởng phòng') || s.includes('cho truong phong') || (s.includes('chờ') && !s.includes('bgđ'))) {
+
+  // 3. Chờ duyệt
+  if (s === 'chờ duyệt' || s.includes('cho duyet') || s.includes('chờ')) {
     return (
       <span style={{
         padding: '2px 8px',
@@ -112,45 +139,32 @@ const renderDocStatusBadge = (status, documentLevel) => {
         display: 'inline-block',
         whiteSpace: 'nowrap'
       }}>
-        Chờ Trưởng phòng duyệt
+        Chờ duyệt
       </span>
     );
   }
-  if (s.includes('trưởng phòng đã duyệt') || s.includes('truong phong da duyet')) {
+
+  // 4. Hết hiệu lực
+  if (s === 'hết hiệu lực' || s.includes('hết hiệu lực') || s.includes('het hieu luc') || s.includes('từ chối') || s.includes('rejected')) {
     return (
       <span style={{
         padding: '2px 8px',
         borderRadius: '12px',
         fontSize: '0.72rem',
         fontWeight: 'bold',
-        backgroundColor: '#D1FAE5',
-        color: '#065F46',
-        border: '1px solid #A7F3D0',
+        backgroundColor: '#FEE2E2',
+        color: '#991B1B',
+        border: '1px solid #FECACA',
         display: 'inline-block',
         whiteSpace: 'nowrap'
       }}>
-        Trưởng phòng đã duyệt
+        Hết hiệu lực
       </span>
     );
   }
-  if (s.includes('bgđ đã duyệt') || s.includes('bgd da duyet')) {
-    return (
-      <span style={{
-        padding: '2px 8px',
-        borderRadius: '12px',
-        fontSize: '0.72rem',
-        fontWeight: 'bold',
-        backgroundColor: '#DCFCE7',
-        color: '#15803D',
-        border: '1px solid #86EFAC',
-        display: 'inline-block',
-        whiteSpace: 'nowrap'
-      }}>
-        BGĐ đã duyệt
-      </span>
-    );
-  }
-  if (s.includes('hiệu lực') || s.includes('đang lưu hành') || s.includes('đã duyệt')) {
+
+  // 5. Hiệu lực
+  if (s === 'hiệu lực' || s.includes('hiệu lực') || s.includes('hieu luc') || s.includes('đang lưu hành') || s.includes('đã duyệt')) {
     return (
       <span style={{
         padding: '2px 8px',
@@ -163,23 +177,25 @@ const renderDocStatusBadge = (status, documentLevel) => {
         display: 'inline-block',
         whiteSpace: 'nowrap'
       }}>
-        {documentLevel === 'Cấp phòng' ? 'Trưởng phòng đã duyệt' : 'BGĐ đã duyệt'}
+        Hiệu lực
       </span>
     );
   }
+
+  // 6. Nháp / Dự thảo
   return (
     <span style={{
       padding: '2px 8px',
       borderRadius: '12px',
       fontSize: '0.72rem',
       fontWeight: 'bold',
-      backgroundColor: '#FFF7ED',
-      color: '#C2410C',
-      border: '1px solid #FDBA74',
+      backgroundColor: '#F1F5F9',
+      color: '#475569',
+      border: '1px solid #CBD5E1',
       display: 'inline-block',
       whiteSpace: 'nowrap'
     }}>
-      {status || 'Nháp'}
+      {rawStatus || 'Nháp'}
     </span>
   );
 };
@@ -195,25 +211,14 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
   const [templates, setTemplates] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [allProcesses, setAllProcesses] = useState([]);
+  const [departmentsList, setDepartmentsList] = useState([]);
+  const [departmentHeads, setDepartmentHeads] = useState([]);
+  const [docTypesList, setDocTypesList] = useState([]);
+  const [selectedWordFile, setSelectedWordFile] = useState(null);
+  const [parsingWordLoading, setParsingWordLoading] = useState(false);
+  const processFileInputRef = useRef(null);
   const [loading, setLoading] = useState(true);
 
-  const getApproverCandidates = (level) => {
-    if (!accounts || accounts.length === 0) return [];
-    // Cả Cấp phòng và Cấp công ty (bước 1) đều đưa cho Trưởng phòng ký trước
-    const tpList = accounts.filter(a => {
-      const roleName = (a.role_name || '').toLowerCase();
-      const permName = (a.permission_name || '').toLowerCase();
-      const levelName = (a.permission_level || '').toLowerCase();
-      return (
-        roleName.includes('trưởng phòng') || 
-        permName.includes('trưởng phòng') || 
-        levelName.includes('trưởng phòng') ||
-        levelName.includes('quản lý')
-      );
-    });
-    if (tpList.length > 0) return tpList;
-    return accounts;
-  };
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [levelFilter, setLevelFilter] = useState('');
@@ -223,12 +228,17 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
   const [newProcessData, setNewProcessData] = useState({
     code: '',
     name: '',
-    symbol: '',
-    iso_document_id: '',
-    document_level: '',
+    symbol: 'QT',
+    doc_type_id: '',
+    doc_type_code: 'QT',
+    department_id: '',
+    department_name: '',
+    file_path: '',
+    document_level: 'Cấp phòng',
     editor: '',
     owner: '',
     approver: '',
+    approver_bgd: 'Trần Đình Hùng (Tổng Giám Đốc)',
     role: '',
     status: 'Nháp'
   });
@@ -276,80 +286,232 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
 
   useEffect(() => {
     fetchDocuments();
+    if (mode === 'processes') {
+      api.get('/iso-documents/types')
+        .then(res => {
+          if (Array.isArray(res)) setDocTypesList(res);
+        })
+        .catch(err => console.error('Lỗi khi tải danh mục loại tài liệu:', err));
+    }
   }, [mode]);
+
+  // Kích hoạt chọn tệp Word trực tiếp từ máy khi bấm Thêm mới
+  const handleInitiateCreateProcess = () => {
+    if (processFileInputRef.current) {
+      processFileInputRef.current.value = '';
+      processFileInputRef.current.click();
+    }
+  };
 
   const openCreateModal = async () => {
     try {
       setLoading(true);
-      const [templatesData, processesData, accountsData] = await Promise.all([
-        api.get('/iso-documents/'),
-        api.get('/iso-documents/processes'),
-        api.get('/accounts/?size=1000')
+      const [deptsData, tpData, procsData, typesData] = await Promise.all([
+        api.get('/iso-documents/meta/departments').catch(() => []),
+        api.get('/iso-documents/approvers/department-heads').catch(() => []),
+        api.get('/iso-documents/processes').catch(() => []),
+        api.get('/iso-documents/types').catch(() => [])
       ]);
-      setTemplates(templatesData || []);
-      setAllProcesses(processesData || []);
-      const accountsList = accountsData?.items || [];
-      setAccounts(accountsList);
-      
-      const defaultTemplate = templatesData && templatesData.length > 0 ? templatesData[0] : null;
-      let generatedCode = '';
-      let documentLevel = 'Cấp phòng';
-      let initialSymbol = '';
-      let approverName = '';
-      
-      const loggedInUser = JSON.parse(localStorage.getItem('smartflow_user') || '{}');
-      const editorName = loggedInUser.full_name || loggedInUser.username || '';
-      
-      if (defaultTemplate) {
-        initialSymbol = defaultTemplate.symbol || '';
-        documentLevel = defaultTemplate.document_level || 'Cấp phòng';
-        const xx = defaultTemplate.folder ? defaultTemplate.folder.slice(-2).toUpperCase() : 'SX';
-        const yy = getTemplateAbbreviation(initialSymbol);
-        
-        const prefix = `G7.${xx}.${yy}`;
-        let maxZz = 0;
-        if (processesData && processesData.length > 0) {
-          processesData.forEach(p => {
-            if (p.code && p.code.toUpperCase().startsWith(prefix.toUpperCase())) {
-              const suffix = p.code.slice(prefix.length);
-              const num = parseInt(suffix, 10);
-              if (!isNaN(num) && num > maxZz) {
-                maxZz = num;
-              }
-            }
-          });
-        }
-        const zz = String(maxZz + 1).padStart(2, '0');
-        generatedCode = `G7.${xx}.${yy}${zz}`;
-        approverName = findApprover(documentLevel, xx, accountsList);
+      const depts = Array.isArray(deptsData) ? deptsData : [];
+      const tps = Array.isArray(tpData) ? tpData : [];
+      const procs = Array.isArray(procsData) ? procsData : [];
+      const dtypes = Array.isArray(typesData) && typesData.length > 0 ? typesData : docTypesList;
+
+      setDepartmentsList(depts);
+      setDepartmentHeads(tps);
+      setAllProcesses(procs);
+      if (Array.isArray(typesData) && typesData.length > 0) {
+        setDocTypesList(typesData);
       }
-      
+
+      const defaultDept = depts.length > 0 ? depts[0] : null;
+      const deptCode = defaultDept ? defaultDept.code : 'CL';
+
+      const defaultDocType = dtypes.length > 0 
+        ? (dtypes.find(t => (t.code || '').toUpperCase() === 'QT') || dtypes[0]) 
+        : { id: 1, name: 'Quy trình', code: 'QT' };
+      const docTypeCode = defaultDocType.code || 'QT';
+
+      const loggedInUser = JSON.parse(localStorage.getItem('smartflow_user') || '{}');
+      const editorName = loggedInUser.full_name || loggedInUser.username || 'Administrator';
+
+      // Sinh mã tài liệu tự động theo phòng ban & loại tài liệu
+      const generatedCode = generateProcessCode(deptCode, docTypeCode, procs);
+
+      const defaultApprover = tps.length > 0 ? tps[0].full_name : '';
+
+      setSelectedWordFile(null);
       setNewProcessData({
         code: generatedCode,
         name: '',
-        symbol: initialSymbol,
-        iso_document_id: defaultTemplate ? defaultTemplate.id : '',
-        document_level: documentLevel,
+        symbol: docTypeCode,
+        doc_type_id: defaultDocType.id || '',
+        doc_type_code: docTypeCode,
+        department_id: defaultDept ? defaultDept.id : '',
+        department_name: defaultDept ? defaultDept.name : '',
+        file_path: '',
+        document_level: 'Cấp phòng',
         editor: editorName,
         owner: editorName,
-        approver: approverName,
-        role: '',
+        approver: defaultApprover,
+        approver_bgd: 'Trần Đình Hùng (Tổng Giám Đốc)',
+        role: defaultDept ? defaultDept.name : '',
         status: 'Nháp'
       });
       setShowCreateModal(true);
     } catch (error) {
-      console.error('Lỗi khi tải danh sách mẫu ISO:', error);
-      showFeedback('error', 'Không thể tải danh sách tài liệu mẫu ISO gốc');
+      console.error('Lỗi khi chuẩn bị tạo tài liệu:', error);
+      showFeedback('error', 'Không thể tải danh sách dữ liệu khởi tạo');
     } finally {
       setLoading(false);
     }
   };
 
+  const handleSelectDepartment = (deptId) => {
+    const dept = departmentsList.find(d => d.id === parseInt(deptId, 10));
+    if (!dept) return;
+    const deptCode = dept.code || 'SX';
+    const docTypeCode = newProcessData.doc_type_code || 'QT';
+    const generatedCode = generateProcessCode(deptCode, docTypeCode, allProcesses);
+
+    setNewProcessData(prev => ({
+      ...prev,
+      department_id: dept.id,
+      department_name: dept.name,
+      code: generatedCode,
+      role: dept.name
+    }));
+  };
+
+  const handleSelectDocType = (docTypeId) => {
+    const dType = docTypesList.find(t => String(t.id) === String(docTypeId));
+    const docTypeCode = dType ? dType.code : 'QT';
+    const dept = departmentsList.find(d => d.id === parseInt(newProcessData.department_id, 10));
+    const deptCode = dept ? dept.code : 'CL';
+    const generatedCode = generateProcessCode(deptCode, docTypeCode, allProcesses);
+
+    setNewProcessData(prev => ({
+      ...prev,
+      doc_type_id: dType ? dType.id : '',
+      doc_type_code: docTypeCode,
+      symbol: docTypeCode,
+      code: generatedCode
+    }));
+  };
+
+  // Xử lý bóc tách tệp Word: Tải lên -> Phân tích -> Tự động điền dữ liệu -> Hiển thị Modal
+  const handleProcessWordUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const fileNameLower = file.name.toLowerCase();
+    if (!fileNameLower.endsWith('.docx')) {
+      showFeedback('error', 'Chỉ hỗ trợ tải lên tệp định dạng Word (.docx)');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    setParsingWordLoading(true);
+
+    try {
+      // 1. Tải song song: Upload & parse Word đồng thời nạp danh sách Phòng ban & Trưởng phòng & Loại tài liệu
+      const [parsedData, deptsData, tpData, procsData, typesData] = await Promise.all([
+        api.post('/iso-documents/upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        }),
+        departmentsList.length > 0 ? Promise.resolve(departmentsList) : api.get('/iso-documents/meta/departments').catch(() => []),
+        departmentHeads.length > 0 ? Promise.resolve(departmentHeads) : api.get('/iso-documents/approvers/department-heads').catch(() => []),
+        allProcesses.length > 0 ? Promise.resolve(allProcesses) : api.get('/iso-documents/processes').catch(() => []),
+        docTypesList.length > 0 ? Promise.resolve(docTypesList) : api.get('/iso-documents/types').catch(() => [])
+      ]);
+
+      const depts = Array.isArray(deptsData) ? deptsData : [];
+      const tps = Array.isArray(tpData) ? tpData : [];
+      const procs = Array.isArray(procsData) ? procsData : [];
+      const dtypes = Array.isArray(typesData) ? typesData : [];
+
+      setDepartmentsList(depts);
+      setDepartmentHeads(tps);
+      setAllProcesses(procs);
+      setDocTypesList(dtypes);
+
+      // 2. Nhận diện phòng ban phù hợp từ tên tệp hoặc nội dung
+      const fileBaseName = file.name.replace(/\.[^/.]+$/, "");
+      const lowerName = fileBaseName.toLowerCase();
+      let matchedDept = depts.find(d => {
+        const c = (d.code || '').toLowerCase();
+        const n = (d.name || '').toLowerCase();
+        return (c && lowerName.includes(c)) || (n && lowerName.includes(n));
+      });
+      if (!matchedDept) {
+        matchedDept = depts.find(d => (d.code || '').toUpperCase() === 'CL') || (depts.length > 0 ? depts[0] : null);
+      }
+
+      const deptCode = matchedDept ? matchedDept.code : 'CL';
+
+      // Nhận diện loại tài liệu phù hợp (nếu có)
+      let matchedType = dtypes.find(t => {
+        const n = (t.name || '').toLowerCase();
+        const c = (t.code || '').toLowerCase();
+        return lowerName.includes(n) || lowerName.includes(`.${c}.`) || lowerName.includes(`-${c}-`);
+      });
+      if (!matchedType) {
+        matchedType = dtypes.find(t => (t.code || '').toUpperCase() === 'QT') || (dtypes.length > 0 ? dtypes[0] : { id: 1, name: 'Quy trình', code: 'QT' });
+      }
+      const docTypeCode = matchedType ? matchedType.code : 'QT';
+
+      // 3. Tự động sinh mã tài liệu kế tiếp theo phòng ban & loại tài liệu
+      const generatedCode = generateProcessCode(deptCode, docTypeCode, procs);
+
+      // 4. Lấy thông tin người biên soạn và Trưởng phòng duyệt
+      const loggedInUser = JSON.parse(localStorage.getItem('smartflow_user') || '{}');
+      const editorName = loggedInUser.full_name || loggedInUser.username || 'Administrator';
+      const defaultApprover = tps.length > 0 ? tps[0].full_name : '';
+
+      const processName = parsedData?.name || fileBaseName;
+
+      // 5. Cập nhật state dữ liệu tài liệu
+      setSelectedWordFile(file);
+      setNewProcessData({
+        code: generatedCode,
+        name: processName,
+        symbol: docTypeCode,
+        doc_type_id: matchedType ? matchedType.id : '',
+        doc_type_code: docTypeCode,
+        department_id: matchedDept ? matchedDept.id : '',
+        department_name: matchedDept ? matchedDept.name : '',
+        file_path: parsedData?.file_path || '',
+        diagram_data: parsedData?.diagram_data || '',
+        sections: parsedData?.sections || undefined,
+        steps: parsedData?.steps || undefined,
+        document_level: 'Cấp phòng',
+        editor: editorName,
+        owner: editorName,
+        approver: defaultApprover,
+        approver_bgd: 'Trần Đình Hùng (Tổng Giám Đốc)',
+        role: matchedDept ? matchedDept.name : '',
+        status: 'Nháp'
+      });
+
+      showFeedback('success', `Đã bóc tách thành công tệp: ${file.name}`);
+      
+      // 6. Hiển thị Modal "Thêm tài liệu mới" sau khi chọn và bóc tách file xong
+      setShowCreateModal(true);
+
+    } catch (err) {
+      console.error('Lỗi phân tích file Word:', err);
+      showFeedback('error', err.response?.data?.detail || 'Không thể phân tích tệp Word');
+    } finally {
+      setParsingWordLoading(false);
+      e.target.value = '';
+    }
+  };
+
   const handleCreateProcess = async (e) => {
     e.preventDefault();
-    const hasIsoDocId = newProcessData.iso_document_id !== '' && newProcessData.iso_document_id !== null && newProcessData.iso_document_id !== undefined;
-    if (!newProcessData.code || !newProcessData.name || !hasIsoDocId) {
-      showFeedback('error', 'Vui lòng điền đầy đủ các thông tin bắt buộc');
+    if (!newProcessData.code || !newProcessData.name || !newProcessData.department_id) {
+      showFeedback('error', 'Vui lòng điền đầy đủ các thông tin bắt buộc (Cấp tài liệu, Phòng ban, Loại tài liệu, Tên tài liệu)');
       return;
     }
 
@@ -357,17 +519,16 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
       setLoading(true);
       const res = await api.post('/iso-documents/processes/save', newProcessData);
       setShowCreateModal(false);
-      showFeedback('success', res.message || 'Khởi tạo quy trình mới thành công!');
+      showFeedback('success', res.message || 'Khởi tạo tài liệu mới thành công!');
       fetchDocuments();
       
-      // Hỏi người dùng có muốn chuyển sang thiết lập lưu đồ & form ngay lập tức không
       const createdId = res.id;
       setTimeout(() => {
         setConfirmModal({
           show: true,
           id: createdId,
           title: '🎉 Khởi tạo thành công!',
-          message: 'Quy trình mới đã được tạo. Bạn có muốn chuyển đến màn hình Biên soạn & Vẽ lưu đồ ngay không?',
+          message: 'Tài liệu mới đã được tạo. Bạn có muốn chuyển đến màn hình Biên soạn & Vẽ lưu đồ ngay không?',
           confirmLabel: 'Đi đến Biên soạn',
           confirmColor: '#16a34a',
           onConfirm: () => {
@@ -378,8 +539,8 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
       }, 500);
 
     } catch (error) {
-      console.error('Lỗi khi tạo quy trình:', error);
-      showFeedback('error', error.response?.data?.detail || 'Lỗi hệ thống khi tạo quy trình mới');
+      console.error('Lỗi khi tạo tài liệu:', error);
+      showFeedback('error', error.response?.data?.detail || 'Lỗi hệ thống khi tạo tài liệu mới');
     } finally {
       setLoading(false);
     }
@@ -437,9 +598,9 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
     setConfirmModal({
       show: true,
       id,
-      title: mode === 'processes' ? 'Xác nhận xoá Quy trình' : 'Xác nhận xoá tài liệu ISO',
+      title: mode === 'processes' ? 'Xác nhận xoá Tài liệu' : 'Xác nhận xoá tài liệu ISO',
       message: mode === 'processes'
-        ? `Bạn có chắc chắn muốn xoá quy trình áp dụng thực tế '${code} - ${name}' cùng toàn bộ thiết lập chi tiết liên quan?`
+        ? `Bạn có chắc chắn muốn xoá tài liệu áp dụng thực tế '${code} - ${name}' cùng toàn bộ thiết lập chi tiết liên quan?`
         : `Bạn có chắc chắn muốn xoá tài liệu mẫu '${code} - ${name}' cùng toàn bộ lưu đồ và thiết lập checklist liên quan?`,
       onConfirm: async () => {
         try {
@@ -448,8 +609,8 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
           showFeedback('success', `Đã xoá thành công!`);
           fetchDocuments();
         } catch (error) {
-          console.error('Lỗi khi xoá quy trình:', error);
-          showFeedback('error', 'Không thể xoá quy trình này');
+          console.error('Lỗi khi xoá tài liệu:', error);
+          showFeedback('error', 'Không thể xoá tài liệu này');
         }
         setConfirmModal({ show: false, id: null, title: '', message: '', onConfirm: null, confirmLabel: 'Xác nhận', confirmColor: '#d93025' });
       }
@@ -565,8 +726,18 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
   };
 
   return (
-    <div className="mgmt-container">
-      <div className="mgmt-main" style={{ fontFamily: 'Inter, sans-serif', display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
+    <div className="gold-layout iso-document-list-view" style={{
+      height: 'calc(100vh - 68px)',
+      maxHeight: 'calc(100vh - 68px)',
+      minHeight: 0,
+      overflow: 'hidden',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '6px',
+      width: '100%',
+      padding: '0'
+    }}>
+      <div className="sticky-top-zone" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
 
         {/* 0. Thanh chuyển đổi Tab nhóm Hồ sơ ISO */}
         <div style={{
@@ -616,7 +787,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
             }}
           >
             <Layers size={16} />
-            <span>Quy trình nghiệp vụ</span>
+            <span>Tài liệu nghiệp vụ</span>
           </Link>
           <Link 
             to="/admin/iso-records" 
@@ -681,35 +852,15 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
       <PageToolbar
         searchValue={searchTerm}
         onSearchChange={(val) => { setSearchTerm(val); setPage(1); }}
-        searchPlaceholder="Tìm theo mã, tên hoặc người ban hành..."
+        searchPlaceholder={mode === 'processes' ? 'Tìm theo mã tài liệu, tên, người biên soạn...' : 'Tìm theo mã mẫu, tên, người ban hành...'}
         showFilter={true}
         isFilterOpen={isFilterBarOpen}
         onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
         activeFiltersCount={(statusFilter ? 1 : 0) + (levelFilter ? 1 : 0) + (filterFolder ? 1 : 0) + (filterOwner ? 1 : 0)}
-        onCreate={mode === 'processes' ? undefined : () => !uploadLoading && fileInputRef.current?.click()}
-        createLabel={mode === 'processes' ? 'Thêm mới' : (uploadLoading ? 'Đang phân tích...' : 'Nhập dữ liệu')}
-        createActions={mode === 'processes' ? [
-          {
-            label: 'Tạo từ mẫu ISO',
-            icon: <Plus size={14} />,
-            onClick: () => openCreateModal()
-          },
-          {
-            label: 'Tải lên từ file Word (.docx)',
-            icon: <Upload size={14} />,
-            onClick: () => !uploadLoading && fileInputRef.current?.click()
-          }
-        ] : []}
+        onCreate={mode === 'processes' ? openCreateModal : undefined}
+        createLabel={mode === 'processes' ? 'Thêm mới' : undefined}
+        createActions={[]}
         hasWritePermission={true}
-      />
-
-      <input
-        type="file"
-        ref={fileInputRef}
-        accept=".doc,.docx"
-        onChange={handleFileUpload}
-        disabled={uploadLoading}
-        style={{ display: 'none' }}
       />
 
       {isFilterBarOpen && (
@@ -735,13 +886,26 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
               onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
             >
               <option value="">Tất cả trạng thái</option>
-              <option value="Chờ Trưởng phòng">Chờ Trưởng phòng duyệt</option>
-              <option value="Chờ BGĐ">Chờ BGĐ duyệt</option>
-              <option value="Trưởng phòng đã duyệt">Trưởng phòng đã duyệt</option>
-              <option value="BGĐ đã duyệt">BGĐ đã duyệt</option>
-              <option value="Hiệu lực">Hiệu lực / Đang lưu hành</option>
-              <option value="Nháp">Nháp / Dự thảo</option>
-              <option value="Từ chối">Từ chối</option>
+              {mode === 'processes' ? (
+                <>
+                  <option value="Hiệu lực">Hiệu lực</option>
+                  <option value="Chờ xem xét">Chờ xem xét</option>
+                  <option value="Chờ duyệt">Chờ duyệt</option>
+                  <option value="Chỉnh sửa">Chỉnh sửa</option>
+                  <option value="Nháp">Nháp</option>
+                  <option value="Hết hiệu lực">Hết hiệu lực</option>
+                </>
+              ) : (
+                <>
+                  <option value="Chờ Trưởng phòng">Chờ Trưởng phòng duyệt</option>
+                  <option value="Chờ BGĐ">Chờ BGĐ duyệt</option>
+                  <option value="Trưởng phòng đã duyệt">Trưởng phòng đã duyệt</option>
+                  <option value="BGĐ đã duyệt">BGĐ đã duyệt</option>
+                  <option value="Hiệu lực">Hiệu lực / Đang lưu hành</option>
+                  <option value="Nháp">Nháp / Dự thảo</option>
+                  <option value="Từ chối">Từ chối</option>
+                </>
+              )}
             </select>
           </div>
 
@@ -790,9 +954,10 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
           </div>
         </div>
       )}
+      </div>
 
       {/* 2. Bảng Danh sách Quy trình ISO */}
-      <div className="admin-list-layout">
+      <div className="admin-list-layout" style={{ flex: '1 1 0%', height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div className="mgmt-table admin-table-card card-shadow" style={{
           backgroundColor: 'white',
           border: '1px solid #EADCC9',
@@ -801,7 +966,9 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
-          height: '100%'
+          flex: '1 1 0%',
+          height: '100%',
+          minHeight: 0
         }}>
         {loading ? (
           <div style={{ padding: '60px', textAlign: 'center', color: '#7B5233', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
@@ -815,22 +982,23 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
             <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem' }}>Vui lòng nhấn tải lên file Word hoặc thêm mới để bắt đầu cấu hình</p>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-            <div className="admin-table-scroll" style={{ overflowX: 'auto', minHeight: '220px', flex: 1 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', flex: '1 1 0%', minHeight: 0, height: '100%', overflow: 'hidden' }}>
+            <div className="admin-table-scroll" style={{ overflowX: 'auto', overflowY: 'auto', flex: '1 1 0%', minHeight: 0, height: '100%' }}>
             <table className="data-table" style={{ width: '100%', minWidth: '100%', tableLayout: 'auto' }}>
-              <thead>
+              <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#FAF6F0' }}>
                 <tr style={{ backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9' }}>
                   <th style={{ padding: '7px 4px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '38px', textAlign: 'center', whiteSpace: 'nowrap' }}>STT</th>
                   {mode === 'processes' ? (
                     <>
-                      <th style={{ padding: '7px 6px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '100px', whiteSpace: 'nowrap' }}>MÃ QUY TRÌNH</th>
-                      <th style={{ padding: '7px 6px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '90px', whiteSpace: 'nowrap' }}>KÝ HIỆU</th>
-                      <th style={{ padding: '7px 8px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', minWidth: '160px' }}>TÊN QUY TRÌNH</th>
+                      <th style={{ padding: '7px 6px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '90px', whiteSpace: 'nowrap' }}>MÃ CŨ</th>
+                      <th style={{ padding: '7px 6px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '85px', textAlign: 'center', whiteSpace: 'nowrap' }}>MÃ MỚI</th>
+                      <th style={{ padding: '7px 6px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '130px', maxWidth: '140px', whiteSpace: 'nowrap' }}>PHÒNG BAN</th>
+                      <th style={{ padding: '7px 8px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', minWidth: '280px' }}>TÊN TÀI LIỆU</th>
+                      <th style={{ padding: '7px 4px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '75px', textAlign: 'center', whiteSpace: 'nowrap' }}>SỐ TÀI LIỆU</th>
                       <th style={{ padding: '7px 4px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '80px', textAlign: 'center', whiteSpace: 'nowrap' }}>CẤP DUYỆT</th>
-                      <th style={{ padding: '7px 6px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '105px', whiteSpace: 'nowrap' }}>NGƯỜI BIÊN SOẠN</th>
-                      <th style={{ padding: '7px 6px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '115px', whiteSpace: 'nowrap' }}>TRƯỞNG PHÒNG DUYỆT</th>
-                      <th style={{ padding: '7px 4px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '85px', textAlign: 'center', whiteSpace: 'nowrap' }}>BGĐ DUYỆT</th>
-                      <th style={{ padding: '7px 4px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '90px', textAlign: 'center', whiteSpace: 'nowrap' }}>THỜI GIAN BAN HÀNH</th>
+                      <th style={{ padding: '7px 6px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '110px', textAlign: 'center', whiteSpace: 'nowrap' }}>NGƯỜI BIÊN SOẠN</th>
+                      <th style={{ padding: '7px 6px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '120px', whiteSpace: 'nowrap' }}>TRƯỞNG PHÒNG DUYỆT</th>
+                      <th style={{ padding: '7px 4px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '110px', textAlign: 'center', whiteSpace: 'nowrap' }}>THỜI GIAN CẬP NHẬT</th>
                       <th style={{ padding: '7px 4px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '120px', textAlign: 'center', whiteSpace: 'nowrap' }}>TRẠNG THÁI</th>
                     </>
                   ) : (
@@ -838,6 +1006,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                       <th style={{ padding: '7px 6px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '90px', whiteSpace: 'nowrap' }}>MÃ MẪU</th>
                       <th style={{ padding: '7px 6px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '90px', whiteSpace: 'nowrap' }}>KÝ HIỆU</th>
                       <th style={{ padding: '7px 8px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', minWidth: '150px' }}>TÊN TÀI LIỆU</th>
+                      <th style={{ padding: '7px 6px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '130px', whiteSpace: 'nowrap' }}>THUỘC QUY TRÌNH</th>
                       <th style={{ padding: '7px 2px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '45px', textAlign: 'center', whiteSpace: 'nowrap' }}>PHIÊN BẢN</th>
                       <th style={{ padding: '7px 6px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '95px', whiteSpace: 'nowrap' }}>LOẠI TÀI LIỆU</th>
                       <th style={{ padding: '7px 4px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '75px', textAlign: 'center', whiteSpace: 'nowrap' }}>CẤP DUYỆT</th>
@@ -869,17 +1038,60 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                     {mode === 'processes' ? (
                       <>
                         <td style={{ padding: '6px 6px', fontSize: '0.8rem', fontWeight: 600, color: '#7B5233', whiteSpace: 'nowrap' }}>{doc.code}</td>
-                        <td style={{ padding: '6px 6px', fontSize: '0.8rem', color: '#1e293b', fontWeight: 500, whiteSpace: 'nowrap' }}>{doc.symbol || '---'}</td>
-                        <td style={{ padding: '6px 8px', fontSize: '0.8rem', color: '#1e293b', fontWeight: 500, wordBreak: 'break-word' }}>{doc.name}</td>
+                        <td style={{ padding: '6px 6px', fontSize: '0.8rem', color: '#94a3b8', fontStyle: 'italic', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                          {doc.new_code || ''}
+                        </td>
+                        <td style={{ padding: '6px 6px', fontSize: '0.8rem', color: '#1e293b', fontWeight: 500, maxWidth: '140px', whiteSpace: 'nowrap' }}>
+                          <span 
+                            title={doc.department_name || doc.symbol || '---'}
+                            style={{ 
+                              display: 'inline-block',
+                              maxWidth: '125px',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              verticalAlign: 'middle',
+                              backgroundColor: '#FAF6F0', 
+                              padding: '2px 6px', 
+                              borderRadius: '4px', 
+                              border: '1px solid #EADCC9', 
+                              fontSize: '0.78rem', 
+                              fontWeight: 600, 
+                              color: '#7B5233' 
+                            }}
+                          >
+                            {doc.department_name || doc.symbol || '---'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '6px 8px', fontSize: '0.8rem', color: '#1e293b', fontWeight: 500, wordBreak: 'break-word', minWidth: '280px' }}>{doc.name}</td>
+                        <td style={{ padding: '6px 4px', fontSize: '0.8rem', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                          {(() => {
+                            const count = doc.documents_count || 0;
+                            const isZero = count === 0;
+                            return (
+                              <span style={{
+                                fontWeight: 700,
+                                color: isZero ? '#DC2626' : '#15803D',
+                                backgroundColor: isZero ? '#FEE2E2' : '#DCFCE7',
+                                padding: '2px 8px',
+                                borderRadius: '10px',
+                                fontSize: '0.75rem',
+                                border: `1px solid ${isZero ? '#FECACA' : '#BBF7D0'}`,
+                                display: 'inline-block'
+                              }}>
+                                {count} TL
+                              </span>
+                            );
+                          })()}
+                        </td>
                         <td style={{ padding: '6px 4px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                           {renderDocumentLevelBadge(doc.document_level)}
                         </td>
-                        <td style={{ padding: '6px 6px', fontSize: '0.8rem', color: '#1e293b', fontWeight: 500, whiteSpace: 'nowrap' }}>{doc.editor || '---'}</td>
+                        <td style={{ padding: '6px 6px', fontSize: '0.8rem', color: '#94a3b8', fontStyle: 'italic', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                          {doc.editor || '---'}
+                        </td>
                         <td style={{ padding: '6px 6px', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
                           {renderApprover1(doc)}
-                        </td>
-                        <td style={{ padding: '6px 4px', fontSize: '0.8rem', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                          {renderApprover2(doc)}
                         </td>
                         <td style={{ padding: '6px 4px', fontSize: '0.8rem', color: '#1e293b', fontWeight: 500, textAlign: 'center', whiteSpace: 'nowrap' }}>
                           {formatVietnameseDate(doc.updated_at || doc.issue_date || doc.created_at)}
@@ -890,6 +1102,15 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                         <td style={{ padding: '6px 6px', fontSize: '0.8rem', fontWeight: 600, color: '#7B5233', whiteSpace: 'nowrap' }}>{doc.code}</td>
                         <td style={{ padding: '6px 6px', fontSize: '0.8rem', color: '#1e293b', fontWeight: 500, whiteSpace: 'nowrap' }}>{doc.symbol || '---'}</td>
                         <td style={{ padding: '6px 8px', fontSize: '0.8rem', color: '#1e293b', fontWeight: 500, wordBreak: 'break-word' }}>{doc.name}</td>
+                        <td style={{ padding: '6px 6px', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+                          {doc.process_code ? (
+                            <span title={doc.process_name} style={{ fontWeight: 600, color: '#1E40AF', backgroundColor: '#EFF6FF', padding: '2px 6px', borderRadius: '4px', border: '1px solid #BFDBFE', fontSize: '0.75rem' }}>
+                              {doc.process_code}
+                            </span>
+                          ) : (
+                            <span style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: '0.75rem' }}>Chưa gán</span>
+                          )}
+                        </td>
                         <td style={{ padding: '6px 2px', fontSize: '0.8rem', color: '#1e293b', textAlign: 'center', fontWeight: 500, whiteSpace: 'nowrap' }}>v{doc.version || '01'}</td>
                         <td style={{ padding: '6px 6px', fontSize: '0.8rem', color: '#1e293b', fontWeight: 500, whiteSpace: 'nowrap' }}>{doc.doc_type || '---'}</td>
                         <td style={{ padding: '6px 4px', textAlign: 'center', whiteSpace: 'nowrap' }}>
@@ -908,7 +1129,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                         <td style={{ padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                           {doc.file_path ? (
                             <a
-                              href={`${api.defaults.baseURL.replace(/\/$/, '')}/iso-documents/${doc.id}/download-raw`}
+                              href={`${api.defaults.baseURL.replace(/\/$/, '')}/iso-documents/${mode === 'processes' ? `processes/${doc.id}` : doc.id}/download-raw`}
                               download
                               target="_blank"
                               rel="noreferrer"
@@ -1093,7 +1314,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
           </div>
         </div>
       )}
-      {/* 4. Modal Tạo Quy trình thực tế mới */}
+      {/* 4. Modal Tạo Quy trình thực tế mới (Gold Design System) */}
       {showCreateModal && (
         <div style={{
           position: 'fixed',
@@ -1101,252 +1322,316 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.4)',
+          backgroundColor: 'rgba(15, 23, 42, 0.5)',
+          backdropFilter: 'blur(5px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 1000
+          zIndex: 1000,
+          padding: '16px'
         }}>
           <div style={{
-            backgroundColor: 'white',
-            borderRadius: '12px',
-            padding: '24px',
-            maxWidth: '650px',
-            width: '90%',
-            margin: '20px',
-            boxShadow: '0 8px 32px rgba(45, 26, 18, 0.15)',
+            backgroundColor: '#FFFFFF',
+            borderRadius: '16px',
+            maxWidth: '680px',
+            width: '100%',
+            boxShadow: '0 25px 50px -12px rgba(45, 26, 18, 0.22)',
             border: '1px solid #EADCC9',
-            maxHeight: '90vh',
-            overflowY: 'auto'
+            maxHeight: '92vh',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden'
           }}>
-            {/* Nút đóng góc trên bên phải */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '0 0 20px 0', borderBottom: '1px solid #F3F4F6', paddingBottom: '12px' }}>
-              <h2 style={{ margin: 0, color: '#1F2937', fontSize: '1.25rem', fontWeight: 'bold' }}>Thêm quy trình mới</h2>
+            {/* Header Modal */}
+            <div style={{
+              padding: '18px 24px',
+              backgroundColor: '#FAF7F2',
+              borderBottom: '1px solid #EADCC9',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '10px',
+                  backgroundColor: '#FAF0E6',
+                  border: '1px solid #E6D5C3',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#7B5233'
+                }}>
+                  <Layers size={22} />
+                </div>
+                <div>
+                  <h2 style={{ margin: 0, color: '#2D1A12', fontSize: '1.18rem', fontWeight: 700 }}>
+                    Thêm tài liệu mới
+                  </h2>
+                  <span style={{ fontSize: '0.8rem', color: '#786C62', marginTop: '2px', display: 'block' }}>
+                    Khởi tạo thông tin tài liệu nghiệp vụ trước khi biên soạn
+                  </span>
+                </div>
+              </div>
+
               <button 
                 type="button" 
                 onClick={() => setShowCreateModal(false)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: '1.5rem', padding: '0 4px', lineHeight: 1 }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '50%',
+                  cursor: 'pointer',
+                  color: '#6B7280',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#EFE8DF'; e.currentTarget.style.color = '#2D1A12'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#6B7280'; }}
               >
-                &times;
+                <X size={18} />
               </button>
             </div>
             
-            <form onSubmit={handleCreateProcess} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', color: '#4b301e', marginBottom: '4px' }}>
-                  Mẫu tài liệu <span style={{ color: 'red' }}>*</span>
-                </label>
-                <select
-                  value={newProcessData.iso_document_id}
-                  onChange={(e) => {
-                    const selId = e.target.value;
-                    const selTemplate = templates.find(t => t.id === parseInt(selId));
-                    if (selTemplate) {
-                      const initialSymbol = selTemplate.symbol || '';
-                      const documentLevel = selTemplate.document_level || 'Cấp phòng';
-                      const xx = selTemplate.folder ? selTemplate.folder.slice(-2).toUpperCase() : 'SX';
-                      const yy = getTemplateAbbreviation(initialSymbol);
-                      
-                      const prefix = `G7.${xx}.${yy}`;
-                      let maxZz = 0;
-                      if (allProcesses && allProcesses.length > 0) {
-                        allProcesses.forEach(p => {
-                          if (p.code && p.code.toUpperCase().startsWith(prefix.toUpperCase())) {
-                            const suffix = p.code.slice(prefix.length);
-                            const num = parseInt(suffix, 10);
-                            if (!isNaN(num) && num > maxZz) {
-                              maxZz = num;
-                            }
-                          }
-                        });
-                      }
-                      const zz = String(maxZz + 1).padStart(2, '0');
-                      const generatedCode = `G7.${xx}.${yy}${zz}`;
-                      const approverName = findApprover(documentLevel, xx, accounts);
-                      
-                      setNewProcessData(prev => ({
-                        ...prev,
-                        iso_document_id: selId,
-                        name: '',
-                        symbol: initialSymbol,
-                        code: generatedCode,
-                        document_level: documentLevel,
-                        owner: prev.owner,
-                        approver: approverName
-                      }));
-                    }
-                  }}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    border: '1px solid #EADCC9',
-                    outline: 'none',
-                    fontSize: '0.88rem',
-                    color: '#1F2937',
-                    backgroundColor: 'white',
-                    cursor: 'pointer'
-                  }}
-                  required
-                >
-                  <option value="" disabled>-- Chọn tài liệu mẫu ISO --</option>
-                  {templates.map(t => (
-                    <option key={t.id} value={t.id}>{t.code} - {t.name}</option>
-                  ))}
-                </select>
-              </div>
+            {/* Form nội dung chuẩn hóa 5 hàng */}
+            <form onSubmit={handleCreateProcess} style={{ display: 'flex', flexDirection: 'column', flex: 1, overflowY: 'auto' }}>
+              <div style={{ padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', color: '#4b301e', marginBottom: '4px' }}>
-                  Tên quy trình <span style={{ color: 'red' }}>*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="Nhập tên quy trình..."
-                  value={newProcessData.name}
-                  onChange={(e) => setNewProcessData(prev => ({ ...prev, name: e.target.value }))}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    border: '1px solid #EADCC9',
-                    outline: 'none',
-                    fontSize: '0.88rem',
-                    boxSizing: 'border-box',
-                    color: '#1F2937'
-                  }}
-                  required
-                />
-              </div>
+                {/* HÀNG 1: Cấp tài liệu, Phòng ban */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 16px' }}>
+                  {/* Cấp tài liệu */}
+                  <div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
+                      <Layers size={14} color="#7B5233" />
+                      <span>Cấp tài liệu</span>
+                      <span style={{ color: '#EF4444' }}>*</span>
+                    </label>
+                    <select
+                      value={newProcessData.document_level || 'Cấp phòng'}
+                      onChange={(e) => {
+                        const newLvl = e.target.value;
+                        setNewProcessData(prev => ({
+                          ...prev,
+                          document_level: newLvl
+                        }));
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '9px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid #D9C7B6',
+                        outline: 'none',
+                        fontSize: '0.88rem',
+                        fontWeight: 500,
+                        backgroundColor: '#FFFFFF',
+                        color: '#1F2937',
+                        cursor: 'pointer',
+                        boxSizing: 'border-box'
+                      }}
+                    >
+                      <option value="Cấp phòng">Cấp phòng</option>
+                      <option value="Cấp công ty">Cấp công ty</option>
+                    </select>
+                  </div>
 
-              {/* Grid 2 cột cho các trường thông tin bên dưới */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 16px' }}>
+                  {/* Phòng ban */}
+                  <div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
+                      <Building size={14} color="#7B5233" />
+                      <span>Phòng ban</span>
+                      <span style={{ color: '#EF4444' }}>*</span>
+                    </label>
+                    <select
+                      value={newProcessData.department_id || ''}
+                      onChange={(e) => handleSelectDepartment(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '9px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid #D9C7B6',
+                        outline: 'none',
+                        fontSize: '0.88rem',
+                        color: '#1F2937',
+                        backgroundColor: '#FFFFFF',
+                        cursor: 'pointer',
+                        boxSizing: 'border-box'
+                      }}
+                      required
+                    >
+                      <option value="" disabled>-- Chọn phòng ban áp dụng tài liệu --</option>
+                      {departmentsList.map(d => (
+                        <option key={d.id} value={d.id}>
+                          {d.name} ({d.code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* HÀNG 2: Loại tài liệu, Mã tài liệu (k chỉnh sửa) */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 16px' }}>
+                  {/* Loại tài liệu */}
+                  <div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
+                      <FolderArchive size={14} color="#7B5233" />
+                      <span>Loại tài liệu</span>
+                      <span style={{ color: '#EF4444' }}>*</span>
+                    </label>
+                    <select
+                      value={newProcessData.doc_type_id || ''}
+                      onChange={(e) => handleSelectDocType(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '9px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid #D9C7B6',
+                        outline: 'none',
+                        fontSize: '0.88rem',
+                        color: '#1F2937',
+                        backgroundColor: '#FFFFFF',
+                        cursor: 'pointer',
+                        boxSizing: 'border-box'
+                      }}
+                      required
+                    >
+                      <option value="" disabled>-- Chọn loại tài liệu --</option>
+                      {docTypesList.map(t => (
+                        <option key={t.id} value={t.id}>
+                          {t.name} ({t.code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Mã tài liệu (k chỉnh sửa) */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.84rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
+                      Mã tài liệu <span style={{ color: '#EF4444' }}>*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={newProcessData.code}
+                      readOnly
+                      title="Mã tài liệu được sinh tự động theo Cấp, Phòng ban và Loại tài liệu"
+                      style={{
+                        width: '100%',
+                        padding: '9px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid #E5E7EB',
+                        outline: 'none',
+                        fontSize: '0.88rem',
+                        fontWeight: 600,
+                        backgroundColor: '#F9FAFB',
+                        color: '#1F2937',
+                        cursor: 'default',
+                        boxSizing: 'border-box'
+                      }}
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* HÀNG 3: Tên tài liệu (Full width 1 hàng) */}
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', color: '#4b301e', marginBottom: '4px' }}>
-                    Mã tài liệu <span style={{ color: 'red' }}>*</span>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
+                    <FileText size={14} color="#7B5233" />
+                    <span>Tên tài liệu</span>
+                    <span style={{ color: '#EF4444' }}>*</span>
                   </label>
                   <input
                     type="text"
-                    value={newProcessData.code}
-                    readOnly
+                    placeholder="Nhập tên tài liệu..."
+                    value={newProcessData.name}
+                    onChange={(e) => setNewProcessData(prev => ({ ...prev, name: e.target.value }))}
                     style={{
                       width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: '6px',
-                      border: '1px solid #E5E7EB',
+                      padding: '9px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid #D9C7B6',
                       outline: 'none',
                       fontSize: '0.88rem',
-                      fontWeight: '600',
-                      backgroundColor: '#F3F4F6',
-                      color: '#4B5563',
-                      cursor: 'not-allowed',
-                      boxSizing: 'border-box'
+                      boxSizing: 'border-box',
+                      color: '#1F2937',
+                      fontWeight: 500
                     }}
                     required
                   />
                 </div>
 
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', color: '#4b301e', marginBottom: '4px' }}>
-                    Cấp tài liệu / Quy trình <span style={{ color: 'red' }}>*</span>
-                  </label>
-                  <select
-                    value={newProcessData.document_level || 'Cấp phòng'}
-                    onChange={(e) => {
-                      const newLvl = e.target.value;
-                      const xx = newProcessData.code ? (newProcessData.code.split('.')[1] || 'SX') : 'SX';
-                      const defaultApprover = findApprover(newLvl, xx, accounts);
-                      setNewProcessData(prev => ({
-                        ...prev,
-                        document_level: newLvl,
-                        approver: defaultApprover
-                      }));
-                    }}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: '6px',
-                      border: '1px solid #EADCC9',
-                      outline: 'none',
-                      fontSize: '0.88rem',
-                      fontWeight: '600',
-                      backgroundColor: 'white',
-                      color: '#1F2937',
-                      cursor: 'pointer',
-                      boxSizing: 'border-box'
-                    }}
-                  >
-                    <option value="Cấp phòng">Cấp phòng</option>
-                    <option value="Cấp công ty">Cấp công ty</option>
-                  </select>
-                  {newProcessData.document_level === 'Cấp công ty' && (
-                    <div style={{ fontSize: '0.74rem', color: '#1E40AF', marginTop: '4px', fontWeight: 600 }}>
-                      Quy trình 2 cấp duyệt: Trưởng phòng duyệt Bước 1, Ban Giám Đốc ký duyệt ban hành Bước 2.
-                    </div>
-                  )}
+                {/* HÀNG 4: Người biên soạn, người phê duyệt */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 16px' }}>
+                  {/* Người biên soạn */}
+                  <div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.84rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
+                      <User size={13} color="#6B7280" />
+                      <span>Người biên soạn</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={newProcessData.editor}
+                      readOnly
+                      style={{
+                        width: '100%',
+                        padding: '9px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid #E5E7EB',
+                        outline: 'none',
+                        fontSize: '0.88rem',
+                        fontWeight: 500,
+                        backgroundColor: '#F9FAFB',
+                        color: '#4B5563',
+                        cursor: 'default',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+
+                  {/* Người phê duyệt */}
+                  <div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.84rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
+                      <ShieldCheck size={13} color="#7B5233" />
+                      <span>{newProcessData.document_level === 'Cấp công ty' ? 'Người phê duyệt (Trưởng phòng)' : 'Người phê duyệt'}</span>
+                      <span style={{ color: '#EF4444' }}>*</span>
+                    </label>
+                    <select
+                      value={newProcessData.approver || ''}
+                      onChange={(e) => setNewProcessData(prev => ({ ...prev, approver: e.target.value }))}
+                      style={{
+                        width: '100%',
+                        padding: '9px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid #D9C7B6',
+                        outline: 'none',
+                        fontSize: '0.88rem',
+                        color: '#1F2937',
+                        backgroundColor: '#FFFFFF',
+                        cursor: 'pointer',
+                        boxSizing: 'border-box'
+                      }}
+                      required
+                    >
+                      <option value="" disabled>-- Chọn người phê duyệt --</option>
+                      {departmentHeads.map(acc => (
+                        <option key={acc.id} value={acc.full_name}>
+                          {acc.display_name || `${acc.full_name} (${acc.department_name || acc.role_name || 'Trưởng phòng'})`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', color: '#4b301e', marginBottom: '4px' }}>
-                    Người biên soạn
-                  </label>
-                  <input
-                    type="text"
-                    value={newProcessData.editor}
-                    readOnly
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: '6px',
-                      border: '1px solid #E5E7EB',
-                      outline: 'none',
-                      fontSize: '0.88rem',
-                      fontWeight: '600',
-                      backgroundColor: '#F3F4F6',
-                      color: '#4B5563',
-                      cursor: 'not-allowed',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', color: '#4b301e', marginBottom: '4px' }}>
-                    {newProcessData.document_level === 'Cấp công ty'
-                      ? 'Người duyệt 1: Cấp phòng (Trưởng phòng) '
-                      : 'Người duyệt (Trưởng phòng) '}
-                    <span style={{ color: 'red' }}>*</span>
-                  </label>
-                  <select
-                    value={newProcessData.approver || ''}
-                    onChange={(e) => setNewProcessData(prev => ({ ...prev, approver: e.target.value }))}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: '6px',
-                      border: '1px solid #EADCC9',
-                      outline: 'none',
-                      fontSize: '0.88rem',
-                      color: '#1F2937',
-                      backgroundColor: 'white',
-                      cursor: 'pointer',
-                      boxSizing: 'border-box'
-                    }}
-                    required
-                  >
-                    <option value="" disabled>-- Chọn Trưởng phòng duyệt --</option>
-                    {getApproverCandidates(newProcessData.document_level || 'Cấp phòng').map(acc => (
-                      <option key={acc.id} value={acc.full_name}>
-                        {acc.full_name} ({acc.permission_name || acc.role_name || 'Trưởng phòng / Quản lý'})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
+                {/* Nếu Cấp công ty -> Người duyệt 2 (BGĐ) */}
                 {newProcessData.document_level === 'Cấp công ty' && (
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', color: '#1E3A8A', marginBottom: '4px' }}>
-                      Người duyệt 2: Cấp công ty (Ban Giám Đốc) <span style={{ color: 'red' }}>*</span>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.84rem', fontWeight: 600, color: '#1E40AF', marginBottom: '6px' }}>
+                      <ShieldCheck size={13} color="#1E40AF" />
+                      <span>Người phê duyệt 2: Cấp công ty (Ban Giám Đốc)</span>
+                      <span style={{ color: '#EF4444' }}>*</span>
                     </label>
                     <input
                       type="text"
@@ -1354,108 +1639,149 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                       onChange={(e) => setNewProcessData(prev => ({ ...prev, approver_bgd: e.target.value }))}
                       style={{
                         width: '100%',
-                        padding: '8px 12px',
-                        borderRadius: '6px',
-                        border: '1.5px solid #93C5FD',
+                        padding: '9px 12px',
+                        borderRadius: '8px',
+                        border: '1.5px solid #BFDBFE',
                         outline: 'none',
                         fontSize: '0.88rem',
                         color: '#1E3A8A',
                         backgroundColor: '#EFF6FF',
-                        fontWeight: 'bold',
+                        fontWeight: 600,
                         boxSizing: 'border-box'
                       }}
                       required
                     />
+                    <span style={{ fontSize: '0.74rem', color: '#3B82F6', marginTop: '4px', display: 'block' }}>
+                      ℹ️ Tài liệu 2 cấp duyệt: Trưởng phòng duyệt Bước 1, Ban Giám Đốc ký duyệt ban hành Bước 2.
+                    </span>
                   </div>
                 )}
 
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', color: '#4b301e', marginBottom: '4px' }}>
-                    Thời gian cập nhật
-                  </label>
-                  <input
-                    type="text"
-                    value={getCurrentFormattedDate()}
-                    readOnly
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: '6px',
-                      border: '1px solid #E5E7EB',
-                      outline: 'none',
-                      fontSize: '0.88rem',
-                      fontWeight: '600',
-                      backgroundColor: '#F3F4F6',
-                      color: '#4B5563',
-                      cursor: 'not-allowed',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                </div>
+                {/* HÀNG 5: Thời gian cập nhật, Trạng thái cập nhật */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 16px' }}>
+                  {/* Thời gian cập nhật */}
+                  <div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.84rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
+                      <Calendar size={13} color="#6B7280" />
+                      <span>Thời gian cập nhật</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={getCurrentFormattedDate()}
+                      readOnly
+                      style={{
+                        width: '100%',
+                        padding: '9px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid #E5E7EB',
+                        outline: 'none',
+                        fontSize: '0.88rem',
+                        fontWeight: 500,
+                        backgroundColor: '#F9FAFB',
+                        color: '#4B5563',
+                        cursor: 'default',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
 
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', color: '#4b301e', marginBottom: '4px' }}>
-                    Trạng thái
-                  </label>
-                  <input
-                    type="text"
-                    value="Nháp"
-                    readOnly
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: '6px',
+                  {/* Trạng thái cập nhật */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.84rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
+                      Trạng thái cập nhật
+                    </label>
+                    <div style={{
+                      padding: '9px 12px',
+                      borderRadius: '8px',
                       border: '1px solid #E5E7EB',
-                      outline: 'none',
+                      backgroundColor: '#F9FAFB',
                       fontSize: '0.88rem',
-                      fontWeight: '600',
-                      backgroundColor: '#F3F4F6',
-                      color: '#4B5563',
-                      cursor: 'not-allowed',
+                      color: '#6B7280',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
                       boxSizing: 'border-box'
-                    }}
-                  />
+                    }}>
+                      <span style={{
+                        padding: '2px 8px',
+                        borderRadius: '6px',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        backgroundColor: '#FFF7ED',
+                        color: '#C2410C',
+                        border: '1px solid #FDBA74'
+                      }}>
+                        Nháp
+                      </span>
+                      <span style={{ fontSize: '0.78rem', color: '#9CA3AF' }}>(Sẽ chuyển tiếp khi biên soạn)</span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px', borderTop: '1px solid #EADCC9', paddingTop: '14px' }}>
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  style={{
-                    padding: '8px 16px',
-                    borderRadius: '6px',
-                    border: '1px solid #7B5233',
-                    backgroundColor: 'white',
-                    color: '#7B5233',
-                    fontSize: '0.85rem',
-                    fontWeight: 'bold',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Hủy bỏ
-                </button>
-                <button
-                  type="submit"
-                  style={{
-                    padding: '8px 16px',
-                    borderRadius: '6px',
-                    border: 'none',
-                    backgroundColor: '#7B5233',
-                    color: 'white',
-                    fontSize: '0.85rem',
-                    fontWeight: 'bold',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Tạo mới
-                </button>
+              {/* Footer Modal */}
+              <div style={{
+                padding: '14px 24px',
+                backgroundColor: '#FAF7F2',
+                borderTop: '1px solid #EADCC9',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '12px'
+              }}>
+                <span style={{ fontSize: '0.78rem', color: '#786C62' }}>
+                  * Sau khi tạo mới, hệ thống sẽ mở trình biên soạn lưu đồ & biểu mẫu.
+                </span>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateModal(false)}
+                    style={{
+                      padding: '9px 18px',
+                      borderRadius: '8px',
+                      border: '1px solid #D5C2B0',
+                      backgroundColor: '#FFFFFF',
+                      color: '#5A4D43',
+                      fontSize: '0.85rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F5EFE8'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+                  >
+                    Hủy bỏ
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '9px 20px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      backgroundColor: '#7B5233',
+                      color: '#FFFFFF',
+                      fontSize: '0.85rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      boxShadow: '0 4px 12px rgba(123, 82, 51, 0.25)',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#634026'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#7B5233'}
+                  >
+                    <Plus size={16} />
+                    Tạo mới tài liệu
+                  </button>
+                </div>
               </div>
             </form>
           </div>
         </div>
       )}
-      </div>
     </div>
   );
 };

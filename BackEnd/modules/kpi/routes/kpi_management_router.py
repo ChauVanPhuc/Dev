@@ -24,16 +24,35 @@ router = APIRouter()
 class KPIChecklistBase(BaseModel):
     task_code: str
     content: str
-    frequency: str
-    status_today: str
-    perform_count: int
+    frequency: Optional[str] = "Hàng ngày"
+    status_today: Optional[str] = "Chưa làm"
+    perform_count: Optional[int] = 0
     last_performed: Optional[str] = None
     result: Optional[str] = None
     department_code: Optional[str] = None
+    checklist_type: Optional[str] = "FIXED" # FIXED | DEADLINE
+    deadline_mode: Optional[str] = None # RECURRING | ONCE
+    recurring_cycle: Optional[str] = None # DAILY | WEEKLY | MONTHLY
+    recurring_day_of_week: Optional[str] = None # e.g. "TUE,FRI"
+    recurring_day_of_month: Optional[int] = None # 1 - 31
+    once_period_type: Optional[str] = None # DAY | WEEK | MONTH
+    due_date: Optional[str] = None # e.g. "2026-10-15"
+    target_week: Optional[str] = None # e.g. "2026-W41"
+    target_month: Optional[str] = None # e.g. "2026-10"
+    due_time: Optional[str] = None # e.g. "17:00"
+    priority: Optional[str] = "MEDIUM" # HIGH | MEDIUM | LOW
+    target_role: Optional[str] = "ALL" # ALL | INSPECTOR | LEADER | MANAGER
+    weight_score: Optional[int] = 10 # Điểm trọng số KPI
+    evidence_type: Optional[str] = "NONE" # NONE | PHOTO | FILE | NUMERIC
+    guide_code: Optional[str] = None # Mã HDKT / Quy trình tham chiếu
+    is_active: Optional[bool] = True # Hiệu lực áp dụng
+    evidence_url: Optional[str] = None # Link file/ảnh/chữ ký bằng chứng
+    performer_note: Optional[str] = None # Ghi chú thực tế của nhân viên
+    completed_at: Optional[str] = None # Thời điểm hoàn thành
 
 
 class KPIChecklistCreate(KPIChecklistBase):
-    employee_id: str
+    employee_id: Optional[str] = "ALL"
 
 class KPIEmployeeItemBase(BaseModel):
     kpi_code: str
@@ -47,6 +66,9 @@ class KPIEmployeeItemBase(BaseModel):
 
 class KPIEmployeeItemCreate(KPIEmployeeItemBase):
     employee_id: str
+
+class KPIActualUpdate(BaseModel):
+    actual: Optional[str] = None
 
 class KPIViolationBase(BaseModel):
     violation_code: str
@@ -238,12 +260,29 @@ def get_kpi_employees(db: Session = Depends(get_db)):
 
 # 2. Checklist công việc CRUD
 @router.get("/checklists", response_model=List[dict])
-def get_checklists(employee_id: Optional[str] = None, department_code: Optional[str] = None, db: Session = Depends(get_db)):
+def get_checklists(
+    employee_id: Optional[str] = None,
+    department_code: Optional[str] = None,
+    checklist_type: Optional[str] = None,
+    deadline_mode: Optional[str] = None,
+    target_role: Optional[str] = None,
+    is_active: Optional[bool] = None,
+    db: Session = Depends(get_db)
+):
     query = db.query(KPIChecklist)
     if employee_id:
-        query = query.filter(KPIChecklist.employee_id == employee_id)
+        from sqlalchemy import or_
+        query = query.filter(or_(KPIChecklist.employee_id == employee_id, KPIChecklist.employee_id == "ALL", KPIChecklist.employee_id == None))
     if department_code and department_code.strip() and department_code.upper() not in ['ALL', 'TẤT CẢ']:
         query = query.filter(KPIChecklist.department_code == department_code.strip())
+    if checklist_type and checklist_type.strip() and checklist_type.upper() not in ['ALL', 'TẤT CẢ']:
+        query = query.filter(KPIChecklist.checklist_type == checklist_type.strip().upper())
+    if deadline_mode and deadline_mode.strip() and deadline_mode.upper() not in ['ALL', 'TẤT CẢ']:
+        query = query.filter(KPIChecklist.deadline_mode == deadline_mode.strip().upper())
+    if target_role and target_role.strip() and target_role.upper() not in ['ALL', 'TẤT CẢ']:
+        query = query.filter(KPIChecklist.target_role == target_role.strip().upper())
+    if is_active is not None:
+        query = query.filter(KPIChecklist.is_active == is_active)
     items = query.order_by(KPIChecklist.id.asc()).all()
     return [
         {
@@ -251,12 +290,31 @@ def get_checklists(employee_id: Optional[str] = None, department_code: Optional[
             "employee_id": idx.employee_id,
             "task_code": idx.task_code,
             "content": idx.content,
-            "frequency": idx.frequency,
-            "status_today": idx.status_today,
-            "perform_count": idx.perform_count,
+            "frequency": idx.frequency or "Hàng ngày",
+            "status_today": idx.status_today or "Chưa làm",
+            "perform_count": idx.perform_count or 0,
             "last_performed": idx.last_performed,
             "result": idx.result,
-            "department_code": idx.department_code
+            "department_code": idx.department_code,
+            "checklist_type": idx.checklist_type or "FIXED",
+            "deadline_mode": idx.deadline_mode,
+            "recurring_cycle": idx.recurring_cycle,
+            "recurring_day_of_week": idx.recurring_day_of_week,
+            "recurring_day_of_month": idx.recurring_day_of_month,
+            "once_period_type": idx.once_period_type,
+            "due_date": idx.due_date,
+            "target_week": idx.target_week,
+            "target_month": idx.target_month,
+            "due_time": idx.due_time,
+            "priority": idx.priority or "MEDIUM",
+            "target_role": idx.target_role or "ALL",
+            "weight_score": idx.weight_score if idx.weight_score is not None else 10,
+            "evidence_type": idx.evidence_type or "NONE",
+            "guide_code": idx.guide_code or "",
+            "is_active": True if idx.is_active is None else bool(idx.is_active),
+            "evidence_url": idx.evidence_url,
+            "performer_note": idx.performer_note,
+            "completed_at": idx.completed_at
         }
         for idx in items
     ]
@@ -278,6 +336,56 @@ def update_checklist(id: int, item: KPIChecklistBase, db: Session = Depends(get_
         setattr(db_item, key, value)
     db.commit()
     return {"status": "success", "message": "Cập nhật công việc checklist thành công"}
+
+@router.post("/checklists/clear-all", response_model=dict)
+@router.delete("/checklists/all", response_model=dict)
+def clear_all_checklists(db: Session = Depends(get_db)):
+    db.query(KPIChecklist).delete()
+    db.commit()
+    try:
+        from sqlalchemy import text
+        db.execute(text("DBCC CHECKIDENT ('kpi_checklists', RESEED, 0)"))
+        db.commit()
+    except Exception:
+        pass
+    return {"status": "success", "message": "Đã xóa toàn bộ công việc checklist thành công"}
+
+@router.post("/checklists/{id}/clone", response_model=dict)
+def clone_checklist(id: int, db: Session = Depends(get_db)):
+    source = db.query(KPIChecklist).filter(KPIChecklist.id == id).first()
+    if not source:
+        raise HTTPException(status_code=404, detail="Không tìm thấy mục checklist nguồn")
+    new_code = f"{source.task_code}-CP"
+    new_item = KPIChecklist(
+        employee_id=source.employee_id or "ALL",
+        task_code=new_code,
+        content=f"{source.content} (Bản sao)",
+        frequency=source.frequency,
+        status_today="Chưa làm",
+        perform_count=0,
+        result=source.result,
+        department_code=source.department_code,
+        checklist_type=source.checklist_type,
+        deadline_mode=source.deadline_mode,
+        recurring_cycle=source.recurring_cycle,
+        recurring_day_of_week=source.recurring_day_of_week,
+        recurring_day_of_month=source.recurring_day_of_month,
+        once_period_type=source.once_period_type,
+        due_date=source.due_date,
+        target_week=source.target_week,
+        target_month=source.target_month,
+        due_time=source.due_time,
+        priority=source.priority,
+        target_role=source.target_role,
+        weight_score=source.weight_score,
+        evidence_type=source.evidence_type,
+        guide_code=source.guide_code,
+        is_active=source.is_active
+    )
+    db.add(new_item)
+    db.commit()
+    db.refresh(new_item)
+    return {"status": "success", "id": new_item.id, "message": "Nhân bản công việc checklist thành công"}
 
 @router.delete("/checklists/{id}", response_model=dict)
 def delete_checklist(id: int, db: Session = Depends(get_db)):
@@ -586,36 +694,9 @@ def delete_checklist_pool_item(id: int, db: Session = Depends(get_db)):
 @router.get("/kpi-pool", response_model=List[dict])
 def get_kpi_pool(db: Session = Depends(get_db)):
     """
-    [GET] Lấy danh sách KPI mẫu chung. Nếu trống, tự động seed các giá trị mặc định.
+    [GET] Lấy danh sách KPI mẫu chung (KPI Pool).
     """
     items = db.query(KPIItemPool).order_by(KPIItemPool.id.asc()).all()
-    if not items:
-        default_items = [
-            ("KPI01", "Tỷ lệ lỗi lọt lưới do vật tư đầu vào", "(Số lô lỗi phát hiện) / (Tổng số lô lỗi thực tế dựa trên Phiếu NCR) * 100", "> 98%", "A"),
-            ("KPI02", "Tỷ lệ hoàn thành CAPA đúng hạn", "(Số phiếu quá hạn 5 ngày) / (Tổng số phiếu nhận) * 100", "> 98%", "B"),
-            ("KPI03", "Số lần sai sót nghiệp vụ (Báo cáo, quy trình...)", "Mỗi một báo cáo ghi nhận đều -2%", "> 96%", "C"),
-            ("KPI04", "Tỷ lệ ngày công làm việc", "(Số ngày đi làm) / (Tổng số ngày cần đi làm) * 100", "> 97%", "D"),
-            ("KPI05", "Tỷ lệ tham gia đào tạo", "(Số lần tham gia đào tạo) / (Tổng số lần cần tham gia đào tạo) * 100", "100%", "E"),
-            ("KPI06", "Tỷ lệ tuân thủ tuần tra mẫu (30 phút/lần)", "Mỗi một báo cáo sai sót được phòng QA ghi nhận đều -2%", ">= 98%", "C"),
-            ("KPI07", "Tỷ lệ lọt pass hàng thành công (Pallet)", "(1 - (Tổng số pallet bị trả về / Tổng số pallet được bàn giao)) * 100", "100%", "A"),
-            ("KPI08", "Tỷ lệ tuân thủ tuần tra mẫu đầu tiên", "Mỗi một báo cáo ghi nhận đều -2%", ">= 98%", "C"),
-            ("KPI09", "Tỷ lệ pass hàng thành công (Sản phẩm)", "(1 - (Tổng số sản phẩm bị trả về / Tổng số sản phẩm được bàn giao)) * 100", "> 95%", "A"),
-            ("KPI10", "Tỷ lệ hàng đạt final", "(Tổng cont final đạt + cont Final fail (được xử lý trong 24h)) / Tổng số cont được final * 100", "100%", "A"),
-            ("KPI11", "Tỷ lệ khiếu nại từ khách hàng", "(Tổng tiền phạt) / (Tổng doanh thu) * 100", "< 98%", "F"),
-            ("KPI12", "Tỷ lệ pass hàng thành công (Mục tiêu tối đa)", "(1 - (Tổng số sản phẩm bị trả về / Tổng số sản phẩm được bàn giao)) * 100", "100%", "A"),
-            ("KPI13", "Tỷ lệ tuân thủ tuần tra mẫu (Mục tiêu tối đa)", "Mỗi một báo cáo ghi nhận đều -2%", "100%", "C")
-        ]
-        for code, content, calc, target, cat in default_items:
-            db.add(KPIItemPool(
-                kpi_code=code,
-                content=content,
-                calc_method=calc,
-                target=target,
-                category=cat
-            ))
-        db.commit()
-        items = db.query(KPIItemPool).order_by(KPIItemPool.id.asc()).all()
-    
     return [
         {
             "id": r.id,
@@ -666,6 +747,12 @@ def delete_kpi_pool_item(id: int, db: Session = Depends(get_db)):
     db.delete(db_item)
     db.commit()
     return {"status": "success", "message": "Xóa mẫu KPI thành công"}
+
+@router.delete("/kpi-pool-all", response_model=dict)
+def delete_all_kpi_pool(db: Session = Depends(get_db)):
+    count = db.query(KPIItemPool).delete()
+    db.commit()
+    return {"status": "success", "message": f"Đã xóa toàn bộ {count} chỉ số KPI mẫu", "deleted_count": count}
 
 @router.get("/export-data", response_model=dict)
 def get_export_data(db: Session = Depends(get_db)):
@@ -1196,6 +1283,27 @@ def calculate_employee_kpi_score(db: Session, employee_id: str, month: int, year
 
     kpi_score = round(total_weighted_earned / total_weight, 1) if total_weight > 0 else 95.0
 
+    # Tính điểm Checklist hoàn thành thực tế (Trọng số 30%)
+    checklist_score = 100.0
+    try:
+        from sqlalchemy import or_
+        emp_checklists = db.query(KPIChecklist).filter(
+            or_(KPIChecklist.employee_id == employee_id, KPIChecklist.employee_id == "ALL")
+        ).all()
+        if emp_checklists:
+            earned_chk = 0
+            for c in emp_checklists:
+                st = (c.status_today or '').lower()
+                if any(k in st for k in ['hoàn thành', 'đã hoàn thành', 'đạt']):
+                    earned_chk += 100
+                elif any(k in st for k in ['đang làm', 'đang thực hiện']):
+                    earned_chk += 50
+                else:
+                    earned_chk += 0
+            checklist_score = round(earned_chk / len(emp_checklists), 1)
+    except Exception:
+        checklist_score = 100.0
+
     violation_score = 0.0
     try:
         adv_list = db.query(AwardDiscipline).all()
@@ -1214,7 +1322,9 @@ def calculate_employee_kpi_score(db: Session, employee_id: str, month: int, year
     except Exception:
         manager_score = 0.0
 
-    total_score = max(0.0, round(kpi_score + manager_score - violation_score, 1))
+    # Điểm hiệu suất cơ sở = 70% KPI + 30% Checklist
+    base_perf = (0.7 * kpi_score) + (0.3 * checklist_score)
+    total_score = max(0.0, round(base_perf + manager_score - violation_score, 1))
 
     rating = "A"
     if total_score >= 105:
@@ -1241,7 +1351,7 @@ def calculate_employee_kpi_score(db: Session, employee_id: str, month: int, year
             month=month,
             year=year,
             kpi_score=kpi_score,
-            checklist_score=100.0,
+            checklist_score=checklist_score,
             violation_score=violation_score,
             manager_score=manager_score,
             total_score=total_score,
@@ -1251,6 +1361,7 @@ def calculate_employee_kpi_score(db: Session, employee_id: str, month: int, year
         db.add(monthly_record)
     else:
         monthly_record.kpi_score = kpi_score
+        monthly_record.checklist_score = checklist_score
         monthly_record.violation_score = violation_score
         monthly_record.manager_score = manager_score
         monthly_record.total_score = total_score

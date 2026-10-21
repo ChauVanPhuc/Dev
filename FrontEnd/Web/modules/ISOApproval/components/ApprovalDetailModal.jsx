@@ -171,18 +171,52 @@ export const ApprovalDetailModal = ({
   // Lọc sạch các sections nghiệp vụ, loại trừ hoàn toàn các key hệ thống __metadata_...
   const cleanSections = useMemo(() => {
     if (!detail) return [];
+
+    let sectionTypes = {};
+    if (typeof detail.sections === 'object' && detail.sections !== null && detail.sections['__metadata_section_types__']) {
+      try {
+        const rawTypes = typeof detail.sections['__metadata_section_types__'] === 'string'
+          ? JSON.parse(detail.sections['__metadata_section_types__'])
+          : detail.sections['__metadata_section_types__'];
+        if (rawTypes && typeof rawTypes === 'object') {
+          sectionTypes = rawTypes;
+        }
+      } catch (e) {
+        console.error('Error parsing section types in ApprovalDetailModal:', e);
+      }
+    } else if (Array.isArray(detail.sections)) {
+      const metaSec = detail.sections.find(s => s && s.section_name === '__metadata_section_types__');
+      if (metaSec && metaSec.content_html) {
+        try {
+          sectionTypes = JSON.parse(metaSec.content_html);
+        } catch (e) {
+          console.error('Error parsing section types from array in ApprovalDetailModal:', e);
+        }
+      }
+    }
+
     let list = [];
     if (Array.isArray(detail.sections)) {
-      list = detail.sections.filter(s => s && s.section_name && !s.section_name.startsWith('__'));
+      list = detail.sections
+        .filter(s => s && s.section_name && !s.section_name.startsWith('__'))
+        .map(s => ({
+          ...s,
+          is_flowchart: sectionTypes[s.section_name] === 'flowchart'
+        }));
     } else if (typeof detail.sections === 'object' && detail.sections !== null) {
       list = Object.entries(detail.sections)
         .filter(([k]) => !k.startsWith('__'))
-        .map(([k, v]) => ({ section_name: k, content_html: typeof v === 'string' ? v : (v?.content_html || '') }));
+        .map(([k, v]) => ({
+          section_name: k,
+          content_html: typeof v === 'string' ? v : (v?.content_html || ''),
+          is_flowchart: sectionTypes[k] === 'flowchart'
+        }));
     }
 
-    // Nếu là Quy trình nghiệp vụ và chưa có mục Lưu trình trong sections, tự động thêm đề mục "Lưu trình thực hiện"
+    // Nếu là Quy trình nghiệp vụ và chưa có mục nào là flowchart, tự động kiểm tra và thêm nếu cần
     if (isProcess) {
       const hasFlowchartSec = list.some(s => {
+        if (s.is_flowchart) return true;
         const n = (s.section_name || '').toLowerCase();
         return n.includes('lưu trình') || n.includes('lưu đồ') || n.includes('sơ đồ') || n.includes('quy trình');
       });
@@ -204,7 +238,7 @@ export const ApprovalDetailModal = ({
   // Kiểm tra xem đề mục hiện tại có phải là mục Lưu trình / Lưu đồ không (gọi Hook TRƯỚC return null)
   const isCurrentSectionFlowchart = useMemo(() => {
     if (!currentSection) return false;
-    if (currentSection.is_flowchart) return true;
+    if (currentSection.is_flowchart !== undefined) return currentSection.is_flowchart;
     const name = (currentSection.section_name || '').toLowerCase();
     return name.includes('lưu trình') || name.includes('lưu đồ') || name.includes('sơ đồ') || name.includes('quy trình thực hiện');
   }, [currentSection]);

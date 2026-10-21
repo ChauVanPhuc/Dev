@@ -87,6 +87,10 @@ tools/
 scratch/
 scratch_*.py
 audit_*.py
+test_*.py
+check_*.py
+find_image.py
+inspect_doc.py
 *_audit*.json
 route_metadata_status.json
 node_modules_bak/

@@ -1,6 +1,34 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+import fs from 'fs'
+import net from 'net'
+
+// Tự động kiểm tra xem Canvas Editor dev server (port 1000) có đang chạy không
+let isCanvasEditorRunning = false;
+const checkCanvasEditorPort = () => {
+  const sock = new net.Socket();
+  sock.setTimeout(350);
+  sock.on('connect', () => {
+    isCanvasEditorRunning = true;
+    sock.destroy();
+  });
+  sock.on('error', () => {
+    isCanvasEditorRunning = false;
+    sock.destroy();
+  });
+  sock.on('timeout', () => {
+    isCanvasEditorRunning = false;
+    sock.destroy();
+  });
+  try {
+    sock.connect(1000, '127.0.0.1');
+  } catch (e) {
+    isCanvasEditorRunning = false;
+  }
+};
+setInterval(checkCanvasEditorPort, 2000);
+checkCanvasEditorPort();
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -42,7 +70,9 @@ export default defineConfig({
       '@/modules/claim': path.resolve(__dirname, '../Claim/FrontEnd/src/modules/claim'),
       '@/modules/price': path.resolve(__dirname, '../Claim/FrontEnd/src/modules/price'),
       '@/modules': path.resolve(__dirname, '../Claim/FrontEnd/src/modules'),
-      '@/shared': path.resolve(__dirname, '../Claim/FrontEnd/src/shared')
+      '@/shared': path.resolve(__dirname, '../Claim/FrontEnd/src/shared'),
+      '@hufe921/canvas-editor': 'C:/Tool/WS/canvas-editor/dist/canvas-editor.js',
+      '@hufe921/canvas-editor-plugin-docx': 'C:/Tool/WS/canvas-editor/node_modules/@hufe921/canvas-editor-plugin-docx/dist/docx.js'
     }
   },
   server: {
@@ -57,7 +87,8 @@ export default defineConfig({
     fs: {
       strict: false,
       allow: [
-        path.resolve(__dirname, '..')
+        path.resolve(__dirname, '..'),
+        'C:/Tool/WS/canvas-editor'
       ]
     },
     proxy: {
@@ -85,6 +116,65 @@ export default defineConfig({
       '/uploads': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true
+      },
+      '/canvas-editor': {
+        target: 'http://127.0.0.1:1000',
+        changeOrigin: true,
+        ws: true,
+        bypass: (req) => {
+          if (!isCanvasEditorRunning) {
+            // Dev server port 1000 không chạy -> Bỏ qua proxy để Vite tự phục vụ file tĩnh từ public/canvas-editor
+            return req.url;
+          }
+        },
+        configure: (proxy) => {
+          proxy.on('error', (err, req, res) => {
+            if (err && (err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT')) {
+              try {
+                if (res && typeof res.writeHead === 'function' && !res.headersSent) {
+                  const urlPath = req.url ? req.url.split('?')[0] : '';
+                  const relPath = urlPath.replace(/^\/canvas-editor\/?/, '');
+                  const safeRelPath = relPath ? relPath.replace(/\.\./g, '') : 'index.html';
+                  const filePath = path.resolve(__dirname, 'public/canvas-editor', safeRelPath);
+                  const targetFile = (fs.existsSync(filePath) && fs.statSync(filePath).isFile())
+                    ? filePath
+                    : path.resolve(__dirname, 'public/canvas-editor/index.html');
+
+                  if (fs.existsSync(targetFile)) {
+                    const ext = path.extname(targetFile).toLowerCase();
+                    const mimeTypes = {
+                      '.html': 'text/html; charset=utf-8',
+                      '.js': 'application/javascript; charset=utf-8',
+                      '.css': 'text/css; charset=utf-8',
+                      '.json': 'application/json; charset=utf-8',
+                      '.png': 'image/png',
+                      '.jpg': 'image/jpeg',
+                      '.jpeg': 'image/jpeg',
+                      '.svg': 'image/svg+xml',
+                      '.ico': 'image/x-icon',
+                      '.gz': 'application/gzip',
+                      '.woff': 'font/woff',
+                      '.woff2': 'font/woff2',
+                      '.ttf': 'font/ttf'
+                    };
+                    const contentType = mimeTypes[ext] || 'application/octet-stream';
+                    res.writeHead(200, { 'Content-Type': contentType });
+                    fs.createReadStream(targetFile).pipe(res);
+                    return;
+                  }
+                  res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+                  res.end('Canvas Editor static file not found');
+                }
+              } catch (fallbackErr) {
+                console.error('[Canvas Editor Fallback Error]', fallbackErr);
+                if (res && !res.headersSent) {
+                  res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+                  res.end('Canvas Editor Fallback Error');
+                }
+              }
+            }
+          });
+        }
       }
     }
   },
@@ -104,6 +194,11 @@ export default defineConfig({
       '/uploads': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true
+      },
+      '/canvas-editor': {
+        target: 'http://127.0.0.1:1000',
+        changeOrigin: true,
+        ws: true
       }
     }
   },

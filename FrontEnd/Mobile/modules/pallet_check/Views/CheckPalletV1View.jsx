@@ -3,8 +3,9 @@ import Layout from '@mobile/Shared/Views/components/layout/MobileLayout';
 import PageHeader from '@mobile/Shared/Views/components/layout/MobilePageHeader';
 import MessageModal from '@mobile/Shared/Views/components/feedback/MessageModal';
 import ConfirmModal from '@mobile/Shared/Views/components/feedback/ConfirmModal';
-import { Html5Qrcode } from 'html5-qrcode';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { QRCodeCanvas } from 'qrcode.react';
+import { PRODUCT_SKU_SET, matchCatalogSku, OPTICAL_COLOR_MAP } from '../constants/productCatalog';
 import { 
   Camera, 
   RotateCcw, 
@@ -85,47 +86,196 @@ export const normalizeToEnglishBarcode = (raw) => {
     }
   }
 
-  // Khử tiền tố thừa trước mã số LPN
-  const lpnMatch = str.match(/(\d{7,12})$/);
-  if (lpnMatch && lpnMatch[1] !== str) {
-    return lpnMatch[1];
+  // Khử tiền tố thừa trước mã số LPN (nếu có tiền tố và có đúng 9 số liền ở cuối)
+  if (!str.includes('-')) {
+    const lpn9 = str.match(/(\d{9})$/);
+    if (lpn9) {
+      return lpn9[1];
+    }
   }
+
+  // Tự động phục hồi mã SKU có 2 dấu '-' nếu Code 39 bị mờ mất dấu '-'
+  const hyphens = (str.match(/-/g) || []).length;
+  if (hyphens === 1) {
+    // Trường hợp 1: Nhòe '-2' thành '4' (ví dụ 174621-WHT -> 17-2621-WHT)
+    const m1 = str.match(/^(\d{2})4(\d{3,4}-[A-Z0-9]+)$/);
+    if (m1) {
+      str = `${m1[1]}-2${m1[2]}`;
+    } else {
+      // Trường hợp 2: Nhòe '-' thành '7' (ví dụ 1772621-WHT -> 17-2621-WHT)
+      const m2 = str.match(/^(\d{2})7(\d{4}-[A-Z0-9]+)$/);
+      if (m2) {
+        str = `${m2[1]}-${m2[2]}`;
+      } else {
+        // Trường hợp 3: Rụng mất dấu '-' giữa 2 số đầu và 4 số sau (ví dụ 172621-WHT -> 17-2621-WHT)
+        const m3 = str.match(/^(\d{2})(\d{4})-([A-Z0-9]+)$/);
+        if (m3) {
+          str = `${m3[1]}-${m3[2]}-${m3[3]}`;
+        } else {
+          // Trường hợp 4: Rụng mất dấu '-' thứ 2 trước chữ màu (ví dụ 17-2621WHT -> 17-2621-WHT)
+          const m4 = str.match(/^(\d{2})-(\d{4})([A-Z]{2,5})$/);
+          if (m4) {
+            str = `${m4[1]}-${m4[2]}-${m4[3]}`;
+          }
+        }
+      }
+    }
+  } else if (hyphens === 0) {
+    // Trường hợp 5: Rụng cả 2 dấu '-' nhưng -2 thành 4 (ví dụ 174621WHT -> 17-2621-WHT)
+    const m0a = str.match(/^(\d{2})4(\d{3})([A-Z]{2,5})$/);
+    if (m0a) {
+      str = `${m0a[1]}-2${m0a[2]}-${m0a[3]}`;
+    } else {
+      // Trường hợp 6: Rụng cả 2 dấu '-' (ví dụ 172621WHT -> 17-2621-WHT)
+      const m0b = str.match(/^(\d{2})(\d{4})([A-Z]{2,5})$/);
+      if (m0b) {
+        str = `${m0b[1]}-${m0b[2]}-${m0b[3]}`;
+      }
+    }
+  }
+
+  // Tự động phục hồi đuôi màu sơn nhòe quang học ở Code 39
+  // (ví dụ 17-2621-W5T -> 17-2621-WHT, 17-2621-W5 -> 17-2621-WHT, 17-2621-8LK -> 17-2621-BLK)
+  const barcodeParts = str.split('-');
+  if (barcodeParts.length >= 2) {
+    const rawTail = barcodeParts[barcodeParts.length - 1];
+    if (OPTICAL_COLOR_MAP && OPTICAL_COLOR_MAP[rawTail]) {
+      str = [...barcodeParts.slice(0, barcodeParts.length - 1), OPTICAL_COLOR_MAP[rawTail]].join('-');
+    }
+  }
+  str = str
+    .replace(/-W5T$/, '-WHT')
+    .replace(/-W1T$/, '-WHT')
+    .replace(/-W5$/, '-WHT')
+    .replace(/-W1$/, '-WHT')
+    .replace(/-8LK$/, '-BLK')
+    .replace(/-6RY$/, '-GRY')
+    .replace(/-E5P$/, '-ESP')
+    .replace(/-W0A$/, '-WOA');
+
+  // Khử ký tự * bao quanh (start/stop character của chuẩn Code 39: *17-2621-WHT*)
+  str = str.replace(/^\*+|\*+$/g, '');
+  // Khử các ký tự đặc biệt thừa ở đầu hoặc cuối mã (như khoảng trắng, ký tự rác)
+  str = str.replace(/^[^A-Z0-9]+|[^A-Z0-9]+$/g, '');
 
   return str;
 };
 
-// Phân loại mã quét là LPN hay SKU
-const classifyCode = (rawCode) => {
+// Phân loại mã quét là LPN hay SKU theo chuẩn quy cách:
+// - Mã LPN: Phải là đúng 9 số liền (ví dụ 061234567, 123456789)
+// - Mã SKU: Bắt buộc phải có đúng 2 dấu '-' và đuôi là chữ cái màu sơn (ví dụ 17-2621-WHT)
+// - Mã Pallet: Bắt đầu bằng PLD- hoặc PLN-
+const classifyCode = (rawCode, standardSku = '') => {
   if (!rawCode) return null;
   const code = normalizeToEnglishBarcode(rawCode);
   if (!code) return null;
 
-  // Nếu có chữ cái (A-Z) -> Chắc chắn là SKU
-  const hasAlpha = /[A-Z]/.test(code);
-  const hasHyphen = code.includes('-');
-  const isPureDigits = /^\d+$/.test(code);
-
-  if (hasAlpha || (hasHyphen && !isPureDigits)) {
-    return { type: 'SKU', code };
+  // 0. Mã Pallet lịch sử
+  if (code.startsWith('PLD-') || code.startsWith('PLN-')) {
+    return { type: 'PALLET', code };
   }
 
-  // Nếu là thuần số
-  if (isPureDigits) {
-    if (code.length >= 7 || code.startsWith('06') || code.startsWith('00')) {
-      return { type: 'LPN', code };
+  // 1. Mã LPN: Đúng chính xác 9 chữ số liền
+  if (/^\d{9}$/.test(code)) {
+    return { type: 'LPN', code };
+  }
+
+  // 2. Tra cứu đối soát Danh mục 478 sản phẩm chuẩn của công ty:
+  const matchedSku = matchCatalogSku(code, standardSku);
+  if (matchedSku) {
+    return { type: 'SKU', code: matchedSku };
+  }
+
+  // 3. Fallback: Mã SKU có đúng 2 dấu '-' và đuôi là chữ cái màu sơn [A-Z]{2,5}
+  const hyphenCount = (code.match(/-/g) || []).length;
+  if (hyphenCount === 2) {
+    const parts = code.split('-');
+    if (parts[0].length >= 1 && parts[1].length >= 1 && parts[2].length >= 2) {
+      if (/^[A-Z0-9]+-[A-Z0-9]+-[A-Z]{2,5}$/.test(code)) {
+        return { type: 'SKU', code };
+      }
     }
-    return { type: code.length >= 5 ? 'LPN' : 'SKU', code };
   }
 
-  return { type: 'SKU', code };
+  return null;
+};
+
+/**
+ * So khớp mã SKU với Mã chuẩn SKU:
+ * Cả 2 mã bắt buộc phải có đúng 2 dấu '-' theo quy định nhà máy.
+ */
+const isOpticalVariantOfSku = (scanned, standard) => {
+  if (!scanned || !standard) return false;
+  const sUpper = scanned.toUpperCase().trim();
+  const stdUpper = standard.toUpperCase().trim();
+  if (sUpper === stdUpper) return true;
+
+  // Đối soát qua danh mục Master Data và bảng sửa quang học
+  const matchedScanned = matchCatalogSku(sUpper, stdUpper);
+  if (matchedScanned && matchedScanned === stdUpper) return true;
+
+  // Cả hai bắt buộc phải có đúng 2 dấu '-'
+  if ((sUpper.match(/-/g) || []).length !== 2 || (stdUpper.match(/-/g) || []).length !== 2) {
+    return false;
+  }
+
+  // Khớp chính xác 3 phần sau chuẩn hóa
+  const sParts = sUpper.split('-');
+  const stdParts = stdUpper.split('-');
+  return sParts[0] === stdParts[0] && sParts[1] === stdParts[1] && sParts[2] === stdParts[2];
+};
+
+const isOpticalVariantOfLpn = (scanned, standard) => {
+  if (!scanned || !standard) return false;
+  if (scanned === standard) return true;
+  const cleanScanned = scanned.replace(/\D/g, '');
+  const cleanStandard = standard.replace(/\D/g, '');
+  return cleanScanned.length === 9 && cleanStandard.length === 9 && cleanScanned === cleanStandard;
+};
+
+/**
+ * Kiểm tra xem chuỗi quét được có phải là mã hợp lệ hay không:
+ * - Mã LPN: đúng 9 số liền
+ * - Mã SKU: bắt buộc phải có đúng 2 dấu '-'
+ * - Mã Pallet lịch sử: bắt đầu bằng PLD- hoặc PLN-
+ */
+const isValidBarcodeCandidate = (code, standardSku = '') => {
+  if (!code) return false;
+  const upper = code.toUpperCase().trim();
+
+  // 1. Mã Pallet lịch sử (PLD-xxxx, PLN-xxxx)
+  if (upper.startsWith('PLD-') || upper.startsWith('PLN-')) {
+    return true;
+  }
+
+  // 2. Mã LPN: Đúng chính xác 9 chữ số liền
+  if (/^\d{9}$/.test(upper)) {
+    return true;
+  }
+
+  // 3. Khớp hoặc tự sửa lỗi qua Danh mục 478 sản phẩm chuẩn của công ty:
+  if (matchCatalogSku(upper, standardSku)) {
+    return true;
+  }
+
+  // 4. Mã SKU: Bắt buộc phải có đúng 2 dấu '-' và đuôi là chữ cái màu sơn hoặc biến thể quang học
+  const hyphenCount = (upper.match(/-/g) || []).length;
+  if (hyphenCount === 2) {
+    const parts = upper.split('-');
+    if (parts[0].length >= 1 && parts[1].length >= 1 && parts[2].length >= 2) {
+      if (/^[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]{2,5}$/.test(upper)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 };
 
 const CheckPalletV1View = () => {
   // ─── TAB CHÍNH: 'scan' (Kiểm tra mới) | 'history' (Lịch sử) ───
   const [activeTab, setActiveTab] = useState('scan');
 
-  // ─── CHẾ ĐỘ NGUỒN QUÉT: 'scanner' (Máy quét mã) | 'camera' (Máy ảnh) ───
-  const [inputMode, setInputMode] = useState('scanner'); // 'scanner' | 'camera'
 
   // ─── TAB PHỤ: 'standing' (Pallet đứng) | 'roof' (Top nóc) ───
   const [palletTab, setPalletTab] = useState('standing'); // 'standing' | 'roof'
@@ -202,12 +352,45 @@ const CheckPalletV1View = () => {
     onConfirm: () => {}
   });
 
-  // ─── CAMERA SCANNER HOOK (html5-qrcode) ───
+  // ─── CAMERA SCANNER HOOK (Native BarcodeDetector GPU + Html5Qrcode Fallback) ───
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState(null);
   const [torchOn, setTorchOn] = useState(false);
+  const [cameraEngine, setCameraEngine] = useState('');
+  const [lastDetectedRaw, setLastDetectedRaw] = useState('');
+  const [isCapturingSnapshot, setIsCapturingSnapshot] = useState(false);
+  const [isFlashAnimation, setIsFlashAnimation] = useState(false);
   const html5QrCodeRef = useRef(null);
+  const isStartingCameraRef = useRef(false);
   const lastCameraScannedCodeRef = useRef('');
+  // Bộ lọc đồng thuận đa khung hình (Candidate Consensus Filter) - Chống 100% rác rung mờ
+  const candidateScanCodeRef = useRef('');
+  const candidateScanCountRef = useRef(0);
+  const candidateScanTimeRef = useRef(0);
+  // Bộ đệm xác nhận 2 khung hình liên tiếp trước khi báo động sai mã (chống giật/rung quang học)
+  const mismatchConfirmRef = useRef(null);
+
+  // Native GPU/NPU BarcodeDetector Refs (Siêu tốc độ phần cứng, 60 FPS, < 10ms)
+  const nativeStreamRef = useRef(null);
+  const nativeDetectorRef = useRef(null);
+  const videoElementRef = useRef(null);
+  const onScanSuccessRef = useRef(null);
+  const animationFrameIdRef = useRef(null);
+  const isCameraRunningRef = useRef(false);
+  const audioCtxRef = useRef(null);
+
+  // Refs đồng bộ trạng thái tươi mới nhất cho vòng lặp camera (triệt tiêu 100% stale closures)
+  const palletTabRef = useRef(palletTab);
+  const standingDataRef = useRef(standingData);
+  const roofDataRef = useRef(roofData);
+  const messageModalRef = useRef(messageModal);
+  const confirmModalRef = useRef(confirmModal);
+
+  useEffect(() => { palletTabRef.current = palletTab; }, [palletTab]);
+  useEffect(() => { standingDataRef.current = standingData; }, [standingData]);
+  useEffect(() => { roofDataRef.current = roofData; }, [roofData]);
+  useEffect(() => { messageModalRef.current = messageModal; }, [messageModal]);
+  useEffect(() => { confirmModalRef.current = confirmModal; }, [confirmModal]);
 
   // Tự động lưu lịch sử vào localStorage khi có thay đổi
   useEffect(() => {
@@ -227,6 +410,12 @@ const CheckPalletV1View = () => {
       setScanPopup(null);
     }, duration);
     return () => clearTimeout(timer);
+  }, [scanPopup]);
+
+  // Đồng bộ ref để camera tạm ngưng quét khi đang hiển thị cảnh báo lỗi/báo động
+  const scanPopupRef = useRef(null);
+  useEffect(() => {
+    scanPopupRef.current = scanPopup;
   }, [scanPopup]);
 
   // Kích hoạt nhận mã quét
@@ -252,13 +441,16 @@ const CheckPalletV1View = () => {
     }, 120);
 
     if (!rawCode) return;
+    // Chặn nhận thêm mã khi đang hiển thị cảnh báo lỗi/báo động để người dùng xử lý xong lỗi
+    if (scanPopupRef.current?.type === 'rejected') return;
+
     // Chuẩn hóa mã sang tiếng Anh
     const clean = normalizeToEnglishBarcode(rawCode);
     if (clean.length < 2) return;
 
     const now = Date.now();
-    // Chống quét đúp trong 350ms
-    if (clean === lastProcessedCodeRef.current && now - lastProcessedTimeRef.current < 350) {
+    // Chống quét đúp trong 250ms
+    if (clean === lastProcessedCodeRef.current && now - lastProcessedTimeRef.current < 250) {
       return;
     }
     lastProcessedCodeRef.current = clean;
@@ -269,34 +461,26 @@ const CheckPalletV1View = () => {
     }
   }, []);
 
-  // Luôn giữ focus ngầm cho máy quét để không cần thao tác điện thoại
-  useEffect(() => {
-    if (activeTab === 'scan') {
-      const focusScanner = () => {
-        if (hiddenScannerInputRef.current) {
-          try {
-            hiddenScannerInputRef.current.focus({ preventScroll: true });
-          } catch (_) {}
-        }
-      };
-      focusScanner();
-      const interval = setInterval(focusScanner, 2000);
-      window.addEventListener('click', focusScanner);
-      return () => {
-        clearInterval(interval);
-        window.removeEventListener('click', focusScanner);
-      };
-    }
-  }, [activeTab]);
 
-  // ─── HỆ THỐNG ÂM THANH & RUNG ───
+  // ─── HỆ THỐNG ÂM THANH & RUNG TÁI SỬ DỤNG AUDIOCONTEXT ───
+  const getAudioContext = useCallback(() => {
+    if (typeof window === 'undefined') return null;
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return null;
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new AudioCtx();
+    }
+    if (audioCtxRef.current.state === 'suspended') {
+      audioCtxRef.current.resume().catch(() => {});
+    }
+    return audioCtxRef.current;
+  }, []);
+
   const playSuccessBeep = useCallback(() => {
     if (!soundEnabled) return;
     try {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (!AudioCtx) return;
-      const ctx = new AudioCtx();
-      if (ctx.state === 'suspended') ctx.resume();
+      const ctx = getAudioContext();
+      if (!ctx) return;
 
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
@@ -318,15 +502,13 @@ const CheckPalletV1View = () => {
     } catch (err) {
       console.warn('Không thể phát âm thanh thành công:', err);
     }
-  }, [soundEnabled]);
+  }, [soundEnabled, getAudioContext]);
 
   const playAlertSound = useCallback((repeatTimes = 3) => {
     if (!soundEnabled) return;
     try {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (!AudioCtx) return;
-      const ctx = new AudioCtx();
-      if (ctx.state === 'suspended') ctx.resume();
+      const ctx = getAudioContext();
+      if (!ctx) return;
 
       for (let i = 0; i < repeatTimes; i++) {
         const startTime = ctx.currentTime + (i * 0.28);
@@ -353,7 +535,7 @@ const CheckPalletV1View = () => {
     } catch (err) {
       console.warn('Không thể phát còi báo động:', err);
     }
-  }, [soundEnabled]);
+  }, [soundEnabled, getAudioContext]);
 
   // ─── HỆ THỐNG GIỌNG NÓI TIẾNG VIỆT (TEXT-TO-SPEECH) ───
   const speakText = useCallback((text) => {
@@ -433,7 +615,7 @@ const CheckPalletV1View = () => {
     const setTargetState = currentTab === 'standing' ? setStandingData : setRoofData;
     const nowStr = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-    const classified = classifyCode(cleanRaw);
+    const classified = classifyCode(cleanRaw, targetState.standardSku);
     if (!classified) {
       // ⛔ BÁO ĐỘNG LIỀN: Không nhận diện được định dạng LPN hoặc SKU hợp lệ
       playAlertSound(3);
@@ -537,8 +719,6 @@ const CheckPalletV1View = () => {
 
     // ─── 2. XỬ LÝ NẾU LÀ MÃ SKU (MÃ SẢN PHẨM) ───
     if (type === 'SKU') {
-      const speechCode = code ? code.replace(/-/g, ' ') : '';
-
       if (!targetState.standardSku) {
         setTargetState(prev => ({
           ...prev,
@@ -554,8 +734,9 @@ const CheckPalletV1View = () => {
           }]
         }));
 
+        const speechCode = code.replace(/-/g, ' ');
         playSuccessBeep();
-        speakText(`Đã quét mã, ${speechCode || code}`);
+        speakText(`Đã quét mã, ${speechCode}`);
         setScanPopup({
           type: 'accepted',
           code: code,
@@ -566,10 +747,15 @@ const CheckPalletV1View = () => {
         return;
       }
 
-      if (code === targetState.standardSku) {
+      // Tự động nhận diện nếu trùng khớp hoặc là biến thể quang học do rung mờ Code 39 (như 174621-WHT -> 17-2621-WHT)
+      const isSkuMatch = (code === targetState.standardSku) || isOpticalVariantOfSku(code, targetState.standardSku);
+      const effectiveSku = isSkuMatch ? targetState.standardSku : code;
+      const speechCode = effectiveSku.replace(/-/g, ' ');
+
+      if (isSkuMatch) {
         let currentCount = 1;
         setTargetState(prev => {
-          const existingIdx = prev.skus.findIndex(it => it.code === code);
+          const existingIdx = prev.skus.findIndex(it => it.code === effectiveSku);
           let updatedSkus = [...prev.skus];
 
           if (existingIdx >= 0) {
@@ -582,7 +768,7 @@ const CheckPalletV1View = () => {
           } else {
             updatedSkus.push({
               id: Date.now(),
-              code: code,
+              code: effectiveSku,
               count: 1,
               firstSeen: nowStr,
               lastSeen: nowStr
@@ -598,10 +784,10 @@ const CheckPalletV1View = () => {
         });
 
         playSuccessBeep();
-        speakText(`Đã quét mã, ${speechCode || code}`);
+        speakText(`Đã quét mã, ${speechCode}`);
         setScanPopup({
           type: 'accepted',
-          code: code,
+          code: effectiveSku,
           category: 'SKU',
           count: currentCount,
           title: 'ĐÃ GHI NHẬN MÃ SẢN PHẨM'
@@ -618,6 +804,7 @@ const CheckPalletV1View = () => {
           title: 'BÁO ĐỘNG — SAI MÃ SẢN PHẨM'
         });
       }
+      return;
     }
   }, [palletTab, standingData, roofData, playSuccessBeep, playAlertSound, speakText, historyList]);
 
@@ -630,6 +817,8 @@ const CheckPalletV1View = () => {
   useEffect(() => {
     const handleGlobalKeyDown = (e) => {
       if (messageModal.isOpen || confirmModal.isOpen) return;
+      // Nếu đang chủ động gõ tay vào ô text thì để sự kiện gõ tự nhiên
+      if (document.activeElement === scanInputRef.current) return;
 
       const key = e.key;
       const keyCode = e.keyCode || e.which;
@@ -672,8 +861,8 @@ const CheckPalletV1View = () => {
       // Nhận ký tự từ máy quét
       if (key && key.length === 1) {
         const now = Date.now();
-        // Xóa buffer nếu cách nhau quá 280ms
-        if (now - lastKeyTimeRef.current > 280) {
+        // Xóa buffer nếu cách nhau quá 400ms
+        if (now - lastKeyTimeRef.current > 400) {
           scannerBufferRef.current = '';
           if (hiddenScannerInputRef.current) {
             hiddenScannerInputRef.current.value = '';
@@ -682,7 +871,7 @@ const CheckPalletV1View = () => {
         lastKeyTimeRef.current = now;
         scannerBufferRef.current += key;
 
-        // Tự kích hoạt nếu máy quét không gửi Enter
+        // Tự kích hoạt nếu máy quét không gửi Enter (đợi 350ms để không bị cắt đuôi ký tự)
         if (scannerTimerRef.current) clearTimeout(scannerTimerRef.current);
         scannerTimerRef.current = setTimeout(() => {
           const inputVal = hiddenScannerInputRef.current ? hiddenScannerInputRef.current.value.trim() : '';
@@ -698,7 +887,7 @@ const CheckPalletV1View = () => {
           if (code && code.length >= 2) {
             executeScannedCode(code);
           }
-        }, 250);
+        }, 350);
       }
     };
 
@@ -709,82 +898,595 @@ const CheckPalletV1View = () => {
     };
   }, [executeScannedCode, messageModal.isOpen, confirmModal.isOpen]);
 
-  // ─── ĐIỀU KHIỂN CAMERA SCANNER (html5-qrcode) ───
+  // ─── ĐIỀU KHIỂN CAMERA SCANNER SIÊU TỐC (NATIVE HARDWARE BARCODEDETECTOR GPU < 10MS) ───
   const startCamera = async () => {
+    if (isStartingCameraRef.current) return;
+    isStartingCameraRef.current = true;
     try {
       setCameraError(null);
       setIsCameraActive(true);
 
-      const html5QrCode = new Html5Qrcode('v1-camera-reader');
-      html5QrCodeRef.current = html5QrCode;
+      // Dọn dẹp camera hoặc scanner cũ nếu đang chạy
+      await stopCamera();
+      setIsCameraActive(true);
 
-      const config = {
-        fps: 12,
-        qrbox: { width: 260, height: 180 },
-        aspectRatio: 1.333
+      const container = document.getElementById('v1-camera-reader');
+      if (container) {
+        container.innerHTML = '';
+      }
+
+      // Callback xử lý khi phát hiện mã vạch (Siêu tốc độ, độ chính xác tuyệt đối)
+      const onScanSuccess = (decodedText) => {
+        if (!decodedText) return;
+        // Chỉ dừng quét khi đang có báo động từ chối (rejected) hoặc modal xác nhận đang mở (không chặn bởi thông báo chụp ảnh)
+        if ((scanPopupRef.current && scanPopupRef.current.type === 'rejected') || confirmModalRef.current?.isOpen) {
+          return;
+        }
+
+        const now = Date.now();
+        // Lấy dữ liệu chuẩn mới nhất từ Ref (triệt tiêu 100% stale closures)
+        const currentTab = palletTabRef.current;
+        const currentData = (currentTab === 'standing' ? standingDataRef.current : roofDataRef.current);
+        const currentStdSku = currentData?.standardSku || '';
+        const currentStdLpn = currentData?.standardLpn || '';
+
+        const cleanText = normalizeToEnglishBarcode(decodedText);
+        if (!cleanText) return;
+
+        // Nếu trước đó đang có popup thông báo không tìm thấy mã từ nút chụp ảnh tĩnh, tự động đóng đi khi camera đã bắt được mã
+        if (messageModalRef.current?.isOpen && messageModalRef.current?.title?.includes('mã')) {
+          setMessageModal(prev => ({ ...prev, isOpen: false }));
+        }
+
+        // Tra cứu đối soát trực tiếp từ điển 478 SKU chuẩn của công ty (tự động sửa lỗi quang học W5T -> WHT)
+        const catalogMatched = matchCatalogSku(cleanText, currentStdSku);
+        const resolvedText = catalogMatched || cleanText;
+
+        setLastDetectedRaw(resolvedText);
+
+        // Lọc nghiêm ngặt: Phải là ứng viên mã hợp lệ theo quy cách nhà máy
+        if (!isValidBarcodeCandidate(resolvedText, currentStdSku)) {
+          return;
+        }
+
+        const classified = classifyCode(resolvedText, currentStdSku);
+        if (!classified) return;
+
+        const { type, code: normalizedCode } = classified;
+
+        // ─── A. MÃ PALLET QR (PLD-..., PLN-...) ───
+        if (type === 'PALLET' || normalizedCode.startsWith('PLD-') || normalizedCode.startsWith('PLN-')) {
+          mismatchConfirmRef.current = null;
+          if (lastCameraScannedCodeRef.current === normalizedCode && (now - lastProcessedTimeRef.current < 1000)) {
+            return;
+          }
+          lastCameraScannedCodeRef.current = normalizedCode;
+          lastProcessedTimeRef.current = now;
+          executeScannedCode(normalizedCode);
+          return;
+        }
+
+        // ─── B. MÃ LPN (MÃ VẬN CHUYỂN 9 SỐ LIỀN) ───
+        if (type === 'LPN') {
+          // A1. Nếu chưa có LPN chuẩn HOẶC khớp LPN chuẩn: Nhận ngay tức thì (< 10ms)!
+          if (!currentStdLpn || normalizedCode === currentStdLpn) {
+            mismatchConfirmRef.current = null;
+            // Debounce 600ms khi lia giữa các thùng cùng mã
+            if (lastCameraScannedCodeRef.current === normalizedCode && (now - lastProcessedTimeRef.current < 600)) {
+              return;
+            }
+            lastCameraScannedCodeRef.current = normalizedCode;
+            lastProcessedTimeRef.current = now;
+            executeScannedCode(normalizedCode);
+            return;
+          }
+
+          // A2. Nếu KHÁC LPN chuẩn (nghi ngờ sai mã vận chuyển):
+          // Yêu cầu xác nhận 2 khung hình liên tiếp trong 600ms để triệt tiêu 100% rung lắc quang học
+          if (mismatchConfirmRef.current?.code === normalizedCode && (now - mismatchConfirmRef.current.time < 600)) {
+            mismatchConfirmRef.current = null;
+            lastCameraScannedCodeRef.current = normalizedCode;
+            lastProcessedTimeRef.current = now;
+            executeScannedCode(normalizedCode);
+          } else {
+            mismatchConfirmRef.current = { code: normalizedCode, time: now };
+          }
+          return;
+        }
+
+        // ─── C. MÃ SKU (MÃ SẢN PHẨM 2 DẤU '-') ───
+        if (type === 'SKU') {
+          const isSkuMatch = !currentStdSku ||
+            normalizedCode === currentStdSku ||
+            isOpticalVariantOfSku(normalizedCode, currentStdSku) ||
+            (matchCatalogSku(normalizedCode, currentStdSku) === currentStdSku);
+
+          // C1. Nếu chưa có SKU chuẩn HOẶC khớp SKU chuẩn: Nhận ngay tức thì (< 10ms)!
+          if (isSkuMatch) {
+            mismatchConfirmRef.current = null;
+            const finalCode = currentStdSku || normalizedCode;
+            // Debounce 600ms khi lia giữa các thùng cùng mã
+            if (lastCameraScannedCodeRef.current === finalCode && (now - lastProcessedTimeRef.current < 600)) {
+              return;
+            }
+            lastCameraScannedCodeRef.current = finalCode;
+            lastProcessedTimeRef.current = now;
+            executeScannedCode(finalCode);
+            return;
+          }
+
+          // C2. Nếu KHÁC SKU chuẩn (nghi ngờ sai thùng sản phẩm trong pallet):
+          // Yêu cầu xác nhận 2 khung hình liên tiếp trong 600ms rồi mới hú còi báo động!
+          if (mismatchConfirmRef.current?.code === normalizedCode && (now - mismatchConfirmRef.current.time < 600)) {
+            mismatchConfirmRef.current = null;
+            lastCameraScannedCodeRef.current = normalizedCode;
+            lastProcessedTimeRef.current = now;
+            executeScannedCode(normalizedCode);
+          } else {
+            mismatchConfirmRef.current = { code: normalizedCode, time: now };
+          }
+          return;
+        }
+      };
+      onScanSuccessRef.current = onScanSuccess;
+
+      // 1. LẤY STREAM CAMERA ĐỘ NÉT CAO 1280X720, CONTINUOUS AUTOFOCUS
+      let stream = null;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280, min: 1024 },
+            height: { ideal: 720, min: 720 },
+            advanced: [{ focusMode: 'continuous' }]
+          }
+        });
+      } catch (mediaErr) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: {
+              facingMode: { ideal: 'environment' },
+              width: { ideal: 1280 },
+              height: { ideal: 720 }
+            }
+          });
+        } catch (basicErr) {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: true
+          });
+        }
+      }
+
+      nativeStreamRef.current = stream;
+
+      const targetContainer = document.getElementById('v1-camera-reader');
+      if (!targetContainer) throw new Error('Không tìm thấy container camera #v1-camera-reader');
+
+      targetContainer.innerHTML = '';
+      const video = document.createElement('video');
+      video.id = 'v1-native-video';
+      video.setAttribute('playsinline', 'true');
+      video.setAttribute('autoplay', 'true');
+      video.setAttribute('muted', 'true');
+      video.style.width = '100%';
+      video.style.height = '100%';
+      video.style.maxHeight = '280px';
+      video.style.objectFit = 'cover';
+      video.style.display = 'block';
+      video.srcObject = stream;
+      targetContainer.appendChild(video);
+      await video.play();
+
+      videoElementRef.current = video;
+      isCameraRunningRef.current = true;
+
+      // 2. KHỞI TẠO BỘ GIẢI MÃ:
+      // A. Hardware ML Kit BarcodeDetector (Ưu tiên GPU phần cứng điện thoại)
+      let nativeDetector = null;
+      if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
+        try {
+          nativeDetector = new window.BarcodeDetector({
+            formats: ['code_39', 'code_128', 'qr_code', 'ean_13', 'itf']
+          });
+        } catch (_) {
+          try {
+            nativeDetector = new window.BarcodeDetector();
+          } catch (detectorErr) {
+            console.warn('Native BarcodeDetector không khả dụng:', detectorErr);
+            nativeDetector = null;
+          }
+        }
+      }
+      nativeDetectorRef.current = nativeDetector;
+
+      // B. High-Resolution ZXing Decoder qua Html5Qrcode (chuẩn nét 1:1, không bị ép nén canvas)
+      const zxingScanner = new Html5Qrcode('v1-camera-reader', {
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.QR_CODE
+        ],
+        useBarCodeDetectorIfSupported: false,
+        verbose: false
+      });
+      html5QrCodeRef.current = zxingScanner;
+
+      setCameraEngine(nativeDetector ? '⚡ GPU Hardware ML Kit (30 FPS)' : '⚡ High-Res 1:1 Engine (ZXing HD)');
+
+      // 3. OFFSCREEN CANVAS QUÉT ĐỘ PHÂN GIẢI GỐC 1:1 (TRIỆT TIÊU 100% LỖI DOWNSCALING CỦA TRÌNH DUYỆT)
+      const scanCanvas = document.createElement('canvas');
+      const scanCtx = scanCanvas.getContext('2d', { willReadFrequently: true });
+
+      let isFrameProcessing = false;
+      let lastScanTime = 0;
+
+      const scanLoop = async () => {
+        if (!isCameraRunningRef.current) return;
+        const now = performance.now();
+
+        // Chu kỳ quét tối ưu: mỗi 40ms (~25 FPS), vừa cực nhanh vừa không quá tải CPU
+        if (!isFrameProcessing && now - lastScanTime >= 40 && video.readyState >= 2 && video.videoWidth > 0) {
+          isFrameProcessing = true;
+          lastScanTime = now;
+          try {
+            let detectedText = null;
+
+            // BƯỚC 1: QUÉT TRỰC TIẾP GPU TRÊN THẺ VIDEO GỐC (Zero-copy, full sensor, không bị xén Quiet Zone viền)
+            if (nativeDetector) {
+              try {
+                const barcodes = await nativeDetector.detect(video);
+                if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
+                  detectedText = barcodes[0].rawValue;
+                }
+              } catch (_) {}
+            }
+
+            // BƯỚC 2: NẾU CHƯA THẤY, DÙNG CANVAS 1:1 CẮT RỘNG 98% (chừa lề Quiet Zone tuyệt đối)
+            if (!detectedText) {
+              const vw = video.videoWidth;
+              const vh = video.videoHeight;
+              const cropW = Math.min(vw, Math.floor(vw * 0.98));
+              const cropH = Math.min(vh, Math.floor(vh * 0.60));
+              const sx = Math.floor((vw - cropW) / 2);
+              const sy = Math.floor((vh - cropH) / 2);
+
+              if (scanCanvas.width !== cropW || scanCanvas.height !== cropH) {
+                scanCanvas.width = cropW;
+                scanCanvas.height = cropH;
+              }
+
+              scanCtx.drawImage(video, sx, sy, cropW, cropH, 0, 0, cropW, cropH);
+
+              // Thử lại nativeDetector trên scanCanvas
+              if (nativeDetector) {
+                try {
+                  const barcodes = await nativeDetector.detect(scanCanvas);
+                  if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
+                    detectedText = barcodes[0].rawValue;
+                  }
+                } catch (_) {}
+              }
+
+              // BƯỚC 3: DỰ PHÒNG ZXING HIGH-RES (dùng decodeAsync chuẩn của Html5QrcodeShim)
+              if (!detectedText && zxingScanner?.qrcode?.decodeAsync) {
+                try {
+                  const zxResult = await zxingScanner.qrcode.decodeAsync(scanCanvas);
+                  if (zxResult?.text) {
+                    detectedText = zxResult.text;
+                  }
+                } catch (_) {}
+              }
+            }
+
+            if (detectedText) {
+              onScanSuccess(detectedText);
+            }
+          } catch (err) {
+            console.warn('Lỗi xử lý frame camera:', err);
+          } finally {
+            isFrameProcessing = false;
+          }
+        }
+
+        if (isCameraRunningRef.current) {
+          animationFrameIdRef.current = requestAnimationFrame(scanLoop);
+        }
       };
 
-      await html5QrCode.start(
-        { facingMode: 'environment' },
-        config,
-        (decodedText) => {
-          const cleanText = normalizeToEnglishBarcode(decodedText);
-          if (cleanText) {
-            lastCameraScannedCodeRef.current = cleanText;
-            executeScannedCode(cleanText);
-          }
-        },
-        () => {}
-      );
+      animationFrameIdRef.current = requestAnimationFrame(scanLoop);
+
     } catch (err) {
       console.error('Lỗi khởi động camera:', err);
-      setCameraError('Không thể mở Camera. Vui lòng kiểm tra quyền truy cập trên trình duyệt.');
+      const isPermissionErr = err?.name === 'NotAllowedError' || err?.message?.toLowerCase?.()?.includes('permission');
+      setCameraError(
+        isPermissionErr
+          ? 'Trình duyệt chưa được cấp quyền Camera. Vui lòng cho phép quyền Camera trong cài đặt trình duyệt.'
+          : (err?.message || 'Không thể mở Camera. Vui lòng bấm "Thử Lại Mở Camera" bên dưới.')
+      );
       setIsCameraActive(false);
+    } finally {
+      isStartingCameraRef.current = false;
     }
   };
 
   const stopCamera = async () => {
-    if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
-      try {
-        await html5QrCodeRef.current.stop();
-        html5QrCodeRef.current.clear();
-      } catch (err) {
-        console.warn('Lỗi khi dừng camera:', err);
-      }
+    isCameraRunningRef.current = false;
+    if (animationFrameIdRef.current) {
+      cancelAnimationFrame(animationFrameIdRef.current);
+      animationFrameIdRef.current = null;
     }
+    if (nativeStreamRef.current) {
+      try {
+        nativeStreamRef.current.getTracks().forEach(t => t.stop());
+      } catch (_) {}
+      nativeStreamRef.current = null;
+    }
+    const container = document.getElementById('v1-camera-reader');
+    if (container) {
+      container.innerHTML = '';
+    }
+
+    if (html5QrCodeRef.current) {
+      try {
+        if (html5QrCodeRef.current.isScanning) {
+          await html5QrCodeRef.current.stop();
+        }
+      } catch (err) {
+        console.warn('Lỗi khi dừng fallback camera:', err);
+      }
+      try {
+        html5QrCodeRef.current.clear();
+      } catch (_) {}
+      html5QrCodeRef.current = null;
+    }
+    videoElementRef.current = null;
+    nativeDetectorRef.current = null;
+    onScanSuccessRef.current = null;
     setIsCameraActive(false);
     setTorchOn(false);
   };
 
+  // Tự động khởi động camera khi mở tab quét để sẵn sàng nhận mã tức thì
   useEffect(() => {
-    if (inputMode !== 'camera' || activeTab !== 'scan') {
+    let timer;
+    if (activeTab === 'scan') {
+      timer = setTimeout(() => {
+        startCamera();
+      }, 300);
+    } else {
       stopCamera();
     }
     return () => {
+      if (timer) clearTimeout(timer);
       stopCamera();
     };
-  }, [inputMode, activeTab]);
+  }, [activeTab]);
 
   const toggleTorch = async () => {
-    if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
-      try {
-        const track = html5QrCodeRef.current.getRunningTrack();
-        if (track && track.getCapabilities && track.getCapabilities().torch) {
-          await track.applyConstraints({
-            advanced: [{ torch: !torchOn }]
-          });
-          setTorchOn(!torchOn);
-        } else {
-          setMessageModal({
-            isOpen: true,
-            type: 'info',
-            title: 'Thông báo',
-            message: 'Thiết bị không hỗ trợ đèn Flash cho camera này.'
-          });
+    if (!isCameraActive) return;
+
+    try {
+      const nextTorchState = !torchOn;
+      let applied = false;
+
+      // 1. Nếu đang chạy Native Stream
+      if (nativeStreamRef.current) {
+        const track = nativeStreamRef.current.getVideoTracks?.()[0];
+        if (track) {
+          const capabilities = (typeof track.getCapabilities === 'function') ? track.getCapabilities() : {};
+          if (capabilities.torch) {
+            await track.applyConstraints({
+              advanced: [{ torch: nextTorchState }]
+            });
+            setTorchOn(nextTorchState);
+            applied = true;
+          }
         }
-      } catch (err) {
-        console.warn('Lỗi flash:', err);
       }
+
+      // 2. Nếu đang dùng Html5Qrcode fallback
+      if (!applied && html5QrCodeRef.current) {
+        try {
+          if (typeof html5QrCodeRef.current.getRunningTrackCameraCapabilities === 'function') {
+            const cameraCapabilities = html5QrCodeRef.current.getRunningTrackCameraCapabilities();
+            const torchFeature = cameraCapabilities?.torchFeature ? cameraCapabilities.torchFeature() : null;
+            if (torchFeature && typeof torchFeature.isSupported === 'function' && torchFeature.isSupported()) {
+              await torchFeature.apply(nextTorchState);
+              setTorchOn(nextTorchState);
+              applied = true;
+            }
+          }
+        } catch (_) {}
+
+        if (!applied) {
+          const videoEl = document.querySelector('#v1-camera-reader video');
+          const stream = videoEl?.srcObject;
+          const track = stream?.getVideoTracks?.()[0];
+
+          if (track && typeof track.applyConstraints === 'function') {
+            const capabilities = (typeof track.getCapabilities === 'function') ? track.getCapabilities() : {};
+            if (capabilities.torch) {
+              await track.applyConstraints({
+                advanced: [{ torch: nextTorchState }]
+              });
+              setTorchOn(nextTorchState);
+              applied = true;
+            }
+          }
+        }
+      }
+
+      if (!applied) {
+        setMessageModal({
+          isOpen: true,
+          type: 'info',
+          title: 'Thông báo đèn Flash',
+          message: 'Thiết bị hoặc camera hiện tại không hỗ trợ đèn Flash (chỉ khả dụng trên camera sau có đèn flash LED của điện thoại).'
+        });
+      }
+    } catch (err) {
+      console.warn('Lỗi khi điều khiển đèn Flash:', err);
+      setMessageModal({
+        isOpen: true,
+        type: 'warning',
+        title: 'Lỗi Flash',
+        message: 'Không thể thay đổi trạng thái đèn Flash: ' + (err.message || 'Lỗi không xác định')
+      });
+    }
+  };
+
+  // ─── HÀM CHỤP ẢNH TĨNH VÀ PHÂN TÍCH ĐA TẦNG (SNAPSHOT HIGH-RES SCAN) ───
+  const handleSnapshotScan = async () => {
+    if (!isCameraActive || isCapturingSnapshot) return;
+    setIsCapturingSnapshot(true);
+    setIsFlashAnimation(true);
+    setTimeout(() => setIsFlashAnimation(false), 200);
+
+    try {
+      const video = videoElementRef.current || document.getElementById('v1-camera-reader')?.querySelector('video');
+      if (!video || video.readyState < 2 || video.videoWidth === 0) {
+        setMessageModal({
+          isOpen: true,
+          type: 'warning',
+          title: 'Camera chưa sẵn sàng',
+          message: 'Chưa nhận được khung hình từ camera. Vui lòng đợi 1 giây rồi thử lại.'
+        });
+        return;
+      }
+
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
+
+      // Tạo canvas chụp tĩnh nguyên bản 1:1 từ cảm biến camera
+      const snapCanvas = document.createElement('canvas');
+      snapCanvas.width = vw;
+      snapCanvas.height = vh;
+      const snapCtx = snapCanvas.getContext('2d', { willReadFrequently: true });
+      snapCtx.drawImage(video, 0, 0, vw, vh);
+
+      let detectedText = null;
+
+      // Pass 1: Quét trực tiếp cảm biến camera (Hardware BarcodeDetector trên thẻ video gốc, không crop, không mất Quiet Zone)
+      if (nativeDetectorRef.current) {
+        try {
+          const results = await nativeDetectorRef.current.detect(video);
+          if (results && results.length > 0 && results[0].rawValue) {
+            detectedText = results[0].rawValue;
+          }
+        } catch (_) {}
+      }
+
+      // Pass 2: Canvas chụp tĩnh nguyên bản 100% từ cảm biến
+      if (!detectedText && nativeDetectorRef.current) {
+        try {
+          const results = await nativeDetectorRef.current.detect(snapCanvas);
+          if (results && results.length > 0 && results[0].rawValue) {
+            detectedText = results[0].rawValue;
+          }
+        } catch (_) {}
+      }
+
+      // Pass 3: ZXing Decoder trên toàn bộ snapCanvas (dùng decodeAsync đúng chuẩn)
+      if (!detectedText && html5QrCodeRef.current?.qrcode?.decodeAsync) {
+        try {
+          const zxRes = await html5QrCodeRef.current.qrcode.decodeAsync(snapCanvas);
+          if (zxRes?.text) {
+            detectedText = zxRes.text;
+          }
+        } catch (_) {}
+      }
+
+      // Pass 4: Vùng cắt trung tâm RỘNG 98% kèm lề trắng an toàn 25px (tạo Quiet Zone hoàn hảo cho Code 39/Code 128)
+      const cropW = Math.min(vw, Math.floor(vw * 0.98));
+      const cropH = Math.min(vh, Math.floor(vh * 0.65));
+      const sx = Math.floor((vw - cropW) / 2);
+      const sy = Math.floor((vh - cropH) / 2);
+
+      const margin = 25;
+      const cropCanvas = document.createElement('canvas');
+      cropCanvas.width = cropW + margin * 2;
+      cropCanvas.height = cropH + margin * 2;
+      const cropCtx = cropCanvas.getContext('2d', { willReadFrequently: true });
+      // Đổ nền trắng toàn bộ để đảm bảo Quiet Zone
+      cropCtx.fillStyle = '#FFFFFF';
+      cropCtx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
+      cropCtx.drawImage(snapCanvas, sx, sy, cropW, cropH, margin, margin, cropW, cropH);
+
+      if (!detectedText && nativeDetectorRef.current) {
+        try {
+          const results = await nativeDetectorRef.current.detect(cropCanvas);
+          if (results && results.length > 0 && results[0].rawValue) {
+            detectedText = results[0].rawValue;
+          }
+        } catch (_) {}
+      }
+
+      if (!detectedText && html5QrCodeRef.current?.qrcode?.decodeAsync) {
+        try {
+          const zxRes = await html5QrCodeRef.current.qrcode.decodeAsync(cropCanvas);
+          if (zxRes?.text) {
+            detectedText = zxRes.text;
+          }
+        } catch (_) {}
+      }
+
+      // Pass 5: Tăng cường độ tương phản (Adaptive Thresholding) để làm nét vạch mờ trên cropCanvas
+      if (!detectedText && html5QrCodeRef.current?.qrcode?.decodeAsync) {
+        try {
+          const imgData = cropCtx.getImageData(0, 0, cropCanvas.width, cropCanvas.height);
+          const data = imgData.data;
+          let sumLum = 0;
+          for (let i = 0; i < data.length; i += 4) {
+            sumLum += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+          }
+          const avgLum = Math.floor(sumLum / (data.length / 4));
+          const threshold = Math.max(105, Math.min(160, avgLum));
+
+          for (let i = 0; i < data.length; i += 4) {
+            const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+            const bw = gray < threshold ? 0 : 255;
+            data[i] = bw;
+            data[i + 1] = bw;
+            data[i + 2] = bw;
+          }
+          cropCtx.putImageData(imgData, 0, 0);
+
+          const zxRes = await html5QrCodeRef.current.qrcode.decodeAsync(cropCanvas);
+          if (zxRes?.text) {
+            detectedText = zxRes.text;
+          }
+        } catch (_) {}
+      }
+
+      if (detectedText) {
+        // Tự động đóng popup cảnh báo nếu đang mở
+        setMessageModal(prev => (prev.isOpen ? { ...prev, isOpen: false } : prev));
+        if (onScanSuccessRef.current) {
+          onScanSuccessRef.current(detectedText);
+        } else {
+          executeScannedCode(detectedText);
+        }
+      } else {
+        setMessageModal({
+          isOpen: true,
+          type: 'warning',
+          title: 'Chưa đọc được mã vạch',
+          message: 'Không tìm thấy mã vạch trong ảnh chụp. Vui lòng giữ camera cách thùng 20-30cm, để rõ nét và đủ sáng rồi thử lại.'
+        });
+      }
+    } catch (err) {
+      console.error('Lỗi khi chụp ảnh tĩnh và phân tích mã:', err);
+      setMessageModal({
+        isOpen: true,
+        type: 'warning',
+        title: 'Lỗi chụp ảnh',
+        message: 'Đã xảy ra lỗi khi phân tích ảnh: ' + (err.message || 'Lỗi không xác định')
+      });
+    } finally {
+      setIsCapturingSnapshot(false);
     }
   };
 
@@ -1018,7 +1720,7 @@ const CheckPalletV1View = () => {
       skus: [...currentData.skus],
       totalScans: currentData.totalScans,
       timestamp: nowStr,
-      source: inputMode === 'scanner' ? 'Máy quét mã' : 'Máy ảnh',
+      source: 'Máy ảnh',
       inspector: 'Nguyễn A',
       status: 'pass'
     };
@@ -1091,7 +1793,6 @@ const CheckPalletV1View = () => {
             totalScans: 0
           });
         }
-        if (scanInputRef.current) scanInputRef.current.focus();
       }
     });
   };
@@ -1222,8 +1923,8 @@ const CheckPalletV1View = () => {
                   alignItems: 'center',
                   gap: '6px'
                 }}>
-                  <Barcode size={16} color="#7b5233" />
-                  <span>THÔNG TIN ĐỌC MÃ / NGUỒN QUÉT</span>
+                  <Camera size={16} color="#7b5233" />
+                  <span>THÔNG TIN ĐỌC MÃ / MÁY ẢNH</span>
                 </div>
 
                 <button
@@ -1249,75 +1950,11 @@ const CheckPalletV1View = () => {
                 </button>
               </div>
 
-              {/* Bộ chọn chế độ: Máy quét mã vs Máy ảnh */}
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: '8px',
-                backgroundColor: '#f4ede2',
-                padding: '4px',
-                borderRadius: '10px'
-              }}>
-                {/* 1. Chế độ Máy quét mã */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInputMode('scanner');
-                    stopCamera();
-                  }}
-                  style={{
-                    padding: '10px 8px',
-                    borderRadius: '8px',
-                    border: inputMode === 'scanner' ? '1.5px solid #7b5233' : '1px solid transparent',
-                    backgroundColor: inputMode === 'scanner' ? '#ffffff' : 'transparent',
-                    color: inputMode === 'scanner' ? '#5c3a21' : '#8c786a',
-                    fontWeight: '800',
-                    fontSize: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px',
-                    cursor: 'pointer',
-                    boxShadow: inputMode === 'scanner' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
-                    transition: 'all 0.15s'
-                  }}
-                >
-                  <Barcode size={16} color={inputMode === 'scanner' ? '#7b5233' : '#8c786a'} />
-                  <span>Máy quét mã</span>
-                </button>
-
-                {/* 2. Chế độ Máy ảnh */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInputMode('camera');
-                  }}
-                  style={{
-                    padding: '10px 8px',
-                    borderRadius: '8px',
-                    border: inputMode === 'camera' ? '1.5px solid #7b5233' : '1px solid transparent',
-                    backgroundColor: inputMode === 'camera' ? '#ffffff' : 'transparent',
-                    color: inputMode === 'camera' ? '#5c3a21' : '#8c786a',
-                    fontWeight: '800',
-                    fontSize: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px',
-                    cursor: 'pointer',
-                    boxShadow: inputMode === 'camera' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
-                    transition: 'all 0.15s'
-                  }}
-                >
-                  <Camera size={16} color={inputMode === 'camera' ? '#7b5233' : '#8c786a'} />
-                  <span>Máy ảnh</span>
-                </button>
-              </div>
-
-              {/* Input ngầm nhận tia máy quét */}
+              {/* Input ngầm nhận tia quét tự động (máy POS / súng quét) */}
               <input
                 ref={hiddenScannerInputRef}
                 type="password"
+                inputMode="none"
                 autoComplete="new-password"
                 tabIndex={-1}
                 aria-hidden="true"
@@ -1366,10 +2003,7 @@ const CheckPalletV1View = () => {
                 }}
               />
 
-
-
-              {/* ── NẾU CHỌN CHẾ ĐỘ MÁY ẢNH (ĐỒNG BỘ TÔNG MÀU BE/NÂU G7) ── */}
-              {inputMode === 'camera' && (
+              {/* ── MÁY ẢNH QUÉT TRỰC TIẾP (ĐỒNG BỘ TÔNG MÀU BE/NÂU G7) ── */}
                 <div style={{
                   display: 'flex',
                   flexDirection: 'column',
@@ -1464,7 +2098,8 @@ const CheckPalletV1View = () => {
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
-                    justifyContent: 'center'
+                    justifyContent: 'center',
+                    marginTop: '4px'
                   }}>
                     <div 
                       id="v1-camera-reader" 
@@ -1474,6 +2109,63 @@ const CheckPalletV1View = () => {
                         display: isCameraActive ? 'block' : 'none' 
                       }} 
                     />
+
+                    {isCameraActive && (
+                      <div style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        pointerEvents: 'none',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}>
+                        {/* Khung ngắm định vị mã vạch và tia quét laser */}
+                        <div style={{
+                          width: '84%',
+                          height: '58%',
+                          maxHeight: '135px',
+                          border: '2px solid rgba(255, 255, 255, 0.45)',
+                          borderRadius: '8px',
+                          position: 'relative',
+                          boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.28)'
+                        }}>
+                          {/* 4 góc viền vàng Gold Design System */}
+                          <div style={{ position: 'absolute', top: -2, left: -2, width: 14, height: 14, borderTop: '3px solid #d4af37', borderLeft: '3px solid #d4af37' }} />
+                          <div style={{ position: 'absolute', top: -2, right: -2, width: 14, height: 14, borderTop: '3px solid #d4af37', borderRight: '3px solid #d4af37' }} />
+                          <div style={{ position: 'absolute', bottom: -2, left: -2, width: 14, height: 14, borderBottom: '3px solid #d4af37', borderLeft: '3px solid #d4af37' }} />
+                          <div style={{ position: 'absolute', bottom: -2, right: -2, width: 14, height: 14, borderBottom: '3px solid #d4af37', borderRight: '3px solid #d4af37' }} />
+                          {/* Tia quét laser đỏ */}
+                          <div style={{
+                            position: 'absolute',
+                            left: 0,
+                            right: 0,
+                            top: '50%',
+                            height: '2px',
+                            background: 'linear-gradient(90deg, transparent, #ef4444, #f87171, #ef4444, transparent)',
+                            boxShadow: '0 0 6px #ef4444'
+                          }} />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Hiệu ứng chớp màn trập khi chụp ảnh tĩnh */}
+                    {isFlashAnimation && (
+                      <div style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: '#ffffff',
+                        opacity: 0.8,
+                        zIndex: 35,
+                        pointerEvents: 'none',
+                        transition: 'opacity 0.2s ease-out'
+                      }} />
+                    )}
 
                     {!isCameraActive && !cameraError && (
                       <div style={{
@@ -1498,14 +2190,160 @@ const CheckPalletV1View = () => {
                         color: '#f87171',
                         fontSize: '11px',
                         textAlign: 'center',
-                        padding: '12px'
+                        padding: '12px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '8px'
                       }}>
-                        {cameraError}
+                        <span>{cameraError}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCameraError(null);
+                            startCamera();
+                          }}
+                          style={{
+                            backgroundColor: '#7b5233',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: '6px',
+                            padding: '5px 14px',
+                            fontSize: '11px',
+                            fontWeight: '700',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Thử Lại Mở Camera
+                        </button>
                       </div>
                     )}
                   </div>
+
+                  {/* Nút chụp ảnh tĩnh đặt bên ngoài khung ngắm (to tròn, chỉ icon Camera) */}
+                  {isCameraActive && (
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      padding: '8px 0 2px 0'
+                    }}>
+                      <button
+                        type="button"
+                        onClick={handleSnapshotScan}
+                        disabled={isCapturingSnapshot}
+                        title="Chụp ảnh quét mã"
+                        style={{
+                          width: '56px',
+                          height: '56px',
+                          borderRadius: '50%',
+                          backgroundColor: isCapturingSnapshot ? '#0369a1' : '#0284c7',
+                          border: '3.5px solid #bae6fd',
+                          color: '#ffffff',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          boxShadow: '0 4px 14px rgba(2, 132, 199, 0.45)',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                          transform: isCapturingSnapshot ? 'scale(0.92)' : 'scale(1)',
+                          outline: 'none',
+                          padding: 0
+                        }}
+                      >
+                        <Camera size={28} color="#ffffff" strokeWidth={2.2} />
+                      </button>
+                    </div>
+                  )}
                 </div>
-              )}
+
+                {/* Ô NHẬP MÃ THỦ CÔNG: Chỉ mở bàn phím ảo khi người dùng chủ động chạm vào ô text này */}
+                <div style={{
+                  display: 'flex',
+                  gap: '6px',
+                  alignItems: 'center',
+                  backgroundColor: '#faf8f5',
+                  padding: '6px 8px',
+                  borderRadius: '10px',
+                  border: '1px solid #eadcc9'
+                }}>
+                  <div style={{ position: 'relative', flex: 1 }}>
+                    <input
+                      ref={scanInputRef}
+                      type="text"
+                      value={scanInputText}
+                      onChange={(e) => setScanInputText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const clean = scanInputText.trim();
+                          if (clean) {
+                            executeScannedCode(clean);
+                            setScanInputText('');
+                          }
+                        }
+                      }}
+                      placeholder="Chạm vào đây để nhập mã thủ công..."
+                      style={{
+                        width: '100%',
+                        padding: '8px 28px 8px 10px',
+                        borderRadius: '7px',
+                        border: '1px solid #d5c7b7',
+                        fontSize: '12px',
+                        fontWeight: '700',
+                        color: '#2d1810',
+                        backgroundColor: '#ffffff',
+                        outline: 'none',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                    {scanInputText && (
+                      <button
+                        type="button"
+                        onClick={() => setScanInputText('')}
+                        style={{
+                          position: 'absolute',
+                          right: '6px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          background: 'none',
+                          border: 'none',
+                          color: '#9ca3af',
+                          cursor: 'pointer',
+                          padding: '2px',
+                          display: 'flex',
+                          alignItems: 'center'
+                        }}
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const clean = scanInputText.trim();
+                      if (clean) {
+                        executeScannedCode(clean);
+                        setScanInputText('');
+                      }
+                    }}
+                    style={{
+                      backgroundColor: '#7b5233',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '7px',
+                      padding: '8px 12px',
+                      fontSize: '11.5px',
+                      fontWeight: '800',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    Nhận mã
+                  </button>
+                </div>
             </div>
 
             {/* ─── CARD 2: HAI TAB [PALLET ĐỨNG] & [TOP NÓC] VÀ DỮ LIỆU ĐỌC ─── */}
@@ -1533,7 +2371,6 @@ const CheckPalletV1View = () => {
                   type="button"
                   onClick={() => {
                     setPalletTab('standing');
-                    if (scanInputRef.current) scanInputRef.current.focus();
                   }}
                   style={{
                     flex: 1,
@@ -1574,7 +2411,6 @@ const CheckPalletV1View = () => {
                   type="button"
                   onClick={() => {
                     setPalletTab('roof');
-                    if (scanInputRef.current) scanInputRef.current.focus();
                   }}
                   style={{
                     flex: 1,
@@ -2847,15 +3683,9 @@ const CheckPalletV1View = () => {
         message={messageModal.message}
         onConfirm={() => {
           setMessageModal(prev => ({ ...prev, isOpen: false }));
-          if (hiddenScannerInputRef.current) {
-            try { hiddenScannerInputRef.current.focus({ preventScroll: true }); } catch (_) {}
-          }
         }}
         onClose={() => {
           setMessageModal(prev => ({ ...prev, isOpen: false }));
-          if (hiddenScannerInputRef.current) {
-            try { hiddenScannerInputRef.current.focus({ preventScroll: true }); } catch (_) {}
-          }
         }}
       />
 

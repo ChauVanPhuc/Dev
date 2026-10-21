@@ -1,24 +1,43 @@
-from sqlalchemy import Column, Integer, Float, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, Float, DateTime, ForeignKey, Boolean
 from sqlalchemy.dialects.mssql import NVARCHAR
 from config.database import Base
 from datetime import datetime
 
 class KPIChecklist(Base):
     """
-    Model quản lý Checklist công việc chi tiết của nhân viên.
+    Model quản lý Checklist công việc chi tiết của nhân viên & Kho Thư viện Checklist Master.
     """
     __tablename__ = "kpi_checklists"
 
     id             = Column(Integer, primary_key=True, index=True)
-    employee_id    = Column(NVARCHAR(50), nullable=False, index=True) # Liên kết với employee_id trong accounts
-    task_code      = Column(NVARCHAR(50), nullable=False) # e.g. "CV01"
-    content        = Column(NVARCHAR(255), nullable=False) # e.g. "Duyệt báo cáo"
-    frequency      = Column(NVARCHAR(50), nullable=False) # e.g. "Hàng ngày", "Hàng tuần"
-    status_today   = Column(NVARCHAR(50), nullable=False, default="Chưa hoàn thành") # e.g. "Chưa hoàn thành", "Đã hoàn thành"
-    perform_count  = Column(Integer, nullable=False, default=0)
-    last_performed = Column(NVARCHAR(50), nullable=True) # e.g. "2026-07-01"
-    result         = Column(NVARCHAR(255), nullable=True) # e.g. "Đầy đủ biên bản"
+    employee_id    = Column(NVARCHAR(50), nullable=False, index=True, default="ALL") # 'ALL' cho Master Checklist, hoặc mã nhân sự khi đã gán
+    task_code      = Column(NVARCHAR(50), nullable=False) # e.g. "CL-IQC-01"
+    content        = Column(NVARCHAR(255), nullable=False) # Nội dung công việc
+    frequency      = Column(NVARCHAR(50), nullable=True) # e.g. "Hàng ngày", "Đầu ca"
+    status_today   = Column(NVARCHAR(50), nullable=True, default="Chưa làm") # Dùng khi đã gán cho nhân sự
+    perform_count  = Column(Integer, nullable=True, default=0)
+    last_performed = Column(NVARCHAR(50), nullable=True) # e.g. "2026-10-05"
+    result         = Column(NVARCHAR(255), nullable=True) # Tiêu chuẩn nghiệm thu / kết quả
     department_code = Column(NVARCHAR(50), nullable=True, index=True) # e.g. "IQC", "PQC1", "FQC", "QA"
+    checklist_type = Column(NVARCHAR(20), nullable=True, default="FIXED") # FIXED | DEADLINE
+    deadline_mode  = Column(NVARCHAR(20), nullable=True) # RECURRING | ONCE
+    recurring_cycle = Column(NVARCHAR(20), nullable=True) # DAILY | WEEKLY | MONTHLY
+    recurring_day_of_week = Column(NVARCHAR(50), nullable=True) # e.g. "MON,FRI"
+    recurring_day_of_month = Column(Integer, nullable=True) # 1 - 31
+    once_period_type = Column(NVARCHAR(20), nullable=True) # DAY | WEEK | MONTH
+    due_date       = Column(NVARCHAR(50), nullable=True) # e.g. "2026-10-15"
+    target_week    = Column(NVARCHAR(20), nullable=True) # e.g. "2026-W41"
+    target_month   = Column(NVARCHAR(20), nullable=True) # e.g. "2026-10"
+    due_time       = Column(NVARCHAR(10), nullable=True) # e.g. "17:00"
+    priority       = Column(NVARCHAR(20), nullable=True, default="MEDIUM") # HIGH | MEDIUM | LOW
+    target_role    = Column(NVARCHAR(100), nullable=True, default="ALL") # ALL | INSPECTOR | LEADER | MANAGER
+    weight_score   = Column(Integer, nullable=True, default=10) # Điểm số trọng số KPI khi hoàn thành
+    evidence_type  = Column(NVARCHAR(50), nullable=True, default="NONE") # NONE | PHOTO | FILE | NUMERIC
+    guide_code     = Column(NVARCHAR(100), nullable=True) # Mã quy trình / HDKT tham chiếu
+    is_active      = Column(Boolean, nullable=True, default=True) # True: Áp dụng, False: Tạm khóa
+    evidence_url   = Column(NVARCHAR(1000), nullable=True) # Đường dẫn file/ảnh/chữ ký nộp bằng chứng
+    performer_note = Column(NVARCHAR(1000), nullable=True) # Ghi chú thực tế của người thực hiện
+    completed_at   = Column(NVARCHAR(50), nullable=True) # Thời điểm hoàn thành
 
 
 class KPIEmployeeItem(Base):

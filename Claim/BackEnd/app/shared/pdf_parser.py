@@ -1356,8 +1356,8 @@ def save_claims_to_excel(claims, excel_path, images_batch_dir=None, claim_import
     keep_alive_streams = []
     
     headers = [
-        "STT", "Dòng hàng", "Mã tham chiếu", "Tên sản phẩm", "Mô tả", "Mã lỗi KH", "Mã lỗi G7", "Tên lỗi G7", 
-        "Mức độ", "Trạng thái", "Giá trị phạt", "Tổng tiền phạt", "LPN", "Container", 
+        "STT", "Loại hàng", "Mã tham chiếu", "Tên sản phẩm", "Mô tả", "Mã lỗi KH", "Mã lỗi G7", "Tên lỗi G7", 
+        "Mức độ", "Trạng thái", "Giá trị phạt", "Tổng tiền phạt", "LPN", "Container", "Ngày load cont", 
         "Thời gian Claim", "Hình ảnh 1", "Hình ảnh 2", "Hình ảnh 3"
     ]
     
@@ -1378,7 +1378,11 @@ def save_claims_to_excel(claims, excel_path, images_batch_dir=None, claim_import
         
         # Write values directly to cells
         ws.cell(row=row_num, column=1, value=c.get("stt") or (idx + 1))
-        ws.cell(row=row_num, column=2, value=c.get("customer_name") or "")
+        
+        # 2. Loại hàng (WOA trong tên là OAK, còn lại Pigment)
+        p_name = str(c.get("sku") or c.get("product_name") or "")
+        loai_hang = c.get("loai_hang") or ("OAK" if "WOA" in p_name.upper() else "Pigment")
+        ws.cell(row=row_num, column=2, value=loai_hang)
         
         # 3. Mã tham chiếu (Cabinet No) standing before SKU
         cabinet_no = c.get("cabinet_no") or ""
@@ -1417,10 +1421,11 @@ def save_claims_to_excel(claims, excel_path, images_batch_dir=None, claim_import
         
         ws.cell(row=row_num, column=13, value=c.get("lpn") or "")
         ws.cell(row=row_num, column=14, value=c.get("container_no") or "")
-        ws.cell(row=row_num, column=15, value=c.get("period") or "")
+        ws.cell(row=row_num, column=15, value=c.get("date_loading_raw") or c.get("date_loading") or "")
+        ws.cell(row=row_num, column=16, value=c.get("period") or "")
         
         # Set alignment for cells
-        for col_num in range(1, 16):
+        for col_num in range(1, 17):
             ws.cell(row=row_num, column=col_num).alignment = Alignment(vertical="center", horizontal="center")
             
         # Embed images if available
@@ -1481,7 +1486,7 @@ def save_claims_to_excel(claims, excel_path, images_batch_dir=None, claim_import
                         keep_alive_streams.append(img_io)
                         
                         img = OpenpyxlImage(img_io)
-                        col_letter = openpyxl.utils.get_column_letter(16 + img_idx)
+                        col_letter = openpyxl.utils.get_column_letter(17 + img_idx)
                         cell_coordinate = f"{col_letter}{row_num}"
                         ws.add_image(img, cell_coordinate)
                         has_image = True
@@ -1491,8 +1496,8 @@ def save_claims_to_excel(claims, excel_path, images_batch_dir=None, claim_import
             if has_image:
                 ws.row_dimensions[row_num].height = 65
                         
-    # Auto-adjust column sizes for text columns (1 to 15)
-    for col_idx in range(1, 16):
+    # Auto-adjust column sizes for text columns (1 to 16)
+    for col_idx in range(1, 17):
         col_letter = openpyxl.utils.get_column_letter(col_idx)
         max_len = 0
         for cell in ws[col_letter]:
@@ -1501,10 +1506,10 @@ def save_claims_to_excel(claims, excel_path, images_batch_dir=None, claim_import
                 max_len = len(val_str)
         ws.column_dimensions[col_letter].width = max(max_len + 3, 10)
         
-    # Set fixed column widths for Image columns
-    ws.column_dimensions["P"].width = 20
+    # Set fixed column widths for Image columns (Q, R, S)
     ws.column_dimensions["Q"].width = 20
     ws.column_dimensions["R"].width = 20
+    ws.column_dimensions["S"].width = 20
     
     wb.save(excel_path)
     

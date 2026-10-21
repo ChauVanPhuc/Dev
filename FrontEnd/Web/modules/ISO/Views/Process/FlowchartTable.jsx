@@ -1,31 +1,39 @@
 import React from "react";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
-const SVG_W = 860;
-const H_HDR = 40;
+const SVG_W = 620;
+const H_HDR = 36;
 const H_ROW = 120;
 
 // Column X starts + widths
 const COL = {
-  buoc:   { x: 0,   w: 70  },
-  trach:  { x: 70,  w: 150 },
-  luudo:  { x: 220, w: 450 },
-  phuluc: { x: 670, w: 190 },
+  buoc:   { x: 0,   w: 38  },
+  trach:  { x: 38,  w: 150 },
+  luudo:  { x: 188, w: 252 },
+  phuluc: { x: 440, w: 180 },
 };
 
-// Node positions (center X) within luudo column
-const MAIN_CX  = 325;   // main flow node center X
-const BR0_CX   = 470;   // 1st branch
-const BR1_CX   = 580;   // 2nd branch
-const RET_CX   = 645;   // return node (far right of luudo)
+// Node center X in luudo column (căn giữa hoàn hảo dưới chữ Lưu đồ)
+const MAIN_CX = 188 + 118; // 306
 
-// Node sizes
-const RECT = { w: 110, h: 44 };
-const OVAL = { w: 110, h: 44 };
-const DIAM = { w: 112, h: 58 };
+// Node sizes matching Canvas
+const RECT = { w: 160, h: 44 };
+const OVAL = { w: 160, h: 40 };
+const DIAM = { w: 98,  h: 60 };
 
 const rowY   = (i) => H_HDR + i * H_ROW;
 const nodeCY = (i) => rowY(i) + H_ROW / 2;
+
+// ─── XML Escape Helper ─────────────────────────────────────────────────────────
+function escapeXml(unsafe) {
+  if (!unsafe) return "";
+  return String(unsafe)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
 
 // ─── Text wrap helper ──────────────────────────────────────────────────────────
 function wrapText(text, maxChars) {
@@ -35,300 +43,298 @@ function wrapText(text, maxChars) {
   let cur = "";
   for (const w of words) {
     const candidate = cur ? cur + " " + w : w;
-    if (candidate.length <= maxChars) { cur = candidate; }
-    else { if (cur) lines.push(cur); cur = w; }
+    if (candidate.length <= maxChars) {
+      cur = candidate;
+    } else {
+      if (cur) lines.push(cur);
+      cur = w;
+    }
   }
   if (cur) lines.push(cur);
-  return lines.slice(0, 2);
+  return lines.slice(0, 3);
 }
 
-function SvgText({ x, y, text, maxChars = 14, fontSize = 10, fontWeight = "normal", fill = "#000", anchor = "middle" }) {
+function renderWrappedText(x, y, text, maxChars = 20, fontSize = 9.5, fontWeight = "bold", fill = "#000000", anchor = "middle", yOffset = 0) {
   const lines = wrapText(text, maxChars);
-  const lh = fontSize + 2;
+  const lh = fontSize + 3.5;
   const totalH = lh * (lines.length - 1);
-  return (
-    <text textAnchor={anchor} fontFamily="Georgia, 'Times New Roman', serif" fontSize={fontSize} fontWeight={fontWeight} fill={fill}>
-      {lines.map((l, i) => (
-        <tspan key={i} x={x} y={y - totalH / 2 + i * lh}>{l}</tspan>
-      ))}
-    </text>
-  );
+  const tspans = lines.map((l, i) => `<tspan x="${x}" y="${y + yOffset - totalH / 2 + i * lh + fontSize * 0.35}">${escapeXml(l)}</tspan>`).join("");
+  return `<text text-anchor="${anchor}" font-family="'Times New Roman', Times, serif" font-size="${fontSize}" font-weight="${fontWeight}" fill="${fill}">${tspans}</text>`;
 }
 
-// ─── Node shapes ───────────────────────────────────────────────────────────────
-function RectNode({ cx, cy, label, w = RECT.w, h = RECT.h, stroke = "#000" }) {
-  return (
+// ─── Node shapes matching Flowchart Canvas ─────────────────────────────────────
+function renderRectNode({ cx, cy, label, w = RECT.w, h = RECT.h }) {
+  const x = cx - w / 2;
+  const y = cy - h / 2;
+  const fontSize = h < 44 ? 9 : 9.5;
+  return `
     <g>
-      <rect x={cx - w / 2} y={cy - h / 2} width={w} height={h} fill="white" stroke={stroke} strokeWidth="1" />
-      <SvgText x={cx} y={cy} text={label} maxChars={Math.floor(w / 6)} />
+      <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="4" ry="4" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+      ${renderWrappedText(cx, cy, label, 20, fontSize, "bold", "#000000", "middle", 0)}
     </g>
-  );
+  `;
 }
 
-function OvalNode({ cx, cy, label, w = OVAL.w, h = OVAL.h, stroke = "#000" }) {
-  return (
+function renderOvalNode({ cx, cy, label, w = OVAL.w, h = OVAL.h }) {
+  const x = cx - w / 2;
+  const y = cy - h / 2;
+  const rx = h / 2;
+  const fontSize = h < 42 ? 9 : 9.5;
+  return `
     <g>
-      <ellipse cx={cx} cy={cy} rx={w / 2} ry={h / 2} fill="white" stroke={stroke} strokeWidth="1" />
-      <SvgText x={cx} y={cy} text={label} maxChars={Math.floor(w / 6)} />
+      <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" ry="${rx}" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+      ${renderWrappedText(cx, cy, label, 20, fontSize, "bold", "#000000", "middle", 0)}
     </g>
-  );
+  `;
 }
 
-function DiamondNode({ cx, cy, label, w = DIAM.w, h = DIAM.h }) {
+function renderDiamondNode({ cx, cy, label, w = DIAM.w, h = DIAM.h }) {
   const pts = `${cx},${cy - h / 2} ${cx + w / 2},${cy} ${cx},${cy + h / 2} ${cx - w / 2},${cy}`;
-  return (
+  const lines = wrapText(label, 15);
+  // Với chữ 3 dòng trong hình thoi, dùng font 8.2 và khoảng cách dòng 10.7 để text nằm gọn bên trong biên dạng
+  const fontSize = lines.length >= 3 ? (h < 60 ? 8.2 : 8.8) : (h < 60 ? 9 : 9.5);
+  const lh = fontSize + 2.5;
+  const totalH = lh * (lines.length - 1);
+  const tspans = lines.map((l, i) => `<tspan x="${cx}" y="${cy - totalH / 2 + i * lh + fontSize * 0.35}">${escapeXml(l)}</tspan>`).join("");
+  return `
     <g>
-      <polygon points={pts} fill="white" stroke="#000" strokeWidth="1" />
-      <SvgText x={cx} y={cy} text={label} maxChars={Math.floor((w * 0.55) / 6)} />
+      <polygon points="${pts}" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+      <text text-anchor="middle" font-family="'Times New Roman', Times, serif" font-size="${fontSize}" font-weight="bold" fill="#000000">${tspans}</text>
     </g>
-  );
+  `;
 }
 
-// ─── Arrow helpers ─────────────────────────────────────────────────────────────
-const nodeBottom = (type, cy) => cy + (type === "decision" ? DIAM.h / 2 : RECT.h / 2);
-const nodeTop    = (type, cy) => cy - (type === "decision" ? DIAM.h / 2 : RECT.h / 2);
-const nodeRight  = (type, cx) => cx + (type === "decision" ? DIAM.w / 2 : RECT.w / 2);
-
-function ArrowLine({ x1, y1, x2, y2, color = "#000", marker = "url(#arrMain)", label = "", dashed = false }) {
-  const mx = (x1 + x2) / 2;
-  const my = (y1 + y2) / 2;
-  return (
-    <g>
-      <line x1={x1} y1={y1} x2={x2} y2={y2}
-        stroke={color} strokeWidth="1.2"
-        strokeDasharray={dashed ? "5,3" : "none"}
-        markerEnd={marker} />
-      {label && (
-        <text x={mx + 3} y={my - 4} fontFamily="serif" fontSize="9" fontWeight="bold" fill={color}>{label}</text>
-      )}
-    </g>
-  );
+// ─── Helpers ───────────────────────────────────────────────────────────────────
+export function getFlowchartRowHeight(totalSteps) {
+  if (totalSteps <= 4) return 115;
+  if (totalSteps === 5) return 108;
+  if (totalSteps === 6) return 100;
+  if (totalSteps === 7) return 92;
+  if (totalSteps === 8) return 84;
+  if (totalSteps === 9) return 76;
+  return Math.max(68, Math.floor(700 / totalSteps));
 }
 
-function PolyArrow({ points, color = "#cc0000", marker = "url(#arrRed)", label = "" }) {
-  const pts = points.map(p => `${p[0]},${p[1]}`).join(" ");
-  const mid = points[Math.floor(points.length / 2)];
-  return (
-    <g>
-      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.2" markerEnd={marker} />
-      {label && mid && (
-        <text x={mid[0] + 3} y={mid[1] - 4} fontFamily="serif" fontSize="9" fontWeight="bold" fill={color}>{label}</text>
-      )}
-    </g>
-  );
-}
-
-// ─── Fail path helper ──────────────────────────────────────────────────────────
-function getFailPath(step) {
-  if (step.fail_path && step.fail_path.length > 0) return step.fail_path;
-  if (step.has_branch) {
-    return [
-      { name: step.fail_node_name_1 || "Xử lý không phù hợp", assignee_role: step.assignee_role, edge_label: "Không" },
-      { name: step.fail_node_name_3 || "Trả hàng", assignee_role: step.assignee_role, return_to_step: null },
-    ];
-  }
-  return [];
-}
+const nodeBottom = (type, cy, diamH = DIAM.h, ovalH = OVAL.h, rectH = RECT.h) => cy + (type === "decision" ? diamH / 2 : (type === "terminal" ? ovalH / 2 : rectH / 2));
+const nodeTop    = (type, cy, diamH = DIAM.h, ovalH = OVAL.h, rectH = RECT.h) => cy - (type === "decision" ? diamH / 2 : (type === "terminal" ? ovalH / 2 : rectH / 2));
+const nodeRight  = (type, cx, diamW = DIAM.w) => cx + (type === "decision" ? diamW / 2 : (type === "terminal" ? OVAL.w / 2 : RECT.w / 2));
 
 function getNodeType(step, idx, total) {
-  if (idx === 0 || idx === total - 1) return "terminal";
-  if (step.node_type === "decision") return "decision";
-  return step.node_type || "task";
+  const raw = (step.node_type || "").toLowerCase();
+  if (raw === "decision" || (step.fail_path && step.fail_path.length > 0)) return "decision";
+  if (raw === "terminal" || raw === "start" || raw === "end") return "terminal";
+  const name = (step.name || "").toLowerCase();
+  if (idx === 0 || /bắt đầu|tiếp nhận/i.test(name)) return "terminal";
+  if (idx === total - 1 && /kết thúc|lưu trữ|hoàn tất/i.test(name)) return "terminal";
+  if (/phê duyệt|quyết định|kiểm tra|thẩm định|đối chiếu/i.test(name)) return "decision";
+  return "task";
 }
 
-// ─── Main Component ────────────────────────────────────────────────────────────
-export default function FlowchartTable({ steps = [] }) {
-  if (!steps.length) return null;
+// ─── SVG Generator Function ────────────────────────────────────────────────────
+export function generateFlowchartSvgHtml(steps = []) {
+  if (!steps || !steps.length) return "";
   const total = steps.length;
-  const svgH = H_HDR + total * H_ROW + 10;
+  const rowH = getFlowchartRowHeight(total);
+  const svgH = H_HDR + total * rowH + 10;
+
+  const curRowY = (i) => H_HDR + i * rowH;
+  const curCY = (i) => curRowY(i) + rowH / 2;
+
+  const curDiamH = rowH < 100 ? 58 : (rowH < 105 ? 62 : DIAM.h);
+  const curDiamW = rowH < 100 ? 108 : (rowH < 105 ? 112 : DIAM.w);
+  const curRectH = rowH < 100 ? 42 : (rowH < 105 ? 46 : RECT.h);
+  const curOvalH = rowH < 100 ? 38 : (rowH < 105 ? 42 : OVAL.h);
 
   const elems = [];
 
-  // ── Table grid ──────────────────────────────────────────────────────────────
-  elems.push(<rect key="bg" x={0} y={0} width={SVG_W} height={svgH} fill="white" stroke="#000" strokeWidth="1.5" />);
-  elems.push(<line key="hdrLine" x1={0} y1={H_HDR} x2={SVG_W} y2={H_HDR} stroke="#000" strokeWidth="1.5" />);
+  // Table grid
+  elems.push(`<rect x="0" y="0" width="${SVG_W}" height="${svgH}" fill="#ffffff" stroke="#000000" stroke-width="1.5" />`);
+  elems.push(`<line x1="0" y1="${H_HDR}" x2="${SVG_W}" y2="${H_HDR}" stroke="#000000" stroke-width="1.5" />`);
 
   // Column dividers
-  [COL.trach.x, COL.luudo.x, COL.phuluc.x].forEach((x, i) => (
-    elems.push(<line key={`col${i}`} x1={x} y1={0} x2={x} y2={svgH} stroke="#000" strokeWidth="1" />)
-  ));
-  // Row dividers
-  steps.forEach((_, i) => {
-    if (i > 0) elems.push(<line key={`row${i}`} x1={0} y1={rowY(i)} x2={SVG_W} y2={rowY(i)} stroke="#000" strokeWidth="0.5" />);
+  [COL.trach.x, COL.luudo.x, COL.phuluc.x].forEach((x) => {
+    elems.push(`<line x1="${x}" y1="0" x2="${x}" y2="${svgH}" stroke="#000000" stroke-width="1" />`);
   });
 
-  // ── Headers ─────────────────────────────────────────────────────────────────
+  // Row dividers
+  steps.forEach((_, i) => {
+    if (i > 0) elems.push(`<line x1="0" y1="${curRowY(i)}" x2="${SVG_W}" y2="${curRowY(i)}" stroke="#000000" stroke-width="0.8" />`);
+  });
+
+  // Column Headers
   const hdrs = [
     { x: COL.buoc.x + COL.buoc.w / 2, label: "Bước" },
     { x: COL.trach.x + COL.trach.w / 2, label: "Trách nhiệm" },
     { x: COL.luudo.x + COL.luudo.w / 2, label: "Lưu đồ" },
     { x: COL.phuluc.x + COL.phuluc.w / 2, label: "Phụ lục" },
   ];
-  hdrs.forEach(h => elems.push(
-    <text key={`hdr-${h.label}`} x={h.x} y={H_HDR / 2 + 5} textAnchor="middle"
-      fontFamily="Georgia, serif" fontSize="12" fontWeight="bold" fill="#000" textDecoration="underline">
-      {h.label}
-    </text>
-  ));
-
-  // ── Pre-calculate return node positions ──────────────────────────────────────
-  // key: "stepNum-branchIdx" → {cx, cy}
-  const retNodePos = {};
-  steps.forEach((step, idx) => {
-    if (step.node_type === "decision" && step.has_branch) {
-      const fp = getFailPath(step);
-      fp.forEach((pn, pi) => {
-        if (pn.return_to_step) {
-          const ti = steps.findIndex(s => s.step_number === pn.return_to_step);
-          if (ti >= 0) {
-            retNodePos[`${step.step_number}-${pi}`] = { cx: RET_CX, cy: nodeCY(ti) };
-          }
-        }
-      });
-    }
-  });
-
-  // ── Render each step ─────────────────────────────────────────────────────────
-  steps.forEach((step, idx) => {
-    const cy   = nodeCY(idx);
-    const type = getNodeType(step, idx, total);
-
-    // Step number
-    elems.push(
-      <text key={`sn${idx}`} x={COL.buoc.x + COL.buoc.w / 2} y={cy + 4}
-        textAnchor="middle" fontFamily="Georgia, serif" fontSize="11" fill="#000">
-        {idx + 1}.
+  hdrs.forEach((h) => {
+    elems.push(`
+      <text x="${h.x}" y="${H_HDR / 2 + 4}" text-anchor="middle" font-family="'Times New Roman', Times, serif" font-size="10.5" font-weight="bold" fill="#000000">
+        ${escapeXml(h.label)}
       </text>
-    );
+    `);
+  });
 
-    // Responsibility text
-    const roleLines = wrapText(`- ${step.assignee_role || ""}`, 18);
-    roleLines.forEach((line, li) => (
-      elems.push(
-        <text key={`role${idx}-${li}`} x={COL.trach.x + 8} y={cy - (roleLines.length - 1) * 6 + li * 12}
-          fontFamily="Georgia, serif" fontSize="10" fill="#000">{line}</text>
-      )
-    ));
+  // Render each step
+  steps.forEach((step, idx) => {
+    const cy = curCY(idx);
+    const type = getNodeType(step, idx, total);
+    const stepNumber = step.step_number || (idx + 1);
 
-    // Appendix
-    if (step.template_files) {
-      step.template_files.split(",").map(f => f.trim()).filter(Boolean).forEach((f, fi) => (
-        elems.push(
-          <text key={`app${idx}-${fi}`} x={COL.phuluc.x + 8} y={cy - 10 + fi * 13}
-            fontFamily="Georgia, serif" fontSize="9" fill="#0000cc">{f}</text>
-        )
-      ));
+    // 1. Cột Bước
+    elems.push(`
+      <text x="${COL.buoc.x + COL.buoc.w / 2}" y="${cy + 4}" text-anchor="middle" font-family="'Times New Roman', Times, serif" font-size="11" font-weight="bold" fill="#000000">
+        ${stepNumber}.
+      </text>
+    `);
+
+    // 2. Cột Trách nhiệm
+    const roleLines = wrapText(step.assignee_role ? `- ${step.assignee_role}` : "- Đang cập nhật", 18);
+    const roleSvgLines = roleLines.map((line, li) => `
+      <text x="${COL.trach.x + 10}" y="${cy - (roleLines.length - 1) * 7 + li * 14}" font-family="'Times New Roman', Times, serif" font-size="10" fill="#1E293B">
+        ${escapeXml(line)}
+      </text>
+    `).join("");
+    elems.push(roleSvgLines);
+
+    // 3. Cột Phụ lục (Biểu mẫu / Hồ sơ)
+    if (step.template_files && step.template_files !== "---") {
+      const rawTpls = step.template_files
+        .split(/[,;\n]+/)
+        .map((f) => f.trim())
+        .filter(Boolean);
+
+      const allTplLines = [];
+      rawTpls.forEach((f) => {
+        const lines = wrapText(f, 22);
+        allTplLines.push(...lines);
+      });
+
+      const totTplH = allTplLines.length * 14;
+      const tplSvg = allTplLines.map((line, li) => `
+        <text x="${COL.phuluc.x + 10}" y="${cy - totTplH / 2 + li * 14 + 10}" font-family="'Times New Roman', Times, serif" font-size="10" font-weight="bold" fill="#0369A1">
+          ${escapeXml(line)}
+        </text>
+      `).join("");
+      elems.push(tplSvg);
     }
 
-    // Main flow node
-    const nodeEl = type === "terminal"
-      ? <OvalNode key={`nd${idx}`} cx={MAIN_CX} cy={cy} label={step.name} />
+    // 4. Khối lưu đồ (Node)
+    const nodeStr = type === "terminal"
+      ? renderOvalNode({ cx: MAIN_CX, cy, label: step.name || `Bước ${stepNumber}`, h: curOvalH })
       : type === "decision"
-      ? <DiamondNode key={`nd${idx}`} cx={MAIN_CX} cy={cy} label={step.name} />
-      : <RectNode key={`nd${idx}`} cx={MAIN_CX} cy={cy} label={step.name} />;
-    elems.push(nodeEl);
+      ? renderDiamondNode({ cx: MAIN_CX, cy, label: step.name || `Bước ${stepNumber}`, w: curDiamW, h: curDiamH })
+      : renderRectNode({ cx: MAIN_CX, cy, label: step.name || `Bước ${stepNumber}`, h: curRectH });
+    elems.push(nodeStr);
 
-    // Vertical arrow to next main step
+    // 5. Mũi tên đi xuống bước kế tiếp (Thuận chiều / Đạt)
     if (idx < total - 1) {
-      const nextType = getNodeType(steps[idx + 1], idx + 1, total);
-      const y1 = nodeBottom(type, cy) + 1;
-      const y2 = nodeTop(nextType, nodeCY(idx + 1)) - 1;
-      elems.push(
-        <g key={`varr${idx}`}>
-          <line x1={MAIN_CX} y1={y1} x2={MAIN_CX} y2={y2}
-            stroke="#000" strokeWidth="1.2" markerEnd="url(#arrMain)" />
-          {type === "decision" && (
-            <text x={MAIN_CX + 5} y={y1 + (y2 - y1) / 2}
-              fontFamily="serif" fontSize="9" fontWeight="bold" fill="#cc0000">Đồng ý</text>
-          )}
-        </g>
-      );
+      const nextStep = steps[idx + 1];
+      const nextType = getNodeType(nextStep, idx + 1, total);
+      const y1 = nodeBottom(type, cy, curDiamH, curOvalH, curRectH);
+      const y2 = nodeTop(nextType, curCY(idx + 1), curDiamH, curOvalH, curRectH);
+      const midY = (y1 + y2) / 2;
+
+      if (type === "decision") {
+        const passLabel = /phê duyệt|quyết định/i.test(step.name || "") ? "Đồng ý" : "Đạt";
+        elems.push(`
+          <g>
+            <line x1="${MAIN_CX}" y1="${y1}" x2="${MAIN_CX}" y2="${midY - 9}" stroke="#15803D" stroke-width="1.4" />
+            <rect x="${MAIN_CX - 18}" y="${midY - 9}" width="36" height="18" rx="3" fill="#DCFCE7" stroke="#15803D" stroke-width="1.2" />
+            <text x="${MAIN_CX}" y="${midY + 4}" text-anchor="middle" font-family="'Times New Roman', Times, serif" font-size="9" font-weight="bold" fill="#15803D">
+              ${escapeXml(passLabel)}
+            </text>
+            <line x1="${MAIN_CX}" y1="${midY + 9}" x2="${MAIN_CX}" y2="${y2}" stroke="#15803D" stroke-width="1.4" marker-end="url(#arrGreen)" />
+          </g>
+        `);
+      } else {
+        elems.push(`
+          <g>
+            <line x1="${MAIN_CX}" y1="${y1}" x2="${MAIN_CX}" y2="${y2}" stroke="#000000" stroke-width="1.3" marker-end="url(#arrMain)" />
+          </g>
+        `);
+      }
     }
 
-    // Branch nodes for decision
-    if (type === "decision" && step.has_branch) {
-      const fp = getFailPath(step);
-      const branchXPositions = [BR0_CX, BR1_CX];
+    // 6. Nhánh rẽ / Quay lại của Khối Quyết định (Không Đạt / Loop-back)
+    if (type === "decision") {
+      const fp = (step.fail_path && step.fail_path.length > 0) ? step.fail_path : [
+        { return_to_step: Math.max(1, stepNumber - 1), edge_label: /phê duyệt|quyết định/i.test(step.name || "") ? "Không đồng ý" : "K.Đạt" }
+      ];
 
       fp.forEach((pn, pi) => {
-        const retKey = `${step.step_number}-${pi}`;
-        const isReturn = !!pn.return_to_step && retNodePos[retKey];
-        const bcx = isReturn ? retNodePos[retKey].cx : (branchXPositions[pi] || BR1_CX + (pi - 1) * 100);
-        const bcy = isReturn ? retNodePos[retKey].cy : cy;
-        const edgeLabel = pn.edge_label || (pi === 0 ? "Không" : "");
+        if (!pn.return_to_step) return;
+        const targetIdx = steps.findIndex((s) => s.step_number === pn.return_to_step);
+        if (targetIdx < 0) return;
 
-        // Draw branch node
-        if (isReturn) {
-          elems.push(<OvalNode key={`br${idx}-${pi}`} cx={bcx} cy={bcy} w={100} h={40} label={pn.name} stroke="#cc0000" />);
-        } else {
-          elems.push(<RectNode key={`br${idx}-${pi}`} cx={bcx} cy={bcy} w={100} h={40} label={pn.name} stroke="#cc0000" />);
-        }
+        const targetStep = steps[targetIdx];
+        const targetType = getNodeType(targetStep, targetIdx, total);
+        const targetCy = curCY(targetIdx);
 
-        // Arrow
-        if (pi === 0) {
-          // Decision → first branch (horizontal)
-          const x1 = nodeRight("decision", MAIN_CX) + 1;
-          const x2 = bcx - 50 - 1;
-          elems.push(
-            <g key={`barr${idx}-${pi}`}>
-              <line x1={x1} y1={cy} x2={x2} y2={cy}
-                stroke="#cc0000" strokeWidth="1.2" markerEnd="url(#arrRed)" />
-              {edgeLabel && (
-                <text x={x1 + (x2 - x1) / 2} y={cy - 4}
-                  textAnchor="middle" fontFamily="serif" fontSize="9" fontWeight="bold" fill="#cc0000">
-                  {edgeLabel}
-                </text>
-              )}
-            </g>
-          );
-        } else if (!isReturn) {
-          // Previous branch → this branch (horizontal)
-          const prevCX = branchXPositions[pi - 1] || BR0_CX;
-          const x1 = prevCX + 50 + 1;
-          const x2 = bcx - 50 - 1;
-          elems.push(
-            <line key={`barr${idx}-${pi}`} x1={x1} y1={cy} x2={x2} y2={cy}
-              stroke="#cc0000" strokeWidth="1.2" markerEnd="url(#arrRed)" />
-          );
-        } else {
-          // Return arrow: prev branch → right bus → up → return node left side
-          const prevCX = pi > 0 ? (branchXPositions[pi - 1] || BR0_CX) : MAIN_CX;
-          const prevBRight = prevCX + 50;
-          const busX = COL.phuluc.x - 15; // right bus line
-          const retLeft = bcx - 50;
+        const xStart = nodeRight("decision", MAIN_CX, curDiamW);
+        const yStart = cy;
+        const busX = MAIN_CX + 96 + pi * 16; // Bus line nằm gọn gàng bên phải khối trong cột lưu đồ (trước vạch ngăn cột)
+        const xEnd = nodeRight(targetType, MAIN_CX, curDiamW);
+        const yEnd = targetCy;
+        const midY = (yStart + yEnd) / 2;
+        const failLabel = pn.edge_label || (/phê duyệt|quyết định/i.test(step.name || "") ? "Không đồng ý" : "K.Đạt");
 
-          // Direction: up or down?
-          const goUp = bcy < cy;
-          const busEntry = goUp ? Math.min(cy, bcy) - 10 : Math.max(cy, bcy) + 10;
+        // Vẽ đường gấp khúc: Từ góc phải Decision -> Sang busX -> Lên/Xuống targetCy -> Chạm mép phải của node đích
+        const pts = [
+          [xStart, yStart],
+          [busX, yStart],
+          [busX, yEnd],
+          [xEnd + 7, yEnd],
+        ].map((p) => `${p[0]},${p[1]}`).join(" ");
 
-          const pts = [
-            [prevBRight, cy],
-            [busX, cy],
-            [busX, bcy],
-            [retLeft, bcy],
-          ];
-          elems.push(
-            <PolyArrow key={`rarr${idx}-${pi}`} points={pts} color="#cc0000" marker="url(#arrRed)" />
-          );
-        }
+        const badgeW = Math.max(52, failLabel.length * 6.5 + 14);
+
+        elems.push(`
+          <g>
+            <!-- Đường dây rẽ nhánh đỏ -->
+            <polyline points="${pts}" fill="none" stroke="#DC2626" stroke-width="1.4" />
+            <!-- Mũi tên đỏ chỉ sang trái chạm đúng mép ngoài của Node đích -->
+            <polygon points="${xEnd},${yEnd} ${xEnd + 8},${yEnd - 4.5} ${xEnd + 8},${yEnd + 4.5}" fill="#DC2626" />
+            <!-- Nền badge đặc chống che/cắt chữ từ đường kẻ dọc -->
+            <rect x="${busX - badgeW / 2}" y="${midY - 9}" width="${badgeW}" height="18" rx="3" fill="#FFFFFF" stroke="#DC2626" stroke-width="1.2" />
+            <rect x="${busX - badgeW / 2}" y="${midY - 9}" width="${badgeW}" height="18" rx="3" fill="#FEE2E2" fill-opacity="0.85" />
+            <text x="${busX}" y="${midY + 4}" text-anchor="middle" font-family="'Times New Roman', Times, serif" font-size="8.5" font-weight="bold" fill="#DC2626">
+              ${escapeXml(failLabel)}
+            </text>
+          </g>
+        `);
       });
     }
   });
 
+  return `
+    <svg viewBox="0 0 ${SVG_W} ${svgH}" xmlns="http://www.w3.org/2000/svg" style="max-width: 620px; width: 100%; height: auto; display: block; margin: 0 auto; background-color: #ffffff; font-family: 'Times New Roman', Times, serif;">
+      <defs>
+        <marker id="arrMain" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#000000" />
+        </marker>
+        <marker id="arrGreen" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#15803D" />
+        </marker>
+        <marker id="arrRed" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#DC2626" />
+        </marker>
+      </defs>
+      ${elems.join("")}
+    </svg>
+  `;
+}
+
+// ─── Main Component ────────────────────────────────────────────────────────────
+export default function FlowchartTable({ steps = [], className = "", style = {} }) {
+  if (!steps || !steps.length) return null;
+  const svgHtml = generateFlowchartSvgHtml(steps);
   return (
-    <div style={{ overflowX: "auto" }}>
-      <svg viewBox={`0 0 ${SVG_W} ${svgH}`}
-        style={{ width: "100%", height: "auto", display: "block", backgroundColor: "white", fontFamily: "Georgia, 'Times New Roman', serif" }}>
-        <defs>
-          <marker id="arrMain" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
-            <path d="M 0 2 L 8 5 L 0 8 z" fill="#000" />
-          </marker>
-          <marker id="arrRed" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
-            <path d="M 0 2 L 8 5 L 0 8 z" fill="#cc0000" />
-          </marker>
-        </defs>
-        {elems}
-      </svg>
-    </div>
+    <div
+      className={className}
+      style={{ overflowX: "auto", ...style }}
+      dangerouslySetInnerHTML={{ __html: svgHtml }}
+    />
   );
 }

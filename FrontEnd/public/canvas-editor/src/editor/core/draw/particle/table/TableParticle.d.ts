@@ -1,0 +1,41 @@
+import { IElement } from '../../../..';
+import { ITableRowFragment } from '../../../../interface/Element';
+import { IRow } from '../../../../interface/Row';
+import { ITd } from '../../../../interface/table/Td';
+import { ITr } from '../../../../interface/table/Tr';
+import { Draw } from '../../Draw';
+export declare class TableParticle {
+    private draw;
+    private range;
+    private options;
+    private fragmentContentHeightCache;
+    private tdLineHeightPrefixCache;
+    private fragmentTdListCache;
+    constructor(draw: Draw);
+    getTrListGroupByCol(payload: ITr[]): ITr[];
+    getRangeRowCol(): ITd[][] | null;
+    private _drawOuterBorder;
+    getFragmentTdList(element: IElement, fragment: ITableRowFragment): ITd[];
+    private _getDrawTdList;
+    private _drawSlash;
+    private _drawBorder;
+    private _drawBackgroundColor;
+    getTableWidth(element: IElement): number;
+    getFragmentTrHeight(tr: ITr, trIndex: number, fragment?: ITableRowFragment): number;
+    getFragmentContentHeight(element: IElement, fragment: Pick<ITableRowFragment, 'startTrIndex' | 'endTrIndex' | 'startSplitTrOffset' | 'endSplitTrHeight'>): number;
+    getTdWindowInFragment(td: ITd, element: IElement, fragment: ITableRowFragment): [number, number];
+    getTdWindowOffsetY(windowStart: number, fragment: ITableRowFragment): number;
+    getTdVisibleRowListByWindow(td: ITd, windowStart: number, windowEnd: number): {
+        rowList: IRow[];
+        startIndex: number;
+        startRowIndex: number;
+    };
+    getTdLineRangeBySplitWindow(td: ITd, windowStart: number, windowEnd: number): [number, number];
+    getTableHeight(element: IElement): number;
+    getRowCountByColIndex(trList: ITr[], colIndex: number): number;
+    getTdListByColIndex(trList: ITr[], colIndex: number): ITd[];
+    getTdListByRowIndex(trList: ITr[], rowIndex: number): ITd[];
+    computeRowColInfo(element: IElement): void;
+    drawRange(ctx: CanvasRenderingContext2D, element: IElement, startX: number, startY: number, fragment?: ITableRowFragment): void;
+    render(ctx: CanvasRenderingContext2D, element: IElement, startX: number, startY: number, fragment?: ITableRowFragment): void;
+}

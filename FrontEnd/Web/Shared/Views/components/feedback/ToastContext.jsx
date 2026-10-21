@@ -6,7 +6,12 @@ export const ToastContext = createContext(null);
 export const useToast = () => {
   const context = useContext(ToastContext);
   if (!context) {
-    return { toast: (type, message) => console.log(`[Toast ${type}]: ${message}`) };
+    const fallback = (type, message) => console.log(`[Toast ${type}]: ${message}`);
+    fallback.success = (msg) => console.log(`[Toast success]: ${msg}`);
+    fallback.error = (msg) => console.log(`[Toast error]: ${msg}`);
+    fallback.warning = (msg) => console.log(`[Toast warning]: ${msg}`);
+    fallback.info = (msg) => console.log(`[Toast info]: ${msg}`);
+    return { toast: fallback };
   }
   return context;
 };
@@ -14,19 +19,31 @@ export const useToast = () => {
 export const ToastProvider = ({ children }) => {
   const [toasts, setToasts] = useState([]);
 
+  const removeToast = useCallback((id) => {
+    setToasts((prevToasts) => prevToasts.filter((t) => t.id !== id));
+  }, []);
+
   const showToast = useCallback((type, message) => {
+    let actualType = type;
+    let actualMsg = message;
+    if (message === undefined) {
+      actualType = 'info';
+      actualMsg = type;
+    }
     const id = Date.now() + Math.random().toString(36).substr(2, 9);
-    setToasts((prevToasts) => [...prevToasts, { id, type, message }]);
+    setToasts((prevToasts) => [...prevToasts, { id, type: actualType, message: actualMsg }]);
     
     // Auto-remove after 3 seconds
     setTimeout(() => {
       removeToast(id);
     }, 3000);
-  }, []);
+    return id;
+  }, [removeToast]);
 
-  const removeToast = useCallback((id) => {
-    setToasts((prevToasts) => prevToasts.filter((t) => t.id !== id));
-  }, []);
+  showToast.success = useCallback((msg) => showToast('success', msg), [showToast]);
+  showToast.error = useCallback((msg) => showToast('error', msg), [showToast]);
+  showToast.warning = useCallback((msg) => showToast('warning', msg), [showToast]);
+  showToast.info = useCallback((msg) => showToast('info', msg), [showToast]);
 
   // Toast icons mapping
   const getIcon = (type) => {

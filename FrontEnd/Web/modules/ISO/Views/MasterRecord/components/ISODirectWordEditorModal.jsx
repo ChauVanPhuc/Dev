@@ -408,7 +408,15 @@ const ISODirectWordEditorModal = ({
                       className={`iso-word-nav-item level-${h.level}`}
                       onClick={() => {
                         if (h.el) {
-                          h.el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                          const ws = h.el.closest('.iso-word-workspace');
+                          if (ws) {
+                            const wsRect = ws.getBoundingClientRect();
+                            const elRect = h.el.getBoundingClientRect();
+                            const offset = elRect.top - wsRect.top + ws.scrollTop - 30;
+                            ws.scrollTo({ top: Math.max(0, offset), behavior: 'smooth' });
+                          } else {
+                            h.el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                          }
                         }
                       }}
                       title={h.title}

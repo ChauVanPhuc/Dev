@@ -1,15 +1,32 @@
 # -*- coding: utf-8 -*-
 import os
+import re
 import json
 from datetime import datetime
 from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from fastapi.responses import FileResponse, StreamingResponse
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.modules.claim import schemas, service, import_service, excel_export
 
 router = APIRouter()
+
+def format_month_year(d, raw_str=None) -> str:
+    if d and hasattr(d, "strftime"):
+        return d.strftime("%m/%Y")
+    if raw_str:
+        s = str(raw_str).strip()
+        parts = re.split(r'[-/]', s)
+        if len(parts) == 3:
+            if len(parts[0]) == 4:
+                return f"{int(parts[1]):02d}/{parts[0]}"
+            else:
+                return f"{int(parts[0]):02d}/{parts[2]}"
+        elif len(parts) == 2:
+            return f"{parts[0].zfill(2)}/{parts[1]}"
+    return ""
 
 def resolve_company_error_codes(order_code: str, db: Session = None) -> str:
     return import_service.resolve_company_error_codes(order_code, db)
@@ -41,15 +58,45 @@ def read_claims(
             db.rollback()
             import_service.logger.error(f"Error auto-syncing claims company_error_code: {e}")
             
+    # Prefetch container details from lpn_containers
+    cont_map = {}
+    try:
+        cont_rows = db.execute(text("""
+            SELECT 
+                id, container_number, 
+                REPLACE(container_number, ' ', '') as cont_clean,
+                date_loading, date_loading_raw, factory
+            FROM lpn_containers WITH (NOLOCK)
+        """)).fetchall()
+        for cr in cont_rows:
+            if cr[2]:
+                c_key = str(cr[2]).strip().upper()
+                if c_key not in cont_map:
+                    cont_map[c_key] = {
+                        "lpn_container_id": cr[0],
+                        "lpn_container_number": cr[1],
+                        "date_loading": cr[3].isoformat() if hasattr(cr[3], "isoformat") else str(cr[3]) if cr[3] else None,
+                        "date_loading_raw": format_month_year(cr[3], cr[4])
+                    }
+    except Exception as e:
+        import_service.logger.warning(f"Error prefetching lpn_containers for claims: {e}")
+
     # Serialize items
     item_dicts = []
     for c in items:
         img_paths = json.loads(c.image_paths) if c.image_paths else []
         img_caps = json.loads(c.image_captions) if c.image_captions else []
+        
+        c_clean = (c.container_no or "").replace(" ", "").strip().upper()
+        c_info = cont_map.get(c_clean, {})
+        pname = c.product_name or ""
+        loai_hang = "OAK" if "WOA" in pname.upper() else "Pigment"
+
         item_dicts.append({
             "id": c.id,
             "claim_code": c.claim_code,
             "customer_name": c.customer_name or "",
+            "loai_hang": loai_hang,
             "product_name": c.product_name,
             "order_code": c.order_code or "",
             "company_error_code": c.company_error_code or "",
@@ -58,6 +105,11 @@ def read_claims(
             "status": c.status or "Received",
             "lpn": c.lpn or "",
             "container_no": c.container_no or "",
+            "cont": c.container_no or "",
+            "lpn_container_number": c_info.get("lpn_container_number") or c.container_no or "",
+            "lpn_container_id": c_info.get("lpn_container_id"),
+            "date_loading": c_info.get("date_loading"),
+            "date_loading_raw": c_info.get("date_loading_raw"),
             "action": c.action or "",
             "period": c.period or "",
             "image_paths": img_paths,
@@ -76,6 +128,14 @@ def read_claims(
             db_codes = {c["claim_code"] for c in item_dicts}
             for tc in temp_claims:
                 if tc.get("claim_code") not in db_codes:
+                    tc_clean = (tc.get("container_no") or tc.get("cont") or "").replace(" ", "").strip().upper()
+                    tc_info = cont_map.get(tc_clean, {})
+                    tc_pname = tc.get("product_name") or tc.get("sku") or ""
+                    tc["loai_hang"] = "OAK" if "WOA" in tc_pname.upper() else "Pigment"
+                    tc["lpn_container_number"] = tc_info.get("lpn_container_number") or tc.get("container_no") or ""
+                    tc["lpn_container_id"] = tc_info.get("lpn_container_id")
+                    tc["date_loading"] = tc_info.get("date_loading")
+                    tc["date_loading_raw"] = tc_info.get("date_loading_raw")
                     item_dicts.append(tc)
                     total += 1
     except Exception as e:
@@ -347,6 +407,25 @@ def read_claim(claim_id: int, db: Session = Depends(get_db)):
     db_claim = service.get_claim_by_id(db, claim_id)
     if not db_claim:
         raise HTTPException(status_code=404, detail="Không tìm thấy khiếu nại khách hàng")
+
+    # Enrich with container info and loai_hang
+    c_clean = (db_claim.container_no or "").replace(" ", "").strip().upper()
+    if c_clean:
+        try:
+            cont_row = db.execute(text("""
+                SELECT id, container_number, date_loading, date_loading_raw
+                FROM lpn_containers WITH (NOLOCK)
+                WHERE REPLACE(container_number, ' ', '') = :c
+            """), {"c": c_clean}).fetchone()
+            if cont_row:
+                db_claim.lpn_container_id = cont_row[0]
+                db_claim.lpn_container_number = cont_row[1]
+                db_claim.date_loading = cont_row[2].isoformat() if hasattr(cont_row[2], "isoformat") else str(cont_row[2]) if cont_row[2] else None
+                db_claim.date_loading_raw = format_month_year(cont_row[2], cont_row[3])
+        except Exception:
+            pass
+    pname = db_claim.product_name or ""
+    db_claim.loai_hang = "OAK" if "WOA" in pname.upper() else "Pigment"
     return db_claim
 
 @router.post("/claims", response_model=schemas.CustomerClaimResponse, status_code=status.HTTP_201_CREATED)

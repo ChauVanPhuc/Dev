@@ -25,7 +25,11 @@ import {
   ExternalLink,
   RefreshCw,
   X,
-  FileDown
+  FileDown,
+  Clock,
+  Repeat,
+  Check,
+  Copy
 } from 'lucide-react';
 import api, { getFullImageUrl } from '@webShared/Services/api.service';
 import ExcelJS from 'exceljs';
@@ -64,6 +68,56 @@ const qlclDepartmentsList = [
   { code: 'PQC2', name: 'PQC2 (QC Sơn - Đóng gói)' },
   { code: 'FQC', name: 'FQC (QC Final thành phẩm)' }
 ];
+
+const targetRolesList = [
+  { code: 'ALL', name: 'Tất cả vị trí' },
+  { code: 'INSPECTOR', name: 'Nhân viên kiểm tra' },
+  { code: 'LEADER', name: 'Tổ trưởng / Lead' },
+  { code: 'MANAGER', name: 'Trưởng phòng / Quản lý' }
+];
+
+const getRoleBadge = (roleCode) => {
+  switch (roleCode) {
+    case 'MANAGER':
+      return { label: 'Quản lý', bg: '#EDE9FE', color: '#6D28D9', border: '#DDD6FE' };
+    case 'LEADER':
+      return { label: 'Tổ trưởng', bg: '#FEF3C7', color: '#B45309', border: '#FDE68A' };
+    case 'INSPECTOR':
+      return { label: 'Nhân viên', bg: '#E0F2FE', color: '#0369A1', border: '#BAE6FD' };
+    default:
+      return { label: 'Tất cả', bg: '#F1F5F9', color: '#475569', border: '#CBD5E1' };
+  }
+};
+
+const getEvidenceBadge = (evType) => {
+  switch (evType) {
+    case 'PHOTO':
+    case 'IMAGE':
+      return { label: 'Chụp ảnh', bg: '#ECFDF5', color: '#047857', border: '#A7F3D0' };
+    case 'FILE':
+    case 'DOCUMENT':
+      return { label: 'Đính kèm file', bg: '#EFF6FF', color: '#1D4ED8', border: '#BFDBFE' };
+    case 'NUMERIC':
+      return { label: 'Nhập số đo', bg: '#FFFBEB', color: '#B45309', border: '#FDE68A' };
+    case 'SIGNATURE':
+      return { label: 'Chữ ký', bg: '#F5F3FF', color: '#6D28D9', border: '#DDD6FE' };
+    default:
+      return null;
+  }
+};
+
+const toggleDayOfWeek = (currentStr, dayCode) => {
+  const days = currentStr ? currentStr.split(',').map(d => d.trim()).filter(Boolean) : [];
+  let nextDays = [];
+  if (days.includes(dayCode)) {
+    nextDays = days.filter(d => d !== dayCode);
+  } else {
+    nextDays = [...days, dayCode];
+  }
+  const order = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+  nextDays.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+  return nextDays.join(',');
+};
 
 const getDeptBadgeStyle = (code) => {
   const labelMap = {
@@ -836,7 +890,97 @@ const QualityKPIDashboardView = ({ readOnly: propReadOnly = false, isMobileView:
   const [isChecklistModalOpen, setIsChecklistModalOpen] = useState(false);
   const [editingChecklist, setEditingChecklist] = useState(null);
   const [selectedChecklistDept, setSelectedChecklistDept] = useState('ALL');
-  const [checklistFormData, setChecklistFormData] = useState({ content: '', frequency: 'Hàng ngày', employee_id: 'NV_IQC_001', status_today: 'Chưa làm', department_code: 'IQC' });
+  const [selectedChecklistRole, setSelectedChecklistRole] = useState('ALL');
+  const [selectedChecklistPriority, setSelectedChecklistPriority] = useState('ALL');
+  // Sub-tabs cho Tab Checklist: 'fixed' (Cố định) vs 'deadline' (Thời hạn)
+  const [checklistSubTab, setChecklistSubTab] = useState('fixed');
+  // Bộ lọc cho Tab Thời hạn: 'ALL', 'RECURRING', 'ONCE_DAY', 'ONCE_WEEK', 'ONCE_MONTH'
+  const [deadlineTypeFilter, setDeadlineTypeFilter] = useState('ALL');
+  const [isClearAllConfirmOpen, setIsClearAllConfirmOpen] = useState(false);
+
+  const initialChecklistForm = {
+    task_code: '',
+    content: '',
+    frequency: 'Hàng ngày',
+    employee_id: 'ALL',
+    department_code: 'IQC',
+    target_role: 'ALL', // 'ALL' | 'INSPECTOR' | 'LEADER' | 'MANAGER'
+    checklist_type: 'FIXED', // 'FIXED' | 'DEADLINE'
+    deadline_mode: 'RECURRING', // 'RECURRING' | 'ONCE'
+    recurring_cycle: 'DAILY', // 'DAILY' | 'WEEKLY' | 'MONTHLY'
+    recurring_day_of_week: 'FRI',
+    recurring_day_of_month: 25,
+    once_period_type: 'DAY', // 'DAY' | 'WEEK' | 'MONTH'
+    due_date: new Date().toISOString().split('T')[0],
+    target_week: 'Tuần 42/2026',
+    target_month: 'Tháng 10/2026',
+    due_time: '17:00',
+    priority: 'MEDIUM',
+    weight_score: 10,
+    evidence_type: 'NONE', // 'NONE' | 'PHOTO' | 'FILE' | 'NUMERIC'
+    guide_code: '',
+    is_active: true,
+    result: ''
+  };
+  const [checklistFormData, setChecklistFormData] = useState(initialChecklistForm);
+
+  // Helper: Tính toán trạng thái hạn chót & đếm ngược
+  const getDeadlineStatusInfo = (item) => {
+    if (item.status_today === 'Đã hoàn thành') {
+      return { label: 'Đã hoàn thành', color: '#15803D', bg: '#DCFCE7', border: '#86EFAC', type: 'COMPLETED' };
+    }
+    if (item.checklist_type !== 'DEADLINE') {
+      return { label: item.status_today || 'Chưa làm', color: '#475569', bg: '#F1F5F9', border: '#CBD5E1', type: 'FIXED' };
+    }
+
+    const now = new Date();
+    let targetDateTime = null;
+
+    if (item.deadline_mode === 'ONCE') {
+      if (item.due_date) {
+        const timeStr = item.due_time || '17:00';
+        targetDateTime = new Date(`${item.due_date}T${timeStr}:00`);
+      }
+    } else if (item.deadline_mode === 'RECURRING') {
+      const [h, m] = (item.due_time || '17:00').split(':').map(Number);
+      if (item.recurring_cycle === 'DAILY') {
+        targetDateTime = new Date();
+        targetDateTime.setHours(h || 17, m || 0, 0, 0);
+      } else if (item.recurring_cycle === 'WEEKLY') {
+        const daysMap = { 'MON': 1, 'TUE': 2, 'WED': 3, 'THU': 4, 'FRI': 5, 'SAT': 6, 'SUN': 0 };
+        const targetDay = daysMap[item.recurring_day_of_week] !== undefined ? daysMap[item.recurring_day_of_week] : 5;
+        const currentDay = now.getDay();
+        let diffDays = targetDay - currentDay;
+        if (diffDays < 0) diffDays += 7;
+        targetDateTime = new Date(now.getTime() + diffDays * 24 * 60 * 60 * 1000);
+        targetDateTime.setHours(h || 17, m || 0, 0, 0);
+      } else if (item.recurring_cycle === 'MONTHLY') {
+        const dayOfMonth = item.recurring_day_of_month || 25;
+        targetDateTime = new Date(now.getFullYear(), now.getMonth(), dayOfMonth, h || 17, m || 0, 0, 0);
+        if (targetDateTime < now) {
+          targetDateTime = new Date(now.getFullYear(), now.getMonth() + 1, dayOfMonth, h || 17, m || 0, 0, 0);
+        }
+      }
+    }
+
+    if (!targetDateTime || isNaN(targetDateTime.getTime())) {
+      return { label: item.status_today || 'Chưa làm', color: '#64748B', bg: '#F1F5F9', border: '#CBD5E1', type: 'VALID' };
+    }
+
+    const diffMs = targetDateTime.getTime() - now.getTime();
+    const diffHours = Math.round(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffMs < 0) {
+      const overdueDays = Math.abs(diffDays);
+      const text = overdueDays > 0 ? `Quá hạn ${overdueDays} ngày` : `Quá hạn ${Math.abs(diffHours)}h`;
+      return { label: text, color: '#DC2626', bg: '#FEE2E2', border: '#FCA5A5', type: 'OVERDUE' };
+    } else if (diffHours <= 24) {
+      return { label: `Sắp đến hạn (${diffHours}h)`, color: '#B45309', bg: '#FEF3C7', border: '#FDE68A', type: 'DUE_SOON' };
+    } else {
+      return { label: `Còn ${diffDays} ngày`, color: '#15803D', bg: '#DCFCE7', border: '#86EFAC', type: 'VALID' };
+    }
+  };
 
 
   // Dynamic Summary Stats from DB
@@ -1422,14 +1566,17 @@ const QualityKPIDashboardView = ({ readOnly: propReadOnly = false, isMobileView:
   };
 
   // CRUD Handlers for Tab Checklist Công Việc (Custom React Popup Modal)
-  const handleAddDashboardChecklist = () => {
+  const handleAddDashboardChecklist = (preferredType) => {
     setEditingChecklist(null);
+    const type = preferredType || (checklistSubTab === 'deadline' ? 'DEADLINE' : 'FIXED');
+    const prefix = type === 'DEADLINE' ? 'CL-TH-' : 'CL-CD-';
+    const nextCode = `${prefix}${String(Date.now()).slice(-4)}`;
     setChecklistFormData({
-      content: '',
-      frequency: 'Hàng ngày',
-      employee_id: selectedChecklistDept !== 'ALL' ? `NV_${selectedChecklistDept}_001` : 'NV_IQC_001',
-      status_today: 'Chưa làm',
-      department_code: selectedChecklistDept !== 'ALL' ? selectedChecklistDept : 'IQC'
+      ...initialChecklistForm,
+      task_code: nextCode,
+      checklist_type: type,
+      department_code: selectedChecklistDept !== 'ALL' ? selectedChecklistDept : 'IQC',
+      employee_id: 'ALL'
     });
     setIsChecklistModalOpen(true);
   };
@@ -1437,49 +1584,104 @@ const QualityKPIDashboardView = ({ readOnly: propReadOnly = false, isMobileView:
   const handleEditDashboardChecklist = (item) => {
     setEditingChecklist(item);
     setChecklistFormData({
+      task_code: item.task_code || item.code || '',
       content: item.content || '',
       frequency: item.frequency || 'Hàng ngày',
-      employee_id: item.employee_id || 'NV_IQC_001',
-      status_today: item.status_today || 'Đang thực hiện',
-      department_code: item.department_code || 'IQC'
+      employee_id: item.employee_id || 'ALL',
+      department_code: item.department_code || 'IQC',
+      target_role: item.target_role || 'ALL',
+      checklist_type: item.checklist_type || 'FIXED',
+      deadline_mode: item.deadline_mode || 'RECURRING',
+      recurring_cycle: item.recurring_cycle || 'DAILY',
+      recurring_day_of_week: item.recurring_day_of_week || 'FRI',
+      recurring_day_of_month: item.recurring_day_of_month || 25,
+      once_period_type: item.once_period_type || 'DAY',
+      due_date: item.due_date || new Date().toISOString().split('T')[0],
+      target_week: item.target_week || 'Tuần 42/2026',
+      target_month: item.target_month || 'Tháng 10/2026',
+      due_time: item.due_time || '17:00',
+      priority: item.priority || 'MEDIUM',
+      weight_score: item.weight_score != null ? item.weight_score : 10,
+      evidence_type: item.evidence_type || 'NONE',
+      guide_code: item.guide_code || '',
+      is_active: item.is_active !== false,
+      result: item.result || ''
     });
     setIsChecklistModalOpen(true);
   };
 
+  const handleCloneDashboardChecklist = async (item) => {
+    try {
+      await api.post(`/kpi-management/checklists/${item.id}/clone`);
+      await fetchDatabaseData();
+    } catch (err) {
+      console.error('Clone checklist error:', err);
+    }
+  };
+
   const handleSaveDashboardChecklist = async (e) => {
     if (e) e.preventDefault();
-    if (!checklistFormData.content) return;
+    if (!checklistFormData.content || !checklistFormData.content.trim()) return;
 
     try {
+      const payload = {
+        employee_id: checklistFormData.employee_id || 'ALL',
+        task_code: checklistFormData.task_code || (editingChecklist ? editingChecklist.task_code : `CL-${String(Date.now()).slice(-4)}`),
+        content: checklistFormData.content.trim(),
+        frequency: checklistFormData.frequency || 'Hàng ngày',
+        result: checklistFormData.result || '',
+        department_code: checklistFormData.department_code || 'IQC',
+        target_role: checklistFormData.target_role || 'ALL',
+        checklist_type: checklistFormData.checklist_type || 'FIXED',
+        deadline_mode: checklistFormData.checklist_type === 'DEADLINE' ? checklistFormData.deadline_mode : null,
+        recurring_cycle: checklistFormData.checklist_type === 'DEADLINE' && checklistFormData.deadline_mode === 'RECURRING' ? checklistFormData.recurring_cycle : null,
+        recurring_day_of_week: checklistFormData.checklist_type === 'DEADLINE' && checklistFormData.deadline_mode === 'RECURRING' && checklistFormData.recurring_cycle === 'WEEKLY' ? checklistFormData.recurring_day_of_week : null,
+        recurring_day_of_month: checklistFormData.checklist_type === 'DEADLINE' && checklistFormData.deadline_mode === 'RECURRING' && checklistFormData.recurring_cycle === 'MONTHLY' ? checklistFormData.recurring_day_of_month : null,
+        once_period_type: checklistFormData.checklist_type === 'DEADLINE' && checklistFormData.deadline_mode === 'ONCE' ? checklistFormData.once_period_type : null,
+        due_date: checklistFormData.checklist_type === 'DEADLINE' ? checklistFormData.due_date : null,
+        target_week: checklistFormData.checklist_type === 'DEADLINE' && checklistFormData.deadline_mode === 'ONCE' && checklistFormData.once_period_type === 'WEEK' ? checklistFormData.target_week : null,
+        target_month: checklistFormData.checklist_type === 'DEADLINE' && checklistFormData.deadline_mode === 'ONCE' && checklistFormData.once_period_type === 'MONTH' ? checklistFormData.target_month : null,
+        due_time: checklistFormData.checklist_type === 'DEADLINE' ? checklistFormData.due_time : null,
+        priority: checklistFormData.priority || 'MEDIUM',
+        weight_score: Number(checklistFormData.weight_score) || 10,
+        evidence_type: checklistFormData.evidence_type || 'NONE',
+        guide_code: checklistFormData.guide_code || '',
+        is_active: checklistFormData.is_active !== false
+      };
+
       if (editingChecklist) {
-        await api.put(`/kpi-management/checklists/${editingChecklist.id}`, {
-          employee_id: checklistFormData.employee_id,
-          task_code: editingChecklist.task_code || `CL-${String(Date.now()).slice(-4)}`,
-          content: checklistFormData.content,
-          frequency: checklistFormData.frequency,
-          status_today: checklistFormData.status_today,
-          perform_count: editingChecklist.perform_count || 1,
-          last_performed: new Date().toISOString().split('T')[0],
-          result: editingChecklist.result || 'Đã cập nhật',
-          department_code: checklistFormData.department_code || 'IQC'
-        });
+        await api.put(`/kpi-management/checklists/${editingChecklist.id}`, payload);
       } else {
-        await api.post('/kpi-management/checklists', {
-          employee_id: checklistFormData.employee_id,
-          task_code: `CL-${String(Date.now()).slice(-4)}`,
-          content: checklistFormData.content,
-          frequency: checklistFormData.frequency,
-          status_today: checklistFormData.status_today,
-          perform_count: 0,
-          last_performed: new Date().toISOString().split('T')[0],
-          result: 'Mới tạo',
-          department_code: checklistFormData.department_code || 'IQC'
-        });
+        await api.post('/kpi-management/checklists', payload);
       }
       setIsChecklistModalOpen(false);
       await fetchDatabaseData();
     } catch (err) {
       console.error('Error saving checklist:', err);
+    }
+  };
+
+  const handleClearAllChecklists = async () => {
+    try {
+      await api.post('/kpi-management/checklists/clear-all');
+      setIsClearAllConfirmOpen(false);
+      await fetchDatabaseData();
+    } catch (err) {
+      console.error('Clear all checklists error:', err);
+    }
+  };
+
+  const handleToggleChecklistStatus = async (item) => {
+    try {
+      const nextStatus = item.status_today === 'Đã hoàn thành' ? 'Chưa làm' : 'Đã hoàn thành';
+      await api.put(`/kpi-management/checklists/${item.id}`, {
+        ...item,
+        status_today: nextStatus,
+        last_performed: new Date().toISOString().split('T')[0]
+      });
+      await fetchDatabaseData();
+    } catch (err) {
+      console.error('Toggle status error:', err);
     }
   };
 
@@ -1579,80 +1781,189 @@ const QualityKPIDashboardView = ({ readOnly: propReadOnly = false, isMobileView:
             {/* TOP 4 CARDS matching Mockup Screen 2 */}
             <div className="kpi-work-indicators-top-cards" style={{ flexShrink: 0 }}>
               
-              {/* Card 1: Điểm KPI Trung bình */}
-              <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9' }}>
-                <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#64748B' }}>
-                  Điểm KPI Trung bình
-                </div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: '3px', marginTop: '6px' }}>
-                  <span style={{ fontSize: '1.8rem', fontWeight: '900', color: '#5D3B32', lineHeight: 1 }}>25</span>
-                  <span style={{ fontSize: '0.95rem', fontWeight: '700', color: '#94A3B8' }}>/ 100</span>
-                </div>
-                <div style={{ width: '100%', height: '6px', backgroundColor: '#F1F5F9', borderRadius: '3px', marginTop: '8px', overflow: 'hidden' }}>
-                  <div style={{ width: '25%', height: '100%', backgroundColor: '#D97706', borderRadius: '3px' }}></div>
-                </div>
-              </div>
+              {(() => {
+                const isQc5Mode = workIndicators.some(w => String(w.code || '').startsWith('KPI-QC'));
+                
+                if (isQc5Mode) {
+                  return (
+                    <>
+                      {/* Card 1: 100 Điểm Cơ Sở */}
+                      <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9' }}>
+                        <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#64748B' }}>
+                          Điểm KPI Cơ Sở (Đánh Giá Tháng)
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '3px', marginTop: '6px' }}>
+                          <span style={{ fontSize: '1.8rem', fontWeight: '900', color: '#15803D', lineHeight: 1 }}>100</span>
+                          <span style={{ fontSize: '0.95rem', fontWeight: '700', color: '#94A3B8' }}>/ 100</span>
+                        </div>
+                        <div style={{ width: '100%', height: '6px', backgroundColor: '#F1F5F9', borderRadius: '3px', marginTop: '8px', overflow: 'hidden' }}>
+                          <div style={{ width: '100%', height: '100%', backgroundColor: '#16A34A', borderRadius: '3px' }}></div>
+                        </div>
+                        <div style={{ fontSize: '0.62rem', fontWeight: '700', color: '#B45309', marginTop: '5px' }}>
+                          Mặc định 20đ / tiêu chí • Thưởng khi &gt; 100đ
+                        </div>
+                      </div>
 
-              {/* Card 2: Top 3 chỉ số đạt cao nhất */}
-              <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9' }}>
-                <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#5D3B32', marginBottom: '6px' }}>
-                  Top 3 chỉ số đạt cao nhất
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  {[
-                    { code: 'KPI-IND-01', score: '98.0%' },
-                    { code: 'KPI-IND-02', score: '95.0%' },
-                    { code: 'KPI-IND-03', score: '92.0%' }
-                  ].map((t, idx) => (
-                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', backgroundColor: '#7B5233', color: '#FFFFFF', padding: '3px 8px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: '800' }}>
-                      <span>{t.code}</span>
-                      <span>{t.score}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+                      {/* Card 2: 5 Tiêu chí chuẩn */}
+                      <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9' }}>
+                        <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#5D3B32', marginBottom: '6px' }}>
+                          5 Tiêu Chí Đánh Giá Chuẩn
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          {[
+                            { code: '01. Phiếu kiểm tra', score: '20đ' },
+                            { code: '02. Độ chính xác phiếu', score: '20đ' },
+                            { code: '03. Đánh giá quản lý', score: '20đ' },
+                            { code: '04. Khiếu nại khách hàng', score: '20đ' },
+                            { code: '05. Tiến độ báo cáo CAPA', score: '20đ' }
+                          ].map((t, idx) => (
+                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', backgroundColor: '#7B5233', color: '#FFFFFF', padding: '2px 7px', borderRadius: '3px', fontSize: '0.65rem', fontWeight: '800' }}>
+                              <span>{t.code}</span>
+                              <span>{t.score}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
 
-              {/* Card 3: Các nhóm phát sinh lỗi nhiều nhất */}
-              <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9' }}>
-                <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#5D3B32', marginBottom: '6px' }}>
-                  Các nhóm phát sinh lỗi nhiều nhất
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  {[
-                    { group: 'Tổ QC Sơn', width: '100%' },
-                    { group: 'Tổ Đóng Gói', width: '85%' },
-                    { group: 'Tổ Cưa Xẻ', width: '65%' }
-                  ].map((g, idx) => (
-                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ fontSize: '0.65rem', color: '#475569', fontWeight: '700', width: '65px', whiteSpace: 'nowrap' }}>{g.group}</span>
-                      <div style={{ flex: 1, height: '10px', backgroundColor: '#F1F5F9', borderRadius: '3px', overflow: 'hidden' }}>
-                        <div style={{ width: g.width, height: '100%', backgroundColor: '#5D3B32', borderRadius: '3px' }}></div>
+                      {/* Card 3: Thưởng KPI (+5đ) */}
+                      <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9' }}>
+                        <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#15803D', marginBottom: '6px', display: 'flex', justifyContent: 'space-between' }}>
+                          <span>Cơ Chế Thưởng (+5đ)</span>
+                          <span style={{ fontSize: '0.62rem', color: '#15803D', fontWeight: '800' }}>Max: 115đ</span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          {[
+                            { item: 'Độ chính xác', reward: '+5đ (Không lỗi)' },
+                            { item: 'ĐG Quản lý', reward: '+5đ (Loại A+)' },
+                            { item: 'Báo cáo CAPA', reward: '+5đ (Trước hạn)' }
+                          ].map((g, idx) => (
+                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', backgroundColor: '#DCFCE7', color: '#15803D', padding: '3px 7px', borderRadius: '4px', fontSize: '0.65rem', fontWeight: '800', border: '1px solid #BBF7D0' }}>
+                              <span>{g.item}</span>
+                              <span>{g.reward}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ fontSize: '0.62rem', fontWeight: '700', color: '#15803D', marginTop: '5px' }}>
+                          Tổng KPI &gt; 100đ: Được thưởng KPI tháng
+                        </div>
+                      </div>
+
+                      {/* Card 4: Trừ Điểm Vi Phạm */}
+                      <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9' }}>
+                        <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#DC2626', marginBottom: '6px' }}>
+                          Quy Định Trừ Điểm Vi Phạm
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          {[
+                            { code: 'Thiếu/sai phiếu', val: '-2đ / phiếu' },
+                            { code: 'Có sửa/trả hàng', val: '-2đ / phiếu' },
+                            { code: 'CAPA quá hạn', val: '-10đ / phiếu' }
+                          ].map((errItem, idx) => (
+                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', backgroundColor: '#FEE2E2', color: '#DC2626', padding: '3px 7px', borderRadius: '4px', fontSize: '0.65rem', fontWeight: '800', border: '1px solid #FECACA' }}>
+                              <span>{errItem.code}</span>
+                              <span>{errItem.val}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ fontSize: '0.62rem', fontWeight: '700', color: '#DC2626', marginTop: '5px' }}>
+                          Áp dụng trừ trực tiếp vào điểm tháng
+                        </div>
+                      </div>
+                    </>
+                  );
+                }
+
+                return (
+                  <>
+                    {/* Card 1: Điểm KPI Trung bình */}
+                    <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9' }}>
+                      <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#64748B' }}>
+                        Điểm KPI Trung bình
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: '3px', marginTop: '6px' }}>
+                        <span style={{ fontSize: '1.8rem', fontWeight: '900', color: '#5D3B32', lineHeight: 1 }}>{workIndicators.length > 0 ? '25' : '0'}</span>
+                        <span style={{ fontSize: '0.95rem', fontWeight: '700', color: '#94A3B8' }}>/ 100</span>
+                      </div>
+                      <div style={{ width: '100%', height: '6px', backgroundColor: '#F1F5F9', borderRadius: '3px', marginTop: '8px', overflow: 'hidden' }}>
+                        <div style={{ width: workIndicators.length > 0 ? '25%' : '0%', height: '100%', backgroundColor: '#D97706', borderRadius: '3px' }}></div>
                       </div>
                     </div>
-                  ))}
-                </div>
-              </div>
 
-              {/* Card 4: Top 5 Lỗi Cần Xử Lý */}
-              <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9' }}>
-                <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#5D3B32', marginBottom: '6px' }}>
-                  Top 5 Lỗi Cần Xử Lý
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                  {[
-                    { code: 'Lỗi Sơn Bề Mặt', val: '100/100' },
-                    { code: 'Lỗi Kích Thước', val: '100/100' },
-                    { code: 'Lỗi Dán Cạnh', val: '100/100' },
-                    { code: 'Lỗi Khoan Lỗ', val: '80/100' },
-                    { code: 'Lỗi Đóng Gói', val: '50/100' }
-                  ].map((errItem, idx) => (
-                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', backgroundColor: '#7B5233', color: '#FFFFFF', padding: '2px 6px', borderRadius: '3px', fontSize: '0.65rem', fontWeight: '800' }}>
-                      <span>{errItem.code}</span>
-                      <span>{errItem.val}</span>
+                    {/* Card 2: Top 3 chỉ số đạt cao nhất */}
+                    <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9' }}>
+                      <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#5D3B32', marginBottom: '6px' }}>
+                        Top 3 chỉ số đạt cao nhất
+                      </div>
+                      {workIndicators.length === 0 ? (
+                        <div style={{ fontSize: '0.75rem', color: '#94A3B8', fontStyle: 'italic', padding: '10px 0' }}>Chưa có dữ liệu</div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          {[
+                            { code: 'KPI-IND-01', score: '98.0%' },
+                            { code: 'KPI-IND-02', score: '95.0%' },
+                            { code: 'KPI-IND-03', score: '92.0%' }
+                          ].map((t, idx) => (
+                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', backgroundColor: '#7B5233', color: '#FFFFFF', padding: '3px 8px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: '800' }}>
+                              <span>{t.code}</span>
+                              <span>{t.score}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  ))}
-                </div>
-              </div>
+
+                    {/* Card 3: Các nhóm phát sinh lỗi nhiều nhất */}
+                    <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9' }}>
+                      <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#5D3B32', marginBottom: '6px' }}>
+                        Các nhóm phát sinh lỗi nhiều nhất
+                      </div>
+                      {workIndicators.length === 0 ? (
+                        <div style={{ fontSize: '0.75rem', color: '#94A3B8', fontStyle: 'italic', padding: '10px 0' }}>Chưa có dữ liệu</div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          {[
+                            { group: 'Tổ QC Sơn', width: '100%' },
+                            { group: 'Tổ Đóng Gói', width: '85%' },
+                            { group: 'Tổ Cưa Xẻ', width: '65%' }
+                          ].map((g, idx) => (
+                            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '0.65rem', color: '#475569', fontWeight: '700', width: '65px', whiteSpace: 'nowrap' }}>{g.group}</span>
+                              <div style={{ flex: 1, height: '10px', backgroundColor: '#F1F5F9', borderRadius: '3px', overflow: 'hidden' }}>
+                                <div style={{ width: g.width, height: '100%', backgroundColor: '#5D3B32', borderRadius: '3px' }}></div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Card 4: Top 5 Lỗi Cần Xử Lý */}
+                    <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9' }}>
+                      <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#5D3B32', marginBottom: '6px' }}>
+                        Top 5 Lỗi Cần Xử Lý
+                      </div>
+                      {workIndicators.length === 0 ? (
+                        <div style={{ fontSize: '0.75rem', color: '#94A3B8', fontStyle: 'italic', padding: '10px 0' }}>Chưa có dữ liệu</div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          {[
+                            { code: 'Lỗi Sơn Bề Mặt', val: '100/100' },
+                            { code: 'Lỗi Kích Thước', val: '100/100' },
+                            { code: 'Lỗi Dán Cạnh', val: '100/100' },
+                            { code: 'Lỗi Khoan Lỗ', val: '80/100' },
+                            { code: 'Lỗi Đóng Gói', val: '50/100' }
+                          ].map((errItem, idx) => (
+                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', backgroundColor: '#7B5233', color: '#FFFFFF', padding: '2px 6px', borderRadius: '3px', fontSize: '0.65rem', fontWeight: '800' }}>
+                              <span>{errItem.code}</span>
+                              <span>{errItem.val}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
 
             </div>
 
@@ -1708,6 +2019,18 @@ const QualityKPIDashboardView = ({ readOnly: propReadOnly = false, isMobileView:
                 {(() => {
                   const allData = filterAndSortData(workIndicators, indicatorSearch);
                   const pagedData = allData.slice((indicatorPage - 1) * indicatorPageSize, indicatorPage * indicatorPageSize);
+
+                  if (allData.length === 0) {
+                    return (
+                      <div style={{ padding: '60px 20px', textAlign: 'center', color: '#8C7A6B' }}>
+                        <BarChart3 size={44} style={{ opacity: 0.35, marginBottom: '10px' }} />
+                        <div style={{ fontSize: '0.95rem', fontWeight: '700', color: '#5D3B32' }}>Chưa có chỉ số KPI công việc nào</div>
+                        <div style={{ fontSize: '0.78rem', color: '#8C7A6B', marginTop: '4px' }}>
+                          Dữ liệu đã được làm trống. Nhấn "+ Thêm chỉ số KPI mới" để bắt đầu thiết lập.
+                        </div>
+                      </div>
+                    );
+                  }
 
                   if (isMobile) {
                     return (
@@ -1953,305 +2276,439 @@ const QualityKPIDashboardView = ({ readOnly: propReadOnly = false, isMobileView:
         {/* ========================================================================= */}
         {/* TAB 3: CHECKLIST CÔNG VIỆC                                                */}
         {/* ========================================================================= */}
-        {activeTab === 'checklist_work' && (
-          <div className="kpi-tab-pane" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0 }}>
-            
-            {/* TOP 3 CARDS matching Mockup Screen 3 */}
-            <div className="kpi-checklist-top-cards" style={{ flexShrink: 0 }}>
+        {activeTab === 'checklist_work' && (() => {
+          const fixedList = allChecklists.filter(c => (c.checklist_type || 'FIXED') === 'FIXED');
+          const deadlineList = allChecklists.filter(c => c.checklist_type === 'DEADLINE');
+
+          // Lọc danh sách hiển thị theo Sub-tab (Đã bỏ lọc theo Bộ phận và Vị trí)
+          let currentList = [];
+          if (checklistSubTab === 'fixed') {
+            currentList = filterAndSortData(fixedList, checklistSearch)
+              .filter(item => {
+                if (selectedChecklistPriority === 'ALL') return true;
+                return (item.priority || 'MEDIUM') === selectedChecklistPriority;
+              });
+          } else {
+            currentList = filterAndSortData(deadlineList, checklistSearch)
+              .filter(item => {
+                if (deadlineTypeFilter === 'RECURRING') return item.deadline_mode === 'RECURRING';
+                if (deadlineTypeFilter === 'ONCE_DAY') return item.deadline_mode === 'ONCE' && (item.once_period_type || 'DAY') === 'DAY';
+                if (deadlineTypeFilter === 'ONCE_WEEK') return item.deadline_mode === 'ONCE' && item.once_period_type === 'WEEK';
+                if (deadlineTypeFilter === 'ONCE_MONTH') return item.deadline_mode === 'ONCE' && item.once_period_type === 'MONTH';
+                return true;
+              })
+              .filter(item => {
+                if (selectedChecklistPriority === 'ALL') return true;
+                return (item.priority || 'MEDIUM') === selectedChecklistPriority;
+              });
+          }
+
+          const pagedList = currentList.slice((checklistPage - 1) * checklistPageSize, checklistPage * checklistPageSize);
+
+          return (
+            <div className="kpi-tab-pane" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0 }}>
               
-              {/* Card 1: Điểm KPI Trung bình */}
-              <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9' }}>
-                <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#64748B' }}>
-                  Điểm KPI Trung bình
+              {/* HEADER BANNER KHO CẤU HÌNH & THƯ VIỆN CHECKLIST (MASTER POOL) */}
+              <div style={{
+                backgroundColor: '#FFFFFF',
+                borderRadius: '10px',
+                padding: '12px 18px',
+                border: '1px solid #EADCC9',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '12px',
+                flexShrink: 0
+              }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <h2 style={{ fontSize: '1.05rem', fontWeight: '900', color: '#5D3B32', margin: 0 }}>
+                      Cấu hình & Thư viện Checklist Chất Lượng
+                    </h2>
+                    <span style={{ backgroundColor: '#FAF6F0', color: '#5D3B32', padding: '2px 8px', borderRadius: '12px', fontSize: '0.68rem', fontWeight: '800', border: '1px solid #EADCC9' }}>
+                      Master Checklist Pool
+                    </span>
+                  </div>
+                  <p style={{ fontSize: '0.74rem', color: '#64748B', margin: '3px 0 0 0' }}>
+                    Thiết lập danh mục công việc chuẩn (Cố định & Thời hạn), quy định tần suất, tiêu chuẩn nghiệm thu và trọng số điểm để gán cho từng nhân sự tại màn hình CL03.
+                  </p>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: '3px', marginTop: '6px' }}>
-                  <span style={{ fontSize: '1.8rem', fontWeight: '900', color: '#5D3B32', lineHeight: 1 }}>25</span>
-                  <span style={{ fontSize: '0.95rem', fontWeight: '700', color: '#94A3B8' }}>/ 100</span>
-                </div>
-                <div style={{ width: '100%', height: '6px', backgroundColor: '#F1F5F9', borderRadius: '3px', marginTop: '8px', overflow: 'hidden' }}>
-                  <div style={{ width: '25%', height: '100%', backgroundColor: '#D97706', borderRadius: '3px' }}></div>
-                </div>
-              </div>
 
-              {/* Card 2: Lỗi vi phạm mới nhất */}
-              <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9' }}>
-                <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#5D3B32', marginBottom: '6px' }}>
-                  Lỗi vi phạm mới nhất
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  {[
-                    { label: 'Tăng ca', score: '100/100' },
-                    { label: 'Về sớm', score: '100/100' },
-                    { label: 'Vào trễ', score: '100/100' }
-                  ].map((err, idx) => (
-                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', backgroundColor: '#7B5233', color: '#FFFFFF', padding: '3px 8px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: '800' }}>
-                      <span>{err.label}</span>
-                      <span>{err.score}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  {!isReadOnly && (
+                    <button
+                      onClick={() => handleAddDashboardChecklist(checklistSubTab === 'deadline' ? 'DEADLINE' : 'FIXED')}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        padding: '7px 14px',
+                        backgroundColor: '#5D3B32',
+                        color: '#FFFFFF',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontWeight: '800',
+                        fontSize: '0.78rem',
+                        cursor: 'pointer',
+                        boxShadow: '0 2px 4px rgba(93, 59, 50, 0.2)'
+                      }}
+                    >
+                      <Plus size={14} /> Thêm Checklist {checklistSubTab === 'fixed' ? 'Cố định' : 'Thời hạn'}
+                    </button>
+                  )}
 
-              {/* Card 3: Tổng số lỗi phát sinh trong năm */}
-              <div style={{ backgroundColor: '#FFFFFF', borderRadius: '10px', padding: '10px 14px', border: '1px solid #EADCC9' }}>
-                <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#5D3B32', marginBottom: '6px' }}>
-                  Tổng số lỗi phát sinh trong năm
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', height: '55px', paddingBottom: '2px' }}>
-                  {[
-                    { m: 'T1', h: '40%' }, { m: 'T2', h: '60%' }, { m: 'T3', h: '50%' },
-                    { m: 'T4', h: '75%' }, { m: 'T5', h: '45%' }, { m: 'T6', h: '90%' },
-                    { m: 'T7', h: '65%' }, { m: 'T8', h: '35%' }, { m: 'T9', h: '80%' },
-                    { m: 'T10', h: '50%' }, { m: 'T11', h: '70%' }, { m: 'T12', h: '95%' }
-                  ].map((item, idx) => (
-                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', flex: 1 }}>
-                      <div style={{ width: '10px', height: item.h, backgroundColor: '#5D3B32', borderRadius: '2px 2px 0 0' }}></div>
-                      <span style={{ fontSize: '0.6rem', color: '#64748B', fontWeight: '700' }}>{item.m}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-            </div>
-
-            {/* TABLE / CARD VIEW WITH SEARCH & FILTER */}
-            <div className="mgmt-table card admin-table-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, backgroundColor: '#FFFFFF', borderRadius: '10px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
-              <div className="kpi-mgmt-table-header" style={{ flexShrink: 0, padding: '8px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                <TableControlToolbar
-                  searchValue={checklistSearch}
-                  onSearchChange={(e) => setChecklistSearch(e.target.value)}
-                  placeholder="Tìm nội dung checklist..."
-                  onSort={() => setSortAsc(prev => !prev)}
-                  onFilter={() => setFilterOpen(prev => !prev)}
-                  onExport={() => handleExportExcel(filterAndSortData(allChecklists, checklistSearch).filter(item => selectedChecklistDept === 'ALL' || item.department_code === selectedChecklistDept), 'Checklist_Cong_Viec')}
-                  sortAsc={sortAsc}
-                  isFilterActive={filterOpen}
-                />
-                {!isReadOnly && (
                   <button
-                    onClick={handleAddDashboardChecklist}
-                    className="kpi-btn-add-primary"
-                    style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 14px', backgroundColor: '#5D3B32', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: '800', fontSize: '0.75rem', cursor: 'pointer' }}
-                  >
-                    <Plus size={13} /> Thêm Checklist mới
-                  </button>
-                )}
-              </div>
-
-              {/* BAR BỘ LỌC BỘ PHẬN QLCL - NẰM TRONG BỘ LỌC PHỄU (filterOpen) - COMPACT GỖ NÂU */}
-              {filterOpen && (
-                <div style={{ flexShrink: 0, padding: '6px 14px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.72rem', flexWrap: 'wrap' }}>
-                  <span style={{ fontWeight: '800', color: '#5D3B32' }}>Bộ phận phụ trách:</span>
-                  <select
-                    value={selectedChecklistDept}
-                    onChange={(e) => { setSelectedChecklistDept(e.target.value); setChecklistPage(1); }}
+                    onClick={() => handleExportExcel(currentList, checklistSubTab === 'fixed' ? 'Master_Checklist_Co_Dinh' : 'Master_Checklist_Thoi_Han')}
                     style={{
-                      padding: '3px 10px',
-                      borderRadius: '6px',
-                      border: '1px solid #EADCC9',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      padding: '7px 12px',
                       backgroundColor: '#FFFFFF',
                       color: '#5D3B32',
+                      border: '1px solid #EADCC9',
+                      borderRadius: '6px',
                       fontWeight: '700',
-                      fontSize: '0.72rem',
-                      outline: 'none',
+                      fontSize: '0.76rem',
                       cursor: 'pointer'
                     }}
                   >
-                    {qlclDepartmentsList.map(dept => (
-                      <option key={dept.code} value={dept.code}>{dept.name}</option>
-                    ))}
-                  </select>
-                  <RenderPageSizeSelect pageSize={checklistPageSize} setPageSize={setChecklistPageSize} setCurrentPage={setChecklistPage} />
+                    <FileDown size={14} /> Xuất Excel
+                  </button>
+
+                  {!isReadOnly && (
+                    <button
+                      onClick={() => setIsClearAllConfirmOpen(true)}
+                      title="Xóa toàn bộ dữ liệu Checklist"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '7px 10px',
+                        backgroundColor: '#FEF2F2',
+                        color: '#DC2626',
+                        border: '1px solid #FCA5A5',
+                        borderRadius: '6px',
+                        fontWeight: '700',
+                        fontSize: '0.74rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <Trash2 size={13} /> Xóa tất cả
+                    </button>
+                  )}
                 </div>
-              )}
+              </div>
 
-              <div className="admin-table-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: isMobile ? 'hidden' : 'auto' }}>
-                {(() => {
-                  const filtered = filterAndSortData(allChecklists, checklistSearch)
-                    .filter(item => selectedChecklistDept === 'ALL' || item.department_code === selectedChecklistDept);
-                  const paged = filtered.slice((checklistPage - 1) * checklistPageSize, checklistPage * checklistPageSize);
+              {/* TABLE CONTAINER VỚI 2 SUB-TAB (CỐ ĐỊNH & THỜI HẠN) */}
+              <div className="mgmt-table card admin-table-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, backgroundColor: '#FFFFFF', borderRadius: '10px', overflow: 'hidden', border: '1px solid #EADCC9' }}>
+                
+                {/* SUB-TAB BAR & TOOLBAR */}
+                <div style={{ flexShrink: 0, backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', padding: '8px 14px' }}>
+                  
+                  {/* Row 1: Sub-Tabs & Search Toolbar */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                    
+                    {/* 2 Sub-Tabs Button: Sạch icon */}
+                    <div style={{ display: 'flex', gap: '6px', backgroundColor: '#EDE4D8', padding: '3px', borderRadius: '8px' }}>
+                      <button
+                        onClick={() => { setChecklistSubTab('fixed'); setChecklistPage(1); }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '6px 14px',
+                          borderRadius: '6px',
+                          border: 'none',
+                          cursor: 'pointer',
+                          fontWeight: '800',
+                          fontSize: '0.78rem',
+                          backgroundColor: checklistSubTab === 'fixed' ? '#5D3B32' : 'transparent',
+                          color: checklistSubTab === 'fixed' ? '#FFFFFF' : '#5D3B32',
+                          transition: 'all 0.15s ease',
+                          boxShadow: checklistSubTab === 'fixed' ? '0 1px 3px rgba(93, 59, 50, 0.25)' : 'none'
+                        }}
+                      >
+                        <span>Checklist Cố Định</span>
+                        <span style={{
+                          backgroundColor: checklistSubTab === 'fixed' ? '#FFFFFF' : '#5D3B32',
+                          color: checklistSubTab === 'fixed' ? '#5D3B32' : '#FFFFFF',
+                          padding: '1px 6px',
+                          borderRadius: '10px',
+                          fontSize: '0.68rem',
+                          fontWeight: '800'
+                        }}>
+                          {fixedList.length}
+                        </span>
+                      </button>
 
-                  if (isMobile) {
-                    return (
-                      <div className="kpi-mobile-cards-container" style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {paged.map((item, idx) => {
-                          const globalIdx = (checklistPage - 1) * checklistPageSize + idx;
-                          const badge = getDeptBadgeStyle(item.department_code);
-                          return (
-                            <div
-                              key={item.id || idx}
-                              className="kpi-data-mobile-card"
+                      <button
+                        onClick={() => { setChecklistSubTab('deadline'); setChecklistPage(1); }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '6px 14px',
+                          borderRadius: '6px',
+                          border: 'none',
+                          cursor: 'pointer',
+                          fontWeight: '800',
+                          fontSize: '0.78rem',
+                          backgroundColor: checklistSubTab === 'deadline' ? '#5D3B32' : 'transparent',
+                          color: checklistSubTab === 'deadline' ? '#FFFFFF' : '#5D3B32',
+                          transition: 'all 0.15s ease',
+                          boxShadow: checklistSubTab === 'deadline' ? '0 1px 3px rgba(93, 59, 50, 0.25)' : 'none'
+                        }}
+                      >
+                        <span>Checklist Thời Hạn</span>
+                        <span style={{
+                          backgroundColor: checklistSubTab === 'deadline' ? '#FFFFFF' : '#5D3B32',
+                          color: checklistSubTab === 'deadline' ? '#5D3B32' : '#FFFFFF',
+                          padding: '1px 6px',
+                          borderRadius: '10px',
+                          fontSize: '0.68rem',
+                          fontWeight: '800'
+                        }}>
+                          {deadlineList.length}
+                        </span>
+                      </button>
+                    </div>
+
+                    {/* Search Controls */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <TableControlToolbar
+                        searchValue={checklistSearch}
+                        onSearchChange={(e) => setChecklistSearch(e.target.value)}
+                        placeholder={checklistSubTab === 'fixed' ? "Tìm theo mã hoặc nội dung checklist..." : "Tìm theo mã hoặc nội dung checklist thời hạn..."}
+                        onSort={() => setSortAsc(prev => !prev)}
+                        onFilter={() => setFilterOpen(prev => !prev)}
+                        onExport={() => handleExportExcel(currentList, checklistSubTab === 'fixed' ? 'Master_Checklist_Co_Dinh' : 'Master_Checklist_Thoi_Han')}
+                        sortAsc={sortAsc}
+                        isFilterActive={filterOpen}
+                      />
+                    </div>
+
+                  </div>
+
+                  {/* Row 2: Bộ lọc cấu hình tinh gọn (Bỏ Bộ phận & Vị trí, Bỏ Icon) */}
+                  <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed #EADCC9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                    
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', fontSize: '0.72rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ fontWeight: '800', color: '#5D3B32' }}>Mức ưu tiên:</span>
+                        <select
+                          value={selectedChecklistPriority}
+                          onChange={(e) => { setSelectedChecklistPriority(e.target.value); setChecklistPage(1); }}
+                          style={{ padding: '3px 8px', borderRadius: '6px', border: '1px solid #EADCC9', backgroundColor: '#FFFFFF', color: '#5D3B32', fontWeight: '700', fontSize: '0.72rem', outline: 'none', cursor: 'pointer' }}
+                        >
+                          <option value="ALL">Tất cả mức độ</option>
+                          <option value="HIGH">Ưu tiên Cao (HIGH)</option>
+                          <option value="MEDIUM">Tiêu chuẩn (MEDIUM)</option>
+                          <option value="LOW">Thấp (LOW)</option>
+                        </select>
+                      </div>
+
+                      {/* Bộ lọc phụ: Loại hình thời hạn (khi ở Tab Thời Hạn) - Sạch icon */}
+                      {checklistSubTab === 'deadline' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '0.72rem', fontWeight: '800', color: '#5D3B32' }}>Hình thức:</span>
+                          {[
+                            { id: 'ALL', label: 'Tất cả' },
+                            { id: 'RECURRING', label: 'Lặp lại (Chu kỳ)' },
+                            { id: 'ONCE_DAY', label: '1 Lần: Theo Ngày' },
+                            { id: 'ONCE_WEEK', label: '1 Lần: Theo Tuần' },
+                            { id: 'ONCE_MONTH', label: '1 Lần: Theo Tháng' }
+                          ].map(f => (
+                            <button
+                              key={f.id}
+                              onClick={() => { setDeadlineTypeFilter(f.id); setChecklistPage(1); }}
                               style={{
-                                background: idx % 2 === 0 ? '#FFFFFF' : '#FFFDFB',
-                                borderRadius: '8px',
-                                border: '1px solid #EADCC9',
-                                padding: '10px 12px',
-                                boxShadow: '0 1px 4px rgba(91, 57, 36, 0.05)',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: '8px'
+                                padding: '3px 8px',
+                                borderRadius: '4px',
+                                border: deadlineTypeFilter === f.id ? '1px solid #5D3B32' : '1px solid #EADCC9',
+                                backgroundColor: deadlineTypeFilter === f.id ? '#5D3B32' : '#FFFFFF',
+                                color: deadlineTypeFilter === f.id ? '#FFFFFF' : '#5D3B32',
+                                fontWeight: deadlineTypeFilter === f.id ? '800' : '600',
+                                fontSize: '0.68rem',
+                                cursor: 'pointer'
                               }}
                             >
-                              {/* Header: STT + Task Code + Dept Badge + Actions */}
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                  <span style={{
-                                    background: '#5D3B32',
-                                    color: '#FFFFFF',
-                                    borderRadius: '50%',
-                                    width: '20px',
-                                    height: '20px',
-                                    fontSize: '0.68rem',
-                                    fontWeight: '800',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    flexShrink: 0
-                                  }}>
-                                    {globalIdx + 1}
-                                  </span>
-                                  <span style={{ fontWeight: '800', color: '#5D3B32', fontSize: '0.82rem' }}>
-                                    {item.task_code || item.code || `CL-00${globalIdx + 1}`}
-                                  </span>
-                                  <span style={{
-                                    padding: '2px 8px',
-                                    borderRadius: '4px',
-                                    fontSize: '0.68rem',
-                                    fontWeight: '700',
-                                    backgroundColor: badge.bg,
-                                    color: badge.color,
-                                    border: `1px solid ${badge.border}`
-                                  }}>
-                                    {badge.label}
-                                  </span>
-                                </div>
+                              {f.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
 
-                                {!isReadOnly && (
-                                  <div style={{ display: 'flex', gap: '6px' }}>
-                                    <button
-                                      onClick={() => handleEditDashboardChecklist(item)}
-                                      style={{
-                                        border: '1px solid #EADCC9',
-                                        background: '#FFFFFF',
-                                        color: '#5D3B32',
-                                        padding: '4px 8px',
-                                        borderRadius: '4px',
-                                        cursor: 'pointer',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '3px',
-                                        fontWeight: '700',
-                                        fontSize: '0.72rem'
-                                      }}
-                                      title="Chỉnh sửa"
-                                    >
-                                      <Edit2 size={12} /> Sửa
-                                    </button>
-                                    <button
-                                      onClick={() => handleDeleteDashboardChecklist(item)}
-                                      style={{
-                                        border: '1px solid #FCA5A5',
-                                        background: '#FEF2F2',
-                                        color: '#DC2626',
-                                        padding: '4px 8px',
-                                        borderRadius: '4px',
-                                        cursor: 'pointer',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '3px',
-                                        fontWeight: '700',
-                                        fontSize: '0.72rem'
-                                      }}
-                                      title="Xóa công việc"
-                                    >
-                                      <Trash2 size={12} /> Xóa
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
+                    <RenderPageSizeSelect pageSize={checklistPageSize} setPageSize={setChecklistPageSize} setCurrentPage={setChecklistPage} />
 
-                              {/* Body: Nội dung Checklist công việc */}
-                              <div style={{ fontWeight: '700', color: '#1E293B', fontSize: '0.85rem', lineHeight: '1.45' }}>
-                                {item.content}
-                              </div>
+                  </div>
 
-                              {/* Footer: Tần suất thực hiện */}
-                              <div style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                paddingTop: '6px',
-                                borderTop: '1px dashed #EADCC9',
-                                fontSize: '0.72rem'
-                              }}>
-                                <span style={{ color: '#64748B', fontWeight: '600' }}>Tần suất thực hiện:</span>
-                                <span style={{
-                                  backgroundColor: '#FAF6F0',
-                                  border: '1px solid #EADCC9',
-                                  padding: '2px 8px',
-                                  borderRadius: '4px',
-                                  fontWeight: '700',
-                                  color: '#5D3B32'
-                                }}>
-                                  {item.frequency || 'Hàng ngày'}
+                </div>
+
+                {/* DANH SÁCH BẢNG MASTER CHECKLIST */}
+                <div className="admin-table-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: isMobile ? 'hidden' : 'auto' }}>
+                  {pagedList.length === 0 ? (
+                    <div style={{ padding: '40px 20px', textAlign: 'center', color: '#94A3B8' }}>
+                      <FileText size={36} color="#CBD5E1" style={{ margin: '0 auto 8px' }} />
+                      <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#64748B' }}>
+                        Chưa có công việc {checklistSubTab === 'fixed' ? 'cố định' : 'thời hạn'} nào trong thư viện
+                      </div>
+                      <div style={{ fontSize: '0.75rem', marginTop: '4px' }}>
+                        Bấm nút "Thêm Checklist {checklistSubTab === 'fixed' ? 'Cố định' : 'Thời hạn'}" ở trên để tạo cấu hình mới
+                      </div>
+                    </div>
+                  ) : isMobile ? (
+                    /* MOBILE CARDS VIEW */
+                    <div className="kpi-mobile-cards-container" style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {pagedList.map((item, idx) => {
+                        const globalIdx = (checklistPage - 1) * checklistPageSize + idx;
+                        const evidenceBadge = getEvidenceBadge(item.evidence_type);
+
+                        return (
+                          <div
+                            key={item.id || idx}
+                            className="kpi-data-mobile-card"
+                            style={{
+                              background: idx % 2 === 0 ? '#FFFFFF' : '#FFFDFB',
+                              borderRadius: '8px',
+                              border: '1px solid #EADCC9',
+                              padding: '10px 12px',
+                              boxShadow: '0 1px 4px rgba(91, 57, 36, 0.05)',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '6px'
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                <span style={{ background: '#5D3B32', color: '#FFFFFF', borderRadius: '50%', width: '20px', height: '20px', fontSize: '0.68rem', fontWeight: '800', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  {globalIdx + 1}
                                 </span>
+                                <span style={{ fontWeight: '800', color: '#5D3B32', fontSize: '0.8rem' }}>{item.task_code}</span>
+                              </div>
+
+                              <div style={{ display: 'flex', gap: '4px' }}>
+                                <button
+                                  onClick={() => handleCloneDashboardChecklist(item)}
+                                  title="Nhân bản cấu hình"
+                                  style={{ border: '1px solid #CBD5E1', background: '#F8FAFC', color: '#475569', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.68rem' }}
+                                >
+                                  <Copy size={11} />
+                                </button>
+                                <button
+                                  onClick={() => handleEditDashboardChecklist(item)}
+                                  style={{ border: '1px solid #EADCC9', background: '#FFFFFF', color: '#5D3B32', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.68rem' }}
+                                >
+                                  <Edit2 size={11} />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteDashboardChecklist(item)}
+                                  style={{ border: '1px solid #FCA5A5', background: '#FEF2F2', color: '#DC2626', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.68rem' }}
+                                >
+                                  <Trash2 size={11} />
+                                </button>
                               </div>
                             </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  }
 
-                  return (
+                            <div style={{ fontWeight: '700', color: '#1E293B', fontSize: '0.82rem', lineHeight: '1.4' }}>
+                              {item.content}
+                            </div>
+
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.7rem', paddingTop: '4px', borderTop: '1px dashed #EADCC9', color: '#64748B' }}>
+                              <span>
+                                {checklistSubTab === 'fixed' ? `Tần suất: ${item.frequency || 'Hàng ngày'}` : `Hạn: ${item.due_time || '17:00'}`}
+                              </span>
+                              <span style={{ fontWeight: '800', color: '#15803D', backgroundColor: '#DCFCE7', padding: '1px 6px', borderRadius: '4px' }}>
+                                +{item.weight_score != null ? item.weight_score : 10}đ CheckList
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : checklistSubTab === 'fixed' ? (
+                    /* DESKTOP TABLE: SUB-TAB CỐ ĐỊNH (Đã bỏ Bộ phận, Vị trí, Mã HDKT; Đổi Điểm CheckList) */
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
                       <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
                         <tr style={{ backgroundColor: '#FAF6F0', color: '#5D3B32', borderBottom: '1px solid #EADCC9', textAlign: 'left' }}>
-                          <th style={{ padding: '8px 10px', fontWeight: '800', width: '50px', textAlign: 'center' }}>STT</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', width: '45px', textAlign: 'center' }}>STT</th>
                           <th style={{ padding: '8px 10px', fontWeight: '800', width: '100px' }}>Mã CV</th>
-                          <th style={{ padding: '8px 10px', fontWeight: '800', width: '110px' }}>Bộ phận</th>
                           <th style={{ padding: '8px 10px', fontWeight: '800' }}>Nội dung Checklist công việc</th>
                           <th style={{ padding: '8px 10px', fontWeight: '800', width: '140px' }}>Tần suất thực hiện</th>
-                          {!isReadOnly && <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '110px' }}>Thao tác</th>}
+                          <th style={{ padding: '8px 10px', fontWeight: '800', width: '250px' }}>Tiêu chuẩn nghiệm thu & Yêu cầu</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', width: '140px', textAlign: 'center' }}>Trọng số điểm CheckList</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', width: '90px', textAlign: 'center' }}>Hiệu lực</th>
+                          {!isReadOnly && <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '120px' }}>Thao tác</th>}
                         </tr>
                       </thead>
                       <tbody>
-                        {paged.map((item, idx) => {
+                        {pagedList.map((item, idx) => {
                           const globalIdx = (checklistPage - 1) * checklistPageSize + idx;
-                          const badge = getDeptBadgeStyle(item.department_code);
+                          const evidenceBadge = getEvidenceBadge(item.evidence_type);
+
                           return (
-                            <tr
-                              key={item.id || idx}
-                              style={{ borderBottom: '1px solid #EADCC9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}
-                            >
+                            <tr key={item.id || idx} style={{ borderBottom: '1px solid #EADCC9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}>
                               <td style={{ padding: '8px 10px', fontWeight: '700', color: '#64748B', textAlign: 'center' }}>{globalIdx + 1}</td>
-                              <td style={{ padding: '8px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.task_code || item.code || `CL-00${globalIdx + 1}`}</td>
-                              <td style={{ padding: '8px 10px' }}>
-                                <span style={{
-                                  padding: '2px 8px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: '700',
-                                  backgroundColor: badge.bg, color: badge.color, border: `1px solid ${badge.border}`
-                                }}>
-                                  {badge.label}
+                              <td style={{ padding: '8px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.task_code}</td>
+                              <td style={{ padding: '8px 10px', fontWeight: '600', color: '#1E293B', fontSize: '0.82rem' }}>
+                                <div>{item.content}</div>
+                              </td>
+                              <td style={{ padding: '8px 10px', color: '#475569', fontWeight: '600' }}>
+                                <span style={{ backgroundColor: '#FAF6F0', padding: '2px 6px', borderRadius: '4px', border: '1px solid #EADCC9' }}>
+                                  {item.frequency || 'Hàng ngày'}
                                 </span>
                               </td>
-                              <td style={{ padding: '8px 10px', fontWeight: '600', color: '#1E293B', fontSize: '0.82rem' }}>{item.content}</td>
-                              <td style={{ padding: '8px 10px', color: '#475569', fontWeight: '600' }}>{item.frequency || 'Hàng ngày'}</td>
+                              <td style={{ padding: '8px 10px', color: '#334155', fontSize: '0.74rem' }}>
+                                <div>{item.result || 'Tiêu chuẩn ISO/SOP'}</div>
+                                {evidenceBadge && (
+                                  <span style={{ display: 'inline-block', marginTop: '3px', padding: '1px 6px', borderRadius: '4px', fontSize: '0.65rem', fontWeight: '700', backgroundColor: evidenceBadge.bg, color: evidenceBadge.color, border: `1px solid ${evidenceBadge.border}` }}>
+                                    {evidenceBadge.label}
+                                  </span>
+                                )}
+                              </td>
+                              <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                <span style={{ padding: '2px 8px', borderRadius: '10px', fontWeight: '800', fontSize: '0.72rem', backgroundColor: '#DCFCE7', color: '#15803D', border: '1px solid #86EFAC' }}>
+                                  +{item.weight_score != null ? item.weight_score : 10}đ
+                                </span>
+                              </td>
+                              <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                <span style={{
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  fontSize: '0.68rem',
+                                  fontWeight: '700',
+                                  backgroundColor: item.is_active !== false ? '#ECFDF5' : '#F1F5F9',
+                                  color: item.is_active !== false ? '#059669' : '#64748B',
+                                  border: item.is_active !== false ? '1px solid #A7F3D0' : '1px solid #E2E8F0'
+                                }}>
+                                  {item.is_active !== false ? 'Áp dụng' : 'Tạm khóa'}
+                                </span>
+                              </td>
                               {!isReadOnly && (
                                 <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                                  <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                                  <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
                                     <button
                                       onClick={() => handleEditDashboardChecklist(item)}
-                                      style={{ border: '1px solid #EADCC9', background: '#FFFFFF', color: '#5D3B32', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontWeight: '600', fontSize: '0.7rem' }}
-                                      title="Chỉnh sửa"
+                                      style={{ border: '1px solid #EADCC9', background: '#FFFFFF', color: '#5D3B32', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px', fontWeight: '600', fontSize: '0.68rem' }}
+                                      title="Chỉnh sửa cấu hình"
                                     >
-                                      <Edit2 size={12} /> Sửa
+                                      <Edit2 size={11} /> Sửa
+                                    </button>
+                                    <button
+                                      onClick={() => handleCloneDashboardChecklist(item)}
+                                      style={{ border: '1px solid #CBD5E1', background: '#F8FAFC', color: '#475569', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px', fontWeight: '600', fontSize: '0.68rem' }}
+                                      title="Nhân bản mẫu"
+                                    >
+                                      <Copy size={11} /> Copy
                                     </button>
                                     <button
                                       onClick={() => handleDeleteDashboardChecklist(item)}
-                                      style={{ border: '1px solid #FCA5A5', background: '#FEF2F2', color: '#DC2626', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', fontWeight: '600', fontSize: '0.7rem' }}
+                                      style={{ border: '1px solid #FCA5A5', background: '#FEF2F2', color: '#DC2626', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px', fontWeight: '600', fontSize: '0.68rem' }}
                                       title="Xóa công việc"
                                     >
-                                      <Trash2 size={12} /> Xóa
+                                      <Trash2 size={11} /> Xóa
                                     </button>
                                   </div>
                                 </td>
@@ -2261,15 +2718,154 @@ const QualityKPIDashboardView = ({ readOnly: propReadOnly = false, isMobileView:
                         })}
                       </tbody>
                     </table>
-                  );
-                })()}
+                  ) : (
+                    /* DESKTOP TABLE: SUB-TAB THỜI HẠN (Đã bỏ Bộ phận, Vị trí, Mã HDKT; Sạch Icon) */
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+                      <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
+                        <tr style={{ backgroundColor: '#FAF6F0', color: '#5D3B32', borderBottom: '1px solid #EADCC9', textAlign: 'left' }}>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', width: '45px', textAlign: 'center' }}>STT</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', width: '100px' }}>Mã CV</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800' }}>Nội dung Checklist công việc</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', width: '130px' }}>Hình thức</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', width: '170px' }}>Quy định Thời hạn</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', width: '85px', textAlign: 'center' }}>Ưu tiên</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', width: '230px' }}>Tiêu chuẩn & Yêu cầu</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', width: '140px', textAlign: 'center' }}>Trọng số điểm CheckList</th>
+                          <th style={{ padding: '8px 10px', fontWeight: '800', width: '85px', textAlign: 'center' }}>Hiệu lực</th>
+                          {!isReadOnly && <th style={{ padding: '8px 10px', fontWeight: '800', textAlign: 'center', width: '120px' }}>Thao tác</th>}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pagedList.map((item, idx) => {
+                          const globalIdx = (checklistPage - 1) * checklistPageSize + idx;
+                          const evidenceBadge = getEvidenceBadge(item.evidence_type);
+
+                          // Format text hình thức & thời hạn sạch icon
+                          let modeDesc = '1 Lần';
+                          let dueText = '';
+                          if (item.deadline_mode === 'RECURRING') {
+                            if (item.recurring_cycle === 'DAILY') {
+                              modeDesc = 'Chu kỳ Ngày';
+                              dueText = `Hàng ngày trước ${item.due_time || '17:00'}`;
+                            } else if (item.recurring_cycle === 'WEEKLY') {
+                              modeDesc = 'Chu kỳ Tuần';
+                              dueText = `${item.recurring_day_of_week || 'T6'} trước ${item.due_time || '17:00'}`;
+                            } else if (item.recurring_cycle === 'MONTHLY') {
+                              modeDesc = 'Chu kỳ Tháng';
+                              dueText = `Ngày ${item.recurring_day_of_month || 25} trước ${item.due_time || '17:00'}`;
+                            }
+                          } else {
+                            if (item.once_period_type === 'DAY') {
+                              modeDesc = '1 Lần: Ngày';
+                              dueText = `${formatCompactDate(item.due_date)} lúc ${item.due_time || '17:00'}`;
+                            } else if (item.once_period_type === 'WEEK') {
+                              modeDesc = '1 Lần: Tuần';
+                              dueText = `${item.target_week || 'Tuần này'} (Hạn: ${formatCompactDate(item.due_date)})`;
+                            } else if (item.once_period_type === 'MONTH') {
+                              modeDesc = '1 Lần: Tháng';
+                              dueText = `${item.target_month || 'Tháng này'} (Hạn: ${formatCompactDate(item.due_date)})`;
+                            }
+                          }
+
+                          return (
+                            <tr key={item.id || idx} style={{ borderBottom: '1px solid #EADCC9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAF6F0' }}>
+                              <td style={{ padding: '8px 10px', fontWeight: '700', color: '#64748B', textAlign: 'center' }}>{globalIdx + 1}</td>
+                              <td style={{ padding: '8px 10px', fontWeight: '800', color: '#5D3B32' }}>{item.task_code}</td>
+                              <td style={{ padding: '8px 10px', fontWeight: '600', color: '#1E293B', fontSize: '0.82rem' }}>
+                                <div>{item.content}</div>
+                              </td>
+                              <td style={{ padding: '8px 10px', color: '#334155', fontWeight: '600', fontSize: '0.75rem' }}>
+                                <span style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', padding: '3px 6px', borderRadius: '4px', display: 'inline-block' }}>
+                                  {modeDesc}
+                                </span>
+                              </td>
+                              <td style={{ padding: '8px 10px', color: '#5D3B32', fontWeight: '700', fontSize: '0.74rem' }}>
+                                <div style={{ display: 'inline-block', backgroundColor: '#FAF6F0', border: '1px solid #EADCC9', padding: '3px 7px', borderRadius: '4px' }}>
+                                  {dueText}
+                                </div>
+                              </td>
+                              <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                <span style={{
+                                  padding: '1px 6px',
+                                  borderRadius: '4px',
+                                  fontSize: '0.68rem',
+                                  fontWeight: '700',
+                                  backgroundColor: item.priority === 'HIGH' ? '#FEE2E2' : (item.priority === 'LOW' ? '#F1F5F9' : '#FEF3C7'),
+                                  color: item.priority === 'HIGH' ? '#DC2626' : (item.priority === 'LOW' ? '#475569' : '#B45309'),
+                                  border: item.priority === 'HIGH' ? '1px solid #FCA5A5' : '1px solid transparent'
+                                }}>
+                                  {item.priority === 'HIGH' ? 'Cao' : (item.priority === 'LOW' ? 'Thấp' : 'Thường')}
+                                </span>
+                              </td>
+                              <td style={{ padding: '8px 10px', color: '#334155', fontSize: '0.74rem' }}>
+                                <div>{item.result || 'Tiêu chuẩn ISO/SOP'}</div>
+                                {evidenceBadge && (
+                                  <span style={{ display: 'inline-block', marginTop: '3px', padding: '1px 6px', borderRadius: '4px', fontSize: '0.65rem', fontWeight: '700', backgroundColor: evidenceBadge.bg, color: evidenceBadge.color, border: `1px solid ${evidenceBadge.border}` }}>
+                                    {evidenceBadge.label}
+                                  </span>
+                                )}
+                              </td>
+                              <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                <span style={{ padding: '2px 8px', borderRadius: '10px', fontWeight: '800', fontSize: '0.72rem', backgroundColor: '#DCFCE7', color: '#15803D', border: '1px solid #86EFAC' }}>
+                                  +{item.weight_score != null ? item.weight_score : 10}đ
+                                </span>
+                              </td>
+                              <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                <span style={{
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  fontSize: '0.68rem',
+                                  fontWeight: '700',
+                                  backgroundColor: item.is_active !== false ? '#ECFDF5' : '#F1F5F9',
+                                  color: item.is_active !== false ? '#059669' : '#64748B',
+                                  border: item.is_active !== false ? '1px solid #A7F3D0' : '1px solid #E2E8F0'
+                                }}>
+                                  {item.is_active !== false ? 'Áp dụng' : 'Tạm khóa'}
+                                </span>
+                              </td>
+                              {!isReadOnly && (
+                                <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                  <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                                    <button
+                                      onClick={() => handleEditDashboardChecklist(item)}
+                                      style={{ border: '1px solid #EADCC9', background: '#FFFFFF', color: '#5D3B32', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px', fontWeight: '600', fontSize: '0.68rem' }}
+                                      title="Chỉnh sửa cấu hình"
+                                    >
+                                      <Edit2 size={11} /> Sửa
+                                    </button>
+                                    <button
+                                      onClick={() => handleCloneDashboardChecklist(item)}
+                                      style={{ border: '1px solid #CBD5E1', background: '#F8FAFC', color: '#475569', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px', fontWeight: '600', fontSize: '0.68rem' }}
+                                      title="Nhân bản mẫu"
+                                    >
+                                      <Copy size={11} /> Copy
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteDashboardChecklist(item)}
+                                      style={{ border: '1px solid #FCA5A5', background: '#FEF2F2', color: '#DC2626', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px', fontWeight: '600', fontSize: '0.68rem' }}
+                                      title="Xóa công việc"
+                                    >
+                                      <Trash2 size={11} /> Xóa
+                                    </button>
+                                  </div>
+                                </td>
+                              )}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+
+                {/* PAGINATION */}
+                {renderPaginationControl(checklistPage, setChecklistPage, checklistPageSize, currentList.length, checklistSubTab === 'fixed' ? 'công việc cố định' : 'công việc thời hạn')}
+
               </div>
 
-              {renderPaginationControl(checklistPage, setChecklistPage, checklistPageSize, filterAndSortData(allChecklists, checklistSearch).filter(item => selectedChecklistDept === 'ALL' || item.department_code === selectedChecklistDept).length, 'checklists')}
             </div>
-
-          </div>
-        )}
+          );
+        })()}
 
         {/* ========================================================================= */}
         {/* TAB 4: DANH SÁCH VI PHẠM                                                  */}
@@ -3281,7 +3877,7 @@ const QualityKPIDashboardView = ({ readOnly: propReadOnly = false, isMobileView:
         onClose={() => setDeleteConfirmState({ isOpen: false, itemToDelete: null, isTrainingPlan: false, isAlert: false, isChecklist: false })}
       />
 
-      {/* 6. Custom Checklist React Modal Popup */}
+      {/* 6. Smart Checklist React Modal Popup - Master Configuration Pool */}
       {isChecklistModalOpen && (
         <div style={{
           position: 'fixed',
@@ -3289,92 +3885,447 @@ const QualityKPIDashboardView = ({ readOnly: propReadOnly = false, isMobileView:
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)',
+          backgroundColor: 'rgba(0,0,0,0.55)',
+          backdropFilter: 'blur(3px)',
           zIndex: 1100,
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center'
+          justifyContent: 'center',
+          padding: '16px'
         }}>
           <div style={{
             backgroundColor: '#FFFFFF',
-            borderRadius: '8px',
-            width: '450px',
-            maxWidth: '90%',
-            padding: '20px',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+            borderRadius: '14px',
+            width: '640px',
+            maxWidth: '96%',
+            maxHeight: '92vh',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: '0 25px 30px -5px rgba(0, 0, 0, 0.15), 0 15px 15px -5px rgba(0, 0, 0, 0.06)',
+            border: '1.5px solid #EADCC9',
+            overflow: 'hidden'
           }}>
-            <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#1E293B', marginBottom: '14px', borderBottom: '1px solid #E2E8F0', paddingBottom: '8px' }}>
-              {editingChecklist ? 'Cập Nhật Công Việc Checklist' : 'Thêm Công Việc Checklist Mới'}
-            </h3>
+            {/* Modal Header: Sạch icon */}
+            <div style={{ padding: '16px 20px', backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h3 style={{ fontSize: '1rem', fontWeight: '800', color: '#5D3B32', margin: 0, lineHeight: 1.2 }}>
+                  {editingChecklist ? 'Hiệu Chỉnh Cấu Hình Checklist Master' : 'Thiết Lập Hạng Mục Checklist Mới (Master Pool)'}
+                </h3>
+                <div style={{ fontSize: '0.72rem', color: '#78716C', marginTop: '3px' }}>
+                  Định nghĩa tiêu chuẩn công việc dùng chung để gán cho từng nhân sự tại màn hình CL03
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsChecklistModalOpen(false)}
+                style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#64748B', display: 'flex', alignItems: 'center', padding: '4px' }}
+                title="Đóng"
+              >
+                <X size={20} />
+              </button>
+            </div>
 
-            <form onSubmit={handleSaveDashboardChecklist}>
-              <div style={{ marginBottom: '12px' }}>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#475569', marginBottom: '4px' }}>
-                  Nội dung / Nhiệm vụ Checklist <span style={{ color: '#DC2626' }}>*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="VD: Kiểm tra 5S khu vực kiểm định..."
-                  value={checklistFormData.content}
-                  onChange={(e) => setChecklistFormData(prev => ({ ...prev, content: e.target.value }))}
-                  style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
-                />
+            {/* Modal Body Scroll */}
+            <form onSubmit={handleSaveDashboardChecklist} style={{ overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              
+              {/* SECTION 1: PHÂN LOẠI HÌNH THỨC CÔNG VIỆC (Đã bỏ Bộ phận, Vị trí, Mã HDKT; Sạch icon) */}
+              <div style={{ backgroundColor: '#FDFBF7', border: '1px solid #F0E6D8', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: '800', color: '#5D3B32', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    1. Phân Loại Hình Thức Công Việc
+                  </span>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '700', color: checklistFormData.is_active !== false ? '#15803D' : '#64748B' }}>
+                    <input
+                      type="checkbox"
+                      checked={checklistFormData.is_active !== false}
+                      onChange={(e) => setChecklistFormData(prev => ({ ...prev, is_active: e.target.checked }))}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    <span>{checklistFormData.is_active !== false ? 'Đang kích hoạt' : 'Tạm khóa'}</span>
+                  </label>
+                </div>
+
+                {/* Tabs chọn Loại Checklist: Bỏ icon */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setChecklistFormData(prev => ({
+                        ...prev,
+                        checklist_type: 'FIXED',
+                        task_code: prev.task_code.startsWith('CL-TH-') ? prev.task_code.replace('CL-TH-', 'CL-CD-') : prev.task_code
+                      }));
+                    }}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      border: checklistFormData.checklist_type === 'FIXED' ? '2px solid #5D3B32' : '1px solid #CBD5E1',
+                      backgroundColor: checklistFormData.checklist_type === 'FIXED' ? '#FAF6F0' : '#FFFFFF',
+                      color: checklistFormData.checklist_type === 'FIXED' ? '#5D3B32' : '#64748B',
+                      fontWeight: '800',
+                      fontSize: '0.8rem',
+                      cursor: 'pointer',
+                      textAlign: 'center'
+                    }}
+                  >
+                    Công việc Cố định (Fixed)
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setChecklistFormData(prev => ({
+                        ...prev,
+                        checklist_type: 'DEADLINE',
+                        task_code: prev.task_code.startsWith('CL-CD-') ? prev.task_code.replace('CL-CD-', 'CL-TH-') : prev.task_code
+                      }));
+                    }}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      border: checklistFormData.checklist_type === 'DEADLINE' ? '2px solid #5D3B32' : '1px solid #CBD5E1',
+                      backgroundColor: checklistFormData.checklist_type === 'DEADLINE' ? '#FAF6F0' : '#FFFFFF',
+                      color: checklistFormData.checklist_type === 'DEADLINE' ? '#5D3B32' : '#64748B',
+                      fontWeight: '800',
+                      fontSize: '0.8rem',
+                      cursor: 'pointer',
+                      textAlign: 'center'
+                    }}
+                  >
+                    Công việc Thời hạn (Deadline)
+                  </button>
+                </div>
+
+                {/* Hàng: Mã CV (1fr) & Mức độ ưu tiên (1fr) */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '800', color: '#475569', marginBottom: '3px' }}>
+                      Mã công việc <span style={{ color: '#DC2626' }}>*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={checklistFormData.task_code}
+                      onChange={(e) => setChecklistFormData(prev => ({ ...prev, task_code: e.target.value }))}
+                      placeholder="VD: CL-CD-01"
+                      style={{ width: '100%', padding: '7px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box', fontWeight: '700' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '800', color: '#475569', marginBottom: '3px' }}>
+                      Mức độ ưu tiên
+                    </label>
+                    <select
+                      value={checklistFormData.priority}
+                      onChange={(e) => setChecklistFormData(prev => ({ ...prev, priority: e.target.value }))}
+                      style={{ width: '100%', padding: '7px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box', fontWeight: '700' }}
+                    >
+                      <option value="HIGH">Ưu tiên Cao (HIGH)</option>
+                      <option value="MEDIUM">Trung bình (MEDIUM)</option>
+                      <option value="LOW">Tiêu chuẩn (LOW)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Nội dung công việc */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '800', color: '#475569', marginBottom: '3px' }}>
+                    Nội dung đầu việc <span style={{ color: '#DC2626' }}>*</span>
+                  </label>
+                  <textarea
+                    required
+                    rows={2}
+                    value={checklistFormData.content}
+                    onChange={(e) => setChecklistFormData(prev => ({ ...prev, content: e.target.value }))}
+                    placeholder="Mô tả cụ thể nhiệm vụ, thao tác kiểm tra cần thực hiện..."
+                    style={{ width: '100%', padding: '7px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box', resize: 'vertical' }}
+                  />
+                </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#475569', marginBottom: '4px' }}>
-                    Bộ phận / Vị trí phụ trách
-                  </label>
-                  <select
-                    value={checklistFormData.department_code || 'IQC'}
-                    onChange={(e) => setChecklistFormData(prev => ({ ...prev, department_code: e.target.value, employee_id: `NV_${e.target.value}_001` }))}
-                    style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
-                  >
-                    {qlclDepartmentsList.filter(d => d.code !== 'ALL').map(d => (
-                      <option key={d.code} value={d.code}>{d.name} ({d.code})</option>
-                    ))}
-                  </select>
+              {/* SECTION 2: CẤU HÌNH TẦN SUẤT & CHU KỲ THỰC HIỆN */}
+              <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: '800', color: '#334155', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  {checklistFormData.checklist_type === "FIXED" ? "2. Cấu Hình Tần Suất Định Kỳ" : "2. Cấu Hình Thời Hạn & Chu Kỳ"}
+                </span>
+
+                {checklistFormData.checklist_type === 'FIXED' ? (
+                  /* Form cho Cố định: Chỉ Ngày, Tuần, Tháng */
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '800', color: '#475569', marginBottom: '6px' }}>
+                      Tần suất thực hiện cố định <span style={{ color: '#DC2626' }}>*</span>
+                    </label>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+                      {[
+                        { id: 'Hằng ngày', label: 'Hằng ngày' },
+                        { id: 'Hàng tuần', label: 'Hàng tuần' },
+                        { id: 'Hàng tháng', label: 'Hàng tháng' }
+                      ].map(t => {
+                        const isSel = (checklistFormData.frequency || 'Hằng ngày') === t.id;
+                        return (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => setChecklistFormData(prev => ({ ...prev, frequency: t.id }))}
+                            style={{
+                              padding: '11px 12px',
+                              borderRadius: '8px',
+                              border: isSel ? '2px solid #5D3B32' : '1px solid #CBD5E1',
+                              backgroundColor: isSel ? '#FAF6F0' : '#FFFFFF',
+                              color: isSel ? '#5D3B32' : '#475569',
+                              fontWeight: isSel ? '800' : '600',
+                              fontSize: '0.82rem',
+                              cursor: 'pointer',
+                              textAlign: 'center'
+                            }}
+                          >
+                            {t.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  /* Form cho Thời hạn: Sạch icon */
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {/* Chọn chế độ: Lặp lại hay 1 Lần */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setChecklistFormData(prev => ({ ...prev, deadline_mode: 'RECURRING' }))}
+                        style={{
+                          padding: '6px 10px',
+                          borderRadius: '6px',
+                          border: checklistFormData.deadline_mode === 'RECURRING' ? '2px solid #5D3B32' : '1px solid #CBD5E1',
+                          backgroundColor: checklistFormData.deadline_mode === 'RECURRING' ? '#FAF6F0' : '#FFFFFF',
+                          color: checklistFormData.deadline_mode === 'RECURRING' ? '#5D3B32' : '#64748B',
+                          fontWeight: '800',
+                          fontSize: '0.75rem',
+                          cursor: 'pointer',
+                          textAlign: 'center'
+                        }}
+                      >
+                        Lặp lại theo Chu kỳ
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setChecklistFormData(prev => ({ ...prev, deadline_mode: 'ONCE' }))}
+                        style={{
+                          padding: '6px 10px',
+                          borderRadius: '6px',
+                          border: checklistFormData.deadline_mode === 'ONCE' ? '2px solid #5D3B32' : '1px solid #CBD5E1',
+                          backgroundColor: checklistFormData.deadline_mode === 'ONCE' ? '#FAF6F0' : '#FFFFFF',
+                          color: checklistFormData.deadline_mode === 'ONCE' ? '#5D3B32' : '#64748B',
+                          fontWeight: '800',
+                          fontSize: '0.75rem',
+                          cursor: 'pointer',
+                          textAlign: 'center'
+                        }}
+                      >
+                        1 Lần (Hạn chốt cụ thể)
+                      </button>
+                    </div>
+
+                    {checklistFormData.deadline_mode === 'RECURRING' ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                          <div>
+                            <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '800', color: '#475569', marginBottom: '3px' }}>
+                              Chu kỳ lặp
+                            </label>
+                            <select
+                              value={checklistFormData.repeat_cycle || 'WEEKLY'}
+                              onChange={(e) => setChecklistFormData(prev => ({ ...prev, repeat_cycle: e.target.value }))}
+                              style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }}
+                            >
+                              <option value="DAILY">Hằng ngày (Daily)</option>
+                              <option value="WEEKLY">Hằng tuần (Weekly)</option>
+                              <option value="MONTHLY">Hằng tháng (Monthly)</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '800', color: '#475569', marginBottom: '3px' }}>
+                              Giờ chốt hạn
+                            </label>
+                            <input
+                              type="time"
+                              value={checklistFormData.deadline_time || '17:00'}
+                              onChange={(e) => setChecklistFormData(prev => ({ ...prev, deadline_time: e.target.value }))}
+                              style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }}
+                            />
+                          </div>
+                        </div>
+
+                        {checklistFormData.repeat_cycle === 'WEEKLY' && (
+                          <div>
+                            <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
+                              Chọn các ngày trong tuần thực hiện:
+                            </label>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              {[
+                                { key: '2', label: 'T2' },
+                                { key: '3', label: 'T3' },
+                                { key: '4', label: 'T4' },
+                                { key: '5', label: 'T5' },
+                                { key: '6', label: 'T6' },
+                                { key: '7', label: 'T7' },
+                                { key: 'CN', label: 'CN' }
+                              ].map(day => {
+                                const isSelected = checklistFormData.repeat_days && checklistFormData.repeat_days.includes(day.key);
+                                return (
+                                  <button
+                                    key={day.key}
+                                    type="button"
+                                    onClick={() => toggleDayOfWeek(day.key)}
+                                    style={{
+                                      flex: 1,
+                                      padding: '6px 0',
+                                      borderRadius: '6px',
+                                      border: isSelected ? '1.5px solid #5D3B32' : '1px solid #CBD5E1',
+                                      backgroundColor: isSelected ? '#5D3B32' : '#FFFFFF',
+                                      color: isSelected ? '#FFFFFF' : '#475569',
+                                      fontWeight: '800',
+                                      fontSize: '0.75rem',
+                                      cursor: 'pointer'
+                                    }}
+                                  >
+                                    {day.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {checklistFormData.repeat_cycle === 'MONTHLY' && (
+                          <div>
+                            <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '800', color: '#475569', marginBottom: '3px' }}>
+                              Ngày chốt trong tháng (1 - 31)
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              max="31"
+                              value={checklistFormData.deadline_day_of_month || 1}
+                              onChange={(e) => setChecklistFormData(prev => ({ ...prev, deadline_day_of_month: parseInt(e.target.value, 10) || 1 }))}
+                              style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      /* 1 Lần duy nhất */
+                      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '8px' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '800', color: '#475569', marginBottom: '3px' }}>
+                            Hạn ngày hoàn thành
+                          </label>
+                          <input
+                            type="date"
+                            value={checklistFormData.exact_date || ''}
+                            onChange={(e) => setChecklistFormData(prev => ({ ...prev, exact_date: e.target.value }))}
+                            style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '800', color: '#475569', marginBottom: '3px' }}>
+                            Giờ chốt hạn
+                          </label>
+                          <input
+                            type="time"
+                            value={checklistFormData.deadline_time || '17:00'}
+                            onChange={(e) => setChecklistFormData(prev => ({ ...prev, deadline_time: e.target.value }))}
+                            style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* SECTION 3: TIÊU CHUẨN NGHIỆM THU & TRỌNG SỐ ĐIỂM CHECKLIST (Đổi tên & Sạch icon) */}
+              <div style={{ backgroundColor: '#FDFBF7', border: '1px solid #F0E6D8', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: '800', color: '#5D3B32', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  3. Tiêu Chuẩn Nghiệm Thu & Trọng Số Điểm CheckList
+                </span>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '8px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '800', color: '#475569', marginBottom: '3px' }}>
+                      Trọng số điểm CheckList
+                    </label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="0.5"
+                      max="10"
+                      value={checklistFormData.weight_score || 1.0}
+                      onChange={(e) => setChecklistFormData(prev => ({ ...prev, weight_score: parseFloat(e.target.value) || 1.0 }))}
+                      style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box', fontWeight: '700' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '800', color: '#475569', marginBottom: '3px' }}>
+                      Yêu cầu bằng chứng hoàn thành
+                    </label>
+                    <select
+                      value={checklistFormData.evidence_type || 'NONE'}
+                      onChange={(e) => setChecklistFormData(prev => ({ ...prev, evidence_type: e.target.value }))}
+                      style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box', fontWeight: '600' }}
+                    >
+                      <option value="NONE">Không bắt buộc</option>
+                      <option value="IMAGE">Bắt buộc chụp ảnh hiện trường</option>
+                      <option value="DOCUMENT">Bắt buộc đính kèm biên bản/file</option>
+                      <option value="SIGNATURE">Chữ ký xác nhận</option>
+                    </select>
+                  </div>
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#475569', marginBottom: '4px' }}>
-                    Cách theo dõi (Tần suất)
+                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '800', color: '#475569', marginBottom: '3px' }}>
+                    Tiêu chuẩn nghiệm thu / Kết quả mong đợi
                   </label>
-                  <select
-                    value={checklistFormData.frequency}
-                    onChange={(e) => setChecklistFormData(prev => ({ ...prev, frequency: e.target.value }))}
-                    style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
-                  >
-                    <option value="Hàng ngày">Hàng ngày</option>
-                    <option value="Theo ca">Theo ca</option>
-                    <option value="Hàng tuần">Hàng tuần</option>
-                    <option value="Hàng tháng">Hàng tháng</option>
-                    <option value="Khi phát sinh">Khi phát sinh</option>
-                  </select>
+                  <textarea
+                    rows={2}
+                    value={checklistFormData.result || ''}
+                    onChange={(e) => setChecklistFormData(prev => ({ ...prev, result: e.target.value }))}
+                    placeholder="VD: Kiểm tra 100% linh kiện theo dưỡng, không có ba via, báo cáo được lưu trên hệ thống..."
+                    style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box', resize: 'vertical' }}
+                  />
                 </div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
+              {/* FORM ACTIONS */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', paddingTop: '10px', borderTop: '1px solid #E2E8F0' }}>
                 <button
                   type="button"
                   onClick={() => setIsChecklistModalOpen(false)}
-                  style={{ padding: '6px 16px', borderRadius: '6px', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', fontSize: '0.8rem', fontWeight: '600', cursor: 'pointer' }}
+                  style={{ padding: '8px 18px', borderRadius: '6px', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', fontSize: '0.8rem', fontWeight: '700', cursor: 'pointer', color: '#475569' }}
                 >
-                  Hủy
+                  Hủy bỏ
                 </button>
                 <button
                   type="submit"
-                  style={{ padding: '6px 18px', borderRadius: '6px', border: 'none', backgroundColor: '#7B5233', color: '#FFFFFF', fontSize: '0.8rem', fontWeight: '700', cursor: 'pointer' }}
+                  style={{ padding: '8px 24px', borderRadius: '6px', border: 'none', backgroundColor: '#5D3B32', color: '#FFFFFF', fontSize: '0.8rem', fontWeight: '800', cursor: 'pointer', boxShadow: '0 2px 4px rgba(93, 59, 50, 0.2)' }}
                 >
-                  {editingChecklist ? 'Cập Nhật Database' : 'Tạo Mới Về Database'}
+                  {editingChecklist ? 'Cập Nhật Master Pool' : 'Lưu Vào Master Pool'}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+      {/* 6b. Modal Xác Nhận Xóa Toàn Bộ Checklist */}
+      <BeautifulConfirmModal
+        isOpen={isClearAllConfirmOpen}
+        title="Xác nhận xóa toàn bộ dữ liệu Checklist"
+        message="Bạn có chắc chắn muốn xóa TOÀN BỘ dữ liệu công việc Checklist khỏi hệ thống không? Toàn bộ danh sách công việc sẽ bị xóa sạch và reset ID về 1. Hành động này không thể hoàn tác."
+        confirmText="Xác nhận xóa sạch"
+        cancelText="Hủy bỏ"
+        onConfirm={handleClearAllChecklists}
+        onClose={() => setIsClearAllConfirmOpen(false)}
+      />
 
       {/* 7. Export Options Modal (Multi-option Excel Export) */}
       {showExportModal && (

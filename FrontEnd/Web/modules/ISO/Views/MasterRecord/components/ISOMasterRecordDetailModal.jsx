@@ -13,6 +13,7 @@ const ISOMasterRecordDetailModal = ({
   showDetailModal,
   detailRecord,
   isCreateMode,
+  onSelectProcess,
   selectedChildDoc,
   groupChildDocs = [],
   handleSelectChildDoc,
@@ -228,7 +229,7 @@ const ISOMasterRecordDetailModal = ({
           </div>
 
           {/* 3. Modal Body: Render Active Tab */}
-          <div className="iso-viewer-body" style={{ flex: 1, overflowY: 'auto' }}>
+          <div className="iso-viewer-body" style={{ flex: 1, minHeight: 0, height: '100%', overflowY: viewerActiveTab === 'content' ? 'hidden' : 'auto', overflowX: 'hidden' }}>
             {viewerActiveTab === 'general' && (
               <ISOGeneralInfoTab
                 detailRecord={detailRecord}
@@ -239,6 +240,9 @@ const ISOMasterRecordDetailModal = ({
                 editFormData={editFormData}
                 setEditFormData={setEditFormData}
                 formatDateOnly={formatDateOnly}
+                loadTab2Doc={loadTab2Doc}
+                setSelectedWordDoc={setSelectedWordDoc}
+                onSelectProcess={onSelectProcess}
               />
             )}
 

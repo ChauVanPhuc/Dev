@@ -19,7 +19,11 @@ export const ApprovalSignatureSection = ({
   approverBgd = '',
   approverCustomer = '',
   department = '',
-  status = ''
+  status = '',
+  hideLabel = false,
+  boxHeight = 76,
+  boxWidth = 130,
+  fullWidth = false
 }) => {
   const [signaturesList, setSignaturesList] = useState([]);
 
@@ -35,21 +39,6 @@ export const ApprovalSignatureSection = ({
 
   const isCompanyLevel = documentLevel === 'Cấp công ty';
   const statusLower = (status || '').toLowerCase().trim();
-
-  // Kiểm tra trạng thái đã được ký duyệt thực tế chưa
-  const isAuthorSigned = Boolean(author && author !== '---');
-  const isDeptSigned = statusLower.includes('trưởng phòng đã duyệt') ||
-                       statusLower.includes('chờ bgđ') ||
-                       statusLower.includes('bgđ đã duyệt') ||
-                       statusLower.includes('hiệu lực') ||
-                       statusLower.includes('đã duyệt');
-
-  const isBgdSigned = isCompanyLevel && (
-    statusLower.includes('bgđ đã duyệt') ||
-    statusLower.includes('ban giám đốc đã duyệt') ||
-    statusLower.includes('hiệu lực') ||
-    (statusLower.includes('đã duyệt') && !statusLower.includes('chờ bgđ'))
-  );
 
   // Tra cứu chữ ký từ kho lưu trữ theo tên hoặc mã người dùng
   const findSig = (name) => {
@@ -67,6 +56,12 @@ export const ApprovalSignatureSection = ({
   const deptSig = useMemo(() => findSig(approver), [signaturesList, approver]);
   const bgdSig = useMemo(() => findSig(approverBgd), [signaturesList, approverBgd]);
   const customerSig = useMemo(() => findSig(approverCustomer), [signaturesList, approverCustomer]);
+
+  // Chữ ký phê duyệt mặc định để trống:
+  // Không tự động giả lập đã ký chỉ vì có tên người soạn, chỉ hiển thị khi có chữ ký thật hoặc đã ký duyệt số
+  const isAuthorSigned = Boolean(authorSig && (statusLower.includes('đã ký') || statusLower.includes('đã duyệt')));
+  const isDeptSigned = Boolean(deptSig && (statusLower.includes('trưởng phòng đã duyệt') || statusLower.includes('bgđ đã duyệt')));
+  const isBgdSigned = Boolean(isCompanyLevel && bgdSig && (statusLower.includes('bgđ đã duyệt') || statusLower.includes('ban giám đốc đã duyệt')));
 
   // Xác định chính xác chức danh Trưởng phòng theo phòng ban (QLCL, SX, KD, KT, Kho, ...)
   const deptApproverTitle = useMemo(() => {
@@ -109,7 +104,7 @@ export const ApprovalSignatureSection = ({
     },
     {
       role: deptApproverTitle,
-      name: isDeptSigned ? (approver || '---') : '---',
+      name: isDeptSigned ? (approver || '---') : (approver || '---'),
       sig: deptSig,
       hasSigned: isDeptSigned
     }
@@ -118,31 +113,37 @@ export const ApprovalSignatureSection = ({
   if (isCompanyLevel) {
     signers.push({
       role: 'Ban Giám Đốc',
-      name: isBgdSigned ? (approverBgd || '---') : '---',
+      name: isBgdSigned ? (approverBgd || '---') : (approverBgd || '---'),
       sig: bgdSig,
       hasSigned: isBgdSigned
     });
   }
 
-  return (
-    <div>
-      <label style={{
-        fontSize: '0.73rem',
-        fontWeight: '700',
-        color: '#4B5563',
-        display: 'block',
-        marginBottom: '4px',
-        textTransform: 'uppercase',
-        letterSpacing: '0.5px'
-      }}>
-        Chữ ký phê duyệt
-      </label>
+  const isFull = fullWidth || boxWidth === '100%';
 
-      {/* Grid các ô chữ ký vừa vặn không bị cắt 3 chấm (130px x 88px) */}
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', width: '100%', boxSizing: 'border-box' }}>
+      {!hideLabel && (
+        <label style={{
+          fontSize: '0.70rem',
+          fontWeight: '700',
+          color: '#4B5563',
+          display: 'block',
+          marginBottom: '2px',
+          textTransform: 'uppercase',
+          letterSpacing: '0.4px'
+        }}>
+          Chữ ký phê duyệt
+        </label>
+      )}
+
+      {/* Grid các ô chữ ký: chia đều 1fr khi fullWidth hoặc theo pixel nếu cố định */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: `repeat(${signers.length}, 130px)`,
-        gap: '8px'
+        gridTemplateColumns: isFull ? `repeat(${signers.length}, minmax(0, 1fr))` : `repeat(${signers.length}, ${boxWidth}px)`,
+        gap: '8px',
+        width: '100%',
+        boxSizing: 'border-box'
       }}>
         {signers.map((s, idx) => {
           const isDigital = s.sig?.signature_type === 'DIGITAL';
@@ -150,12 +151,13 @@ export const ApprovalSignatureSection = ({
             <div
               key={idx}
               style={{
-                width: '130px',
-                height: '88px',
+                width: isFull ? '100%' : `${boxWidth}px`,
+                minWidth: 0,
+                height: `${boxHeight}px`,
                 backgroundColor: '#FFFFFF',
                 border: '1px solid #E5E7EB',
-                borderRadius: '6px',
-                padding: '5px 8px',
+                borderRadius: '5px',
+                padding: '4px 6px',
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'space-between',
@@ -172,10 +174,12 @@ export const ApprovalSignatureSection = ({
                   color: '#4B5563',
                   textTransform: 'uppercase',
                   whiteSpace: 'nowrap',
-                  overflow: 'visible',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
                   width: '100%',
                   lineHeight: 1.2
                 }}
+                title={s.role}
               >
                 {s.role}
               </div>
@@ -197,11 +201,11 @@ export const ApprovalSignatureSection = ({
                 {s.name}
               </div>
 
-              {/* Ô hiển thị chữ ký hoặc 'Chưa ký' */}
+              {/* Ô hiển thị chữ ký: mặc định để trống */}
               <div style={{
                 width: '100%',
-                height: '36px',
-                backgroundColor: '#F9FAFB',
+                height: '32px',
+                backgroundColor: '#FAFAF9',
                 border: '1px dashed #E5E7EB',
                 borderRadius: '4px',
                 display: 'flex',
@@ -211,34 +215,26 @@ export const ApprovalSignatureSection = ({
                 padding: '2px',
                 boxSizing: 'border-box'
               }}>
-                {!s.hasSigned ? (
-                  <span style={{ color: '#9CA3AF', fontSize: '0.68rem', fontStyle: 'italic' }}>
-                    Chưa ký
-                  </span>
-                ) : isDigital ? (
+                {s.hasSigned && isDigital ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px', lineHeight: 1 }}>
                     <ShieldCheck size={13} color="#2563EB" />
                     <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#1E40AF' }}>
                       PKI CA
                     </span>
                   </div>
-                ) : s.sig?.signature_data ? (
+                ) : s.hasSigned && s.sig?.signature_data ? (
                   <img
                     src={s.sig.signature_data}
                     alt={s.role}
                     style={{ maxHeight: '30px', maxWidth: '110px', objectFit: 'contain' }}
                   />
-                ) : s.sig?.image_path ? (
+                ) : s.hasSigned && s.sig?.image_path ? (
                   <img
                     src={s.sig.image_path}
                     alt={s.role}
                     style={{ maxHeight: '30px', maxWidth: '110px', objectFit: 'contain' }}
                   />
-                ) : (
-                  <span style={{ fontStyle: 'italic', fontFamily: 'Georgia, serif', fontSize: '0.8rem', color: '#374151', fontWeight: 'bold' }}>
-                    {s.name}
-                  </span>
-                )}
+                ) : null}
               </div>
             </div>
           );

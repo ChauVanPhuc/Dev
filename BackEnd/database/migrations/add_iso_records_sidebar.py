@@ -1,11 +1,6 @@
 import sys
 import os
 
-if hasattr(sys.stdout, 'reconfigure'):
-    sys.stdout.reconfigure(encoding='utf-8')
-if hasattr(sys.stderr, 'reconfigure'):
-    sys.stderr.reconfigure(encoding='utf-8')
-
 backend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if backend_path not in sys.path:
     sys.path.insert(0, backend_path)
@@ -16,11 +11,11 @@ from sqlalchemy import text
 def add_iso_records_sidebar():
     db = SessionLocal()
     try:
-        parent = db.execute(text("SELECT id FROM system_sidebars WHERE id = 16")).fetchone()
+        parent = db.execute(text("SELECT id FROM system_sidebars WHERE title = N'Hồ sơ ISO'")).fetchone()
         if not parent:
-            parent = db.execute(text("SELECT id FROM system_sidebars WHERE title = N'Hồ sơ ISO'")).fetchone()
+            parent = db.execute(text("SELECT id FROM system_sidebars WHERE title LIKE N'%ISO%' AND parent_id IS NULL")).fetchone()
         
-        parent_id = parent[0] if parent else 16
+        parent_id = parent[0] if parent else 17
 
         existing = db.execute(text("SELECT id FROM system_sidebars WHERE route_path = '/admin/iso-records'")).fetchone()
         if not existing:

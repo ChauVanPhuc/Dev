@@ -57,6 +57,11 @@ class CustomerClaimResponse(CustomerClaimBase):
     id: int
     created_at: datetime
     resolved_at: Optional[datetime] = None
+    loai_hang: Optional[str] = None
+    lpn_container_number: Optional[str] = None
+    lpn_container_id: Optional[int] = None
+    date_loading: Optional[str] = None
+    date_loading_raw: Optional[str] = None
 
     class Config:
         from_attributes = True

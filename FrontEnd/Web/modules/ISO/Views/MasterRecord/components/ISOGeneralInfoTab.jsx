@@ -1,5 +1,9 @@
-import React from 'react';
-import { FileText } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import api from '@webShared/Services/api.service';
+import { 
+  FileText, Search, Layers, ChevronRight, X, CheckCircle2, 
+  Sparkles, FileSpreadsheet, ArrowRight, ShieldCheck 
+} from 'lucide-react';
 import { 
   formatClassificationText, 
   renderClassificationBadge, 
@@ -25,7 +29,10 @@ export const ISOGeneralInfoTab = ({
   isEditing = false,
   editFormData = {},
   setEditFormData,
-  formatDateOnly = (d) => d || '---'
+  formatDateOnly = (d) => d || '---',
+  loadTab2Doc,
+  setSelectedWordDoc,
+  onSelectProcess
 }) => {
   const currentRecord = isEditing ? editFormData : (selectedChildDoc || detailRecord);
   const docLevel = currentRecord.document_level || (currentRecord.classification?.toUpperCase().includes('TÀI LIỆU') ? 'Cấp công ty' : 'Cấp phòng');
@@ -40,6 +47,256 @@ export const ISOGeneralInfoTab = ({
   const selectedChildKey = selectedChildDoc?.source_row_id 
     ? `rec_${selectedChildDoc.source_row_id}` 
     : (selectedChildDoc?.id ? `rec_${selectedChildDoc.id}` : (selectedChildDoc?.relative_path || selectedChildDoc?.file_name || ''));
+
+  // --- AUTO-SUGGEST DỮ LIỆU TỪ QUY TRÌNH ISO HIỆU LỰC ---
+  const [activeProcesses, setActiveProcesses] = useState([]);
+  const [loadingProcesses, setLoadingProcesses] = useState(false);
+  const [activeSearchField, setActiveSearchField] = useState(null); // 'code' | 'name' | null
+  const [searchFilterText, setSearchFilterText] = useState('');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+  const dropdownRef = useRef(null);
+  const codeInputRef = useRef(null);
+  const nameInputRef = useRef(null);
+
+  // Tải danh sách quy trình ISO khi mở chế độ chỉnh sửa/tạo mới
+  useEffect(() => {
+    if (isEditing) {
+      let isMounted = true;
+      const fetchActiveProcesses = async () => {
+        try {
+          setLoadingProcesses(true);
+          const res = await api.get('/iso-documents/processes');
+          const list = Array.isArray(res) ? res : (res?.data || []);
+          // Lọc các quy trình có trạng thái là "Hiệu lực"
+          const valid = list.filter(p => {
+            const st = (p.status || '').toLowerCase().trim();
+            return st === 'hiệu lực' || st.includes('hiệu lực');
+          });
+          if (isMounted) setActiveProcesses(valid);
+        } catch (err) {
+          console.error('Lỗi tải quy trình hiệu lực:', err);
+        } finally {
+          if (isMounted) setLoadingProcesses(false);
+        }
+      };
+      fetchActiveProcesses();
+      return () => { isMounted = false; };
+    }
+  }, [isEditing]);
+
+  // Click outside listener để đóng dropdown
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (
+        dropdownRef.current && 
+        !dropdownRef.current.contains(e.target) &&
+        codeInputRef.current && 
+        !codeInputRef.current.contains(e.target) &&
+        nameInputRef.current && 
+        !nameInputRef.current.contains(e.target)
+      ) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Lọc quy trình hiệu lực theo từ khóa tìm kiếm
+  const filteredProcesses = useMemo(() => {
+    if (!activeProcesses || activeProcesses.length === 0) return [];
+    const term = (searchFilterText || '').trim().toLowerCase();
+    if (!term) return activeProcesses;
+    return activeProcesses.filter(p => {
+      const c = (p.code || '').toLowerCase();
+      const n = (p.name || '').toLowerCase();
+      const d = (p.department_name || '').toLowerCase();
+      const docMatch = (p.documents || []).some(doc => 
+        (doc.code || '').toLowerCase().includes(term) ||
+        (doc.name || '').toLowerCase().includes(term)
+      );
+      return c.includes(term) || n.includes(term) || d.includes(term) || docMatch;
+    });
+  }, [activeProcesses, searchFilterText]);
+
+  // Xử lý khi click chọn quy trình: Điền thông tin CỦA QUY TRÌNH vào form
+  const handleSelectProcess = (proc) => {
+    setIsDropdownOpen(false);
+    setActiveSearchField(null);
+    if (typeof onSelectProcess === 'function') {
+      onSelectProcess(proc);
+    } else {
+      setEditFormData(prev => ({
+        ...prev,
+        suggested_doc_code: proc.code || '',
+        item_code: proc.code || '',
+        document_name: proc.name || '',
+        classification: proc.document_type || 'Quy trình',
+        department_in_charge: proc.department_name || prev.department_in_charge,
+        document_level: proc.document_level || prev.document_level || 'Cấp phòng',
+        edition: proc.edition || proc.version || '01',
+        management_group: proc.management_group || prev.management_group || proc.code,
+        identified_forms_count: String(proc.documents_count || (proc.documents ? proc.documents.length : 0)),
+        process_id: proc.id,
+        approver: proc.approver || prev.approver
+      }));
+    }
+  };
+
+  // Render dropdown gợi ý kết quả quy trình hiệu lực
+  const renderProcessDropdown = () => {
+    if (!isDropdownOpen) return null;
+
+    return (
+      <div
+        ref={dropdownRef}
+        style={{
+          position: 'absolute',
+          top: '100%',
+          left: 0,
+          right: activeSearchField === 'code' ? 'auto' : 0,
+          width: activeSearchField === 'code' ? '460px' : '100%',
+          marginTop: '4px',
+          backgroundColor: '#FFFFFF',
+          border: '1.5px solid #EADCC9',
+          borderRadius: '8px',
+          boxShadow: '0 10px 25px rgba(45, 26, 18, 0.15)',
+          zIndex: 9999,
+          maxHeight: '320px',
+          overflowY: 'auto'
+        }}
+        onMouseDown={(e) => e.preventDefault()}
+      >
+        <div style={{
+          padding: '8px 12px',
+          backgroundColor: '#FAF6F0',
+          borderBottom: '1px solid #EADCC9',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', fontWeight: 700, color: '#7B5233' }}>
+            <Layers size={14} color="#7B5233" />
+            <span>QUY TRÌNH ISO HIỆU LỰC ({filteredProcesses.length})</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsDropdownOpen(false)}
+            style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#94a3b8', padding: '2px' }}
+          >
+            <X size={14} />
+          </button>
+        </div>
+
+        {loadingProcesses ? (
+          <div style={{ padding: '16px', textAlign: 'center', fontSize: '0.8rem', color: '#64748b' }}>
+            Đang tải danh sách quy trình hiệu lực...
+          </div>
+        ) : filteredProcesses.length === 0 ? (
+          <div style={{ padding: '16px', textAlign: 'center', fontSize: '0.8rem', color: '#94a3b8', fontStyle: 'italic' }}>
+            {activeProcesses.length === 0 
+              ? 'Chưa có quy trình ISO nào có trạng thái "Hiệu lực" trong hệ thống.' 
+              : 'Không tìm thấy quy trình hiệu lực nào khớp với từ khóa tìm kiếm.'}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {filteredProcesses.map(proc => {
+              const docCount = proc.documents_count || (proc.documents ? proc.documents.length : 0);
+              return (
+                <div
+                  key={proc.id}
+                  onClick={() => handleSelectProcess(proc)}
+                  style={{
+                    padding: '10px 14px',
+                    borderBottom: '1px solid #F1F5F9',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '12px',
+                    transition: 'background-color 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FAF6F0'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{
+                        backgroundColor: '#FAF6F0',
+                        color: '#7B5233',
+                        border: '1px solid #EADCC9',
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        fontSize: '0.78rem',
+                        fontWeight: 700
+                      }}>
+                        {proc.code}
+                      </span>
+                      <span style={{ fontSize: '0.86rem', fontWeight: 600, color: '#1E293B' }}>
+                        {proc.name}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.74rem', color: '#64748b' }}>
+                      <span>Phòng: <strong>{proc.department_name || '---'}</strong></span>
+                      <span>•</span>
+                      <span>Cấp: {proc.document_level || 'Cấp phòng'}</span>
+                      <span>•</span>
+                      <span>Biên soạn: {proc.editor || proc.owner || '---'}</span>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {docCount >= 2 ? (
+                      <span style={{
+                        backgroundColor: '#ECFDF5',
+                        color: '#047857',
+                        border: '1px solid #A7F3D0',
+                        padding: '3px 8px',
+                        borderRadius: '12px',
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {docCount} mẫu (Chọn mẫu)
+                      </span>
+                    ) : docCount === 1 ? (
+                      <span style={{
+                        backgroundColor: '#EFF6FF',
+                        color: '#1E40AF',
+                        border: '1px solid #BFDBFE',
+                        padding: '3px 8px',
+                        borderRadius: '12px',
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        whiteSpace: 'nowrap'
+                      }}>
+                        1 mẫu (Mặc định)
+                      </span>
+                    ) : (
+                      <span style={{
+                        backgroundColor: '#F8FAFC',
+                        color: '#64748b',
+                        border: '1px solid #E2E8F0',
+                        padding: '3px 8px',
+                        borderRadius: '12px',
+                        fontSize: '0.72rem',
+                        fontWeight: 600,
+                        whiteSpace: 'nowrap'
+                      }}>
+                        Quy trình
+                      </span>
+                    )}
+                    <ChevronRight size={14} color="#94a3b8" />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="iso-viewer-tab-content">
@@ -104,17 +361,47 @@ export const ISOGeneralInfoTab = ({
             )}
           </div>
 
-          <div className="iso-readonly-field iso-col-3">
-            <label className="iso-readonly-label">MÃ TÀI LIỆU / QUY TRÌNH</label>
+          <div className="iso-readonly-field iso-col-3" style={{ position: 'relative' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <label className="iso-readonly-label">MÃ TÀI LIỆU / QUY TRÌNH</label>
+              {isEditing && (
+                <span 
+                  onClick={() => {
+                    setSearchFilterText('');
+                    setActiveSearchField('code');
+                    setIsDropdownOpen(prev => !prev);
+                  }}
+                  style={{ fontSize: '0.7rem', color: '#7B5233', fontWeight: 'bold', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '2px' }}
+                  title="Tìm kiếm quy trình ISO hiệu lực"
+                >
+                  <Search size={11} /> Gợi ý QT
+                </span>
+              )}
+            </div>
             {isEditing ? (
-              <input 
-                type="text" 
-                className="iso-input-edit" 
-                style={{ fontWeight: '700', color: '#7B5233' }}
-                value={editFormData.suggested_doc_code ?? editFormData.item_code ?? ''}
-                onChange={(e) => setEditFormData({ ...editFormData, suggested_doc_code: e.target.value, item_code: e.target.value })}
-                placeholder="VD: QT01..."
-              />
+              <div style={{ position: 'relative', width: '100%' }}>
+                <input 
+                  ref={codeInputRef}
+                  type="text" 
+                  className="iso-input-edit" 
+                  style={{ fontWeight: '700', color: '#7B5233' }}
+                  value={editFormData.suggested_doc_code ?? editFormData.item_code ?? ''}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setEditFormData({ ...editFormData, suggested_doc_code: val, item_code: val });
+                    setSearchFilterText(val);
+                    setActiveSearchField('code');
+                    setIsDropdownOpen(true);
+                  }}
+                  onFocus={() => {
+                    setSearchFilterText(editFormData.suggested_doc_code || editFormData.item_code || '');
+                    setActiveSearchField('code');
+                    setIsDropdownOpen(true);
+                  }}
+                  placeholder="VD: QT01..."
+                />
+                {activeSearchField === 'code' && renderProcessDropdown()}
+              </div>
             ) : (
               <div className="iso-readonly-val-box" style={{ fontWeight: '700', color: '#7B5233' }}>
                 {currentRecord.suggested_doc_code || currentRecord.item_code || detailRecord.suggested_doc_code || '---'}
@@ -160,19 +447,49 @@ export const ISOGeneralInfoTab = ({
           </div>
 
           {/* HÀNG 2: Tên tài liệu */}
-          <div className="iso-readonly-field iso-col-12">
-            <label className="iso-readonly-label">TÊN TÀI LIỆU</label>
+          <div className="iso-readonly-field iso-col-12" style={{ position: 'relative' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <label className="iso-readonly-label">TÊN TÀI LIỆU</label>
+              {isEditing && (
+                <span 
+                  onClick={() => {
+                    setSearchFilterText('');
+                    setActiveSearchField('name');
+                    setIsDropdownOpen(prev => !prev);
+                  }}
+                  style={{ fontSize: '0.7rem', color: '#7B5233', fontWeight: 'bold', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '2px' }}
+                  title="Tìm kiếm quy trình ISO hiệu lực"
+                >
+                  <Search size={11} /> Tìm theo tên QT hiệu lực
+                </span>
+              )}
+            </div>
             {isEditing ? (
-              <input 
-                type="text" 
-                name="document_name"
-                className="iso-input-edit" 
-                style={{ fontWeight: '700', color: '#2D1A12', fontSize: '0.96rem' }}
-                value={editFormData.document_name ?? ''}
-                onChange={(e) => setEditFormData({ ...editFormData, document_name: e.target.value })}
-                placeholder="Nhập tên tài liệu / quy trình..."
-                required
-              />
+              <div style={{ position: 'relative', width: '100%' }}>
+                <input 
+                  ref={nameInputRef}
+                  type="text" 
+                  name="document_name"
+                  className="iso-input-edit" 
+                  style={{ fontWeight: '700', color: '#2D1A12', fontSize: '0.96rem' }}
+                  value={editFormData.document_name ?? ''}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setEditFormData({ ...editFormData, document_name: val });
+                    setSearchFilterText(val);
+                    setActiveSearchField('name');
+                    setIsDropdownOpen(true);
+                  }}
+                  onFocus={() => {
+                    setSearchFilterText(editFormData.document_name || '');
+                    setActiveSearchField('name');
+                    setIsDropdownOpen(true);
+                  }}
+                  placeholder="Nhập tên tài liệu / quy trình..."
+                  required
+                />
+                {activeSearchField === 'name' && renderProcessDropdown()}
+              </div>
             ) : (
               <div className="iso-readonly-val-box" style={{ fontWeight: '700', color: '#2D1A12', fontSize: '0.96rem' }}>
                 {currentRecord.document_name || currentRecord.file_name || '---'}

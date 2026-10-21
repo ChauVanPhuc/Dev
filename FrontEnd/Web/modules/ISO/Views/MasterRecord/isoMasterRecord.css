@@ -1183,22 +1183,60 @@
 
 /* Khi đang hiển thị PDF / Word Preview: Loại bỏ scroll lồng thừa ngoài iframe */
 .iso-viewer-doc-pane:has(.iso-pdf-viewport),
-.iso-document-viewer:has(.iso-pdf-viewport) {
+.iso-document-viewer:has(.iso-pdf-viewport),
+.iso-viewer-doc-pane:has(.iso-word-html-viewport),
+.iso-document-viewer:has(.iso-word-html-viewport) {
   overflow: hidden !important;
+}
+
+/* Viewport chuyên dụng cho tài liệu Word HTML: Nền Warm Sand sang trọng, cuộn mượt mà */
+.iso-word-html-viewport {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto !important;
+  overflow-x: auto !important;
+  background-color: #FAF7F2 !important;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 28px 16px 80px 16px;
+  box-sizing: border-box;
+  scroll-behavior: smooth;
 }
 
 .iso-viewer-page {
   width: 100%;
   max-width: 860px;
-  background-color: #FFFFFF;
-  border-radius: 4px;
-  box-shadow: 0 4px 16px rgba(45, 26, 18, 0.08);
-  border: 1px solid #E2E8F0;
-  padding: 36px 44px;
+  background-color: #FFFFFF !important;
+  border-radius: 6px;
+  box-shadow: 0 4px 20px rgba(45, 26, 18, 0.08), 0 1px 4px rgba(0, 0, 0, 0.05);
+  border: 1px solid #EADCC9;
+  padding: 40px 48px;
   box-sizing: border-box;
-  color: #1E293B;
+  color: #1E293B !important;
   font-family: 'Times New Roman', Times, serif, 'Inter', sans-serif;
   line-height: 1.6;
+}
+
+.iso-viewer-page * {
+  box-sizing: border-box;
+}
+
+.iso-viewer-page table.iso-doc-table {
+  background-color: #FFFFFF !important;
+  color: #1E293B !important;
+}
+
+.iso-viewer-page table.iso-doc-table th {
+  background-color: #F8FAFC !important;
+  color: #1E293B !important;
+}
+
+.iso-viewer-page table.iso-doc-table td {
+  background-color: #FFFFFF !important;
+  color: #1E293B !important;
 }
 
 /* Document typography */
@@ -1265,6 +1303,22 @@
   border: 1px solid #000000;
   padding: 7px 10px;
   vertical-align: middle;
+}
+
+/* Chuẩn hóa Hộp Lưu đồ quy trình 4 cột màu đen đơn sắc (Monochrome Black & White) */
+.iso-doc-table .iso-flowchart-box {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border: 1.2px solid #000000 !important;
+  background-color: #FFFFFF !important;
+  color: #000000 !important;
+  box-shadow: none !important;
+}
+
+.iso-doc-table tr:hover .iso-flowchart-box {
+  border-color: #000000 !important;
+  background-color: #FFFFFF !important;
 }
 
 /* Tab Scroll Container */
@@ -2030,6 +2084,50 @@
   margin: 14px auto;
   border-radius: 4px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* Logo VINA G7 tại ô tiêu đề Bìa chuẩn (Table 0, ô đầu tiên) */
+.iso-doc-table[data-t-idx="0"] tr:first-child td:first-child .iso-doc-inline-img,
+.iso-doc-table .iso-header-logo,
+.iso-cell-paragraph .iso-header-logo {
+  max-height: 85px !important;
+  max-width: 100% !important;
+  height: auto !important;
+  display: block !important;
+  margin: 0 auto !important;
+  object-fit: contain !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+
+/* Các ảnh quy trình, lưu đồ, sơ đồ trong bảng (ngoài logo tiêu đề) */
+.iso-doc-table .iso-doc-inline-img:not(.iso-header-logo),
+.iso-cell-paragraph .iso-doc-inline-img:not(.iso-header-logo),
+.iso-flowchart-cell img {
+  max-height: none !important;
+  max-width: 100% !important;
+  width: auto !important;
+  min-width: 160px;
+  height: auto !important;
+  display: block !important;
+  margin: 8px auto !important;
+  object-fit: contain !important;
+  cursor: zoom-in;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.iso-flowchart-cell {
+  background-color: #FAFAFA !important;
+  text-align: center !important;
+  vertical-align: middle !important;
+  padding: 10px !important;
+}
+
+.iso-flowchart-cell img {
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+  border-radius: 4px;
 }
 
 .iso-doc-paragraph {
@@ -4205,11 +4303,102 @@
   overflow-wrap: break-word;
 }
 
+/* Khi editor chứa các tờ A4 độc lập (.iso-a4-sheet), biến khung ngoài thành canvas trong suốt */
+.iso-word-a4-page:has(.iso-a4-sheet),
+.iso-word-a4-page.has-a4-sheets {
+  background-color: transparent !important;
+  background: transparent !important;
+  width: 100% !important;
+  max-width: 860px !important;
+  min-height: auto !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  border: none !important;
+  border-radius: 0 !important;
+}
+
+/* Tờ A4 độc lập chuẩn tỷ lệ (210mm x 297mm @ 96 DPI: 794px x 1123px) */
+.iso-a4-sheet {
+  background: #FFFFFF !important;
+  background-color: #FFFFFF !important;
+  width: 794px !important;
+  max-width: 794px !important;
+  min-height: 1123px !important;
+  height: auto !important;
+  padding: 44px 50px 24px 50px !important;
+  margin: 0 auto 36px auto !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.22) !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+  position: relative !important;
+  page-break-after: always !important;
+  break-after: page !important;
+  font-family: 'Times New Roman', Times, serif !important;
+}
+
+.iso-a4-sheet-content {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 1015px;
+  height: auto;
+  box-sizing: border-box;
+  font-family: 'Times New Roman', Times, serif !important;
+}
+
+.iso-a4-sheet-footer {
+  height: 32px !important;
+  min-height: 32px !important;
+  border-top: 1px solid #000000 !important;
+  padding-top: 6px !important;
+  margin-top: 6px !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  font-family: 'Times New Roman', serif !important;
+  font-size: 10pt !important;
+  font-style: italic !important;
+  color: #0D0D0D !important;
+  user-select: none !important;
+  box-sizing: border-box !important;
+}
+
 .iso-word-a4-page:focus {
   box-shadow: 0 8px 35px rgba(43, 87, 154, 0.4), 0 0 0 1px #2B579A;
 }
 
-/* Document content styles inside Word Editor */
+/* Document content styles inside Word Editor - 100% Times New Roman chuẩn ISO */
+.iso-word-a4-page,
+.iso-word-a4-page p,
+.iso-word-a4-page div,
+.iso-word-a4-page span,
+.iso-word-a4-page strong,
+.iso-word-a4-page em,
+.iso-word-a4-page u,
+.iso-word-a4-page li,
+.iso-word-a4-page td,
+.iso-word-a4-page th,
+.iso-a4-sheet,
+.iso-a4-sheet p,
+.iso-a4-sheet div,
+.iso-a4-sheet span,
+.iso-a4-sheet strong,
+.iso-a4-sheet em,
+.iso-a4-sheet u,
+.iso-a4-sheet li,
+.iso-a4-sheet td,
+.iso-a4-sheet th,
+.iso-a4-sheet h1,
+.iso-a4-sheet h2,
+.iso-a4-sheet h3,
+.iso-a4-sheet h4,
+.iso-doc-paragraph,
+.iso-doc-heading,
+.iso-cell-paragraph {
+  font-family: 'Times New Roman', Times, serif !important;
+}
+
 .iso-word-a4-page p {
   margin: 0 0 6pt 0;
   text-align: justify;
@@ -4262,6 +4451,77 @@
   font-weight: bold;
 }
 
+/* Bảng trang bìa (Table 0) - Chuẩn màu trắng nguyên bản */
+.iso-word-a4-page table.iso-cover-table {
+  border-collapse: collapse !important;
+  border: 1.5px solid #000000 !important;
+  background-color: #FFFFFF !important;
+  background: #FFFFFF !important;
+}
+
+.iso-word-a4-page table.iso-cover-table th,
+.iso-word-a4-page table.iso-cover-table td {
+  background-color: #FFFFFF !important;
+  background: #FFFFFF !important;
+  color: #0D0D0D !important;
+  border: 1px solid #000000 !important;
+}
+
+/* Bảng thông tin con (Nested Metadata Table) lồng trong trang bìa */
+.iso-word-a4-page table.iso-meta-table {
+  width: 350px !important;
+  margin: 36px auto 16px auto !important;
+  border-collapse: collapse !important;
+  border: 1px dotted #94a3b8 !important;
+  background-color: #FFFFFF !important;
+  font-family: 'Times New Roman', serif !important;
+}
+
+.iso-word-a4-page table.iso-meta-table td {
+  padding: 4px 8px !important;
+  border: 1px dotted #94a3b8 !important;
+  font-size: 11pt !important;
+  color: #0D0D0D !important;
+  background-color: #FFFFFF !important;
+}
+
+/* Bảng theo dõi sửa đổi nội dung tài liệu (Table 1) */
+.iso-word-a4-page table.iso-rev-table {
+  width: 100% !important;
+  border-collapse: collapse !important;
+  table-layout: fixed !important;
+  border: 1.5px solid #000000 !important;
+  background: #FFFFFF !important;
+}
+
+.iso-word-a4-page table.iso-rev-table thead th {
+  border: 1px solid #000000 !important;
+  background-color: #FFFFFF !important;
+  color: #0D0D0D !important;
+  font-family: 'Times New Roman', serif !important;
+  font-size: 13pt !important;
+  font-weight: bold !important;
+  padding: 6px 8px !important;
+  text-align: center !important;
+}
+
+.iso-word-a4-page table.iso-rev-table tbody td {
+  border-left: 1px solid #000000 !important;
+  border-right: 1px solid #000000 !important;
+  border-top: none !important;
+  border-bottom: 1px dotted #000000 !important;
+  background-color: #FFFFFF !important;
+  color: #0D0D0D !important;
+  font-family: 'Times New Roman', serif !important;
+  font-size: 11pt !important;
+  padding: 4px 6px !important;
+  height: 32px !important;
+}
+
+.iso-word-a4-page table.iso-rev-table tbody tr:last-child td {
+  border-bottom: 1.5px solid #000000 !important;
+}
+
 /* 4. Status Bar */
 .iso-word-statusbar {
   display: flex;
@@ -4273,6 +4533,55 @@
   font-size: 0.72rem;
   font-weight: 500;
   flex-shrink: 0;
+}
+
+/* Phân cách ngắt trang chuẩn Word trong viewer & editor */
+.iso-doc-page-break-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 36px 0 28px 0;
+  position: relative;
+  user-select: none;
+}
+.iso-doc-page-break-divider::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 1.5px dashed #CBD5E1;
+  z-index: 1;
+}
+.iso-doc-page-break-divider span {
+  position: relative;
+  z-index: 2;
+  background-color: #FAF7F2;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  padding: 3px 14px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #64748B;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+@media print {
+  .iso-doc-page-break-divider {
+    page-break-before: always !important;
+    break-before: page !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    visibility: hidden !important;
+  }
+}
+
+.iso-doc-cover-section {
+  width: 100%;
+  margin-bottom: 24px;
 }
 
 /* ========================================================= */
@@ -4819,4 +5128,62 @@
   word-break: break-word;
   line-height: 1.4;
 }
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spin-icon {
+  animation: spin 1s linear infinite;
+}
+
+/* --- ISO FLOWCHART INTERACTIVE EDIT BADGE & NAV ACTIONS --- */
+.iso-flowchart-edit-badge {
+  transition: all 0.15s ease;
+}
+
+.iso-flowchart-edit-badge:hover {
+  background-color: #7B5233 !important;
+  color: #FFFFFF !important;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(123, 82, 51, 0.25) !important;
+}
+
+.iso-flowchart-block-container {
+  transition: outline 0.15s ease;
+}
+
+.iso-flowchart-block-container:hover {
+  outline: 1.5px dashed rgba(123, 82, 51, 0.35);
+  border-radius: 4px;
+}
+
+.iso-word-nav-item:hover .iso-nav-item-flowchart-btn {
+  opacity: 1 !important;
+}
+
+.iso-nav-item-flowchart-btn {
+  opacity: 0.4;
+  transition: all 0.15s ease;
+}
+
+.iso-nav-item-flowchart-btn:hover {
+  opacity: 1 !important;
+  background-color: #FAF6F0 !important;
+  transform: scale(1.15);
+}
+
+@media print {
+  .iso-flowchart-edit-badge,
+  .iso-nav-item-flowchart-btn {
+    display: none !important;
+  }
+}
+
+.iso-a4-sheet-content {
+  overflow: hidden !important;
+  scroll-behavior: auto !important;
+}
+
 

@@ -39,9 +39,9 @@ def migrate():
             print(f"[INSERT] Tạo nhóm 'Tài liệu ban hành' (id={group_id}).")
 
         guides = [
-            ("/admin/inspection-guides", N'Hướng dẫn kiểm tra (HDKT)', 'BookOpen'),
-            ("/admin/sos-guides", N'Hướng dẫn thao tác (SOS)', 'Wrench'),
-            ("/admin/ctq-guides", N'Lỗi cần chú ý (CTQ)', 'AlertTriangle'),
+            ("/admin/inspection-guides", 'Hướng dẫn kiểm tra (HDKT)', 'BookOpen'),
+            ("/admin/sos-guides", 'Hướng dẫn thao tác (SOS)', 'Wrench'),
+            ("/admin/ctq-guides", 'Lỗi cần chú ý (CTQ)', 'AlertTriangle'),
         ]
 
         for sort_order, (route_path, title, icon) in enumerate(guides, start=1):

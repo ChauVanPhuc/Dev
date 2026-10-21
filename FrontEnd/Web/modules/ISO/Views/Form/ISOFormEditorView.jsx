@@ -54,6 +54,7 @@ const ISOFormEditorView = () => {
     id: null,
     code: '',
     name: '',
+    process_id: null,
     version: '01',
     issue_date: new Date().toISOString().split('T')[0],
     issuer: '',
@@ -80,6 +81,14 @@ const ISOFormEditorView = () => {
   const [symbolPlaceholder, setSymbolPlaceholder] = useState("QT: Quy trình");
   const [namePlaceholder, setNamePlaceholder] = useState("Nhập tên tài liệu...");
   const [contentClassified, setContentClassified] = useState(false);
+
+  // Danh sách toàn bộ quy trình nghiệp vụ phục vụ liên kết
+  const [allProcessesList, setAllProcessesList] = useState([]);
+  useEffect(() => {
+    api.get('/iso-documents/processes').then(data => {
+      setAllProcessesList(Array.isArray(data) ? data : []);
+    }).catch(err => console.error('Lỗi khi tải danh sách quy trình:', err));
+  }, []);
 
   // Tab management & Tab 3 States
   const [activeFormTab, setActiveFormTab] = useState('config'); // 'config' | 'preview' | 'processes'
@@ -292,6 +301,7 @@ const ISOFormEditorView = () => {
         folder: data.folder || data.display_at || '',
         doc_type: data.doc_type || data.notes || '',
         document_level: data.document_level || '',
+        process_id: data.process_id || null,
         notes: data.notes || '',
         revision_logs: data.revision_logs || [],
         sections: receivedSections,
@@ -617,7 +627,20 @@ const ISOFormEditorView = () => {
               </div>
 
               {/* Row 2 */}
-              <div style={{ gridColumn: 'span 3' }}>
+              <div style={{ gridColumn: 'span 4' }}>
+                <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#4B5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Thuộc quy trình nghiệp vụ</label>
+                <select
+                  value={formData.process_id || ''}
+                  onChange={(e) => handleInputChange('process_id', e.target.value ? parseInt(e.target.value) : null)}
+                  style={{ width: '100%', height: '36px', padding: '8px 12px', border: '1px solid #D1D5DB', borderRadius: '6px', fontSize: '0.82rem', outline: 'none', backgroundColor: 'white', cursor: 'pointer', color: '#1F2937' }}
+                >
+                  <option value="">-- Chưa gán quy trình --</option>
+                  {allProcessesList.map(p => (
+                    <option key={p.id} value={p.id}>{p.code} - {p.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ gridColumn: 'span 2' }}>
                 <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#4B5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Người cập nhật</label>
                 <input
                   type="text"
@@ -627,7 +650,7 @@ const ISOFormEditorView = () => {
                   style={{ width: '100%', height: '36px', padding: '8px 12px', border: '1px solid #E5E7EB', borderRadius: '6px', fontSize: '0.82rem', outline: 'none', fontWeight: '600', backgroundColor: '#F3F4F6', color: '#4B5563', cursor: 'not-allowed' }}
                 />
               </div>
-              <div style={{ gridColumn: 'span 3' }}>
+              <div style={{ gridColumn: 'span 2' }}>
                 <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#4B5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ngày cập nhật</label>
                 <input
                   type="text"
@@ -637,7 +660,7 @@ const ISOFormEditorView = () => {
                   style={{ width: '100%', height: '36px', padding: '8px 12px', border: '1px solid #E5E7EB', borderRadius: '6px', fontSize: '0.82rem', outline: 'none', fontWeight: '600', backgroundColor: '#F3F4F6', color: '#4B5563', cursor: 'not-allowed' }}
                 />
               </div>
-              <div style={{ gridColumn: 'span 3' }}>
+              <div style={{ gridColumn: 'span 2' }}>
                 <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#4B5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Cấp duyệt</label>
                 <select
                   value={formData.document_level || 'Cấp phòng'}
@@ -651,7 +674,7 @@ const ISOFormEditorView = () => {
                   <option value="Cấp công ty">Cấp công ty</option>
                 </select>
               </div>
-              <div style={{ gridColumn: 'span 3' }}>
+              <div style={{ gridColumn: 'span 2' }}>
                 <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#4B5563', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Trạng thái</label>
                 <input
                   type="text"

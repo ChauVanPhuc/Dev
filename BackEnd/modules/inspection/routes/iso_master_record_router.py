@@ -18,6 +18,7 @@ from modules.inspection.services.iso_file_service import (
     check_single_file_status,
     get_record_files_and_word_docs,
     parse_docx_to_html_and_headings,
+    get_template_original_2_pages_data,
     parse_excel_to_sheets_data,
     parse_raw_source_links,
     convert_word_to_pdf_preview,
@@ -38,7 +39,9 @@ from modules.inspection.services.iso_file_service import (
     get_department_code,
     get_department_name,
     resolve_record_storage_dir,
-    sanitize_folder_name
+    sanitize_folder_name,
+    merge_template_2_pages_with_upload_doc,
+    generate_default_created_new_doc
 )
 
 router = APIRouter()
@@ -1259,11 +1262,23 @@ def preview_docx_file(path: str = Query(..., description="Đường dẫn tươn
     """
     abs_path, err = resolve_safe_path(path)
     if not abs_path:
-        raise HTTPException(status_code=400, detail=err or "Đường dẫn không hợp lệ")
+        return {
+            "success": False,
+            "error": err or "Không tìm thấy file theo đường dẫn",
+            "detail": err or "Không tìm thấy file theo đường dẫn",
+            "html_content": "",
+            "headings": []
+        }
 
     abs_to_parse = ensure_docx_path(abs_path)
     if not abs_to_parse.lower().endswith(".docx"):
-        raise HTTPException(status_code=400, detail="Chỉ hỗ trợ xem trước tệp Word định dạng .docx hoặc .doc")
+        return {
+            "success": False,
+            "error": "Chỉ hỗ trợ xem trước tệp Word định dạng .docx hoặc .doc",
+            "detail": "Chỉ hỗ trợ xem trước tệp Word định dạng .docx hoặc .doc",
+            "html_content": "",
+            "headings": []
+        }
 
     try:
         preview_data = parse_docx_to_html_and_headings(abs_to_parse)
@@ -1278,7 +1293,226 @@ def preview_docx_file(path: str = Query(..., description="Đường dẫn tươn
             **preview_data
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Không thể đọc nội dung file Word: {str(e)}")
+        return {
+            "success": False,
+            "error": f"Không thể đọc nội dung file Word: {str(e)}",
+            "detail": f"Không thể đọc nội dung file Word: {str(e)}",
+            "html_content": "",
+            "headings": []
+        }
+
+
+@router.get("/template-original-2-pages")
+def get_template_original_2_pages(
+    doc_title: Optional[str] = Query(None, description="Tên quy trình / tài liệu"),
+    issuer: Optional[str] = Query(None, description="Người biên soạn"),
+    approver: Optional[str] = Query(None, description="Người phê duyệt"),
+    doc_code: Optional[str] = Query(None, description="Mã hiệu tài liệu"),
+    issue_date: Optional[str] = Query(None, description="Ngày ban hành"),
+    version: Optional[str] = Query(None, description="Phiên bản / Lần ban hành"),
+    dept_name: Optional[str] = Query(None, description="Phòng ban / bộ phận"),
+    revision_logs: Optional[str] = Query(None, description="JSON danh sách nhật ký sửa đổi"),
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Trích xuất nguyên bản 100% 2 trang đầu gốc từ 'Mẩu quy trình.docx' (Trang bìa & Theo dõi sửa đổi)
+    Tự động điền metadata, người ký duyệt và bảng theo dõi sửa đổi.
+    """
+    try:
+        return get_template_original_2_pages_data(
+            doc_title=doc_title,
+            issuer=issuer,
+            approver=approver,
+            doc_code=doc_code,
+            issue_date=issue_date,
+            version=version,
+            dept_name=dept_name,
+            revision_logs=revision_logs,
+            db=db
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Không thể cắt 2 trang gốc từ template: {str(e)}")
+
+
+@router.get("/default-template-docx")
+def get_default_template_docx(
+    doc_title: Optional[str] = Query(None),
+    doc_code: Optional[str] = Query(None),
+    issuer_name: Optional[str] = Query(None),
+    issuer_role: Optional[str] = Query(None),
+    approver_name: Optional[str] = Query(None),
+    approver_role: Optional[str] = Query(None),
+    dept_name: Optional[str] = Query(None),
+    version: Optional[str] = Query(None),
+    issue_date: Optional[str] = Query(None),
+    revision_logs: Optional[str] = Query(None)
+):
+    """
+    [GET] Trả về luồng nhị phân file Word (.docx) mặc định cho Tạo mới quy trình ISO.
+    Luôn luôn có 2 trang đầu từ 'Mẩu quy trình.docx' (đã điền metadata nếu có) + khung 6 mục ISO chuẩn.
+    """
+    metadata = {
+        "doc_title": doc_title,
+        "doc_code": doc_code,
+        "issuer_name": issuer_name,
+        "issuer_role": issuer_role,
+        "approver_name": approver_name,
+        "approver_role": approver_role,
+        "dept_name": dept_name,
+        "version": version or "01",
+        "issue_date": issue_date,
+        "revision_logs": revision_logs
+    }
+    try:
+        doc = generate_default_created_new_doc(metadata=metadata)
+        buf = io.BytesIO()
+        doc.save(buf)
+        buf.seek(0)
+        fn = f"{doc_code or 'Quy_trinh'}_template.docx"
+        return StreamingResponse(
+            buf,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Content-Disposition": f'attachment; filename="{fn}"'}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lỗi khởi tạo template DOCX: {str(e)}")
+
+
+@router.post("/upload-and-merge-word")
+async def upload_and_merge_word(
+    file: UploadFile = File(...),
+    record_id: Optional[int] = Query(None),
+    doc_title: Optional[str] = Query(None),
+    doc_code: Optional[str] = Query(None),
+    issuer_name: Optional[str] = Query(None),
+    issuer_role: Optional[str] = Query(None),
+    approver_name: Optional[str] = Query(None),
+    approver_role: Optional[str] = Query(None),
+    dept_name: Optional[str] = Query(None),
+    version: Optional[str] = Query(None),
+    issue_date: Optional[str] = Query(None),
+    revision_logs: Optional[str] = Query(None),
+    actor_name: Optional[str] = Query(None),
+    actor_dept: Optional[str] = Query(None),
+    request: Request = None,
+    db: Session = Depends(get_db)
+):
+    """
+    [POST] Tải lên file Word (.docx), tự động:
+    1. Cắt bỏ toàn bộ phần bìa cũ của file upload (tất cả phần trước 'Mục đích').
+    2. Lấy 2 trang đầu từ 'Mẩu quy trình.docx' (điền metadata hiện tại vào Bìa và Bảng sửa đổi).
+    3. Thêm ngắt trang sau Trang 2.
+    4. Ghép nối nội dung từ 'Mục đích' đến hết file upload.
+    5. Lưu trữ tệp DOCX hoàn chỉnh trên hệ thống và trả về thông tin file + TOC.
+    """
+    filename = file.filename or "quy_trinh.docx"
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in [".docx", ".doc"]:
+        raise HTTPException(status_code=400, detail="Chỉ chấp nhận file Word định dạng .docx hoặc .doc")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Tệp tin rỗng")
+
+    # Thu thập metadata để điền vào 2 trang đầu
+    target_dept = dept_name or actor_dept or None
+    target_group = None
+    target_code = doc_code or None
+    record = None
+    if record_id:
+        record = db.query(ISOMasterRecord).filter(ISOMasterRecord.id == record_id).first()
+        if record:
+            target_dept = record.department_in_charge or target_dept
+            target_group = record.management_group
+            target_code = record.source_code or target_code
+            doc_title = doc_title or record.document_name
+            doc_code = doc_code or record.suggested_doc_code
+            version = version or record.edition
+            issue_date = issue_date or record.issue_date
+
+    metadata = {
+        "doc_title": doc_title,
+        "doc_code": doc_code or target_code,
+        "issuer_name": issuer_name,
+        "issuer_role": issuer_role,
+        "approver_name": approver_name,
+        "approver_role": approver_role,
+        "dept_name": target_dept,
+        "version": version or "01",
+        "issue_date": issue_date,
+        "revision_logs": revision_logs
+    }
+
+    try:
+        # Thực hiện ghép 2 trang đầu template + phần từ Mục đích
+        merged_doc = merge_template_2_pages_with_upload_doc(
+            upload_file_bytes=content,
+            metadata=metadata
+        )
+        merged_buf = io.BytesIO()
+        merged_doc.save(merged_buf)
+        merged_bytes = merged_buf.getvalue()
+
+        # Lưu file đã ghép vào thư mục upload
+        safe_fn = f"{doc_code or 'QT'}_{os.path.basename(filename)}"
+        if not safe_fn.endswith('.docx'):
+            safe_fn += '.docx'
+
+        if target_dept and target_group:
+            rel_path, abs_path = save_uploaded_file(
+                merged_bytes,
+                safe_fn,
+                department=target_dept,
+                management_group=target_group,
+                source_code=target_code
+            )
+        else:
+            rel_path, abs_path = save_uploaded_file(merged_bytes, safe_fn, "TÀI LIỆU TẢI LÊN")
+
+        # Trích xuất TOC
+        headings = []
+        try:
+            parsed = parse_docx_to_html_and_headings(abs_path)
+            headings = parsed.get("headings", [])
+        except Exception as e:
+            print(f"[UploadAndMergeWord] Lỗi trích xuất TOC: {e}")
+
+        # Liên kết record nếu có
+        if record_id and record:
+            raw_links = parse_raw_source_links(record.source_link)
+            if rel_path not in raw_links:
+                raw_links.append(rel_path)
+                record.source_link = "; ".join(raw_links)
+                record.updated_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            act_name, act_dept = get_actor_info(request, {"actor_name": actor_name, "actor_dept": actor_dept}, db)
+            log_master_record_action(
+                db=db,
+                record_id=record_id,
+                action_type="UPLOAD_WORD_MERGED",
+                action_label="Tải lên và ghép 2 trang đầu Mẫu quy trình chuẩn VINA G7",
+                actor_name=act_name,
+                actor_dept=act_dept,
+                target_name=safe_fn,
+                details={
+                    "file_name": safe_fn,
+                    "rel_path": rel_path,
+                    "headings_count": len(headings)
+                }
+            )
+            db.commit()
+
+        return {
+            "success": True,
+            "message": "Đã ghép 2 trang đầu chuẩn VINA G7 và nối nội dung từ Mục đích thành công!",
+            "file_path": rel_path,
+            "file_name": safe_fn,
+            "size_bytes": len(merged_bytes),
+            "headings": headings
+        }
+    except Exception as e:
+        print(f"[UploadAndMergeWord] Error: {e}")
+        raise HTTPException(status_code=500, detail=f"Lỗi khi ghép tài liệu: {str(e)}")
 
 
 @router.get("/file-preview/excel")
@@ -1337,6 +1571,7 @@ def preview_pdf_file(path: str = Query(..., description="Đường dẫn tương
 
 
 @router.get("/file-stream")
+@router.get("/file-download")
 def stream_file(
     path: str = Query(..., description="Đường dẫn tương đối tới file"),
     download: bool = Query(False, description="Tải về file (attachment) thay vì xem (inline)")
@@ -1483,7 +1718,7 @@ def get_word_pdf_preview(path: str = Query(..., description="Đường dẫn tư
 
     pdf_path = convert_word_to_pdf_preview(abs_path)
     if not pdf_path or not os.path.exists(pdf_path):
-        raise HTTPException(status_code=500, detail="Không thể tạo bản xem trước PDF từ tài liệu Word")
+        raise HTTPException(status_code=404, detail="Không thể tạo bản xem trước PDF (Server chưa cài đặt LibreOffice hoặc Microsoft Office)")
 
     return FileResponse(
         pdf_path,
@@ -2211,6 +2446,50 @@ def get_compare_pages(
         "total_before": len(before_pages),
         "total_after": len(after_pages)
     }
+
+
+@router.post("/save-direct-word-content")
+def save_direct_word_content_standalone(
+    payload: dict = Body(...),
+    record_id: Optional[int] = Query(None),
+    request: Request = None,
+    db: Session = Depends(get_db)
+):
+    """
+    [POST] Lưu trực tiếp nội dung sửa đổi từ Direct Word Editor vào DOCX file.
+    Hỗ trợ cả trường hợp chưa có record_id (tạo hồ sơ mới) hoặc có record_id.
+    """
+    draft_path = payload.get("draft_path") or payload.get("doc_path")
+    html_content = payload.get("html_content") or payload.get("html")
+    if not draft_path or not html_content:
+        raise HTTPException(status_code=400, detail="Thiếu draft_path hoặc html_content")
+
+    act_name, act_dept = get_actor_info(request, payload, db)
+    record = None
+    if record_id:
+        record = db.query(ISOMasterRecord).filter(ISOMasterRecord.id == record_id).first()
+
+    try:
+        res = save_direct_edited_word_content(
+            draft_rel_path=draft_path,
+            html_content=html_content,
+            record=record
+        )
+        if record:
+            doc_fn = os.path.basename(draft_path)
+            log_master_record_action(
+                db=db,
+                record_id=record.id,
+                action_type="EDIT_WORD_DOC",
+                action_label="Chỉnh sửa tài liệu Word",
+                actor_name=act_name,
+                actor_dept=act_dept,
+                target_name=doc_fn,
+                details={"event": "EVENT_EDIT_WORD", "doc_path": draft_path}
+            )
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lỗi khi lưu tài liệu Word: {str(e)}")
 
 
 @router.post("/{record_id}/save-direct-word-content")

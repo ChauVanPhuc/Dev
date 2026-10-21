@@ -903,10 +903,13 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
         }];
       }
 
-      let relatedTemplates = [];
+      let relatedTemplates = (data.related_templates && data.related_templates.length > 0) ? [...data.related_templates] : [];
       if (receivedSections['__metadata_related_templates__']) {
         try {
-          relatedTemplates = JSON.parse(receivedSections['__metadata_related_templates__']);
+          const parsed = JSON.parse(receivedSections['__metadata_related_templates__']);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            relatedTemplates = parsed;
+          }
         } catch (e) {
           console.error('Error parsing related templates metadata:', e);
         }
@@ -957,6 +960,11 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
       });
       if (relatedTemplates && relatedTemplates.length > 0) {
         setSelectedTemplateId(relatedTemplates[0].id);
+      }
+
+      const validSecKeys = Object.keys(receivedSections).filter(k => !k.startsWith('__'));
+      if (validSecKeys.length > 0 && (!activeMenu || !validSecKeys.includes(activeMenu))) {
+        setActiveMenu(validSecKeys[0]);
       }
     } catch (error) {
       console.error('Lß╗ùi khi tß║úi chi tiß║┐t quy tr├¼nh:', error);
@@ -1014,6 +1022,10 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
         newSectionTypes[key] = parsedData.section_types?.[key] || 'text';
       });
 
+      if (parsedData.html_content) {
+        newSections.__full_html__ = parsedData.html_content;
+      }
+
       const nextCode = formData.code || 'QT01';
 
       const stepsMapped = (parsedData.steps || []).map(step => ({
@@ -1034,8 +1046,8 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
       const workInstructionsMapped = [{
         id: `inst_${Date.now()}`,
         code: `${nextCode}-HD01`,
-        title: 'Hã░ß╗øng dß║½n thß╗▒c hiß╗çn quy tr├¼nh',
-        scope: 'Tß║Ñt cß║ú',
+        title: 'Hướng dẫn thực hiện quy trình',
+        scope: 'Tất cả',
         note: '',
         steps: (parsedData.steps || []).map((step, idx) => ({
           id: `step_${Date.now()}_${idx}`,
@@ -1047,10 +1059,12 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
 
       setFormData(prev => ({
         ...prev,
-        name: (parsedData.name && parsedData.name.trim() !== '[T├¬n quy tr├¼nh]' && parsedData.name.trim() !== 'T├¬n quy tr├¼nh' && parsedData.name.trim() !== '[T├¬n t├ái liß╗çu]' && parsedData.name.trim() !== 'T├¬n t├ái liß╗çu') ? parsedData.name : prev.name,
+        name: (parsedData.name && parsedData.name.trim() !== '[Tên quy trình]' && parsedData.name.trim() !== 'Tên quy trình' && parsedData.name.trim() !== '[Tên tài liệu]' && parsedData.name.trim() !== 'Tên tài liệu') ? parsedData.name : prev.name,
         symbol: parsedData.symbol || prev.symbol,
+        code: parsedData.code || prev.code,
         version: parsedData.version || prev.version || '01',
         file_path: parsedData.file_path || prev.file_path,
+        docx_path: parsedData.file_path || prev.docx_path,
         folder: parsedData.folder || prev.folder,
         doc_type: parsedData.doc_type || prev.doc_type,
         document_level: parsedData.document_level || prev.document_level,
@@ -1062,13 +1076,14 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
         section_types: newSectionTypes,
         steps: stepsMapped,
         instruction_steps: instructionStepsMapped,
-        work_instructions: workInstructionsMapped
+        work_instructions: workInstructionsMapped,
+        updated_at: Date.now()
       }));
 
-      showFeedback('success', 'Cß║¡p nhß║¡t cß║Ñu tr├║c t├ái liß╗çu quy tr├¼nh tß╗½ file Word th├ánh c├┤ng! Vui l├▓ng ß║Ñn "Lã░u quy tr├¼nh" ─æß╗â ho├án tß║Ñt.');
+      showFeedback('success', 'Cập nhật cấu trúc tài liệu quy trình từ file Word thành công! Vui lòng ấn "Lưu quy trình" để hoàn tất.');
     } catch (error) {
-      console.error('Lß╗ùi upload file:', error);
-      const errMsg = error.response?.data?.detail || error.message || 'Lß╗ùi khi upload tß╗çp quy tr├¼nh mß╗øi';
+      console.error('Lỗi upload file:', error);
+      const errMsg = error.response?.data?.detail || error.message || 'Lỗi khi upload tệp quy trình mới';
       showFeedback('error', errMsg);
     } finally {
       setUploadLoading(false);
@@ -1100,7 +1115,7 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
     const nextStepNum = formData.steps.length + 1;
     const newStep = {
       step_number: nextStepNum,
-      name: `Bã░ß╗øc mß╗øi ${nextStepNum}`,
+      name: `Bước ${nextStepNum}`,
       assignee_role: 'QC',
       instructions: '',
       checklist: [],
@@ -1127,7 +1142,7 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
     if (step.has_branch === true) {
       const defaultRole = step.assignee_role || 'QC';
       return [
-        { name: "Cß║¡p nhß║¡t b├ío c├ío th├┤ng tin", assignee_role: defaultRole, edge_label: "Kh├┤ng", return_to_step: null }
+        { name: "Cập nhật báo cáo thông tin", assignee_role: defaultRole, edge_label: "Không", return_to_step: null }
       ];
     }
     return [];
@@ -1626,6 +1641,17 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
       }
     });
 
+    const dividers = clone.querySelectorAll('.iso-doc-page-break-divider');
+    dividers.forEach(div => {
+      const br = document.createElement("p");
+      br.style.pageBreakBefore = "always";
+      br.style.clear = "both";
+      br.innerHTML = "&nbsp;";
+      if (div.parentNode) {
+        div.parentNode.replaceChild(br, div);
+      }
+    });
+
     // Extract pages flat inner contents
     const pages = clone.querySelectorAll(".a4-page");
     const pageContents = [];
@@ -1686,6 +1712,7 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
               margin: 1.0in 1.0in 1.0in 1.0in; /* 2.54cm standard margins */
               mso-header-margin: 36.0pt;
               mso-footer-margin: 36.0pt;
+              mso-footer: f1;
               mso-paper-source: 0;
             }
             div.Section1 {
@@ -1756,15 +1783,22 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
               border: none !important;
               mso-border-alt: none !important;
             }
-            .word-only-spacer {
-              display: block !important;
-              height: 40pt !important;
-              line-height: 40pt !important;
+            .word-only-spacer, .word-only-spacer2 {
+              display: none !important;
+              height: 0 !important;
             }
-            .word-only-spacer2 {
-              display: block !important;
-              height: 120pt !important;
-              line-height: 120pt !important;
+            table.MsoFooter {
+              width: 100%;
+              border-collapse: collapse;
+              border: none !important;
+              border-top: 1.0pt solid windowtext !important;
+              font-family: 'Times New Roman', serif;
+              font-size: 9.5pt;
+              font-style: italic;
+            }
+            table.MsoFooter td {
+              border: none !important;
+              padding: 3pt 0 !important;
             }
             h3 {
               font-size: 13pt;
@@ -1791,6 +1825,17 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
         <body>
           <div class="Section1">
             ${html}
+          </div>
+          <!-- Real Word Footer pinned to bottom margin of every page -->
+          <div style="mso-element:footer" id="f1">
+            <table class="MsoFooter">
+              <tr>
+                <td style="text-align:left; width:28%;">Mã hiệu: ${formData.code || '---'}</td>
+                <td style="text-align:center; width:28%;">Ngày ban hành: ${formData.issue_date || '---'}</td>
+                <td style="text-align:center; width:24%;">Lần ban hành: ${formData.version || '01'}</td>
+                <td style="text-align:right; width:20%;">Trang <span style="mso-field-code: PAGE "></span> / <span style="mso-field-code: NUMPAGES "></span></td>
+              </tr>
+            </table>
           </div>
         </body>
       </html>
@@ -1956,7 +2001,7 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
       const nextStepNum = prev.steps.length + 1;
       const newStep = {
         step_number: nextStepNum,
-        name: nodeType === 'decision' ? `Kiß╗âm tra ${nextStepNum}` : nodeType === 'terminal' ? `Kß║┐t th├║c` : `Bã░ß╗øc mß╗øi ${nextStepNum}`,
+        name: nodeType === 'decision' ? `Kiểm tra ${nextStepNum}` : nodeType === 'terminal' ? `Kết thúc` : `Bước ${nextStepNum}`,
         assignee_role: 'QC',
         instructions: '',
         checklist: [],
@@ -1991,17 +2036,17 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
   };
 
   const triggerDownload = () => {
-    alert("─Éang khß╗ƒi tß║ío tß║úi xuß╗æng t├ái liß╗çu quy tr├¼nh dß║íng PDF/Word...");
+    alert("Đang khởi tạo tải xuống tài liệu quy trình dạng PDF/Word...");
   };
 
   // --- SAVE FORM ---
-  const handleSaveForm = async () => {
+  const handleSaveForm = async (options = {}) => {
     if (!formData.code) {
-      showFeedback('error', 'M├ú quy tr├¼nh kh├┤ng ─æã░ß╗úc ─æß╗â trß╗æng');
+      showFeedback('error', 'Mã quy trình không được để trống');
       return;
     }
     if (!formData.name || !formData.name.trim()) {
-      showFeedback('error', 'T├¬n quy tr├¼nh l├á bß║»t buß╗Öc');
+      showFeedback('error', 'Tên quy trình là bắt buộc');
       return;
     }
 
@@ -2025,7 +2070,7 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
           links.push({
             from: formData.steps[idx-1].flow_node_id,
             to: step.flow_node_id,
-            label: '─Éß║ít'
+            label: 'Đạt'
           });
         }
       });
@@ -2070,15 +2115,26 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
 
       const url = isProcessMode ? '/iso-documents/processes/save' : '/iso-documents/save';
       const res = await api.post(url, finalPayload);
-      showFeedback('success', res.message || 'Lã░u t├ái liß╗çu quy tr├¼nh ISO th├ánh c├┤ng!');
+      showFeedback('success', res?.message || 'Lưu tài liệu quy trình ISO thành công!');
 
-      setTimeout(() => {
-        navigate(backPath);
-      }, 1000);
+      if (res?.revision_logs && res.revision_logs.length > 0) {
+        setFormData(prev => ({
+          ...prev,
+          revision_logs: res.revision_logs
+        }));
+      }
+
+      if (!options?.stayOnPage) {
+        setTimeout(() => {
+          navigate(backPath);
+        }, 1000);
+      }
+      return res;
 
     } catch (error) {
-      console.error('Lß╗ùi khi lã░u quy tr├¼nh:', error);
-      showFeedback('error', error.response?.data?.detail || 'Lß╗ùi hß╗ç thß╗æng khi lã░u trß╗» dß╗» liß╗çu quy tr├¼nh');
+      console.error('Lỗi khi lưu quy trình:', error);
+      showFeedback('error', error.response?.data?.detail || 'Lỗi hệ thống khi lưu trữ dữ liệu quy trình');
+      throw error;
     } finally {
       setLoading(false);
     }
