@@ -123,57 +123,9 @@ export default defineConfig({
         ws: true,
         bypass: (req) => {
           if (!isCanvasEditorRunning) {
-            // Dev server port 1000 không chạy -> Bỏ qua proxy để Vite tự phục vụ file tĩnh từ public/canvas-editor
+            // Dev server port 1000 khong chay -> Bo qua proxy de Vite tu dong phuc vu file tinh tu public/canvas-editor
             return req.url;
           }
-        },
-        configure: (proxy) => {
-          proxy.on('error', (err, req, res) => {
-            if (err && (err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT')) {
-              try {
-                if (res && typeof res.writeHead === 'function' && !res.headersSent) {
-                  const urlPath = req.url ? req.url.split('?')[0] : '';
-                  const relPath = urlPath.replace(/^\/canvas-editor\/?/, '');
-                  const safeRelPath = relPath ? relPath.replace(/\.\./g, '') : 'index.html';
-                  const filePath = path.resolve(__dirname, 'public/canvas-editor', safeRelPath);
-                  const targetFile = (fs.existsSync(filePath) && fs.statSync(filePath).isFile())
-                    ? filePath
-                    : path.resolve(__dirname, 'public/canvas-editor/index.html');
-
-                  if (fs.existsSync(targetFile)) {
-                    const ext = path.extname(targetFile).toLowerCase();
-                    const mimeTypes = {
-                      '.html': 'text/html; charset=utf-8',
-                      '.js': 'application/javascript; charset=utf-8',
-                      '.css': 'text/css; charset=utf-8',
-                      '.json': 'application/json; charset=utf-8',
-                      '.png': 'image/png',
-                      '.jpg': 'image/jpeg',
-                      '.jpeg': 'image/jpeg',
-                      '.svg': 'image/svg+xml',
-                      '.ico': 'image/x-icon',
-                      '.gz': 'application/gzip',
-                      '.woff': 'font/woff',
-                      '.woff2': 'font/woff2',
-                      '.ttf': 'font/ttf'
-                    };
-                    const contentType = mimeTypes[ext] || 'application/octet-stream';
-                    res.writeHead(200, { 'Content-Type': contentType });
-                    fs.createReadStream(targetFile).pipe(res);
-                    return;
-                  }
-                  res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-                  res.end('Canvas Editor static file not found');
-                }
-              } catch (fallbackErr) {
-                console.error('[Canvas Editor Fallback Error]', fallbackErr);
-                if (res && !res.headersSent) {
-                  res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
-                  res.end('Canvas Editor Fallback Error');
-                }
-              }
-            }
-          });
         }
       }
     }
@@ -194,11 +146,6 @@ export default defineConfig({
       '/uploads': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true
-      },
-      '/canvas-editor': {
-        target: 'http://127.0.0.1:1000',
-        changeOrigin: true,
-        ws: true
       }
     }
   },

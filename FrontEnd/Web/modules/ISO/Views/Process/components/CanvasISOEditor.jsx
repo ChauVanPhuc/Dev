@@ -398,7 +398,7 @@ const CanvasISOEditor = ({
           boxShadow: '0 2px 8px rgba(220, 38, 38, 0.15)'
         }}>
           <span style={{ fontSize: '0.88rem', color: '#991B1B', fontWeight: '500' }}>
-            ⚠️ Chưa thể tải Canvas Editor (Vite dev server port 1000 chưa khởi động hoặc gặp sự cố). Bạn có thể thử tải lại hoặc chuyển sang Trình soạn thảo Word chuẩn.
+            ⚠️ Chưa thể tải Trình soạn thảo Canvas Editor. Bạn có thể thử bấm "Thử tải lại" hoặc chuyển sang "Chế độ Word chuẩn".
           </span>
           <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
             <button
