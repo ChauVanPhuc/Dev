@@ -190,19 +190,20 @@ class LabelDetector:
             c_area = cv2.contourArea(c)
             rect_fill = c_area / float(area) if area > 0 else 0
 
-            # LỌC BỎ CHỮ IN THÙNG CARTON / BẢN VẼ SƠ ĐỒ / VIỀN MÀNG CO
-            min_white_needed = 0.35 if is_vert else 0.45
+            # LỌC BỎ CHỮ IN THÙNG CARTON / BẢN VẼ SƠ ĐỒ / VIỀN MÀNG CO / SỐ STENCIL (72, 60, 36)
+            min_white_needed = 0.35 if is_vert else 0.40
             min_bc_needed = 0.12 if is_vert else 0.20
-            if whiteness_ratio < min_white_needed and bc_score < min_bc_needed:
+            # Tem decal dán trên thùng carton bắt buộc phải có diện tích giấy trắng đáng kể
+            if whiteness_ratio < min_white_needed:
                 continue
-            if rect_fill < 0.45 and bc_score < 0.12:
+            if rect_fill < 0.42 and bc_score < 0.12:
                 continue
 
             # 1. Kiểm tra độ dày thực tế của mảng giấy trắng (bỏ qua cho tem dọc mỏng)
             patch_dist = dist_map[y:y+bh, x:x+bw]
             max_thickness = float(np.max(patch_dist)) if patch_dist.size > 0 else 0
             if not is_vert:
-                min_thick_needed = (1.5 if min_dim < int(65 * scale_det) else 2.5) if scale_det < 1.0 else (3.0 if min_dim < 65 else 5.0)
+                min_thick_needed = (1.8 if min_dim < int(65 * scale_det) else 2.8) if scale_det < 1.0 else (3.5 if min_dim < 65 else 5.5)
                 if max_thickness < min_thick_needed:
                     continue
 
@@ -477,10 +478,11 @@ class LabelDetector:
 
         for idx, item in enumerate(boxes_with_conf):
             bx, by, bw, bh, conf = item
-            # Padding hào phóng tối đa để bảo đảm ôm trọn 100% con tem và toàn bộ dòng chữ in người đọc (HRI) phía dưới mã (kể cả tem xoay dọc)
-            pad_x = max(35, int(bw * 0.35))
-            pad_y_top = max(30, int(bh * 0.25))
-            pad_y_bottom = max(35, int(bh * 0.35))
+            # Tight crop bám sát mép tem decal, chỉ chừa lề nhỏ 5-8% (tối đa 12-16px) để không cắt vào viền nhãn,
+            # tuyệt đối không padding quá đà làm nuốt trọn chữ in và số stencil (72, 60...) trên vỏ thùng carton.
+            pad_x = min(16, max(4, int(bw * 0.05)))
+            pad_y_top = min(14, max(4, int(bh * 0.05)))
+            pad_y_bottom = min(18, max(6, int(bh * 0.08)))
             x1 = max(0, bx - pad_x)
             y1 = max(0, by - pad_y_top)
             x2 = min(w, bx + bw + pad_x)
@@ -623,15 +625,15 @@ class LabelDetector:
         bc_val_p = float(np.mean(np.maximum(bc_h_p, bc_v_p)))
         lap_p = float(cv2.Laplacian(patch, cv2.CV_64F).var()) if patch.size > 0 else 0
 
-        # Nếu không có mã vạch và kết cấu nhẵn hoặc nền carton tối màu -> Mảng số stencil carton
+        # Nếu không có mã vạch và kết cấu nhẵn hoặc nền carton tối màu -> Chắc chắn là số stencil carton rác
         mean_p = float(patch.mean()) if patch.size > 0 else 0
-        if bc_val_p < 22.0 and (lap_p < 140.0 or mean_p < 145.0):
+        if bc_val_p < 20.0 and (lap_p < 150.0 or mean_p < 155.0):
             return []
 
-        # Nếu là tem nhãn đơn lẻ chuẩn (bề ngang <= 260px và chiều cao <= 155px trên thumbnail, aspect 0.35 - 5.0),
-        # giữ nguyên trực tiếp 100% khung tem, tuyệt đối không bóc tách mảnh con để tránh cắt đứt mã vạch hoặc dòng chữ in bên dưới.
+        # Nếu là tem nhãn đơn lẻ chuẩn: yêu cầu phải có nền giấy trắng sáng thực sự (mean_p >= 165)
+        # và có năng lượng mã vạch hoặc văn bản in sắc nét (bc_val_p >= 25.0 hoặc lap_p >= 180.0)
         aspect_box = float(bw) / float(bh) if bh > 0 else 1.0
-        if bw <= 260 and bh <= 155 and 0.35 <= aspect_box <= 5.0 and mean_p >= 135.0:
+        if bw <= 260 and bh <= 155 and 0.35 <= aspect_box <= 5.0 and mean_p >= 165.0 and (bc_val_p >= 25.0 or lap_p >= 180.0):
             return [(x, y, bw, bh, default_conf)]
 
         # 1. Tìm các mảng giấy trắng con bên trong (White Sub-Contours)

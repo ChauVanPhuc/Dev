@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Filter, AlertTriangle, Trash2, List, LayoutGrid, Sparkles, X, RefreshCw, Play, Pause, Square, Maximize2, Eye, Zap } from 'lucide-react';
 import { LpnFilterBar } from './LpnFilterBar';
 
-export const ControlPanel = ({
+const ControlPanelComponent = ({
   currentJob,
   progressData,
   isPaused = false,
@@ -1140,7 +1140,7 @@ export const ControlPanel = ({
                 transition: 'all 0.2s ease',
                 boxShadow: isSyncing ? '0 0 0 2px rgba(34, 197, 94, 0.35)' : 'none'
               }}
-              title={isSyncing ? "Bấm để chọn: Dừng đồng bộ hoặc Mở popup giám sát" : "Bắt đầu Đồng bộ dữ liệu cào & bóc tách AI OCR thời gian thực"}
+              title={isSyncing ? "Bấm để chọn: Dừng đồng bộ hoặc Mở popup giám sát" : "Cập nhật dữ liệu container mới từ AppSheet"}
             >
               <RefreshCw
                 size={14}
@@ -1340,4 +1340,6 @@ export const ControlPanel = ({
   </div>
 );
 };
+
+export const ControlPanel = React.memo(ControlPanelComponent);
 

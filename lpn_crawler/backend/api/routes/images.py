@@ -1,8 +1,8 @@
-# -*- coding: utf-8 -*-
 import os
+import functools
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -12,6 +12,7 @@ from lpn_crawler.backend.models.models import LpnImage
 router = APIRouter()
 
 
+@functools.lru_cache(maxsize=20000)
 def resolve_image_file_path(raw_path: str) -> Optional[str]:
     """
     Tìm và chuẩn hóa đường dẫn tuyệt đối của file ảnh trên ổ đĩa từ relative path
@@ -39,8 +40,6 @@ def resolve_image_file_path(raw_path: str) -> Optional[str]:
     return None
 
 
-from fastapi.responses import FileResponse, RedirectResponse
-
 @router.get("/images/{image_id}/file")
 def serve_lpn_image_by_id(image_id: int, db: Session = Depends(get_db)):
     """
@@ -63,7 +62,7 @@ def serve_lpn_image_by_id(image_id: int, db: Session = Depends(get_db)):
                 ".gif": "image/gif"
             }
             mime = img.file_mime or mime_map.get(ext, "image/jpeg")
-            return FileResponse(abs_path, media_type=mime, headers={"Cache-Control": "public, max-age=86400"})
+            return FileResponse(abs_path, media_type=mime, headers={"Cache-Control": "public, max-age=604800, immutable"})
     
     if img.source_url and img.source_url.startswith("http"):
         return RedirectResponse(url=img.source_url, status_code=307)
@@ -89,4 +88,4 @@ def serve_lpn_image_by_path(path: str = Query(...)):
         ".gif": "image/gif"
     }
     mime = mime_map.get(ext, "image/jpeg")
-    return FileResponse(abs_path, media_type=mime, headers={"Cache-Control": "public, max-age=86400"})
+    return FileResponse(abs_path, media_type=mime, headers={"Cache-Control": "public, max-age=604800, immutable"})

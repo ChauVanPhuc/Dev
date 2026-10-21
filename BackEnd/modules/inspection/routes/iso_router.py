@@ -126,6 +126,7 @@ def save_iso_document(
             issue_date=payload.get("issue_date", now_str[:10]),
             issuer=payload.get("issuer", ""),
             approver=payload.get("approver", ""),
+            approver_bgd=payload.get("approver_bgd", ""),
             file_path=payload.get("file_path", ""),
             status=payload.get("status", "Hiệu lực"),
             folder=payload.get("folder", ""),
@@ -155,6 +156,7 @@ def save_iso_document(
         doc.issue_date = payload.get("issue_date", doc.issue_date)
         doc.issuer = payload.get("issuer", doc.issuer)
         doc.approver = payload.get("approver", doc.approver)
+        doc.approver_bgd = payload.get("approver_bgd", getattr(doc, "approver_bgd", ""))
         doc.file_path = payload.get("file_path", doc.file_path)
         doc.status = payload.get("status", doc.status)
         doc.folder = payload.get("folder", doc.folder)
@@ -243,6 +245,7 @@ def get_iso_documents(db: Session = Depends(get_db)):
             "issue_date": d.issue_date,
             "issuer": d.issuer,
             "approver": d.approver,
+            "approver_bgd": getattr(d, "approver_bgd", "") or "",
             "file_path": d.file_path,
             "status": d.status,
             "folder": d.folder,
@@ -318,6 +321,7 @@ def get_iso_document_details(id: int, db: Session = Depends(get_db)):
         "issue_date": doc.issue_date,
         "issuer": doc.issuer,
         "approver": doc.approver,
+        "approver_bgd": getattr(doc, "approver_bgd", "") or "",
         "file_path": doc.file_path,
         "status": doc.status,
         "folder": doc.folder,
@@ -397,6 +401,7 @@ def get_iso_processes(db: Session = Depends(get_db)):
             "owner": p.owner,
             "editor": p.editor,
             "approver": p.approver,
+            "approver_bgd": getattr(p, "approver_bgd", "") or "",
             "issue_date": p.issue_date,
             "last_checked_date": p.last_checked_date,
             "last_result": p.last_result,
@@ -450,6 +455,7 @@ def save_iso_process(
             owner=payload.get("owner", ""),
             editor=payload.get("editor", ""),
             approver=payload.get("approver", ""),
+            approver_bgd=payload.get("approver_bgd", ""),
             issue_date=payload.get("issue_date", now_str[:10]),
             last_checked_date=payload.get("last_checked_date"),
             last_result=payload.get("last_result", "Chưa đánh giá"),
@@ -521,6 +527,7 @@ def save_iso_process(
         proc.owner = payload.get("owner", proc.owner)
         proc.editor = payload.get("editor", proc.editor)
         proc.approver = payload.get("approver", proc.approver)
+        proc.approver_bgd = payload.get("approver_bgd", getattr(proc, "approver_bgd", ""))
         proc.issue_date = payload.get("issue_date", proc.issue_date)
         proc.last_checked_date = payload.get("last_checked_date", proc.last_checked_date)
         proc.last_result = payload.get("last_result", proc.last_result)
@@ -734,6 +741,7 @@ def get_iso_process_details(id: int, db: Session = Depends(get_db)):
         "owner": proc.owner,
         "editor": proc.editor,
         "approver": proc.approver,
+        "approver_bgd": getattr(proc, "approver_bgd", "") or "",
         "issue_date": proc.issue_date,
         "last_checked_date": proc.last_checked_date,
         "last_result": proc.last_result,

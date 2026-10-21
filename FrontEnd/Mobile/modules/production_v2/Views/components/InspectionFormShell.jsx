@@ -623,6 +623,7 @@ const InspectionFormShell = ({ title, subTitle, formState, children, showLastRes
               type="button"
               className="pv2-btn-cancel"
               onClick={() => navigate(ROUTES.INSPECTION_LIST)}
+              style={{ width: '100%', flex: 1 }}
             >
               <ArrowLeft size={17} />
               <span className="pv2-btn-label">
@@ -630,19 +631,6 @@ const InspectionFormShell = ({ title, subTitle, formState, children, showLastRes
                 <span className="pv2-btn-text-short">Quay lại</span>
               </span>
             </button>
-            {!isDone && (
-              <button
-                type="button"
-                className="pv2-btn-submit"
-                onClick={handleConfirmTicketClick}
-                disabled={submitting}
-              >
-                <CheckCircle2 size={17} />
-                <span className="pv2-btn-label">
-                  {submitting ? 'Đang duyệt...' : 'Xác nhận duyệt'}
-                </span>
-              </button>
-            )}
           </>
         ) : (
           <>

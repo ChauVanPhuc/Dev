@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { formatDateDMY, formatTimestampVN } from '../utils/formatters';
 
 const resolveImgUrl = (img) => {
   if (!img) return '';
@@ -16,7 +17,7 @@ const resolveImgUrl = (img) => {
   return img.source_url || '';
 };
 
-export const ContainerTableView = ({
+const ContainerTableViewComponent = ({
   items = [],
   total = 0,
   page = 1,
@@ -46,6 +47,8 @@ export const ContainerTableView = ({
     currentPageContainerIds.length > 0 &&
     currentPageContainerIds.every((id) => selectedContainerIds.includes(id));
 
+  const hoverTimerRef = useRef(null);
+
   const handleImageMouseEnter = (imgUrl, e) => {
     if (!imgUrl) return;
     const rect = e.currentTarget.getBoundingClientRect();
@@ -54,11 +57,16 @@ export const ContainerTableView = ({
       left = Math.max(10, rect.left - 270);
     }
     let top = Math.max(10, Math.min(window.innerHeight - 270, rect.top - 20));
-    setHoverPos({ top, left });
-    setHoveredImg(imgUrl);
+    
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = setTimeout(() => {
+      setHoverPos({ top, left });
+      setHoveredImg(imgUrl);
+    }, 140);
   };
 
   const handleImageMouseLeave = () => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
     setHoveredImg(null);
   };
 
@@ -222,10 +230,7 @@ export const ContainerTableView = ({
               <th style={{ width: '45px', textAlign: 'center' }}>STT</th>
               <th style={{ width: '90px', textAlign: 'center' }}>Ảnh Container</th>
               <th style={{ minWidth: '150px' }}>Số Container</th>
-              <th style={{ minWidth: '110px' }}>Nhà Máy</th>
-              <th style={{ minWidth: '115px' }}>Ngày Loading</th>
               <th style={{ minWidth: '150px' }}>Timestamp</th>
-              <th style={{ minWidth: '130px' }}>Người Thao Tác</th>
               <th style={{ width: '100px', textAlign: 'center' }}>Số Kiện</th>
               <th style={{ width: '90px', textAlign: 'center' }}>Số LPN</th>
               <th style={{ width: '90px', textAlign: 'center' }}>Số Ảnh</th>
@@ -236,7 +241,7 @@ export const ContainerTableView = ({
           <tbody>
             {loading && items.length === 0 ? (
               <tr>
-                <td colSpan="13" style={{ textAlign: 'center', padding: '36px', color: '#8D6E63' }}>
+                <td colSpan="10" style={{ textAlign: 'center', padding: '36px', color: '#8D6E63' }}>
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
                     <div className="lpn-spinner-sm" />
                     <span>Đang tải danh sách Container...</span>
@@ -245,7 +250,7 @@ export const ContainerTableView = ({
               </tr>
             ) : items.length === 0 ? (
               <tr>
-                <td colSpan="13" style={{ textAlign: 'center', padding: '40px', color: '#8D6E63' }}>
+                <td colSpan="10" style={{ textAlign: 'center', padding: '40px', color: '#8D6E63' }}>
                   Không có dữ liệu Container nào phù hợp với bộ lọc.
                 </td>
               </tr>
@@ -320,6 +325,7 @@ export const ContainerTableView = ({
                               display: 'block'
                             }}
                             loading="lazy"
+                            decoding="async"
                             onError={(e) => {
                               e.target.style.display = 'none';
                             }}
@@ -351,24 +357,9 @@ export const ContainerTableView = ({
                       {row.container_number}
                     </td>
 
-                    {/* Factory */}
-                    <td style={{ color: '#4E342E', fontWeight: '600' }}>
-                      {row.factory || '—'}
-                    </td>
-
-                    {/* Date Loading */}
-                    <td style={{ color: '#5D4037' }}>
-                      {row.date_loading || row.date_loading_raw || '—'}
-                    </td>
-
                     {/* Timestamp */}
-                    <td style={{ color: '#6D4C41', fontSize: '0.78rem' }}>
-                      {row.timestamp_raw || '—'}
-                    </td>
-
-                    {/* Operator Name */}
-                    <td style={{ color: '#4E342E' }}>
-                      {row.operator_name || '—'}
+                    <td style={{ color: '#6D4C41', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>
+                      {formatTimestampVN(row.timestamp_raw)}
                     </td>
 
                     {/* Số Kiện (Pallet/Box) */}
@@ -533,6 +524,7 @@ export const ContainerTableView = ({
                         alt={row.container_number}
                         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                         loading="lazy"
+                        decoding="async"
                       />
                     ) : (
                       <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.66rem', color: '#8D6E63', fontWeight: '600' }}>
@@ -545,7 +537,7 @@ export const ContainerTableView = ({
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '0.76rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span style={{ color: '#8D6E63', fontWeight: '500' }}>Ngày đóng:</span>
-                      <span style={{ color: '#2D1A12', fontWeight: '700' }}>{row.date_loading || row.date_loading_raw || '—'}</span>
+                      <span style={{ color: '#2D1A12', fontWeight: '700' }}>{formatDateDMY(row.date_loading || row.date_loading_raw)}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span style={{ color: '#8D6E63', fontWeight: '500' }}>Người thao tác:</span>
@@ -745,3 +737,5 @@ export const ContainerTableView = ({
     </div>
   );
 };
+
+export const ContainerTableView = React.memo(ContainerTableViewComponent);

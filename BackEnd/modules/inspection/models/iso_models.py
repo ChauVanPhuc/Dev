@@ -15,7 +15,8 @@ class ISODocument(Base):
     version = Column(NVARCHAR(50), default="01")                         # Lần ban hành
     issue_date = Column(NVARCHAR(50))                                    # Ngày ban hành
     issuer = Column(NVARCHAR(100))                                       # Người soạn thảo / ban hành
-    approver = Column(NVARCHAR(100))                                     # Người phê duyệt
+    approver = Column(NVARCHAR(100))                                     # Người phê duyệt (Cấp phòng / Trưởng phòng)
+    approver_bgd = Column(NVARCHAR(150), nullable=True)                  # Người phê duyệt cấp công ty (Ban Giám Đốc)
     file_path = Column(NVARCHAR(500), nullable=True)                     # Đường dẫn file tải lên
     status = Column(NVARCHAR(50), default="Hiệu lực")                    # Hiệu lực, Hết hiệu lực, Dự thảo
     folder = Column(NVARCHAR(100), nullable=True)                        # Thư mục quản lý (ví dụ: "3/2/1")
@@ -98,7 +99,8 @@ class ISOProcess(Base):
     iso_document_id = Column(Integer, ForeignKey("iso_documents.id", ondelete="CASCADE"), nullable=False) # Khuôn mẫu gốc
     owner = Column(NVARCHAR(100))                                       # Người phụ trách / chịu trách nhiệm
     editor = Column(NVARCHAR(100))                                      # Người biên soạn / thực thi
-    approver = Column(NVARCHAR(100))                                    # Người duyệt
+    approver = Column(NVARCHAR(100))                                    # Người duyệt (Cấp phòng / Trưởng phòng)
+    approver_bgd = Column(NVARCHAR(150), nullable=True)                 # Người phê duyệt cấp công ty (Ban Giám Đốc)
     issue_date = Column(NVARCHAR(50))                                   # Ngày ban hành thực tế
     last_checked_date = Column(NVARCHAR(50), nullable=True)             # Ngày kiểm tra đánh giá gần nhất
     last_result = Column(NVARCHAR(100), nullable=True)                  # Kết quả đánh giá gần nhất (Đạt / Không đạt)

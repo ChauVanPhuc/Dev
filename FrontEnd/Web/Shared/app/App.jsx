@@ -139,6 +139,9 @@ const OrderShippingMonitoring = lazy(() => import('@modules/Purchasing/Views/Mon
 const ISODocumentList = lazy(() => import('@modules/ISO/Views/Document/ISODocumentListView'));
 const ISOFormEditor = lazy(() => import('@modules/ISO/Views/Form/ISOFormEditorView'));
 const ISOProcessEditor = lazy(() => import('@modules/ISO/Views/Process/ISOProcessEditorView'));
+const ISOMasterRecordList = lazy(() => import('@modules/ISO/Views/MasterRecord/ISOMasterRecordListView'));
+const ISOApprovalListView = lazy(() => import('@modules/ISOApproval/views/ISOApprovalListView'));
+const ISOSignatureListView = lazy(() => import('@modules/ISOSignature/views/ISOSignatureListView'));
 
 import { authService } from '@modules/Auth/Models/auth.service';
 import { ScreenProvider } from '@shared/context/ScreenContext';
@@ -593,6 +596,7 @@ const ProtectedRoute = ({ permissionKey, children }) => {
     console.error('Failed to parse screen permissions:', e);
   }
 
+
   if (isAdmin && !hasExplicitPermission) {
     permission = 'write';
   }
@@ -728,13 +732,19 @@ function App() {
                 <Route path="reports" element={<ProtectedRoute permissionKey="reports"><InspectionReports /></ProtectedRoute>} />
                 <Route path="reports/detail/:type/:id" element={<ProtectedRoute permissionKey="reports"><InspectionDetail /></ProtectedRoute>} />
                 <Route path="quality" element={<ProtectedRoute permissionKey={["/admin/quality", "quality"]}><QualityOverview /></ProtectedRoute>} />
+                <Route path="quality/parameter" element={<ProtectedRoute permissionKey={["/admin/quality/parameter", "/admin/quality", "quality"]}><QualityOverview isParameterMode={true} /></ProtectedRoute>} />
+                <Route path="quality-parameter" element={<Navigate to="/admin/quality/parameter" replace />} />
                 <Route path="quality-targets" element={<Navigate to="/admin/kpi/dashboard" replace />} />
                 <Route path="quality-records" element={<ProtectedRoute permissionKey="quality-records"><QualityRecords /></ProtectedRoute>} />
                 <Route path="quality-records/:id" element={<ProtectedRoute permissionKey="quality-records"><QualityRecordsDetail /></ProtectedRoute>} />
                 <Route path="iso-documents" element={<ProtectedRoute permissionKey="iso-documents"><ISODocumentList mode="documents" /></ProtectedRoute>} />
                 <Route path="iso-processes" element={<ProtectedRoute permissionKey="iso-processes"><ISODocumentList mode="processes" /></ProtectedRoute>} />
+                <Route path="iso-records" element={<ProtectedRoute permissionKey={["iso-documents", "iso-records"]}><ISOMasterRecordList /></ProtectedRoute>} />
+                <Route path="iso-master-records" element={<Navigate to="/admin/iso-records" replace />} />
                 <Route path="iso-documents/edit/:id" element={<ProtectedRoute permissionKey={["iso-documents", "iso-processes"]}><ISOFormEditor /></ProtectedRoute>} />
                 <Route path="iso-processes/edit/:id" element={<ProtectedRoute permissionKey="iso-processes"><ISOProcessEditor /></ProtectedRoute>} />
+                <Route path="iso-approvals" element={<ProtectedRoute permissionKey={["iso-approvals", "/admin/iso-approvals", "iso-processes", "iso-documents"]}><ISOApprovalListView /></ProtectedRoute>} />
+                <Route path="iso-signatures" element={<ProtectedRoute permissionKey={["iso-processes", "iso-documents", "users"]}><ISOSignatureListView /></ProtectedRoute>} />
                 <Route path="kpi" element={<ProtectedRoute permissionKey="kpi"><KPIReports /></ProtectedRoute>} />
                 <Route path="kpi/dashboard" element={<ProtectedRoute permissionKey="kpi"><QualityKPIDashboard /></ProtectedRoute>} />
                 <Route path="kpi/personnel" element={<ProtectedRoute permissionKey="kpi"><KPIPersonnel /></ProtectedRoute>} />

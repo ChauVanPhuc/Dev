@@ -477,8 +477,20 @@ export const useInspectionReports = () => {
     const { item, tabType } = deleteTarget;
     setIsDeleting(true);
     try {
+      const rawUser = localStorage.getItem('smartflow_user');
+      const parsedUser = rawUser ? JSON.parse(rawUser) : {};
+      const currentUserName = parsedUser.full_name || parsedUser.name || parsedUser.username || 'Quản lý QC';
+      const currentUserRole = parsedUser.role_name || parsedUser.role || 'Quản lý QC';
+
       const deleteUrl = tabType === 'daily' ? `/inspections/daily/${item.id}` : `/inspections/stage/${item.id}`;
-      await api.delete(deleteUrl);
+      await api.delete(deleteUrl, {
+        data: {
+          deleted_by: currentUserName,
+          user_name: currentUserName,
+          user_role: currentUserRole,
+          user_id: parsedUser.id
+        }
+      });
       
       if (tabType === 'daily') {
         setDailyInspections(prev => prev.filter(i => i.id !== item.id));
@@ -486,12 +498,13 @@ export const useInspectionReports = () => {
         setStageInspections(prev => prev.filter(i => i.id !== item.id));
       }
       
-      if (toast) toast('success', `Đã xóa thành công phiếu kiểm tra #${item.id}!`);
+      if (toast) toast('success', `Đã ẩn thành công phiếu kiểm tra #${item.id}!`);
+      else alert(`Đã ẩn thành công phiếu kiểm tra #${item.id}!`);
       setDeleteTarget(null);
     } catch (err) {
       console.error('Lỗi khi xóa phiếu kiểm tra:', err);
-      if (toast) toast('error', err.response?.data?.detail || 'Xóa phiếu kiểm tra thất bại!');
-      else alert(err.response?.data?.detail || 'Xóa phiếu kiểm tra thất bại!');
+      if (toast) toast('error', err.response?.data?.detail || 'Xóa (ẩn) phiếu kiểm tra thất bại!');
+      else alert(err.response?.data?.detail || 'Xóa (ẩn) phiếu kiểm tra thất bại!');
     } finally {
       setIsDeleting(false);
     }
@@ -502,10 +515,18 @@ export const useInspectionReports = () => {
     const { item, tabType } = revertTarget;
     setIsReverting(true);
     try {
+      const rawUser = localStorage.getItem('smartflow_user');
+      const parsedUser = rawUser ? JSON.parse(rawUser) : {};
+      const currentUserName = parsedUser.full_name || parsedUser.name || parsedUser.username || 'Quản lý QC';
+      const currentUserRole = parsedUser.role_name || parsedUser.role || 'Quản lý QC';
+
       const revertUrl = `/inspections/revert/${tabType}/${item.id}`;
       await api.post(revertUrl, {
         reason: revertReason,
-        reverted_by: 'Quản lý QC'
+        reverted_by: currentUserName,
+        user_name: currentUserName,
+        user_role: currentUserRole,
+        user_id: parsedUser.id
       });
 
       // Cập nhật trạng thái tức thì trên giao diện

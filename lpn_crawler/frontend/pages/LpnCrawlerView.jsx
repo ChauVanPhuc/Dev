@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { lpnCrawlerApi } from '../services/api';
 import { ControlPanel } from '../components/ControlPanel';
@@ -183,18 +183,22 @@ export default function LpnCrawlerView() {
     setCustomSubtitle('Tự động crawl dữ liệu Container, Pallet, Box, Batch và hình ảnh từ AppSheet');
   }, [setCustomTitle, setCustomSubtitle]);
 
-  // Load Initial Job, KPI Stats & Data
+  // Khởi tạo thông tin Job và KPI một lần khi vào trang
   useEffect(() => {
     fetchCurrentJob();
-    fetchContainers();
     fetchKpiStats();
+  }, []);
+
+  // Tải danh sách Container khi chuyển trang, đổi bộ lọc hoặc đổi kiểu sắp xếp
+  useEffect(() => {
+    fetchContainers();
   }, [page, pageSize, filters, sortOption, viewMode]);
 
-  // Tự động đồng bộ số liệu KPI ngoài màn hình mỗi 10 giây
+  // Tự động đồng bộ số liệu KPI ngoài màn hình mỗi 45 giây (thay vì 10 giây để tránh nghẽn)
   useEffect(() => {
     const timer = setInterval(() => {
       fetchKpiStats();
-    }, 10000);
+    }, 45000);
     return () => clearInterval(timer);
   }, []);
 
@@ -427,10 +431,12 @@ export default function LpnCrawlerView() {
       setItems(res.items || []);
       setTotal(res.total || 0);
 
-      // Cập nhật số lượng Container chưa quét
-      lpnCrawlerApi.getUnscannedContainers({ ...activeFilters, limit: 1 }).then((uRes) => {
-        setUnscannedCount(uRes.total_containers);
-      }).catch(() => {});
+      // Cập nhật số lượng Container chưa quét (chỉ cần chạy ở trang đầu để tránh nghẽn khi lật trang)
+      if (activePage === 1) {
+        lpnCrawlerApi.getUnscannedContainers({ ...activeFilters, limit: 1 }).then((uRes) => {
+          setUnscannedCount(uRes.total_containers);
+        }).catch(() => {});
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -438,7 +444,7 @@ export default function LpnCrawlerView() {
     }
   };
 
-  const handleSelectContainer = async (card) => {
+  const handleSelectContainer = useCallback(async (card) => {
     if (!card || !card.container_id) return;
     try {
       const detail = await lpnCrawlerApi.getContainerDetail(card.container_id);
@@ -449,7 +455,7 @@ export default function LpnCrawlerView() {
       console.error('[LPN] getContainerDetail failed:', e);
       showToast('error', `Không thể tải chi tiết container: ${e.message}`);
     }
-  };
+  }, []);
 
   const handleSelectItem = async (itemOrId) => {
     if (!itemOrId) return;
@@ -468,20 +474,22 @@ export default function LpnCrawlerView() {
     }
   };
 
-  const handleToggleSelectRow = (itemId) => {
+  const handleToggleSelectRow = useCallback((itemId) => {
     setSelectedItemIds((prev) =>
       prev.includes(itemId) ? prev.filter((id) => id !== itemId) : [...prev, itemId]
     );
-  };
+  }, []);
 
-  const handleToggleSelectAll = (currentPageIds) => {
-    const isAllSelected = currentPageIds.every((id) => selectedItemIds.includes(id));
-    if (isAllSelected) {
-      setSelectedItemIds((prev) => prev.filter((id) => !currentPageIds.includes(id)));
-    } else {
-      setSelectedItemIds((prev) => Array.from(new Set([...prev, ...currentPageIds])));
-    }
-  };
+  const handleToggleSelectAll = useCallback((currentPageIds) => {
+    setSelectedItemIds((prev) => {
+      const isAllSelected = currentPageIds.every((id) => prev.includes(id));
+      if (isAllSelected) {
+        return prev.filter((id) => !currentPageIds.includes(id));
+      } else {
+        return Array.from(new Set([...prev, ...currentPageIds]));
+      }
+    });
+  }, []);
 
   const handleDeleteSelected = () => {
     if (!selectedItemIds || selectedItemIds.length === 0) return;
@@ -690,22 +698,22 @@ export default function LpnCrawlerView() {
       setProgressData({
         percent: 0,
         current_container: '—',
-        current_action: 'Đang khởi chạy luồng Đồng bộ AppSheet & AI OCR...',
+        current_action: 'Đang kết nối AppSheet và kiểm tra dữ liệu mới...',
         processed: 0,
         total: 0,
         items_crawled: 0,
         images_downloaded: 0,
         sku_crawled: 0,
         speed_str: '—',
-        crawl_mode: 'Live Sync (API + OCR)',
+        crawl_mode: 'Cập nhật dữ liệu mới',
         eta_seconds: null,
         current_status: 'STARTING'
       });
 
       const res = await lpnCrawlerApi.startSyncJob(force, mode);
       if (res && res.id) {
-        setCurrentJob({ ...res, is_sync_mode: true });
-        showToast('success', `Đã khởi chạy Đồng bộ thành công (Job #${res.id})`);
+        setCurrentJob({ ...res, is_sync_mode: false, auto_ocr: false });
+        showToast('success', `Đã khởi chạy Cập nhật dữ liệu thành công (Job #${res.id})`);
       }
     } catch (err) {
       setIsSyncActive(false);
@@ -1000,37 +1008,43 @@ export default function LpnCrawlerView() {
       )}
 
       {/* AI OCR Batch Scan Modal */}
-      <AiOcrScanModal
-        isOpen={showAiOcrScanModal}
-        onClose={() => setShowAiOcrScanModal(false)}
-      />
+      {showAiOcrScanModal && (
+        <AiOcrScanModal
+          isOpen={showAiOcrScanModal}
+          onClose={() => setShowAiOcrScanModal(false)}
+        />
+      )}
 
       {/* Batch Container Scan Modal (Quét Hàng Loạt Container Chưa Quét) */}
-      <BatchContainerScanModal
-        isOpen={showBatchScanModal}
-        onClose={() => setShowBatchScanModal(false)}
-        currentFilters={filters}
-        selectedContainerIds={selectedItemIds}
-        onScanComplete={() => {
-          fetchContainers(true);
-          fetchKpiStats();
-        }}
-      />
+      {showBatchScanModal && (
+        <BatchContainerScanModal
+          isOpen={showBatchScanModal}
+          onClose={() => setShowBatchScanModal(false)}
+          currentFilters={filters}
+          selectedContainerIds={selectedItemIds}
+          onScanComplete={() => {
+            fetchContainers(true);
+            fetchKpiStats();
+          }}
+        />
+      )}
 
       {/* Dashboard Modal (All-Time Data & Upcoming Charts) */}
-      <DashboardModal
-        isOpen={isLpnDashboardOpen || showDashboardModal}
-        onClose={() => {
-          setShowDashboardModal(false);
-          setLpnDashboardOpen(false);
-        }}
-        allTimeStats={kpiStats?.all_time || kpiStats}
-        onOpenMissingRows={(opts) => {
-          setShowDashboardModal(false);
-          setLpnDashboardOpen(false);
-          handleOpenMissingRows(opts || { isAllTime: true });
-        }}
-      />
+      {(isLpnDashboardOpen || showDashboardModal) && (
+        <DashboardModal
+          isOpen={isLpnDashboardOpen || showDashboardModal}
+          onClose={() => {
+            setShowDashboardModal(false);
+            setLpnDashboardOpen(false);
+          }}
+          allTimeStats={kpiStats?.all_time || kpiStats}
+          onOpenMissingRows={(opts) => {
+            setShowDashboardModal(false);
+            setLpnDashboardOpen(false);
+            handleOpenMissingRows(opts || { isAllTime: true });
+          }}
+        />
+      )}
     </div>
   );
 }

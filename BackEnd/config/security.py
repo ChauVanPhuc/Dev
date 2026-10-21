@@ -42,3 +42,49 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     # Ký nhận token bằng SECRET_KEY và thuật toán quy định
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
+
+
+from fastapi import Request, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from config.database import get_db
+
+
+def get_current_user(request: Request, db: Session = Depends(get_db)):
+    """
+    Dependency kiểm tra token Bearer và trả về Account của người dùng đang đăng nhập.
+    Bảo vệ các API nghiệp vụ quan trọng khỏi truy cập trái phép.
+    """
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Yêu cầu đăng nhập để thực hiện thao tác này (Thiếu Bearer Token).",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    token = auth_header.split(" ")[1].strip()
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        username: str = payload.get("sub")
+        if not username:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token không hợp lệ (không có username).",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Phiên làm việc đã hết hạn hoặc Token không hợp lệ. Vui lòng đăng nhập lại.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    from modules.auth.models.accounts import Account
+    user = db.query(Account).filter(Account.username == username).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Tài khoản không tồn tại trên hệ thống.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return user
+

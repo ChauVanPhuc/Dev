@@ -138,6 +138,21 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
           return item;
         });
 
+        // Đảm bảo nhóm "Hồ sơ ISO" luôn có đủ "Quản lý hồ sơ", "Hồ sơ cần duyệt" và "Quản lý Chữ ký"
+        const isoGroup = list.find(item => item.title === 'Hồ sơ ISO' || item.title === 'Hồ sơ chuẩn ISO' || item.title === 'Quản lý ISO');
+        if (isoGroup) {
+          if (!isoGroup.children) isoGroup.children = [];
+          if (!isoGroup.children.some(c => c.route_path === '/admin/iso-records')) {
+            isoGroup.children.push({ id: 3101, title: 'Quản lý hồ sơ', route_path: '/admin/iso-records', icon: 'FolderArchive' });
+          }
+          if (!isoGroup.children.some(c => c.route_path === '/admin/iso-approvals')) {
+            isoGroup.children.push({ id: 3099, title: 'Hồ sơ cần duyệt', route_path: '/admin/iso-approvals', icon: 'FileCheck' });
+          }
+          if (!isoGroup.children.some(c => c.route_path === '/admin/iso-signatures')) {
+            isoGroup.children.push({ id: 3100, title: 'Quản lý Chữ ký', route_path: '/admin/iso-signatures', icon: 'PenTool' });
+          }
+        }
+
         setMenuList(list);
       } catch (err) {
         console.error('Failed to fetch sidebar menus:', err);
@@ -158,6 +173,11 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
       perm = activePermissions['/admin/inspection-guides'] || activePermissions['inspection-guides'];
     }
 
+    // Fallback: nếu chưa cấu hình riêng cho Quản lý kiểm thông số, kế thừa quyền từ /admin/quality
+    if (perm === undefined && (item.route_path === '/admin/quality/parameter' || item.route_path === '/admin/quality-parameter')) {
+      perm = activePermissions['/admin/quality'] || activePermissions['quality'];
+    }
+
     // Cho phép hiển thị Dashboard KPI nếu là kpi route
     if (item.route_path === '/admin/kpi/dashboard' || item.permission_key === 'kpi') {
       const kpiPerm = activePermissions['/admin/kpi/dashboard'] || activePermissions['kpi'];
@@ -169,6 +189,8 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
       const fbPerm = activePermissions['/admin/feedback'] || activePermissions['feedback'];
       if (fbPerm !== 'none') return false;
     }
+
+
 
     // Whitelist các module Claim, Dashboard, Price, Crawl, Train không bao giờ bị chặn trừ khi gán 'none' rõ ràng
     const allowByDefaultRoutes = [
@@ -240,18 +262,20 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
     if (
       item.route_path !== '/admin/dashboard' &&
       item.route_path !== '/admin/manufacture-dashboard' &&
+      item.route_path !== '/admin/quality' &&
       location.pathname.startsWith(item.route_path + '/')
     ) {
       // Check if there is another item in the sidebar that matches the pathname exactly
       let hasExactMatchSibling = false;
       for (const group of menuList) {
-        if (!group.children || group.children.length === 0) {
+        const children = getGroupChildren(group);
+        if (!children || children.length === 0) {
           if (location.pathname === group.route_path) {
             hasExactMatchSibling = true;
             break;
           }
-        } else if (group.children) {
-          for (const child of group.children) {
+        } else {
+          for (const child of children) {
             if (location.pathname === child.route_path) {
               hasExactMatchSibling = true;
               break;
@@ -334,6 +358,24 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
       } else {
         list = list.map(item => item.route_path === '/admin/kpi/quality-employees' ? { ...item, title: 'Danh sách nhân sự' } : item);
       }
+
+      // Thêm mục con "Quản lý kiểm thông số" ngay sau "Tổng quan chất lượng"
+      const hasParamMenu = list.some(item => item.route_path === '/admin/quality/parameter');
+      if (!hasParamMenu) {
+        const paramItem = {
+          id: 9940,
+          parent_id: group.id,
+          title: 'Quản lý kiểm thông số',
+          route_path: '/admin/quality/parameter',
+          icon: 'SlidersHorizontal'
+        };
+        const qualityIdx = list.findIndex(item => item.route_path === '/admin/quality' || item.title === 'Tổng quan chất lượng');
+        if (qualityIdx !== -1) {
+          list.splice(qualityIdx + 1, 0, paramItem);
+        } else {
+          list.push(paramItem);
+        }
+      }
     }
     if (group.title === 'Quản lý kinh doanh') {
       const rest = list.filter(item => item.route_path !== '/admin/prices' && item.title !== 'Quản lý giá tủ');
@@ -348,6 +390,20 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
         { id: 996, parent_id: group.id, title: 'Train Hình ảnh', route_path: '/admin/ai-ocr-train', icon: 'Cpu' }
       ];
     }
+    if (group.title === 'Hồ sơ ISO' || group.title === 'Hồ sơ chuẩn ISO' || group.title === 'Quản lý ISO') {
+      const hasRecords = list.some(item => item.route_path === '/admin/iso-records');
+      if (!hasRecords) {
+        list = [...list, { id: 3101, parent_id: group.id, title: 'Quản lý hồ sơ', route_path: '/admin/iso-records', icon: 'FolderArchive' }];
+      }
+      const hasApprovals = list.some(item => item.route_path === '/admin/iso-approvals');
+      if (!hasApprovals) {
+        list = [...list, { id: 901, parent_id: group.id, title: 'Hồ sơ cần duyệt', route_path: '/admin/iso-approvals', icon: 'FileCheck' }];
+      }
+      const hasSignatures = list.some(item => item.route_path === '/admin/iso-signatures');
+      if (!hasSignatures) {
+        list = [...list, { id: 902, parent_id: group.id, title: 'Quản lý Chữ ký', route_path: '/admin/iso-signatures', icon: 'PenTool' }];
+      }
+    }
     // Đảm bảo không có Quản Lý Góp Ý nằm bên trong bất kỳ group nào (vì đã chuyển lên cấp cao nhất)
     list = list.filter(item => item.route_path !== '/admin/feedback' && item.route_path !== '/admin/quick-reports');
     return list;
@@ -355,6 +411,11 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
 
   // Helper check xem group co child nao dang active ko (bao gom ca sub-children)
   const hasActiveChild = (group) => {
+    if ((group.title === 'Hồ sơ ISO' || group.title === 'Hồ sơ chuẩn ISO' || group.title === 'Quản lý ISO') && (
+      location.pathname.startsWith('/admin/iso-')
+    )) {
+      return true;
+    }
     if (group.title === 'Quản lý hệ thống' && (
       location.pathname === '/admin/monitor' || 
       location.pathname === '/admin/monitor/'
@@ -364,6 +425,10 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
     if ((group.title === 'Module chất lượng' || group.title === 'Quản lý chất lượng' || group.title === 'Quản lý Chất Lượng') && (
       location.pathname === '/admin/quality' || 
       location.pathname === '/admin/quality/' ||
+      location.pathname === '/admin/quality/parameter' ||
+      location.pathname === '/admin/quality/parameter/' ||
+      location.pathname === '/admin/quality-parameter' ||
+      location.pathname === '/admin/quality-parameter/' ||
       location.pathname === '/admin/claim-dashboard' ||
       location.pathname === '/admin/claim-dashboard/' ||
       location.pathname === '/admin/defects' ||

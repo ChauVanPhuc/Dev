@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { formatDateMDY } from '../utils/formatters';
+import { formatDateMDY, formatTimestampVN } from '../utils/formatters';
 import { ImageLightboxModal } from './ImageLightboxModal';
 import { ImageCanvas } from '../../ai_ocr_train/frontend/components/ImageCanvas';
 import { lpnCrawlerApi } from '../services/api';
@@ -88,13 +88,10 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
     if (!target || !code) return false;
     const clean = String(code).trim().toUpperCase();
     if (clean === target) return true;
-    if (clean.length === target.length) {
-      let diffs = 0;
-      for (let i = 0; i < clean.length; i++) {
-        if (clean[i] !== target[i]) diffs++;
-      }
-      if (diffs <= 1 && target.length >= 7) return true;
-    }
+    // Chuẩn hóa nhầm lẫn quang học giữa chữ O và số 0
+    const normTarget = target.replace(/O/g, '0');
+    const normClean = clean.replace(/O/g, '0');
+    if (normClean === normTarget) return true;
     return false;
   };
 
@@ -547,18 +544,23 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
               if (!skuCounts[sKey]) {
                 const isTargetM = Boolean(meta.expectedSku && (effectiveSku.toUpperCase() === meta.expectedSku || isSkuCodeMatch(sCode, meta.expectedSku)));
                 const isSelfM = Boolean(expSkuClean && (effectiveSku.toUpperCase() === expSkuClean || isSkuCodeMatch(sCode, expSkuClean)));
-                const otherSibling = (!isSelfM && !isTargetM && Array.isArray(effectiveItemsList)) ? effectiveItemsList.find(it => it.sku && isSkuCodeMatch(sCode, it.sku)) : null;
-                const isM = isTargetM || isSelfM || Boolean(otherSibling);
-                const matchReason = isSelfM
-                  ? 'Khớp CSDL'
-                  : (isTargetM ? `Khớp ${meta.label} (CSDL: ${meta.expectedSku})` : (otherSibling ? `Khớp ${otherSibling.suffix_key || 'kiện khác'}` : (meta.expectedSku ? `Lệch mã: CSDL ${meta.label} là ${meta.expectedSku}` : `Lệch mã: CSDL là ${expSkuClean}`)));
+                // Tem ở mỗi vị trí đối chiếu theo CSDL của chính vị trí đó (hoặc kiện hiện tại)
+                const isM = isTargetM || isSelfM;
+                let matchReason = '';
+                if (isM) {
+                  matchReason = isSelfM ? 'Khớp CSDL' : `Khớp ${meta.label} (CSDL: ${meta.expectedSku})`;
+                } else {
+                  matchReason = (otherSibling && otherSibling.suffix_key !== meta.label)
+                    ? `❌ Lệch SKU: CSDL ${meta.label} là ${meta.expectedSku || expSkuClean} (Mã đọc thuộc ${otherSibling.suffix_key || 'kiện khác'}, nghi ngờ dán/xếp nhầm!)`
+                    : `❌ Lệch SKU: CSDL ${meta.label} là ${meta.expectedSku || expSkuClean} (Đọc AI: ${effectiveSku})`;
+                }
                 skuCounts[sKey] = {
                   code: effectiveSku,
                   raw_code: sCode,
                   count: 0,
                   is_match: isM,
-                  is_other_item: !isSelfM && (isTargetM || Boolean(otherSibling)),
-                  other_item_label: !isSelfM && isTargetM ? meta.label : (otherSibling ? otherSibling.suffix_key : null),
+                  is_other_item: Boolean(otherSibling),
+                  other_item_label: otherSibling ? otherSibling.suffix_key : null,
                   orientation: rOrient,
                   category_label: rCat,
                   match_reason: matchReason
@@ -576,16 +578,22 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                 const isTargetM = Boolean(meta.expectedLpn && isLpnCodeMatch(lCode, meta.expectedLpn));
                 const isSelfM = isLpnCodeMatch(lCode, expLpnClean);
                 const otherItem = (!isSelfM && !isTargetM) ? containerLpnsMap[lCode.toUpperCase()] : null;
-                const isM = isTargetM || isSelfM || Boolean(otherItem);
-                const matchReason = isSelfM
-                  ? 'Khớp CSDL'
-                  : (isTargetM ? `Khớp ${meta.label} (CSDL: ${meta.expectedLpn})` : (otherItem ? `Khớp ${otherItem.suffix_key || 'kiện khác'} (thùng dán cạnh)` : (meta.expectedLpn ? `Lệch mã: CSDL ${meta.label} là ${meta.expectedLpn}` : 'Không khớp CSDL')));
+                // Tem ở mỗi vị trí đối chiếu theo CSDL của chính vị trí đó (hoặc kiện hiện tại)
+                const isM = isTargetM || isSelfM;
+                let matchReason = '';
+                if (isM) {
+                  matchReason = isSelfM ? 'Khớp CSDL' : `Khớp ${meta.label} (CSDL: ${meta.expectedLpn})`;
+                } else {
+                  matchReason = (otherItem && otherItem.suffix_key !== meta.label)
+                    ? `❌ Lệch LPN: CSDL ${meta.label} là ${meta.expectedLpn || expLpnClean} (Mã đọc thuộc ${otherItem.suffix_key || 'kiện khác'}, nghi ngờ dán nhầm tem!)`
+                    : `❌ Lệch LPN: CSDL ${meta.label} là ${meta.expectedLpn || expLpnClean} (Đọc AI: ${lCode})`;
+                }
                 lpnCounts[lKey] = {
                   code: lCode,
                   count: 0,
                   is_match: isM,
-                  is_other_item: (!isSelfM && isTargetM) || Boolean(otherItem),
-                  other_item_label: !isSelfM && isTargetM ? meta.label : (otherItem ? otherItem.suffix_key : null),
+                  is_other_item: Boolean(otherItem),
+                  other_item_label: otherItem ? otherItem.suffix_key : null,
                   orientation: rOrient,
                   category_label: rCat,
                   match_reason: matchReason
@@ -795,17 +803,24 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
         if (!sMap[sKey]) {
           const isTargetM = Boolean(meta.expectedSku && (effectiveSku.toUpperCase() === meta.expectedSku || isSkuCodeMatch(sCode, meta.expectedSku)));
           const isSelfM = Boolean(expSkuClean && (effectiveSku.toUpperCase() === expSkuClean || isSkuCodeMatch(sCode, expSkuClean)));
+          const otherSibling = (!isSelfM && !isTargetM && Array.isArray(effectiveItemsList)) ? effectiveItemsList.find(it => it.sku && isSkuCodeMatch(sCode, it.sku)) : null;
+          // Tem ở mỗi vị trí đối chiếu theo CSDL của chính vị trí đó (hoặc kiện hiện tại)
           const isM = isTargetM || isSelfM;
-          const matchReason = isSelfM
-            ? 'Khớp CSDL'
-            : (isTargetM ? `Khớp ${meta.label}` : (meta.expectedSku ? `Lệch mã: CSDL ${meta.label} là ${meta.expectedSku}` : `Lệch mã: CSDL là ${expSkuClean}`));
+          let matchReason = '';
+          if (isM) {
+            matchReason = isSelfM ? 'Khớp CSDL' : `Khớp ${meta.label} (CSDL: ${meta.expectedSku})`;
+          } else {
+            matchReason = (otherSibling && otherSibling.suffix_key !== meta.label)
+              ? `❌ Lệch SKU: CSDL ${meta.label} là ${meta.expectedSku || expSkuClean} (Mã đọc thuộc ${otherSibling.suffix_key || 'kiện khác'}, nghi ngờ dán/xếp nhầm!)`
+              : `❌ Lệch SKU: CSDL ${meta.label} là ${meta.expectedSku || expSkuClean} (Đọc AI: ${effectiveSku})`;
+          }
           sMap[sKey] = {
             code: effectiveSku,
             raw_code: sCode,
             count: 0,
             is_match: isM,
-            is_other_item: !isSelfM && isTargetM,
-            other_item_label: !isSelfM && isTargetM ? meta.label : null,
+            is_other_item: Boolean(otherSibling),
+            other_item_label: otherSibling ? otherSibling.suffix_key : null,
             orientation: rOrient,
             category_label: rCat,
             match_reason: matchReason
@@ -823,16 +838,22 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
           const isSelfM = isLpnCodeMatch(lCode);
           const isTargetM = Boolean(meta.expectedLpn && isLpnCodeMatch(lCode, meta.expectedLpn));
           const otherItem = (!isSelfM && !isTargetM) ? containerLpnsMap[lCode.toUpperCase()] : meta.pairedItem;
-          const isM = isSelfM || isTargetM || Boolean(otherItem);
-          const matchReason = isSelfM
-            ? 'Khớp CSDL'
-            : (isTargetM ? `Khớp ${meta.label}` : (otherItem ? `Khớp ${otherItem.suffix_key || 'kiện khác'} (thùng dán cạnh)` : (meta.expectedLpn ? `Lệch mã: CSDL ${meta.label} là ${meta.expectedLpn}` : 'Không khớp CSDL')));
+          // Tem ở mỗi vị trí đối chiếu theo CSDL của chính vị trí đó (hoặc kiện hiện tại)
+          const isM = isSelfM || isTargetM;
+          let matchReason = '';
+          if (isM) {
+            matchReason = isSelfM ? 'Khớp CSDL' : `Khớp ${meta.label} (CSDL: ${meta.expectedLpn})`;
+          } else {
+            matchReason = (otherItem && otherItem.suffix_key !== meta.label)
+              ? `❌ Lệch LPN: CSDL ${meta.label} là ${meta.expectedLpn || expLpnClean} (Mã đọc thuộc ${otherItem.suffix_key || 'kiện khác'}, nghi ngờ dán nhầm tem!)`
+              : `❌ Lệch LPN: CSDL ${meta.label} là ${meta.expectedLpn || expLpnClean} (Đọc AI: ${lCode})`;
+          }
           lMap[lKey] = {
             code: lCode,
             count: 0,
             is_match: isM,
-            is_other_item: !isSelfM && (isTargetM || Boolean(otherItem)),
-            other_item_label: !isSelfM && isTargetM ? meta.label : (otherItem ? otherItem.suffix_key : null),
+            is_other_item: Boolean(otherItem),
+            other_item_label: otherItem ? (otherItem.suffix_key || otherItem.item_code) : null,
             orientation: rOrient,
             category_label: rCat,
             match_reason: matchReason
@@ -893,20 +914,17 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
 
       const isSelfMatch = isLpnCodeMatch(rawCode);
       const isTargetMatch = Boolean(meta.expectedLpn && isLpnCodeMatch(rawCode, meta.expectedLpn));
-      const otherItem = (!isSelfMatch && !isTargetMatch) ? containerLpnsMap[rawCode.toUpperCase()] : meta.pairedItem;
-      const isM = isSelfMatch || isTargetMatch || Boolean(itemLpn.is_match) || Boolean(otherItem);
+      const otherItem = (!isSelfMatch && !isTargetMatch) ? containerLpnsMap[rawCode.toUpperCase()] : null;
+      // Cả tem tủ đứng lẫn tem top nóc đều đối chiếu theo CSDL mục tiêu tương ứng (getTargetMetaForOrient) hoặc chính kiện này
+      const isM = isSelfMatch || isTargetMatch;
 
       let reason = '';
-      if (isSelfMatch) {
-        reason = 'Khớp CSDL';
-      } else if (isTargetMatch) {
-        reason = `Khớp ${meta.label} (CSDL: ${meta.expectedLpn})`;
-      } else if (otherItem) {
-        reason = `Khớp ${otherItem.suffix_key || 'kiện khác'} (thùng dán cạnh)`;
-      } else if (itemLpn.match_reason && isM) {
-        reason = itemLpn.match_reason;
+      if (isM) {
+        reason = (isTargetMatch && !meta.isSelf) ? `Khớp ${meta.label} (CSDL: ${meta.expectedLpn})` : 'Khớp CSDL';
       } else {
-        reason = meta.expectedLpn ? `Lệch mã: CSDL ${meta.label} là ${meta.expectedLpn}` : (expLpnClean ? `Lệch mã: CSDL là ${expLpnClean} (Thùng khác dán cạnh)` : 'Mã không có trong CSDL');
+        reason = otherItem
+          ? `❌ Lệch LPN: CSDL là ${meta.expectedLpn || expLpnClean} (Mã đọc thuộc ${otherItem.suffix_key || 'kiện khác'}, nghi ngờ dán nhầm tem!)`
+          : (meta.expectedLpn ? `❌ Lệch LPN: CSDL ${meta.label} là ${meta.expectedLpn} (Đọc AI: ${rawCode})` : `❌ Lệch LPN: CSDL là ${expLpnClean} (Đọc AI: ${rawCode})`);
       }
 
       const key = `${rawCode}__${itemOrient}`;
@@ -916,8 +934,8 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
           code: rawCode,
           count: 0,
           is_match: isM,
-          is_other_item: !isSelfMatch && (isTargetMatch || Boolean(otherItem)),
-          other_item_label: !isSelfMatch && isTargetMatch ? meta.label : (otherItem ? otherItem.suffix_key : (isPosVertical && itemOrient === 'horizontal' ? 'Tủ dưới (Pallet đứng)' : null)),
+          is_other_item: Boolean(otherItem),
+          other_item_label: otherItem ? otherItem.suffix_key : null,
           orientation: itemOrient,
           category_label: itemCat,
           match_reason: reason
@@ -977,19 +995,16 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
       const isTargetM = Boolean(meta.expectedSku && (effectiveCode.toUpperCase() === meta.expectedSku || isSkuCodeMatch(rawCode, meta.expectedSku)));
       const isSelfM = Boolean(expSkuClean && (effectiveCode.toUpperCase() === expSkuClean || isSkuCodeMatch(rawCode, expSkuClean)));
       const otherSibling = (!isSelfM && !isTargetM && Array.isArray(effectiveItemsList)) ? effectiveItemsList.find(it => it.sku && isSkuCodeMatch(rawCode, it.sku)) : null;
-      const isM = isTargetM || isSelfM || Boolean(itemSku.is_match) || Boolean(otherSibling);
+      // Cả tem tủ đứng lẫn tem top nóc đều đối chiếu theo CSDL mục tiêu tương ứng (getTargetMetaForOrient) hoặc chính kiện này
+      const isM = isSelfM || isTargetM;
 
       let reason = '';
-      if (isSelfM) {
-        reason = 'Khớp CSDL';
-      } else if (isTargetM) {
-        reason = `Khớp ${meta.label} (CSDL: ${meta.expectedSku})`;
-      } else if (otherSibling) {
-        reason = `Khớp ${otherSibling.suffix_key || 'kiện khác'}`;
-      } else if (itemSku.match_reason && isM) {
-        reason = itemSku.match_reason;
+      if (isM) {
+        reason = (isTargetM && !meta.isSelf) ? `Khớp ${meta.label} (CSDL: ${meta.expectedSku})` : 'Khớp CSDL';
       } else {
-        reason = meta.expectedSku ? `Lệch mã: CSDL ${meta.label} là ${meta.expectedSku}` : (expSkuClean ? `Lệch mã: CSDL là ${expSkuClean}` : 'Mã không có trong CSDL');
+        reason = otherSibling
+          ? `❌ Lệch SKU: CSDL là ${meta.expectedSku || expSkuClean} (Mã đọc thuộc ${otherSibling.suffix_key || 'kiện khác'}, nghi ngờ dán/xếp nhầm!)`
+          : (meta.expectedSku ? `❌ Lệch SKU: CSDL ${meta.label} là ${meta.expectedSku} (Đọc AI: ${effectiveCode})` : `❌ Lệch SKU: CSDL là ${expSkuClean} (Đọc AI: ${effectiveCode})`);
       }
 
       // Nhóm theo effectiveCode để gộp các biến thể giống 90-99% vào mã chuẩn:
@@ -1000,8 +1015,8 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
           code: effectiveCode,
           count: 0,
           is_match: isM,
-          is_other_item: !isSelfM && (isTargetM || Boolean(otherSibling)),
-          other_item_label: !isSelfM && isTargetM ? meta.label : (otherSibling ? otherSibling.suffix_key : null),
+          is_other_item: Boolean(otherSibling),
+          other_item_label: otherSibling ? otherSibling.suffix_key : null,
           orientation: itemOrient,
           category_label: itemCat,
           match_reason: reason
@@ -1419,7 +1434,7 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                           <CleanTableRow label="Số Container" value={item.container_number} bold />
                           <CleanTableRow label="Factory" value={item.factory} />
                           <CleanTableRow label="Date loading" value={formatDateMDY(item.date_loading || item.date_loading_raw)} />
-                          <CleanTableRow label="Timestamp" value={item.timestamp_raw} isLast />
+                          <CleanTableRow label="Timestamp" value={formatTimestampVN(item.timestamp_raw)} isLast />
                         </tbody>
                       </table>
                     </div>
@@ -1753,9 +1768,49 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                     </div>
 
                     {aiResult && (() => {
-                      const hasLpnMatch = finalLpnsList.some((l) => l.is_match) || Boolean(aiResult.is_lpn_match) || isLpnCodeMatch(aiResult.detected_lpn);
-                      const hasSkuMatch = finalSkusList.some((s) => s.is_match) || Boolean(aiResult.is_sku_match) || isSkuCodeMatch(aiResult.detected_sku);
-                      const isSuccess = aiResult.status === 'success' || hasLpnMatch || hasSkuMatch;
+                      const hasSkuMismatch = finalSkusList.some((s) => !s.is_match);
+                      const hasLpnMismatch = finalLpnsList.some((l) => !l.is_match);
+                      const hasSkuMatch = finalSkusList.some((s) => s.is_match);
+                      const hasLpnMatch = finalLpnsList.some((l) => l.is_match);
+
+                      let badgeText = 'Đã nhận diện';
+                      let badgeBg = '#DEF7EC';
+                      let badgeColor = '#03543F';
+                      let badgeBorder = '#BCF0DA';
+
+                      if (hasSkuMismatch || hasLpnMismatch) {
+                        if (hasSkuMismatch && hasLpnMismatch) {
+                          badgeText = '❌ LỆCH CẢ SKU & LPN';
+                        } else if (hasSkuMismatch) {
+                          badgeText = '❌ LỆCH MẪU SKU';
+                        } else {
+                          badgeText = '⚠️ LỆCH MÃ LPN';
+                        }
+                        badgeBg = '#FDE8E8';
+                        badgeColor = '#9B1C1C';
+                        badgeBorder = '#F8B4B4';
+                      } else if (hasSkuMatch && hasLpnMatch) {
+                        badgeText = '✅ Khớp 100%';
+                        badgeBg = '#DEF7EC';
+                        badgeColor = '#03543F';
+                        badgeBorder = '#BCF0DA';
+                      } else if (hasSkuMatch || hasLpnMatch) {
+                        badgeText = hasSkuMatch ? 'Khớp SKU (Thiếu LPN)' : 'Khớp LPN (Thiếu SKU)';
+                        badgeBg = '#FEF3C7';
+                        badgeColor = '#92400E';
+                        badgeBorder = '#FCD34D';
+                      } else if (aiResult.status === 'review') {
+                        badgeText = 'Cần Review';
+                        badgeBg = '#FEF3C7';
+                        badgeColor = '#92400E';
+                        badgeBorder = '#FCD34D';
+                      } else {
+                        badgeText = 'Chưa khớp CSDL';
+                        badgeBg = '#FDE8E8';
+                        badgeColor = '#9B1C1C';
+                        badgeBorder = '#F8B4B4';
+                      }
+
                       return (
                         <span
                           style={{
@@ -1763,12 +1818,13 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                             fontWeight: '700',
                             padding: '2px 8px',
                             borderRadius: '999px',
-                            backgroundColor: isSuccess ? '#DEF7EC' : (aiResult.status === 'review' ? '#FEF3C7' : '#FDE8E8'),
-                            color: isSuccess ? '#03543F' : (aiResult.status === 'review' ? '#92400E' : '#9B1C1C'),
-                            border: `1px solid ${isSuccess ? '#BCF0DA' : (aiResult.status === 'review' ? '#FCD34D' : '#F8B4B4')}`
+                            backgroundColor: badgeBg,
+                            color: badgeColor,
+                            border: `1px solid ${badgeBorder}`,
+                            letterSpacing: '0.01em'
                           }}
                         >
-                          {isSuccess ? 'Đã nhận diện' : (aiResult.status === 'review' ? 'Cần Review' : 'Thất bại')}
+                          {badgeText}
                         </span>
                       );
                     })()}
@@ -2098,51 +2154,58 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                                   <div
                                     key={idx}
                                     style={{
-                                      padding: '5px 7px',
-                                      borderRadius: '4px',
+                                      padding: '6px 8px',
+                                      borderRadius: '6px',
                                       backgroundColor: itemLpn.is_match ? '#F0FDF4' : '#FEF2F2',
-                                      border: `1px solid ${itemLpn.is_match ? '#BBF7D0' : '#FECACA'}`,
+                                      border: `1.5px solid ${itemLpn.is_match ? '#86EFAC' : '#F87171'}`,
+                                      boxShadow: itemLpn.is_match ? 'none' : '0 1px 3px rgba(239, 68, 68, 0.1)',
                                       display: 'flex',
                                       flexDirection: 'column',
-                                      gap: '2px',
+                                      gap: '3px',
                                       minWidth: 0
                                     }}
                                     title={itemLpn.match_reason}
                                   >
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'space-between' }}>
-                                      <span
-                                        style={{
-                                          fontFamily: 'Consolas, monospace',
-                                          fontSize: '0.82rem',
-                                          fontWeight: '800',
-                                          color: '#1F2937',
-                                          letterSpacing: '-0.2px'
-                                        }}
-                                      >
-                                        {itemLpn.code}
-                                      </span>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', minWidth: 0 }}>
+                                        <span style={{ fontSize: '0.8rem' }}>{itemLpn.is_match ? '✅' : '❌'}</span>
+                                        <span
+                                          style={{
+                                            fontFamily: 'Consolas, monospace',
+                                            fontSize: '0.84rem',
+                                            fontWeight: '800',
+                                            color: itemLpn.is_match ? '#15803D' : '#991B1B',
+                                            letterSpacing: '-0.2px',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            whiteSpace: 'nowrap'
+                                          }}
+                                        >
+                                          {itemLpn.code}
+                                        </span>
+                                      </div>
                                       <span
                                         style={{
                                           fontSize: '0.66rem',
-                                          color: '#4B5563',
-                                          fontWeight: '600',
-                                          backgroundColor: '#FFFFFF',
-                                          padding: '1px 5px',
-                                          borderRadius: '3px',
-                                          border: '1px solid #E5E7EB',
+                                          color: itemLpn.is_match ? '#166534' : '#991B1B',
+                                          fontWeight: '700',
+                                          backgroundColor: itemLpn.is_match ? '#DCFCE7' : '#FEE2E2',
+                                          padding: '1px 6px',
+                                          borderRadius: '4px',
+                                          border: `1px solid ${itemLpn.is_match ? '#BBF7D0' : '#FECACA'}`,
                                           flexShrink: 0
                                         }}
                                       >
                                         {itemLpn.count} cái
                                       </span>
                                     </div>
-                                    {itemLpn.is_other_item && itemLpn.match_reason && (
-                                      <div style={{ fontSize: '0.65rem', color: '#047857', fontWeight: '600', lineHeight: 1.2 }}>
+                                    {itemLpn.is_match && itemLpn.match_reason && (
+                                      <div style={{ fontSize: '0.67rem', color: '#15803D', fontWeight: '600', lineHeight: 1.25 }}>
                                         {itemLpn.match_reason}
                                       </div>
                                     )}
                                     {!itemLpn.is_match && itemLpn.match_reason && (
-                                      <div style={{ fontSize: '0.65rem', color: '#B91C1C', fontStyle: 'italic', lineHeight: 1.2 }}>
+                                      <div style={{ fontSize: '0.67rem', color: '#DC2626', fontWeight: '700', lineHeight: 1.25, backgroundColor: '#FFF5F5', padding: '2px 4px', borderRadius: '3px', border: '1px dashed #FECACA' }}>
                                         {itemLpn.match_reason}
                                       </div>
                                     )}
@@ -2167,51 +2230,58 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                                   <div
                                     key={idx}
                                     style={{
-                                      padding: '5px 7px',
-                                      borderRadius: '4px',
+                                      padding: '6px 8px',
+                                      borderRadius: '6px',
                                       backgroundColor: itemSku.is_match ? '#F0FDF4' : '#FEF2F2',
-                                      border: `1px solid ${itemSku.is_match ? '#BBF7D0' : '#FECACA'}`,
+                                      border: `1.5px solid ${itemSku.is_match ? '#86EFAC' : '#F87171'}`,
+                                      boxShadow: itemSku.is_match ? 'none' : '0 1px 3px rgba(239, 68, 68, 0.1)',
                                       display: 'flex',
                                       flexDirection: 'column',
-                                      gap: '2px',
+                                      gap: '3px',
                                       minWidth: 0
                                     }}
                                     title={itemSku.match_reason}
                                   >
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'space-between' }}>
-                                      <span
-                                        style={{
-                                          fontFamily: 'Consolas, monospace',
-                                          fontSize: '0.82rem',
-                                          fontWeight: '800',
-                                          color: '#1F2937',
-                                          letterSpacing: '-0.2px'
-                                        }}
-                                      >
-                                        {itemSku.code}
-                                      </span>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', minWidth: 0 }}>
+                                        <span style={{ fontSize: '0.8rem' }}>{itemSku.is_match ? '✅' : '❌'}</span>
+                                        <span
+                                          style={{
+                                            fontFamily: 'Consolas, monospace',
+                                            fontSize: '0.84rem',
+                                            fontWeight: '800',
+                                            color: itemSku.is_match ? '#15803D' : '#991B1B',
+                                            letterSpacing: '-0.2px',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            whiteSpace: 'nowrap'
+                                          }}
+                                        >
+                                          {itemSku.code}
+                                        </span>
+                                      </div>
                                       <span
                                         style={{
                                           fontSize: '0.66rem',
-                                          color: '#4B5563',
-                                          fontWeight: '600',
-                                          backgroundColor: '#FFFFFF',
-                                          padding: '1px 5px',
-                                          borderRadius: '3px',
-                                          border: '1px solid #E5E7EB',
+                                          color: itemSku.is_match ? '#166534' : '#991B1B',
+                                          fontWeight: '700',
+                                          backgroundColor: itemSku.is_match ? '#DCFCE7' : '#FEE2E2',
+                                          padding: '1px 6px',
+                                          borderRadius: '4px',
+                                          border: `1px solid ${itemSku.is_match ? '#BBF7D0' : '#FECACA'}`,
                                           flexShrink: 0
                                         }}
                                       >
                                         {itemSku.count} cái
                                       </span>
                                     </div>
-                                    {itemSku.is_other_item && itemSku.match_reason && (
-                                      <div style={{ fontSize: '0.65rem', color: '#047857', fontWeight: '600', lineHeight: 1.2 }}>
+                                    {itemSku.is_match && itemSku.match_reason && (
+                                      <div style={{ fontSize: '0.67rem', color: '#15803D', fontWeight: '600', lineHeight: 1.25 }}>
                                         {itemSku.match_reason}
                                       </div>
                                     )}
                                     {!itemSku.is_match && itemSku.match_reason && (
-                                      <div style={{ fontSize: '0.65rem', color: '#B91C1C', fontStyle: 'italic', lineHeight: 1.2 }}>
+                                      <div style={{ fontSize: '0.67rem', color: '#DC2626', fontWeight: '700', lineHeight: 1.25, backgroundColor: '#FFF5F5', padding: '2px 4px', borderRadius: '3px', border: '1px dashed #FECACA' }}>
                                         {itemSku.match_reason}
                                       </div>
                                     )}
@@ -2373,51 +2443,58 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                                       <div
                                         key={idx}
                                         style={{
-                                          padding: '5px 7px',
-                                          borderRadius: '4px',
+                                          padding: '6px 8px',
+                                          borderRadius: '6px',
                                           backgroundColor: itemLpn.is_match ? '#F0FDF4' : '#FEF2F2',
-                                          border: `1px solid ${itemLpn.is_match ? '#BBF7D0' : '#FECACA'}`,
+                                          border: `1.5px solid ${itemLpn.is_match ? '#86EFAC' : '#F87171'}`,
+                                          boxShadow: itemLpn.is_match ? 'none' : '0 1px 3px rgba(239, 68, 68, 0.1)',
                                           display: 'flex',
                                           flexDirection: 'column',
-                                          gap: '2px',
+                                          gap: '3px',
                                           minWidth: 0
                                         }}
                                         title={itemLpn.match_reason}
                                       >
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'space-between' }}>
-                                          <span
-                                            style={{
-                                              fontFamily: 'Consolas, monospace',
-                                              fontSize: '0.82rem',
-                                              fontWeight: '800',
-                                              color: '#1F2937',
-                                              letterSpacing: '-0.2px'
-                                            }}
-                                          >
-                                            {itemLpn.code}
-                                          </span>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', minWidth: 0 }}>
+                                            <span style={{ fontSize: '0.8rem' }}>{itemLpn.is_match ? '✅' : '❌'}</span>
+                                            <span
+                                              style={{
+                                                fontFamily: 'Consolas, monospace',
+                                                fontSize: '0.84rem',
+                                                fontWeight: '800',
+                                                color: itemLpn.is_match ? '#15803D' : '#991B1B',
+                                                letterSpacing: '-0.2px',
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis',
+                                                whiteSpace: 'nowrap'
+                                              }}
+                                            >
+                                              {itemLpn.code}
+                                            </span>
+                                          </div>
                                           <span
                                             style={{
                                               fontSize: '0.66rem',
-                                              color: '#4B5563',
-                                              fontWeight: '600',
-                                              backgroundColor: '#FFFFFF',
-                                              padding: '1px 5px',
-                                              borderRadius: '3px',
-                                              border: '1px solid #E5E7EB',
+                                              color: itemLpn.is_match ? '#166534' : '#991B1B',
+                                              fontWeight: '700',
+                                              backgroundColor: itemLpn.is_match ? '#DCFCE7' : '#FEE2E2',
+                                              padding: '1px 6px',
+                                              borderRadius: '4px',
+                                              border: `1px solid ${itemLpn.is_match ? '#BBF7D0' : '#FECACA'}`,
                                               flexShrink: 0
                                             }}
                                           >
                                             {itemLpn.count} cái
                                           </span>
                                         </div>
-                                        {itemLpn.is_other_item && itemLpn.match_reason && (
-                                          <div style={{ fontSize: '0.65rem', color: '#047857', fontWeight: '600', lineHeight: 1.2 }}>
+                                        {itemLpn.is_match && itemLpn.match_reason && (
+                                          <div style={{ fontSize: '0.67rem', color: '#15803D', fontWeight: '600', lineHeight: 1.25 }}>
                                             {itemLpn.match_reason}
                                           </div>
                                         )}
                                         {!itemLpn.is_match && itemLpn.match_reason && (
-                                          <div style={{ fontSize: '0.65rem', color: '#B91C1C', fontStyle: 'italic', lineHeight: 1.2 }}>
+                                          <div style={{ fontSize: '0.67rem', color: '#DC2626', fontWeight: '700', lineHeight: 1.25, backgroundColor: '#FFF5F5', padding: '2px 4px', borderRadius: '3px', border: '1px dashed #FECACA' }}>
                                             {itemLpn.match_reason}
                                           </div>
                                         )}
@@ -2442,46 +2519,58 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                                       <div
                                         key={idx}
                                         style={{
-                                          padding: '5px 7px',
-                                          borderRadius: '4px',
+                                          padding: '6px 8px',
+                                          borderRadius: '6px',
                                           backgroundColor: itemSku.is_match ? '#F0FDF4' : '#FEF2F2',
-                                          border: `1px solid ${itemSku.is_match ? '#BBF7D0' : '#FECACA'}`,
+                                          border: `1.5px solid ${itemSku.is_match ? '#86EFAC' : '#F87171'}`,
+                                          boxShadow: itemSku.is_match ? 'none' : '0 1px 3px rgba(239, 68, 68, 0.1)',
                                           display: 'flex',
                                           flexDirection: 'column',
-                                          gap: '2px',
+                                          gap: '3px',
                                           minWidth: 0
                                         }}
                                         title={itemSku.match_reason}
                                       >
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'space-between' }}>
-                                          <span
-                                            style={{
-                                              fontFamily: 'Consolas, monospace',
-                                              fontSize: '0.82rem',
-                                              fontWeight: '800',
-                                              color: '#1F2937',
-                                              letterSpacing: '-0.2px'
-                                            }}
-                                          >
-                                            {itemSku.code}
-                                          </span>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', minWidth: 0 }}>
+                                            <span style={{ fontSize: '0.8rem' }}>{itemSku.is_match ? '✅' : '❌'}</span>
+                                            <span
+                                              style={{
+                                                fontFamily: 'Consolas, monospace',
+                                                fontSize: '0.84rem',
+                                                fontWeight: '800',
+                                                color: itemSku.is_match ? '#15803D' : '#991B1B',
+                                                letterSpacing: '-0.2px',
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis',
+                                                whiteSpace: 'nowrap'
+                                              }}
+                                            >
+                                              {itemSku.code}
+                                            </span>
+                                          </div>
                                           <span
                                             style={{
                                               fontSize: '0.66rem',
-                                              color: '#4B5563',
-                                              fontWeight: '600',
-                                              backgroundColor: '#FFFFFF',
-                                              padding: '1px 5px',
-                                              borderRadius: '3px',
-                                              border: '1px solid #E5E7EB',
+                                              color: itemSku.is_match ? '#166534' : '#991B1B',
+                                              fontWeight: '700',
+                                              backgroundColor: itemSku.is_match ? '#DCFCE7' : '#FEE2E2',
+                                              padding: '1px 6px',
+                                              borderRadius: '4px',
+                                              border: `1px solid ${itemSku.is_match ? '#BBF7D0' : '#FECACA'}`,
                                               flexShrink: 0
                                             }}
                                           >
                                             {itemSku.count} cái
                                           </span>
                                         </div>
+                                        {itemSku.is_match && itemSku.match_reason && (
+                                          <div style={{ fontSize: '0.67rem', color: '#15803D', fontWeight: '600', lineHeight: 1.25 }}>
+                                            {itemSku.match_reason}
+                                          </div>
+                                        )}
                                         {!itemSku.is_match && itemSku.match_reason && (
-                                          <div style={{ fontSize: '0.65rem', color: '#B91C1C', fontStyle: 'italic', lineHeight: 1.2 }}>
+                                          <div style={{ fontSize: '0.67rem', color: '#DC2626', fontWeight: '700', lineHeight: 1.25, backgroundColor: '#FFF5F5', padding: '2px 4px', borderRadius: '3px', border: '1px dashed #FECACA' }}>
                                             {itemSku.match_reason}
                                           </div>
                                         )}
@@ -3132,12 +3221,17 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                               const rLpn = roi.extracted_lpn || roi.extracted?.lpn;
                               const rSku = roi.extracted_sku || roi.extracted?.sku;
 
-                              const isDirectLpn = rLpn && targetLpn && (rLpn === targetLpn || isLpnCodeMatch(rLpn));
-                              const isPairedLpn = rLpn && pairedLpn && (rLpn === pairedLpn || isLpnCodeMatch(rLpn));
-                              const isContLpn = rLpn && containerItems.some(c => c.lpn && (c.lpn === rLpn || isLpnCodeMatch(rLpn)));
-                              const isLpnMatch = isDirectLpn || isPairedLpn || isContLpn;
+                              const rOrient = roi.orientation || (roi.rotation_deg === 90 || roi.rotation_deg === 270 ? 'vertical' : 'horizontal');
+                              const meta = getTargetMetaForOrient(rOrient);
+                              const isMetaLpn = rLpn && meta.expectedLpn && (rLpn === meta.expectedLpn || isLpnCodeMatch(rLpn, meta.expectedLpn));
+                              const isDirectLpn = rLpn && targetLpn && (rLpn === targetLpn || isLpnCodeMatch(rLpn, targetLpn));
+                              const isPairedLpn = rLpn && pairedLpn && (rLpn === pairedLpn || isLpnCodeMatch(rLpn, pairedLpn));
+                              const isLpnMatch = isMetaLpn || isDirectLpn || isPairedLpn;
 
-                              const isSkuMatch = rSku && targetSku && (rSku === targetSku || isSkuCodeMatch(rSku));
+                              const isMetaSku = rSku && meta.expectedSku && (rSku === meta.expectedSku || isSkuCodeMatch(rSku, meta.expectedSku));
+                              const isDirectSku = rSku && targetSku && (rSku === targetSku || isSkuCodeMatch(rSku, targetSku));
+                              const isPairedSku = rSku && pairedItem?.sku && (rSku === pairedItem.sku || isSkuCodeMatch(rSku, pairedItem.sku));
+                              const isSkuMatch = isMetaSku || isDirectSku || isPairedSku;
                               const hasMatch = isLpnMatch || isSkuMatch;
                               const isMismatch = (rLpn && targetLpn && !isLpnMatch) || (rSku && targetSku && !isSkuMatch);
                               const fullTextSnippet = roi.full_text || roi.text_under_barcode || (roi.tokens ? roi.tokens.map(t => t.text).join(' ') : '');
@@ -3253,19 +3347,31 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                     const pairedLpn = pairedItem?.lpn;
                     const containerItems = inspectorAnalysis?.meta_info?.container_items || [];
 
-                    const isRoiLpnMatch = (code) => {
+                    const isRoiLpnMatch = (code, roi) => {
                       if (!code) return { isMatch: false };
-                      if (targetLpn && (code === targetLpn || isLpnCodeMatch(code))) {
+                      const rOrient = roi?.orientation || (roi?.rotation_deg === 90 || roi?.rotation_deg === 270 ? 'vertical' : 'horizontal');
+                      const meta = getTargetMetaForOrient(rOrient);
+
+                      if (meta.expectedLpn && (code === meta.expectedLpn || isLpnCodeMatch(code, meta.expectedLpn))) {
+                        return {
+                          isMatch: true,
+                          matchType: meta.isSelf ? 'direct' : 'paired',
+                          label: meta.isSelf ? 'ĐÚNG 100%' : `ĐÚNG (Khớp ${meta.label})`
+                        };
+                      }
+                      const isSelfMatch = targetLpn && (code === targetLpn || isLpnCodeMatch(code));
+                      if (isSelfMatch) {
                         return { isMatch: true, matchType: 'direct', label: 'ĐÚNG 100%' };
                       }
-                      if (pairedLpn && (code === pairedLpn || isLpnCodeMatch(code))) {
-                        return { isMatch: true, matchType: 'paired', label: `ĐÚNG (Khớp ${pairedItem?.suffix_key || 'kiện đi kèm'})` };
+                      const isPairedMatch = pairedLpn && (code === pairedLpn || isLpnCodeMatch(code));
+                      if (isPairedMatch) {
+                        return { isMatch: true, matchType: 'paired', label: `ĐÚNG (Khớp ${pairedItem?.suffix_key || 'Pallet/Top'})` };
                       }
                       const foundInCont = containerItems.find(c => c.lpn && (c.lpn === code || isLpnCodeMatch(code)));
                       if (foundInCont) {
-                        return { isMatch: true, matchType: 'container', label: `ĐÚNG (Kiện ${foundInCont.suffix_key})` };
+                        return { isMatch: false, matchType: 'container_mismatch', label: `❌ LỆCH MÃ (Thuộc ${foundInCont.suffix_key || 'kiện khác'}, nghi nhầm tem!)` };
                       }
-                      return { isMatch: false };
+                      return { isMatch: false, label: 'SAI (Khác CSDL)' };
                     };
 
                     const roiList = inspectorAnalysis?.roi_details || inspectorAnalysis?.images?.roi_details || [];
@@ -3273,10 +3379,10 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
 
                     const lpnMatchedCount = lpnRois.filter(r => {
                       const code = r.extracted_lpn || r.extracted?.lpn;
-                      return isRoiLpnMatch(code).isMatch;
+                      return isRoiLpnMatch(code, r).isMatch;
                     }).length;
                     const lpnTotalCount = lpnRois.length;
-                    const isAllLpnMatch = lpnTotalCount > 0 ? (lpnMatchedCount === lpnTotalCount) : Boolean(aiResult?.is_lpn_match || (targetLpn && isRoiLpnMatch(aiResult?.detected_lpn || inspectorAnalysis?.extracted?.lpn).isMatch));
+                    const isAllLpnMatch = lpnTotalCount > 0 ? (lpnMatchedCount === lpnTotalCount) : Boolean(aiResult?.is_lpn_match || (targetLpn && isRoiLpnMatch(aiResult?.detected_lpn || inspectorAnalysis?.extracted?.lpn, { orientation: isPosVertical ? 'vertical' : 'horizontal' }).isMatch));
                     const lpnMatchRate = lpnTotalCount > 0 ? Math.round((lpnMatchedCount / lpnTotalCount) * 100) : (isAllLpnMatch ? 100 : 0);
 
                     return (
@@ -3331,7 +3437,7 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                 {lpnRois.map((roi) => {
                                   const code = roi.extracted_lpn || roi.extracted?.lpn;
-                                  const matchInfo = isRoiLpnMatch(code);
+                                  const matchInfo = isRoiLpnMatch(code, roi);
                                   const isMatch = matchInfo.isMatch;
                                   const isSelected = selectedRoiIndex === (roi.label_id - 1);
                                   const cleanTextUnderQr = extractCleanCodeUnderRoi(roi, 'lpn');
@@ -3450,9 +3556,9 @@ export const DetailModal = ({ item, itemsList = [], onNavigate, onClose, onResol
                       }
                       const otherSibling = Array.isArray(itemsList) ? itemsList.find(it => isSkuCodeMatch(code, it.sku)) : null;
                       if (otherSibling) {
-                        return { isMatch: true, matchType: 'container', label: `ĐÚNG (${otherSibling.suffix_key})` };
+                        return { isMatch: false, matchType: 'container_mismatch', label: `❌ LỆCH SKU (Thuộc ${otherSibling.suffix_key}, nghi ngờ dán nhầm!)` };
                       }
-                      return { isMatch: false };
+                      return { isMatch: false, label: 'SAI KÝ TỰ' };
                     };
 
                     const skuMatchedCount = skuRois.filter(r => {

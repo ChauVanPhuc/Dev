@@ -84,11 +84,28 @@ class BarcodeEngine:
                             if not clean_text:
                                 continue
                             fmt_name = b.format.name if hasattr(b.format, 'name') else str(b.format)
+                            
+                            # Trích xuất tọa độ Bounding Box của mã vạch trên ảnh gốc
+                            bc_box = None
+                            try:
+                                if hasattr(b, 'position') and b.position is not None:
+                                    pos = b.position
+                                    xs = [pos.top_left.x, pos.top_right.x, pos.bottom_left.x, pos.bottom_right.x]
+                                    ys = [pos.top_left.y, pos.top_right.y, pos.bottom_left.y, pos.bottom_right.y]
+                                    bx1 = int(min(xs) / sc)
+                                    by1 = int(min(ys) / sc)
+                                    bx2 = int(max(xs) / sc)
+                                    by2 = int(max(ys) / sc)
+                                    bc_box = [bx1, by1, max(1, bx2 - bx1), max(1, by2 - by1)]
+                            except Exception:
+                                pass
+
                             res_item = {
                                 "data": clean_text,
                                 "type": fmt_name,
                                 "confidence": 1.0,
-                                "source": f"ZXing ({fmt_name})"
+                                "source": f"ZXing ({fmt_name})",
+                                "bbox": bc_box
                             }
                             if target_clean and clean_text.upper() == target_clean:
                                 if clean_text not in seen_texts:
@@ -119,15 +136,27 @@ class BarcodeEngine:
             try:
                 ok, decoded_info, points, _ = self.qr_detector.detectAndDecodeMulti(gray)
                 if ok and decoded_info:
-                    for text in decoded_info:
+                    for idx_qr, text in enumerate(decoded_info):
                         clean_text = str(text).strip()
                         if clean_text and clean_text not in seen_texts:
                             seen_texts.add(clean_text)
+                            bc_box = None
+                            try:
+                                if points is not None and idx_qr < len(points):
+                                    pts = points[idx_qr]
+                                    bx1 = int(np.min(pts[:, 0]))
+                                    by1 = int(np.min(pts[:, 1]))
+                                    bx2 = int(np.max(pts[:, 0]))
+                                    by2 = int(np.max(pts[:, 1]))
+                                    bc_box = [bx1, by1, max(1, bx2 - bx1), max(1, by2 - by1)]
+                            except Exception:
+                                pass
                             results.append({
                                 "data": clean_text,
                                 "type": "QR_CODE",
                                 "confidence": 1.0,
-                                "source": "QR Detector"
+                                "source": "QR Detector",
+                                "bbox": bc_box
                             })
             except Exception:
                 pass
@@ -142,11 +171,23 @@ class BarcodeEngine:
                         if clean_text and clean_text not in seen_texts:
                             b_type = str(decoded_type[idx]) if decoded_type is not None and idx < len(decoded_type) else "1D_BARCODE"
                             seen_texts.add(clean_text)
+                            bc_box = None
+                            try:
+                                if points is not None and idx < len(points):
+                                    pts = points[idx]
+                                    bx1 = int(np.min(pts[:, 0]))
+                                    by1 = int(np.min(pts[:, 1]))
+                                    bx2 = int(np.max(pts[:, 0]))
+                                    by2 = int(np.max(pts[:, 1]))
+                                    bc_box = [bx1, by1, max(1, bx2 - bx1), max(1, by2 - by1)]
+                            except Exception:
+                                pass
                             results.append({
                                 "data": clean_text,
                                 "type": b_type,
                                 "confidence": 0.95,
-                                "source": f"Barcode Detector ({b_type})"
+                                "source": f"Barcode Detector ({b_type})",
+                                "bbox": bc_box
                             })
             except Exception:
                 pass

@@ -852,6 +852,36 @@ def extract_root_po(code: str) -> str:
         return m2.group(1)
     return code_clean
 
+
+def resolve_bom_part_qty(bom_q: float, prod_q: float, master_norm: Optional[float] = None) -> int:
+    """
+    Tính toán số lượng chi tiết thực tế của đơn hàng từ BOM và số lượng sản phẩm (prod_q).
+    Phân biệt thông minh giữa:
+    1. bom_q là định mức trên 1 đơn vị sản phẩm (unit norm, ví dụ 2 thanh đứng / tủ) -> Nhân với prod_q.
+    2. bom_q đã được nhân trước trong dữ liệu cũ (pre-multiplied, ví dụ bom_q = 46 hoặc 92) -> Giữ nguyên để tránh nhân đôi.
+    """
+    b_q = float(bom_q or 1.0)
+    p_q = float(prod_q or 1.0)
+    if p_q <= 1.0:
+        return max(1, int(round(b_q)))
+
+    # Nếu có định mức master_norm để đối chiếu:
+    if master_norm is not None and master_norm > 0:
+        # Nếu bom_q xấp xỉ master_norm (định mức):
+        if abs(b_q - master_norm) < 0.0001:
+            return max(1, int(round(p_q * b_q)))
+        # Nếu bom_q xấp xỉ master_norm * p_q (đã nhân trước):
+        if abs(b_q - (master_norm * p_q)) < 0.01:
+            return int(round(b_q))
+
+    # Heuristic an toàn khi không có master_norm:
+    # Nếu bom_q < p_q (ví dụ bom_q = 2, p_q = 120): chắc chắn là định mức -> nhân p_q
+    if b_q < p_q:
+        return max(1, int(round(p_q * b_q)))
+    else:
+        # bom_q >= p_q: đã được nhân trước (ví dụ bom_q = 46, p_q = 46 hoặc bom_q = 92, p_q = 46)
+        return int(round(b_q))
+
 # ----------------------------------------------------------------------
 # 1.5. Danh sách mã PO siêu nhanh cho Dropdown Lựa chọn (Inspection / Transfer)
 # ----------------------------------------------------------------------
@@ -1253,7 +1283,7 @@ def get_production_order_detail(po_code: Optional[str] = None, po: Optional[str]
 
                         for b in matching_boms:
                             bom_unit_qty = float(b.quantity or 1.0)
-                            required_qty = int(bom_unit_qty) if bom_unit_qty >= 1.0 else max(1, int(prod_q * bom_unit_qty))
+                            required_qty = resolve_bom_part_qty(bom_unit_qty, prod_q)
                             part_title = b.name or b.sku or f"Chi tiết {b.id}"
 
                             # Calculate actual handoff quantity from real deliveries table
@@ -1688,10 +1718,47 @@ def get_order_bom(
         parts_map = {}
         if boms and all_products:
             prod_map = {p.id: p for p in all_products}
+
+            # Build master BOM norm map: {(prod_sku_or_name, part_name): norm_qty}
+            master_norms = {}
+            try:
+                from modules.master.models.master_product import MasterProduct
+                from modules.master.models.master_bom_detail import MasterBOMDetail
+
+                p_skus = list(set([p.sku.strip() for p in all_products if p.sku]))
+                p_names = list(set([p.name.strip() for p in all_products if p.name]))
+                if p_skus or p_names:
+                    conds = []
+                    if p_skus:
+                        conds.append(MasterProduct.sku.in_(p_skus))
+                    if p_names:
+                        conds.append(MasterProduct.name.in_(p_names))
+                    m_prods = db.query(MasterProduct).filter(or_(*conds)).all()
+                    mp_map = {mp.id: mp for mp in m_prods}
+                    if mp_map:
+                        mb_list = db.query(MasterBOMDetail).filter(MasterBOMDetail.master_product_id.in_(list(mp_map.keys()))).all()
+                        for mb in mb_list:
+                            mp = mp_map.get(mb.master_product_id)
+                            if mp and mb.name and mb.quantity is not None:
+                                p_norm = float(mb.quantity)
+                                if mp.sku:
+                                    master_norms[(mp.sku.strip().lower(), mb.name.strip().lower())] = p_norm
+                                if mp.name:
+                                    master_norms[(mp.name.strip().lower(), mb.name.strip().lower())] = p_norm
+            except Exception as e_norm:
+                logger.warning(f"Lỗi khi tải master_norms trong get_order_bom: {e_norm}")
+
             for b in boms:
                 p = prod_map.get(b.product_id)
                 prod_q = float(p.order_qty or p.quantity or 1.0) if p else 1.0
-                qty = max(1, int(prod_q * float(b.quantity or 1.0)))
+                bom_q = float(b.quantity or 1.0)
+                m_norm = None
+                if p and b.name:
+                    p_sku_c = (p.sku or "").strip().lower()
+                    p_name_c = (p.name or "").strip().lower()
+                    b_name_c = b.name.strip().lower()
+                    m_norm = master_norms.get((p_sku_c, b_name_c)) or master_norms.get((p_name_c, b_name_c))
+                qty = resolve_bom_part_qty(bom_q, prod_q, m_norm)
                 name = b.name or b.sku or "Chi tiết"
                 spec_raw = (b.specification or "").strip()
                 if is_invalid_spec(spec_raw):
@@ -2290,7 +2357,7 @@ def get_parts_by_month(
                 continue
             p_qty = float(r.order_qty or r.prod_qty or 1.0)
             b_qty = float(r.bom_unit_qty or 1.0)
-            calc_target = int(b_qty) if b_qty >= 1.0 else max(1, int(p_qty * b_qty))
+            calc_target = resolve_bom_part_qty(b_qty, p_qty)
             spec_str = (r.specification or "Tiêu chuẩn").split("-")[0].strip() or "Tiêu chuẩn"
 
             if name not in parts_map:
@@ -2588,7 +2655,7 @@ def get_production_plans_schedule(
 
             ord_q = float(r.order_qty or r.prod_qty or 1.0)
             bom_q = float(r.bom_unit_qty or 1.0)
-            target_q = int(bom_q) if bom_q >= 1.0 else max(1, int(ord_q * bom_q))
+            target_q = resolve_bom_part_qty(bom_q, ord_q)
 
             if pname not in parts_summary:
                 parts_summary[pname] = {

@@ -87,21 +87,21 @@ const Login = () => {
     return () => { isMounted = false; };
   }, [isAuthenticated, navigate, user, login]);
 
-  // [KEEP] Load ghi nhớ tài khoản và mật khẩu khi khởi tạo
+    // [KEEP] Load ghi nhớ tài khoản khi khởi tạo
   useEffect(() => {
-    const savedData = localStorage.getItem('smartflow_remembered_credentials')
-    if (savedData) {
-      try {
-        const { username, password } = JSON.parse(savedData)
-        setFormData(prev => ({
-          ...prev,
-          username: username || '',
-          password: password || '',
-          remember: true
-        }))
-      } catch (e) { }
+    // Dọn dẹp key cũ có chứa mật khẩu dạng plaintext (nếu còn sót lại từ trước)
+    localStorage.removeItem('smartflow_remembered_credentials');
+    localStorage.removeItem('smartflow_remembered_user');
+
+    const savedUsername = localStorage.getItem('smartflow_remembered_username');
+    if (savedUsername) {
+      setFormData(prev => ({
+        ...prev,
+        username: savedUsername,
+        remember: true
+      }));
     }
-  }, [])
+  }, []);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target
@@ -119,16 +119,15 @@ const Login = () => {
 
     if (!cleanUsername || !cleanPassword) return
 
-    // [KEEP] Xử lý lưu ghi nhớ tài khoản và mật khẩu
+    // [BẢO MẬT] Chỉ ghi nhớ Tên đăng nhập, tuyệt đối KHÔNG lưu mật khẩu thô vào localStorage
     if (formData.remember) {
-      localStorage.setItem('smartflow_remembered_credentials', JSON.stringify({
-        username: cleanUsername,
-        password: cleanPassword
-      }))
+      localStorage.setItem('smartflow_remembered_username', cleanUsername);
     } else {
-      localStorage.removeItem('smartflow_remembered_credentials')
-      localStorage.removeItem('smartflow_remembered_user') // Dọn dẹp key cũ nếu tồn tại
+      localStorage.removeItem('smartflow_remembered_username');
     }
+    // Đảm bảo không còn lưu trữ mật khẩu cũ
+    localStorage.removeItem('smartflow_remembered_credentials');
+    localStorage.removeItem('smartflow_remembered_user');
 
     const result = await login(cleanUsername, cleanPassword)
     if (result.success) {

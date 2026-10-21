@@ -46,4 +46,4 @@ if not defined PYTHON_EXE (
 
 :: Khoi dong Backend Server
 cd /d %~dp0BackEnd
-"%PYTHON_EXE%" -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir "%~dp0BackEnd" --reload-dir "%~dp0lpn_crawler"
+"%PYTHON_EXE%" -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir "%~dp0BackEnd" --reload-dir "%~dp0lpn_crawler\backend" --reload-dir "%~dp0lpn_crawler\ai_ocr_train" --reload-exclude "*storage*"

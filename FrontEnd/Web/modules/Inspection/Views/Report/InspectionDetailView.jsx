@@ -187,7 +187,10 @@ const InspectionDetailView = () => {
     setConfirming(true);
     try {
       const res = await api.post(`/inspections/confirm/${actualType}/${id}`, {
-        confirmed_by: currentUser.id
+        confirmed_by: currentUser.id,
+        confirmed_by_name: currentUser.full_name || currentUser.name || currentUser.username,
+        updated_by: currentUser.full_name || currentUser.name || currentUser.username,
+        user_role: currentUser.role_name || currentUser.permission_name || 'Quản lý QC'
       });
       if (res) {
         setItem(prev => ({

@@ -4,7 +4,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import timedelta
 from config.database import get_db
-from config.security import verify_password, create_access_token
+from config.security import verify_password, create_access_token, get_current_user
 from modules.auth.schemas.accounts import Account, AccountBase, AccountCreate, AccountUpdate, Token, PaginatedAccountResponse, FCMTokenUpdate, PasswordChange
 from modules.auth.controllers import account_controller
 from config.settings import settings
@@ -57,6 +57,7 @@ def list_accounts(
     status: str = None,
     sort_by: str = "id",
     sort_dir: str = "desc",
+    current_user: AccountModel = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -272,7 +273,11 @@ def get_all_stages(db: Session = Depends(get_db)):
     return [{"id": s.id, "name": s.name, "description": s.description} for s in stages]
 
 @router.post("/", response_model=Account)
-def register_user(account: AccountCreate, db: Session = Depends(get_db)):
+def register_user(
+    account: AccountCreate, 
+    current_user: AccountModel = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """
     [POST] Đăng ký một tài khoản người dùng mới.
     
@@ -426,7 +431,12 @@ def get_user_detail(account_id: int, db: Session = Depends(get_db)):
     }
 
 @router.put("/{account_id}", response_model=Account)
-def update_user(account_id: int, account: AccountUpdate, db: Session = Depends(get_db)):
+def update_user(
+    account_id: int, 
+    account: AccountUpdate, 
+    current_user: AccountModel = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """
     [PUT] Cập nhật thông tin cơ bản của một tài khoản.
     """
@@ -443,7 +453,12 @@ def update_user(account_id: int, account: AccountUpdate, db: Session = Depends(g
     return db_account
 
 @router.post("/{account_id}/sync-departments/")
-def sync_account_departments(account_id: int, payload: dict, db: Session = Depends(get_db)):
+def sync_account_departments(
+    account_id: int, 
+    payload: dict, 
+    current_user: AccountModel = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """
     [POST] Đồng bộ hóa phòng ban / vai trò / quyền / công đoạn cho một tài khoản.
     """
@@ -576,7 +591,12 @@ def get_user_permissions(account_id: int, resolved: bool = False, db: Session = 
     return {"permissions": permissions}
 
 @router.put("/{account_id}/permissions")
-def update_user_permissions(account_id: int, payload: dict, db: Session = Depends(get_db)):
+def update_user_permissions(
+    account_id: int, 
+    payload: dict, 
+    current_user: AccountModel = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """
     [PUT] Cập nhật phân quyền trên từng màn hình cho tài khoản.
     """

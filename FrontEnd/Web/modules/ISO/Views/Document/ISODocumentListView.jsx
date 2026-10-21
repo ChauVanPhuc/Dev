@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import api from '@webShared/Services/api.service';
-import { useOutletContext, useNavigate } from 'react-router-dom';
-import { Plus, Trash2, Edit, Search, Filter, Upload, FileText, Download, AlertCircle, CheckCircle, ExternalLink, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useOutletContext, useNavigate, Link } from 'react-router-dom';
+import { Plus, Trash2, Edit, Search, Filter, Upload, FileText, Download, AlertCircle, CheckCircle, ExternalLink, RefreshCw, ChevronLeft, ChevronRight, FolderArchive, Layers } from 'lucide-react';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import '@styles/components.css';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
+import { formatVietnameseDateTime, formatVietnameseDate } from '../../utils/isoDateUtils';
 
 const getDepartmentAbbreviation = (templateSymbol, user) => {
   if (templateSymbol) {
@@ -39,30 +40,19 @@ const getTemplateAbbreviation = (templateSymbol) => {
 
 const findApprover = (level, deptAbbr, accountsList) => {
   if (!accountsList || accountsList.length === 0) return '';
-  const isCty = level === 'Cấp công ty';
+  // Cả Cấp phòng và Cấp công ty (Bước 1) đều đưa cho Trưởng phòng ký trước
   const candidates = accountsList.filter(a => {
     const roleName = (a.role_name || '').toLowerCase();
     const permName = (a.permission_name || '').toLowerCase();
     const levelName = (a.permission_level || '').toLowerCase();
-    if (isCty) {
-      return (
-        roleName.includes('giám đốc') || 
-        roleName.includes('bgd') || 
-        permName.includes('giám đốc') || 
-        permName.includes('tgd') || 
-        permName.includes('phó tổng giám đốc') ||
-        levelName.includes('ban giám đốc') || 
-        levelName.includes('giám đốc')
-      );
-    } else {
-      return (
-        roleName.includes('trưởng phòng') || 
-        permName.includes('trưởng phòng') || 
-        levelName.includes('trưởng phòng')
-      );
-    }
+    return (
+      roleName.includes('trưởng phòng') || 
+      permName.includes('trưởng phòng') || 
+      levelName.includes('trưởng phòng') ||
+      levelName.includes('quản lý')
+    );
   });
-  return candidates.length > 0 ? candidates[0].full_name : '';
+  return candidates.length > 0 ? candidates[0].full_name : (accountsList[0]?.full_name || 'Trưởng phòng');
 };
 
 const getCurrentFormattedDate = () => {
@@ -71,6 +61,127 @@ const getCurrentFormattedDate = () => {
   const MM = String(now.getMonth() + 1).padStart(2, '0');
   const YYYY = now.getFullYear();
   return `${DD}/${MM}/${YYYY}`;
+};
+
+const renderDocStatusBadge = (status, documentLevel) => {
+  const s = (status || '').toLowerCase();
+  if (s.includes('từ chối') || s.includes('rejected')) {
+    return (
+      <span style={{
+        padding: '2px 8px',
+        borderRadius: '12px',
+        fontSize: '0.72rem',
+        fontWeight: 'bold',
+        backgroundColor: '#FEE2E2',
+        color: '#991B1B',
+        border: '1px solid #FECACA',
+        display: 'inline-block',
+        whiteSpace: 'nowrap'
+      }}>
+        Từ chối
+      </span>
+    );
+  }
+  if (s.includes('chờ bgđ') || s.includes('cho bgd')) {
+    return (
+      <span style={{
+        padding: '2px 8px',
+        borderRadius: '12px',
+        fontSize: '0.72rem',
+        fontWeight: 'bold',
+        backgroundColor: '#EDE9FE',
+        color: '#6D28D9',
+        border: '1px solid #DDD6FE',
+        display: 'inline-block',
+        whiteSpace: 'nowrap'
+      }}>
+        Chờ BGĐ duyệt
+      </span>
+    );
+  }
+  if (s.includes('chờ trưởng phòng') || s.includes('cho truong phong') || (s.includes('chờ') && !s.includes('bgđ'))) {
+    return (
+      <span style={{
+        padding: '2px 8px',
+        borderRadius: '12px',
+        fontSize: '0.72rem',
+        fontWeight: 'bold',
+        backgroundColor: '#FEF3C7',
+        color: '#B45309',
+        border: '1px solid #FDE68A',
+        display: 'inline-block',
+        whiteSpace: 'nowrap'
+      }}>
+        Chờ Trưởng phòng duyệt
+      </span>
+    );
+  }
+  if (s.includes('trưởng phòng đã duyệt') || s.includes('truong phong da duyet')) {
+    return (
+      <span style={{
+        padding: '2px 8px',
+        borderRadius: '12px',
+        fontSize: '0.72rem',
+        fontWeight: 'bold',
+        backgroundColor: '#D1FAE5',
+        color: '#065F46',
+        border: '1px solid #A7F3D0',
+        display: 'inline-block',
+        whiteSpace: 'nowrap'
+      }}>
+        Trưởng phòng đã duyệt
+      </span>
+    );
+  }
+  if (s.includes('bgđ đã duyệt') || s.includes('bgd da duyet')) {
+    return (
+      <span style={{
+        padding: '2px 8px',
+        borderRadius: '12px',
+        fontSize: '0.72rem',
+        fontWeight: 'bold',
+        backgroundColor: '#DCFCE7',
+        color: '#15803D',
+        border: '1px solid #86EFAC',
+        display: 'inline-block',
+        whiteSpace: 'nowrap'
+      }}>
+        BGĐ đã duyệt
+      </span>
+    );
+  }
+  if (s.includes('hiệu lực') || s.includes('đang lưu hành') || s.includes('đã duyệt')) {
+    return (
+      <span style={{
+        padding: '2px 8px',
+        borderRadius: '12px',
+        fontSize: '0.72rem',
+        fontWeight: 'bold',
+        backgroundColor: '#DCFCE7',
+        color: '#15803D',
+        border: '1px solid #86EFAC',
+        display: 'inline-block',
+        whiteSpace: 'nowrap'
+      }}>
+        {documentLevel === 'Cấp phòng' ? 'Trưởng phòng đã duyệt' : 'BGĐ đã duyệt'}
+      </span>
+    );
+  }
+  return (
+    <span style={{
+      padding: '2px 8px',
+      borderRadius: '12px',
+      fontSize: '0.72rem',
+      fontWeight: 'bold',
+      backgroundColor: '#FFF7ED',
+      color: '#C2410C',
+      border: '1px solid #FDBA74',
+      display: 'inline-block',
+      whiteSpace: 'nowrap'
+    }}>
+      {status || 'Nháp'}
+    </span>
+  );
 };
 
 const ISODocumentListView = ({ mode = 'documents' }) => {
@@ -88,36 +199,24 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
 
   const getApproverCandidates = (level) => {
     if (!accounts || accounts.length === 0) return [];
-    if (level === 'Cấp công ty') {
-      return accounts.filter(a => {
-        const roleName = (a.role_name || '').toLowerCase();
-        const permName = (a.permission_name || '').toLowerCase();
-        const levelName = (a.permission_level || '').toLowerCase();
-        return (
-          roleName.includes('giám đốc') || 
-          roleName.includes('bgd') || 
-          permName.includes('giám đốc') || 
-          permName.includes('tgd') || 
-          permName.includes('phó tổng giám đốc') ||
-          levelName.includes('ban giám đốc') || 
-          levelName.includes('giám đốc')
-        );
-      });
-    } else {
-      return accounts.filter(a => {
-        const roleName = (a.role_name || '').toLowerCase();
-        const permName = (a.permission_name || '').toLowerCase();
-        const levelName = (a.permission_level || '').toLowerCase();
-        return (
-          roleName.includes('trưởng phòng') || 
-          permName.includes('trưởng phòng') || 
-          levelName.includes('trưởng phòng')
-        );
-      });
-    }
+    // Cả Cấp phòng và Cấp công ty (bước 1) đều đưa cho Trưởng phòng ký trước
+    const tpList = accounts.filter(a => {
+      const roleName = (a.role_name || '').toLowerCase();
+      const permName = (a.permission_name || '').toLowerCase();
+      const levelName = (a.permission_level || '').toLowerCase();
+      return (
+        roleName.includes('trưởng phòng') || 
+        permName.includes('trưởng phòng') || 
+        levelName.includes('trưởng phòng') ||
+        levelName.includes('quản lý')
+      );
+    });
+    if (tpList.length > 0) return tpList;
+    return accounts;
   };
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [levelFilter, setLevelFilter] = useState('');
   const [uploadLoading, setUploadLoading] = useState(false);
   const { toast } = useToast();
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -380,7 +479,8 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
           (doc.name || '').toLowerCase().includes(q) ||
           (doc.owner || '').toLowerCase().includes(q) ||
           (doc.editor || '').toLowerCase().includes(q) ||
-          (doc.approver || '').toLowerCase().includes(q);
+          (doc.approver || '').toLowerCase().includes(q) ||
+          (doc.approver_bgd || '').toLowerCase().includes(q);
       } else {
         matchSearch = 
           (doc.code || '').toLowerCase().includes(q) ||
@@ -390,20 +490,192 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
           (doc.doc_type || '').toLowerCase().includes(q);
       }
       
-      const matchStatus = statusFilter === '' || doc.status === statusFilter;
+      const matchStatus = !statusFilter || (doc.status || '').toLowerCase().includes(statusFilter.toLowerCase());
+      const matchLevel = !levelFilter || (doc.document_level || 'Cấp phòng') === levelFilter;
       const matchFolder = filterFolder === '' || doc.folder === filterFolder;
       const matchOwner = filterOwner === '' || (doc.owner === filterOwner || doc.issuer === filterOwner);
-      return matchSearch && matchStatus && matchFolder && matchOwner;
+      return matchSearch && matchStatus && matchLevel && matchFolder && matchOwner;
     });
-  }, [documents, searchTerm, statusFilter, filterFolder, filterOwner, mode]);
+  }, [documents, searchTerm, statusFilter, levelFilter, filterFolder, filterOwner, mode]);
 
   const paginatedDocs = useMemo(() => {
     return filteredDocs.slice((page - 1) * pageSize, page * pageSize);
   }, [filteredDocs, page, pageSize]);
 
+  // Hiển thị cấp duyệt (chữ thường, không khung bo màu)
+  const renderDocumentLevelBadge = (level) => {
+    return (
+      <span style={{ fontSize: '0.82rem', color: '#1e293b', fontWeight: 500, whiteSpace: 'nowrap' }}>
+        {level || 'Cấp phòng'}
+      </span>
+    );
+  };
+
+  // Người duyệt 1: Trưởng phòng ký (Chỉ hiển thị tên khi thực tế đã được ký duyệt)
+  const renderApprover1 = (doc) => {
+    const statusLower = (doc.status || '').toLowerCase().trim();
+
+    // Chưa qua bước Trưởng phòng duyệt (Dự thảo, Bản nháp, Chờ duyệt, Chờ Trưởng phòng duyệt, Từ chối, Soạn thảo)
+    if (
+      !doc.status ||
+      statusLower.includes('dự thảo') ||
+      statusLower.includes('chờ trưởng phòng') ||
+      statusLower.includes('chờ duyệt') ||
+      statusLower.includes('bản nháp') ||
+      statusLower.includes('từ chối') ||
+      statusLower.includes('soạn thảo')
+    ) {
+      return <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>---</span>;
+    }
+
+    // Các trạng thái Trưởng phòng đã duyệt: "Trưởng phòng đã duyệt", "Chờ BGĐ", "BGĐ đã duyệt", "Đã duyệt", "Hiệu lực"
+    return (
+      <span style={{ fontWeight: 500, color: '#1e293b' }}>
+        {doc.approver || 'Trưởng phòng'}
+      </span>
+    );
+  };
+
+  // Người duyệt 2: Ban Giám Đốc (BGĐ) ký (Chỉ hiển thị tên khi thực tế đã được ký duyệt)
+  const renderApprover2 = (doc) => {
+    const lvl = doc.document_level || 'Cấp phòng';
+    const statusLower = (doc.status || '').toLowerCase().trim();
+
+    // Nếu là hồ sơ Cấp phòng (quy trình chỉ duyệt cấp phòng, không cần BGĐ)
+    if (lvl === 'Cấp phòng' && !statusLower.includes('bgđ')) {
+      return <span style={{ color: '#cbd5e1', fontWeight: 'bold' }} title="Không áp dụng cấp BGĐ">-</span>;
+    }
+
+    // Đã được BGĐ ký duyệt
+    const isBgdApproved = statusLower.includes('bgđ đã duyệt') ||
+                          statusLower.includes('ban giám đốc đã duyệt') ||
+                          statusLower.includes('hiệu lực') ||
+                          (statusLower.includes('đã duyệt') && !statusLower.includes('chờ bgđ'));
+
+    if (isBgdApproved) {
+      return (
+        <span style={{ fontWeight: 600, color: '#1E40AF' }}>
+          {doc.approver_bgd || 'Ban Giám Đốc'}
+        </span>
+      );
+    }
+
+    // Chưa tới lượt BGĐ duyệt hoặc đang chờ BGĐ duyệt
+    return <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>---</span>;
+  };
+
   return (
     <div className="mgmt-container">
-      <div className="mgmt-main" style={{ fontFamily: 'Inter, sans-serif', display: 'flex', flexDirection: 'column', gap: '20px', width: '100%' }}>
+      <div className="mgmt-main" style={{ fontFamily: 'Inter, sans-serif', display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
+
+        {/* 0. Thanh chuyển đổi Tab nhóm Hồ sơ ISO */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          padding: '4px 6px',
+          backgroundColor: '#FFFFFF',
+          border: '1px solid #EADCC9',
+          borderRadius: '10px',
+          overflowX: 'auto',
+          whiteSpace: 'nowrap'
+        }}>
+          <Link 
+            to="/admin/iso-documents" 
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              fontSize: '0.85rem',
+              fontWeight: 700,
+              textDecoration: 'none',
+              color: mode === 'documents' ? '#FFFFFF' : '#6B7280',
+              backgroundColor: mode === 'documents' ? '#7B5233' : 'transparent',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <FileText size={16} />
+            <span>Quản lý mẫu tài liệu</span>
+          </Link>
+          <Link 
+            to="/admin/iso-processes" 
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              fontSize: '0.85rem',
+              fontWeight: 700,
+              textDecoration: 'none',
+              color: mode === 'processes' ? '#FFFFFF' : '#6B7280',
+              backgroundColor: mode === 'processes' ? '#7B5233' : 'transparent',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <Layers size={16} />
+            <span>Quy trình nghiệp vụ</span>
+          </Link>
+          <Link 
+            to="/admin/iso-records" 
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              fontSize: '0.85rem',
+              fontWeight: 700,
+              textDecoration: 'none',
+              color: '#6B7280',
+              backgroundColor: 'transparent',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <FolderArchive size={16} />
+            <span>Quản lý hồ sơ (Master List)</span>
+          </Link>
+          <Link 
+            to="/admin/iso-approvals" 
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              fontSize: '0.85rem',
+              fontWeight: 700,
+              textDecoration: 'none',
+              color: '#6B7280',
+              backgroundColor: 'transparent',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <CheckCircle size={16} />
+            <span>Hồ sơ cần duyệt</span>
+          </Link>
+          <Link 
+            to="/admin/iso-signatures" 
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              fontSize: '0.85rem',
+              fontWeight: 700,
+              textDecoration: 'none',
+              color: '#6B7280',
+              backgroundColor: 'transparent',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <Edit size={16} />
+            <span>Quản lý Chữ ký</span>
+          </Link>
+        </div>
 
       {/* 1. Bộ điều khiển hành động và bộ lọc sử dụng PageToolbar và filter-inline-bar */}
       <PageToolbar
@@ -413,7 +685,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
         showFilter={true}
         isFilterOpen={isFilterBarOpen}
         onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
-        activeFiltersCount={(statusFilter ? 1 : 0) + (filterFolder ? 1 : 0) + (filterOwner ? 1 : 0)}
+        activeFiltersCount={(statusFilter ? 1 : 0) + (levelFilter ? 1 : 0) + (filterFolder ? 1 : 0) + (filterOwner ? 1 : 0)}
         onCreate={mode === 'processes' ? undefined : () => !uploadLoading && fileInputRef.current?.click()}
         createLabel={mode === 'processes' ? 'Thêm mới' : (uploadLoading ? 'Đang phân tích...' : 'Nhập dữ liệu')}
         createActions={mode === 'processes' ? [
@@ -442,6 +714,19 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
 
       {isFilterBarOpen && (
         <div className="filter-inline-bar">
+          {/* Lọc cấp duyệt */}
+          <div className="filter-field-group">
+            <label className="filter-field-label">Cấp duyệt</label>
+            <select
+              value={levelFilter}
+              onChange={(e) => { setLevelFilter(e.target.value); setPage(1); }}
+            >
+              <option value="">Tất cả cấp duyệt</option>
+              <option value="Cấp phòng">Cấp phòng</option>
+              <option value="Cấp công ty">Cấp công ty</option>
+            </select>
+          </div>
+
           {/* Lọc trạng thái */}
           <div className="filter-field-group">
             <label className="filter-field-label">Trạng thái</label>
@@ -450,9 +735,13 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
               onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
             >
               <option value="">Tất cả trạng thái</option>
-              <option value="Nháp">Nháp</option>
-              <option value="Đang lưu hành">Đang lưu hành</option>
-              <option value="Đang điều chỉnh">Đang điều chỉnh</option>
+              <option value="Chờ Trưởng phòng">Chờ Trưởng phòng duyệt</option>
+              <option value="Chờ BGĐ">Chờ BGĐ duyệt</option>
+              <option value="Trưởng phòng đã duyệt">Trưởng phòng đã duyệt</option>
+              <option value="BGĐ đã duyệt">BGĐ đã duyệt</option>
+              <option value="Hiệu lực">Hiệu lực / Đang lưu hành</option>
+              <option value="Nháp">Nháp / Dự thảo</option>
+              <option value="Từ chối">Từ chối</option>
             </select>
           </div>
 
@@ -528,35 +817,39 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
             <div className="admin-table-scroll" style={{ overflowX: 'auto', minHeight: '220px', flex: 1 }}>
-            <table className="data-table" style={{ width: '100%', minWidth: '900px' }}>
+            <table className="data-table" style={{ width: '100%', minWidth: '100%', tableLayout: 'auto' }}>
               <thead>
                 <tr style={{ backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9' }}>
-                  <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '50px' }}>STT</th>
+                  <th style={{ padding: '7px 4px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '38px', textAlign: 'center', whiteSpace: 'nowrap' }}>STT</th>
                   {mode === 'processes' ? (
                     <>
-                      <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '120px' }}>MÃ QUY TRÌNH</th>
-                      <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '130px' }}>KÝ HIỆU</th>
-                      <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233' }}>TÊN QUY TRÌNH</th>
-                      <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '130px' }}>CẤP TÀI LIỆU</th>
-                      <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '150px' }}>NGƯỜI BIÊN SOẠN</th>
-                      <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '150px' }}>NGƯỜI DUYỆT</th>
-                      <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '160px' }}>THỜI GIAN BAN HÀNH</th>
-                      <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '120px', textAlign: 'center' }}>TRẠNG THÁI</th>
+                      <th style={{ padding: '7px 6px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '100px', whiteSpace: 'nowrap' }}>MÃ QUY TRÌNH</th>
+                      <th style={{ padding: '7px 6px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '90px', whiteSpace: 'nowrap' }}>KÝ HIỆU</th>
+                      <th style={{ padding: '7px 8px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', minWidth: '160px' }}>TÊN QUY TRÌNH</th>
+                      <th style={{ padding: '7px 4px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '80px', textAlign: 'center', whiteSpace: 'nowrap' }}>CẤP DUYỆT</th>
+                      <th style={{ padding: '7px 6px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '105px', whiteSpace: 'nowrap' }}>NGƯỜI BIÊN SOẠN</th>
+                      <th style={{ padding: '7px 6px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '115px', whiteSpace: 'nowrap' }}>TRƯỞNG PHÒNG DUYỆT</th>
+                      <th style={{ padding: '7px 4px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '85px', textAlign: 'center', whiteSpace: 'nowrap' }}>BGĐ DUYỆT</th>
+                      <th style={{ padding: '7px 4px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '90px', textAlign: 'center', whiteSpace: 'nowrap' }}>THỜI GIAN BAN HÀNH</th>
+                      <th style={{ padding: '7px 4px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '120px', textAlign: 'center', whiteSpace: 'nowrap' }}>TRẠNG THÁI</th>
                     </>
                   ) : (
                     <>
-                      <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '100px' }}>MÃ MẪU</th>
-                      <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '130px' }}>KÝ HIỆU</th>
-                      <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233' }}>TÊN TÀI LIỆU</th>
-                      <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '80px', textAlign: 'center' }}>PHIÊN BẢN</th>
-                      <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '150px' }}>LOẠI TÀI LIỆU</th>
-                      <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '150px' }}>NGƯỜI TẠO</th>
-                      <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '120px' }}>CẬP NHẬT CUỐI</th>
-                      <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '80px', textAlign: 'center' }}>FILE GỐC</th>
-                      <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '120px', textAlign: 'center' }}>TRẠNG THÁI</th>
+                      <th style={{ padding: '7px 6px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '90px', whiteSpace: 'nowrap' }}>MÃ MẪU</th>
+                      <th style={{ padding: '7px 6px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '90px', whiteSpace: 'nowrap' }}>KÝ HIỆU</th>
+                      <th style={{ padding: '7px 8px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', minWidth: '150px' }}>TÊN TÀI LIỆU</th>
+                      <th style={{ padding: '7px 2px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '45px', textAlign: 'center', whiteSpace: 'nowrap' }}>PHIÊN BẢN</th>
+                      <th style={{ padding: '7px 6px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '95px', whiteSpace: 'nowrap' }}>LOẠI TÀI LIỆU</th>
+                      <th style={{ padding: '7px 4px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '75px', textAlign: 'center', whiteSpace: 'nowrap' }}>CẤP DUYỆT</th>
+                      <th style={{ padding: '7px 6px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '95px', whiteSpace: 'nowrap' }}>NGƯỜI TẠO</th>
+                      <th style={{ padding: '7px 6px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '110px', whiteSpace: 'nowrap' }}>TRƯỞNG PHÒNG DUYỆT</th>
+                      <th style={{ padding: '7px 4px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '80px', textAlign: 'center', whiteSpace: 'nowrap' }}>BGĐ DUYỆT</th>
+                      <th style={{ padding: '7px 4px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '85px', textAlign: 'center', whiteSpace: 'nowrap' }}>CẬP NHẬT CUỐI</th>
+                      <th style={{ padding: '7px 2px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '42px', textAlign: 'center', whiteSpace: 'nowrap' }}>FILE GỐC</th>
+                      <th style={{ padding: '7px 4px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '115px', textAlign: 'center', whiteSpace: 'nowrap' }}>TRẠNG THÁI</th>
                     </>
                   )}
-                  <th style={{ padding: '12px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#7B5233', width: '100px', textAlign: 'center' }}>THAO TÁC</th>
+                  <th style={{ padding: '7px 2px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '38px', textAlign: 'center', whiteSpace: 'nowrap' }}>THAO TÁC</th>
                 </tr>
               </thead>
               <tbody>
@@ -571,32 +864,48 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                     onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FAF6F0'}
                     onMouseLeave={(e) => e.currentTarget.style.backgroundColor = index % 2 === 1 ? '#fdfcfb' : 'white'}
                   >
-                    <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#64748b', fontWeight: '500' }}>{index + 1}</td>
+                    <td style={{ padding: '6px 4px', fontSize: '0.8rem', color: '#64748b', fontWeight: 500, textAlign: 'center', whiteSpace: 'nowrap' }}>{index + 1}</td>
                     
                     {mode === 'processes' ? (
                       <>
-                        <td style={{ padding: '12px 16px', fontSize: '0.85rem', fontWeight: 'bold', color: '#7B5233' }}>{doc.code}</td>
-                        <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1e293b', fontWeight: '500' }}>{doc.symbol || '---'}</td>
-                        <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1e293b', fontWeight: '600' }}>{doc.name}</td>
-                        <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#64748b' }}>{doc.document_level || '---'}</td>
-                        <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1e293b' }}>{doc.editor || '---'}</td>
-                        <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1e293b' }}>
-                          {doc.status === 'Hiệu lực' || doc.status === 'Đang lưu hành' || doc.status === 'Đang hoạt động' || doc.status === 'Đã duyệt' ? (doc.approver || '---') : '---'}
+                        <td style={{ padding: '6px 6px', fontSize: '0.8rem', fontWeight: 600, color: '#7B5233', whiteSpace: 'nowrap' }}>{doc.code}</td>
+                        <td style={{ padding: '6px 6px', fontSize: '0.8rem', color: '#1e293b', fontWeight: 500, whiteSpace: 'nowrap' }}>{doc.symbol || '---'}</td>
+                        <td style={{ padding: '6px 8px', fontSize: '0.8rem', color: '#1e293b', fontWeight: 500, wordBreak: 'break-word' }}>{doc.name}</td>
+                        <td style={{ padding: '6px 4px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                          {renderDocumentLevelBadge(doc.document_level)}
                         </td>
-                        <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1e293b' }}>
-                          {doc.status === 'Hiệu lực' || doc.status === 'Đang lưu hành' || doc.status === 'Đang hoạt động' || doc.status === 'Đã duyệt' ? (doc.issue_date || '---') : '---'}
+                        <td style={{ padding: '6px 6px', fontSize: '0.8rem', color: '#1e293b', fontWeight: 500, whiteSpace: 'nowrap' }}>{doc.editor || '---'}</td>
+                        <td style={{ padding: '6px 6px', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+                          {renderApprover1(doc)}
+                        </td>
+                        <td style={{ padding: '6px 4px', fontSize: '0.8rem', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                          {renderApprover2(doc)}
+                        </td>
+                        <td style={{ padding: '6px 4px', fontSize: '0.8rem', color: '#1e293b', fontWeight: 500, textAlign: 'center', whiteSpace: 'nowrap' }}>
+                          {formatVietnameseDate(doc.updated_at || doc.issue_date || doc.created_at)}
                         </td>
                       </>
                     ) : (
                       <>
-                        <td style={{ padding: '12px 16px', fontSize: '0.85rem', fontWeight: 'bold', color: '#7B5233' }}>{doc.code}</td>
-                        <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1e293b', fontWeight: '500' }}>{doc.symbol || '---'}</td>
-                        <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1e293b', fontWeight: '600' }}>{doc.name}</td>
-                        <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1e293b', textAlign: 'center', fontWeight: '500' }}>{doc.version}</td>
-                        <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#64748b' }}>{doc.doc_type || '---'}</td>
-                        <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#1e293b' }}>{doc.issuer || '---'}</td>
-                        <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#64748b' }}>{doc.updated_at ? doc.updated_at.split(' ')[0] : '---'}</td>
-                        <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                        <td style={{ padding: '6px 6px', fontSize: '0.8rem', fontWeight: 600, color: '#7B5233', whiteSpace: 'nowrap' }}>{doc.code}</td>
+                        <td style={{ padding: '6px 6px', fontSize: '0.8rem', color: '#1e293b', fontWeight: 500, whiteSpace: 'nowrap' }}>{doc.symbol || '---'}</td>
+                        <td style={{ padding: '6px 8px', fontSize: '0.8rem', color: '#1e293b', fontWeight: 500, wordBreak: 'break-word' }}>{doc.name}</td>
+                        <td style={{ padding: '6px 2px', fontSize: '0.8rem', color: '#1e293b', textAlign: 'center', fontWeight: 500, whiteSpace: 'nowrap' }}>v{doc.version || '01'}</td>
+                        <td style={{ padding: '6px 6px', fontSize: '0.8rem', color: '#1e293b', fontWeight: 500, whiteSpace: 'nowrap' }}>{doc.doc_type || '---'}</td>
+                        <td style={{ padding: '6px 4px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                          {renderDocumentLevelBadge(doc.document_level)}
+                        </td>
+                        <td style={{ padding: '6px 6px', fontSize: '0.8rem', color: '#1e293b', fontWeight: 500, whiteSpace: 'nowrap' }}>{doc.issuer || '---'}</td>
+                        <td style={{ padding: '6px 6px', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+                          {renderApprover1(doc)}
+                        </td>
+                        <td style={{ padding: '6px 4px', fontSize: '0.8rem', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                          {renderApprover2(doc)}
+                        </td>
+                        <td style={{ padding: '6px 4px', fontSize: '0.8rem', color: '#1e293b', fontWeight: 500, textAlign: 'center', whiteSpace: 'nowrap' }}>
+                          {formatVietnameseDate(doc.updated_at || doc.created_at || doc.issue_date)}
+                        </td>
+                        <td style={{ padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                           {doc.file_path ? (
                             <a
                               href={`${api.defaults.baseURL.replace(/\/$/, '')}/iso-documents/${doc.id}/download-raw`}
@@ -604,31 +913,21 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                               target="_blank"
                               rel="noreferrer"
                               title="Tải tệp tin gốc nguyên bản"
-                              style={{ color: '#7B5233', display: 'inline-flex', padding: '4px', borderRadius: '4px', backgroundColor: '#FAF6F0', cursor: 'pointer' }}
+                              style={{ color: '#7B5233', display: 'inline-flex', padding: '3px', borderRadius: '4px', backgroundColor: '#FAF6F0', cursor: 'pointer' }}
                             >
-                              <Download size={14} />
+                              <Download size={13} />
                             </a>
                           ) : (
-                            <span style={{ color: '#cbd5e1', fontSize: '0.75rem' }}>Không có</span>
+                            <span style={{ color: '#94a3b8', fontSize: '0.78rem' }}>Không có</span>
                           )}
                         </td>
                       </>
                     )}
 
-                    <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                      <span style={{
-                        padding: '4px 10px',
-                        borderRadius: '20px',
-                        fontSize: '0.75rem',
-                        fontWeight: 'bold',
-                        backgroundColor: doc.status === 'Đang lưu hành' || doc.status === 'Hiệu lực' ? '#e6f4ea' : doc.status === 'Nháp' || doc.status === 'Dự thảo' ? '#fff7ed' : doc.status === 'Đang điều chỉnh' ? '#eff6ff' : '#f1f5f9',
-                        color: doc.status === 'Đang lưu hành' || doc.status === 'Hiệu lực' ? '#137333' : doc.status === 'Nháp' || doc.status === 'Dự thảo' ? '#c2410c' : doc.status === 'Đang điều chỉnh' ? '#1d4ed8' : '#64748b',
-                        border: `1px solid ${doc.status === 'Đang lưu hành' || doc.status === 'Hiệu lực' ? '#137333' : doc.status === 'Nháp' || doc.status === 'Dự thảo' ? '#c2410c' : doc.status === 'Đang điều chỉnh' ? '#3b82f6' : '#cbd5e1'}`
-                      }}>
-                        {doc.status}
-                      </span>
+                    <td style={{ padding: '6px 4px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                      {renderDocStatusBadge(doc.status, doc.document_level)}
                     </td>
-                    <td style={{ position: 'relative', textAlign: 'center', zIndex: actionMenuId === doc.id ? 40 : 1 }}>
+                    <td style={{ position: 'relative', textAlign: 'center', zIndex: actionMenuId === doc.id ? 40 : 1, whiteSpace: 'nowrap', padding: '6px 2px' }}>
                       <button
                         className="action-btn"
                         onClick={(e) => {
@@ -652,6 +951,17 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                             }}
                           >
                             Chỉnh sửa
+                          </button>
+                          <button
+                            className="action-menu-item"
+                            style={{ color: '#059669', display: 'flex', alignItems: 'center', gap: '6px' }}
+                            onClick={() => {
+                              setActionMenuId(null);
+                              navigate(`/admin/iso-approvals?keyword=${encodeURIComponent(doc.code)}`);
+                            }}
+                          >
+                            <CheckCircle size={14} />
+                            <span>Ký duyệt hồ sơ</span>
                           </button>
                           <button
                             className="action-menu-item warn"
@@ -938,26 +1248,42 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
 
                 <div>
                   <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', color: '#4b301e', marginBottom: '4px' }}>
-                    Cấp tài liệu
+                    Cấp tài liệu / Quy trình <span style={{ color: 'red' }}>*</span>
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={newProcessData.document_level || 'Cấp phòng'}
-                    readOnly
+                    onChange={(e) => {
+                      const newLvl = e.target.value;
+                      const xx = newProcessData.code ? (newProcessData.code.split('.')[1] || 'SX') : 'SX';
+                      const defaultApprover = findApprover(newLvl, xx, accounts);
+                      setNewProcessData(prev => ({
+                        ...prev,
+                        document_level: newLvl,
+                        approver: defaultApprover
+                      }));
+                    }}
                     style={{
                       width: '100%',
                       padding: '8px 12px',
                       borderRadius: '6px',
-                      border: '1px solid #E5E7EB',
+                      border: '1px solid #EADCC9',
                       outline: 'none',
                       fontSize: '0.88rem',
                       fontWeight: '600',
-                      backgroundColor: '#F3F4F6',
-                      color: '#4B5563',
-                      cursor: 'not-allowed',
+                      backgroundColor: 'white',
+                      color: '#1F2937',
+                      cursor: 'pointer',
                       boxSizing: 'border-box'
                     }}
-                  />
+                  >
+                    <option value="Cấp phòng">Cấp phòng</option>
+                    <option value="Cấp công ty">Cấp công ty</option>
+                  </select>
+                  {newProcessData.document_level === 'Cấp công ty' && (
+                    <div style={{ fontSize: '0.74rem', color: '#1E40AF', marginTop: '4px', fontWeight: 600 }}>
+                      Quy trình 2 cấp duyệt: Trưởng phòng duyệt Bước 1, Ban Giám Đốc ký duyệt ban hành Bước 2.
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -986,7 +1312,10 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
 
                 <div>
                   <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', color: '#4b301e', marginBottom: '4px' }}>
-                    Người duyệt cuối <span style={{ color: 'red' }}>*</span>
+                    {newProcessData.document_level === 'Cấp công ty'
+                      ? 'Người duyệt 1: Cấp phòng (Trưởng phòng) '
+                      : 'Người duyệt (Trưởng phòng) '}
+                    <span style={{ color: 'red' }}>*</span>
                   </label>
                   <select
                     value={newProcessData.approver || ''}
@@ -1005,14 +1334,40 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                     }}
                     required
                   >
-                    <option value="" disabled>-- Chọn người duyệt cuối --</option>
+                    <option value="" disabled>-- Chọn Trưởng phòng duyệt --</option>
                     {getApproverCandidates(newProcessData.document_level || 'Cấp phòng').map(acc => (
                       <option key={acc.id} value={acc.full_name}>
-                        {acc.full_name} ({acc.permission_name || acc.role_name || 'Người duyệt'})
+                        {acc.full_name} ({acc.permission_name || acc.role_name || 'Trưởng phòng / Quản lý'})
                       </option>
                     ))}
                   </select>
                 </div>
+
+                {newProcessData.document_level === 'Cấp công ty' && (
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', color: '#1E3A8A', marginBottom: '4px' }}>
+                      Người duyệt 2: Cấp công ty (Ban Giám Đốc) <span style={{ color: 'red' }}>*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={newProcessData.approver_bgd || 'Trần Đình Hùng (Tổng Giám Đốc)'}
+                      onChange={(e) => setNewProcessData(prev => ({ ...prev, approver_bgd: e.target.value }))}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        border: '1.5px solid #93C5FD',
+                        outline: 'none',
+                        fontSize: '0.88rem',
+                        color: '#1E3A8A',
+                        backgroundColor: '#EFF6FF',
+                        fontWeight: 'bold',
+                        boxSizing: 'border-box'
+                      }}
+                      required
+                    />
+                  </div>
+                )}
 
                 <div>
                   <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', color: '#4b301e', marginBottom: '4px' }}>

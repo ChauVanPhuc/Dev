@@ -118,11 +118,15 @@ class AppSheetCrawlerEngine(
                 pass
 
         try:
-            while not self.ocr_stop_event.is_set():
+            while not self.ocr_stop_event.is_set() and not crawl_job_manager.is_cancelled(self.job_id):
                 try:
                     raw_item = self.ocr_queue.get(timeout=1.0)
                 except Exception:
                     continue
+
+                if self.ocr_stop_event.is_set() or crawl_job_manager.is_cancelled(self.job_id):
+                    self.ocr_queue.task_done()
+                    break
 
                 if raw_item is None:
                     self.ocr_queue.task_done()
@@ -451,6 +455,8 @@ class AppSheetCrawlerEngine(
                         LpnImage.local_path != ''
                     )
                     .distinct()
+                    .order_by(LpnImage.id.desc())
+                    .limit(100)
                 )
                 candidates = query.all()
 
@@ -467,26 +473,32 @@ class AppSheetCrawlerEngine(
                     f"Đang nạp vào hàng đợi AI OCR ưu tiên nền (Priority 2)...",
                     source="ai_ocr"
                 )
-                tot = len(valid_candidates)
-                for idx, row in enumerate(valid_candidates):
-                    task = {
-                        "image_id": row.image_id,
-                        "lpn_item_id": row.item_id,
-                        "container_number": row.container_number or "",
-                        "local_path": row.local_path,
-                        "expected_lpn": row.expected_lpn,
-                        "expected_sku": row.expected_sku,
-                        "suffix_key": row.image_type or "Pallet",
-                        "image_type": row.image_type or "Pallet",
-                        "container_img_idx": idx + 1,
-                        "container_img_total": tot,
-                        "container_total_items": tot,
-                        "is_missing_recheck": True
-                    }
-                    if hasattr(self, "enqueue_ocr_task"):
-                        self.enqueue_ocr_task(task, priority=2)
-                    else:
-                        self.ocr_queue.put(task)
+                from collections import defaultdict
+                cont_groups = defaultdict(list)
+                for c in valid_candidates:
+                    cont_groups[c.container_number or "Chưa phân loại"].append(c)
+
+                for c_num, group_rows in cont_groups.items():
+                    tot = len(group_rows)
+                    for idx, row in enumerate(group_rows):
+                        task = {
+                            "image_id": row.image_id,
+                            "lpn_item_id": row.item_id,
+                            "container_number": row.container_number or "",
+                            "local_path": row.local_path,
+                            "expected_lpn": row.expected_lpn,
+                            "expected_sku": row.expected_sku,
+                            "suffix_key": row.image_type or "Pallet",
+                            "image_type": row.image_type or "Pallet",
+                            "container_img_idx": idx + 1,
+                            "container_img_total": tot,
+                            "container_total_items": tot,
+                            "is_missing_recheck": True
+                        }
+                        if hasattr(self, "enqueue_ocr_task"):
+                            self.enqueue_ocr_task(task, priority=2)
+                        else:
+                            self.ocr_queue.put(task)
             else:
                 self.log("[Smart Backfill AI OCR] Toàn bộ ảnh trong CSDL đã được nhận diện AI OCR đầy đủ 100%.", source="ai_ocr")
 
@@ -509,7 +521,6 @@ class AppSheetCrawlerEngine(
             self.ocr_thread = threading.Thread(target=self._ocr_worker_loop, name=f"SyncOcrWorker-{self.job_id}", daemon=True)
             self.ocr_thread.start()
             self.log("[AI OCR Sync] Đã kích hoạt luồng nhận diện AI OCR thời gian thực.")
-            self._enqueue_missing_mismatch_items()
 
         browser = None
         try:
@@ -657,10 +668,37 @@ class AppSheetCrawlerEngine(
                     
                     # Thử Fast-Path API tối đa 3 lần, mỗi lần chờ 30 giây
                     for retry_fast in range(1, 4):
+                        if crawl_job_manager.is_cancelled(self.job_id):
+                            self.log("Nhận được tín hiệu HỦY JOB. Dừng toàn bộ tiến trình.", level="WARNING")
+                            job.status = "cancelled"
+                            job.end_time = datetime.utcnow()
+                            self.db.commit()
+                            if browser:
+                                try:
+                                    browser.close()
+                                except Exception:
+                                    pass
+                            crawl_job_manager.release_job_lock_sync(self.job_id)
+                            return
+
                         self.log(f"[FAST-PATH (Lần {retry_fast}/3)] Đang kết nối và trích xuất dữ liệu qua AppSheet Template API ngầm...")
                         template_payload = self.fetch_appsheet_template_api_direct(page, context)
                         if template_payload:
                             break
+
+                        if crawl_job_manager.is_cancelled(self.job_id):
+                            self.log("Nhận được tín hiệu HỦY JOB sau khi tải API. Dừng toàn bộ tiến trình.", level="WARNING")
+                            job.status = "cancelled"
+                            job.end_time = datetime.utcnow()
+                            self.db.commit()
+                            if browser:
+                                try:
+                                    browser.close()
+                                except Exception:
+                                    pass
+                            crawl_job_manager.release_job_lock_sync(self.job_id)
+                            return
+
                         if retry_fast < 3:
                             reason_msg = getattr(self, "last_api_fail_reason", "Chưa nhận được phản hồi từ API")
                             self.log(
@@ -672,6 +710,19 @@ class AppSheetCrawlerEngine(
                                 if crawl_job_manager.is_cancelled(self.job_id):
                                     break
                                 time.sleep(1)
+
+                    if crawl_job_manager.is_cancelled(self.job_id):
+                        self.log("Nhận được tín hiệu HỦY JOB. Dừng toàn bộ tiến trình.", level="WARNING")
+                        job.status = "cancelled"
+                        job.end_time = datetime.utcnow()
+                        self.db.commit()
+                        if browser:
+                            try:
+                                browser.close()
+                            except Exception:
+                                pass
+                        crawl_job_manager.release_job_lock_sync(self.job_id)
+                        return
 
                     if template_payload:
                         self.log("[FAST-PATH THÀNH CÔNG] Đã nhận dữ liệu từ AppSheet API. Bắt đầu xử lý các Container...")

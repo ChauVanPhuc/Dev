@@ -130,7 +130,9 @@ def get_daily_inspections(
     """
     [GET] Lấy danh sách phiếu kiểm tra hàng ngày.
     """
-    query = db.query(DailyInspectionRecord).order_by(DailyInspectionRecord.inspection_date.desc(), DailyInspectionRecord.id.desc())
+    query = db.query(DailyInspectionRecord).filter(
+        or_(DailyInspectionRecord.is_deleted == False, DailyInspectionRecord.is_deleted.is_(None))
+    ).order_by(DailyInspectionRecord.inspection_date.desc(), DailyInspectionRecord.id.desc())
     if skip > 0:
         query = query.offset(skip)
     if limit > 0:
@@ -184,7 +186,9 @@ def get_all_inbound_inspections(
     """
     [GET] Lấy danh sách toàn bộ phiếu kiểm tra đầu vào.
     """
-    records = db.query(InputInspection).order_by(InputInspection.inspected_at.desc(), InputInspection.id.desc()).offset(skip).limit(limit).all()
+    records = db.query(InputInspection).filter(
+        or_(InputInspection.is_deleted == False, InputInspection.is_deleted.is_(None))
+    ).order_by(InputInspection.inspected_at.desc(), InputInspection.id.desc()).offset(skip).limit(limit).all()
     
     # [PERF] Batch load tên người kiểm tra — 1 query thay vì N queries
     inspector_ids = list({r.inspector_id for r in records if r.inspector_id})
@@ -545,7 +549,7 @@ def get_stage_inspection(id: int, db: Session = Depends(get_db)):
     [GET] Lấy chi tiết một phiếu kiểm tra công đoạn.
     """
     record = db.query(InputInspection).filter(InputInspection.id == id).first()
-    if not record:
+    if not record or getattr(record, 'is_deleted', False):
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu kiểm tra")
     return record
 
@@ -623,37 +627,100 @@ def do_update_stage(id: int, data: StageInspectionCreate, db: Session):
 @router.delete("/stage/{id}")
 @router.delete("/input/{id}")
 @router.delete("/{id}")
-def delete_inspection(id: int, db: Session = Depends(get_db)):
+def delete_inspection(
+    id: int, 
+    request: Request = None,
+    payload: Optional[Dict[str, Any]] = Body(None),
+    db: Session = Depends(get_db)
+):
     """
-    [DELETE] Xóa một phiếu kiểm tra công đoạn / đầu vào theo ID.
+    [DELETE] Xóa phiếu kiểm tra công đoạn / đầu vào (Ẩn hoàn toàn khỏi hệ thống - Soft Delete).
+    Không xóa vĩnh viễn khỏi DB để bảo toàn toàn vẹn dữ liệu và phục vụ tra cứu lịch sử ISO khi cần.
     """
     record = db.query(InputInspection).filter(InputInspection.id == id).first()
     if not record:
         raise HTTPException(status_code=404, detail=f"Không tìm thấy phiếu kiểm tra #{id}")
     
     try:
-        db.delete(record)
+        now = datetime.datetime.now()
+        body_data = payload or {}
+        user_name = (body_data.get("deleted_by") or body_data.get("user_name") or "").strip()
+        user_role = (body_data.get("user_role") or "Quản lý QC").strip()
+
+        # Trích xuất danh tính người dùng từ Bearer Token nếu chưa có
+        if request:
+            auth_header = request.headers.get("Authorization") or request.headers.get("authorization")
+            if auth_header and auth_header.startswith("Bearer "):
+                token = auth_header.split(" ")[1]
+                try:
+                    jwt_payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+                    token_user = jwt_payload.get("full_name") or jwt_payload.get("sub")
+                    if token_user and not user_name:
+                        user_name = token_user
+                    if not user_role or user_role == "Quản lý QC":
+                        user_role = jwt_payload.get("role_name") or jwt_payload.get("role") or "Quản lý QC"
+                except Exception:
+                    pass
+
+        if not user_name:
+            user_name = "Quản lý QC"
+
+        # Ẩn hoàn toàn phiếu
+        record.is_deleted = True
+
+        data_dict = {}
+        if record.data_json:
+            try:
+                data_dict = json.loads(record.data_json) if isinstance(record.data_json, str) else dict(record.data_json)
+            except Exception:
+                data_dict = {}
+
+        data_dict["is_deleted"] = True
+        data_dict["status"] = "deleted"
+        data_dict["deleted_at"] = now.isoformat()
+        data_dict["deleted_by"] = user_name
+
+        _record_inspection_history(
+            data_dict=data_dict,
+            action_type="delete",
+            action_label="Xóa phiếu kiểm tra (Đã ẩn)",
+            changes=[{
+                "field": "is_deleted",
+                "label": "Trạng thái hiển thị",
+                "old_val": "Hiển thị",
+                "new_val": "Đã ẩn hoàn toàn"
+            }],
+            user_name=user_name,
+            user_role=user_role,
+            note="Đã ẩn phiếu kiểm tra khỏi hệ thống"
+        )
+
+        record.data_json = json.dumps(data_dict, ensure_ascii=False)
         db.commit()
-        return {"status": "success", "message": f"Đã xóa phiếu kiểm tra #{id}"}
+        return {"status": "success", "message": f"Đã ẩn phiếu kiểm tra #{id} thành công"}
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Lỗi khi xóa phiếu kiểm tra: {str(e)}")
 
 @router.delete("/daily/{id}")
-def delete_daily_inspection(id: int, db: Session = Depends(get_db)):
+def delete_daily_inspection(
+    id: int, 
+    request: Request = None,
+    payload: Optional[Dict[str, Any]] = Body(None),
+    db: Session = Depends(get_db)
+):
     """
-    [DELETE] Xóa một bản ghi kiểm tra lỗi hàng ngày và danh sách lỗi liên quan.
+    [DELETE] Xóa một bản ghi kiểm tra lỗi hàng ngày (Ẩn hoàn toàn khỏi hệ thống - Soft Delete).
     """
     record = db.query(DailyInspectionRecord).filter(DailyInspectionRecord.id == id).first()
     if not record:
         raise HTTPException(status_code=404, detail=f"Không tìm thấy bản ghi kiểm tra hàng ngày #{id}")
     
     try:
-        # Xóa các defects liên quan trước
-        db.query(DailyInspectionDefect).filter(DailyInspectionDefect.record_id == id).delete()
-        db.delete(record)
+        record.is_deleted = True
+        record.status = "deleted"
         db.commit()
-        return {"status": "success", "message": f"Đã xóa bản ghi kiểm tra hàng ngày #{id}"}
+        return {"status": "success", "message": f"Đã ẩn bản ghi kiểm tra hàng ngày #{id} thành công"}
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Lỗi khi xóa bản ghi: {str(e)}")
@@ -672,9 +739,12 @@ def get_stage_inspections(
     """
     [GET] Lấy danh sách phiếu kiểm tra công đoạn.
     Hỗ trợ filter theo batch_no, product_sku, month/year, và tìm kiếm text.
+    Tự động lọc bỏ các phiếu đã bị ẩn (is_deleted == True).
     """
     import json
-    query = db.query(InputInspection)
+    query = db.query(InputInspection).filter(
+        or_(InputInspection.is_deleted == False, InputInspection.is_deleted.is_(None))
+    )
     if batch_no:
         query = query.filter(InputInspection.batch_no == batch_no)
     if product_sku:
@@ -728,6 +798,20 @@ def get_stage_inspections(
                 r.inspector_name = 'Phan Thị Lương'
             else:
                 r.inspector_name = 'Huỳnh Hoàng Sơn'
+
+    # Map confirmed_by_name cho các phiếu đã xác nhận
+    confirmed_user_ids = {r.confirmed_by for r in records if r.confirmed_by}
+    if confirmed_user_ids:
+        try:
+            from modules.auth.models.accounts import Account
+            acc_rows = db.query(Account.id, Account.full_name, Account.username).filter(Account.id.in_(confirmed_user_ids)).all()
+            acc_map = {a.id: (a.full_name or a.username) for a in acc_rows}
+            for r in records:
+                if r.confirmed_by in acc_map:
+                    r.confirmed_by_name = acc_map[r.confirmed_by]
+        except Exception:
+            pass
+
     return records
 
 UPLOAD_DIR = get_upload_dir("inspections")
@@ -756,7 +840,9 @@ def get_inspections_list(
     from sqlalchemy import extract
 
     # Tạo query lọc theo các điều kiện chung (Tháng, Công đoạn, PO, Sản phẩm)
-    base_query = db.query(InputInspection)
+    base_query = db.query(InputInspection).filter(
+        or_(InputInspection.is_deleted == False, InputInspection.is_deleted.is_(None))
+    )
     if month and int(month) > 0:
         base_query = base_query.filter(extract('month', InputInspection.inspected_at) == int(month))
     if stage and stage not in ["ALL", "Tất cả công đoạn", ""]:
@@ -4152,7 +4238,8 @@ def get_pending_inspections(
     Hỗ trợ tìm kiếm theo từ khóa q.
     """
     query = db.query(InputInspection).filter(
-        or_(InputInspection.is_confirmed == False, InputInspection.is_confirmed.is_(None))
+        or_(InputInspection.is_confirmed == False, InputInspection.is_confirmed.is_(None)),
+        or_(InputInspection.is_deleted == False, InputInspection.is_deleted.is_(None))
     )
     
     if q and q.strip():
@@ -4231,6 +4318,10 @@ def get_pending_inspections(
                 or (data_dict.get("images") if isinstance(data_dict.get("images"), list) else [])
             ),
             "parameter": data_dict.get("parameter") or "",
+            "gloss_value": data_dict.get("gloss_value") or "",
+            "color_value": data_dict.get("color_value") or "",
+            "is_ocr_scanned": bool(data_dict.get("is_ocr_scanned", False)),
+            "ocr_scanned_at": data_dict.get("ocr_scanned_at") or "",
             "data_json": item.data_json or "",
             "parts_details": data_dict.get("parts_details") or data_dict.get("partsDetails") or [],
             "edit_history": data_dict.get("edit_history") or [],
@@ -4242,6 +4333,116 @@ def get_pending_inspections(
         task["stt"] = i + 1
         
     return pending_tasks
+
+
+@router.post("/ocr-parameter-scan/{inspection_id}")
+def ocr_parameter_scan_single(
+    inspection_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    [POST] Quét OCR ảnh của 1 phiếu kiểm tra thông số và lưu giá trị Độ bóng & Màu sơn vào CSDL.
+    """
+    from modules.inspection.services.parameter_ocr_service import scan_and_save_inspection_parameters
+    item = db.query(InputInspection).filter(InputInspection.id == inspection_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phiếu kiểm tra.")
+    res = scan_and_save_inspection_parameters(item, db)
+    return res
+
+
+@router.post("/ocr-parameter-scan-batch")
+def ocr_parameter_scan_batch(
+    payload: Optional[Dict[str, Any]] = Body(None),
+    db: Session = Depends(get_db)
+):
+    """
+    [POST] Quét OCR tự động hàng loạt cho các phiếu kiểm tra thông số chưa được quét.
+    """
+    from modules.inspection.services.parameter_ocr_service import scan_and_save_inspection_parameters
+    task_ids = payload.get("task_ids") if payload else None
+
+    query = db.query(InputInspection).filter(
+        or_(InputInspection.is_confirmed == False, InputInspection.is_confirmed.is_(None))
+    )
+    if task_ids and isinstance(task_ids, list):
+        query = query.filter(InputInspection.id.in_(task_ids))
+
+    items = query.all()
+    results = []
+    scanned_count = 0
+
+    for item in items:
+        # Kiểm tra xem có phải phiếu thông số không
+        it_type = str(item.inspection_type or "").lower()
+        d_json = {}
+        if item.data_json:
+            try:
+                d_json = json.loads(item.data_json) if isinstance(item.data_json, str) else item.data_json
+            except Exception:
+                d_json = {}
+
+        is_param = it_type == "parameter" or "thông số" in it_type or d_json.get("mode") == "parameter"
+        if not is_param and not (task_ids and item.id in task_ids):
+            continue
+
+        force_rescan = payload.get("force", False) if payload else False
+        if not force_rescan and d_json.get("is_ocr_scanned") and (d_json.get("gloss_value") or d_json.get("color_value")):
+            continue
+
+        r = scan_and_save_inspection_parameters(item, db)
+        results.append(r)
+        if r.get("scan_performed"):
+            scanned_count += 1
+
+    return {
+        "success": True,
+        "scanned_count": scanned_count,
+        "total_tasks": len(results),
+        "results": results
+    }
+
+
+@router.put("/update-parameter-values/{inspection_id}")
+def update_inspection_parameter_values(
+    inspection_id: int,
+    payload: Dict[str, Any] = Body(...),
+    db: Session = Depends(get_db)
+):
+    """
+    [PUT] Cập nhật thủ công chỉ số Độ bóng (gloss_value) & Màu sơn (color_value) cho phiếu kiểm tra.
+    """
+    item = db.query(InputInspection).filter(InputInspection.id == inspection_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phiếu kiểm tra.")
+
+    d_json = {}
+    if item.data_json:
+        try:
+            d_json = json.loads(item.data_json) if isinstance(item.data_json, str) else item.data_json
+        except Exception:
+            d_json = {}
+    if not isinstance(d_json, dict):
+        d_json = {}
+
+    if "gloss_value" in payload:
+        d_json["gloss_value"] = str(payload.get("gloss_value") or "").strip()
+    if "color_value" in payload:
+        d_json["color_value"] = str(payload.get("color_value") or "").strip()
+
+    d_json["is_ocr_scanned"] = True
+    d_json["manual_updated_at"] = datetime.datetime.now().isoformat()
+
+    item.data_json = json.dumps(d_json, ensure_ascii=False)
+    db.commit()
+    db.refresh(item)
+
+    return {
+        "success": True,
+        "task_id": item.id,
+        "gloss_value": d_json.get("gloss_value"),
+        "color_value": d_json.get("color_value")
+    }
 
 
 @router.get("/all-tickets")
@@ -4256,7 +4457,9 @@ def get_all_inspection_tickets(
     [GET] Lấy danh sách toàn bộ phiếu kiểm tra (cả đã xác nhận và chưa xác nhận).
     Hỗ trợ lọc theo khoảng thời gian (ngày, tuần, tháng) hoặc tìm kiếm theo từ khóa q.
     """
-    query = db.query(InputInspection)
+    query = db.query(InputInspection).filter(
+        or_(InputInspection.is_deleted == False, InputInspection.is_deleted.is_(None))
+    )
 
     now = datetime.datetime.now()
     if period == "today":
@@ -4359,6 +4562,10 @@ def get_all_inspection_tickets(
                 or (data_dict.get("images") if isinstance(data_dict.get("images"), list) else [])
             ),
             "parameter": data_dict.get("parameter") or "",
+            "gloss_value": data_dict.get("gloss_value") or "",
+            "color_value": data_dict.get("color_value") or "",
+            "is_ocr_scanned": bool(data_dict.get("is_ocr_scanned", False)),
+            "ocr_scanned_at": data_dict.get("ocr_scanned_at") or "",
             "data_json": item.data_json or "",
             "parts_details": data_dict.get("parts_details") or data_dict.get("partsDetails") or [],
             "edit_history": data_dict.get("edit_history") or [],
@@ -4529,6 +4736,30 @@ def _build_inspection_diff(
                 "new_val": new_note
             })
 
+    # 9. Độ bóng (gloss_value)
+    if "gloss_value" in body_data:
+        new_gloss = str(body_data.get("gloss_value") or "").strip()
+        old_gloss = str(data_dict.get("gloss_value") or "").strip()
+        if old_gloss != new_gloss:
+            changes.append({
+                "field": "gloss_value",
+                "label": "Độ bóng (GU)",
+                "old_val": old_gloss or "(Chưa có)",
+                "new_val": new_gloss or "(Đã xóa)"
+            })
+
+    # 10. Màu sơn (color_value)
+    if "color_value" in body_data:
+        new_color = str(body_data.get("color_value") or "").strip()
+        old_color = str(data_dict.get("color_value") or "").strip()
+        if old_color != new_color:
+            changes.append({
+                "field": "color_value",
+                "label": "Màu sơn (ΔE)",
+                "old_val": old_color or "(Chưa có)",
+                "new_val": new_color or "(Đã xóa)"
+            })
+
     return changes
 
 
@@ -4537,8 +4768,8 @@ def _record_inspection_history(
     action_type: str,
     action_label: str,
     changes: List[Dict[str, str]],
-    user_name: str = "QC Administrator",
-    user_role: str = "QC",
+    user_name: str = "Quản lý QC",
+    user_role: str = "Quản lý QC",
     note: str = ""
 ) -> Dict[str, Any]:
     now_vn = get_vietnam_time()
@@ -4569,6 +4800,7 @@ def _record_inspection_history(
 def confirm_inspection(
     type: str, 
     id: int, 
+    request: Request = None,
     payload: Optional[Dict[str, Any]] = Body(None),
     confirmed_by: Optional[int] = Body(None, embed=True), 
     db: Session = Depends(get_db)
@@ -4577,7 +4809,7 @@ def confirm_inspection(
     [POST] Xác nhận phiếu kiểm tra.
     type: 'stage' hoặc 'input'.
     Hỗ trợ cập nhật kết quả (result), hành động (action), thông tin xử lý (handling_info), loại phiếu (inspection_type), công đoạn (stage) và trạng thái (status).
-    Tự động ghi nhận lịch sử duyệt hồ sơ (Audit Trail).
+    Tự động ghi nhận lịch sử duyệt hồ sơ (Audit Trail) dựa trên tài khoản gửi lên hoặc giải mã từ Token đăng nhập.
     """
     record = db.query(InputInspection).filter(InputInspection.id == id).first()
     if not record:
@@ -4589,8 +4821,46 @@ def confirm_inspection(
     
     body_data = payload or {}
     c_by = body_data.get("confirmed_by") or confirmed_by
+    user_name = (body_data.get("updated_by") or body_data.get("confirmed_by_name") or body_data.get("user_name") or "").strip()
+    user_role = (body_data.get("user_role") or "").strip()
+
+    # Trích xuất danh tính người dùng từ Bearer Token nếu chưa có
+    if not c_by or not user_name:
+        if request:
+            try:
+                import jwt
+                from config.settings import settings
+                auth_header = request.headers.get("Authorization")
+                if auth_header and auth_header.startswith("Bearer "):
+                    token = auth_header.split(" ")[1].strip()
+                    payload_jwt = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+                    username_jwt = payload_jwt.get("sub")
+                    if username_jwt:
+                        from modules.auth.models.accounts import Account
+                        token_acc = db.query(Account).filter(Account.username == username_jwt).first()
+                        if token_acc:
+                            if not c_by:
+                                c_by = token_acc.id
+                            if not user_name:
+                                user_name = token_acc.full_name or token_acc.name or token_acc.username
+                            if not user_role:
+                                user_role = token_acc.role_name or "Quản lý QC"
+            except Exception:
+                pass
+
     if c_by:
         record.confirmed_by = c_by
+        if not user_name or not user_role:
+            try:
+                from modules.auth.models.accounts import Account
+                acc = db.query(Account).filter(Account.id == c_by).first()
+                if acc:
+                    if not user_name:
+                        user_name = acc.full_name or acc.name or acc.username
+                    if not user_role:
+                        user_role = acc.role_name or "Quản lý QC"
+            except Exception:
+                pass
 
     # Cập nhật loại phiếu và công đoạn nếu có
     new_type = body_data.get("inspection_type")
@@ -4620,8 +4890,26 @@ def confirm_inspection(
 
     # Ghi nhận Audit Trail lịch sử xác nhận / chỉnh sửa
     changes = _build_inspection_diff(record, data_dict, body_data)
-    user_name = body_data.get("updated_by") or body_data.get("confirmed_by_name") or body_data.get("user_name") or "QC Administrator"
-    user_role = body_data.get("user_role") or "Quản lý QC"
+    user_name = (body_data.get("updated_by") or body_data.get("confirmed_by_name") or body_data.get("user_name") or "").strip()
+    user_role = (body_data.get("user_role") or "").strip()
+
+    if c_by and (not user_name or not user_role):
+        try:
+            from modules.auth.models.accounts import Account
+            acc = db.query(Account).filter(Account.id == c_by).first()
+            if acc:
+                if not user_name:
+                    user_name = acc.full_name or acc.name or acc.username
+                if not user_role:
+                    user_role = acc.role_name or "Quản lý QC"
+        except Exception:
+            pass
+
+    if not user_name:
+        user_name = "Quản lý QC"
+    if not user_role:
+        user_role = "Quản lý QC"
+
     history_note = body_data.get("history_note") or handling_info or ""
 
     _record_inspection_history(
@@ -4633,6 +4921,7 @@ def confirm_inspection(
         user_role=user_role,
         note=history_note
     )
+    data_dict["confirmed_by_name"] = user_name
             
     data_dict["status"] = new_status
     if new_stage is not None:
@@ -4672,6 +4961,11 @@ def confirm_inspection(
     new_param = body_data.get("parameter")
     if new_param:
         data_dict["parameter"] = new_param
+
+    if "gloss_value" in body_data and body_data["gloss_value"] is not None:
+        data_dict["gloss_value"] = str(body_data["gloss_value"]).strip()
+    if "color_value" in body_data and body_data["color_value"] is not None:
+        data_dict["color_value"] = str(body_data["color_value"]).strip()
         
     record.data_json = json.dumps(data_dict, ensure_ascii=False)
         
@@ -4693,7 +4987,9 @@ def confirm_inspection(
             "handling_info": data_dict.get("handling_info"),
             "handling_images": data_dict.get("handling_images") or [],
             "edit_history": data_dict.get("edit_history") or [],
-            "parameter": data_dict.get("parameter")
+            "parameter": data_dict.get("parameter"),
+            "gloss_value": data_dict.get("gloss_value") or "",
+            "color_value": data_dict.get("color_value") or ""
         }
     except Exception as e:
         db.rollback()
@@ -4727,9 +5023,24 @@ def update_inspection_record(
             data_dict = {}
 
     # Ghi nhận Audit Diff chi tiết
-    changes = _build_inspection_diff(record, data_dict, body_data)
-    user_name = body_data.get("updated_by") or body_data.get("user_name") or "QC Administrator"
-    user_role = body_data.get("user_role") or "Quản lý QC"
+    user_name = (body_data.get("updated_by") or body_data.get("user_name") or "").strip()
+    user_role = (body_data.get("user_role") or "").strip()
+    u_id = body_data.get("user_id") or body_data.get("updated_by_id")
+    if u_id and (not user_name or not user_role):
+        try:
+            from modules.auth.models.accounts import Account
+            acc = db.query(Account).filter(Account.id == u_id).first()
+            if acc:
+                if not user_name:
+                    user_name = acc.full_name or acc.name or acc.username
+                if not user_role:
+                    user_role = acc.role_name or "Quản lý QC"
+        except Exception:
+            pass
+    if not user_name:
+        user_name = "Quản lý QC"
+    if not user_role:
+        user_role = "Quản lý QC"
     history_note = body_data.get("history_note") or ""
 
     if changes:
@@ -4799,6 +5110,11 @@ def update_inspection_record(
 
     if "parameter" in body_data:
         data_dict["parameter"] = body_data["parameter"]
+
+    if "gloss_value" in body_data and body_data["gloss_value"] is not None:
+        data_dict["gloss_value"] = str(body_data["gloss_value"]).strip()
+    if "color_value" in body_data and body_data["color_value"] is not None:
+        data_dict["color_value"] = str(body_data["color_value"]).strip()
         
     record.data_json = json.dumps(data_dict, ensure_ascii=False)
     
@@ -4817,7 +5133,9 @@ def update_inspection_record(
             "handling_info": data_dict.get("handling_info"),
             "handling_images": data_dict.get("handling_images") or [],
             "edit_history": data_dict.get("edit_history") or [],
-            "parameter": data_dict.get("parameter")
+            "parameter": data_dict.get("parameter"),
+            "gloss_value": data_dict.get("gloss_value") or "",
+            "color_value": data_dict.get("color_value") or ""
         }
     except Exception as e:
         db.rollback()
@@ -4829,6 +5147,7 @@ def update_inspection_record(
 def revert_inspection_to_pending(
     id: int,
     type: str = "input",
+    request: Request = None,
     payload: Optional[Dict[str, Any]] = Body(None),
     db: Session = Depends(get_db)
 ):
@@ -4843,8 +5162,42 @@ def revert_inspection_to_pending(
     """
     body_data = payload or {}
     reason = (body_data.get("reason") or body_data.get("note") or "").strip()
-    user_name = body_data.get("reverted_by") or body_data.get("user_name") or "QC Administrator"
-    user_role = body_data.get("user_role") or "Quản lý QC"
+    user_name = (body_data.get("reverted_by") or body_data.get("user_name") or "").strip()
+    user_role = (body_data.get("user_role") or "").strip()
+    u_id = body_data.get("user_id") or body_data.get("reverted_by_id")
+
+    # Trích xuất danh tính người dùng từ Bearer Token nếu chưa có
+    if request:
+        auth_header = request.headers.get("Authorization") or request.headers.get("authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.split(" ")[1]
+            try:
+                jwt_payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+                token_user = jwt_payload.get("full_name") or jwt_payload.get("sub")
+                if token_user and (not user_name or user_name == "Quản lý QC"):
+                    user_name = token_user
+                if not user_role or user_role == "Quản lý QC":
+                    user_role = jwt_payload.get("role_name") or jwt_payload.get("role") or "Quản lý QC"
+                if not u_id:
+                    u_id = jwt_payload.get("id") or jwt_payload.get("user_id")
+            except Exception:
+                pass
+
+    if u_id and (not user_name or not user_role or user_name == "Quản lý QC"):
+        try:
+            from modules.auth.models.accounts import Account
+            acc = db.query(Account).filter(Account.id == u_id).first()
+            if acc:
+                if not user_name or user_name == "Quản lý QC":
+                    user_name = acc.full_name or acc.name or acc.username
+                if not user_role or user_role == "Quản lý QC":
+                    user_role = acc.role_name or "Quản lý QC"
+        except Exception:
+            pass
+    if not user_name:
+        user_name = "Quản lý QC"
+    if not user_role:
+        user_role = "Quản lý QC"
 
     # 1. Nếu là phiếu daily inspection
     if type == "daily":
@@ -5065,33 +5418,101 @@ def get_inspection_history(
 @router.post("/confirm-batch")
 @router.post("/confirm-batch/")
 def confirm_inspections_batch(
-    ids: List[int] = Body(..., embed=True),
+    request: Request = None,
+    payload: Optional[Dict[str, Any]] = Body(None),
+    ids: Optional[List[int]] = Body(None, embed=True),
     confirmed_by: Optional[int] = Body(None, embed=True),
     db: Session = Depends(get_db)
 ):
     """
     [POST] Xác nhận nhanh hàng loạt phiếu kiểm tra theo danh sách IDs.
+    Tự động ghi nhận lịch sử duyệt hồ sơ (Audit Trail) cho từng phiếu với thông tin người duyệt thực tế.
     """
-    if not ids:
+    body_data = payload or {}
+    target_ids = body_data.get("ids") or ids or []
+    if not target_ids:
         raise HTTPException(status_code=400, detail="Danh sách ID phiếu xác nhận không được để trống")
+
+    c_by = body_data.get("confirmed_by") or confirmed_by
+    user_name = (body_data.get("confirmed_by_name") or body_data.get("updated_by") or body_data.get("user_name") or "").strip()
+    user_role = (body_data.get("user_role") or "").strip()
+
+    # Trích xuất danh tính người dùng từ Bearer Token nếu chưa có
+    if not c_by or not user_name:
+        if request:
+            try:
+                import jwt
+                from config.settings import settings
+                auth_header = request.headers.get("Authorization")
+                if auth_header and auth_header.startswith("Bearer "):
+                    token = auth_header.split(" ")[1].strip()
+                    payload_jwt = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+                    username_jwt = payload_jwt.get("sub")
+                    if username_jwt:
+                        from modules.auth.models.accounts import Account
+                        token_acc = db.query(Account).filter(Account.username == username_jwt).first()
+                        if token_acc:
+                            if not c_by:
+                                c_by = token_acc.id
+                            if not user_name:
+                                user_name = token_acc.full_name or token_acc.name or token_acc.username
+                            if not user_role:
+                                user_role = token_acc.role_name or "Quản lý QC"
+            except Exception:
+                pass
+
+    if c_by and (not user_name or not user_role):
+        try:
+            from modules.auth.models.accounts import Account
+            acc = db.query(Account).filter(Account.id == c_by).first()
+            if acc:
+                if not user_name:
+                    user_name = acc.full_name or acc.name or acc.username
+                if not user_role:
+                    user_role = acc.role_name or "Quản lý QC"
+        except Exception:
+            pass
+
+    if not user_name:
+        user_name = "Quản lý QC"
+    if not user_role:
+        user_role = "Quản lý QC"
 
     now = datetime.datetime.now()
     try:
-        updated_count = db.query(InputInspection).filter(
-            InputInspection.id.in_(ids)
-        ).update(
-            {
-                InputInspection.is_confirmed: True,
-                InputInspection.confirmed_at: now,
-                InputInspection.confirmed_by: confirmed_by
-            },
-            synchronize_session=False
-        )
+        records = db.query(InputInspection).filter(InputInspection.id.in_(target_ids)).all()
+        for rec in records:
+            rec.is_confirmed = True
+            rec.confirmed_at = now
+            if c_by:
+                rec.confirmed_by = c_by
+
+            data_dict = {}
+            if rec.data_json:
+                try:
+                    data_dict = json.loads(rec.data_json) if isinstance(rec.data_json, str) else dict(rec.data_json)
+                except Exception:
+                    data_dict = {}
+
+            data_dict["status"] = "Đã xong"
+            data_dict["confirmed_by_name"] = user_name
+
+            _record_inspection_history(
+                data_dict=data_dict,
+                action_type="confirm",
+                action_label="Xác nhận duyệt hồ sơ",
+                changes=[],
+                user_name=user_name,
+                user_role=user_role,
+                note="Duyệt nhanh hàng loạt hồ sơ ĐẠT"
+            )
+            rec.data_json = json.dumps(data_dict, ensure_ascii=False)
+
         db.commit()
         return {
             "success": True,
-            "message": f"Đã xác nhận thành công {updated_count} phiếu kiểm tra",
-            "confirmed_count": updated_count,
+            "message": f"Đã xác nhận thành công {len(records)} phiếu kiểm tra",
+            "confirmed_count": len(records),
             "confirmed_at": now.isoformat()
         }
     except Exception as e:
@@ -5338,7 +5759,9 @@ def get_quality_overview(
                 filter_s_date = datetime.date(int(year), 1, 1)
                 filter_e_date = datetime.date(int(year), 12, 31)
 
-        query = db.query(InputInspection)
+        query = db.query(InputInspection).filter(
+            or_(InputInspection.is_deleted == False, InputInspection.is_deleted.is_(None))
+        )
 
         if filter_s_date:
             s_dt = datetime.datetime.combine(filter_s_date, datetime.time.min)
@@ -6072,7 +6495,7 @@ def get_inspection_detail_by_id(id: str, db: Session = Depends(get_db)):
             extracted_num = int(m.group())
             record = db.query(InputInspection).filter(InputInspection.id == extracted_num).first()
 
-    if not record:
+    if not record or getattr(record, 'is_deleted', False):
         raise HTTPException(status_code=404, detail="Không tìm thấy phiếu kiểm tra")
 
     data_dict = {}

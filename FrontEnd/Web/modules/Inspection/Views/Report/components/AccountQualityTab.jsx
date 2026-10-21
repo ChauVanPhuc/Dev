@@ -28,6 +28,7 @@ const AccountQualityTab = ({
   onSelectTask,
   refreshTrigger = 0,
   onUpdateAccountCount,
+  isParameterMode = false,
 }) => {
   // Lọc theo thời gian (Hôm nay, Tuần này, Tháng này, Tất cả, hoặc Tùy chọn)
   const [timePeriod, setTimePeriod] = useState('today'); // 'all' | 'today' | 'week' | 'month' | 'custom'
@@ -201,7 +202,48 @@ const AccountQualityTab = ({
     };
 
     // 2. Phân bổ phiếu kiểm tra vào các nhóm
-    const safeTickets = Array.isArray(allTickets) && allTickets.length > 0 ? allTickets : pendingTasks;
+    const rawTickets = Array.isArray(allTickets) && allTickets.length > 0 ? allTickets : pendingTasks;
+    const safeTickets = rawTickets.filter(task => {
+      if (!task) return false;
+
+      let dj = null;
+      if (task.data_json) {
+        try {
+          dj = typeof task.data_json === 'string' ? JSON.parse(task.data_json) : task.data_json;
+        } catch (e) {}
+      }
+
+      const rawType = String(task.inspection_type || dj?.mode || dj?.inspection_type || '').toLowerCase().trim();
+      const rawCat = String(task.category || '').toLowerCase().trim();
+
+      let isParam = false;
+      const isOtherExplicit = (
+        rawType.includes('first_sample') || rawType.includes('mẫu đầu') || rawType.includes('mau-dau') || rawType.includes('mẫu-đầu') ||
+        rawType.includes('daily') || rawType.includes('hang-ngay') || rawType.includes('hằng ngày') ||
+        rawType.includes('re_inspect') || rawType.includes('tai-kiem') || rawType.includes('tái kiểm') || rawType.includes('reinspect') ||
+        rawType.includes('process') || rawType.includes('quy-trinh') || rawType.includes('quy trình') ||
+        rawType.includes('qa') || rawType.includes('vấn đáp') || rawType.includes('van-dap') ||
+        rawType.includes('nhap-kho') || rawType.includes('nhập kho') || rawType.includes('dau-vao') || rawType.includes('đầu vào') || rawType.includes('input')
+      );
+
+      if (!isOtherExplicit) {
+        if (
+          rawType === 'parameter' ||
+          rawType.includes('parameter') ||
+          rawType.includes('thông số') ||
+          rawType.includes('thong-so') ||
+          rawCat.includes('thông số') ||
+          rawCat.includes('thong-so') ||
+          rawCat.includes('parameter') ||
+          dj?.mode === 'parameter' ||
+          dj?.inspection_type === 'parameter'
+        ) {
+          isParam = true;
+        }
+      }
+
+      return isParameterMode ? isParam : !isParam;
+    });
     safeTickets.forEach(task => {
       const inspectorName = (task.inspector_name || 'QC Hệ thống').trim();
       let g = findGroup(inspectorName);

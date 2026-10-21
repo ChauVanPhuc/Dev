@@ -503,9 +503,15 @@ export const AiOcrScanModal = ({ isOpen, onClose }) => {
   const expLpnClean = inspectingItem ? String(inspectingItem.expected_lpn || inspectingItem.lpn || '').trim().toUpperCase() : '';
   const expSkuClean = inspectingItem ? String(inspectingItem.expected_sku || inspectingItem.sku || '').trim().replace(/^[-:;,. #*!_/]+|[-:;,. #*!_/]+$/g, '').toUpperCase() : '';
 
-  const isLpnCodeMatch = (code) => {
-    if (!expLpnClean || !code) return false;
-    return String(code).trim().toUpperCase() === expLpnClean;
+  const isLpnCodeMatch = (code, targetLpn = expLpnClean) => {
+    const target = String(targetLpn || expLpnClean || '').trim().toUpperCase();
+    if (!target || !code) return false;
+    const clean = String(code).trim().toUpperCase();
+    if (clean === target) return true;
+    const normTarget = target.replace(/O/g, '0');
+    const normClean = clean.replace(/O/g, '0');
+    if (normClean === normTarget) return true;
+    return false;
   };
 
   const isSkuCodeMatch = (code) => {
@@ -1762,10 +1768,10 @@ export const AiOcrScanModal = ({ isOpen, onClose }) => {
                               const rLpn = roi.extracted_lpn || roi.extracted?.lpn;
                               const rSku = roi.extracted_sku || roi.extracted?.sku;
 
+                              const rOrient = roi.orientation || (roi.rotation_deg === 90 || roi.rotation_deg === 270 ? 'vertical' : 'horizontal');
                               const isDirectLpn = rLpn && targetLpn && (rLpn === targetLpn || isLpnCodeMatch(rLpn));
-                              const isPairedLpn = rLpn && pairedLpn && (rLpn === pairedLpn || isLpnCodeMatch(rLpn));
-                              const isContLpn = rLpn && containerItems.some(c => c.lpn && (c.lpn === rLpn || isLpnCodeMatch(rLpn)));
-                              const isLpnMatch = isDirectLpn || isPairedLpn || isContLpn;
+                              const isPairedLpn = rOrient === 'vertical' && rLpn && pairedLpn && (rLpn === pairedLpn || isLpnCodeMatch(rLpn));
+                              const isLpnMatch = isDirectLpn || isPairedLpn;
 
                               const isSkuMatch = rSku && targetSku && (rSku === targetSku || isSkuCodeMatch(rSku));
                               const hasMatch = isLpnMatch || isSkuMatch;
@@ -1895,9 +1901,9 @@ export const AiOcrScanModal = ({ isOpen, onClose }) => {
                       }
                       const foundInCont = containerItems.find(c => c.lpn && (c.lpn === code || isLpnCodeMatch(code)));
                       if (foundInCont) {
-                        return { isMatch: true, matchType: 'container', label: `ĐÚNG (Kiện ${foundInCont.suffix_key})` };
+                        return { isMatch: false, matchType: 'container_mismatch', label: `❌ LỆCH MÃ (Thuộc ${foundInCont.suffix_key || 'kiện khác'}, nghi nhầm tem!)` };
                       }
-                      return { isMatch: false };
+                      return { isMatch: false, label: 'SAI (Khác CSDL)' };
                     };
 
                     const roiList = inspectorAnalysis?.roi_details || inspectorAnalysis?.images?.roi_details || [];

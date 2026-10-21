@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Check } from 'lucide-react';
 
-import { formatDateMDY } from '../utils/formatters';
+import { formatDateMDY, formatTimestampVN } from '../utils/formatters';
 
-export { formatDateMDY };
+export { formatDateMDY, formatTimestampVN };
 
 export const DataTable = ({
   items = [],
@@ -154,7 +154,7 @@ export const DataTable = ({
                     </td>
                     <td style={{ fontWeight: '700', color: '#2D1A12' }}>{row.factory || '—'}</td>
                     <td style={{ fontWeight: '700', color: '#2D1A12' }}>{formatDateMDY(row.date_loading || row.date_loading_raw)}</td>
-                    <td style={{ fontWeight: '700', color: '#2D1A12' }}>{row.timestamp_raw || '—'}</td>
+                    <td style={{ fontWeight: '700', color: '#2D1A12' }}>{formatTimestampVN(row.timestamp_raw)}</td>
                     <td style={{ fontWeight: '700', color: '#2D1A12' }}>{row.operator_name || '—'}</td>
                     <td style={{ fontWeight: '700', color: '#2D1A12' }}>{row.lpn || '—'}</td>
                     <td style={{ fontWeight: '700', color: '#2D1A12' }}>{row.sku || '—'}</td>

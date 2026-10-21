@@ -66,6 +66,7 @@ class DailyInspectionRecordRead(BaseModel):
     pallet_code: Optional[str] = None
     status: Optional[str] = "Đã hoàn thành"
     is_confirmed: Optional[bool] = True
+    is_deleted: Optional[bool] = False
     total_products: int
     total_defects: int
     defect_rate: float

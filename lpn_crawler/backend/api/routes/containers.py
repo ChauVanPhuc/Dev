@@ -13,7 +13,7 @@ from sqlalchemy import or_, and_, desc, asc, extract, text, func
 
 from app.core.database import get_db, SessionLocal
 from lpn_crawler.backend.models.models import LpnContainer, LpnItem, LpnImage, LpnAiOcrResult
-from lpn_crawler.backend.utils.formatters import format_date_mdy
+from lpn_crawler.backend.utils.formatters import format_date_mdy, format_timestamp_display
 from lpn_crawler.backend.api.routes.images import resolve_image_file_path
 from lpn_crawler.backend.services.storage import download_image_authenticated
 from lpn_crawler.ai_ocr_train.core.pipeline import get_default_pipeline
@@ -179,6 +179,7 @@ def get_containers_rows(
             c.date_loading_raw,
             c.date_loading,
             c.timestamp_raw,
+            c.timestamp_val,
             c.operator_name,
             i.record_type,
             i.suffix_key,
@@ -224,7 +225,7 @@ def get_containers_rows(
             "factory": r.factory,
             "date_loading_raw": r.date_loading_raw,
             "date_loading": format_date_mdy(r.date_loading, r.date_loading_raw),
-            "timestamp_raw": r.timestamp_raw,
+            "timestamp_raw": format_timestamp_display(r.timestamp_raw, getattr(r, "timestamp_val", None)),
             "operator_name": r.operator_name,
             "record_type": r.record_type,
             "suffix_key": r.suffix_key,
@@ -378,7 +379,7 @@ def get_containers_cards(
     params["offset"] = offset
     params["limit"] = page_size
 
-    cards_sql = text(f"""
+    base_cards_sql = text(f"""
         SELECT 
             c.id as container_id,
             c.container_number,
@@ -386,64 +387,129 @@ def get_containers_cards(
             c.date_loading,
             c.date_loading_raw,
             c.timestamp_raw,
+            c.timestamp_val,
             c.operator_name,
-            c.container_image,
-            (SELECT COUNT(DISTINCT i.lpn) FROM lpn_items i WITH (NOLOCK) WHERE i.container_id = c.id AND i.lpn IS NOT NULL AND LTRIM(RTRIM(i.lpn)) != '' AND i.lpn != 'None' AND i.lpn != '0') as lpn_count,
-            (SELECT COUNT(DISTINCT i.sku) FROM lpn_items i WITH (NOLOCK) WHERE i.container_id = c.id AND i.sku IS NOT NULL AND LTRIM(RTRIM(i.sku)) != '' AND i.sku != 'None' AND i.sku != '0') as sku_count,
-            (SELECT COUNT(*) FROM lpn_items i WITH (NOLOCK) WHERE i.container_id = c.id) as total_items,
-            (SELECT COUNT(*) FROM lpn_images img WITH (NOLOCK) WHERE img.container_id = c.id AND (
-                (img.local_path IS NOT NULL AND LTRIM(RTRIM(img.local_path)) != '' AND img.local_path != 'None')
-                OR (img.source_url IS NOT NULL AND LTRIM(RTRIM(img.source_url)) != '' AND img.source_url != 'None')
-            )) as total_images,
-            (SELECT COUNT(*) FROM lpn_items i WITH (NOLOCK) WHERE i.container_id = c.id AND (i.sku IS NULL OR LTRIM(RTRIM(i.sku)) = '' OR i.sku = 'None' OR i.sku = '0')) as items_without_sku,
-            (SELECT COUNT(*) FROM lpn_items i WITH (NOLOCK) WHERE i.container_id = c.id AND (i.lpn IS NULL OR LTRIM(RTRIM(i.lpn)) = '' OR i.lpn = 'None' OR i.lpn = '0')) as items_without_lpn,
-            (SELECT COUNT(*) FROM lpn_items i WITH (NOLOCK) WHERE i.container_id = c.id AND NOT EXISTS (
-                SELECT 1 FROM lpn_images img WITH (NOLOCK) 
-                WHERE img.lpn_item_id = i.id AND (
-                    (img.local_path IS NOT NULL AND LTRIM(RTRIM(img.local_path)) != '' AND img.local_path != 'None')
-                    OR (img.source_url IS NOT NULL AND LTRIM(RTRIM(img.source_url)) != '' AND img.source_url != 'None')
-                )
-            )) as items_without_image,
-            (SELECT TOP 1 local_path FROM lpn_images img WITH (NOLOCK) WHERE img.container_id = c.id AND img.local_path IS NOT NULL AND LTRIM(RTRIM(img.local_path)) != '' AND img.local_path != 'None' ORDER BY img.sort_order, img.id) as first_image,
-            (SELECT TOP 1 source_url FROM lpn_images img WITH (NOLOCK) WHERE img.container_id = c.id AND img.source_url IS NOT NULL AND LTRIM(RTRIM(img.source_url)) != '' AND img.source_url != 'None' ORDER BY img.sort_order, img.id) as first_image_url,
-            (SELECT COUNT(DISTINCT o.item_id) FROM lpn_ai_ocr_results o WITH (NOLOCK) 
-             JOIN lpn_items i WITH (NOLOCK) ON o.item_id = i.id
-             WHERE i.container_id = c.id
-            ) as ocr_scanned_count,
-            (SELECT COUNT(DISTINCT o.item_id) FROM lpn_ai_ocr_results o WITH (NOLOCK) 
-             JOIN lpn_items i WITH (NOLOCK) ON o.item_id = i.id
-             WHERE i.container_id = c.id
-               AND o.is_lpn_match = 1
-               AND (i.sku IS NULL OR LTRIM(RTRIM(i.sku)) IN ('', 'None', '0', '—') OR o.is_sku_match = 1)
-               AND o.status = 'success'
-            ) as ocr_matched_count,
-            (SELECT COUNT(DISTINCT o.item_id) FROM lpn_ai_ocr_results o WITH (NOLOCK) 
-             JOIN lpn_items i WITH (NOLOCK) ON o.item_id = i.id
-             WHERE i.container_id = c.id
-               AND (
-                 o.is_lpn_match = 0
-                 OR (i.sku IS NOT NULL AND LTRIM(RTRIM(i.sku)) NOT IN ('', 'None', '0', '—') AND o.is_sku_match = 0)
-                 OR o.status != 'success'
-               )
-            ) as ocr_mismatch_count
+            c.container_image
         FROM lpn_containers c WITH (NOLOCK)
         {where_sql}
         ORDER BY {order_by}
         OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY
     """)
-    rows = db.execute(cards_sql, params).fetchall()
+    rows = db.execute(base_cards_sql, params).fetchall()
+
+    if not rows:
+        return {
+            "total": total,
+            "items": [],
+            "page": page,
+            "page_size": page_size
+        }
+
+    c_ids = [r.container_id for r in rows]
+    id_str = ','.join(str(i) for i in c_ids)
+
+    # 1. Item metrics (LPN, SKU, Kiện hàng, thiếu SKU/LPN)
+    item_metrics_sql = text(f"""
+        SELECT 
+            container_id,
+            COUNT(DISTINCT CASE WHEN lpn IS NOT NULL AND LTRIM(RTRIM(lpn)) != '' AND lpn != 'None' AND lpn != '0' THEN lpn END) as lpn_count,
+            COUNT(DISTINCT CASE WHEN sku IS NOT NULL AND LTRIM(RTRIM(sku)) != '' AND sku != 'None' AND sku != '0' THEN sku END) as sku_count,
+            COUNT(*) as total_items,
+            COUNT(CASE WHEN sku IS NULL OR LTRIM(RTRIM(sku)) = '' OR sku = 'None' OR sku = '0' THEN 1 END) as items_without_sku,
+            COUNT(CASE WHEN lpn IS NULL OR LTRIM(RTRIM(lpn)) = '' OR lpn = 'None' OR lpn = '0' THEN 1 END) as items_without_lpn
+        FROM lpn_items WITH (NOLOCK)
+        WHERE container_id IN ({id_str})
+        GROUP BY container_id
+    """)
+    items_map = {r.container_id: r for r in db.execute(item_metrics_sql).fetchall()}
+
+    # 2. Image metrics
+    img_metrics_sql = text(f"""
+        SELECT container_id, COUNT(*) as total_images
+        FROM lpn_images WITH (NOLOCK)
+        WHERE container_id IN ({id_str})
+          AND ((local_path IS NOT NULL AND LTRIM(RTRIM(local_path)) != '' AND local_path != 'None')
+            OR (source_url IS NOT NULL AND LTRIM(RTRIM(source_url)) != '' AND source_url != 'None'))
+        GROUP BY container_id
+    """)
+    imgs_map = {r.container_id: r.total_images for r in db.execute(img_metrics_sql).fetchall()}
+
+    # 3. First image for each container
+    first_img_sql = text(f"""
+        SELECT container_id, local_path, source_url
+        FROM (
+            SELECT container_id, local_path, source_url,
+                   ROW_NUMBER() OVER (PARTITION BY container_id ORDER BY sort_order, id) as rn
+            FROM lpn_images WITH (NOLOCK)
+            WHERE container_id IN ({id_str})
+              AND ((local_path IS NOT NULL AND LTRIM(RTRIM(local_path)) != '' AND local_path != 'None')
+                OR (source_url IS NOT NULL AND LTRIM(RTRIM(source_url)) != '' AND source_url != 'None'))
+        ) sub
+        WHERE rn = 1
+    """)
+    first_imgs_map = {r.container_id: (r.local_path, r.source_url) for r in db.execute(first_img_sql).fetchall()}
+
+    # 4. Items without image
+    no_img_sql = text(f"""
+        SELECT 
+            i.container_id,
+            COUNT(CASE WHEN img.id IS NULL THEN 1 END) as items_without_image
+        FROM lpn_items i WITH (NOLOCK)
+        LEFT JOIN lpn_images img WITH (NOLOCK) ON img.lpn_item_id = i.id 
+            AND ((img.local_path IS NOT NULL AND LTRIM(RTRIM(img.local_path)) != '' AND img.local_path != 'None')
+              OR (img.source_url IS NOT NULL AND LTRIM(RTRIM(img.source_url)) != '' AND img.source_url != 'None'))
+        WHERE i.container_id IN ({id_str})
+        GROUP BY i.container_id
+    """)
+    no_img_map = {r.container_id: r.items_without_image for r in db.execute(no_img_sql).fetchall()}
+
+    # 5. AI OCR metrics
+    ocr_metrics_sql = text(f"""
+        SELECT 
+            i.container_id,
+            COUNT(DISTINCT o.item_id) as ocr_scanned_count,
+            COUNT(DISTINCT CASE 
+                WHEN o.is_lpn_match = 1 
+                 AND (i.sku IS NULL OR LTRIM(RTRIM(i.sku)) IN ('', 'None', '0', '—') OR o.is_sku_match = 1)
+                 AND o.status = 'success' 
+                THEN o.item_id END
+            ) as ocr_matched_count,
+            COUNT(DISTINCT CASE 
+                WHEN o.is_lpn_match = 0 
+                  OR (i.sku IS NOT NULL AND LTRIM(RTRIM(i.sku)) NOT IN ('', 'None', '0', '—') AND o.is_sku_match = 0)
+                  OR o.status != 'success'
+                THEN o.item_id END
+            ) as ocr_mismatch_count
+        FROM lpn_ai_ocr_results o WITH (NOLOCK)
+        JOIN lpn_items i WITH (NOLOCK) ON o.item_id = i.id
+        WHERE i.container_id IN ({id_str})
+        GROUP BY i.container_id
+    """)
+    ocr_map = {r.container_id: r for r in db.execute(ocr_metrics_sql).fetchall()}
 
     cards = []
     for r in rows:
+        cid = r.container_id
+        itm_info = items_map.get(cid)
+        tot_itms = itm_info.total_items if itm_info else 0
+        lpn_cnt = itm_info.lpn_count if itm_info else 0
+        sku_cnt = itm_info.sku_count if itm_info else 0
+        no_sku = itm_info.items_without_sku if itm_info else 0
+        no_lpn = itm_info.items_without_lpn if itm_info else 0
+
+        tot_imgs = imgs_map.get(cid, 0)
+        no_img = no_img_map.get(cid, max(0, tot_itms - tot_imgs))
+
+        ocr_info = ocr_map.get(cid)
+        ocr_scanned = ocr_info.ocr_scanned_count if ocr_info else 0
+        ocr_matched = ocr_info.ocr_matched_count if ocr_info else 0
+        ocr_mismatch = ocr_info.ocr_mismatch_count if ocr_info else 0
+
+        first_img_paths = first_imgs_map.get(cid, (None, None))
+        first_img = first_img_paths[0]
+        first_img_url = first_img_paths[1]
+
         missing_reasons = []
-        tot_imgs = r.total_images or 0
-        tot_itms = r.total_items or 0
-        no_img = r.items_without_image if r.items_without_image is not None else max(0, tot_itms - tot_imgs)
-        no_sku = r.items_without_sku or 0
-        no_lpn = r.items_without_lpn or 0
-        ocr_scanned = r.ocr_scanned_count or 0
-        ocr_matched = r.ocr_matched_count or 0
-        ocr_mismatch = r.ocr_mismatch_count or 0
 
         # Kiểm tra ảnh (nếu số ảnh < số Pallet/Box hoặc có kiện thiếu ảnh)
         if tot_imgs < tot_itms or no_img > 0 or tot_imgs == 0:
@@ -454,11 +520,11 @@ def get_containers_cards(
                 missing_reasons.append("ảnh")
         
         # Kiểm tra SKU (nếu có kiện thiếu SKU hoặc sku_count = 0)
-        if not r.sku_count or r.sku_count == 0 or no_sku > 0:
+        if not sku_cnt or sku_cnt == 0 or no_sku > 0:
             missing_reasons.append("SKU")
             
         # Kiểm tra LPN (nếu có kiện thiếu LPN hoặc lpn_count = 0)
-        if not r.lpn_count or r.lpn_count == 0 or no_lpn > 0:
+        if not lpn_cnt or lpn_cnt == 0 or no_lpn > 0:
             missing_reasons.append("LPN")
             
         # Kiểm tra Date loading
@@ -497,10 +563,10 @@ def get_containers_cards(
             "factory": r.factory or "—",
             "date_loading_raw": r.date_loading_raw,
             "date_loading": format_date_mdy(r.date_loading, r.date_loading_raw) or (r.date_loading_raw or "—"),
-            "timestamp_raw": r.timestamp_raw or "—",
+            "timestamp_raw": format_timestamp_display(r.timestamp_raw, getattr(r, "timestamp_val", None)) or (r.timestamp_raw or "—"),
             "operator_name": r.operator_name or "—",
-            "lpn_count": r.lpn_count or 0,
-            "sku_count": r.sku_count or 0,
+            "lpn_count": lpn_cnt,
+            "sku_count": sku_cnt,
             "total_items": tot_itms,
             "total_images": tot_imgs,
             "items_without_image": no_img,
@@ -508,7 +574,7 @@ def get_containers_cards(
             "items_without_lpn": no_lpn,
             "container_image": container_img,
             "first_image": container_img,
-            "first_pallet_image": r.first_image or r.first_image_url,
+            "first_pallet_image": first_img or first_img_url,
             "ocr_scanned_count": ocr_scanned,
             "ocr_matched_count": ocr_matched,
             "ocr_mismatch_count": ocr_mismatch,
@@ -590,21 +656,22 @@ def get_unscanned_containers(
     e_date = end_date or endDate
 
     where_clauses = [
-        "(SELECT COUNT(*) FROM lpn_images img WITH (NOLOCK) WHERE img.container_id = c.id) > 0"
+        "EXISTS (SELECT 1 FROM lpn_images img WITH (NOLOCK) WHERE img.container_id = c.id)"
     ]
     params = {"limit": limit}
 
     if include_mismatched:
-        where_clauses.append("""(
-            (SELECT COUNT(*) FROM lpn_images img WITH (NOLOCK) WHERE img.container_id = c.id) > 
-            (SELECT COUNT(DISTINCT o.image_id) FROM lpn_ai_ocr_results o WITH (NOLOCK) WHERE o.image_id IN (SELECT img2.id FROM lpn_images img2 WITH (NOLOCK) WHERE img2.container_id = c.id))
-            OR
-            (SELECT COUNT(DISTINCT o.image_id) FROM lpn_ai_ocr_results o WITH (NOLOCK) WHERE o.image_id IN (SELECT img2.id FROM lpn_images img2 WITH (NOLOCK) WHERE img2.container_id = c.id) AND (o.is_lpn_match = 0 OR o.is_sku_match = 0 OR o.status != 'success')) > 0
+        where_clauses.append("""EXISTS (
+            SELECT 1 FROM lpn_images img WITH (NOLOCK)
+            LEFT JOIN lpn_ai_ocr_results o WITH (NOLOCK) ON o.image_id = img.id
+            WHERE img.container_id = c.id 
+              AND (o.id IS NULL OR o.is_lpn_match = 0 OR o.is_sku_match = 0 OR o.status != 'success')
         )""")
     else:
-        where_clauses.append("""(
-            (SELECT COUNT(*) FROM lpn_images img WITH (NOLOCK) WHERE img.container_id = c.id) > 
-            (SELECT COUNT(DISTINCT o.image_id) FROM lpn_ai_ocr_results o WITH (NOLOCK) WHERE o.image_id IN (SELECT img2.id FROM lpn_images img2 WITH (NOLOCK) WHERE img2.container_id = c.id))
+        where_clauses.append("""EXISTS (
+            SELECT 1 FROM lpn_images img WITH (NOLOCK)
+            LEFT JOIN lpn_ai_ocr_results o WITH (NOLOCK) ON o.image_id = img.id
+            WHERE img.container_id = c.id AND o.id IS NULL
         )""")
 
     if container_ids:
@@ -781,7 +848,7 @@ def get_container_detail(container_id: int, db: Session = Depends(get_db)):
             "factory": cont.factory,
             "date_loading": format_date_mdy(cont.date_loading, cont.date_loading_raw) or (cont.date_loading_raw or "—"),
             "date_loading_raw": cont.date_loading_raw,
-            "timestamp_raw": cont.timestamp_raw,
+            "timestamp_raw": format_timestamp_display(cont.timestamp_raw, cont.timestamp_val) or (cont.timestamp_raw or "—"),
             "operator_name": cont.operator_name,
             "item_index": itm.item_index,
             "record_type": itm.record_type,
@@ -850,7 +917,7 @@ def get_container_detail(container_id: int, db: Session = Depends(get_db)):
         "factory": cont.factory or "—",
         "date_loading": format_date_mdy(cont.date_loading, cont.date_loading_raw) or (cont.date_loading_raw or "—"),
         "date_loading_raw": cont.date_loading_raw,
-        "timestamp_raw": cont.timestamp_raw or "—",
+        "timestamp_raw": format_timestamp_display(cont.timestamp_raw, cont.timestamp_val) or (cont.timestamp_raw or "—"),
         "operator_name": cont.operator_name or "—",
         "lpn_count": len(valid_lpns),
         "sku_count": len(valid_skus),

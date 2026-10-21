@@ -53,6 +53,7 @@ class InputInspection(Base):
     is_confirmed    = Column(Boolean, default=False, nullable=False)
     confirmed_at    = Column(DateTime, nullable=True)
     confirmed_by    = Column(Integer, nullable=True)
+    is_deleted      = Column(Boolean, default=False, nullable=True)
     created_at      = Column(DateTime, default=get_vietnam_time, nullable=True)
 
     # Alias Properties để tương thích ngược 100% với code dùng stage_inspections
@@ -84,10 +85,32 @@ class InputInspection(Base):
     def action(self):
         if self.data_json:
             try:
-                d = json.loads(self.data_json)
+                d = json.loads(self.data_json) if isinstance(self.data_json, str) else self.data_json
                 if d.get("action"):
                     return d.get("action")
             except Exception:
                 pass
         return "chap-nhan" if (self.result in ["pass", "Đạt"] or self.conclusion in ["pass", "Đạt"]) else "tra-ve"
+
+    @property
+    def confirmed_by_name(self):
+        if hasattr(self, '_confirmed_by_name') and self._confirmed_by_name:
+            return self._confirmed_by_name
+        if self.data_json:
+            try:
+                d = json.loads(self.data_json) if isinstance(self.data_json, str) else self.data_json
+                if d.get("confirmed_by_name"):
+                    return d.get("confirmed_by_name")
+                history = d.get("edit_history", [])
+                if isinstance(history, list):
+                    for h in reversed(history):
+                        if h.get("action_type") == "confirm" and h.get("user_name"):
+                            return h.get("user_name")
+            except Exception:
+                pass
+        return None
+
+    @confirmed_by_name.setter
+    def confirmed_by_name(self, value):
+        self._confirmed_by_name = value
 

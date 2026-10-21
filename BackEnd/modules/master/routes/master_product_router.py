@@ -13,16 +13,17 @@ from modules.master.controllers import master_product_controller
 
 router = APIRouter()
 
+from shared.utils.file_security import validate_image_upload
+
+
 @router.post("/upload-image")
 async def upload_master_product_image(file: UploadFile = File(...)):
     """
-    [POST] Tải lên hình ảnh sản phẩm mẫu.
+    [POST] Tải lên hình ảnh sản phẩm mẫu (Có kiểm tra bảo mật định dạng).
     """
+    file_ext = validate_image_upload(file)
     upload_dir = get_upload_dir("products")
     
-    file_ext = os.path.splitext(file.filename)[1] if file.filename else ".png"
-    if not file_ext:
-        file_ext = ".png"
     new_filename = f"prod_{uuid.uuid4()}{file_ext}"
     file_path = os.path.join(upload_dir, new_filename)
     

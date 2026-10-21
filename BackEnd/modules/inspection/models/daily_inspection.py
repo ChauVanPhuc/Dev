@@ -17,6 +17,7 @@ class DailyInspectionRecord(Base):
     pallet_code = Column(NVARCHAR(100), nullable=True)
     status = Column(NVARCHAR(50), default="Đã hoàn thành")
     is_confirmed = Column(Boolean, default=True)
+    is_deleted = Column(Boolean, default=False, nullable=True)
     total_products = Column(Integer, default=0)
     total_defects = Column(Integer, default=0)
     defect_rate = Column(Float, default=0.0)

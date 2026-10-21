@@ -49,5 +49,7 @@ class InputInspectionRead(InputInspection):
     inspection_date: Optional[datetime] = None
     created_at: Optional[datetime] = None
     action: Optional[str] = None
+    confirmed_by_name: Optional[str] = None
+    is_deleted: Optional[bool] = False
 
 

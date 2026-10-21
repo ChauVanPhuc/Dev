@@ -39,7 +39,7 @@ export const lpnCrawlerApi = {
       const params = new URLSearchParams();
       if (force) params.append('force', 'true');
       if (mode) params.append('mode', mode);
-      params.append('auto_ocr', 'true');
+      params.append('auto_ocr', 'false');
       const queryString = `?${params.toString()}`;
       const url = `${API_BASE}/jobs/start${queryString}`;
       const res = await fetch(url, {

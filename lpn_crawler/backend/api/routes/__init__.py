@@ -6,6 +6,7 @@ from lpn_crawler.backend.api.routes.logs import router as logs_router
 from lpn_crawler.backend.api.routes.stats import router as stats_router
 from lpn_crawler.backend.api.routes.images import router as images_router
 from lpn_crawler.backend.api.routes.export import router as export_router
+from lpn_crawler.backend.api.routes.webhook import router as webhook_router
 
 __all__ = [
     "jobs_router",
@@ -15,4 +16,5 @@ __all__ = [
     "stats_router",
     "images_router",
     "export_router",
+    "webhook_router",
 ]

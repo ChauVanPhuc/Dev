@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useNavigate, useOutletContext } from 'react-router-dom';
-import { Search, Filter, Edit, FileText, ChevronLeft, ChevronRight, CheckCircle2, X, Eye, RotateCcw, XCircle, Layers, Package, CheckCheck, MoreVertical, Info, Image as ImageIcon, ClipboardList, AlertTriangle, Keyboard, HelpCircle, Loader2, Save, UploadCloud, Plus, PlusCircle, History, Clock, ArrowRight, User } from 'lucide-react';
+import { useNavigate, useLocation, useOutletContext } from 'react-router-dom';
+import { Search, Filter, Edit, FileText, ChevronLeft, ChevronRight, CheckCircle2, X, Eye, RotateCcw, XCircle, Layers, Package, CheckCheck, MoreVertical, Info, Image as ImageIcon, ClipboardList, AlertTriangle, Keyboard, HelpCircle, Loader2, Save, UploadCloud, Plus, PlusCircle, History, Clock, ArrowRight, User, Scan, Sparkles } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import * as XLSX from 'xlsx';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
@@ -48,6 +48,97 @@ const normalizeInspectionType = (typeKey, category) => {
   return typeKey || 'first_sample';
 };
 
+/**
+ * Nhận diện phiếu kiểm tra thông số (đo độ ẩm, độ dày, độ bóng, kích thước, thông số kỹ thuật...)
+ */
+export const isParameterInspection = (task) => {
+  if (!task) return false;
+
+  let dj = null;
+  if (task.data_json) {
+    try {
+      dj = typeof task.data_json === 'string' ? JSON.parse(task.data_json) : task.data_json;
+    } catch (e) {}
+  }
+
+  const rawType = String(task.inspection_type || dj?.mode || dj?.inspection_type || '').toLowerCase().trim();
+  const rawCat = String(task.category || '').toLowerCase().trim();
+
+  // 1. Nếu đã xác định rõ ràng là các loại kiểm tra khác -> KHÔNG PHẢI kiểm tra thông số
+  if (
+    rawType.includes('first_sample') || rawType.includes('mẫu đầu') || rawType.includes('mau-dau') || rawType.includes('mẫu-đầu') ||
+    rawType.includes('daily') || rawType.includes('hang-ngay') || rawType.includes('hằng ngày') ||
+    rawType.includes('re_inspect') || rawType.includes('tai-kiem') || rawType.includes('tái kiểm') || rawType.includes('reinspect') ||
+    rawType.includes('process') || rawType.includes('quy-trinh') || rawType.includes('quy trình') ||
+    rawType.includes('qa') || rawType.includes('vấn đáp') || rawType.includes('van-dap') ||
+    rawType.includes('nhap-kho') || rawType.includes('nhập kho') || rawType.includes('dau-vao') || rawType.includes('đầu vào') || rawType.includes('input')
+  ) {
+    return false;
+  }
+
+  // 2. Kiểm tra nếu là phiếu thông số (parameter)
+  if (
+    rawType === 'parameter' ||
+    rawType.includes('parameter') ||
+    rawType.includes('thông số') ||
+    rawType.includes('thong-so')
+  ) {
+    return true;
+  }
+
+  if (
+    rawCat.includes('thông số') ||
+    rawCat.includes('thong-so') ||
+    rawCat.includes('parameter')
+  ) {
+    return true;
+  }
+
+  if (dj?.mode === 'parameter' || dj?.inspection_type === 'parameter') {
+    return true;
+  }
+
+  return false;
+};
+
+/**
+ * Nhận diện phiếu kiểm tra màu / độ bóng sơn (chỉ riêng các phiếu này mới đo độ bóng & màu sơn bằng máy)
+ */
+export const isColorInspection = (task) => {
+  if (!task) return false;
+
+  let dj = null;
+  if (task.data_json) {
+    try {
+      dj = typeof task.data_json === 'string' ? JSON.parse(task.data_json) : task.data_json;
+    } catch (e) {}
+  }
+
+  const param = String(task.parameter || dj?.parameter || '').toLowerCase().trim();
+  const cat = String(task.category || '').toLowerCase().trim();
+  const taskName = String(task.part_name || task.task_name || '').toLowerCase().trim();
+
+  // 1. Kiểm tra tham số kỹ thuật: do_bong (tên trong DB là "Kiểm tra màu"), do_bong_son, kiem_tra_mau, mau_son
+  if (
+    param === 'do_bong' ||
+    param === 'do_bong_son' ||
+    param === 'kiem_tra_mau' ||
+    param === 'mau_son' ||
+    param === 'color' ||
+    param.includes('mau') ||
+    param.includes('màu')
+  ) {
+    return true;
+  }
+
+  // 2. Kiểm tra phân loại hoặc tên phiếu
+  if (cat.includes('kiểm tra màu') || cat.includes('màu sơn') || taskName.includes('kiểm tra màu')) {
+    return true;
+  }
+
+  return false;
+};
+
 const getImageStemKey = (img) => {
   if (!img || typeof img !== 'string') return '';
   const clean = img.trim().split('?')[0].split('#')[0].replace(/\\/g, '/');
@@ -91,34 +182,52 @@ const handleInspectionImageError = (e) => {
   e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 24 24" fill="none" stroke="%23A89F91" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2" fill="%23FAF7F2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>';
 };
 
-const QualityOverviewView = () => {
+const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const isParameterMode = isParameterModeProp ?? (location.pathname.includes('/quality/parameter') || location.pathname.includes('/quality-parameter'));
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
 
   // Cấu hình động mã màn hình, tên màn hình từ Database
-  const { screenCode, title, subtitle, loading: metaLoading } = useScreenMetadataCached('/admin/quality');
+  const screenRoute = isParameterMode ? '/admin/quality/parameter' : '/admin/quality';
+  const { screenCode, title, subtitle, loading: metaLoading } = useScreenMetadataCached(screenRoute);
 
   useEffect(() => {
-    if (setCustomTitle) setCustomTitle(title || 'Quản lý chất lượng');
-    if (setCustomSubtitle) setCustomSubtitle(subtitle || 'CL1: Hiển thị danh sách các công việc tồn đọng cần xử lý');
-    if (setCustomScreenCode) setCustomScreenCode(screenCode || 'CL1');
-  }, [title, subtitle, screenCode, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
+    if (isParameterMode) {
+      if (setCustomTitle) setCustomTitle(title || 'Quản lý kiểm thông số');
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || 'CL1-PARAM: Hiển thị danh sách các phiếu kiểm tra thông số tồn đọng cần xử lý');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode || 'CL1-PARAM');
+    } else {
+      if (setCustomTitle) setCustomTitle(title || 'Quản lý chất lượng');
+      if (setCustomSubtitle) setCustomSubtitle(subtitle || 'CL1: Hiển thị danh sách các công việc tồn đọng cần xử lý');
+      if (setCustomScreenCode) setCustomScreenCode(screenCode || 'CL1');
+    }
+  }, [isParameterMode, title, subtitle, screenCode, setCustomTitle, setCustomSubtitle, setCustomScreenCode]);
 
   const [activeMainTab, setActiveMainTab] = useState('tasks'); // 'tasks' | 'accounts'
   const [pendingTasks, setPendingTasks] = useState([]);
   const [accountCount, setAccountCount] = useState(0);
   const [accountTabRefreshTrigger, setAccountTabRefreshTrigger] = useState(0);
 
+  // Lọc tập dữ liệu theo phân hệ: Quản lý kiểm thông số vs Quản lý chất lượng (tổng quan)
+  const scopedPendingTasks = useMemo(() => {
+    if (!Array.isArray(pendingTasks)) return [];
+    return pendingTasks.filter(task => {
+      const isParam = isParameterInspection(task);
+      return isParameterMode ? isParam : !isParam;
+    });
+  }, [pendingTasks, isParameterMode]);
+
   // Đếm số lượng tài khoản kiểm tra viên duy nhất trong danh sách tồn đọng
   const distinctAccountCount = useMemo(() => {
-    if (!Array.isArray(pendingTasks)) return 0;
+    if (!Array.isArray(scopedPendingTasks)) return 0;
     const s = new Set();
-    pendingTasks.forEach(t => {
+    scopedPendingTasks.forEach(t => {
       const name = (t.inspector_name || 'QC Hệ thống').trim();
       if (name) s.add(name);
     });
     return s.size;
-  }, [pendingTasks]);
+  }, [scopedPendingTasks]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOption, setSortOption] = useState('date_desc');
@@ -134,15 +243,16 @@ const QualityOverviewView = () => {
   const { toast } = useToast();
 
   // Trích xuất thông tin tài khoản đăng nhập hiện tại để ghi nhận Audit Trail
-  const currentUser = useMemo(() => {
+  const getCurrentUser = () => {
     try {
       const raw = localStorage.getItem('smartflow_user');
       return raw ? JSON.parse(raw) : {};
     } catch (e) {
       return {};
     }
-  }, []);
-  const currentEditorName = currentUser.full_name || currentUser.name || currentUser.username || 'QC Administrator';
+  };
+  const currentUser = getCurrentUser();
+  const currentEditorName = currentUser.full_name || currentUser.name || currentUser.username || 'Quản lý QC';
   const currentEditorRole = currentUser.role_name || currentUser.role || 'Quản lý QC';
   
   // Modal Chi tiết / Xác nhận
@@ -176,6 +286,10 @@ const QualityOverviewView = () => {
   const [modalStage, setModalStage] = useState('');
   const [modalStatus, setModalStatus] = useState('Chưa Làm');
   const [modalParameter, setModalParameter] = useState('do_am');
+  const [modalGlossValue, setModalGlossValue] = useState('');
+  const [modalColorValue, setModalColorValue] = useState('');
+  const [scanningTaskIds, setScanningTaskIds] = useState(new Set());
+  const scannedOrAttemptedRef = useRef(new Set());
   const [formTypes, setFormTypes] = useState([]);
   const [parameterOptions, setParameterOptions] = useState([]);
   const [savingTask, setSavingTask] = useState(false);
@@ -282,6 +396,11 @@ const QualityOverviewView = () => {
       const rawParam = selectedTask.parameter || parsedJson?.parameter || 'do_am';
       setModalParameter(rawParam);
 
+      const rawGloss = selectedTask.gloss_value || parsedJson?.gloss_value || '';
+      const rawColor = selectedTask.color_value || parsedJson?.color_value || '';
+      setModalGlossValue(rawGloss);
+      setModalColorValue(rawColor);
+
       setModalStatus(selectedTask.status || parsedJson?.status || 'Chưa Làm');
       setHandlingInfo(selectedTask.handling_info || parsedJson?.handling_info || '');
 
@@ -358,6 +477,8 @@ const QualityOverviewView = () => {
         inspection_type: normalizeInspectionType(rawType, selectedTask.category),
         stage: normalizeStage(rawStage),
         parameter: rawParam,
+        gloss_value: rawGloss,
+        color_value: rawColor,
         status: selectedTask.status || parsedJson?.status || 'Chưa Làm',
         handling_info: (selectedTask.handling_info || parsedJson?.handling_info || '').trim(),
         handling_images: [...initHandlingImgs],
@@ -594,24 +715,148 @@ const QualityOverviewView = () => {
     fetchPendingTasks();
   }, []);
 
+  // ─── TỰ ĐỘNG QUÉT OCR THÔNG SỐ ĐO (ĐỘ BÓNG & MÀU SƠN) KHI MỞ TRANG KIỂM THÔNG SỐ ───
+  useEffect(() => {
+    if (!isParameterMode || loading || !Array.isArray(scopedPendingTasks) || scopedPendingTasks.length === 0) {
+      return;
+    }
+
+    // Lọc các phiếu KIỂM TRA MÀU có ảnh minh chứng nhưng chưa được quét OCR
+    const unscannedTasks = scopedPendingTasks.filter(t => {
+      if (!isColorInspection(t)) return false;
+      const hasImages = (Array.isArray(t.images) && t.images.length > 0) || t.image_path_1 || t.image_path_2 || t.image_path_3;
+      const isScanned = Boolean(t.is_ocr_scanned) && (Boolean(t.gloss_value) || Boolean(t.color_value));
+      return hasImages && !isScanned && !scannedOrAttemptedRef.current.has(t.id) && !scanningTaskIds.has(t.id);
+    });
+
+    if (unscannedTasks.length === 0) return;
+
+    const taskIdsToScan = unscannedTasks.map(t => t.id);
+    taskIdsToScan.forEach(id => scannedOrAttemptedRef.current.add(id));
+
+    setScanningTaskIds(prev => {
+      const next = new Set(prev);
+      taskIdsToScan.forEach(id => next.add(id));
+      return next;
+    });
+
+    api.post('/inspections/ocr-parameter-scan-batch', { task_ids: taskIdsToScan })
+      .then(res => {
+        const data = res?.data !== undefined ? res.data : res;
+        if (data?.results && Array.isArray(data.results)) {
+          const map = new Map();
+          data.results.forEach(r => {
+            if (r.task_id) map.set(r.task_id, r);
+          });
+
+          setPendingTasks(prev => prev.map(t => {
+            if (map.has(t.id)) {
+              const r = map.get(t.id);
+              return {
+                ...t,
+                gloss_value: r.gloss_value || t.gloss_value || '',
+                color_value: r.color_value || t.color_value || '',
+                is_ocr_scanned: true
+              };
+            }
+            return t;
+          }));
+
+          setSelectedTask(curr => {
+            if (curr && map.has(curr.id)) {
+              const r = map.get(curr.id);
+              if (r.gloss_value && !modalGlossValue) setModalGlossValue(r.gloss_value);
+              if (r.color_value && !modalColorValue) setModalColorValue(r.color_value);
+              return {
+                ...curr,
+                gloss_value: r.gloss_value || curr.gloss_value || '',
+                color_value: r.color_value || curr.color_value || '',
+                is_ocr_scanned: true
+              };
+            }
+            return curr;
+          });
+
+          if (data.scanned_count > 0) {
+            toast('info', `Đã tự động nhận diện OCR thành công cho ${data.scanned_count} phiếu đo.`);
+          }
+        }
+      })
+      .catch(err => {
+        console.warn('Lỗi tự động quét OCR:', err);
+      })
+      .finally(() => {
+        setScanningTaskIds(prev => {
+          const next = new Set(prev);
+          taskIdsToScan.forEach(id => next.delete(id));
+          return next;
+        });
+      });
+  }, [isParameterMode, loading, scopedPendingTasks]);
+
+  // Quét lại OCR thủ công cho 1 phiếu kiểm tra
+  const handleScanSingleTaskOCR = async (task, e) => {
+    if (e) e.stopPropagation();
+    if (!task) return;
+    setScanningTaskIds(prev => new Set(prev).add(task.id));
+    try {
+      const res = await api.post(`/inspections/ocr-parameter-scan/${task.id}`);
+      const r = res?.data !== undefined ? res.data : res;
+      if (r?.success) {
+        setPendingTasks(prev => prev.map(t => {
+          if (t.id === task.id) {
+            return {
+              ...t,
+              gloss_value: r.gloss_value || '',
+              color_value: r.color_value || '',
+              is_ocr_scanned: true
+            };
+          }
+          return t;
+        }));
+        if (selectedTask?.id === task.id) {
+          if (r.gloss_value) setModalGlossValue(r.gloss_value);
+          if (r.color_value) setModalColorValue(r.color_value);
+          setSelectedTask(curr => ({
+            ...curr,
+            gloss_value: r.gloss_value || '',
+            color_value: r.color_value || '',
+            is_ocr_scanned: true
+          }));
+        }
+        toast('success', `Đã quét OCR phiếu #${task.ticket_code || task.id}: Độ bóng ${r.gloss_value || '—'}, Màu sơn ${r.color_value || '—'}`);
+      } else {
+        toast('warning', `Không đọc được chỉ số từ ảnh: ${r?.detail || 'Vui lòng kiểm tra lại ảnh chụp'}`);
+      }
+    } catch (err) {
+      toast('error', 'Lỗi quét OCR: ' + (err.response?.data?.detail || err.message));
+    } finally {
+      setScanningTaskIds(prev => {
+        const next = new Set(prev);
+        next.delete(task.id);
+        return next;
+      });
+    }
+  };
+
   // Danh sách công đoạn & phân loại thực tế từ dữ liệu
   const uniqueStages = useMemo(() => {
     const set = new Set();
-    pendingTasks.forEach(t => {
+    scopedPendingTasks.forEach(t => {
       const st = t.stage || t.stage_name;
       if (st && String(st).trim()) set.add(String(st).trim());
     });
     return Array.from(set).sort();
-  }, [pendingTasks]);
+  }, [scopedPendingTasks]);
 
   const uniqueCategories = useMemo(() => {
     const set = new Set();
-    pendingTasks.forEach(t => {
+    scopedPendingTasks.forEach(t => {
       const cat = t.category || t.inspection_type;
       if (cat && String(cat).trim()) set.add(String(cat).trim());
     });
     return Array.from(set).sort();
-  }, [pendingTasks]);
+  }, [scopedPendingTasks]);
 
   const activeFiltersCount = useMemo(() => {
     return (filterResult !== 'all' ? 1 : 0) +
@@ -630,7 +875,7 @@ const QualityOverviewView = () => {
 
   // Lọc tìm kiếm & Sắp xếp danh sách phiếu chưa xác nhận
   const filteredTasks = useMemo(() => {
-    let result = [...pendingTasks];
+    let result = [...scopedPendingTasks];
 
     // 1. Tìm kiếm văn bản
     if (searchQuery.trim()) {
@@ -694,7 +939,7 @@ const QualityOverviewView = () => {
     }
 
     return result;
-  }, [pendingTasks, searchQuery, sortOption, filterResult, filterAction, filterCategory, filterStage]);
+  }, [scopedPendingTasks, searchQuery, sortOption, filterResult, filterAction, filterCategory, filterStage]);
 
   // Phân trang
   const paginatedTasks = useMemo(() => {
@@ -992,7 +1237,9 @@ const QualityOverviewView = () => {
         images: modalImages,
         updated_by: currentEditorName,
         user_role: currentEditorRole,
-        parameter: modalInspectionType === 'parameter' ? modalParameter : undefined
+        parameter: modalInspectionType === 'parameter' ? modalParameter : undefined,
+        gloss_value: (modalInspectionType === 'parameter' || isParameterMode) ? modalGlossValue : undefined,
+        color_value: (modalInspectionType === 'parameter' || isParameterMode) ? modalColorValue : undefined
       });
       toast('success', `Đã lưu cập nhật phiếu #${task.ticket_code || task.id} thành công!`);
 
@@ -1004,6 +1251,8 @@ const QualityOverviewView = () => {
         inspection_type: modalInspectionType,
         stage: modalStage,
         parameter: modalParameter,
+        gloss_value: modalGlossValue,
+        color_value: modalColorValue,
         status: modalStatus,
         handling_info: (handlingInfo || '').trim(),
         handling_images: [...handlingImages],
@@ -1031,6 +1280,8 @@ const QualityOverviewView = () => {
         images_json: JSON.stringify(modalImages),
         edit_history: updatedHistory || prev.edit_history,
         parameter: modalInspectionType === 'parameter' ? modalParameter : prev.parameter,
+        gloss_value: (modalInspectionType === 'parameter' || isParameterMode) ? modalGlossValue : prev.gloss_value,
+        color_value: (modalInspectionType === 'parameter' || isParameterMode) ? modalColorValue : prev.color_value,
         category: getCategoryBadgeInfo(null, modalStage, modalInspectionType)?.label || prev.category
       } : null);
 
@@ -1052,6 +1303,8 @@ const QualityOverviewView = () => {
             images_json: JSON.stringify(modalImages),
             edit_history: updatedHistory || t.edit_history,
             parameter: modalInspectionType === 'parameter' ? modalParameter : t.parameter,
+            gloss_value: (modalInspectionType === 'parameter' || isParameterMode) ? modalGlossValue : t.gloss_value,
+            color_value: (modalInspectionType === 'parameter' || isParameterMode) ? modalColorValue : t.color_value,
             category: getCategoryBadgeInfo(null, modalStage, modalInspectionType)?.label || t.category
           };
         }
@@ -1079,6 +1332,10 @@ const QualityOverviewView = () => {
     if (modalStage !== init.stage) return true;
     if (modalStatus !== init.status) return true;
     if (modalInspectionType === 'parameter' && modalParameter !== init.parameter) return true;
+    if ((modalInspectionType === 'parameter' || isParameterMode)) {
+      if ((modalGlossValue || '') !== (init.gloss_value || '')) return true;
+      if ((modalColorValue || '') !== (init.color_value || '')) return true;
+    }
     if ((handlingInfo || '').trim() !== (init.handling_info || '').trim()) return true;
 
     const curImgs = handlingImages || [];
@@ -1129,6 +1386,7 @@ const QualityOverviewView = () => {
     setConfirming(true);
     try {
       const taskType = task.type || 'input';
+      const curU = getCurrentUser();
       await api.post(`/inspections/confirm/${taskType}/${task.id}`, {
         result: modalResult,
         action: modalAction,
@@ -1138,10 +1396,13 @@ const QualityOverviewView = () => {
         stage: modalStage,
         status: 'Đã xong',
         images: modalImages,
-        updated_by: currentEditorName,
-        confirmed_by_name: currentEditorName,
-        user_role: currentEditorRole,
-        parameter: modalInspectionType === 'parameter' ? modalParameter : undefined
+        confirmed_by: curU?.id || curU?.account_id || curU?.user_id,
+        updated_by: curU?.full_name || curU?.name || curU?.username || currentEditorName,
+        confirmed_by_name: curU?.full_name || curU?.name || curU?.username || currentEditorName,
+        user_role: curU?.role_name || curU?.role || currentEditorRole,
+        parameter: modalInspectionType === 'parameter' ? modalParameter : undefined,
+        gloss_value: (modalInspectionType === 'parameter' || isParameterMode) ? modalGlossValue : undefined,
+        color_value: (modalInspectionType === 'parameter' || isParameterMode) ? modalColorValue : undefined
       });
       toast('success', `Đã xác nhận thành công phiếu #${task.ticket_code || task.id}!`);
 
@@ -1248,8 +1509,8 @@ const QualityOverviewView = () => {
 
   // Danh sách các phiếu đủ điều kiện xác nhận nhanh trong toàn bộ danh sách chờ
   const eligibleQuickPassTasks = useMemo(() => {
-    return pendingTasks.filter(isEligibleForQuickConfirm);
-  }, [pendingTasks]);
+    return scopedPendingTasks.filter(isEligibleForQuickConfirm);
+  }, [scopedPendingTasks]);
 
   // Modal xác nhận nhanh đơn lẻ từng dòng
   const [quickConfirmModal, setQuickConfirmModal] = useState({
@@ -1402,7 +1663,13 @@ const QualityOverviewView = () => {
     setQuickConfirming(true);
     try {
       const taskType = t.type || 'input';
-      await api.post(`/inspections/confirm/${taskType}/${t.id}`, {});
+      const curU = getCurrentUser();
+      await api.post(`/inspections/confirm/${taskType}/${t.id}`, {
+        confirmed_by: curU?.id || curU?.account_id || curU?.user_id,
+        confirmed_by_name: curU?.full_name || curU?.name || curU?.username || currentEditorName,
+        updated_by: curU?.full_name || curU?.name || curU?.username || currentEditorName,
+        user_role: curU?.role_name || curU?.role || currentEditorRole
+      });
       toast('success', `Đã duyệt nhanh thành công hồ sơ #${t.ticket_code || t.id}!`);
       setQuickConfirmModal({ isOpen: false, task: null });
       fetchPendingTasks();
@@ -1428,7 +1695,13 @@ const QualityOverviewView = () => {
 
     setBatchConfirming(true);
     try {
-      const res = await api.post('/inspections/confirm-batch', { ids: validFilteredIds });
+      const curU = getCurrentUser();
+      const res = await api.post('/inspections/confirm-batch', {
+        ids: validFilteredIds,
+        confirmed_by: curU?.id || curU?.account_id || curU?.user_id,
+        confirmed_by_name: curU?.full_name || curU?.name || curU?.username || currentEditorName,
+        user_role: curU?.role_name || curU?.role || currentEditorRole
+      });
       toast('success', res.data?.message || `Đã xác nhận nhanh thành công ${validFilteredIds.length} phiếu ĐẠT!`);
       setIsBatchQuickModalOpen(false);
       fetchPendingTasks();
@@ -2120,35 +2393,49 @@ const QualityOverviewView = () => {
         const cleanNotes = /^ch[ờo]\s*x[áa]c\s*nh[ậa]n/i.test(notes) ? '' : notes;
         const handlingNotes = (task.handling_notes || '').trim();
 
-        return {
+        const rowData = {
           'STT': index + 1,
           'Mã phiếu': ticketCode,
           'Đơn hàng (PO)': poNumber,
           'Nội dung kiểm tra': taskContent,
           'Phân loại': categoryLabel,
           'Công đoạn': stageLabel,
-          'Người kiểm tra (QC)': inspector,
-          'Mức độ ưu tiên': priority,
-          'Kết quả': resultLabel,
-          'Trạng thái': status,
-          'Hành động xử lý': actionLabel,
-          'SL cần kiểm (Lô)': requiredQty,
-          'SL mẫu kiểm tra': sampleQty,
-          'Số lỗi phát hiện': errorQty,
-          'Ngày ghi nhận': recordedDate,
-          'Ghi chú': cleanNotes,
-          'Biện pháp xử lý': handlingNotes
         };
+
+        if (isParameterMode) {
+          rowData['Độ bóng (GU)'] = (isColorInspection(task) && task.gloss_value) ? `${task.gloss_value} GU` : '';
+          rowData['Màu sơn (ΔE)'] = (isColorInspection(task) && task.color_value) ? `${task.color_value}` : '';
+        }
+
+        rowData['Người kiểm tra (QC)'] = inspector;
+        rowData['Mức độ ưu tiên'] = priority;
+        rowData['Kết quả'] = resultLabel;
+        rowData['Trạng thái'] = status;
+        rowData['Hành động xử lý'] = actionLabel;
+        rowData['SL cần kiểm (Lô)'] = requiredQty;
+        rowData['SL mẫu kiểm tra'] = sampleQty;
+        rowData['Số lỗi phát hiện'] = errorQty;
+        rowData['Ngày ghi nhận'] = recordedDate;
+        rowData['Ghi chú'] = cleanNotes;
+        rowData['Biện pháp xử lý'] = handlingNotes;
+
+        return rowData;
       });
 
       const worksheet = XLSX.utils.json_to_sheet(exportData);
-      worksheet['!cols'] = [
+      const cols = [
         { wch: 6 },   // STT
         { wch: 14 },  // Mã phiếu
         { wch: 16 },  // Đơn hàng (PO)
         { wch: 30 },  // Nội dung kiểm tra
         { wch: 18 },  // Phân loại
         { wch: 16 },  // Công đoạn
+      ];
+      if (isParameterMode) {
+        cols.push({ wch: 16 }); // Độ bóng
+        cols.push({ wch: 16 }); // Màu sơn
+      }
+      cols.push(
         { wch: 22 },  // Người kiểm tra (QC)
         { wch: 14 },  // Mức độ ưu tiên
         { wch: 14 },  // Kết quả
@@ -2160,14 +2447,17 @@ const QualityOverviewView = () => {
         { wch: 20 },  // Ngày ghi nhận
         { wch: 35 },  // Ghi chú
         { wch: 35 }   // Biện pháp xử lý
-      ];
+      );
+      worksheet['!cols'] = cols;
 
       const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "DS Phiếu Tồn Đọng CL1");
+      const sheetName = isParameterMode ? "DS Phiếu Kiểm Thông Số" : "DS Phiếu Tồn Đọng CL1";
+      XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
       
       const now = new Date();
       const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-      XLSX.writeFile(workbook, `Danh_Sach_Phieu_Ton_Dong_CL1_${dateStr}.xlsx`);
+      const filePrefix = isParameterMode ? "Danh_Sach_Phieu_Kiem_Thong_So" : "Danh_Sach_Phieu_Ton_Dong_CL1";
+      XLSX.writeFile(workbook, `${filePrefix}_${dateStr}.xlsx`);
       toast('success', `Đã xuất thành công ${filteredTasks.length} phiếu tồn đọng ra file Excel!`);
     } catch (err) {
       console.error('Lỗi khi xuất file Excel:', err);
@@ -2478,7 +2768,7 @@ const QualityOverviewView = () => {
             <span className="desktop-tab-label">Theo danh sách phiếu tồn đọng</span>
             <span className="mobile-tab-label">Theo phiếu</span>
             <span className="tab-count-badge">
-              {pendingTasks.length}
+              {scopedPendingTasks.length}
             </span>
           </button>
 
@@ -2499,7 +2789,8 @@ const QualityOverviewView = () => {
 
       {activeMainTab === 'accounts' ? (
         <AccountQualityTab
-          pendingTasks={pendingTasks}
+          pendingTasks={scopedPendingTasks}
+          isParameterMode={isParameterMode}
           onSelectTask={(task) => setSelectedTask(task)}
           refreshTrigger={accountTabRefreshTrigger}
           onUpdateAccountCount={(cnt) => setAccountCount(cnt)}
@@ -2694,7 +2985,9 @@ const QualityOverviewView = () => {
             <div style={{ padding: '5rem', textAlign: 'center', backgroundColor: '#fff' }}>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
                 <FileText size={48} opacity={0.3} style={{ color: '#8D6E63' }} />
-                <span style={{ color: '#8D6E63', fontWeight: 600 }}>Không có phiếu kiểm tra tồn đọng cần xác nhận.</span>
+                <span style={{ color: '#8D6E63', fontWeight: 600 }}>
+                  {isParameterMode ? 'Không có phiếu kiểm tra thông số tồn đọng cần xác nhận.' : 'Không có phiếu kiểm tra tồn đọng cần xác nhận.'}
+                </span>
               </div>
             </div>
           ) : (
@@ -2707,6 +3000,12 @@ const QualityOverviewView = () => {
                       <th style={{ width: '120px' }}>PO</th>
                       <th style={{ minWidth: '220px' }}>NỘI DUNG</th>
                       <th style={{ width: '180px' }}>PHIẾU KIỂM TRA</th>
+                      {isParameterMode && (
+                        <>
+                          <th style={{ width: '125px', textAlign: 'center' }}>ĐỘ BÓNG</th>
+                          <th style={{ width: '125px', textAlign: 'center' }}>MÀU SƠN</th>
+                        </>
+                      )}
                       <th style={{ width: '140px' }}>NGƯỜI KIỂM TRA</th>
                       <th style={{ width: '110px', textAlign: 'center' }}>MỨC ĐỘ ƯU TIÊN</th>
                       <th style={{ width: '110px', textAlign: 'center' }}>TRẠNG THÁI</th>
@@ -2746,6 +3045,64 @@ const QualityOverviewView = () => {
                           </td>
                           <td style={{ fontWeight: '700', color: '#2D1A12' }}>{renderCleanBatchTaskName(task)}</td>
                           <td style={{ verticalAlign: 'middle' }}>{renderCategoryBadge(task)}</td>
+                          {isParameterMode && (
+                            <>
+                              <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
+                                {!isColorInspection(task) ? (
+                                  <span style={{ color: '#D1D5DB', fontSize: '0.85rem' }}>—</span>
+                                ) : scanningTaskIds.has(task.id) ? (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#0284C7', fontSize: '0.78rem', fontWeight: 600 }}>
+                                    <Loader2 size={13} className="spin" /> Đang quét...
+                                  </span>
+                                ) : task.gloss_value ? (
+                                  <span style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '5px',
+                                    padding: '3px 8px',
+                                    borderRadius: '6px',
+                                    backgroundColor: '#ECFDF5',
+                                    color: '#065F46',
+                                    border: '1px solid #A7F3D0',
+                                    fontWeight: 700,
+                                    fontSize: '0.8rem'
+                                  }}>
+                                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10B981', display: 'inline-block' }} />
+                                    {task.gloss_value} GU
+                                  </span>
+                                ) : (
+                                  <span style={{ color: '#9CA3AF', fontSize: '0.8rem' }}>—</span>
+                                )}
+                              </td>
+                              <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
+                                {!isColorInspection(task) ? (
+                                  <span style={{ color: '#D1D5DB', fontSize: '0.85rem' }}>—</span>
+                                ) : scanningTaskIds.has(task.id) ? (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#0284C7', fontSize: '0.78rem', fontWeight: 600 }}>
+                                    <Loader2 size={13} className="spin" /> Đang quét...
+                                  </span>
+                                ) : task.color_value ? (
+                                  <span style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '5px',
+                                    padding: '3px 8px',
+                                    borderRadius: '6px',
+                                    backgroundColor: '#EFF6FF',
+                                    color: '#1E40AF',
+                                    border: '1px solid #BFDBFE',
+                                    fontWeight: 700,
+                                    fontSize: '0.8rem'
+                                  }}>
+                                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#3B82F6', display: 'inline-block' }} />
+                                    ΔE: {task.color_value}
+                                  </span>
+                                ) : (
+                                  <span style={{ color: '#9CA3AF', fontSize: '0.8rem' }}>—</span>
+                                )}
+                              </td>
+                            </>
+                          )}
                           <td style={{ fontWeight: '600', color: '#2D1A12' }}>
                             <span style={{
                               display: 'inline-block',
@@ -2838,6 +3195,34 @@ const QualityOverviewView = () => {
                                   <Eye size={14} color="#7B5233" />
                                   <span>Xem chi tiết</span>
                                 </button>
+
+                                {isParameterMode && isColorInspection(task) && (
+                                  <button
+                                    type="button"
+                                    className="action-menu-item"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setActionMenuId(null);
+                                      handleScanSingleTaskOCR(task, e);
+                                    }}
+                                    disabled={scanningTaskIds.has(task.id)}
+                                    style={{ 
+                                      display: 'flex', 
+                                      alignItems: 'center', 
+                                      gap: '8px', 
+                                      padding: '7px 12px',
+                                      fontSize: '0.8rem',
+                                      fontWeight: '600',
+                                      color: '#0284C7',
+                                      borderRadius: '6px',
+                                      whiteSpace: 'nowrap',
+                                      width: '100%'
+                                    }}
+                                  >
+                                    <Scan size={14} color="#0284C7" />
+                                    <span>{task.is_ocr_scanned ? 'Quét lại OCR' : 'Quét OCR ảnh'}</span>
+                                  </button>
+                                )}
 
                                 {isEligibleForQuickConfirm(task) && (
                                   <button
@@ -2964,6 +3349,20 @@ const QualityOverviewView = () => {
                         </span>
                       </div>
 
+                      {/* HIỂN THỊ ĐỘ BÓNG & MÀU SƠN (NẾU LÀ KIỂM TRA MÀU) */}
+                      {isParameterMode && isColorInspection(task) && (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', margin: '4px 0' }}>
+                          <div style={{ padding: '4px 8px', borderRadius: '6px', background: '#ECFDF5', border: '1px solid #A7F3D0', fontSize: '0.74rem' }}>
+                            <span style={{ color: '#065F46', fontWeight: 600 }}>Độ bóng: </span>
+                            <strong style={{ color: '#047857' }}>{task.gloss_value ? `${task.gloss_value} GU` : '—'}</strong>
+                          </div>
+                          <div style={{ padding: '4px 8px', borderRadius: '6px', background: '#EFF6FF', border: '1px solid #BFDBFE', fontSize: '0.74rem' }}>
+                            <span style={{ color: '#1E40AF', fontWeight: 600 }}>Màu sơn: </span>
+                            <strong style={{ color: '#1D4ED8' }}>{task.color_value ? `ΔE ${task.color_value}` : '—'}</strong>
+                          </div>
+                        </div>
+                      )}
+
                       {/* META GRID */}
                       <div className="quality-card-meta-grid">
                         <div className="quality-card-meta-item">
@@ -3010,6 +3409,23 @@ const QualityOverviewView = () => {
                           <Eye size={15} color="#7B5233" />
                           <span>Chi tiết</span>
                         </button>
+
+                        {isParameterMode && isColorInspection(task) && (
+                          <button
+                            type="button"
+                            className="quality-btn-mobile"
+                            disabled={scanningTaskIds.has(task.id)}
+                            onClick={(e) => handleScanSingleTaskOCR(task, e)}
+                            style={{
+                              backgroundColor: '#F0F9FF',
+                              border: '1px solid #BAE6FD',
+                              color: '#0284C7'
+                            }}
+                          >
+                            <Scan size={14} color="#0284C7" />
+                            <span>{scanningTaskIds.has(task.id) ? 'Quét...' : (task.is_ocr_scanned ? 'Quét lại' : 'Quét OCR')}</span>
+                          </button>
+                        )}
 
                         {isQuickEligible && (
                           <button
@@ -3533,58 +3949,166 @@ const QualityOverviewView = () => {
                             )}
                           </select>
 
-                          {/* KHI LOẠI PHIẾU LÀ KIỂM TRA THÔNG SỐ: HIỂN THỊ CHỌN THÔNG SỐ (ẢNH 3) */}
-                          {modalInspectionType === 'parameter' && (
+                          {/* KHI LOẠI PHIẾU LÀ KIỂM TRA THÔNG SỐ: HIỂN THỊ CHỌN THÔNG SỐ & THÔNG SỐ ĐO 2 MÁY */}
+                          {(modalInspectionType === 'parameter' || isParameterMode) && (
                             <div style={{
-                              padding: '6px 8px',
-                              backgroundColor: '#FDFBF9',
-                              border: '1px solid #E6DCD1',
+                              padding: '10px',
+                              backgroundColor: '#FAF5EE',
+                              border: '1px solid #E6D5C3',
                               borderRadius: '8px',
-                              marginTop: '2px'
+                              marginTop: '4px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '8px'
                             }}>
-                              <label style={{ 
-                                fontSize: '0.73rem', 
-                                color: '#6D4C41', 
-                                fontWeight: 700, 
-                                display: 'block', 
-                                marginBottom: '4px' 
-                              }}>
-                                Chọn thông số <span style={{ color: '#EF4444' }}>*</span>
-                              </label>
-                              <select
-                                value={modalParameter}
-                                onChange={(e) => setModalParameter(e.target.value)}
-                                style={{
-                                  padding: '5px 8px',
-                                  borderRadius: '6px',
-                                  border: '1px solid #8B5E3C',
-                                  fontSize: '0.82rem',
-                                  fontWeight: '600',
-                                  backgroundColor: '#FFFFFF',
-                                  color: '#3E2723',
-                                  cursor: 'pointer',
-                                  outline: 'none',
-                                  width: '100%',
-                                  boxShadow: '0 1px 3px rgba(139, 94, 60, 0.08)'
-                                }}
-                              >
-                                {parameterOptions.length > 0 ? (
-                                  parameterOptions.map(p => (
-                                    <option key={p.code || p.id} value={p.code}>{p.name}</option>
-                                  ))
-                                ) : (
-                                  <>
-                                    <option value="do_am">Độ ẩm</option>
-                                    <option value="nhiet_do">Nhiệt độ</option>
-                                    <option value="anh_sang">Ánh sáng</option>
-                                    <option value="do_bong_son">Độ bóng sơn</option>
-                                    <option value="do_day_mang_son">Độ dày màng sơn</option>
-                                  </>
-                                )}
-                                {modalParameter && !parameterOptions.some(p => p.code === modalParameter) && !['do_am', 'nhiet_do', 'anh_sang', 'do_bong_son', 'do_day_mang_son'].includes(modalParameter) && (
-                                  <option value={modalParameter}>{modalParameter}</option>
-                                )}
-                              </select>
+                              <div>
+                                <label style={{ 
+                                  fontSize: '0.73rem', 
+                                  color: '#6D4C41', 
+                                  fontWeight: 700, 
+                                  display: 'block', 
+                                  marginBottom: '4px' 
+                                }}>
+                                  Chọn thông số <span style={{ color: '#EF4444' }}>*</span>
+                                </label>
+                                <select
+                                  value={modalParameter}
+                                  onChange={(e) => setModalParameter(e.target.value)}
+                                  style={{
+                                    padding: '5px 8px',
+                                    borderRadius: '6px',
+                                    border: '1px solid #8B5E3C',
+                                    fontSize: '0.82rem',
+                                    fontWeight: '600',
+                                    backgroundColor: '#FFFFFF',
+                                    color: '#3E2723',
+                                    cursor: 'pointer',
+                                    outline: 'none',
+                                    width: '100%',
+                                    boxShadow: '0 1px 3px rgba(139, 94, 60, 0.08)'
+                                  }}
+                                >
+                                  {parameterOptions.length > 0 ? (
+                                    parameterOptions.map(p => (
+                                      <option key={p.code || p.id} value={p.code}>{p.name}</option>
+                                    ))
+                                  ) : (
+                                    <>
+                                      <option value="do_am">Độ ẩm</option>
+                                      <option value="nhiet_do">Nhiệt độ</option>
+                                      <option value="anh_sang">Ánh sáng</option>
+                                      <option value="do_bong_son">Độ bóng sơn</option>
+                                      <option value="do_day_mang_son">Độ dày màng sơn</option>
+                                    </>
+                                  )}
+                                  {modalParameter && !parameterOptions.some(p => p.code === modalParameter) && !['do_am', 'nhiet_do', 'anh_sang', 'do_bong_son', 'do_day_mang_son'].includes(modalParameter) && (
+                                    <option value={modalParameter}>{modalParameter}</option>
+                                  )}
+                                </select>
+                              </div>
+
+                              {/* THÔNG SỐ ĐO TỪ 2 MÁY: ĐỘ BÓNG (GU) & MÀU SƠN (ΔE) - CHỈ HIỂN THỊ KHI LÀ KIỂM TRA MÀU */}
+                              {(
+                                modalParameter === 'do_bong' ||
+                                modalParameter === 'do_bong_son' ||
+                                modalParameter === 'kiem_tra_mau' ||
+                                modalParameter === 'mau_son' ||
+                                (modalParameter && String(modalParameter).includes('mau')) ||
+                                isColorInspection(selectedTask)
+                              ) && (
+                                <div style={{
+                                  borderTop: '1px dashed #DFC8B4',
+                                  paddingTop: '8px'
+                                }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                                    <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#7B5233', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      <Sparkles size={13} color="#D97706" />
+                                      <span>Chỉ số đo (Đọc OCR từ ảnh)</span>
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => handleScanSingleTaskOCR(selectedTask, e)}
+                                      disabled={scanningTaskIds.has(selectedTask?.id)}
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        padding: '3px 8px',
+                                        fontSize: '0.72rem',
+                                        fontWeight: 600,
+                                        borderRadius: '6px',
+                                        backgroundColor: '#FFFFFF',
+                                        border: '1px solid #7B5233',
+                                        color: '#7B5233',
+                                        cursor: 'pointer'
+                                      }}
+                                      title="Quét lại OCR từ ảnh chụp mẫu"
+                                    >
+                                      {scanningTaskIds.has(selectedTask?.id) ? (
+                                        <>
+                                          <Loader2 size={12} className="spin" />
+                                          <span>Đang quét...</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <RotateCcw size={12} />
+                                          <span>Quét lại OCR</span>
+                                        </>
+                                      )}
+                                    </button>
+                                  </div>
+
+                                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                                    <div>
+                                      <label style={{ fontSize: '0.71rem', color: '#065F46', fontWeight: 700, display: 'block', marginBottom: '3px' }}>
+                                        Độ bóng (GU - Máy xanh)
+                                      </label>
+                                      <input
+                                        type="text"
+                                        placeholder="vd: 30.7"
+                                        value={modalGlossValue}
+                                        onChange={(e) => setModalGlossValue(e.target.value)}
+                                        style={{
+                                          width: '100%',
+                                          padding: '5px 8px',
+                                          borderRadius: '6px',
+                                          border: '1px solid #A7F3D0',
+                                          backgroundColor: '#FFFFFF',
+                                          color: '#065F46',
+                                          fontWeight: 700,
+                                          fontSize: '0.84rem',
+                                          outline: 'none',
+                                          boxSizing: 'border-box'
+                                        }}
+                                      />
+                                    </div>
+
+                                    <div>
+                                      <label style={{ fontSize: '0.71rem', color: '#1E40AF', fontWeight: 700, display: 'block', marginBottom: '3px' }}>
+                                        Màu sơn (ΔE - Máy đo màu)
+                                      </label>
+                                      <input
+                                        type="text"
+                                        placeholder="vd: 0.10"
+                                        value={modalColorValue}
+                                        onChange={(e) => setModalColorValue(e.target.value)}
+                                        style={{
+                                          width: '100%',
+                                          padding: '5px 8px',
+                                          borderRadius: '6px',
+                                          border: '1px solid #BFDBFE',
+                                          backgroundColor: '#FFFFFF',
+                                          color: '#1E40AF',
+                                          fontWeight: 700,
+                                          fontSize: '0.84rem',
+                                          outline: 'none',
+                                          boxSizing: 'border-box'
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )}
 
@@ -4545,7 +5069,7 @@ const QualityOverviewView = () => {
                                         fontSize: '0.86rem'
                                       }}>
                                         <User size={14} color="#8B5E3C" />
-                                        {item.user_name || (isCreate ? 'Lê Thị Hồng Nhung' : 'QC Administrator')}
+                                        {item.user_name || (isCreate ? (selectedTask?.inspector_name || 'Người kiểm tra') : (selectedTask?.confirmed_by_name || currentEditorName || 'Quản lý QC'))}
                                       </span>
 
                                       {(item.department || item.user_role) && (

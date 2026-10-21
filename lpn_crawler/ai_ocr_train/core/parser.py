@@ -45,13 +45,13 @@ class LabelDataParser:
     )
 
     CARTON_PREFIXES = (
-        "VOM", "VOL", "MEAS", "CTN", "BOX", "QTY", "PCS", "NW", "GW",
+        "JHM", "AZL", "VOM", "VOL", "MEAS", "CTN", "BOX", "QTY", "PCS", "NW", "GW",
         "ITEM", "ORDER", "PO", "LOT", "BATCH", "CARTON", "PALLET",
         "PACKAGE", "PKG", "CUFT", "CBM", "WEIGHT", "GROSS", "NET"
     )
 
     IGNORED_SKU_WORDS = {
-        "MADE-IN-VIETNAM", "MADE-IN-CHINA", "FRAGILE-HANDLE", "THIS-SIDE-UP",
+        "JHM", "AZL", "MADE-IN-VIETNAM", "MADE-IN-CHINA", "FRAGILE-HANDLE", "THIS-SIDE-UP",
         "DOUBLE-SINK", "BASE-CABINET", "SINGLE-SINK", "VANITY-SET", "TOP-BOTTOM",
         "ARIEL", "RIGHT", "LEFT", "CENTER", "CAMBRIDGE", "CABINET", "VANITY",
         "BATCH", "MODEL", "WHITE", "BLACK", "OAK", "GREY", "GRAY", "BROWN",
@@ -101,17 +101,21 @@ class LabelDataParser:
             return False
 
         # SKU bắt buộc phải chứa ít nhất 1 chữ cái (mã model, phân loại kích cỡ D/S/R/L hoặc mã màu hoàn chỉnh)
-        # Loại bỏ triệt để các mảnh số cụt (ví dụ: '2-42', '1-60') hoặc số LPN bị dính dấu gạch ('0600-75401')
         if not any(c.isalpha() for c in c_upper):
+            return False
+
+        # SKU sản phẩm kho (tủ lavabo, gương, tủ đứng) BẮT BUỘC phải có chứa chữ số chỉ kích thước/series (vd: 72, 60, 54, 42, 36, 30, 24...)
+        # Loại bỏ triệt để các chuỗi thuần chữ cái in trên vỏ thùng carton như 'JHM-AZL-R'
+        has_number_part = any(any(c.isdigit() for c in p) for p in parts)
+        if not has_number_part:
             return False
 
         valid_codes = {
             "WOA", "WHT", "BLK", "GRY", "BL", "OAK", "WAL", "ESP", "BRO",
             "MNB", "VGN", "BC", "BF", "STD", "PRO", "LX", "DB", "SC", "R", "L", "C", "S", "D"
         }
-        has_number_part = any(any(c.isdigit() for c in p) for p in parts)
         has_code_part = any(p in valid_codes for p in parts)
-        return has_number_part or has_code_part
+        return has_code_part or len(parts) >= 2
 
     @classmethod
     def clean_lpn_digits(cls, text: str) -> str:
@@ -839,8 +843,6 @@ class LabelDataParser:
                             color_matches = [exp for exp in expected_skus if color_code in exp.upper()]
                             if len(color_matches) == 1:
                                 matched_exp = color_matches[0]
-                        if not matched_exp and len(expected_skus) == 1:
-                            matched_exp = expected_skus[0]
 
                         if matched_exp:
                             inferred_sku = matched_exp
@@ -849,8 +851,10 @@ class LabelDataParser:
                             desc_conf = 0.95
                             src_desc = "OCR (Descriptor Validated vs Master SKU)"
                             all_candidate_skus.append((inferred_sku, desc_conf, src_desc))
-                        # Lưu ý: Nếu expected_skus tồn tại nhưng không khớp với SKU nào,
-                        # TUYỆT ĐỐI KHÔNG thêm inferred_sku ảo vào all_candidate_skus để tránh báo lệch mã sai!
+                        else:
+                            # Không khớp với SKU CSDL: giữ nguyên inferred_sku đọc thực tế từ thùng carton
+                            # để đối soát đúng với thực tế ảnh, KHÔNG bị gán ép theo CSDL!
+                            all_candidate_skus.append((inferred_sku, 0.70, "OCR (Descriptor Prediction Unvalidated)"))
                     else:
                         validated_sku = None
                         sku_is_validated = False

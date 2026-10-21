@@ -35,7 +35,7 @@ _cached_kpi_stats = {
 
 
 @router.get("/stats")
-def get_lpn_kpi_stats(db: Session = Depends(get_db)):
+def get_lpn_kpi_stats(force_refresh: bool = False, db: Session = Depends(get_db)):
     """
     Trả về bộ KPI thống kê của hệ thống Container & LPN:
     1. all_time: Thống kê toàn bộ tích lũy (dành cho Popup Dashboard)
@@ -44,8 +44,8 @@ def get_lpn_kpi_stats(db: Session = Depends(get_db)):
     global _cached_kpi_stats
     now = time.time()
 
-    # Cache 30 giây tránh dội query khi chuyển tab hoặc refresh liên tục
-    if (now - _cached_kpi_stats.get("_cached_at", 0)) < 30.0 and _cached_kpi_stats.get("all_time", {}).get("total_containers", 0) > 0:
+    # Cache 120 giây tránh dội query khi chuyển tab hoặc refresh liên tục
+    if not force_refresh and (now - _cached_kpi_stats.get("_cached_at", 0)) < 120.0 and _cached_kpi_stats.get("all_time", {}).get("total_containers", 0) > 0:
         return _cached_kpi_stats
 
     try:

@@ -803,7 +803,7 @@ const InspectionReportsView = () => {
     const hasConfirm = list.some(item => item.action_type === 'confirm');
     if (isConfirmed && !hasConfirm) {
       const confirmTime = activeReportItem.confirmed_at || activeReportItem.updated_at || activeReportItem.created_at || '';
-      const confirmUser = activeReportItem.confirmed_by_name || activeReportItem.approved_by_name || 'QC Administrator';
+      const confirmUser = activeReportItem.confirmed_by_name || activeReportItem.approved_by_name || (activeReportItem.confirmed_by ? `Quản lý QC (#${activeReportItem.confirmed_by})` : 'Quản lý QC');
       list.unshift({
         id: 'init_confirm_' + (activeReportItem.id || '0'),
         action_type: 'confirm',
@@ -2940,7 +2940,7 @@ const InspectionReportsView = () => {
                                       fontSize: '0.88rem'
                                     }}>
                                       <User size={15} color="#7B5233" />
-                                      {item.user_name || (isCreate ? (getDisplayInspector(activeReportItem) || 'QC Inspector') : 'QC Administrator')}
+                                      {item.user_name || (isCreate ? (getDisplayInspector(activeReportItem) || 'QC Inspector') : (activeReportItem?.confirmed_by_name || 'Quản lý QC'))}
                                     </span>
 
                                     {(item.department || item.user_role) && (
@@ -3356,14 +3356,14 @@ const InspectionReportsView = () => {
                 <Trash2 size={22} style={{ color: '#DC2626' }} />
               </div>
               <div>
-                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '800', color: '#991B1B' }}>Xác nhận xóa phiếu kiểm tra</h3>
-                <p style={{ margin: '2px 0 0 0', fontSize: '0.8rem', color: '#B91C1C' }}>Thao tác này không thể hoàn tác</p>
+                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '800', color: '#991B1B' }}>Xác nhận xóa (ẩn) phiếu kiểm tra</h3>
+                <p style={{ margin: '2px 0 0 0', fontSize: '0.8rem', color: '#B91C1C' }}>Phiếu sẽ được ẩn hoàn toàn khỏi danh sách báo cáo và hệ thống</p>
               </div>
             </div>
 
             <div style={{ padding: '20px 24px' }}>
               <p style={{ fontSize: '0.9rem', color: '#374151', margin: '0 0 16px 0', lineHeight: 1.5 }}>
-                Bạn có chắc chắn muốn xóa vĩnh viễn phiếu kiểm tra <b style={{ color: '#991B1B' }}>#{deleteTarget.item?.id}</b> khỏi hệ thống?
+                Bạn có chắc chắn muốn xóa (ẩn) phiếu kiểm tra <b style={{ color: '#991B1B' }}>#{deleteTarget.item?.id}</b>? Phiếu này sẽ bị ẩn hoàn toàn và không còn xuất hiện trên các màn hình làm việc.
               </p>
 
               <div style={{ backgroundColor: '#FAF6F0', borderRadius: '8px', padding: '12px 14px', border: '1px solid #EADCC9', fontSize: '0.83rem', display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -3418,7 +3418,7 @@ const InspectionReportsView = () => {
                   gap: '6px'
                 }}
               >
-                {isDeleting ? 'Đang xóa...' : 'Xác nhận xóa'}
+                {isDeleting ? 'Đang xóa...' : 'Xác nhận xóa (Ẩn phiếu)'}
               </button>
             </div>
           </div>

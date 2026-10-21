@@ -26,6 +26,7 @@ class Settings:
     APPSHEET_TEMPLATE_ID: str = os.getenv("APPSHEET_TEMPLATE_ID", "600686db-6622-4b98-a276-02cdb3e0ab2b")
     IMAGE_DOWNLOAD_WORKERS: int = int(os.getenv("IMAGE_DOWNLOAD_WORKERS", "16"))
     USE_DIRECT_API_FASTPATH: bool = os.getenv("USE_DIRECT_API_FASTPATH", "True").lower() == "true"
+    APPSHEET_WEBHOOK_SECRET: str = os.getenv("APPSHEET_WEBHOOK_SECRET", "SmartFlow_2026")
     
     # Path settings (Relative to project root)
     PROJECT_ROOT: str = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
@@ -35,6 +36,7 @@ class Settings:
     STORAGE_STATE_FILE: str = os.path.join(STORAGE_AUTH_DIR, "storage_state.json")
     STORAGE_IMAGES_DIR: str = os.path.join(MODULE_ROOT, "storage", "images")
     STORAGE_EXPORTS_DIR: str = os.path.join(MODULE_ROOT, "storage", "exports")
+    STORAGE_WEBHOOKS_DIR: str = os.path.join(MODULE_ROOT, "storage", "webhooks")
 
 settings = Settings()
 
@@ -42,3 +44,4 @@ settings = Settings()
 os.makedirs(settings.STORAGE_AUTH_DIR, exist_ok=True)
 os.makedirs(settings.STORAGE_IMAGES_DIR, exist_ok=True)
 os.makedirs(settings.STORAGE_EXPORTS_DIR, exist_ok=True)
+os.makedirs(settings.STORAGE_WEBHOOKS_DIR, exist_ok=True)

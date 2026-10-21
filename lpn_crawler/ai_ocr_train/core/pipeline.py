@@ -289,37 +289,35 @@ class AiOcrPipeline:
             # Lọc bỏ các vùng ROI giả mạo (không phải tem nhãn thực sự):
             r_tokens = ocr_item.get("tokens", [])
             r_barcodes = [b.get("data") for b in b_list if isinstance(b, dict) and b.get("data")]
-            has_ident = bool(roi_parsed.get("lpn") or roi_parsed.get("sku") or r_barcodes)
             r_box = r_item.get("bbox", [0, 0, 0, 0])
             r_w = r_box[2] if len(r_box) >= 4 else 0
             r_h = r_box[3] if len(r_box) >= 4 else 0
             r_asp = float(r_w) / float(r_h) if r_h > 0 else 1.0
 
             # Tem nhãn kho thực tế (hỗ trợ cả tem ngang 0° lẫn tem dán dọc xoay 90°/270°):
-            # - Tem ngang (0°): aspect ~ 1.0 đến 3.0, chiều ngang không quá 40% bề rộng kiện pallet
-            # - Tem dọc (90°/270°): aspect ~ 0.40 đến 0.90, chiều cao không quá 25% chiều cao kiện pallet
-            # Loại bỏ các vùng khe rãnh ánh sáng cửa sổ hoặc viền cạnh thùng dị dạng (r_h > 28% ảnh và r_asp < 0.38)
+            # - Loại bỏ các vùng khe rãnh ánh sáng cửa sổ hoặc viền cạnh thùng dị dạng (r_h > 28% ảnh và r_asp < 0.38)
             img_h, img_w = orig_img.shape[:2]
             is_abnormal_slit = (r_h > img_h * 0.28 and r_asp < 0.38) or (r_w > img_w * 0.45) or (r_h > img_h * 0.35)
             if is_abnormal_slit:
                 continue
 
-            is_huge_carton = (r_w > img_w * 0.28 and r_h > img_h * 0.20)
-            valid_alnum_chars = sum(len(re.sub(r'[^a-zA-Z0-9]', '', t.get("text", ""))) for t in r_tokens)
+            # NGUYÊN TẮC VÀNG: BÓC TÁCH CHUẨN XÁC TEM NHÃN
+            # Một ROI chỉ được coi là tem nhãn hợp lệ khi:
+            # 1. Có giải mã được Barcode / QR Code thực sự; HOẶC
+            # 2. Đọc được mã LPN kho chuẩn (9 chữ số) từ OCR trên nhãn decal; HOẶC
+            # 3. Đọc được mã SKU hợp lệ và KHÔNG PHẢI là chữ mô tả suy đoán từ vỏ thùng carton (Descriptor Prediction).
+            has_real_barcode = bool(r_barcodes)
+            has_real_lpn = bool(roi_parsed.get("lpn"))
+            has_real_sku = bool(roi_parsed.get("sku") and not roi_parsed.get("sku_is_predicted", False))
 
-            # Chỉ lấy các con tem có mã QR / Barcode hoặc đọc được LPN / SKU (loại bỏ tem chỉ có chữ thường mô tả như 'Brown Oaker')
-            if not has_ident:
+            if not has_real_barcode and not has_real_lpn and not has_real_sku:
+                # Loại bỏ hoàn toàn các mảng vỏ bìa carton ngẫu nhiên (chứa số 72, JHM-AZL-R, CAMB...)
                 continue
             
             annotated_crop = ocr_item.get("annotated_image", zoomed_crop)
             if return_images_base64:
                 annotated_crops_for_grid.append(annotated_crop)
 
-            r_box = r_item.get("bbox", [0, 0, 0, 0])
-            r_w = r_box[2] if len(r_box) >= 4 else 0
-            r_h = r_box[3] if len(r_box) >= 4 else 0
-            r_asp = float(r_w) / float(r_h) if r_h > 0 else 1.0
-            r_tokens = ocr_item.get("tokens", [])
             applied_rot = ocr_item.get("applied_rotation", 0)
 
             # Quy chuẩn chuẩn xác từ nhà máy:
@@ -330,12 +328,39 @@ class AiOcrPipeline:
             label_category = "top_roof" if is_vertical else "pallet_standing"
             category_name = "Top nóc" if is_vertical else "Pallet đứng"
 
-            # Trích xuất chuẩn xác chuỗi chữ dưới mã QR / Barcode (HRI)
-            clean_under_code = (
-                roi_parsed.get("lpn") or roi_parsed.get("sku") or (r_barcodes[0] if r_barcodes else None)
-            )
+            # TRÍCH XUẤT CHUẨN XÁC CHUỖI CHỮ DƯỚI MÃ QR / BARCODE (Spatial Barcode Anchoring):
+            # 1. Ưu tiên hàng đầu: Nội dung giải mã từ chính mã QR / Barcode của tem
+            clean_under_code = None
+            if r_barcodes:
+                clean_under_code = str(r_barcodes[0]).strip()
+
+            # 2. Nếu cần tìm dòng chữ in dưới mã vạch từ OCR tokens (Spatial Anchoring):
+            # Tìm token OCR nằm ngay phía dưới hoặc phía trên bounding box của mã vạch
+            if not clean_under_code or not clean_under_code.isalnum():
+                for b_obj in b_list:
+                    bc_b = b_obj.get("bbox")
+                    if bc_b and len(bc_b) >= 4:
+                        bx, by, bw, bh = bc_b
+                        for t in r_tokens:
+                            tb = t.get("bbox")
+                            t_text = str(t.get("text", "")).strip().upper()
+                            if not t_text or len(t_text) < 4:
+                                continue
+                            if tb and len(tb) >= 4:
+                                tx, ty, tw, th = tb
+                                h_inter = max(0, min(bx + bw, tx + tw) - max(bx, tx))
+                                # Nằm sát phía dưới hoặc phía trên mã vạch trong cự ly hẹp
+                                is_near = (ty >= by + bh * 0.3 and ty <= by + bh * 2.2) or (ty + th <= by + bh * 0.4 and ty + th >= by - bh * 1.0)
+                                if is_near and (h_inter > min(tw, bw) * 0.25):
+                                    if (t_text.isdigit() and len(t_text) >= 8) or ('-' in t_text and LabelDataParser.is_valid_sku_candidate(t_text)):
+                                        clean_under_code = t_text
+                                        break
+                    if clean_under_code:
+                        break
+
+            # 3. Fallback: Lấy LPN hoặc SKU hợp lệ của chính con tem này
             if not clean_under_code:
-                clean_under_code = next((t.get("text") for t in r_tokens if (t.get("text", "").isdigit() and len(t.get("text", "")) >= 8) or '-' in t.get("text", "")), None)
+                clean_under_code = roi_parsed.get("lpn") or roi_parsed.get("sku")
 
             roi_info = {
                 "label_id": len(roi_details) + 1,

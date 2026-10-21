@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { formatDateMDY } from '../utils/formatters';
+import { formatDateDMY, formatDateMDY, formatTimestampVN } from '../utils/formatters';
 
 const resolveImgUrl = (img) => {
   if (!img) return '';
@@ -394,11 +394,11 @@ export const ContainerCardView = ({
                 </tr>
                 <tr>
                   <td style={{ color: '#8D6E63', padding: '3px 0' }}>Ngày xếp:</td>
-                  <td style={{ textAlign: 'right', fontWeight: '700', color: '#2D1A12' }}>{hoveredCard.date_loading || '—'}</td>
+                  <td style={{ textAlign: 'right', fontWeight: '700', color: '#2D1A12' }}>{formatDateDMY(hoveredCard.date_loading)}</td>
                 </tr>
                 <tr>
                   <td style={{ color: '#8D6E63', padding: '3px 0' }}>Thời gian:</td>
-                  <td style={{ textAlign: 'right', fontWeight: '600', color: '#5D4037' }}>{hoveredCard.timestamp_raw || '—'}</td>
+                  <td style={{ textAlign: 'right', fontWeight: '600', color: '#5D4037' }}>{formatTimestampVN(hoveredCard.timestamp_raw)}</td>
                 </tr>
                 <tr>
                   <td style={{ color: '#8D6E63', padding: '3px 0' }}>Người thao tác:</td>

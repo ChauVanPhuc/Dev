@@ -82,7 +82,10 @@ async def send_zalo_notification_to_reporter(db_bug, screen, db: Session):
     except Exception as ze:
         print(f"Error sending Zalo notification for reporter: {ze}")
 
+from shared.utils.file_security import validate_image_upload
+
 router = APIRouter()
+
 
 @router.post("/upload-image")
 async def upload_bug_image(file: UploadFile = File(...)):
@@ -90,12 +93,9 @@ async def upload_bug_image(file: UploadFile = File(...)):
     Tải lên hình ảnh bug màn hình (chấp nhận ảnh clipboard dán hoặc file upload).
     Lưu vào BackEnd/static/uploads/screen_bugs/
     """
+    file_ext = validate_image_upload(file)
     upload_dir = get_upload_dir("screen_bugs")
     
-    # Tạo tên file duy nhất tránh trùng lặp
-    file_ext = os.path.splitext(file.filename)[1]
-    if not file_ext:
-        file_ext = ".png" # Mặc định png cho ảnh clipboard
     new_filename = f"{uuid.uuid4()}{file_ext}"
     file_path = os.path.join(upload_dir, new_filename)
     

@@ -3140,7 +3140,7 @@ const QualityRecordsDetailView = () => {
                                                                             fontSize: '0.86rem'
                                                                         }}>
                                                                             <User size={14} color="#7B5233" />
-                                                                            {item.user_name || 'QC Administrator'}
+                                                                            {item.user_name || 'Quản lý QC'}
                                                                         </span>
 
                                                                         {item.user_role && (

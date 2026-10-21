@@ -689,8 +689,6 @@ export const BatchContainerScanModal = ({
                     <tr style={{ backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', color: '#5D4037', fontWeight: '700', textAlign: 'left' }}>
                       <th style={{ padding: '8px 12px', width: '40px' }}>#</th>
                       <th style={{ padding: '8px 12px' }}>Số Container</th>
-                      <th style={{ padding: '8px 12px' }}>Nhà Máy</th>
-                      <th style={{ padding: '8px 12px' }}>Ngày Loading</th>
                       <th style={{ padding: '8px 12px', textAlign: 'center' }}>Số Ảnh</th>
                       <th style={{ padding: '8px 12px', textAlign: 'right' }}>Trạng Thái Quét</th>
                     </tr>
@@ -714,8 +712,6 @@ export const BatchContainerScanModal = ({
                           <td style={{ padding: '8px 12px', fontWeight: '800', fontFamily: 'monospace', color: '#2D1A12' }}>
                             {c.container_number}
                           </td>
-                          <td style={{ padding: '8px 12px', color: '#5D4037' }}>{c.factory || '—'}</td>
-                          <td style={{ padding: '8px 12px', color: '#5D4037' }}>{c.date_loading || '—'}</td>
                           <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: '700', color: '#4A2E1B' }}>
                             {c.unscanned_images > 0 ? `${c.ocr_scanned_count}/${c.total_images}` : c.total_images}
                           </td>

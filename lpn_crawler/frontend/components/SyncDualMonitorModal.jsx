@@ -286,13 +286,19 @@ export const SyncDualMonitorModal = ({
   const displaySpeed = speedStr ? speedStr.replace(/\s*\(Fast-Skip\)/i, '') : '—';
 
   const percent = total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : (isListening || isCompleted ? 100 : 0);
+  const isOcrMode = Boolean(
+    currentJob?.auto_ocr === true &&
+    !currentJob?.crawl_mode?.includes('Cập nhật') &&
+    !progressData?.crawl_mode?.includes('Cập nhật')
+  );
 
-  // Lấy container đang xử lý để nạp toàn bộ danh sách ảnh đã quét từ CSDL
+  // Lấy container đang xử lý để nạp toàn bộ danh sách ảnh đã quét từ CSDL (chỉ chạy khi isOcrMode bật)
   const activeContainerNum = (progressData?.current_container && progressData.current_container !== '—')
     ? progressData.current_container
     : (syncOcrLatest?.container_number || null);
 
   useEffect(() => {
+    if (!isOcrMode) return;
     let isMounted = true;
     const fetchContainerOcrResults = async () => {
       try {
@@ -313,7 +319,7 @@ export const SyncDualMonitorModal = ({
     };
     fetchContainerOcrResults();
     return () => { isMounted = false; };
-  }, [activeContainerNum, currentJob?.id]);
+  }, [activeContainerNum, currentJob?.id, isOcrMode]);
 
   // Hợp nhất danh sách từ CSDL và các sự kiện SSE realtime mới nhất (không bị mất dòng khi thoát ra vào lại)
   const effectiveFeed = React.useMemo(() => {
@@ -452,18 +458,18 @@ export const SyncDualMonitorModal = ({
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <span style={{ fontWeight: '800', fontSize: '1.02rem', color: '#2D1A12' }}>
-              Tiến Trình Đồng Bộ & Nhận Diện AI OCR
+              {isOcrMode ? 'Tiến Trình Đồng Bộ & Nhận Diện AI OCR' : 'Tiến Trình Cập Nhật Dữ Liệu Container'}
             </span>
             <span
               className={`lpn-status-badge ${isListening ? 'status-running' : isCompleted ? 'status-completed' : isFailed ? 'status-failed' : isStopped ? 'status-failed' : isPaused ? 'status-warning' : 'status-running'}`}
               style={{
                 marginLeft: '4px',
-                backgroundColor: isListening ? '#DCFCE7' : isStopped ? '#FEE2E2' : isPaused ? '#FEF3C7' : undefined,
-                color: isListening ? '#15803D' : isStopped ? '#DC2626' : isPaused ? '#B45309' : undefined,
-                border: isListening ? '1px solid #16A34A' : isStopped ? '1px solid #FCA5A5' : isPaused ? '1px solid #F59E0B' : undefined
+                backgroundColor: isListening ? '#DCFCE7' : isCompleted ? '#DCFCE7' : isStopped ? '#FEE2E2' : isPaused ? '#FEF3C7' : '#EFF6FF',
+                color: isListening ? '#15803D' : isCompleted ? '#15803D' : isStopped ? '#DC2626' : isPaused ? '#B45309' : '#1D4ED8',
+                border: isListening ? '1px solid #16A34A' : isCompleted ? '1px solid #86EFAC' : isStopped ? '1px solid #FCA5A5' : isPaused ? '1px solid #F59E0B' : '1px solid #93C5FD'
               }}
             >
-              {isListening ? 'THƯỜNG TRỰC ĐỒNG BỘ' : isCompleted ? 'ĐÃ RÀ SOÁT XONG' : isStopped ? 'ĐÃ DỪNG ĐỒNG BỘ' : isFailed ? 'THẤT BẠI' : isPaused ? 'TẠM DỪNG' : 'ĐANG ĐỒNG BỘ...'}
+              {isListening ? 'THƯỜNG TRỰC ĐỒNG BỘ' : isCompleted ? 'ĐÃ HOÀN TẤT' : isStopped ? 'ĐÃ DỪNG' : isFailed ? 'THẤT BẠI' : isPaused ? 'TẠM DỪNG' : (isOcrMode ? 'ĐANG ĐỒNG BỘ...' : 'CẬP NHẬT DỮ LIỆU MỚI')}
             </span>
           </div>
 
@@ -604,7 +610,7 @@ export const SyncDualMonitorModal = ({
                   </span>
                 ) : (
                   <span style={{ fontWeight: '800', fontSize: '0.92rem', color: '#15803D' }}>
-                    Đang kiểm tra: {currentContainer}
+                    {currentContainer ? `Đang kiểm tra: ${currentContainer}` : (currentAction || 'Đang sẵn sàng đồng bộ...')}
                   </span>
                 )}
               </div>
@@ -650,12 +656,12 @@ export const SyncDualMonitorModal = ({
             </div>
           </div>
 
-          {/* Quick Metrics Grid - 4 Columns */}
+          {/* Quick Metrics Grid - 3 Columns (Cập Nhật) or 4 Columns (AI OCR) */}
           <div
             className="lpn-sync-metrics-grid"
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+              gridTemplateColumns: isOcrMode ? 'repeat(4, minmax(0, 1fr))' : 'repeat(3, minmax(0, 1fr))',
               gap: '8px',
               backgroundColor: '#FAF6F0',
               padding: '10px 14px',
@@ -676,87 +682,100 @@ export const SyncDualMonitorModal = ({
                 {Number(imagesCount || 0).toLocaleString()} ảnh
               </div>
             </div>
-            <div style={{ minWidth: 0, overflow: 'hidden' }}>
-              <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>Ảnh đã quét AI OCR:</span>
-              <div style={{ fontWeight: '800', color: '#16A34A', fontSize: '0.92rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {Number(ocrTotalScanned || 0).toLocaleString()} ảnh {ocrAvgMs > 0 && <span style={{ fontSize: '0.75rem', color: '#8D6E63', fontWeight: '600' }}>({formatDurationMs(ocrAvgMs)}/ảnh)</span>}
+            {isOcrMode ? (
+              <>
+                <div style={{ minWidth: 0, overflow: 'hidden' }}>
+                  <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>Ảnh đã quét AI OCR:</span>
+                  <div style={{ fontWeight: '800', color: '#16A34A', fontSize: '0.92rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {Number(ocrTotalScanned || 0).toLocaleString()} ảnh {ocrAvgMs > 0 && <span style={{ fontSize: '0.75rem', color: '#8D6E63', fontWeight: '600' }}>({formatDurationMs(ocrAvgMs)}/ảnh)</span>}
+                  </div>
+                </div>
+                <div style={{ minWidth: 0, overflow: 'hidden' }}>
+                  <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>Tỷ lệ khớp LPN/SKU:</span>
+                  <div style={{ fontWeight: '800', color: ocrMatchRate >= 80 ? '#15803D' : '#D97706', fontSize: '0.92rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {ocrMatchRate}% ({ocrMatchedCount}/{ocrTotalScanned})
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div style={{ minWidth: 0, overflow: 'hidden' }}>
+                <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>Tốc độ xử lý:</span>
+                <div style={{ fontWeight: '800', color: '#15803D', fontSize: '0.92rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {displaySpeed}
+                </div>
               </div>
-            </div>
-            <div style={{ minWidth: 0, overflow: 'hidden' }}>
-              <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: '600', display: 'block', whiteSpace: 'nowrap' }}>Tỷ lệ khớp LPN/SKU:</span>
-              <div style={{ fontWeight: '800', color: ocrMatchRate >= 80 ? '#15803D' : '#D97706', fontSize: '0.92rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {ocrMatchRate}% ({ocrMatchedCount}/{ocrTotalScanned})
-              </div>
-            </div>
+            )}
           </div>
 
-          {/* Mobile Tab Switcher: Xem toàn màn hình luồng cào hoặc luồng OCR trên điện thoại */}
-          <div
-            className="lpn-mobile-only"
-            style={{
-              display: 'flex',
-              backgroundColor: '#FAF6F0',
-              border: '1px solid #EADCC9',
-              borderRadius: '8px',
-              padding: '3px',
-              gap: '4px',
-              flexShrink: 0
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => setMobileActiveTab('crawler')}
+          {/* Mobile Tab Switcher: Chỉ hiển thị khi có 2 luồng (isOcrMode) */}
+          {isOcrMode && (
+            <div
+              className="lpn-mobile-only"
               style={{
-                flex: 1,
-                padding: '6px 8px',
-                borderRadius: '6px',
-                fontSize: '0.76rem',
-                fontWeight: '700',
-                border: 'none',
-                cursor: 'pointer',
-                backgroundColor: mobileActiveTab === 'crawler' ? '#7B5233' : 'transparent',
-                color: mobileActiveTab === 'crawler' ? '#FFFFFF' : '#7B5233',
-                transition: 'all 0.15s ease',
                 display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '4px'
+                backgroundColor: '#FAF6F0',
+                border: '1px solid #EADCC9',
+                borderRadius: '8px',
+                padding: '3px',
+                gap: '4px',
+                flexShrink: 0
               }}
             >
-              <span>📜 Luồng Cào</span>
-              <span style={{ fontSize: '0.66rem', opacity: 0.85 }}>({crawlerLogs.length})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setMobileActiveTab('ocr')}
-              style={{
-                flex: 1,
-                padding: '6px 8px',
-                borderRadius: '6px',
-                fontSize: '0.76rem',
-                fontWeight: '700',
-                border: 'none',
-                cursor: 'pointer',
-                backgroundColor: mobileActiveTab === 'ocr' ? '#7B5233' : 'transparent',
-                color: mobileActiveTab === 'ocr' ? '#FFFFFF' : '#7B5233',
-                transition: 'all 0.15s ease',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '4px'
-              }}
-            >
-              <span>🤖 Nhận Diện OCR</span>
-              <span style={{ fontSize: '0.66rem', opacity: 0.85 }}>({ocrTotalScanned})</span>
-            </button>
-          </div>
+              <button
+                type="button"
+                onClick={() => setMobileActiveTab('crawler')}
+                style={{
+                  flex: 1,
+                  padding: '6px 8px',
+                  borderRadius: '6px',
+                  fontSize: '0.76rem',
+                  fontWeight: '700',
+                  border: 'none',
+                  cursor: 'pointer',
+                  backgroundColor: mobileActiveTab === 'crawler' ? '#7B5233' : 'transparent',
+                  color: mobileActiveTab === 'crawler' ? '#FFFFFF' : '#7B5233',
+                  transition: 'all 0.15s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '4px'
+                }}
+              >
+                <span>📜 Luồng Cào</span>
+                <span style={{ fontSize: '0.66rem', opacity: 0.85 }}>({crawlerLogs.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMobileActiveTab('ocr')}
+                style={{
+                  flex: 1,
+                  padding: '6px 8px',
+                  borderRadius: '6px',
+                  fontSize: '0.76rem',
+                  fontWeight: '700',
+                  border: 'none',
+                  cursor: 'pointer',
+                  backgroundColor: mobileActiveTab === 'ocr' ? '#7B5233' : 'transparent',
+                  color: mobileActiveTab === 'ocr' ? '#FFFFFF' : '#7B5233',
+                  transition: 'all 0.15s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '4px'
+                }}
+              >
+                <span>🤖 Nhận Diện OCR</span>
+                <span style={{ fontSize: '0.66rem', opacity: 0.85 }}>({ocrTotalScanned})</span>
+              </button>
+            </div>
+          )}
 
-          {/* Modal Body: 2 Split Areas (Left: Crawler Stream Logs | Right: Live AI OCR Engine & Results) */}
+          {/* Modal Body: Grid phân chia (Khi isOcrMode: 2 cột | Khi !isOcrMode: 1 cột 100% full width) */}
           <div
             className="lpn-sync-split-grid"
             style={{
               display: 'grid',
-              gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+              gridTemplateColumns: isOcrMode ? 'minmax(0, 1fr) minmax(0, 1fr)' : '1fr',
               gap: '12px',
               flex: 1,
               overflow: 'hidden'
@@ -764,7 +783,7 @@ export const SyncDualMonitorModal = ({
           >
             {/* ================= AREA 1: LEFT - APPSHEET CRAWLER STREAM LOGS ================= */}
             <div
-              className={`lpn-sync-area-crawler ${mobileActiveTab !== 'crawler' ? 'lpn-mobile-hidden' : ''}`}
+              className={`lpn-sync-area-crawler ${isOcrMode && mobileActiveTab !== 'crawler' ? 'lpn-mobile-hidden' : ''}`}
               style={{
                 display: 'flex',
                 flexDirection: 'column',
@@ -780,7 +799,7 @@ export const SyncDualMonitorModal = ({
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, gap: '8px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
                   <span style={{ fontWeight: '800', fontSize: '0.88rem', color: '#2D1A12', whiteSpace: 'nowrap' }}>
-                    Đồng bộ AppSheet
+                    {isOcrMode ? 'Đồng bộ AppSheet' : 'Nhật Ký Cập Nhật Dữ Liệu AppSheet'}
                   </span>
                   <span style={{
                     fontSize: '0.68rem',
@@ -882,19 +901,20 @@ export const SyncDualMonitorModal = ({
             </div>
 
             {/* ================= AREA 2: RIGHT - LIVE AI OCR ENGINE ================= */}
-            <div
-              className={`lpn-sync-area-ocr ${mobileActiveTab !== 'ocr' ? 'lpn-mobile-hidden' : ''}`}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '10px',
-                backgroundColor: '#FAF6F0',
-                borderRadius: '10px',
-                border: '1px solid #EADCC9',
-                padding: '12px 14px',
-                overflow: 'hidden'
-              }}
-            >
+            {isOcrMode && (
+              <div
+                className={`lpn-sync-area-ocr ${mobileActiveTab !== 'ocr' ? 'lpn-mobile-hidden' : ''}`}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px',
+                  backgroundColor: '#FAF6F0',
+                  borderRadius: '10px',
+                  border: '1px solid #EADCC9',
+                  padding: '12px 14px',
+                  overflow: 'hidden'
+                }}
+              >
               {/* Area Header */}
               <div style={{
                 display: 'flex',
@@ -1391,6 +1411,7 @@ export const SyncDualMonitorModal = ({
                 </div>
               </div>
             </div>
+            )}
           </div>
         </div>
       </div>

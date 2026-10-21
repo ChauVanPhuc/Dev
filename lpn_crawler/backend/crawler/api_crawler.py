@@ -2,6 +2,7 @@
 import os
 import json
 import time
+import threading
 import requests
 from datetime import datetime, date
 from typing import Dict, Any, List, Optional
@@ -347,19 +348,23 @@ class CrawlerApiMixin:
                 "userConsentedScopes": "amp_email,data_input,device_identity,device_io,location,profile,usage"
             }
 
+            self.send_progress(
+                "Kết nối AppSheet...", "CONNECTING", 0, 0, 0, 0,
+                current_action="Đang trích xuất dữ liệu từ máy chủ AppSheet..."
+            )
             self.log("Đang gửi request trích xuất dữ liệu trực tiếp tới AppSheet Template API...")
             payload = None
 
-            # TIER 1: Pooled HTTP Socket Session với GZIP decompression trực tiếp (phản hồi ~5 giây)
+            # TIER 1: Pooled HTTP Socket Session với GZIP decompression trực tiếp
             try:
                 session = requests.Session()
                 adapter = HTTPAdapter(
                     pool_connections=10, pool_maxsize=10,
-                    max_retries=Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
+                    max_retries=Retry(total=2, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
                 )
                 session.mount("https://", adapter)
                 session.headers.update(headers)
-                resp = session.post(api_url, json=post_body, timeout=(15, 60))
+                resp = session.post(api_url, json=post_body, timeout=(8, 30))
                 if resp.status_code == 200:
                     payload = resp.json()
                 else:
@@ -958,6 +963,8 @@ class CrawlerApiMixin:
                     current_action="Đang thường trực đồng bộ thời gian thực (Sẵn sàng nhận dữ liệu mới)...",
                     sku_crawled=total_sku_count
                 )
+                if hasattr(self, "_enqueue_missing_mismatch_items"):
+                    self._enqueue_missing_mismatch_items()
 
                 poll_count = 0
                 while not crawl_job_manager.is_cancelled(self.job_id):
