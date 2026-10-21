@@ -44,6 +44,19 @@ def upgrade():
             else:
                 print(f" -> Column '{col_name}' already exists in iso_processes.")
 
+        # Ensure iso_document_id in iso_processes is NULLABLE (for standalone processes)
+        check_proc_doc_id_null = db.execute(text("""
+            SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_NAME = 'iso_processes' AND COLUMN_NAME = 'iso_document_id'
+        """)).fetchone()
+        if check_proc_doc_id_null and check_proc_doc_id_null[0] == 'NO':
+            print("Altering iso_processes.iso_document_id to NULL...")
+            db.execute(text("ALTER TABLE iso_processes ALTER COLUMN iso_document_id INT NULL"))
+            db.commit()
+            print(" -> Altered iso_document_id to NULL successfully.")
+        else:
+            print(" -> iso_processes.iso_document_id is already NULLABLE.")
+
         # 2. iso_documents columns
         check_doc_proc_id = db.execute(text("""
             SELECT 1 FROM sys.columns 
