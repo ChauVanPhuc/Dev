@@ -2027,6 +2027,24 @@ const ISOProcessEditorView = () => {
 
   const buildWordFlowchartTable = (steps = [], cleanTitle = 'QUY TRÌNH') => {
     if (!steps || steps.length === 0) return '';
+    try {
+      if (typeof generateFlowchartSvgHtml === 'function') {
+        const svgHtml = generateFlowchartSvgHtml(steps);
+        if (svgHtml) {
+          return `
+            <div class="iso-flowchart-block-container" style="margin:12pt 0;">
+              <h3 style="font-size:12pt; font-weight:bold; margin-bottom:8pt; font-family:'Times New Roman',serif;">5.1. Sơ đồ lưu trình kiểm soát công tác ${cleanTitle.toLowerCase()}</h3>
+              <div style="width:100%; display:flex; justify-content:center; margin-bottom:15pt;">
+                ${svgHtml}
+              </div>
+            </div>
+          `;
+        }
+      }
+    } catch (eSvg) {
+      console.warn('Lỗi render SVG flowchart:', eSvg);
+    }
+
     const totalSteps = steps.length;
     const rows = steps.map((s, idx) => {
       const stepNum = s.step_number || (idx + 1);

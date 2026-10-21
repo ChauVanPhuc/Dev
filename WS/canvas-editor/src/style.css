@@ -792,6 +792,10 @@ ul {
   position: relative;
 }
 
+.menu-item__flowchart i {
+  background-image: url('./assets/images/flowchart.svg');
+}
+
 .menu-item__codeblock i {
   background-image: url('./assets/images/codeblock.svg');
 }

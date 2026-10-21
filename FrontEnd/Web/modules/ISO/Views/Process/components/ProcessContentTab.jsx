@@ -1815,31 +1815,48 @@ const ProcessContentTab = ({ editor }) => {
       }
 
       // 1. CẬP NHẬT VĂN BẢN VÀ THÊM TRANG A4 VÀO DOM TRƯỚC TIÊN
-      if (formData.steps && formData.steps.length > 0 && wordEditorRef.current) {
-        const newTableHtml = buildFlowchartTableHtml(formData.steps);
-        const newDetailedStepsHtml = buildDetailedStepsHtml(formData.steps);
-        const newRevLogsHtml = buildRevisionLogsTableHtml(updatedLogs);
+      if (formData.steps && formData.steps.length > 0) {
+        // NẾU ĐANG Ở CHẾ ĐỘ CANVAS EDITOR -> ĐỒNG BỘ TRỰC TIẾP QUA BRIDGE
+        if (editorEngine === 'canvas' && typeof window.__insertFlowchartIntoCanvasEditor__ === 'function') {
+          window.__insertFlowchartIntoCanvasEditor__(formData.steps);
+        }
 
-        // A. Cập nhật hoặc chèn Bảng lưu đồ 5.1
-        let existingFlowchartEl = wordEditorRef.current.querySelector('#iso-flowchart-block-container, .iso-flowchart-block-container');
-        if (existingFlowchartEl) {
-          existingFlowchartEl.outerHTML = newTableHtml;
-        } else {
-          // Tìm Mục 5.1 hoặc Mục 5 để chèn bảng
-          const sec5El = Array.from(wordEditorRef.current.querySelectorAll('h1, h2, h3, p, .iso-doc-heading')).find(el =>
-            /5\.1\s*Lưu đồ|5\.\s*Nội dung/i.test(el.innerText || '')
-          );
-          if (sec5El) {
-            sec5El.insertAdjacentHTML('afterend', newTableHtml);
+        if (wordEditorRef.current) {
+          const newTableHtml = buildFlowchartTableHtml(formData.steps);
+          const newDetailedStepsHtml = buildDetailedStepsHtml(formData.steps);
+          const newRevLogsHtml = buildRevisionLogsTableHtml(updatedLogs);
+
+          // A. Cập nhật hoặc chèn Bảng lưu đồ 5.1
+          let existingFlowchartEl = wordEditorRef.current.querySelector('#iso-flowchart-block-container, .iso-flowchart-block-container');
+          if (existingFlowchartEl) {
+            existingFlowchartEl.outerHTML = newTableHtml;
           } else {
-            const allSheets = wordEditorRef.current.querySelectorAll('.iso-a4-sheet');
-            const targetSheet = allSheets[2] || allSheets[allSheets.length - 1];
-            const contentEl = targetSheet?.querySelector('.iso-a4-sheet-content');
-            if (contentEl) {
-              contentEl.insertAdjacentHTML('beforeend', newTableHtml);
+            // Kiểm tra xem có bảng table lưu đồ cũ nào (như bảng Word thô ở Ảnh 1) không
+            const allTables = wordEditorRef.current.querySelectorAll('table');
+            const oldRawTable = Array.from(allTables).find(tbl => {
+              const txt = (tbl.innerText || tbl.textContent || '').toLowerCase();
+              return txt.includes('bước 1') && (txt.includes('bước 2') || txt.includes('trách nhiệm') || txt.includes('lưu đồ') || txt.includes('phụ lục'));
+            });
+            if (oldRawTable) {
+              const wrapper = oldRawTable.closest('.iso-doc-table-wrapper') || oldRawTable;
+              wrapper.outerHTML = newTableHtml;
+            } else {
+              // Tìm Mục 5.1 hoặc Mục 5 để chèn bảng
+              const sec5El = Array.from(wordEditorRef.current.querySelectorAll('h1, h2, h3, p, .iso-doc-heading')).find(el =>
+                /5\.1\s*Lưu đồ|5\.\s*Nội dung/i.test(el.innerText || '')
+              );
+              if (sec5El) {
+                sec5El.insertAdjacentHTML('afterend', newTableHtml);
+              } else {
+                const allSheets = wordEditorRef.current.querySelectorAll('.iso-a4-sheet');
+                const targetSheet = allSheets[2] || allSheets[allSheets.length - 1];
+                const contentEl = targetSheet?.querySelector('.iso-a4-sheet-content');
+                if (contentEl) {
+                  contentEl.insertAdjacentHTML('beforeend', newTableHtml);
+                }
+              }
             }
           }
-        }
 
         // B. Lấy lại phần tử flowchart vừa cập nhật để xác định chính xác sheet chứa flowchart
         const currentFlowchartEl = wordEditorRef.current.querySelector('#iso-flowchart-block-container, .iso-flowchart-block-container');
@@ -1919,16 +1936,26 @@ const ProcessContentTab = ({ editor }) => {
             console.warn('Lỗi khi lưu direct word content:', eSave);
           }
         }
+      } // Kết thúc khối if (wordEditorRef.current)
 
-        // E. LƯU CSDL FORM CHA MÀ KHÔNG THOÁT MÀN HÌNH
-        if (handleSaveForm) {
-          await handleSaveForm({
-            stayOnPage: true,
-            skipModal: true,
-            revisionNote: noteContent,
-            revisionPageNo: 'Mục 5 / Toàn bộ'
-          });
-        }
+      if (editorEngine === 'canvas' && setFormData) {
+        setFormData(prev => ({
+          ...prev,
+          has_flowchart: true,
+          steps: formData.steps,
+          revision_logs: updatedLogs
+        }));
+      }
+
+      // E. LƯU CSDL FORM CHA MÀ KHÔNG THOÁT MÀN HÌNH
+      if (handleSaveForm) {
+        await handleSaveForm({
+          stayOnPage: true,
+          skipModal: true,
+          revisionNote: noteContent,
+          revisionPageNo: 'Mục 5 / Toàn bộ'
+        });
+      }
 
         setTimeout(() => {
           const fcEl = wordEditorRef.current?.querySelector('#iso-flowchart-block-container, .iso-flowchart-block-container, #heading-sec-5');
@@ -4056,21 +4083,12 @@ const ProcessContentTab = ({ editor }) => {
                 <div style={{ display: 'flex', justifyContent: 'center', padding: '28px 16px', minHeight: '100%' }}>
                   <div style={{
                     backgroundColor: '#FFFFFF',
-                    padding: '40px 48px',
+                    padding: '32px 40px',
                     borderRadius: '4px',
                     boxShadow: '0 8px 30px rgba(0,0,0,0.15)',
                     width: '816px',
                     boxSizing: 'border-box'
                   }}>
-                    <div style={{ textAlign: 'center', marginBottom: '20px', borderBottom: '2px solid #000', paddingBottom: '12px' }}>
-                      <h2 style={{ margin: 0, fontSize: '14pt', fontWeight: 'bold', textTransform: 'uppercase' }}>
-                        LƯU ĐỒ QUY TRÌNH ISO
-                      </h2>
-                      <div style={{ fontSize: '11pt', marginTop: '4px' }}>
-                        {formData.name || formData.code || 'Quy trình'}
-                      </div>
-                    </div>
-
                     {(!formData.steps || formData.steps.length === 0) ? (
                       <div style={{ padding: '40px', textAlign: 'center', color: '#94A3B8', fontStyle: 'italic' }}>
                         Chưa có bước lưu đồ nào để hiển thị bản in.

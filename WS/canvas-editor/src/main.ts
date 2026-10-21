@@ -1029,9 +1029,128 @@ window.onload = function () {
 
   Reflect.set(window, '__updateCoverMetadata__', updateCoverMetadata)
 
+  function insertOrUpdateFlowchartSvg(payload: {
+    svgDataUrl: string
+    width?: number
+    height?: number
+    stepCount?: number
+  }) {
+    if (!payload?.svgDataUrl) return
+    try {
+      const curData = instance.command.getValue().data
+      const mainList = curData.main || []
+      const w = payload.width || 640
+      const h = payload.height || 450
+
+      // 1. Kiểm tra xem trong tài liệu đã có ảnh flowchart cũ chưa
+      let existingIndex = -1
+      for (let i = 0; i < mainList.length; i++) {
+        const el = mainList[i]
+        if (el.type === 'image' && (el.id === 'iso-flowchart-svg' || (el as any).extension === 'iso-flowchart')) {
+          existingIndex = i
+          break
+        }
+      }
+
+      // 2. Nếu chưa có ảnh SVG, kiểm tra xem có bảng table lưu đồ cũ (ví dụ bảng Word thô được import) không
+      let existingTableIndex = -1
+      if (existingIndex === -1) {
+        for (let i = 0; i < mainList.length; i++) {
+          const el = mainList[i]
+          if (el.type === 'table' && (el as any).trList && (el as any).trList.length >= 2) {
+            let tableText = ''
+            for (const tr of (el as any).trList) {
+              for (const td of (tr.tdList || [])) {
+                for (const item of (td.value || [])) {
+                  if (typeof item.value === 'string') {
+                    tableText += ' ' + item.value
+                  }
+                }
+              }
+            }
+            const low = tableText.toLowerCase()
+            // Bảng lưu đồ có chứa "bước 1" và ("trách nhiệm" hoặc "lưu đồ" hoặc "bước 2" hoặc "phụ lục")
+            if (low.includes('bước 1') && (low.includes('bước 2') || low.includes('trách nhiệm') || low.includes('lưu đồ') || low.includes('phụ lục'))) {
+              existingTableIndex = i
+              break
+            }
+          }
+        }
+      }
+
+      const flowchartEl: IElement = {
+        type: ElementType.IMAGE,
+        value: payload.svgDataUrl,
+        width: w,
+        height: h,
+        id: 'iso-flowchart-svg',
+        extension: 'iso-flowchart' as any,
+        rowFlex: RowFlex.CENTER
+      }
+
+      if (existingIndex !== -1) {
+        mainList[existingIndex].value = payload.svgDataUrl
+        mainList[existingIndex].width = w
+        mainList[existingIndex].height = h
+        instance.command.executeSetValue(curData)
+      } else if (existingTableIndex !== -1) {
+        // Thay thế trực tiếp bảng Word thô bằng ảnh SVG chuẩn vector ISO
+        mainList.splice(existingTableIndex, 1, flowchartEl)
+        instance.command.executeSetValue(curData)
+      } else {
+        let sec51Idx = -1
+        for (let i = 0; i < mainList.length; i++) {
+          const el = mainList[i]
+          if (el.value && typeof el.value === 'string' && /5\.1|Sơ đồ lưu trình|Lưu trình/i.test(el.value)) {
+            sec51Idx = i
+            break
+          }
+        }
+
+        if (sec51Idx !== -1) {
+          mainList.splice(sec51Idx + 1, 0, { value: '\n' }, flowchartEl, { value: '\n\n' })
+          instance.command.executeSetValue(curData)
+        } else {
+          instance.command.executeInsertElementList([
+            { value: '\n' },
+            flowchartEl,
+            { value: '\n\n' }
+          ])
+        }
+      }
+    } catch (e) {
+      console.warn('Lỗi chèn/cập nhật Flowchart SVG vào Canvas Editor:', e)
+    }
+  }
+
+  Reflect.set(window, '__insertFlowchartSvg__', insertOrUpdateFlowchartSvg)
+
+  // Lắng nghe nhấp đúp vào Sơ đồ để mở lại bảng thiết kế
+  if (instance.listener) {
+    const origImageDblclick = instance.listener.imageDblclick
+    instance.listener.imageDblclick = payload => {
+      if (payload.element?.id === 'iso-flowchart-svg' || (payload.element as any)?.extension === 'iso-flowchart') {
+        try {
+          if (typeof (window.parent as any).__openIsoFlowchartModal === 'function') {
+            (window.parent as any).__openIsoFlowchartModal()
+          } else {
+            window.parent.postMessage({ type: 'OPEN_ISO_FLOWCHART_DESIGNER' }, '*')
+          }
+        } catch (_) {
+          window.parent.postMessage({ type: 'OPEN_ISO_FLOWCHART_DESIGNER' }, '*')
+        }
+        return
+      }
+      if (origImageDblclick) origImageDblclick(payload)
+    }
+  }
+
   window.addEventListener('message', (event) => {
     if (event.data?.type === 'UPDATE_COVER_METADATA' && event.data?.payload) {
       updateCoverMetadata(event.data.payload)
+    }
+    if (event.data?.type === 'INSERT_FLOWCHART_SVG' && event.data?.payload) {
+      insertOrUpdateFlowchartSvg(event.data.payload)
     }
   })
   // Hàm tải dữ liệu mẫu khi cần xem lại bệnh án mẫu
@@ -1674,6 +1793,23 @@ window.onload = function () {
       })
     } else {
       instance.command.executeDeleteWatermark()
+    }
+  }
+
+  const flowchartDom = document.querySelector<HTMLDivElement>(
+    '.menu-item__flowchart'
+  )
+  if (flowchartDom) {
+    flowchartDom.onclick = function () {
+      try {
+        if (typeof (window.parent as any).__openIsoFlowchartModal === 'function') {
+          (window.parent as any).__openIsoFlowchartModal()
+        } else {
+          window.parent.postMessage({ type: 'OPEN_ISO_FLOWCHART_DESIGNER' }, '*')
+        }
+      } catch (_) {
+        window.parent.postMessage({ type: 'OPEN_ISO_FLOWCHART_DESIGNER' }, '*')
+      }
     }
   }
 

@@ -190,7 +190,9 @@ export function generateFlowchartSvgHtml(steps = []) {
     `);
 
     // 2. Cột Trách nhiệm
-    const roleLines = wrapText(step.assignee_role ? `- ${step.assignee_role}` : "- Đang cập nhật", 18);
+    const rawRole = step.assignee_role || step.role || step.department || step.dept || "";
+    const roleText = rawRole ? (rawRole.trim().startsWith("-") ? rawRole.trim() : `- ${rawRole.trim()}`) : "- Đang cập nhật";
+    const roleLines = wrapText(roleText, 22);
     const roleSvgLines = roleLines.map((line, li) => `
       <text x="${COL.trach.x + 10}" y="${cy - (roleLines.length - 1) * 7 + li * 14}" font-family="'Times New Roman', Times, serif" font-size="10" fill="#1E293B">
         ${escapeXml(line)}
@@ -199,15 +201,16 @@ export function generateFlowchartSvgHtml(steps = []) {
     elems.push(roleSvgLines);
 
     // 3. Cột Phụ lục (Biểu mẫu / Hồ sơ)
-    if (step.template_files && step.template_files !== "---") {
-      const rawTpls = step.template_files
+    const rawTplStr = step.template_files || step.template_file || step.forms || step.form_name || step.template || "";
+    if (rawTplStr && rawTplStr !== "---") {
+      const rawTpls = rawTplStr
         .split(/[,;\n]+/)
         .map((f) => f.trim())
         .filter(Boolean);
 
       const allTplLines = [];
       rawTpls.forEach((f) => {
-        const lines = wrapText(f, 22);
+        const lines = wrapText(f, 24);
         allTplLines.push(...lines);
       });
 

@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import api from '@webShared/Services/api.service';
+import { generateFlowchartSvgHtml } from '../FlowchartTable';
 
 /**
  * CanvasISOEditor - Nhúng trực tiếp toàn bộ giao diện Canvas Editor từ C:\Tool\WS\canvas-editor
@@ -16,7 +17,8 @@ const CanvasISOEditor = ({
   setFormData,
   handleSaveForm,
   showFeedback,
-  onSwitchToClassic
+  onSwitchToClassic,
+  onOpenFlowchartModal
 }) => {
   const iframeRef = useRef(null);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -184,6 +186,12 @@ const CanvasISOEditor = ({
         const buffer = fileRes?.data || fileRes;
         await importBufferToCanvasEditor(buffer);
 
+        if (formData.steps && formData.steps.length > 0 && typeof window.__insertFlowchartIntoCanvasEditor__ === 'function') {
+          setTimeout(() => {
+            window.__insertFlowchartIntoCanvasEditor__(formData.steps);
+          }, 500);
+        }
+
         if (showFeedback) {
           showFeedback('success', 'Đã ghép 2 trang đầu Mẫu quy trình và nối nội dung từ Mục đích thành công!');
         }
@@ -196,15 +204,73 @@ const CanvasISOEditor = ({
     }
   }, [formData, setFormData, showFeedback, importBufferToCanvasEditor]);
 
+  // Chèn hoặc cập nhật Sơ đồ SVG chuẩn ISO vào Canvas Editor
+  const insertFlowchartIntoCanvasEditor = useCallback((steps) => {
+    if (!steps || steps.length === 0) return;
+    try {
+      const iframeWin = iframeRef.current?.contentWindow;
+      if (!iframeWin) return;
+
+      const svgString = generateFlowchartSvgHtml(steps);
+      if (!svgString) return;
+
+      const total = steps.length;
+      const rowH = total <= 4 ? 115 : (total === 5 ? 108 : (total === 6 ? 100 : (total === 7 ? 92 : (total === 8 ? 84 : 76))));
+      const svgHeight = 36 + total * rowH + 15;
+      const svgWidth = 620;
+
+      const encodedSvg = encodeURIComponent(svgString);
+      const svgDataUrl = `data:image/svg+xml;charset=utf-8,${encodedSvg}`;
+
+      const payload = {
+        svgDataUrl,
+        width: svgWidth,
+        height: svgHeight,
+        stepCount: total
+      };
+
+      if (typeof iframeWin.__insertFlowchartSvg__ === 'function') {
+        iframeWin.__insertFlowchartSvg__(payload);
+      } else {
+        iframeWin.postMessage({ type: 'INSERT_FLOWCHART_SVG', payload }, '*');
+      }
+
+      if (showFeedback) {
+        showFeedback('success', `Đã đồng bộ Sơ đồ lưu trình (${total} bước) vào Canvas Editor thành công!`);
+      }
+    } catch (err) {
+      console.error('Lỗi khi chèn Sơ đồ SVG vào Canvas Editor:', err);
+    }
+  }, [showFeedback]);
+
   // Đăng ký các hàm toàn cục cho nút bên ngoài và iframe gọi
   useEffect(() => {
     window.__saveCanvasEditor__ = handleSaveDoc;
     window.__uploadAndMergeCanvasWord__ = handleUploadAndMergeWord;
+    window.__insertFlowchartIntoCanvasEditor__ = insertFlowchartIntoCanvasEditor;
+    window.__openIsoFlowchartModal = () => {
+      if (typeof onOpenFlowchartModal === 'function') {
+        onOpenFlowchartModal();
+      }
+    };
+
+    const handleMessage = (event) => {
+      if (event.data?.type === 'OPEN_ISO_FLOWCHART_DESIGNER') {
+        if (typeof onOpenFlowchartModal === 'function') {
+          onOpenFlowchartModal();
+        }
+      }
+    };
+    window.addEventListener('message', handleMessage);
+
     return () => {
       delete window.__saveCanvasEditor__;
       delete window.__uploadAndMergeCanvasWord__;
+      delete window.__insertFlowchartIntoCanvasEditor__;
+      delete window.__openIsoFlowchartModal;
+      window.removeEventListener('message', handleMessage);
     };
-  }, [handleSaveDoc, handleUploadAndMergeWord]);
+  }, [handleSaveDoc, handleUploadAndMergeWord, insertFlowchartIntoCanvasEditor, onOpenFlowchartModal]);
 
   // Đồng bộ tiêu đề và thông tin bìa sang Canvas Editor
   const syncCoverMetadata = useCallback((metaData) => {
@@ -302,6 +368,11 @@ const CanvasISOEditor = ({
             const buffer = res?.data || res;
             await importBufferToCanvasEditor(buffer);
             setTimeout(() => syncCoverMetadata(formData), 300);
+            if (formData.steps && formData.steps.length > 0) {
+              setTimeout(() => {
+                insertFlowchartIntoCanvasEditor(formData.steps);
+              }, 500);
+            }
           }).catch(err => {
             console.warn('Không thể nạp file Word từ server:', err);
           });
