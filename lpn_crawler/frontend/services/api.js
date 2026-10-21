@@ -668,5 +668,87 @@ export const lpnCrawlerApi = {
     } catch (e) {
       return { success: false, models: [] };
     }
+  },
+
+  // === PHÂN HỆ ZALO BOT NOTIFICATION ===
+  async getZaloStatus() {
+    try {
+      const res = await fetch(`${API_BASE}/zalo/status`);
+      if (!res.ok) throw new Error('Không thể lấy trạng thái Zalo Bot');
+      return await res.json();
+    } catch (e) {
+      console.error('[API] getZaloStatus error:', e);
+      return { is_connected: false, is_configured: false };
+    }
+  },
+
+  async getZaloConfig() {
+    try {
+      const res = await fetch(`${API_BASE}/zalo/config`);
+      if (!res.ok) throw new Error('Không thể lấy cấu hình Zalo Bot');
+      return await res.json();
+    } catch (e) {
+      console.error('[API] getZaloConfig error:', e);
+      return null;
+    }
+  },
+
+  async updateZaloConfig(configData) {
+    const res = await fetch(`${API_BASE}/zalo/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(configData)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Lỗi cập nhật cấu hình Zalo Bot');
+    return data;
+  },
+
+  async testZaloConnection() {
+    const res = await fetch(`${API_BASE}/zalo/test-connection`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    return await res.json();
+  },
+
+  async sendTestZaloMessage(phone, message) {
+    const res = await fetch(`${API_BASE}/zalo/test-message`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, message })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Lỗi gửi tin nhắn Zalo');
+    return data;
+  },
+
+  async resendContainerZaloReport(containerId, phone = null, sendImage = true) {
+    const res = await fetch(`${API_BASE}/zalo/resend/${containerId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, send_image: sendImage })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Lỗi gửi báo cáo Zalo');
+    return data;
+  },
+
+  async getZaloLogs(params = {}) {
+    try {
+      const q = new URLSearchParams();
+      if (params.page) q.append('page', params.page);
+      if (params.page_size) q.append('page_size', params.page_size);
+      if (params.container) q.append('container', params.container);
+      if (params.phone) q.append('phone', params.phone);
+      if (params.status) q.append('status', params.status);
+      const res = await fetch(`${API_BASE}/zalo/logs?${q.toString()}`);
+      if (!res.ok) return { total: 0, items: [] };
+      return await res.json();
+    } catch (e) {
+      console.error('[API] getZaloLogs error:', e);
+      return { total: 0, items: [] };
+    }
   }
 };
+

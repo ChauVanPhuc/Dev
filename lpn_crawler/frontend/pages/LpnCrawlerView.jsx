@@ -15,6 +15,7 @@ import { Toast } from '../components/Toast';
 import { AiOcrScanModal } from '../components/AiOcrScanModal';
 import { BatchContainerScanModal } from '../components/BatchContainerScanModal';
 import { DashboardModal } from '../components/DashboardModal';
+import { ZaloBotSettingsModal } from '../components/ZaloBotSettingsModal';
 import { LayoutDashboard } from 'lucide-react';
 import useUiStore from '@shared/store/uiStore';
 import '../styles/lpnCrawler.css';
@@ -120,7 +121,31 @@ export default function LpnCrawlerView() {
     isAllTime: false
   });
   const [showAiOcrScanModal, setShowAiOcrScanModal] = useState(false);
+  const [showZaloSettingsModal, setShowZaloSettingsModal] = useState(false);
+  const [zaloStatus, setZaloStatus] = useState({ is_connected: false, is_configured: false });
   const [forceRestartMessage, setForceRestartMessage] = useState('');
+
+  // Tải trạng thái Zalo Bot
+  const refreshZaloStatus = useCallback(() => {
+    lpnCrawlerApi.getZaloStatus().then((st) => setZaloStatus(st || {})).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    refreshZaloStatus();
+  }, [refreshZaloStatus]);
+
+  const handleResendZalo = async (container) => {
+    const cId = container.container_id || container.id;
+    try {
+      showToast('info', `Đang gửi báo cáo Zalo cho Container ${container.container_number}...`);
+      const res = await lpnCrawlerApi.resendContainerZaloReport(cId);
+      showToast('success', res.message || `Đã gửi báo cáo Zalo thành công!`);
+      fetchContainers(true);
+      refreshZaloStatus();
+    } catch (err) {
+      showToast('error', err.message || 'Lỗi khi gửi báo cáo Zalo');
+    }
+  };
 
   const handleOpenMissingRows = (config = null) => {
     const stats7d = kpiStats?.recent_7days || kpiStats || {};
@@ -801,6 +826,8 @@ export default function LpnCrawlerView() {
         unscannedCount={unscannedCount}
         viewMode={viewMode}
         onViewModeChange={handleViewModeChange}
+        onOpenZaloSettings={() => setShowZaloSettingsModal(true)}
+        zaloStatus={zaloStatus}
       />
 
       {/* Main Data Display: Bảng Danh Sách Container */}
@@ -814,6 +841,7 @@ export default function LpnCrawlerView() {
         selectedContainerIds={selectedItemIds}
         onToggleSelectRow={handleToggleSelectRow}
         onToggleSelectAll={handleToggleSelectAll}
+        onResendZalo={handleResendZalo}
         loading={loading}
       />
 
@@ -1043,6 +1071,18 @@ export default function LpnCrawlerView() {
             setLpnDashboardOpen(false);
             handleOpenMissingRows(opts || { isAllTime: true });
           }}
+        />
+      )}
+
+      {/* Modal Cấu hình Zalo Bot */}
+      {showZaloSettingsModal && (
+        <ZaloBotSettingsModal
+          isOpen={showZaloSettingsModal}
+          onClose={() => {
+            setShowZaloSettingsModal(false);
+            refreshZaloStatus();
+          }}
+          onShowToast={(msg, type) => showToast(type || 'info', msg)}
         />
       )}
     </div>

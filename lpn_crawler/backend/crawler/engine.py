@@ -6,8 +6,14 @@ import logging
 import queue
 import threading
 from datetime import datetime
+
 from typing import Dict, Any, List, Optional, Callable
-from playwright.sync_api import sync_playwright
+
+try:
+    from playwright.sync_api import sync_playwright
+except ImportError:
+    sync_playwright = None
+
 
 from app.core.database import SessionLocal
 from lpn_crawler.backend.config.settings import settings

@@ -452,6 +452,33 @@ export const ContainerDetailModal = ({
     }
   };
 
+  const [isSendingZalo, setIsSendingZalo] = useState(false);
+
+  const handleSendZalo = async () => {
+    const cId = currentContainer?.container_id || currentContainer?.id;
+    if (!cId || isSendingZalo) return;
+    setIsSendingZalo(true);
+    try {
+      const res = await lpnCrawlerApi.resendContainerZaloReport(cId);
+      if (res && res.success) {
+        alert(`Đã gửi báo cáo Zalo thành công tới ${res.recipient_name || res.target_phone || 'người nhận'}`);
+        const fresh = {
+          ...currentContainer,
+          zalo_notify_status: 'sent',
+          zalo_notified_at: new Date().toISOString()
+        };
+        setCurrentContainer(fresh);
+        if (onContainerUpdate) onContainerUpdate(fresh);
+      } else {
+        alert(`Gửi Zalo thất bại: ${res?.message || 'Không rõ nguyên nhân'}`);
+      }
+    } catch (err) {
+      alert(`Lỗi khi gửi Zalo: ${err?.response?.data?.detail || err.message}`);
+    } finally {
+      setIsSendingZalo(false);
+    }
+  };
+
   // Hàm xử lý chỉnh sửa trực tiếp từng ô (Inline Edit - Chỉ dành riêng cho tài khoản Admin)
   const handleInlineEdit = async (itemId, field, value) => {
     if (!isAdmin) {
@@ -857,23 +884,53 @@ export const ContainerDetailModal = ({
               )}
             </div>
 
-            <button
-              type="button"
-              onClick={onClose}
-              style={{
-                background: '#FAF6F0',
-                border: '1px solid #EADCC9',
-                padding: '5px 14px',
-                cursor: 'pointer',
-                color: '#4A2E1B',
-                borderRadius: '6px',
-                fontSize: '0.80rem',
-                fontWeight: '700',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              Đóng
-            </button>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={handleSendZalo}
+                disabled={isSendingZalo}
+                style={{
+                  background: currentContainer.zalo_notify_status === 'sent' ? '#ECFDF5' : '#FAF6F0',
+                  border: `1px solid ${currentContainer.zalo_notify_status === 'sent' ? '#A7F3D0' : '#EADCC9'}`,
+                  padding: '5px 12px',
+                  cursor: isSendingZalo ? 'wait' : 'pointer',
+                  color: currentContainer.zalo_notify_status === 'sent' ? '#047857' : '#4A2E1B',
+                  borderRadius: '6px',
+                  fontSize: '0.80rem',
+                  fontWeight: '700',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'all 0.15s ease'
+                }}
+                title={
+                  currentContainer.zalo_notify_status === 'sent'
+                    ? `Đã gửi báo cáo Zalo${currentContainer.zalo_notified_at ? ` lúc ${currentContainer.zalo_notified_at}` : ''}. Bấm để gửi lại.`
+                    : 'Gửi kết quả kiểm tra tới Zalo người thao tác/quản lý'
+                }
+              >
+                <span>💬</span>
+                <span>{isSendingZalo ? 'Đang gửi...' : currentContainer.zalo_notify_status === 'sent' ? 'Gửi lại Zalo' : 'Gửi Zalo'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={onClose}
+                style={{
+                  background: '#FAF6F0',
+                  border: '1px solid #EADCC9',
+                  padding: '5px 14px',
+                  cursor: 'pointer',
+                  color: '#4A2E1B',
+                  borderRadius: '6px',
+                  fontSize: '0.80rem',
+                  fontWeight: '700',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                Đóng
+              </button>
+            </div>
           </div>
 
           {/* Meta row: Trạng thái + Ngày + Thống kê */}
@@ -907,6 +964,23 @@ export const ContainerDetailModal = ({
               <span className="lpn-cdm-chip" style={{ background: '#FAF6F0', border: '1px solid #EADCC9', borderRadius: '14px', padding: '1px 8px', fontSize: '0.72rem', color: '#7B5233', fontWeight: '600' }}>
                 <b>{stats.topGroupCount}</b> Pallet Nóc ({stats.topItemCount} tủ)
               </span>
+              {currentContainer.operator_phone && (
+                <span
+                  className="lpn-cdm-chip"
+                  style={{
+                    background: '#EFF6FF',
+                    border: '1px solid #BFDBFE',
+                    borderRadius: '14px',
+                    padding: '1px 8px',
+                    fontSize: '0.72rem',
+                    color: '#1D4ED8',
+                    fontWeight: '600'
+                  }}
+                  title={`Số điện thoại nhận tin Zalo: ${currentContainer.operator_phone}`}
+                >
+                  📱 SĐT: {currentContainer.operator_phone}
+                </span>
+              )}
               {isAdmin ? (
                 <span
                   style={{

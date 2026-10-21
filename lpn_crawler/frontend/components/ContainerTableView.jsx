@@ -28,6 +28,7 @@ const ContainerTableViewComponent = ({
   selectedContainerIds = [],
   onToggleSelectRow = () => {},
   onToggleSelectAll = () => {},
+  onResendZalo = () => {},
   loading = false
 }) => {
   const effectivePageSize = (pageSize === Infinity || pageSize === 'all') ? (total || 100000) : (pageSize || 15);
@@ -235,7 +236,7 @@ const ContainerTableViewComponent = ({
               <th style={{ width: '90px', textAlign: 'center' }}>Số LPN</th>
               <th style={{ width: '90px', textAlign: 'center' }}>Số Ảnh</th>
               <th style={{ minWidth: '140px', textAlign: 'center' }}>Trạng Thái</th>
-              <th style={{ textAlign: 'center', width: '100px' }}>Thao Tác</th>
+              <th style={{ textAlign: 'center', width: '160px' }}>Thao Tác</th>
             </tr>
           </thead>
           <tbody>
@@ -419,6 +420,44 @@ const ContainerTableViewComponent = ({
                         >
                           <span>Chi tiết</span>
                         </button>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onResendZalo(row.container_id || row.id);
+                          }}
+                          style={{
+                            background: row.zalo_notify_status === 'sent' ? '#ECFDF5' : '#FFFBEB',
+                            border: `1px solid ${row.zalo_notify_status === 'sent' ? '#A7F3D0' : '#FDE68A'}`,
+                            borderRadius: '6px',
+                            padding: '5px 8px',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            color: row.zalo_notify_status === 'sent' ? '#047857' : '#B45309',
+                            fontSize: '0.74rem',
+                            fontWeight: '700',
+                            transition: 'all 0.15s ease'
+                          }}
+                          title={
+                            row.zalo_notify_status === 'sent'
+                              ? `Đã gửi Zalo${row.zalo_notified_at ? ` lúc ${formatTimestampVN(row.zalo_notified_at)}` : ''}. Bấm để gửi lại.`
+                              : row.zalo_notify_status === 'failed'
+                              ? 'Gửi Zalo thất bại. Bấm để thử gửi lại.'
+                              : 'Gửi kết quả kiểm tra tới Zalo'
+                          }
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.opacity = '0.85';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.opacity = '1';
+                          }}
+                        >
+                          <span style={{ fontSize: '0.8rem' }}>💬</span>
+                          <span>{row.zalo_notify_status === 'sent' ? 'Đã gửi' : 'Zalo'}</span>
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -543,6 +582,12 @@ const ContainerTableViewComponent = ({
                       <span style={{ color: '#8D6E63', fontWeight: '500' }}>Người thao tác:</span>
                       <span style={{ color: '#4E342E', fontWeight: '600' }}>{row.operator_name || '—'}</span>
                     </div>
+                    {row.operator_phone && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: '#8D6E63', fontWeight: '500' }}>SĐT Zalo:</span>
+                        <span style={{ color: '#0369A1', fontWeight: '600' }}>{row.operator_phone}</span>
+                      </div>
+                    )}
                     <div style={{ display: 'flex', gap: '10px', marginTop: '2px', paddingTop: '4px', borderTop: '1px dashed #F0E6D8' }}>
                       <span style={{ color: '#0369A1', fontWeight: '700' }}>{row.total_items || 0} Kiện</span>
                       <span style={{ color: '#15803D', fontWeight: '700' }}>{row.lpn_count || 0} LPN</span>
@@ -551,28 +596,55 @@ const ContainerTableViewComponent = ({
                   </div>
                 </div>
 
-                {/* Nút Xem chi tiết to, dễ bấm */}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onSelectContainer(row);
-                  }}
-                  style={{
-                    width: '100%',
-                    backgroundColor: '#FAF6F0',
-                    border: '1px solid #EADCC9',
-                    borderRadius: '6px',
-                    padding: '8px 12px',
-                    color: '#4A2E1B',
-                    fontSize: '0.78rem',
-                    fontWeight: '700',
-                    cursor: 'pointer',
-                    textAlign: 'center'
-                  }}
-                >
-                  Xem chi tiết Container
-                </button>
+                {/* Hàng nút Thao tác Mobile: Xem chi tiết & Gửi Zalo */}
+                <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectContainer(row);
+                    }}
+                    style={{
+                      flex: 1,
+                      backgroundColor: '#FAF6F0',
+                      border: '1px solid #EADCC9',
+                      borderRadius: '6px',
+                      padding: '8px 12px',
+                      color: '#4A2E1B',
+                      fontSize: '0.78rem',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                      textAlign: 'center'
+                    }}
+                  >
+                    Xem chi tiết
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onResendZalo(row.container_id || row.id);
+                    }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '4px',
+                      backgroundColor: row.zalo_notify_status === 'sent' ? '#ECFDF5' : '#FFFBEB',
+                      border: `1px solid ${row.zalo_notify_status === 'sent' ? '#A7F3D0' : '#FDE68A'}`,
+                      borderRadius: '6px',
+                      padding: '8px 12px',
+                      color: row.zalo_notify_status === 'sent' ? '#047857' : '#B45309',
+                      fontSize: '0.78rem',
+                      fontWeight: '700',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <span>💬</span>
+                    <span>{row.zalo_notify_status === 'sent' ? 'Đã gửi' : 'Gửi Zalo'}</span>
+                  </button>
+                </div>
               </div>
             );
           })

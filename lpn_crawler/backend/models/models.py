@@ -40,6 +40,9 @@ class LpnContainer(Base):
     timestamp_raw = Column(String(100), nullable=True)
     timestamp_val = Column(DateTime, nullable=True)
     operator_name = Column(String(150), nullable=True)
+    operator_phone = Column(String(50), nullable=True)
+    zalo_notify_status = Column(String(50), default="PENDING")
+    zalo_notified_at = Column(DateTime, nullable=True)
     content_hash = Column(String(64), nullable=False)
     first_seen_at = Column(DateTime, default=datetime.utcnow)
     last_seen_at = Column(DateTime, default=datetime.utcnow)
@@ -54,6 +57,7 @@ class LpnContainer(Base):
     items = relationship("LpnItem", back_populates="container", cascade="all, delete-orphan")
     images = relationship("LpnImage", back_populates="container", cascade="all, delete-orphan")
     job_containers = relationship("LpnJobContainer", back_populates="container", cascade="all, delete-orphan")
+    zalo_logs = relationship("LpnZaloLog", back_populates="container")
 
 
 class LpnJobContainer(Base):
@@ -147,4 +151,39 @@ class LpnAiOcrResult(Base):
     raw_ocr_text = Column(UnicodeText, nullable=True)
     processing_time_ms = Column(Float, default=0.0)
     scanned_at = Column(DateTime, default=datetime.utcnow)
+
+
+class LpnZaloConfig(Base):
+    __tablename__ = "lpn_zalo_configs"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    bot_phone = Column(String(20), nullable=True)
+    bot_name = Column(Unicode(100), nullable=True)
+    imei = Column(String(255), nullable=True)
+    session_cookies = Column(UnicodeText, nullable=True)
+    secret_key = Column(String(255), nullable=True)
+    default_recipient_phone = Column(String(20), nullable=True)
+    fallback_manager_phones = Column(UnicodeText, nullable=True)  # JSON array string
+    is_auto_send_enabled = Column(Boolean, default=True)
+    is_connected = Column(Boolean, default=False)
+    last_connected_at = Column(DateTime, nullable=True)
+    last_checked_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class LpnZaloLog(Base):
+    __tablename__ = "lpn_zalo_logs"
+
+    id = Column(BigInteger, primary_key=True, index=True, autoincrement=True)
+    container_id = Column(BigInteger, ForeignKey("lpn_containers.id", ondelete="SET NULL"), nullable=True)
+    container_number = Column(String(100), nullable=True, index=True)
+    recipient_phone = Column(String(20), nullable=False, index=True)
+    recipient_zalo_id = Column(String(100), nullable=True)
+    recipient_name = Column(Unicode(100), nullable=True)
+    message_content = Column(UnicodeText, nullable=False)
+    status = Column(String(30), default="PENDING")  # SUCCESS, FAILED, FALLBACK_SENT
+    error_reason = Column(Unicode(500), nullable=True)
+    sent_at = Column(DateTime, default=datetime.utcnow)
+
+    container = relationship("LpnContainer", back_populates="zalo_logs")
 

@@ -66,6 +66,9 @@ from lpn_crawler.backend.api.routes.export import (
 from lpn_crawler.backend.api.routes.webhook import (
     router as webhook_router,
 )
+from lpn_crawler.backend.api.routes.zalo import (
+    router as zalo_router,
+)
 from lpn_crawler.backend.utils.formatters import format_date_mdy
 from lpn_crawler.backend.models.schemas import (
     BatchDeleteRequest,
@@ -84,6 +87,7 @@ router.include_router(stats_router)
 router.include_router(images_router)
 router.include_router(export_router)
 router.include_router(webhook_router)
+router.include_router(zalo_router)
 
 # Mount AI OCR & Training sub-router (được bọc try-except an toàn để có thể xóa folder mà không lỗi)
 try:

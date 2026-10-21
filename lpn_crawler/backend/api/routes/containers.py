@@ -389,7 +389,10 @@ def get_containers_cards(
             c.timestamp_raw,
             c.timestamp_val,
             c.operator_name,
-            c.container_image
+            c.container_image,
+            c.operator_phone,
+            c.zalo_notify_status,
+            c.zalo_notified_at
         FROM lpn_containers c WITH (NOLOCK)
         {where_sql}
         ORDER BY {order_by}
@@ -581,7 +584,10 @@ def get_containers_cards(
             "status_code": status_code,
             "status_label": status_label,
             "missing_label": missing_label,
-            "is_valid": (status_code == "PASSED")
+            "is_valid": (status_code == "PASSED"),
+            "operator_phone": getattr(r, "operator_phone", None),
+            "zalo_notify_status": getattr(r, "zalo_notify_status", None),
+            "zalo_notified_at": r.zalo_notified_at.isoformat() if getattr(r, "zalo_notified_at", None) else None
         })
 
     return {
@@ -934,6 +940,9 @@ def get_container_detail(container_id: int, db: Session = Depends(get_db)):
         "ocr_mismatch_count": ocr_mismatch,
         "status_code": status_code,
         "status_label": status_label,
+        "operator_phone": getattr(cont, "operator_phone", None),
+        "zalo_notify_status": getattr(cont, "zalo_notify_status", None),
+        "zalo_notified_at": cont.zalo_notified_at.isoformat() if getattr(cont, "zalo_notified_at", None) else None,
         "items": formatted_items
     }
 

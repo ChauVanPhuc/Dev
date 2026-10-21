@@ -1217,6 +1217,42 @@ def _extract_container_number(data: Dict[str, Any]) -> str:
     return ""
 
 
+def _extract_phone_number(data: Dict[str, Any], payload: Any, db: Session) -> str:
+    """Trích xuất số điện thoại yêu cầu từ payload AppSheet hoặc mapping qua tài khoản hệ thống"""
+    p_data = data if isinstance(data, dict) else (payload if isinstance(payload, dict) else {})
+    phone_keys = [
+        "Phone", "Phone number", "Phone Number", "phone", "phone_number",
+        "Số điện thoại", "Số ĐT", "SĐT", "sdt", "so_dien_thoai",
+        "Operator phone", "Operator Phone", "operator_phone",
+        "Zalo phone", "Zalo Phone", "zalo_phone",
+        "Userphone", "Telephone", "Mobile", "Contact"
+    ]
+    for k in phone_keys:
+        if k in p_data and p_data[k]:
+            val = str(p_data[k]).strip()
+            if val and val.lower() not in ["none", "null", ""]:
+                return val
+
+    # Thử tìm qua Useremail hoặc Operator name trong bảng accounts
+    email_or_user = str(p_data.get("Useremail") or p_data.get("Email") or p_data.get("Operator name") or p_data.get("UserName") or "").strip()
+    if email_or_user:
+        try:
+            from modules.auth.models.accounts import Account
+            acc = db.query(Account).filter(
+                or_(
+                    Account.email == email_or_user,
+                    Account.username == email_or_user,
+                    Account.full_name == email_or_user
+                )
+            ).first()
+            if acc and acc.phone:
+                return acc.phone.strip()
+        except Exception:
+            pass
+    return ""
+
+
+
 def _parse_date(date_str: Optional[str]):
     """Chuyển đổi chuỗi ngày linh hoạt sang datetime.date (ưu tiên chuẩn AppSheet MM/DD/YYYY)"""
     if not date_str:
@@ -1337,10 +1373,14 @@ def _download_and_save_webp(
         return None
 
 
-def _run_background_ocr_tasks(ocr_tasks: List[Dict[str, Any]]):
+def _run_background_ocr_tasks(
+    ocr_tasks: List[Dict[str, Any]],
+    container_id: Optional[int] = None,
+    target_phone: Optional[str] = None
+):
     """
     Tiến trình chạy ngầm quét AI OCR qua tất cả các ảnh vừa tải về.
-    Mở SessionLocal() độc lập, an toàn đa luồng.
+    Sau khi quét xong toàn bộ ảnh, tự động gửi báo cáo kết quả qua Zalo tới số điện thoại yêu cầu.
     """
     if not ocr_tasks:
         return
@@ -1462,6 +1502,20 @@ def _run_background_ocr_tasks(ocr_tasks: List[Dict[str, Any]]):
     finally:
         db.close()
 
+    # TỰ ĐỘNG GỬI BÁO CÁO KẾT QUẢ QUÉT QUA ZALO
+    if container_id:
+        try:
+            from lpn_crawler.backend.services.zalo_bot_service import ZaloBotService
+            print(f"[Zalo Bot] Tu dong gui bao cao ket qua quet Container ID {container_id} toi SDT: {target_phone}...")
+            z_res = ZaloBotService.send_container_report(
+                container_id=container_id,
+                target_phone=target_phone,
+                send_image=True
+            )
+            print(f"[Zalo Bot] Ket qua gui Zalo: {z_res.get('message')}")
+        except Exception as ze:
+            print(f"[Zalo Bot Error] Loi gui bao cao Zalo: {ze}")
+
 
 def _compute_content_hash(data: Any) -> str:
     """
@@ -1544,6 +1598,7 @@ async def receive_appsheet_webhook(
     timestamp_raw = str(row_data.get("Timestamp") or row_data.get("At") or payload.get("At") or "").strip()
     timestamp_val = _parse_datetime(timestamp_raw) or datetime.utcnow()
     operator_name = str(row_data.get("Operator name") or row_data.get("Operator") or row_data.get("Useremail") or payload.get("UserName") or "").strip()
+    operator_phone = _extract_phone_number(row_data, payload, db)
 
     fingerprint = hashlib.md5(f"{c_clean}_{factory}".encode("utf-8")).hexdigest()
     content_hash = _compute_content_hash(row_data if isinstance(row_data, dict) else payload)
@@ -1695,6 +1750,7 @@ async def receive_appsheet_webhook(
                     timestamp_raw=timestamp_raw,
                     timestamp_val=timestamp_val,
                     operator_name=operator_name,
+                    operator_phone=operator_phone,
                     content_hash=content_hash,
                     status="success"
                 )
@@ -1713,6 +1769,8 @@ async def receive_appsheet_webhook(
                     db_cont.timestamp_raw = timestamp_raw
                 if operator_name:
                     db_cont.operator_name = operator_name
+                if operator_phone:
+                    db_cont.operator_phone = operator_phone
                 db_cont.content_hash = content_hash
                 db_cont.last_seen_at = datetime.utcnow()
                 db_cont.crawl_count = (db_cont.crawl_count or 1) + 1
@@ -1936,7 +1994,14 @@ async def receive_appsheet_webhook(
 
             # 5.4. Lên lịch chạy ngầm AI OCR qua BackgroundTasks
             if ocr_tasks:
-                background_tasks.add_task(_run_background_ocr_tasks, ocr_tasks)
+                background_tasks.add_task(_run_background_ocr_tasks, ocr_tasks, container_id=db_cont.id, target_phone=operator_phone)
+            else:
+                # Nếu tất cả ảnh đều đã cache không cần quét lại -> Vẫn gửi thông báo Zalo
+                try:
+                    from lpn_crawler.backend.services.zalo_bot_service import ZaloBotService
+                    background_tasks.add_task(ZaloBotService.send_container_report, db_cont.id, operator_phone)
+                except Exception:
+                    pass
 
         except Exception as db_err:
             db.rollback()

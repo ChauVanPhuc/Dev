@@ -8,7 +8,8 @@ Trích xuất tập mẫu ảnh và nhãn đối chiếu từ cơ sở dữ li�
 
 import os
 import hashlib
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
+
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 

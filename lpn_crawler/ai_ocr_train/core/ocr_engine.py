@@ -11,7 +11,14 @@ import os
 import re
 import cv2
 import numpy as np
-import torch
+try:
+    import torch
+    _ModuleBase = torch.nn.Module
+except ImportError:
+    torch = None
+    class _ModuleBase:
+        pass
+
 from typing import List, Dict, Any, Optional, Tuple
 from .parser import LabelDataParser
 
@@ -20,7 +27,8 @@ import threading
 _DIRECTML_GPU_LOCK = threading.Lock()
 
 
-class CraftDirectMLWrapper(torch.nn.Module):
+class CraftDirectMLWrapper(_ModuleBase):
+
     """Bọc mô hình phát hiện vùng chữ CRAFT trên GPU AMD Radeon bằng Microsoft DirectML (Thread-Safe)."""
     def __init__(self, ort_session):
         super().__init__()
@@ -45,7 +53,7 @@ class OnnxDirectMlCrnnRecognizer:
         self.device = torch.device("cpu")
         self.idx2char = IDX2CHAR
 
-    def predict_text(self, tensor_crop: torch.Tensor) -> List[Tuple[str, float]]:
+    def predict_text(self, tensor_crop: Any) -> List[Tuple[str, float]]:
         # tensor_crop: (B, 1, 32, W)
         x_np = tensor_crop.detach().cpu().numpy().astype(np.float32)
         with _DIRECTML_GPU_LOCK:

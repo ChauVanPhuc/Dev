@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, AlertTriangle, Trash2, List, LayoutGrid, Sparkles, X, RefreshCw, Play, Pause, Square, Maximize2, Eye, Zap } from 'lucide-react';
+import { Search, Filter, AlertTriangle, Trash2, List, LayoutGrid, Sparkles, X, RefreshCw, Play, Pause, Square, Maximize2, Eye, Zap, MessageSquare } from 'lucide-react';
 import { LpnFilterBar } from './LpnFilterBar';
 
 const ControlPanelComponent = ({
@@ -33,7 +33,9 @@ const ControlPanelComponent = ({
   onStopSync = () => {},
   onOpenSyncMonitor = () => {},
   onOpenBatchScan = () => {},
-  unscannedCount = null
+  unscannedCount = null,
+  onOpenZaloSettings = () => {},
+  zaloStatus = {}
 }) => {
   const activePaused = isPaused || progressData?.current_status === 'PAUSED';
 
@@ -496,6 +498,41 @@ const ControlPanelComponent = ({
                 {unscannedCount}
               </span>
             )}
+          </button>
+
+          {/* Nút Zalo Bot */}
+          <button
+            type="button"
+            onClick={onOpenZaloSettings}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              height: '34px',
+              padding: '0 12px',
+              borderRadius: '6px',
+              fontWeight: '700',
+              fontSize: '0.82rem',
+              cursor: 'pointer',
+              backgroundColor: zaloStatus?.is_connected ? '#ECFDF5' : '#FFFBEB',
+              color: zaloStatus?.is_connected ? '#047857' : '#B45309',
+              border: `1px solid ${zaloStatus?.is_connected ? '#A7F3D0' : '#FDE68A'}`,
+              transition: 'all 0.15s ease',
+              whiteSpace: 'nowrap'
+            }}
+            title={zaloStatus?.is_connected ? "Zalo Bot đang hoạt động (Bấm để xem cấu hình)" : "Zalo Bot chưa kết nối (Bấm để cấu hình Cookie/IMEI)"}
+          >
+            <MessageSquare size={14} color={zaloStatus?.is_connected ? '#059669' : '#D97706'} />
+            <span>Zalo Bot</span>
+            <span
+              style={{
+                width: '7px',
+                height: '7px',
+                borderRadius: '50%',
+                backgroundColor: zaloStatus?.is_connected ? '#10B981' : '#F59E0B',
+                boxShadow: zaloStatus?.is_connected ? '0 0 5px #10B981' : '0 0 5px #F59E0B'
+              }}
+            />
           </button>
 
           {/* Nút Khác (Dropdown) */}
@@ -982,6 +1019,44 @@ const ControlPanelComponent = ({
                     <path d="M7 21H5a2 2 0 0 1-2-2v-2"></path>
                   </svg>
                   <span>Đọc ảnh bằng AI</span>
+                </button>
+                <div style={{ height: '1px', backgroundColor: '#F0E6D8', margin: '4px 0' }}></div>
+                <button
+                  type="button"
+                  className="import-dropdown-item"
+                  onClick={() => {
+                    setIsOtherDropdownOpen(false);
+                    onOpenZaloSettings();
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    width: '100%',
+                    padding: '10px 16px',
+                    border: 'none',
+                    background: 'none',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    fontWeight: '600',
+                    fontSize: '0.85rem',
+                    color: '#2D1A12',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <MessageSquare size={14} color={zaloStatus?.is_connected ? '#059669' : '#D97706'} />
+                    <span>Cấu hình Zalo Bot</span>
+                  </div>
+                  {zaloStatus?.is_connected ? (
+                    <span style={{ fontSize: '0.7rem', color: '#059669', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', padding: '1px 6px', borderRadius: '4px' }}>
+                      Đang kết nối
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: '0.7rem', color: '#B45309', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', padding: '1px 6px', borderRadius: '4px' }}>
+                      Chưa kết nối
+                    </span>
+                  )}
                 </button>
 
                 {selectedItemIds.length > 0 && (
