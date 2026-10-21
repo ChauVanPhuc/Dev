@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import api from '@webShared/Services/api.service';
-import { useOutletContext, useNavigate, Link } from 'react-router-dom';
+import { useOutletContext, useNavigate } from 'react-router-dom';
 import { Plus, Trash2, Edit, Search, Filter, Upload, FileText, Download, AlertCircle, CheckCircle, ExternalLink, RefreshCw, ChevronLeft, ChevronRight, FolderArchive, Layers, X, Building, User, ShieldCheck, Calendar, Loader2 } from 'lucide-react';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import '@styles/components.css';
@@ -738,115 +738,6 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
       padding: '0'
     }}>
       <div className="sticky-top-zone" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
-
-        {/* 0. Thanh chuyển đổi Tab nhóm Hồ sơ ISO */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          padding: '4px 6px',
-          backgroundColor: '#FFFFFF',
-          border: '1px solid #EADCC9',
-          borderRadius: '10px',
-          overflowX: 'auto',
-          whiteSpace: 'nowrap'
-        }}>
-          <Link 
-            to="/admin/iso-documents" 
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '8px 16px',
-              borderRadius: '8px',
-              fontSize: '0.85rem',
-              fontWeight: 700,
-              textDecoration: 'none',
-              color: mode === 'documents' ? '#FFFFFF' : '#6B7280',
-              backgroundColor: mode === 'documents' ? '#7B5233' : 'transparent',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            <FileText size={16} />
-            <span>Quản lý mẫu tài liệu</span>
-          </Link>
-          <Link 
-            to="/admin/iso-processes" 
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '8px 16px',
-              borderRadius: '8px',
-              fontSize: '0.85rem',
-              fontWeight: 700,
-              textDecoration: 'none',
-              color: mode === 'processes' ? '#FFFFFF' : '#6B7280',
-              backgroundColor: mode === 'processes' ? '#7B5233' : 'transparent',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            <Layers size={16} />
-            <span>Tài liệu nghiệp vụ</span>
-          </Link>
-          <Link 
-            to="/admin/iso-records" 
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '8px 16px',
-              borderRadius: '8px',
-              fontSize: '0.85rem',
-              fontWeight: 700,
-              textDecoration: 'none',
-              color: '#6B7280',
-              backgroundColor: 'transparent',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            <FolderArchive size={16} />
-            <span>Quản lý hồ sơ (Master List)</span>
-          </Link>
-          <Link 
-            to="/admin/iso-approvals" 
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '8px 16px',
-              borderRadius: '8px',
-              fontSize: '0.85rem',
-              fontWeight: 700,
-              textDecoration: 'none',
-              color: '#6B7280',
-              backgroundColor: 'transparent',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            <CheckCircle size={16} />
-            <span>Hồ sơ cần duyệt</span>
-          </Link>
-          <Link 
-            to="/admin/iso-signatures" 
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '8px 16px',
-              borderRadius: '8px',
-              fontSize: '0.85rem',
-              fontWeight: 700,
-              textDecoration: 'none',
-              color: '#6B7280',
-              backgroundColor: 'transparent',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            <Edit size={16} />
-            <span>Quản lý Chữ ký</span>
-          </Link>
-        </div>
 
       {/* 1. Bộ điều khiển hành động và bộ lọc sử dụng PageToolbar và filter-inline-bar */}
       <PageToolbar
