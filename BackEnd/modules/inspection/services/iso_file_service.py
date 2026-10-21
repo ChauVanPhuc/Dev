@@ -14,9 +14,11 @@ import shutil
 import datetime
 import unicodedata
 from typing import List, Dict, Any, Optional, Tuple
+import copy
 
 import docx
-from docx.oxml import parse_xml
+from docx.oxml import parse_xml, OxmlElement
+from docx.oxml.ns import qn
 from docx.oxml.text.paragraph import CT_P
 from docx.oxml.table import CT_Tbl
 from docx.text.paragraph import Paragraph
@@ -1394,6 +1396,8 @@ def parse_docx_to_html_and_headings(abs_path: str) -> Dict[str, Any]:
     if not has_standard_cover or not has_rev_log:
         try:
             candidates = [
+                os.path.join(WORKSPACE_ROOT, "Mẩu quy trình.docx"),
+                os.path.join(WORKSPACE_ROOT, "Mẫu quy trình.docx"),
                 os.path.join(WORKSPACE_ROOT, "BackEnd", "templates", "Mẩu quy trình.docx"),
                 os.path.join(WORKSPACE_ROOT, "BackEnd", "templates", "Mẫu quy trình.docx"),
                 os.path.join(os.environ.get("USERPROFILE", "C:\\Users\\Administrator"), "Downloads", "Mẩu quy trình.docx"),
@@ -1478,6 +1482,46 @@ def parse_docx_to_html_and_headings(abs_path: str) -> Dict[str, Any]:
     }
 
 
+def _resolve_user_position(name_or_login: str, default_title: str = "", db: Optional[Any] = None) -> str:
+    """Tra cứu chức danh / vị trí công việc thực tế của nhân sự từ CSDL."""
+    if not name_or_login or not name_or_login.strip():
+        return default_title
+    clean = name_or_login.strip()
+    try:
+        from config.database import SessionLocal
+        from modules.auth.models.accounts import Account
+        from modules.auth.models.permissions import Permission
+        from modules.auth.models.departments import Department
+
+        def lookup(sess):
+            acc = sess.query(Account).filter(
+                (Account.username == clean) | (Account.full_name == clean)
+            ).first()
+            if acc:
+                if acc.permission_id:
+                    p = sess.query(Permission).filter(Permission.id == acc.permission_id).first()
+                    if p and p.name and p.name.strip():
+                        return p.name.strip()
+                if acc.department_id:
+                    d = sess.query(Department).filter(Department.id == acc.department_id).first()
+                    if d and d.name and d.name.strip():
+                        return d.name.strip()
+            return None
+
+        if db is not None:
+            res = lookup(db)
+            if res:
+                return res
+        else:
+            with SessionLocal() as sess:
+                res = lookup(sess)
+                if res:
+                    return res
+    except Exception:
+        pass
+    return default_title
+
+
 def get_template_original_2_pages_data(
     doc_title: Optional[str] = None,
     issuer: Optional[str] = None,
@@ -1485,83 +1529,137 @@ def get_template_original_2_pages_data(
     doc_code: Optional[str] = None,
     issue_date: Optional[str] = None,
     version: Optional[str] = None,
-    revision_logs: Optional[Any] = None
+    dept_name: Optional[str] = None,
+    revision_logs: Optional[Any] = None,
+    db: Optional[Any] = None
 ) -> Dict[str, Any]:
     """
     Trích xuất chuẩn xác 100% 2 trang đầu gốc từ 'Mẩu quy trình.docx':
-    - Trang 1: Trang bìa (Table 0) với logo VINA G7, bảng 5 cột, tên tài liệu và bảng ký duyệt biên soạn/phê duyệt.
-    - Trang 2: Bảng THEO DÕI SỬA ĐỔI NỘI DUNG TÀI LIỆU (Heading + Table 1) 23 hàng chuẩn.
+    - Trang 1 (Trang bìa): Tờ A4 chuẩn có khung bìa, Logo VINA G7, CÔNG TY CỔ PHẦN VINA G7 (nền trắng), tên quy trình 26pt, bảng thông tin con (mã hiệu/ngày ban hành/bộ phận) lồng bên trong, bảng trách nhiệm ký duyệt và Footer chân trang A4 'Trang 1'.
+    - Trang 2 (Theo dõi sửa đổi): Tờ A4 chuẩn có tiêu đề THEO DÕI SỬA ĐỔI NỘI DUNG TÀI LIỆU, bảng nhật ký 23 dòng viền chấm dotted và Footer chân trang A4 'Trang 2'.
     """
-    candidates = [
-        os.path.join(WORKSPACE_ROOT, "BackEnd", "templates", "Mẩu quy trình.docx"),
-        os.path.join(WORKSPACE_ROOT, "BackEnd", "templates", "Mẫu quy trình.docx"),
-        os.path.join(os.environ.get("USERPROFILE", "C:\\Users\\Administrator"), "Downloads", "Mẩu quy trình.docx"),
-        os.path.join(os.environ.get("USERPROFILE", "C:\\Users\\Administrator"), "Downloads", "Mẫu quy trình.docx"),
-    ]
-    tpl_path = next((c for c in candidates if os.path.isfile(c)), None)
-    if not tpl_path or not os.path.exists(tpl_path):
-        raise FileNotFoundError("Không tìm thấy tệp Mẩu quy trình.docx mẫu")
-
-    tpl_doc = docx.Document(tpl_path)
-    tpl_img_map = {}
-    for r_id, rel in tpl_doc.part.related_parts.items():
-        if "image" in rel.content_type:
-            try:
-                b64_data = base64.b64encode(rel.blob).decode('utf-8')
-                tpl_img_map[r_id] = f"data:{rel.content_type};base64,{b64_data}"
-            except Exception:
-                tpl_img_map[r_id] = get_vina_g7_logo_base64()
-
-    # 1. Trang bìa (Table 0)
-    t0_rendered = render_table_to_html(tpl_doc.tables[0], tpl_img_map, table_idx=0)
-    if doc_title and doc_title.strip():
-        clean_t = doc_title.strip().upper()
-        t0_rendered = t0_rendered.replace('[Tên quy trình]', clean_t)
+    clean_t = (doc_title or "[Tên quy trình]").strip().upper()
+    eff_code = doc_code or "[mã hiệu]"
+    eff_ver = version or "01"
+    eff_date = issue_date or "18/06/2026"
+    eff_dept = dept_name or "Phòng QLCL"
 
     # Bóc tách thông minh Biên soạn (Họ tên & Chức vụ)
     iss_name = ""
-    iss_role = "Biên soạn"
+    iss_role = ""
     if issuer and issuer.strip():
         raw_iss = issuer.strip()
         m_paren = re.search(r'^(.*?)\s*[\(\:]\s*(.*?)\)?$', raw_iss)
         if m_paren and m_paren.group(2).strip():
-            iss_role = m_paren.group(1).strip() or "Biên soạn"
-            iss_name = m_paren.group(2).strip().rstrip(')')
+            iss_name = m_paren.group(1).strip()
+            iss_role = m_paren.group(2).strip().rstrip(')')
+        elif any(k in raw_iss.lower() for k in ["nhân viên", "chuyên viên", "kỹ sư", "quản lý", "trưởng nhóm"]):
+            iss_role = raw_iss
+            iss_name = ""
         else:
             iss_name = raw_iss
-    t0_rendered = t0_rendered.replace('[Họ tên người biên soạn]', iss_name or '&nbsp;')
-    t0_rendered = t0_rendered.replace('[CV NBS]', iss_role)
+
+    if not iss_role:
+        iss_role = _resolve_user_position(iss_name, default_title="Biên soạn", db=db)
 
     # Bóc tách thông minh Phê duyệt (Họ tên & Chức vụ)
     app_name = ""
-    app_role = "Phê duyệt"
+    app_role = ""
     if approver and approver.strip():
         raw_app = approver.strip()
         m_paren = re.search(r'^(.*?)\s*[\(\:]\s*(.*?)\)?$', raw_app)
         if m_paren and m_paren.group(2).strip():
-            app_role = m_paren.group(1).strip()
-            app_name = m_paren.group(2).strip().rstrip(')')
+            app_name = m_paren.group(1).strip()
+            app_role = m_paren.group(2).strip().rstrip(')')
         elif any(k in raw_app.lower() for k in ["giám đốc", "phó tổng", "tổng giám", "trưởng phòng", "bgd", "tgđ"]):
             app_role = raw_app
             app_name = ""
         else:
             app_name = raw_app
-    t0_rendered = t0_rendered.replace('[Họ tên người phê duyệt]', app_name or '&nbsp;')
-    t0_rendered = t0_rendered.replace('[CV NPD]', app_role)
 
-    cover_html = (
-        f'<div id="iso-heading-cover-page" class="iso-doc-cover-section" style="margin-bottom: 24px;">\n'
-        f'{t0_rendered}\n'
-        f'<div class="iso-doc-page-break-divider"><span>--- Ngắt trang (Trang bìa) ---</span></div>\n'
-        f'</div>'
-    )
+    if not app_role:
+        app_role = _resolve_user_position(app_name, default_title="Trưởng Phòng", db=db)
 
-    # 2. Trang 2: Theo dõi sửa đổi (Heading + Table 1)
-    t1_rendered = render_table_to_html(tpl_doc.tables[1], tpl_img_map, table_idx=1)
+    # Logo base64
+    logo_src = get_vina_g7_logo_base64() or "/vina_g7_logo.png"
 
-    eff_date = issue_date or "18/06/2026"
-    eff_ver = version or "01"
+    # Bảng thông tin con (Nested Metadata Table) chuẩn xác từ Mẩu quy trình.docx
+    meta_table_html = f'''
+    <table class="iso-meta-table" style="margin: 36px auto 16px auto; border-collapse: collapse; width: 350px; font-family: 'Times New Roman', serif; border: 1px dotted #94a3b8; background-color: #FFFFFF;">
+      <tbody>
+        <tr style="height: 28px;">
+          <td style="padding: 4px 8px; border: 1px dotted #94a3b8; font-weight: bold; font-size: 11pt; color: #0D0D0D; width: 140px; text-align: left; background-color: #FFFFFF;">Mã hiệu:</td>
+          <td style="padding: 4px 8px; border: 1px dotted #94a3b8; font-size: 11pt; color: #0D0D0D; text-align: center; background-color: #FFFFFF;">{eff_code}</td>
+        </tr>
+        <tr style="height: 28px;">
+          <td style="padding: 4px 8px; border: 1px dotted #94a3b8; font-weight: bold; font-size: 11pt; color: #0D0D0D; width: 140px; text-align: left; background-color: #FFFFFF;">Lần ban hành :</td>
+          <td style="padding: 4px 8px; border: 1px dotted #94a3b8; font-size: 11pt; color: #0D0D0D; text-align: center; background-color: #FFFFFF;">{eff_ver}</td>
+        </tr>
+        <tr style="height: 28px;">
+          <td style="padding: 4px 8px; border: 1px dotted #94a3b8; font-weight: bold; font-size: 11pt; color: #0D0D0D; width: 140px; text-align: left; background-color: #FFFFFF;">Ngày ban hành :</td>
+          <td style="padding: 4px 8px; border: 1px dotted #94a3b8; font-size: 11pt; color: #0D0D0D; text-align: center; background-color: #FFFFFF;">{eff_date}</td>
+        </tr>
+        <tr style="height: 28px;">
+          <td style="padding: 4px 8px; border: 1px dotted #94a3b8; font-weight: bold; font-size: 11pt; color: #0D0D0D; width: 140px; text-align: left; background-color: #FFFFFF;">Bộ phận thực hiện:</td>
+          <td style="padding: 4px 8px; border: 1px dotted #94a3b8; font-size: 11pt; color: #0D0D0D; text-align: center; background-color: #FFFFFF;">{eff_dept}</td>
+        </tr>
+      </tbody>
+    </table>
+    '''
 
+    # TRANG 1: TỜ A4 TRANG BÌA CHUẨN
+    cover_html = f'''
+    <div class="iso-a4-sheet" data-page="1" id="iso-heading-cover-page" style="background:#FFFFFF; width:794px; min-height:1123px; padding:48px 50px 32px 50px; margin:0 auto 36px auto; box-shadow:0 4px 20px rgba(0,0,0,0.22); box-sizing:border-box; display:flex; flex-direction:column; justify-content:space-between; position:relative;">
+      <div class="iso-a4-sheet-content">
+        <table class="iso-cover-table" style="width:100%; border-collapse:collapse; table-layout:fixed; border:1.5px solid #000000; background:#FFFFFF;">
+          <colgroup>
+            <col style="width:17%;" />
+            <col style="width:29%;" />
+            <col style="width:24%;" />
+            <col style="width:30%;" />
+          </colgroup>
+          <tbody>
+            <tr style="height:120px; background:#FFFFFF;">
+              <td style="border:1px solid #000000; padding:6px 8px; vertical-align:middle; text-align:center; background:#FFFFFF;">
+                <img src="{logo_src}" style="max-height:85px; max-width:100%; display:block; margin:0 auto; object-fit:contain;" alt="Logo VINA G7" />
+              </td>
+              <td colspan="3" style="border:1px solid #000000; padding:6px 12px; vertical-align:middle; text-align:center; background:#FFFFFF;">
+                <p style="margin:0; text-align:center;"><strong style="font-size:20pt; font-family:'Times New Roman', serif; text-transform:uppercase; color:#0D0D0D; letter-spacing:0.5px;">CÔNG TY CỔ PHẦN VINA G7</strong></p>
+              </td>
+            </tr>
+            <tr style="height:620px; background:#FFFFFF;">
+              <td colspan="4" style="border:1px solid #000000; padding:36px 16px 20px 16px; vertical-align:middle; text-align:center; background:#FFFFFF;">
+                <div style="margin-top:20px; margin-bottom:30px;">
+                  <h1 style="font-size:26pt; font-family:'Times New Roman', serif; font-weight:bold; text-transform:uppercase; color:#0D0D0D; line-height:1.4; margin:0; letter-spacing:0.5px;">{clean_t}</h1>
+                </div>
+                {meta_table_html}
+              </td>
+            </tr>
+            <tr style="height:48px; background:#FFFFFF;">
+              <td style="border:1px solid #000000; padding:6px 8px; vertical-align:middle; text-align:center; background:#FFFFFF;"><strong style="font-size:13pt; font-family:'Times New Roman', serif; text-transform:uppercase; color:#0D0D0D;">TRÁCH NHIỆM</strong></td>
+              <td style="border:1px solid #000000; padding:6px 8px; vertical-align:middle; text-align:center; background:#FFFFFF;"><strong style="font-size:13pt; font-family:'Times New Roman', serif; text-transform:uppercase; color:#0D0D0D;">HỌ TÊN</strong></td>
+              <td style="border:1px solid #000000; padding:6px 8px; vertical-align:middle; text-align:center; background:#FFFFFF;"><strong style="font-size:13pt; font-family:'Times New Roman', serif; text-transform:uppercase; color:#0D0D0D;">CHỨC VỤ</strong></td>
+              <td style="border:1px solid #000000; padding:6px 8px; vertical-align:middle; text-align:center; background:#FFFFFF;"><strong style="font-size:13pt; font-family:'Times New Roman', serif; text-transform:uppercase; color:#0D0D0D;">KÝ TÊN</strong></td>
+            </tr>
+            <tr style="height:80px; background:#FFFFFF;">
+              <td style="border:1px solid #000000; padding:6px 8px; vertical-align:middle; text-align:center; background:#FFFFFF;"><strong style="font-size:12pt; font-family:'Times New Roman', serif; color:#0D0D0D;">Biên soạn</strong></td>
+              <td style="border:1px solid #000000; padding:6px 8px; vertical-align:middle; text-align:center; background:#FFFFFF;"><strong style="font-size:12pt; font-family:'Times New Roman', serif; color:#0D0D0D;">{iss_name or '&nbsp;'}</strong></td>
+              <td style="border:1px solid #000000; padding:6px 8px; vertical-align:middle; text-align:center; background:#FFFFFF;"><strong style="font-size:12pt; font-family:'Times New Roman', serif; color:#0D0D0D;">{iss_role or 'Biên soạn'}</strong></td>
+              <td style="border:1px solid #000000; padding:6px 8px; vertical-align:middle; text-align:center; background:#FFFFFF;">&nbsp;</td>
+            </tr>
+            <tr style="height:80px; background:#FFFFFF;">
+              <td style="border:1px solid #000000; padding:6px 8px; vertical-align:middle; text-align:center; background:#FFFFFF;"><strong style="font-size:12pt; font-family:'Times New Roman', serif; color:#0D0D0D;">Phê duyệt</strong></td>
+              <td style="border:1px solid #000000; padding:6px 8px; vertical-align:middle; text-align:center; background:#FFFFFF;"><strong style="font-size:12pt; font-family:'Times New Roman', serif; color:#0D0D0D;">{app_name or '&nbsp;'}</strong></td>
+              <td style="border:1px solid #000000; padding:6px 8px; vertical-align:middle; text-align:center; background:#FFFFFF;"><strong style="font-size:12pt; font-family:'Times New Roman', serif; color:#0D0D0D;">{app_role or 'Trưởng Phòng'}</strong></td>
+              <td style="border:1px solid #000000; padding:6px 8px; vertical-align:middle; text-align:center; background:#FFFFFF;">&nbsp;</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    '''
+
+    # TRANG 2: TỜ A4 THEO DÕI SỬA ĐỔI NỘI DUNG TÀI LIỆU
     parsed_logs = []
     if isinstance(revision_logs, str):
         try:
@@ -1579,66 +1677,71 @@ def get_template_original_2_pages_data(
             "page_no": "Toàn bộ"
         }]
 
-    # Dựng 22 hàng dữ liệu chuẩn theo Mẩu quy trình.docx (nạp các dòng nhật ký thực tế + các dòng trống còn lại)
-    total_rows = 22
+    # Dựng 9 hàng dữ liệu chuẩn (tổng 10 dòng gồm 1 header + 9 hàng dữ liệu) để luôn nằm vừa khít trong Trang 2
+    total_rows = 9
     tbody_rows = []
     for r_idx in range(total_rows):
+        is_last = (r_idx == total_rows - 1)
+        bottom_border = "1.5px solid #000000" if is_last else "1px dotted #000000"
         if r_idx < len(parsed_logs):
             item = parsed_logs[r_idx]
             seq_val = str(item.get("seq_no", r_idx + 1)).zfill(2)
             date_val = clean_html_text(str(item.get("rev_date") or eff_date))
-            content_val = clean_html_text(str(item.get("content") or "Cập nhật nội dung quy trình"))
+            content_val = clean_html_text(str(item.get("content") or "Ban hành lần đầu"))
             page_val = clean_html_text(str(item.get("page_no") or "Toàn bộ"))
             tbody_rows.append(
-                f'<tr style="height:28px;">\n'
-                f'  <td style="border:1px solid #000000; padding:4px 6px; text-align:center; font-size:9.5pt; color:#0D0D0D;">{seq_val}</td>\n'
-                f'  <td style="border:1px solid #000000; padding:4px 6px; text-align:center; font-size:9.5pt; color:#0D0D0D;">{date_val}</td>\n'
-                f'  <td style="border:1px solid #000000; padding:4px 8px; text-align:left; font-size:9.5pt; color:#0D0D0D;">{content_val}</td>\n'
-                f'  <td style="border:1px solid #000000; padding:4px 6px; text-align:center; font-size:9.5pt; color:#0D0D0D;">{page_val}</td>\n'
+                f'<tr style="height:32px; background:#FFFFFF;">\n'
+                f'  <td style="border-left:1px solid #000000; border-right:1px solid #000000; border-bottom:{bottom_border}; border-top:none; padding:4px 6px; text-align:center; font-size:11pt; font-family:\'Times New Roman\', serif; color:#0D0D0D; background:#FFFFFF;">{seq_val}</td>\n'
+                f'  <td style="border-left:1px solid #000000; border-right:1px solid #000000; border-bottom:{bottom_border}; border-top:none; padding:4px 6px; text-align:center; font-size:11pt; font-family:\'Times New Roman\', serif; color:#0D0D0D; background:#FFFFFF;">{date_val}</td>\n'
+                f'  <td style="border-left:1px solid #000000; border-right:1px solid #000000; border-bottom:{bottom_border}; border-top:none; padding:4px 8px; text-align:left; font-size:11pt; font-family:\'Times New Roman\', serif; color:#0D0D0D; background:#FFFFFF;">{content_val}</td>\n'
+                f'  <td style="border-left:1px solid #000000; border-right:1px solid #000000; border-bottom:{bottom_border}; border-top:none; padding:4px 6px; text-align:center; font-size:11pt; font-family:\'Times New Roman\', serif; color:#0D0D0D; background:#FFFFFF;">{page_val}</td>\n'
                 f'</tr>'
             )
         else:
             tbody_rows.append(
-                f'<tr style="height:28px;">\n'
-                f'  <td style="border:1px solid #000000; padding:4px 6px; text-align:center;">&nbsp;</td>\n'
-                f'  <td style="border:1px solid #000000; padding:4px 6px; text-align:center;">&nbsp;</td>\n'
-                f'  <td style="border:1px solid #000000; padding:4px 8px;">&nbsp;</td>\n'
-                f'  <td style="border:1px solid #000000; padding:4px 6px; text-align:center;">&nbsp;</td>\n'
+                f'<tr style="height:32px; background:#FFFFFF;">\n'
+                f'  <td style="border-left:1px solid #000000; border-right:1px solid #000000; border-bottom:{bottom_border}; border-top:none; padding:4px 6px; text-align:center; background:#FFFFFF;">&nbsp;</td>\n'
+                f'  <td style="border-left:1px solid #000000; border-right:1px solid #000000; border-bottom:{bottom_border}; border-top:none; padding:4px 6px; text-align:center; background:#FFFFFF;">&nbsp;</td>\n'
+                f'  <td style="border-left:1px solid #000000; border-right:1px solid #000000; border-bottom:{bottom_border}; border-top:none; padding:4px 8px; background:#FFFFFF;">&nbsp;</td>\n'
+                f'  <td style="border-left:1px solid #000000; border-right:1px solid #000000; border-bottom:{bottom_border}; border-top:none; padding:4px 6px; text-align:center; background:#FFFFFF;">&nbsp;</td>\n'
                 f'</tr>'
             )
 
-    rows_html = "\n".join(tbody_rows)
-    t1_rendered = (
-        f'<div class="iso-doc-table-wrapper" data-t-idx="1" style="width:100%; max-width:100%; overflow-x:auto; margin:12px 0;">\n'
-        f'<table class="iso-doc-table" data-t-idx="1" style="width:100%; max-width:100%; border-collapse:collapse; table-layout:fixed; border:1.5px solid #000000;">\n'
-        f'  <colgroup>\n'
-        f'    <col style="width:12.5%;" />\n'
-        f'    <col style="width:14.3%;" />\n'
-        f'    <col style="width:50.3%;" />\n'
-        f'    <col style="width:22.9%;" />\n'
-        f'  </colgroup>\n'
-        f'  <thead>\n'
-        f'    <tr style="background-color: #F8FAFC; font-weight: bold; text-align: center; height:34px;">\n'
-        f'      <th style="padding: 6px 8px; border: 1px solid #000000; text-align: center; font-size:10pt; color:#0D0D0D;">Số TT</th>\n'
-        f'      <th style="padding: 6px 8px; border: 1px solid #000000; text-align: center; font-size:10pt; color:#0D0D0D;">Ngày Sửa</th>\n'
-        f'      <th style="padding: 6px 8px; border: 1px solid #000000; text-align: center; font-size:10pt; color:#0D0D0D;">Nội Dung Sửa Đổi</th>\n'
-        f'      <th style="padding: 6px 8px; border: 1px solid #000000; text-align: center; font-size:10pt; color:#0D0D0D;">Trang Số</th>\n'
-        f'    </tr>\n'
-        f'  </thead>\n'
-        f'  <tbody>\n'
-        f'{rows_html}\n'
-        f'  </tbody>\n'
-        f'</table>\n'
-        f'</div>'
-    )
-
-    rev_log_html = (
-        f'<div id="heading-iso-rev-log-wrapper" style="margin-bottom: 24px;">\n'
-        f'<h1 id="heading-iso-rev-log" class="iso-doc-heading level-1">THEO DÕI SỬA ĐỔI NỘI DUNG TÀI LIỆU</h1>\n'
-        f'{t1_rendered}\n'
-        f'<div class="iso-doc-page-break-divider"><span>--- Ngắt trang ---</span></div>\n'
-        f'</div>'
-    )
+    rows_html = "".join(tbody_rows)
+    rev_log_html = f'''
+    <div class="iso-a4-sheet" data-page="2" id="heading-iso-rev-log-wrapper" style="background:#FFFFFF; width:794px; min-height:1123px; padding:48px 50px 32px 50px; margin:0 auto 36px auto; box-shadow:0 4px 20px rgba(0,0,0,0.22); box-sizing:border-box; display:flex; flex-direction:column; justify-content:space-between; position:relative;">
+      <div class="iso-a4-sheet-content">
+        <h1 id="heading-iso-rev-log" class="iso-doc-heading level-1" style="font-size:18pt; font-weight:bold; font-family:'Times New Roman', serif; text-transform:uppercase; margin:0 0 20px 0; color:#0D0D0D; text-align:center; letter-spacing:0.5px;">
+          THEO DÕI SỬA ĐỔI NỘI DUNG TÀI LIỆU
+        </h1>
+        <table class="iso-rev-table" style="width:100%; border-collapse:collapse; table-layout:fixed; border:1.5px solid #000000; background:#FFFFFF;">
+          <colgroup>
+            <col style="width:12.5%;" />
+            <col style="width:14.3%;" />
+            <col style="width:50.3%;" />
+            <col style="width:22.9%;" />
+          </colgroup>
+          <thead>
+            <tr style="height:36px; background:#FFFFFF;">
+              <th style="border:1px solid #000000; padding:6px 8px; text-align:center; font-size:13pt; font-weight:bold; font-family:'Times New Roman', serif; color:#0D0D0D; background:#FFFFFF;">Số TT</th>
+              <th style="border:1px solid #000000; padding:6px 8px; text-align:center; font-size:13pt; font-weight:bold; font-family:'Times New Roman', serif; color:#0D0D0D; background:#FFFFFF;">Ngày Sửa</th>
+              <th style="border:1px solid #000000; padding:6px 8px; text-align:center; font-size:13pt; font-weight:bold; font-family:'Times New Roman', serif; color:#0D0D0D; background:#FFFFFF;">Nội Dung Sửa Đổi</th>
+              <th style="border:1px solid #000000; padding:6px 8px; text-align:center; font-size:13pt; font-weight:bold; font-family:'Times New Roman', serif; color:#0D0D0D; background:#FFFFFF;">Trang Số</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows_html}
+          </tbody>
+        </table>
+      </div>
+      <div class="iso-a4-sheet-footer" style="border-top:1px solid #000000; padding-top:6px; margin-top:20px; display:flex; justify-content:space-between; font-family:'Times New Roman', serif; font-size:10pt; font-style:italic; color:#0D0D0D;">
+        <span>Mã hiệu: {eff_code}</span>
+        <span>Ngày ban hành: {eff_date}</span>
+        <span>Lần ban hành: {eff_ver}</span>
+        <span>Trang 2</span>
+      </div>
+    </div>
+    '''
 
     return {
         "success": True,
@@ -1647,7 +1750,7 @@ def get_template_original_2_pages_data(
         "full_2_pages_html": f"{cover_html}\n{rev_log_html}",
         "headings": [
             {"id": "iso-heading-cover-page", "title": "Trang bìa", "level": 1},
-            {"id": "heading-iso-rev-log", "title": "THEO DÕI SỬA ĐỔI NỘI DUNG TÀI LIỆU", "level": 1}
+            {"id": "heading-iso-rev-log", "title": "Theo dõi sửa đổi nội dung tài liệu", "level": 1}
         ]
     }
 
@@ -1664,7 +1767,7 @@ def clean_html_text(text: str) -> str:
 
 
 def render_paragraph_runs(p: Paragraph, image_map: Dict[str, str]) -> str:
-    """Render các Run trong Paragraph, hỗ trợ bold, italic, underline, màu sắc và ảnh."""
+    """Render các Run trong Paragraph, hỗ trợ bold, italic, underline, font chữ, font size, màu sắc và ảnh."""
     runs_html = []
     
     # Kiểm tra ảnh inline trong paragraph
@@ -1687,8 +1790,8 @@ def render_paragraph_runs(p: Paragraph, image_map: Dict[str, str]) -> str:
                 if not img_src and r_id:
                     img_src = get_vina_g7_logo_base64()
                 if img_src:
-                    runs_html.append(f'<img src="{img_src}" class="iso-doc-inline-img" alt="Logo VINA G7" style="max-height:85px; max-width:100%; display:block; margin:0 auto; object-fit:contain;" />')
-        except:
+                    runs_html.append(f'<img src="{img_src}" class="iso-doc-inline-img" alt="Hình ảnh tài liệu" style="max-width:100%; height:auto; display:block; margin:6px auto;" />')
+        except Exception:
             pass
 
         if not run_text:
@@ -1701,6 +1804,17 @@ def render_paragraph_runs(p: Paragraph, image_map: Dict[str, str]) -> str:
         if r.underline:
             run_text = f"<u>{run_text}</u>"
 
+        styles = []
+        # Luôn chuẩn hoá toàn bộ font chữ thành Times New Roman chuẩn ISO
+        styles.append("font-family: 'Times New Roman', Times, serif;")
+        if r.font.size and r.font.size.pt:
+            styles.append(f"font-size: {r.font.size.pt:.1f}pt;")
+        if r.font.color and r.font.color.rgb:
+            styles.append(f"color: #{r.font.color.rgb};")
+
+        if styles:
+            run_text = f'<span style="{" ".join(styles)}">{run_text}</span>'
+
         runs_html.append(run_text)
 
     fallback_text = clean_html_text(p.text).replace('&lt;br/&gt;', '<br/>').replace('&lt;br&gt;', '<br/>').replace('\n', '<br/>')
@@ -1711,7 +1825,7 @@ def render_cell_paragraphs(cell: Any, image_map: Dict[str, str]) -> str:
     """Render toàn bộ các đoạn văn và ảnh trong một ô bảng Word chuẩn xác."""
     parts = []
     
-    # Kiểm tra xem ô có ảnh embedded (như logo) không
+    # Kiểm tra xem ô có ảnh embedded (như lưu đồ, sơ đồ quy trình, hình ảnh biểu mẫu) không
     blips = cell._tc.xpath('.//a:blip')
     cell_imgs = []
     for blip in blips:
@@ -1720,7 +1834,7 @@ def render_cell_paragraphs(cell: Any, image_map: Dict[str, str]) -> str:
         if not img_src and r_id:
             img_src = get_vina_g7_logo_base64()
         if img_src:
-            cell_imgs.append(f'<img src="{img_src}" class="iso-doc-inline-img" alt="Logo VINA G7" style="max-width:100%; max-height:85px; display:block; margin:0 auto; object-fit:contain;" />')
+            cell_imgs.append(f'<img src="{img_src}" class="iso-doc-inline-img" alt="Hình ảnh tài liệu" style="max-width:100%; height:auto; display:block; margin:6px auto;" />')
 
     for p in cell.paragraphs:
         align_css = ""
@@ -1773,6 +1887,30 @@ def render_table_to_html(tbl: Table, image_map: Dict[str, str], table_idx: int =
     grid = [[tbl.rows[r].cells[c]._tc for c in range(n_cols)] for r in range(n_rows)]
     visited = set()
 
+    # Tự động phát hiện cột lưu đồ quy trình / hình ảnh cần gộp nhiều dòng (flowchart rowspan)
+    # Xử lý trường hợp tác giả Word chèn 1 hình ảnh lưu đồ ở Bước 1 và để trống các ô Bước 2..N bên dưới
+    flowchart_col_merge = {}
+    if n_rows > 2:
+        for col_idx in range(n_cols):
+            header_text = tbl.rows[0].cells[col_idx].text.lower() if n_rows > 0 else ""
+            is_fc_header = any(k in header_text for k in ['lưu đồ', 'sơ đồ', 'quy trình', 'flowchart', 'tiến trình'])
+            for start_r in range(1, n_rows - 1):
+                cell_start = tbl.rows[start_r].cells[col_idx]
+                has_img = bool(cell_start._tc.xpath('.//a:blip'))
+                if has_img or is_fc_header:
+                    empty_below = 0
+                    for next_r in range(start_r + 1, n_rows):
+                        next_cell = tbl.rows[next_r].cells[col_idx]
+                        has_img_next = bool(next_cell._tc.xpath('.//a:blip'))
+                        txt_next = next_cell.text.strip()
+                        if not has_img_next and not txt_next:
+                            empty_below += 1
+                        else:
+                            break
+                    if empty_below >= 1 and (has_img or is_fc_header):
+                        flowchart_col_merge[(start_r, col_idx)] = 1 + empty_below
+                        break
+
     html = [
         f'<div class="iso-doc-table-wrapper" data-t-idx="{table_idx}" style="width:100%; max-width:100%; overflow-x:auto; margin:12px 0;">',
         f'  <table class="iso-doc-table" data-t-idx="{table_idx}" style="width:100%; max-width:100%; border-collapse:collapse; table-layout:fixed; border:1.5px solid #000000;">'
@@ -1813,8 +1951,11 @@ def render_table_to_html(tbl: Table, image_map: Dict[str, str], table_idx: int =
             
             # Tính rowspan
             rowspan = 1
-            while r + rowspan < n_rows and all(grid[r + rowspan][c + k] == tc for k in range(colspan)):
-                rowspan += 1
+            if (r, c) in flowchart_col_merge:
+                rowspan = flowchart_col_merge[(r, c)]
+            else:
+                while r + rowspan < n_rows and all(grid[r + rowspan][c + k] == tc for k in range(colspan)):
+                    rowspan += 1
             
             for dr in range(rowspan):
                 for dc in range(colspan):
@@ -1837,12 +1978,13 @@ def render_table_to_html(tbl: Table, image_map: Dict[str, str], table_idx: int =
             if table_idx == 0 and r == 0 and c == 0:
                 logo_b64 = get_vina_g7_logo_base64()
                 if '<img' not in cell_inner_html and logo_b64:
-                    cell_inner_html = f'<p class="iso-cell-paragraph" style="text-align:center;"><img src="{logo_b64}" class="iso-doc-inline-img" alt="Logo VINA G7" style="max-height:85px; max-width:100%; display:block; margin:0 auto; object-fit:contain;" /></p>'
+                    cell_inner_html = f'<p class="iso-cell-paragraph" style="text-align:center;"><img src="{logo_b64}" class="iso-doc-inline-img iso-header-logo" alt="Logo VINA G7" style="max-height:85px; max-width:100%; display:block; margin:0 auto; object-fit:contain;" /></p>'
                 elif '/vina_g7_logo.png' in cell_inner_html and logo_b64:
                     cell_inner_html = cell_inner_html.replace('/vina_g7_logo.png', logo_b64)
 
-            valign_style = "vertical-align: middle;"
-            html.append(f'      <{tag} data-r="{r}" data-c="{c}"{span_str} style="border:1px solid #000000; padding:6px 8px; {valign_style} word-break:break-word;">{cell_inner_html}</{tag}>')
+            cell_extra_class = " iso-flowchart-cell" if (r, c) in flowchart_col_merge else ""
+            valign_style = "vertical-align: middle; text-align: center;" if (r, c) in flowchart_col_merge else "vertical-align: middle;"
+            html.append(f'      <{tag} data-r="{r}" data-c="{c}"{span_str} class="{tag}{cell_extra_class}" style="border:1px solid #000000; padding:6px 8px; {valign_style} word-break:break-word;">{cell_inner_html}</{tag}>')
             c += colspan
         html.append("    </tr>")
 
@@ -2194,6 +2336,8 @@ def get_iso_procedure_template_path() -> Optional[str]:
     Xác định đường dẫn file TEMPLATE chuẩn 'Mẫu quy trình.docx' trong hệ thống.
     """
     candidates = [
+        os.path.join(WORKSPACE_ROOT, "Mẩu quy trình.docx"),
+        os.path.join(WORKSPACE_ROOT, "Mẫu quy trình.docx"),
         os.path.join(WORKSPACE_ROOT, "BackEnd", "templates", "Mẫu quy trình.docx"),
         os.path.join(WORKSPACE_ROOT, "BackEnd", "templates", "Mẩu quy trình.docx"),
         os.path.join(WORKSPACE_ROOT, "..", "Chuyen doi file", "Mẩu quy trình.docx"),
@@ -3857,4 +4001,448 @@ def save_direct_edited_word_content(
         "preview_url": f"/api/v1/iso-master-records/word-pdf-preview?path={clean_rel}",
         "message": "Đã lưu chỉnh sửa tài liệu Word thành công"
     }
+
+
+def get_iso_process_template_path() -> str:
+    """Tìm đường dẫn tệp Mẩu quy trình.docx trên hệ thống."""
+    candidate_paths = [
+        os.path.join(WORKSPACE_ROOT, "BackEnd", "templates", "Mẩu quy trình.docx"),
+        os.path.join(WORKSPACE_ROOT, "BackEnd", "templates", "Mẫu quy trình.docx"),
+        os.path.join(WORKSPACE_ROOT, "templates", "Mẩu quy trình.docx"),
+        os.path.join(WORKSPACE_ROOT, "Mẩu quy trình.docx"),
+        os.path.join(WORKSPACE_ROOT, "Mẫu quy trình.docx"),
+    ]
+    for p in candidate_paths:
+        if os.path.exists(p):
+            return p
+    return candidate_paths[0]
+
+
+def find_muc_dich_start_element(doc: docx.Document) -> Tuple[int, Optional[str]]:
+    """
+    Tìm vị trí element bắt đầu của phần 'Mục đích'.
+    Hỗ trợ các dạng: '1. Mục đích', '1. MỤC ĐÍCH', 'I. MỤC ĐÍCH', 'Mục đích:', 'Mục đích và phạm vi'...
+    """
+    pattern = re.compile(r'^(?:(?:\d+|[IVXLCDM]+)[\.\:\s]+)?\s*mục\s*đích', re.IGNORECASE)
+    for idx, child in enumerate(doc.element.body):
+        if isinstance(child, CT_P):
+            p = docx.text.paragraph.Paragraph(child, doc)
+            text = p.text.strip()
+            if pattern.search(text):
+                return idx, text
+    return -1, None
+
+
+def fill_metadata_into_template_docx(doc_tpl: docx.Document, metadata: Dict[str, Any]):
+    """
+    Điền các trường metadata (Mã hiệu, Tên quy trình, Lần ban hành, Ngày ban hành, Bộ phận, Người biên soạn, Người duyệt)
+    vào Table 0 (Bìa) và Table 1 (Bảng theo dõi sửa đổi) của Mẩu quy trình.docx.
+    """
+    if not metadata or not doc_tpl.tables:
+        return
+
+    doc_title = (metadata.get("doc_title") or metadata.get("name") or "").strip()
+    doc_code = (metadata.get("doc_code") or metadata.get("code") or metadata.get("new_code") or "").strip()
+    version = (metadata.get("version") or metadata.get("edition") or "").strip()
+    issue_date = (metadata.get("issue_date") or "").strip()
+    dept_name = (metadata.get("dept_name") or metadata.get("department_name") or metadata.get("folder") or "").strip()
+    issuer_name = (metadata.get("issuer_name") or metadata.get("issuer") or metadata.get("editor") or metadata.get("owner") or "").strip()
+    issuer_role = (metadata.get("issuer_role") or "").strip()
+    approver_name = (metadata.get("approver_name") or metadata.get("approver") or "").strip()
+    approver_role = (metadata.get("approver_role") or "").strip()
+
+    if issuer_name and not issuer_role:
+        issuer_role = _resolve_user_position(issuer_name, default_title="Nhân viên")
+    if not issuer_role:
+        issuer_role = "Nhân viên"
+
+    if approver_name and not approver_role:
+        approver_role = _resolve_user_position(approver_name, default_title="Trưởng phòng / Ban Giám Đốc")
+    if not approver_role:
+        approver_role = "Trưởng phòng / Ban Giám Đốc"
+
+    # 1. Bìa (Table 0)
+    def replace_placeholder_in_paragraphs(paras):
+        for p in paras:
+            txt = p.text
+            orig = txt
+            # Xử lý các placeholder chuẩn
+            if "[Tên quy trình]" in txt:
+                txt = txt.replace("[Tên quy trình]", doc_title.upper() if doc_title else "[Tên quy trình]")
+            if "[mã hiệu]" in txt:
+                txt = txt.replace("[mã hiệu]", doc_code if doc_code else "[mã hiệu]")
+            if "[lần ban hành]" in txt:
+                txt = txt.replace("[lần ban hành]", version if version else "[lần ban hành]")
+            if "[ngày ban hành]" in txt:
+                txt = txt.replace("[ngày ban hành]", issue_date if issue_date else "[ngày ban hành]")
+            if "[phòng ban/ bộ phận]" in txt:
+                txt = txt.replace("[phòng ban/ bộ phận]", dept_name if dept_name else "[phòng ban/ bộ phận]")
+            if "[Họ tên người biên soạn]" in txt:
+                txt = txt.replace("[Họ tên người biên soạn]", issuer_name if issuer_name else "[Họ tên người biên soạn]")
+            if "[CV NBS]" in txt:
+                txt = txt.replace("[CV NBS]", issuer_role if issuer_role else "[CV NBS]")
+            if "[Họ tên người phê duyệt]" in txt:
+                txt = txt.replace("[Họ tên người phê duyệt]", approver_name if approver_name else "[Họ tên người phê duyệt]")
+            if "[CV NPD]" in txt:
+                txt = txt.replace("[CV NPD]", approver_role if approver_role else "[CV NPD]")
+            if "Phòng QLCL" in txt and dept_name:
+                txt = txt.replace("Phòng QLCL", dept_name)
+            if "18/06/2026" in txt:
+                txt = txt.replace("18/06/2026", issue_date if issue_date else "[ngày ban hành]")
+            if " 01 " in txt and version:
+                txt = txt.replace(" 01 ", f" {version} ")
+
+            # Xóa triệt để các dữ liệu cứng cũ
+            hardcoded_map = {
+                "ĐOÀN HỮU TRIỆU": issuer_name if issuer_name else "[Họ tên người biên soạn]",
+                "NGUYỄN HÒA": approver_name if approver_name else "[Họ tên người phê duyệt]",
+                "TP.HCNS": issuer_role if issuer_role else "[CV NBS]",
+                "TP. HCNS": issuer_role if issuer_role else "[CV NBS]",
+                "PHÓ TGĐ": approver_role if approver_role else "[CV NPD]",
+                "PHÓ TGD": approver_role if approver_role else "[CV NPD]",
+                "G7.ISO.QT14": doc_code if doc_code else "[mã hiệu]",
+                "01/07/2026": issue_date if issue_date else "[ngày ban hành]",
+                "HCNS": dept_name if dept_name else "[phòng ban/ bộ phận]",
+            }
+            for hc_k, hc_v in hardcoded_map.items():
+                if hc_k in txt:
+                    txt = txt.replace(hc_k, hc_v)
+
+            if txt != orig:
+                p.text = txt
+
+    def process_all_cells(cell):
+        replace_placeholder_in_paragraphs(cell.paragraphs)
+        for nested_t in cell.tables:
+            for nested_r in nested_t.rows:
+                for nested_c in nested_r.cells:
+                    process_all_cells(nested_c)
+
+    table_cover = doc_tpl.tables[0]
+    for row in table_cover.rows:
+        for cell in row.cells:
+            process_all_cells(cell)
+
+    # Đảm bảo Logo nằm gọn trong khung (Cell 0, 0)
+    if doc_tpl.tables:
+        t0 = doc_tpl.tables[0]
+        c00 = t0.rows[0].cells[0]
+        # Đảm bảo c00 có vAlign center
+        tcPr00 = c00._tc.get_or_add_tcPr()
+        vAlign00 = tcPr00.find(qn('w:vAlign'))
+        if vAlign00 is None:
+            vAlign00 = OxmlElement('w:vAlign')
+            tcPr00.append(vAlign00)
+        vAlign00.set(qn('w:val'), 'center')
+
+        for p in c00.paragraphs:
+            pPr = p._p.get_or_add_pPr()
+            jc = pPr.find(qn('w:jc'))
+            if jc is None:
+                jc = OxmlElement('w:jc')
+                pPr.append(jc)
+            jc.set(qn('w:val'), 'center')
+            spacing = pPr.find(qn('w:spacing'))
+            if spacing is None:
+                spacing = OxmlElement('w:spacing')
+                pPr.append(spacing)
+            spacing.set(qn('w:after'), '0')
+            spacing.set(qn('w:before'), '0')
+            spacing.set(qn('w:line'), '240')
+            spacing.set(qn('w:lineRule'), 'auto')
+
+            for r in p.runs:
+                drawing = r._r.find(qn('w:drawing'))
+                if drawing is not None:
+                    extent = drawing.find('.//' + qn('wp:extent'))
+                    if extent is not None:
+                        extent.set('cx', '780000')
+                        extent.set('cy', '770000')
+                    xfrm = drawing.find('.//' + qn('a:xfrm'))
+                    if xfrm is not None:
+                        ext = xfrm.find(qn('a:ext'))
+                        if ext is not None:
+                            ext.set('cx', '780000')
+                            ext.set('cy', '770000')
+                    for tag in ['wp:positionH', 'wp:positionV']:
+                        pos_el = drawing.find('.//' + qn(tag))
+                        if pos_el is not None:
+                            offset = pos_el.find(qn('wp:posOffset'))
+                            if offset is not None:
+                                offset.text = '0'
+
+        # Sắp xếp và điều chỉnh chiều cao Row 1 của Table 0 (Bìa) thông minh:
+        # Xóa bớt các đoạn rỗng thừa trong c10 để dù tiêu đề hay tên bộ phận dài cỡ nào cũng KHÔNG BAO GIỜ bị tràn sang trang 2
+        if len(t0.rows) > 1:
+            r1 = t0.rows[1]
+            c10 = r1.cells[0]
+            paras = list(c10.paragraphs)
+            title_p = None
+            for p in paras:
+                if p.text.strip():
+                    title_p = p
+                    break
+            empty_before = []
+            empty_after = []
+            found_title = False
+            for p in paras:
+                if p == title_p:
+                    found_title = True
+                elif not p.text.strip():
+                    if not found_title:
+                        empty_before.append(p)
+                    else:
+                        empty_after.append(p)
+            for p in empty_before[2:]:
+                c10._tc.remove(p._p)
+            for p in empty_after[3:]:
+                c10._tc.remove(p._p)
+
+            trPr = r1._tr.get_or_add_trPr()
+            trHeight = trPr.find(qn('w:trHeight'))
+            if trHeight is None:
+                trHeight = OxmlElement('w:trHeight')
+                trPr.append(trHeight)
+            trHeight.set(qn('w:val'), '10500')
+            trHeight.set(qn('w:hRule'), 'atLeast')
+
+            # Căn giữa bảng nhỏ thông tin (Mã hiệu, Lần ban hành...)
+            c10 = r1.cells[0]
+            if c10.tables:
+                nt = c10.tables[0]
+                tblPr = nt._tbl.tblPr
+                jc = tblPr.find(qn('w:jc'))
+                if jc is None:
+                    jc = OxmlElement('w:jc')
+                    tblPr.append(jc)
+                jc.set(qn('w:val'), 'center')
+
+                # Áp dụng viền nét đứt (dashed) màu xám nhạt (#94A3B8) chuẩn Ảnh 4
+                tblBorders = tblPr.find(qn('w:tblBorders'))
+                if tblBorders is None:
+                    tblBorders = OxmlElement('w:tblBorders')
+                    tblPr.append(tblBorders)
+                for b_name in ['top', 'left', 'bottom', 'right', 'insideH', 'insideV']:
+                    b_el = tblBorders.find(qn(f'w:{b_name}'))
+                    if b_el is None:
+                        b_el = OxmlElement(f'w:{b_name}')
+                        tblBorders.append(b_el)
+                    b_el.set(qn('w:val'), 'dashed')
+                    b_el.set(qn('w:sz'), '4')
+                    b_el.set(qn('w:space'), '0')
+                    b_el.set(qn('w:color'), '94A3B8')
+
+                # Đảm bảo bảng thông tin con có đúng 4 hàng độc lập chuẩn Ảnh 4
+                if len(nt.rows) == 3:
+                    nt.add_row()
+                    nt.rows[2].cells[0].text = "Ngày ban hành :"
+                    nt.rows[2].cells[1].text = issue_date if issue_date else "[ngày ban hành]"
+                    nt.rows[3].cells[0].text = "Bộ phận thực hiện:"
+                    nt.rows[3].cells[1].text = dept_name if dept_name else "[phòng ban/ bộ phận]"
+
+        # Đảm bảo tblGrid của Table 0: Cột 3 (CHỨC VỤ) đủ rộng và Cột 4 (KÝ TÊN) rộng hơn
+        grid = t0._tbl.tblGrid
+        if grid is not None and len(grid.gridCol_lst) >= 5:
+            grid.gridCol_lst[3].w = 1600000
+            grid.gridCol_lst[4].w = 2000000
+
+        # Đảm bảo Bảng trách nhiệm (Rows 2, 3, 4): Cột CHỨC VỤ và KÝ TÊN chuẩn tỉ lệ
+        for r_idx in [2, 3, 4]:
+            if r_idx < len(t0.rows):
+                row = t0.rows[r_idx]
+                if len(row.cells) >= 5:
+                    c_cv = row.cells[3]
+                    tcPr_cv = c_cv._tc.get_or_add_tcPr()
+                    tcW_cv = tcPr_cv.find(qn('w:tcW'))
+                    if tcW_cv is None:
+                        tcW_cv = OxmlElement('w:tcW')
+                        tcPr_cv.append(tcW_cv)
+                    tcW_cv.set(qn('w:w'), '2200')
+                    tcW_cv.set(qn('w:type'), 'dxa')
+                    c_cv.width = 2200 * 20
+
+                    c_kt = row.cells[4]
+                    tcPr_kt = c_kt._tc.get_or_add_tcPr()
+                    tcW_kt = tcPr_kt.find(qn('w:tcW'))
+                    if tcW_kt is None:
+                        tcW_kt = OxmlElement('w:tcW')
+                        tcPr_kt.append(tcW_kt)
+                    tcW_kt.set(qn('w:w'), '2400')
+                    tcW_kt.set(qn('w:type'), 'dxa')
+                    c_kt.width = 2400 * 20
+
+    # Đảm bảo p_theo_doi (THEO DÕI SỬA ĐỔI NỘI DUNG TÀI LIỆU) luôn có w:pageBreakBefore để ngắt sang Trang 2
+    if doc_tpl.paragraphs:
+        p_theo_doi = doc_tpl.paragraphs[0]
+        pPr = p_theo_doi._p.get_or_add_pPr()
+        if pPr.find(qn('w:pageBreakBefore')) is None:
+            pPr.append(OxmlElement('w:pageBreakBefore'))
+        spacing_td = pPr.find(qn('w:spacing'))
+        if spacing_td is None:
+            spacing_td = OxmlElement('w:spacing')
+            pPr.append(spacing_td)
+        spacing_td.set(qn('w:before'), '100')
+        spacing_td.set(qn('w:after'), '120')
+        spacing_td.set(qn('w:line'), '240')
+        spacing_td.set(qn('w:lineRule'), 'auto')
+
+    # 2. Bảng nhật ký sửa đổi (Table 1)
+    if len(doc_tpl.tables) > 1:
+        table_rev = doc_tpl.tables[1]
+        # Giới hạn tối đa 10 dòng (1 header + 9 dòng dữ liệu) để Table 1 TUYỆT ĐỐI KHÔNG tràn sang Trang 3
+        while len(table_rev.rows) > 10:
+            last_row = table_rev.rows[-1]
+            table_rev._tbl.remove(last_row._tr)
+
+        # Đảm bảo các dòng của Table 1 nằm vừa khít trong Trang 2 (Header 500 twips, Data 420 twips)
+        for idx, r in enumerate(table_rev.rows):
+            trPr = r._tr.get_or_add_trPr()
+            trHeight = trPr.find(qn('w:trHeight'))
+            if trHeight is None:
+                trHeight = OxmlElement('w:trHeight')
+                trPr.append(trHeight)
+            h_val = '500' if idx == 0 else '420'
+            trHeight.set(qn('w:val'), h_val)
+            trHeight.set(qn('w:hRule'), 'atLeast')
+
+        revision_logs = metadata.get("revision_logs")
+        if revision_logs:
+            if isinstance(revision_logs, str):
+                try:
+                    revision_logs = json.loads(revision_logs)
+                except Exception:
+                    revision_logs = []
+        if not revision_logs:
+            revision_logs = [{
+                "seq_no": 1,
+                "rev_date": issue_date or "",
+                "content": "Ban hành lần đầu",
+                "page_no": "Tất cả"
+            }]
+
+        if isinstance(revision_logs, list) and revision_logs:
+            for idx, log in enumerate(revision_logs):
+                target_row_idx = idx + 1
+                if target_row_idx < len(table_rev.rows):
+                    row = table_rev.rows[target_row_idx]
+                    cells = row.cells
+                    if len(cells) >= 4:
+                        cells[0].text = str(log.get("seq_no", idx + 1)).zfill(2)
+                        cells[1].text = str(log.get("rev_date") or issue_date or "")
+                        cells[2].text = str(log.get("content") or "Cập nhật tài liệu")
+                        cells[3].text = str(log.get("page_no") or "Toàn bộ")
+
+            # Xóa các chuỗi placeholder còn lại trong Table 1
+            for clean_idx in range(len(revision_logs) + 1, len(table_rev.rows)):
+                clean_row = table_rev.rows[clean_idx]
+                for c in clean_row.cells:
+                    if "[" in c.text and "]" in c.text:
+                        c.text = ""
+
+    # 3. Chân trang (Footer): Tự động cập nhật thông tin ăn theo metadata quy trình
+    formatted_issue_date = issue_date
+    if issue_date and "-" in issue_date:
+        parts = issue_date.split("-")
+        if len(parts) == 3 and len(parts[0]) == 4:
+            formatted_issue_date = f"{parts[2]}/{parts[1]}/{parts[0]}"
+
+    target_code = doc_code or "QT-001"
+    target_date = formatted_issue_date or "18/06/2026"
+    target_ver = version or "01"
+
+    for s in doc_tpl.sections:
+        for p in s.footer.paragraphs:
+            if "Mã hiệu" in p.text:
+                for r in p.runs:
+                    if "Mã hiệu:" in r.text:
+                        r.text = f"Mã hiệu: {target_code}"
+                    elif r.text.strip() == "QTKS01":
+                        r.text = ""
+                    elif r.text.strip() == "Ngày":
+                        r.text = f" Ngày ban hành: {target_date}"
+                    elif "ban hành: 18" in r.text or r.text.strip() == "ban hành:":
+                        r.text = ""
+                    elif "/06/2026" in r.text:
+                        r.text = ""
+                    elif "Lần ban hành" in r.text:
+                        r.text = f"Lần ban hành: {target_ver}"
+                    elif r.text.strip() in [": 01", "01"]:
+                        r.text = ""
+
+
+
+def merge_template_2_pages_with_upload_doc(
+    upload_file_bytes: bytes,
+    metadata: Optional[Dict[str, Any]] = None,
+    template_path: Optional[str] = None
+) -> docx.Document:
+    """
+    Ghép 2 trang đầu từ 'Mẩu quy trình.docx' với phần nội dung BẮT ĐẦU TỪ MỤC ĐÍCH của file Word upload.
+    Loại bỏ toàn bộ phần bìa cũ của file upload.
+    """
+    if not template_path or not os.path.exists(template_path):
+        template_path = get_iso_process_template_path()
+
+    doc_tpl = docx.Document(template_path)
+    if metadata:
+        fill_metadata_into_template_docx(doc_tpl, metadata)
+
+    # Đọc file upload
+    upload_io = io.BytesIO(upload_file_bytes)
+    doc_upload = docx.Document(upload_io)
+
+    start_idx, match_text = find_muc_dich_start_element(doc_upload)
+    if start_idx == -1:
+        start_idx = 0
+
+    # Thêm Page Break sau trang 2 của template trước khi nối
+    p_break = doc_tpl.add_paragraph()
+    p_break_run = p_break.add_run()
+    p_break_run.add_break(docx.enum.text.WD_BREAK.PAGE)
+
+    # Sao chép các phần tử từ 'Mục đích' đến hết
+    body_elements = list(doc_upload.element.body)
+    for child in body_elements[start_idx:]:
+        if child.tag.endswith('sectPr'):
+            continue
+        new_elem = copy.deepcopy(child)
+        doc_tpl.element.body.append(new_elem)
+
+    # Sao chép quan hệ hình ảnh / media
+    for rel_id, rel in doc_upload.part.rels.items():
+        if "image" in rel.reltype or "image" in rel.target_ref:
+            try:
+                if rel_id not in doc_tpl.part.rels:
+                    doc_tpl.part.relate_to(rel.target_part, rel.reltype, rId=rel_id)
+            except Exception:
+                pass
+
+    return doc_tpl
+
+
+def generate_default_created_new_doc(
+    metadata: Optional[Dict[str, Any]] = None,
+    template_path: Optional[str] = None
+) -> docx.Document:
+    """
+    Sinh tài liệu mặc định khi Tạo mới quy trình:
+    Gồm đúng 2 trang đầu từ 'Mẩu quy trình.docx' + Page Break + khung 6 mục ISO mẫu (từ 1. Mục đích đến 6. Biểu mẫu).
+    """
+    if not template_path or not os.path.exists(template_path):
+        template_path = get_iso_process_template_path()
+
+    doc_tpl = docx.Document(template_path)
+    if metadata:
+        fill_metadata_into_template_docx(doc_tpl, metadata)
+
+    # Thêm ngắt trang sau trang 2
+    p_break = doc_tpl.add_paragraph()
+    p_break_run = p_break.add_run()
+    p_break_run.add_break(docx.enum.text.WD_BREAK.PAGE)
+
+    # Thêm 1 đoạn văn bản trống để trang 3 hoàn toàn trống cho người dùng tự do soạn thảo
+    doc_tpl.add_paragraph("")
+
+    return doc_tpl
+
 

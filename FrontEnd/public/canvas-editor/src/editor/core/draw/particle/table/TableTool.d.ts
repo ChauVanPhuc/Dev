@@ -1,0 +1,33 @@
+import { Draw } from '../../Draw';
+export declare class TableTool {
+    private readonly MIN_TD_WIDTH;
+    private readonly ROW_COL_OFFSET;
+    private readonly ROW_COL_QUICK_WIDTH;
+    private readonly ROW_COL_QUICK_OFFSET;
+    private readonly ROW_COL_QUICK_POSITION;
+    private readonly BORDER_VALUE;
+    private readonly TABLE_SELECT_OFFSET;
+    private draw;
+    private canvas;
+    private options;
+    private position;
+    private range;
+    private container;
+    private toolRowContainer;
+    private toolRowAddBtn;
+    private toolColAddBtn;
+    private toolTableSelectBtn;
+    private toolColContainer;
+    private toolBorderContainer;
+    private anchorLine;
+    private mousedownX;
+    private mousedownY;
+    private lastAnchorKey;
+    private anchorPageNo;
+    constructor(draw: Draw);
+    dispose(): void;
+    render(): void;
+    private _setAnchorActive;
+    private _mousedown;
+    private _mousemove;
+}

@@ -111,7 +111,7 @@ echo [4/5] Starting Gemini Web2API AI Server...
 start "Gemini Web2API - AI Server" cmd /k "cd /d %~dp0AI\gemini-web2api && call run.bat"
 
 :: --- 5. FEEDBACK PORTAL (Port 3001) ---
-echo [5/5] Processing Feedback Portal (Port 3001)...
+echo [5/6] Processing Feedback Portal (Port 3001)...
 cd /d %~dp0Feedback\FrontEnd
 if not exist node_modules (
     echo [!] node_modules missing in Feedback. Running 'npm install'...
@@ -121,13 +121,20 @@ if not exist node_modules (
 )
 start "Feedback Portal - ERP G7 (Port 3001)" cmd /k "cd /d %~dp0Feedback\FrontEnd && npm run dev"
 
+:: --- 6. CANVAS EDITOR (Port 1000) ---
+if exist "C:\Tool\WS\canvas-editor" (
+    echo [6/6] Starting Canvas Editor (Port 1000)...
+    start "Canvas Editor - ERP G7" cmd /k "cd /d %~dp0 && call start_canvas_editor.bat"
+)
+
 echo.
 echo ======================================================
 echo  SUCCESS: All systems have been signaled to start.
-echo  - Backend:  http://localhost:8000
-echo  - Web ERP:  http://localhost:5173
-echo  - Mobile:   http://localhost:3000
-echo  - Feedback: http://localhost:3001
+echo  - Backend:       http://localhost:8000
+echo  - Web ERP:       http://localhost:5173
+echo  - Canvas Editor: http://localhost:1000/canvas-editor/
+echo  - Mobile:        http://localhost:3000
+echo  - Feedback:      http://localhost:3001
 echo  Check the individual windows for status and logs.
 echo ======================================================
 pause

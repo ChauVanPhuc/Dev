@@ -38,6 +38,26 @@ const getTemplateAbbreviation = (templateSymbol) => {
   return 'QT';
 };
 
+// Hàm sinh mã tài liệu tự động theo định dạng chuẩn G7.{Mã_PB}.{Mã_Loại}{Số_TT}
+const generateProcessCode = (deptCode, docTypeCode, processesList = []) => {
+  const dCode = (deptCode || 'QL').trim().toUpperCase();
+  const tCode = (docTypeCode || 'QT').trim().toUpperCase();
+  const prefix = `G7.${dCode}.${tCode}`;
+  let maxZz = 0;
+  (processesList || []).forEach(p => {
+    const pCode = (p.code || '').toUpperCase();
+    if (pCode.startsWith(prefix)) {
+      const suffix = pCode.slice(prefix.length);
+      const num = parseInt(suffix, 10);
+      if (!isNaN(num) && num > maxZz) {
+        maxZz = num;
+      }
+    }
+  });
+  const zz = String(maxZz + 1).padStart(2, '0');
+  return `G7.${dCode}.${tCode}${zz}`;
+};
+
 const findApprover = (level, deptAbbr, accountsList) => {
   if (!accountsList || accountsList.length === 0) return '';
   // Cả Cấp phòng và Cấp công ty (Bước 1) đều đưa cho Trưởng phòng ký trước
@@ -193,6 +213,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
   const [allProcesses, setAllProcesses] = useState([]);
   const [departmentsList, setDepartmentsList] = useState([]);
   const [departmentHeads, setDepartmentHeads] = useState([]);
+  const [docTypesList, setDocTypesList] = useState([]);
   const [selectedWordFile, setSelectedWordFile] = useState(null);
   const [parsingWordLoading, setParsingWordLoading] = useState(false);
   const processFileInputRef = useRef(null);
@@ -208,6 +229,8 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
     code: '',
     name: '',
     symbol: 'QT',
+    doc_type_id: '',
+    doc_type_code: 'QT',
     department_id: '',
     department_name: '',
     file_path: '',
@@ -215,6 +238,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
     editor: '',
     owner: '',
     approver: '',
+    approver_bgd: 'Trần Đình Hùng (Tổng Giám Đốc)',
     role: '',
     status: 'Nháp'
   });
@@ -262,6 +286,13 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
 
   useEffect(() => {
     fetchDocuments();
+    if (mode === 'processes') {
+      api.get('/iso-documents/types')
+        .then(res => {
+          if (Array.isArray(res)) setDocTypesList(res);
+        })
+        .catch(err => console.error('Lỗi khi tải danh mục loại tài liệu:', err));
+    }
   }, [mode]);
 
   // Kích hoạt chọn tệp Word trực tiếp từ máy khi bấm Thêm mới
@@ -275,38 +306,37 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
   const openCreateModal = async () => {
     try {
       setLoading(true);
-      const [deptsData, tpData, procsData] = await Promise.all([
+      const [deptsData, tpData, procsData, typesData] = await Promise.all([
         api.get('/iso-documents/meta/departments').catch(() => []),
         api.get('/iso-documents/approvers/department-heads').catch(() => []),
-        api.get('/iso-documents/processes').catch(() => [])
+        api.get('/iso-documents/processes').catch(() => []),
+        api.get('/iso-documents/types').catch(() => [])
       ]);
       const depts = Array.isArray(deptsData) ? deptsData : [];
       const tps = Array.isArray(tpData) ? tpData : [];
       const procs = Array.isArray(procsData) ? procsData : [];
+      const dtypes = Array.isArray(typesData) && typesData.length > 0 ? typesData : docTypesList;
+
       setDepartmentsList(depts);
       setDepartmentHeads(tps);
       setAllProcesses(procs);
+      if (Array.isArray(typesData) && typesData.length > 0) {
+        setDocTypesList(typesData);
+      }
 
       const defaultDept = depts.length > 0 ? depts[0] : null;
       const deptCode = defaultDept ? defaultDept.code : 'CL';
 
+      const defaultDocType = dtypes.length > 0 
+        ? (dtypes.find(t => (t.code || '').toUpperCase() === 'QT') || dtypes[0]) 
+        : { id: 1, name: 'Quy trình', code: 'QT' };
+      const docTypeCode = defaultDocType.code || 'QT';
+
       const loggedInUser = JSON.parse(localStorage.getItem('smartflow_user') || '{}');
       const editorName = loggedInUser.full_name || loggedInUser.username || 'Administrator';
 
-      // Sinh mã quy trình theo phòng ban
-      const prefix = `G7.${deptCode}.QT`;
-      let maxZz = 0;
-      procs.forEach(p => {
-        if (p.code && p.code.toUpperCase().startsWith(prefix.toUpperCase())) {
-          const suffix = p.code.slice(prefix.length);
-          const num = parseInt(suffix, 10);
-          if (!isNaN(num) && num > maxZz) {
-            maxZz = num;
-          }
-        }
-      });
-      const zz = String(maxZz + 1).padStart(2, '0');
-      const generatedCode = `G7.${deptCode}.QT${zz}`;
+      // Sinh mã tài liệu tự động theo phòng ban & loại tài liệu
+      const generatedCode = generateProcessCode(deptCode, docTypeCode, procs);
 
       const defaultApprover = tps.length > 0 ? tps[0].full_name : '';
 
@@ -314,7 +344,9 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
       setNewProcessData({
         code: generatedCode,
         name: '',
-        symbol: 'QT',
+        symbol: docTypeCode,
+        doc_type_id: defaultDocType.id || '',
+        doc_type_code: docTypeCode,
         department_id: defaultDept ? defaultDept.id : '',
         department_name: defaultDept ? defaultDept.name : '',
         file_path: '',
@@ -322,12 +354,13 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
         editor: editorName,
         owner: editorName,
         approver: defaultApprover,
+        approver_bgd: 'Trần Đình Hùng (Tổng Giám Đốc)',
         role: defaultDept ? defaultDept.name : '',
         status: 'Nháp'
       });
       setShowCreateModal(true);
     } catch (error) {
-      console.error('Lỗi khi chuẩn bị tạo quy trình:', error);
+      console.error('Lỗi khi chuẩn bị tạo tài liệu:', error);
       showFeedback('error', 'Không thể tải danh sách dữ liệu khởi tạo');
     } finally {
       setLoading(false);
@@ -335,22 +368,11 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
   };
 
   const handleSelectDepartment = (deptId) => {
-    const dept = departmentsList.find(d => d.id === parseInt(deptId));
+    const dept = departmentsList.find(d => d.id === parseInt(deptId, 10));
     if (!dept) return;
     const deptCode = dept.code || 'SX';
-    const prefix = `G7.${deptCode}.QT`;
-    let maxZz = 0;
-    allProcesses.forEach(p => {
-      if (p.code && p.code.toUpperCase().startsWith(prefix.toUpperCase())) {
-        const suffix = p.code.slice(prefix.length);
-        const num = parseInt(suffix, 10);
-        if (!isNaN(num) && num > maxZz) {
-          maxZz = num;
-        }
-      }
-    });
-    const zz = String(maxZz + 1).padStart(2, '0');
-    const generatedCode = `G7.${deptCode}.QT${zz}`;
+    const docTypeCode = newProcessData.doc_type_code || 'QT';
+    const generatedCode = generateProcessCode(deptCode, docTypeCode, allProcesses);
 
     setNewProcessData(prev => ({
       ...prev,
@@ -358,6 +380,22 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
       department_name: dept.name,
       code: generatedCode,
       role: dept.name
+    }));
+  };
+
+  const handleSelectDocType = (docTypeId) => {
+    const dType = docTypesList.find(t => String(t.id) === String(docTypeId));
+    const docTypeCode = dType ? dType.code : 'QT';
+    const dept = departmentsList.find(d => d.id === parseInt(newProcessData.department_id, 10));
+    const deptCode = dept ? dept.code : 'CL';
+    const generatedCode = generateProcessCode(deptCode, docTypeCode, allProcesses);
+
+    setNewProcessData(prev => ({
+      ...prev,
+      doc_type_id: dType ? dType.id : '',
+      doc_type_code: docTypeCode,
+      symbol: docTypeCode,
+      code: generatedCode
     }));
   };
 
@@ -377,23 +415,26 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
     setParsingWordLoading(true);
 
     try {
-      // 1. Tải song song: Upload & parse Word đồng thời nạp danh sách Phòng ban & Trưởng phòng
-      const [parsedData, deptsData, tpData, procsData] = await Promise.all([
+      // 1. Tải song song: Upload & parse Word đồng thời nạp danh sách Phòng ban & Trưởng phòng & Loại tài liệu
+      const [parsedData, deptsData, tpData, procsData, typesData] = await Promise.all([
         api.post('/iso-documents/upload', formData, {
           headers: { 'Content-Type': 'multipart/form-data' }
         }),
         departmentsList.length > 0 ? Promise.resolve(departmentsList) : api.get('/iso-documents/meta/departments').catch(() => []),
         departmentHeads.length > 0 ? Promise.resolve(departmentHeads) : api.get('/iso-documents/approvers/department-heads').catch(() => []),
-        allProcesses.length > 0 ? Promise.resolve(allProcesses) : api.get('/iso-documents/processes').catch(() => [])
+        allProcesses.length > 0 ? Promise.resolve(allProcesses) : api.get('/iso-documents/processes').catch(() => []),
+        docTypesList.length > 0 ? Promise.resolve(docTypesList) : api.get('/iso-documents/types').catch(() => [])
       ]);
 
       const depts = Array.isArray(deptsData) ? deptsData : [];
       const tps = Array.isArray(tpData) ? tpData : [];
       const procs = Array.isArray(procsData) ? procsData : [];
+      const dtypes = Array.isArray(typesData) ? typesData : [];
 
       setDepartmentsList(depts);
       setDepartmentHeads(tps);
       setAllProcesses(procs);
+      setDocTypesList(dtypes);
 
       // 2. Nhận diện phòng ban phù hợp từ tên tệp hoặc nội dung
       const fileBaseName = file.name.replace(/\.[^/.]+$/, "");
@@ -409,20 +450,19 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
 
       const deptCode = matchedDept ? matchedDept.code : 'CL';
 
-      // 3. Tự động sinh mã quy trình kế tiếp theo phòng ban
-      const prefix = `G7.${deptCode}.QT`;
-      let maxZz = 0;
-      procs.forEach(p => {
-        if (p.code && p.code.toUpperCase().startsWith(prefix.toUpperCase())) {
-          const suffix = p.code.slice(prefix.length);
-          const num = parseInt(suffix, 10);
-          if (!isNaN(num) && num > maxZz) {
-            maxZz = num;
-          }
-        }
+      // Nhận diện loại tài liệu phù hợp (nếu có)
+      let matchedType = dtypes.find(t => {
+        const n = (t.name || '').toLowerCase();
+        const c = (t.code || '').toLowerCase();
+        return lowerName.includes(n) || lowerName.includes(`.${c}.`) || lowerName.includes(`-${c}-`);
       });
-      const zz = String(maxZz + 1).padStart(2, '0');
-      const generatedCode = `G7.${deptCode}.QT${zz}`;
+      if (!matchedType) {
+        matchedType = dtypes.find(t => (t.code || '').toUpperCase() === 'QT') || (dtypes.length > 0 ? dtypes[0] : { id: 1, name: 'Quy trình', code: 'QT' });
+      }
+      const docTypeCode = matchedType ? matchedType.code : 'QT';
+
+      // 3. Tự động sinh mã tài liệu kế tiếp theo phòng ban & loại tài liệu
+      const generatedCode = generateProcessCode(deptCode, docTypeCode, procs);
 
       // 4. Lấy thông tin người biên soạn và Trưởng phòng duyệt
       const loggedInUser = JSON.parse(localStorage.getItem('smartflow_user') || '{}');
@@ -431,12 +471,14 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
 
       const processName = parsedData?.name || fileBaseName;
 
-      // 5. Cập nhật state dữ liệu quy trình
+      // 5. Cập nhật state dữ liệu tài liệu
       setSelectedWordFile(file);
       setNewProcessData({
         code: generatedCode,
         name: processName,
-        symbol: 'QT',
+        symbol: docTypeCode,
+        doc_type_id: matchedType ? matchedType.id : '',
+        doc_type_code: docTypeCode,
         department_id: matchedDept ? matchedDept.id : '',
         department_name: matchedDept ? matchedDept.name : '',
         file_path: parsedData?.file_path || '',
@@ -447,13 +489,14 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
         editor: editorName,
         owner: editorName,
         approver: defaultApprover,
+        approver_bgd: 'Trần Đình Hùng (Tổng Giám Đốc)',
         role: matchedDept ? matchedDept.name : '',
         status: 'Nháp'
       });
 
       showFeedback('success', `Đã bóc tách thành công tệp: ${file.name}`);
       
-      // 6. Hiển thị Modal "Thêm quy trình mới" sau khi chọn và bóc tách file xong
+      // 6. Hiển thị Modal "Thêm tài liệu mới" sau khi chọn và bóc tách file xong
       setShowCreateModal(true);
 
     } catch (err) {
@@ -468,7 +511,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
   const handleCreateProcess = async (e) => {
     e.preventDefault();
     if (!newProcessData.code || !newProcessData.name || !newProcessData.department_id) {
-      showFeedback('error', 'Vui lòng điền đầy đủ các thông tin bắt buộc (Phòng ban, Tên quy trình, Mã quy trình)');
+      showFeedback('error', 'Vui lòng điền đầy đủ các thông tin bắt buộc (Cấp tài liệu, Phòng ban, Loại tài liệu, Tên tài liệu)');
       return;
     }
 
@@ -476,7 +519,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
       setLoading(true);
       const res = await api.post('/iso-documents/processes/save', newProcessData);
       setShowCreateModal(false);
-      showFeedback('success', res.message || 'Khởi tạo quy trình mới thành công!');
+      showFeedback('success', res.message || 'Khởi tạo tài liệu mới thành công!');
       fetchDocuments();
       
       const createdId = res.id;
@@ -485,7 +528,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
           show: true,
           id: createdId,
           title: '🎉 Khởi tạo thành công!',
-          message: 'Quy trình mới đã được tạo. Bạn có muốn chuyển đến màn hình Biên soạn & Vẽ lưu đồ ngay không?',
+          message: 'Tài liệu mới đã được tạo. Bạn có muốn chuyển đến màn hình Biên soạn & Vẽ lưu đồ ngay không?',
           confirmLabel: 'Đi đến Biên soạn',
           confirmColor: '#16a34a',
           onConfirm: () => {
@@ -496,8 +539,8 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
       }, 500);
 
     } catch (error) {
-      console.error('Lỗi khi tạo quy trình:', error);
-      showFeedback('error', error.response?.data?.detail || 'Lỗi hệ thống khi tạo quy trình mới');
+      console.error('Lỗi khi tạo tài liệu:', error);
+      showFeedback('error', error.response?.data?.detail || 'Lỗi hệ thống khi tạo tài liệu mới');
     } finally {
       setLoading(false);
     }
@@ -555,9 +598,9 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
     setConfirmModal({
       show: true,
       id,
-      title: mode === 'processes' ? 'Xác nhận xoá Quy trình' : 'Xác nhận xoá tài liệu ISO',
+      title: mode === 'processes' ? 'Xác nhận xoá Tài liệu' : 'Xác nhận xoá tài liệu ISO',
       message: mode === 'processes'
-        ? `Bạn có chắc chắn muốn xoá quy trình áp dụng thực tế '${code} - ${name}' cùng toàn bộ thiết lập chi tiết liên quan?`
+        ? `Bạn có chắc chắn muốn xoá tài liệu áp dụng thực tế '${code} - ${name}' cùng toàn bộ thiết lập chi tiết liên quan?`
         : `Bạn có chắc chắn muốn xoá tài liệu mẫu '${code} - ${name}' cùng toàn bộ lưu đồ và thiết lập checklist liên quan?`,
       onConfirm: async () => {
         try {
@@ -566,8 +609,8 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
           showFeedback('success', `Đã xoá thành công!`);
           fetchDocuments();
         } catch (error) {
-          console.error('Lỗi khi xoá quy trình:', error);
-          showFeedback('error', 'Không thể xoá quy trình này');
+          console.error('Lỗi khi xoá tài liệu:', error);
+          showFeedback('error', 'Không thể xoá tài liệu này');
         }
         setConfirmModal({ show: false, id: null, title: '', message: '', onConfirm: null, confirmLabel: 'Xác nhận', confirmColor: '#d93025' });
       }
@@ -744,7 +787,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
             }}
           >
             <Layers size={16} />
-            <span>Quy trình nghiệp vụ</span>
+            <span>Tài liệu nghiệp vụ</span>
           </Link>
           <Link 
             to="/admin/iso-records" 
@@ -809,7 +852,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
       <PageToolbar
         searchValue={searchTerm}
         onSearchChange={(val) => { setSearchTerm(val); setPage(1); }}
-        searchPlaceholder={mode === 'processes' ? 'Tìm theo mã quy trình, tên, người biên soạn...' : 'Tìm theo mã mẫu, tên, người ban hành...'}
+        searchPlaceholder={mode === 'processes' ? 'Tìm theo mã tài liệu, tên, người biên soạn...' : 'Tìm theo mã mẫu, tên, người ban hành...'}
         showFilter={true}
         isFilterOpen={isFilterBarOpen}
         onFilterToggle={() => setIsFilterBarOpen(!isFilterBarOpen)}
@@ -950,7 +993,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                       <th style={{ padding: '7px 6px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '90px', whiteSpace: 'nowrap' }}>MÃ CŨ</th>
                       <th style={{ padding: '7px 6px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '85px', textAlign: 'center', whiteSpace: 'nowrap' }}>MÃ MỚI</th>
                       <th style={{ padding: '7px 6px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '130px', maxWidth: '140px', whiteSpace: 'nowrap' }}>PHÒNG BAN</th>
-                      <th style={{ padding: '7px 8px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', minWidth: '280px' }}>TÊN QUY TRÌNH</th>
+                      <th style={{ padding: '7px 8px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', minWidth: '280px' }}>TÊN TÀI LIỆU</th>
                       <th style={{ padding: '7px 4px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '75px', textAlign: 'center', whiteSpace: 'nowrap' }}>SỐ TÀI LIỆU</th>
                       <th style={{ padding: '7px 4px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '80px', textAlign: 'center', whiteSpace: 'nowrap' }}>CẤP DUYỆT</th>
                       <th style={{ padding: '7px 6px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '110px', textAlign: 'center', whiteSpace: 'nowrap' }}>NGƯỜI BIÊN SOẠN</th>
@@ -1324,10 +1367,10 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                 </div>
                 <div>
                   <h2 style={{ margin: 0, color: '#2D1A12', fontSize: '1.18rem', fontWeight: 700 }}>
-                    Thêm quy trình mới
+                    Thêm tài liệu mới
                   </h2>
                   <span style={{ fontSize: '0.8rem', color: '#786C62', marginTop: '2px', display: 'block' }}>
-                    Khởi tạo thông tin quy trình nghiệp vụ trước khi biên soạn
+                    Khởi tạo thông tin tài liệu nghiệp vụ trước khi biên soạn
                   </span>
                 </div>
               </div>
@@ -1355,101 +1398,18 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
               </button>
             </div>
             
-            {/* Form nội dung */}
+            {/* Form nội dung chuẩn hóa 5 hàng */}
             <form onSubmit={handleCreateProcess} style={{ display: 'flex', flexDirection: 'column', flex: 1, overflowY: 'auto' }}>
               <div style={{ padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
-                {/* Phòng ban */}
-                <div>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
-                    <Building size={14} color="#7B5233" />
-                    <span>Phòng ban</span>
-                    <span style={{ color: '#EF4444' }}>*</span>
-                  </label>
-                  <select
-                    value={newProcessData.department_id || ''}
-                    onChange={(e) => handleSelectDepartment(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '9px 12px',
-                      borderRadius: '8px',
-                      border: '1px solid #D9C7B6',
-                      outline: 'none',
-                      fontSize: '0.88rem',
-                      color: '#1F2937',
-                      backgroundColor: '#FFFFFF',
-                      cursor: 'pointer',
-                      boxSizing: 'border-box'
-                    }}
-                    required
-                  >
-                    <option value="" disabled>-- Chọn phòng ban áp dụng quy trình --</option>
-                    {departmentsList.map(d => (
-                      <option key={d.id} value={d.id}>
-                        {d.name} ({d.code})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Tên quy trình */}
-                <div>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
-                    <FileText size={14} color="#7B5233" />
-                    <span>Tên quy trình</span>
-                    <span style={{ color: '#EF4444' }}>*</span>
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Nhập tên quy trình..."
-                    value={newProcessData.name}
-                    onChange={(e) => setNewProcessData(prev => ({ ...prev, name: e.target.value }))}
-                    style={{
-                      width: '100%',
-                      padding: '9px 12px',
-                      borderRadius: '8px',
-                      border: '1px solid #D9C7B6',
-                      outline: 'none',
-                      fontSize: '0.88rem',
-                      boxSizing: 'border-box',
-                      color: '#1F2937',
-                      fontWeight: 500
-                    }}
-                    required
-                  />
-                </div>
-
-                {/* Grid 2 cột cho các thông tin còn lại */}
+                {/* HÀNG 1: Cấp tài liệu, Phòng ban */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 16px' }}>
-                  {/* Mã quy trình */}
+                  {/* Cấp tài liệu */}
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.84rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
-                      Mã tài liệu / Quy trình <span style={{ color: '#EF4444' }}>*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={newProcessData.code}
-                      onChange={(e) => setNewProcessData(prev => ({ ...prev, code: e.target.value }))}
-                      style={{
-                        width: '100%',
-                        padding: '9px 12px',
-                        borderRadius: '8px',
-                        border: '1px solid #D9C7B6',
-                        outline: 'none',
-                        fontSize: '0.88rem',
-                        fontWeight: 600,
-                        backgroundColor: '#FFFFFF',
-                        color: '#1F2937',
-                        boxSizing: 'border-box'
-                      }}
-                      required
-                    />
-                  </div>
-
-                  {/* Cấp quy trình */}
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.84rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
-                      Cấp tài liệu / Quy trình <span style={{ color: '#EF4444' }}>*</span>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
+                      <Layers size={14} color="#7B5233" />
+                      <span>Cấp tài liệu</span>
+                      <span style={{ color: '#EF4444' }}>*</span>
                     </label>
                     <select
                       value={newProcessData.document_level || 'Cấp phòng'}
@@ -1479,6 +1439,132 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                     </select>
                   </div>
 
+                  {/* Phòng ban */}
+                  <div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
+                      <Building size={14} color="#7B5233" />
+                      <span>Phòng ban</span>
+                      <span style={{ color: '#EF4444' }}>*</span>
+                    </label>
+                    <select
+                      value={newProcessData.department_id || ''}
+                      onChange={(e) => handleSelectDepartment(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '9px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid #D9C7B6',
+                        outline: 'none',
+                        fontSize: '0.88rem',
+                        color: '#1F2937',
+                        backgroundColor: '#FFFFFF',
+                        cursor: 'pointer',
+                        boxSizing: 'border-box'
+                      }}
+                      required
+                    >
+                      <option value="" disabled>-- Chọn phòng ban áp dụng tài liệu --</option>
+                      {departmentsList.map(d => (
+                        <option key={d.id} value={d.id}>
+                          {d.name} ({d.code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* HÀNG 2: Loại tài liệu, Mã tài liệu (k chỉnh sửa) */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 16px' }}>
+                  {/* Loại tài liệu */}
+                  <div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
+                      <FolderArchive size={14} color="#7B5233" />
+                      <span>Loại tài liệu</span>
+                      <span style={{ color: '#EF4444' }}>*</span>
+                    </label>
+                    <select
+                      value={newProcessData.doc_type_id || ''}
+                      onChange={(e) => handleSelectDocType(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '9px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid #D9C7B6',
+                        outline: 'none',
+                        fontSize: '0.88rem',
+                        color: '#1F2937',
+                        backgroundColor: '#FFFFFF',
+                        cursor: 'pointer',
+                        boxSizing: 'border-box'
+                      }}
+                      required
+                    >
+                      <option value="" disabled>-- Chọn loại tài liệu --</option>
+                      {docTypesList.map(t => (
+                        <option key={t.id} value={t.id}>
+                          {t.name} ({t.code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Mã tài liệu (k chỉnh sửa) */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.84rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
+                      Mã tài liệu <span style={{ color: '#EF4444' }}>*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={newProcessData.code}
+                      readOnly
+                      title="Mã tài liệu được sinh tự động theo Cấp, Phòng ban và Loại tài liệu"
+                      style={{
+                        width: '100%',
+                        padding: '9px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid #E5E7EB',
+                        outline: 'none',
+                        fontSize: '0.88rem',
+                        fontWeight: 600,
+                        backgroundColor: '#F9FAFB',
+                        color: '#1F2937',
+                        cursor: 'default',
+                        boxSizing: 'border-box'
+                      }}
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* HÀNG 3: Tên tài liệu (Full width 1 hàng) */}
+                <div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
+                    <FileText size={14} color="#7B5233" />
+                    <span>Tên tài liệu</span>
+                    <span style={{ color: '#EF4444' }}>*</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Nhập tên tài liệu..."
+                    value={newProcessData.name}
+                    onChange={(e) => setNewProcessData(prev => ({ ...prev, name: e.target.value }))}
+                    style={{
+                      width: '100%',
+                      padding: '9px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid #D9C7B6',
+                      outline: 'none',
+                      fontSize: '0.88rem',
+                      boxSizing: 'border-box',
+                      color: '#1F2937',
+                      fontWeight: 500
+                    }}
+                    required
+                  />
+                </div>
+
+                {/* HÀNG 4: Người biên soạn, người phê duyệt */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 16px' }}>
                   {/* Người biên soạn */}
                   <div>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.84rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
@@ -1505,11 +1591,11 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                     />
                   </div>
 
-                  {/* Người duyệt (Trưởng phòng) */}
+                  {/* Người phê duyệt */}
                   <div>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.84rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
                       <ShieldCheck size={13} color="#7B5233" />
-                      <span>{newProcessData.document_level === 'Cấp công ty' ? 'Người duyệt 1 (Trưởng phòng)' : 'Người duyệt (Trưởng phòng)'}</span>
+                      <span>{newProcessData.document_level === 'Cấp công ty' ? 'Người phê duyệt (Trưởng phòng)' : 'Người phê duyệt'}</span>
                       <span style={{ color: '#EF4444' }}>*</span>
                     </label>
                     <select
@@ -1529,7 +1615,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                       }}
                       required
                     >
-                      <option value="" disabled>-- Chọn Trưởng phòng duyệt --</option>
+                      <option value="" disabled>-- Chọn người phê duyệt --</option>
                       {departmentHeads.map(acc => (
                         <option key={acc.id} value={acc.full_name}>
                           {acc.display_name || `${acc.full_name} (${acc.department_name || acc.role_name || 'Trưởng phòng'})`}
@@ -1537,39 +1623,42 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                       ))}
                     </select>
                   </div>
+                </div>
 
-                  {/* Nếu Cấp công ty -> Người duyệt 2 (BGĐ) */}
-                  {newProcessData.document_level === 'Cấp công ty' && (
-                    <div style={{ gridColumn: 'span 2' }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.84rem', fontWeight: 600, color: '#1E40AF', marginBottom: '6px' }}>
-                        <ShieldCheck size={13} color="#1E40AF" />
-                        <span>Người duyệt 2: Cấp công ty (Ban Giám Đốc)</span>
-                        <span style={{ color: '#EF4444' }}>*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={newProcessData.approver_bgd || 'Trần Đình Hùng (Tổng Giám Đốc)'}
-                        onChange={(e) => setNewProcessData(prev => ({ ...prev, approver_bgd: e.target.value }))}
-                        style={{
-                          width: '100%',
-                          padding: '9px 12px',
-                          borderRadius: '8px',
-                          border: '1.5px solid #BFDBFE',
-                          outline: 'none',
-                          fontSize: '0.88rem',
-                          color: '#1E3A8A',
-                          backgroundColor: '#EFF6FF',
-                          fontWeight: 600,
-                          boxSizing: 'border-box'
-                        }}
-                        required
-                      />
-                      <span style={{ fontSize: '0.74rem', color: '#3B82F6', marginTop: '4px', display: 'block' }}>
-                        ℹ️ Quy trình 2 cấp duyệt: Trưởng phòng duyệt Bước 1, Ban Giám Đốc ký duyệt ban hành Bước 2.
-                      </span>
-                    </div>
-                  )}
+                {/* Nếu Cấp công ty -> Người duyệt 2 (BGĐ) */}
+                {newProcessData.document_level === 'Cấp công ty' && (
+                  <div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.84rem', fontWeight: 600, color: '#1E40AF', marginBottom: '6px' }}>
+                      <ShieldCheck size={13} color="#1E40AF" />
+                      <span>Người phê duyệt 2: Cấp công ty (Ban Giám Đốc)</span>
+                      <span style={{ color: '#EF4444' }}>*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={newProcessData.approver_bgd || 'Trần Đình Hùng (Tổng Giám Đốc)'}
+                      onChange={(e) => setNewProcessData(prev => ({ ...prev, approver_bgd: e.target.value }))}
+                      style={{
+                        width: '100%',
+                        padding: '9px 12px',
+                        borderRadius: '8px',
+                        border: '1.5px solid #BFDBFE',
+                        outline: 'none',
+                        fontSize: '0.88rem',
+                        color: '#1E3A8A',
+                        backgroundColor: '#EFF6FF',
+                        fontWeight: 600,
+                        boxSizing: 'border-box'
+                      }}
+                      required
+                    />
+                    <span style={{ fontSize: '0.74rem', color: '#3B82F6', marginTop: '4px', display: 'block' }}>
+                      ℹ️ Tài liệu 2 cấp duyệt: Trưởng phòng duyệt Bước 1, Ban Giám Đốc ký duyệt ban hành Bước 2.
+                    </span>
+                  </div>
+                )}
 
+                {/* HÀNG 5: Thời gian cập nhật, Trạng thái cập nhật */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 16px' }}>
                   {/* Thời gian cập nhật */}
                   <div>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.84rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
@@ -1596,10 +1685,10 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                     />
                   </div>
 
-                  {/* Trạng thái */}
+                  {/* Trạng thái cập nhật */}
                   <div>
                     <label style={{ display: 'block', fontSize: '0.84rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
-                      Trạng thái
+                      Trạng thái cập nhật
                     </label>
                     <div style={{
                       padding: '9px 12px',
@@ -1685,7 +1774,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                     onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#7B5233'}
                   >
                     <Plus size={16} />
-                    Tạo mới quy trình
+                    Tạo mới tài liệu
                   </button>
                 </div>
               </div>

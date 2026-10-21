@@ -159,8 +159,24 @@ def parse_iso_docx(file_path: str) -> dict:
                     })
             continue
 
-        # B. Kiểm tra nếu là Bảng các bước lưu đồ (Flowchart/Process table)
-        is_flow_table = any("trách nhiệm" in h or "lưu đồ" in h or "biểu mẫu" in h or "phụ lục" in h for h in headers)
+        # B. Kiểm tra nếu là Bảng Danh mục biểu mẫu và hồ sơ lưu trữ (Mục 6)
+        is_forms_table = any("mã hiệu" in h or "thời hạn" in h or "nơi lưu trữ" in h for h in headers) or (any("biểu mẫu" in h or "hồ sơ" in h for h in headers) and not any("lưu đồ" in h or "trách nhiệm" in h for h in headers))
+        if is_forms_table:
+            forms_rows = []
+            for r_idx, row in enumerate(table.rows):
+                cells_text = [re.sub(r'\s+', ' ', c.text.strip()) for c in row.cells]
+                if r_idx == 0:
+                    th_cells = "".join([f'<th style="border:1px solid #000000; padding:6px 8px; font-weight:bold; background:#F1F5F9; text-align:center; font-size:10pt; font-family:\'Times New Roman\', serif;">{c}</th>' for c in cells_text])
+                    forms_rows.append(f'<tr>{th_cells}</tr>')
+                else:
+                    td_cells = "".join([f'<td style="border:1px solid #000000; padding:6px 8px; text-align:{"center" if idx in [0, 2, 3] else "left"}; font-size:10pt; font-family:\'Times New Roman\', serif;">{c}</td>' for idx, c in enumerate(cells_text)])
+                    forms_rows.append(f'<tr>{td_cells}</tr>')
+            forms_table_html = f'<table class="iso-doc-forms-table" style="width:100%; border-collapse:collapse; margin-top:8px; border:1px solid #000000; font-family:\'Times New Roman\', serif;"><tbody>{"".join(forms_rows)}</tbody></table>'
+            result["forms_table_html"] = forms_table_html
+            continue
+
+        # C. Kiểm tra nếu là Bảng các bước lưu đồ (Flowchart/Process table)
+        is_flow_table = any("trách nhiệm" in h or "lưu đồ" in h for h in headers)
         if is_flow_table:
             # Xác định chỉ mục các cột
             col_idx = {
@@ -220,7 +236,6 @@ def parse_iso_docx(file_path: str) -> dict:
             continue
 
     # 3. Phân tích nội dung văn bản chính (Các phần lớn từ 1 đến 5)
-    # 3. Phân tích nội dung văn bản chính (Các phần lớn từ 1 đến 5)
     current_section = None
     section_content = []
 
@@ -253,6 +268,10 @@ def parse_iso_docx(file_path: str) -> dict:
                     "template_files": "",
                     "node_type": "task"
                 }
+                # QUAN TRỌNG: Vẫn đưa dòng tiêu đề bước vào section_content của Mục 5
+                # để mục Diễn giải chi tiết không bị mất các tiêu đề Bước 1, Bước 2, Bước 3...
+                if current_section:
+                    section_content.append(line)
                 continue
 
         # Nhận diện tiêu đề mục mới bằng cách quét các thuộc tính hình thức văn bản và từ khóa
@@ -514,6 +533,18 @@ def parse_iso_docx(file_path: str) -> dict:
         except Exception:
             pass
     
+    # 5b. Bổ sung Mục 6 Bảng biểu mẫu nếu tài liệu có Bảng biểu mẫu và hồ sơ lưu trữ
+    if result.get("forms_table_html"):
+        sec6_found = False
+        for k in list(result.get("sections", {}).keys()):
+            if "biểu mẫu" in k.lower() or "hồ sơ" in k.lower():
+                sec6_found = True
+                if "<table" not in result["sections"][k]:
+                    result["sections"][k] = (result["sections"][k] + result["forms_table_html"]).strip()
+                break
+        if not sec6_found:
+            result.setdefault("sections", {})["6. Danh mục biểu mẫu và hồ sơ lưu trữ"] = result["forms_table_html"]
+
     # 6. Chỉ giữ lại các mục có nội dung thực tế từ file
     if "sections" in result:
         result["sections"] = {

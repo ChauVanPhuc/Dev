@@ -75,6 +75,7 @@ def upgrade():
                     {"title": "Quản lý tài khoản", "route_path": "/admin/users", "icon": "Users", "sort_order": 7, "permission_key": "users"},
                     {"title": "Cấu hình Sidebar", "route_path": "/admin/sidebar", "icon": "Sliders", "sort_order": 8, "permission_key": "screens"},
                     {"title": "Quản lý mã QR tạm", "route_path": "/admin/backup-qrs", "icon": "QrCode", "sort_order": 9, "permission_key": "backup-qrs"},
+                    {"title": "Cấu hình hệ thống", "route_path": "/admin/system-config", "icon": "Sliders", "sort_order": 10, "permission_key": "screens"},
                 ]
             },
             {

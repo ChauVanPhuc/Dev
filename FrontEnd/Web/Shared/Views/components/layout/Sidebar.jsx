@@ -138,6 +138,24 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
           return item;
         });
 
+        // Đảm bảo "Cấu hình hệ thống" luôn xuất hiện trong nhóm "Quản lý hệ thống"
+        const sysGroup = list.find(item => item.title === 'Quản lý hệ thống' || item.id === 2);
+        if (sysGroup && Array.isArray(sysGroup.children)) {
+          const hasSystemConfig = sysGroup.children.some(c => c.route_path === '/admin/system-config');
+          if (!hasSystemConfig) {
+            sysGroup.children.push({
+              id: 3113,
+              parent_id: sysGroup.id,
+              title: 'Cấu hình hệ thống',
+              route_path: '/admin/system-config',
+              icon: 'Sliders',
+              sort_order: 10,
+              is_active: true,
+              permission_key: 'screens'
+            });
+          }
+        }
+
         setMenuList(list);
       } catch (err) {
         console.error('Failed to fetch sidebar menus:', err);
@@ -177,7 +195,8 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
       '/admin/claims',
       '/admin/prices',
       '/admin/lpn-crawler',
-      '/admin/ai-ocr-train'
+      '/admin/ai-ocr-train',
+      '/admin/system-config'
     ];
     if (allowByDefaultRoutes.includes(item.route_path)) {
       if (perm === 'none') return true;

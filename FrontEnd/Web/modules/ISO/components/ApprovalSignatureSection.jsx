@@ -19,7 +19,11 @@ export const ApprovalSignatureSection = ({
   approverBgd = '',
   approverCustomer = '',
   department = '',
-  status = ''
+  status = '',
+  hideLabel = false,
+  boxHeight = 76,
+  boxWidth = 130,
+  fullWidth = false
 }) => {
   const [signaturesList, setSignaturesList] = useState([]);
 
@@ -115,25 +119,31 @@ export const ApprovalSignatureSection = ({
     });
   }
 
-  return (
-    <div>
-      <label style={{
-        fontSize: '0.73rem',
-        fontWeight: '700',
-        color: '#4B5563',
-        display: 'block',
-        marginBottom: '4px',
-        textTransform: 'uppercase',
-        letterSpacing: '0.5px'
-      }}>
-        Chữ ký phê duyệt
-      </label>
+  const isFull = fullWidth || boxWidth === '100%';
 
-      {/* Grid các ô chữ ký vừa vặn không bị cắt 3 chấm (130px x 88px) */}
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', width: '100%', boxSizing: 'border-box' }}>
+      {!hideLabel && (
+        <label style={{
+          fontSize: '0.70rem',
+          fontWeight: '700',
+          color: '#4B5563',
+          display: 'block',
+          marginBottom: '2px',
+          textTransform: 'uppercase',
+          letterSpacing: '0.4px'
+        }}>
+          Chữ ký phê duyệt
+        </label>
+      )}
+
+      {/* Grid các ô chữ ký: chia đều 1fr khi fullWidth hoặc theo pixel nếu cố định */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: `repeat(${signers.length}, 130px)`,
-        gap: '8px'
+        gridTemplateColumns: isFull ? `repeat(${signers.length}, minmax(0, 1fr))` : `repeat(${signers.length}, ${boxWidth}px)`,
+        gap: '8px',
+        width: '100%',
+        boxSizing: 'border-box'
       }}>
         {signers.map((s, idx) => {
           const isDigital = s.sig?.signature_type === 'DIGITAL';
@@ -141,12 +151,13 @@ export const ApprovalSignatureSection = ({
             <div
               key={idx}
               style={{
-                width: '130px',
-                height: '88px',
+                width: isFull ? '100%' : `${boxWidth}px`,
+                minWidth: 0,
+                height: `${boxHeight}px`,
                 backgroundColor: '#FFFFFF',
                 border: '1px solid #E5E7EB',
-                borderRadius: '6px',
-                padding: '5px 8px',
+                borderRadius: '5px',
+                padding: '4px 6px',
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'space-between',
@@ -163,10 +174,12 @@ export const ApprovalSignatureSection = ({
                   color: '#4B5563',
                   textTransform: 'uppercase',
                   whiteSpace: 'nowrap',
-                  overflow: 'visible',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
                   width: '100%',
                   lineHeight: 1.2
                 }}
+                title={s.role}
               >
                 {s.role}
               </div>
@@ -191,7 +204,7 @@ export const ApprovalSignatureSection = ({
               {/* Ô hiển thị chữ ký: mặc định để trống */}
               <div style={{
                 width: '100%',
-                height: '36px',
+                height: '32px',
                 backgroundColor: '#FAFAF9',
                 border: '1px dashed #E5E7EB',
                 borderRadius: '4px',

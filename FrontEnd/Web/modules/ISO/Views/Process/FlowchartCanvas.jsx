@@ -1,4 +1,6 @@
 import React, { useCallback, useMemo, useEffect, useState, useRef, useImperativeHandle, forwardRef } from "react";
+import { Search } from "lucide-react";
+import api from '@webShared/Services/api.service';
 import {
   ReactFlow, Background, Controls,
   useNodesState, useEdgesState, addEdge,
@@ -30,7 +32,7 @@ const TaskNode = ({ data, selected }) => {
       flexDirection: "column",
       alignItems: "center",
       justifyContent: "center",
-      fontFamily: "Arial, sans-serif",
+      fontFamily: "'Times New Roman', Times, serif",
       padding: "6px 10px",
       boxSizing: "border-box",
       position: "relative",
@@ -41,16 +43,11 @@ const TaskNode = ({ data, selected }) => {
       <Handle type="target" position={Position.Left} id="left-target" style={{ background: "#000000", width: 7, height: 7, top: "50%" }} />
       <Handle type="target" position={Position.Right} id="right-target" style={{ background: "#000000", width: 7, height: 7, top: "50%" }} />
       
-      {/* Header Badges: Step Number & Role */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", marginBottom: "4px", pointerEvents: "none" }}>
+      {/* Header Badges: Step Number */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", width: "100%", marginBottom: "4px", pointerEvents: "none" }}>
         <span style={{ fontSize: "8.5px", fontWeight: "bold", background: "#000000", color: "#ffffff", padding: "1px 5px", borderRadius: "2px" }}>
           B{data.stepNumber}
         </span>
-        {data.role && (
-          <span style={{ fontSize: "8.5px", color: "#475569", fontWeight: "600", maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={data.role}>
-            {data.role}
-          </span>
-        )}
       </div>
 
       {/* Step Name */}
@@ -92,7 +89,7 @@ const DiamondNode = ({ data, selected }) => {
       <div style={{
         position: "absolute", top: 0, left: 0, width: "124px", height: "124px",
         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-        fontFamily: "Arial, sans-serif", padding: "16px", boxSizing: "border-box",
+        fontFamily: "'Times New Roman', Times, serif", padding: "16px", boxSizing: "border-box",
         pointerEvents: "none", zIndex: 2
       }}>
         <span style={{ fontSize: "8.5px", fontWeight: "bold", background: "#000000", color: "#ffffff", padding: "1px 5px", borderRadius: "2px", marginBottom: "3px" }}>
@@ -101,11 +98,6 @@ const DiamondNode = ({ data, selected }) => {
         <div style={{ fontSize: "10.5px", fontWeight: "bold", color: "#000000", textAlign: "center", lineHeight: "1.2", wordBreak: "break-word" }}>
           {data.label}
         </div>
-        {data.role && (
-          <span style={{ fontSize: "8px", color: "#475569", fontWeight: "600", marginTop: "2px", maxWidth: "90px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={data.role}>
-            {data.role}
-          </span>
-        )}
       </div>
 
       {/* Source Handles */}
@@ -129,7 +121,7 @@ const OvalNode = ({ data, selected }) => {
       flexDirection: "column",
       alignItems: "center",
       justifyContent: "center",
-      fontFamily: "Arial, sans-serif",
+      fontFamily: "'Times New Roman', Times, serif",
       padding: "6px 14px",
       boxSizing: "border-box",
       position: "relative",
@@ -139,15 +131,10 @@ const OvalNode = ({ data, selected }) => {
       <Handle type="target" position={Position.Left} id="left-target" style={{ background: "#000000", width: 7, height: 7, top: "50%" }} />
       <Handle type="target" position={Position.Right} id="right-target" style={{ background: "#000000", width: 7, height: 7, top: "50%" }} />
       
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", marginBottom: "2px", pointerEvents: "none" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", width: "100%", marginBottom: "2px", pointerEvents: "none" }}>
         <span style={{ fontSize: "8.5px", fontWeight: "bold", background: "#000000", color: "#ffffff", padding: "1px 6px", borderRadius: "10px" }}>
           B{data.stepNumber}
         </span>
-        {data.role && (
-          <span style={{ fontSize: "8.5px", color: "#475569", fontWeight: "600", maxWidth: "115px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={data.role}>
-            {data.role}
-          </span>
-        )}
       </div>
 
       <div style={{ fontSize: "11px", fontWeight: "bold", color: "#000000", textAlign: "center", lineHeight: "1.3", wordBreak: "break-word", pointerEvents: "none" }}>
@@ -161,7 +148,14 @@ const OvalNode = ({ data, selected }) => {
   );
 };
 
-const nodeTypes = { task: TaskNode, decision: DiamondNode, terminal: OvalNode };
+const nodeTypes = {
+  task: TaskNode,
+  decision: DiamondNode,
+  terminal: OvalNode,
+  start: OvalNode,
+  end: OvalNode,
+  default: TaskNode,
+};
 
 // ─── Minimal Edge with Double Click Inline Editing ──────────────────────────────
 const MinimalEdge = ({
@@ -200,7 +194,7 @@ const MinimalEdge = ({
 
   return (
     <>
-      <BaseEdge path={edgePath} markerEnd={markerEnd} style={{ ...style, stroke: "#000000", strokeWidth: 1.5 }} />
+      <BaseEdge path={edgePath} markerEnd={markerEnd} style={{ strokeWidth: 1.5, ...style }} />
       {label !== undefined && label !== "" && (
         <EdgeLabelRenderer>
           <div
@@ -228,7 +222,7 @@ const MinimalEdge = ({
                   textAlign: "center",
                   outline: "none",
                   backgroundColor: "#ffffff",
-                  fontFamily: "Arial, sans-serif"
+                  fontFamily: "'Times New Roman', Times, serif"
                 }}
               />
             ) : (
@@ -237,14 +231,14 @@ const MinimalEdge = ({
                   padding: "1px 6px",
                   fontSize: "9px",
                   fontWeight: "bold",
-                  backgroundColor: "#ffffff",
-                  border: "1px solid #000000",
+                  backgroundColor: data?.isPass ? "#DCFCE7" : (data?.isFail ? "#FEE2E2" : "#ffffff"),
+                  border: data?.isPass ? "1px solid #15803D" : (data?.isFail ? "1px solid #DC2626" : "1px solid #000000"),
                   borderRadius: "2px",
-                  color: "#000000",
+                  color: data?.isPass ? "#15803D" : (data?.isFail ? "#DC2626" : "#000000"),
                   cursor: "pointer",
                   userSelect: "none",
                   whiteSpace: "nowrap",
-                  fontFamily: "Arial, sans-serif",
+                  fontFamily: "'Times New Roman', Times, serif",
                   boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
                 }}
                 title="Double-click để sửa nhãn"
@@ -327,7 +321,7 @@ const COMMON_ROLES = [
   "Phòng Mua hàng / Thu mua"
 ];
 
-const PropertiesPanel = ({ step, stepIndex, steps, onUpdate, onDelete, onClose }) => {
+const PropertiesPanel = ({ step, stepIndex, steps, relatedTemplates = [], dbTemplates = [], onUpdate, onDelete, onClose, onOpenFormPicker }) => {
   if (!step) return null;
   const isDecision = step.node_type === "decision";
   const currentFailPath = (step.fail_path && step.fail_path.length > 0) ? step.fail_path[0] : null;
@@ -373,7 +367,7 @@ const PropertiesPanel = ({ step, stepIndex, steps, onUpdate, onDelete, onClose }
             rows="2"
             value={step.name || ""}
             onChange={(e) => onUpdate(stepIndex, "name", e.target.value)}
-            style={{ width: "100%", padding: "6px 8px", border: "1px solid #CBD5E1", borderRadius: "4px", fontSize: "11px", outline: "none", fontFamily: "Arial, sans-serif", boxSizing: "border-box" }}
+            style={{ width: "100%", padding: "6px 8px", border: "1px solid #CBD5E1", borderRadius: "4px", fontSize: "11px", outline: "none", fontFamily: "'Times New Roman', Times, serif", boxSizing: "border-box" }}
           />
         </div>
 
@@ -492,17 +486,58 @@ const PropertiesPanel = ({ step, stepIndex, steps, onUpdate, onDelete, onClose }
           </div>
         )}
 
-        {/* Biểu mẫu đi kèm */}
+        {/* Biểu mẫu / Hồ sơ áp dụng (gộp 1 ô, nhấp vào mở popup CSDL như ảnh 2) */}
         <div>
           <label style={{ fontSize: "9px", fontWeight: "bold", color: "#64748B", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
-            Biểu mẫu / Hồ sơ:
+            Biểu mẫu / Hồ sơ áp dụng:
           </label>
-          <input
-            value={step.template_files || ""}
-            onChange={(e) => onUpdate(stepIndex, "template_files", e.target.value)}
-            placeholder="Ví dụ: QT07-BM01..."
-            style={{ width: "100%", padding: "6px 8px", border: "1px solid #CBD5E1", borderRadius: "4px", fontSize: "11px", outline: "none", boxSizing: "border-box" }}
-          />
+          <div
+            onClick={() => {
+              if (onOpenFormPicker) {
+                onOpenFormPicker(stepIndex);
+              }
+            }}
+            style={{
+              position: "relative",
+              display: "flex",
+              alignItems: "center",
+              cursor: "pointer",
+              width: "100%"
+            }}
+            title="Nhấp để tìm kiếm và chọn biểu mẫu từ CSDL"
+          >
+            <input
+              type="text"
+              readOnly
+              value={step.template_files || ""}
+              placeholder="Chọn biểu mẫu từ CSDL..."
+              style={{
+                width: "100%",
+                height: "34px",
+                padding: "4px 28px 4px 8px",
+                borderRadius: "4px",
+                border: "1px solid #CBD5E1",
+                fontSize: "11px",
+                backgroundColor: "#FFFFFF",
+                color: step.template_files ? "#1E293B" : "#94A3B8",
+                cursor: "pointer",
+                boxSizing: "border-box",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                overflow: "hidden"
+              }}
+            />
+            <Search
+              size={14}
+              style={{
+                position: "absolute",
+                right: "8px",
+                color: "#7B5233",
+                pointerEvents: "none",
+                opacity: 0.8
+              }}
+            />
+          </div>
         </div>
 
         {/* Diễn giải chi tiết / Hướng dẫn thực hiện bước (Mục 5.2) */}
@@ -552,7 +587,7 @@ const PropertiesPanel = ({ step, stepIndex, steps, onUpdate, onDelete, onClose }
               fontSize: "11px",
               lineHeight: "1.4",
               outline: "none",
-              fontFamily: "Arial, sans-serif",
+              fontFamily: "'Times New Roman', Times, serif",
               resize: "vertical",
               boxSizing: "border-box"
             }}
@@ -589,7 +624,7 @@ const FlowCanvas = ({ steps, onPositionsChange, onAddStep, onUpdateStep, onDelet
   // Helper to calculate dimensions based on node type
   const getNodeDimensions = useCallback((nodeType) => {
     if (nodeType === "decision") return { width: 124, height: 124 };
-    if (nodeType === "terminal") return { width: 185, height: 52 };
+    if (nodeType === "terminal" || nodeType === "start" || nodeType === "end") return { width: 185, height: 52 };
     return { width: 185, height: 58 }; // task
   }, []);
 
@@ -635,17 +670,17 @@ const FlowCanvas = ({ steps, onPositionsChange, onAddStep, onUpdateStep, onDelet
     const edges = [];
     const totalSteps = steps.length;
 
-    // 1. Process steps and auto-deduce node types if unassigned
+    // 1. Process steps and auto-deduce node types if unassigned (Normalize start/end to terminal)
     const processedSteps = steps.map((step, idx) => {
-      let nodeType = step.node_type;
+      let nodeType = (step.node_type || "").toLowerCase();
       const stepName = (step.name || "").toLowerCase();
-      if (!nodeType || nodeType === "task") {
-        if (idx === 0 || /bắt đầu|tiếp nhận/i.test(stepName)) {
+      if (!nodeType || nodeType === "task" || nodeType === "start" || nodeType === "end" || nodeType === "terminal") {
+        if (nodeType === "start" || idx === 0 || /bắt đầu|tiếp nhận/i.test(stepName)) {
+          nodeType = "terminal";
+        } else if (nodeType === "end" || (idx === totalSteps - 1 && /kết thúc|lưu trữ|hoàn tất/i.test(stepName))) {
           nodeType = "terminal";
         } else if (/phê duyệt|quyết định|kiểm tra|thẩm định|đối chiếu/i.test(stepName) || (step.fail_path && step.fail_path.length > 0)) {
           nodeType = "decision";
-        } else if (idx === totalSteps - 1 && /kết thúc|lưu trữ|hoàn tất/i.test(stepName)) {
-          nodeType = "terminal";
         } else {
           nodeType = "task";
         }
@@ -689,7 +724,17 @@ const FlowCanvas = ({ steps, onPositionsChange, onAddStep, onUpdateStep, onDelet
 
       if (next) {
         const nextStep = processedSteps.find(s => s.step_number === next);
-        const { sourceHandle, targetHandle } = getBestHandles(step, nextStep, step.node_type, nextStep?.node_type);
+        let { sourceHandle, targetHandle } = getBestHandles(step, nextStep, step.node_type, nextStep?.node_type);
+        
+        // Với khối Quyết định, nhánh thuận (Đồng ý / Đạt) luôn đi ra từ đáy (bottom) nếu bước tiếp theo nằm bên dưới
+        if (isDecision) {
+          const dy = (nextStep?.y_pos !== undefined ? nextStep.y_pos : (50 + (idx + 1) * 130)) - (step.y_pos !== undefined ? step.y_pos : (50 + idx * 130));
+          if (dy > 0) {
+            sourceHandle = "bottom";
+            targetHandle = "top";
+          }
+        }
+
         const edgeId = `e-${step.step_number}-${next}`;
         const isApproval = /phê duyệt|quyết định/i.test(step.name || "");
         const defaultLabel = isDecision ? (isApproval ? "Đồng ý" : "Đạt") : "";
@@ -698,16 +743,18 @@ const FlowCanvas = ({ steps, onPositionsChange, onAddStep, onUpdateStep, onDelet
         edges.push({
           id: edgeId,
           source: stepId,
-          sourceHandle: sourceHandle,
+          sourceHandle: sourceHandle || "bottom",
           target: `step-${next}`,
-          targetHandle: targetHandle,
+          targetHandle: targetHandle || "top",
           type: "minimal",
           data: {
             fromDecision: isDecision,
+            isPass: isDecision,
             onLabelChange: null,
           },
           label: savedLabel,
-          markerEnd: { type: MarkerType.ArrowClosed, color: "#000000" },
+          style: isDecision ? { stroke: "#15803D", strokeWidth: 1.5 } : { stroke: "#000000", strokeWidth: 1.5 },
+          markerEnd: { type: MarkerType.ArrowClosed, color: isDecision ? "#15803D" : "#000000" },
         });
       }
 
@@ -734,10 +781,12 @@ const FlowCanvas = ({ steps, onPositionsChange, onAddStep, onUpdateStep, onDelet
               type: "minimal",
               data: {
                 fromDecision: true,
+                isFail: true,
                 onLabelChange: null,
               },
               label: savedLabel,
-              markerEnd: { type: MarkerType.ArrowClosed, color: "#000000" },
+              style: { stroke: "#DC2626", strokeWidth: 1.5 },
+              markerEnd: { type: MarkerType.ArrowClosed, color: "#DC2626" },
             });
           }
         });
@@ -923,8 +972,22 @@ const FlowCanvas = ({ steps, onPositionsChange, onAddStep, onUpdateStep, onDelet
 };
 
 // ─── Flowchart Canvas Inner Wrapper ──────────────────────────────────────────────
-const FlowchartCanvasInner = ({ steps, onPositionsChange, onAddStep, onUpdateStep, onDeleteStep, onNodeSelect, selectedStepIdx, canvasRef }) => {
+const FlowchartCanvasInner = ({ steps, relatedTemplates = [], onPositionsChange, onAddStep, onUpdateStep, onDeleteStep, onNodeSelect, selectedStepIdx, canvasRef, onOpenFormPicker }) => {
   const [internalSelectedStepNumber, setInternalSelectedStepNumber] = useState(null);
+  const [dbTemplates, setDbTemplates] = useState([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    api.get('/iso-documents/form-templates')
+      .then(res => {
+        const list = Array.isArray(res) ? res : (res?.data || []);
+        if (isMounted) setDbTemplates(list);
+      })
+      .catch(err => {
+        console.warn("Could not load db templates:", err);
+      });
+    return () => { isMounted = false; };
+  }, []);
 
   const selectedStepNumber = internalSelectedStepNumber !== null
     ? internalSelectedStepNumber
@@ -955,9 +1018,12 @@ const FlowchartCanvasInner = ({ steps, onPositionsChange, onAddStep, onUpdateSte
           step={selectedStep}
           stepIndex={selectedStepIndex}
           steps={steps}
+          relatedTemplates={relatedTemplates}
+          dbTemplates={dbTemplates}
           onUpdate={onUpdateStep}
           onDelete={onDeleteStep}
           onClose={() => setInternalSelectedStepNumber(null)}
+          onOpenFormPicker={onOpenFormPicker}
         />
       )}
     </div>
