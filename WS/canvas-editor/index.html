@@ -125,6 +125,62 @@
       </div>
       <div class="menu-divider"></div>
       <div class="menu-item">
+        <div class="menu-item__table">
+          <i title="Bảng biểu"></i>
+        </div>
+        <div class="menu-item__table__collapse">
+          <div class="table-close">×</div>
+          <div class="table-title">
+            <span class="table-select">Chèn</span>
+            <span>Bảng</span>
+          </div>
+          <div class="table-panel"></div>
+        </div>
+        <div class="menu-item__image">
+          <i title="Chèn hình ảnh"></i>
+          <input type="file" id="image" accept=".png, .jpg, .jpeg, .svg, .gif">
+        </div>
+        <div class="menu-item__hyperlink">
+          <i title="Chèn liên kết (Hyperlink)"></i>
+        </div>
+        <div class="menu-item__separator">
+          <i title="Đường phân cách"></i>
+          <div class="options">
+            <ul>
+              <li data-separator='0,0'>
+                <i></i>
+              </li>
+              <li data-separator="1,1">
+                <i></i>
+              </li>
+              <li data-separator="3,1">
+                <i></i>
+              </li>
+              <li data-separator="4,4">
+                <i></i>
+              </li>
+              <li data-separator="7,3,3,3">
+                <i></i>
+              </li>
+              <li data-separator="6,2,2,2,2,2">
+                <i></i>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="menu-item__watermark">
+          <i title="Hình mờ (Thêm, Xóa)"></i>
+          <div class="options">
+            <ul>
+              <li data-menu="add">Thêm hình mờ</li>
+              <li data-menu="delete">Xóa hình mờ</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      </div>
+      <div class="menu-row menu-row-2">
+      <div class="menu-item">
         <div class="menu-item__title">
           <i></i>
           <span class="select" title="Kiểu đề mục">Văn bản thường</span>
@@ -240,60 +296,8 @@
           </div>
         </div>
       </div>
-      <div class="menu-row menu-row-2">
-        <div class="menu-item">
-        <div class="menu-item__table">
-          <i title="Bảng biểu"></i>
-        </div>
-        <div class="menu-item__table__collapse">
-          <div class="table-close">×</div>
-          <div class="table-title">
-            <span class="table-select">Chèn</span>
-            <span>Bảng</span>
-          </div>
-          <div class="table-panel"></div>
-        </div>
-        <div class="menu-item__image">
-          <i title="Chèn hình ảnh"></i>
-          <input type="file" id="image" accept=".png, .jpg, .jpeg, .svg, .gif">
-        </div>
-        <div class="menu-item__hyperlink">
-          <i title="Chèn liên kết (Hyperlink)"></i>
-        </div>
-        <div class="menu-item__separator">
-          <i title="Đường phân cách"></i>
-          <div class="options">
-            <ul>
-              <li data-separator='0,0'>
-                <i></i>
-              </li>
-              <li data-separator="1,1">
-                <i></i>
-              </li>
-              <li data-separator="3,1">
-                <i></i>
-              </li>
-              <li data-separator="4,4">
-                <i></i>
-              </li>
-              <li data-separator="7,3,3,3">
-                <i></i>
-              </li>
-              <li data-separator="6,2,2,2,2,2">
-                <i></i>
-              </li>
-            </ul>
-          </div>
-        </div>
-        <div class="menu-item__watermark">
-          <i title="Hình mờ (Thêm, Xóa)"></i>
-          <div class="options">
-            <ul>
-              <li data-menu="add">Thêm hình mờ</li>
-              <li data-menu="delete">Xóa hình mờ</li>
-            </ul>
-          </div>
-        </div>
+      <div class="menu-divider"></div>
+      <div class="menu-item">
         <div class="menu-item__codeblock" title="Khối mã (Code block)">
           <i></i>
         </div>
@@ -381,6 +385,7 @@
           <i></i>
           <input type="file" id="docx-input" accept=".docx" style="display:none" />
         </div>
+      </div>
       </div>
     </div>
     <div class="catalog" editor-component="catalog">
