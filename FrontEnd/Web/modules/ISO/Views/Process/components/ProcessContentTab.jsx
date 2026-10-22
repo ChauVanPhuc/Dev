@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Undo, Redo, Bold, Italic, Underline, Strikethrough, AlignLeft, AlignCenter, AlignRight,
   AlignJustify, List, ListOrdered, ChevronLeft, ChevronRight, Table as TableIcon,
@@ -807,6 +808,11 @@ const ProcessContentTab = ({ editor }) => {
         bodyHtml = replaceFlowchartInHtml(bodyHtml, stepsMapped);
       }
       bodyHtml = replaceRelatedFormsInHtml(bodyHtml);
+      if (bodyHtml) {
+        bodyHtml = bodyHtml.normalize ? bodyHtml.normalize('NFC') : bodyHtml;
+        bodyHtml = bodyHtml.replace(/font-family\s*:\s*[^;"'}]+;?/gi, 'font-family: "Times New Roman", Times, serif;');
+        bodyHtml = bodyHtml.replace(/<font[^>]*\sface="[^"]*"/gi, (match) => match.replace(/face="[^"]*"/, 'face="Times New Roman"'));
+      }
 
       // 4. Phân trang nội dung file chọn vào các trang A4 từ trang 3 trở đi
       const bodySheets = buildSheetsFromBodyHtml(bodyHtml, 3);
@@ -1211,9 +1217,9 @@ const ProcessContentTab = ({ editor }) => {
     const svgHtml = generateFlowchartSvgHtml(steps);
 
     return `
-      <div class="iso-flowchart-block-container" id="iso-flowchart-block-container" data-flowchart-block="true" data-flowchart-v="9" data-steps-sig="${stepsSig}" data-step-count="${totalSteps}" style="margin: 6px 0 10px 0; position: relative;">
-        <div class="iso-flowchart-header-actions" style="margin: 0 0 8px 0; display: flex; justify-content: space-between; align-items: center;">
-          <h3 style="font-size: 11pt; font-weight: bold; margin: 0; color: #000000;">
+      <div class="iso-flowchart-block-container" id="iso-flowchart-block-container" data-flowchart-block="true" data-flowchart-v="9" data-steps-sig="${stepsSig}" data-step-count="${totalSteps}" style="margin: 6px 0 10px 0; position: relative; font-family: 'Times New Roman', Times, serif;">
+        <div class="iso-flowchart-header-actions" style="margin: 0 0 8px 0; display: flex; justify-content: space-between; align-items: center; font-family: 'Times New Roman', Times, serif;">
+          <h3 style="font-size: 11pt; font-weight: bold; margin: 0; color: #000000; font-family: 'Times New Roman', Times, serif;">
             5.1. Sơ đồ lưu trình kiểm soát công tác ${displayProcTitle.toLowerCase()}
           </h3>
           <button
@@ -1265,21 +1271,21 @@ const ProcessContentTab = ({ editor }) => {
       let instHtml = s.instructions || '';
       if (!instHtml || instHtml === '<p></p>') {
         instHtml = `
-          <p style="margin: 3px 0;">• <strong>Trách nhiệm thực hiện:</strong> ${stepRole}</p>
-          <p style="margin: 3px 0;">• <strong>Nội dung công việc:</strong> ${stepRole} chủ trì phối hợp với các phòng ban tiến hành ${stepName.toLowerCase()} theo đúng tiêu chuẩn kỹ thuật, hệ thống quản lý chất lượng ISO 9001:2015 và trách nhiệm xã hội Amfori BSCI.</p>
-          <p style="margin: 3px 0;">• <strong>Hồ sơ / Biểu mẫu kiểm soát áp dụng:</strong> ${stepTpl}</p>
+          <p style="margin: 3px 0; font-family: 'Times New Roman', Times, serif;">• <strong>Trách nhiệm thực hiện:</strong> ${stepRole}</p>
+          <p style="margin: 3px 0; font-family: 'Times New Roman', Times, serif;">• <strong>Nội dung công việc:</strong> ${stepRole} chủ trì phối hợp với các phòng ban tiến hành ${stepName.toLowerCase()} theo đúng tiêu chuẩn kỹ thuật, hệ thống quản lý chất lượng ISO 9001:2015 và trách nhiệm xã hội Amfori BSCI.</p>
+          <p style="margin: 3px 0; font-family: 'Times New Roman', Times, serif;">• <strong>Hồ sơ / Biểu mẫu kiểm soát áp dụng:</strong> ${stepTpl}</p>
         `;
       } else if (!instHtml.trim().startsWith('<')) {
         const lines = instHtml.split('\n').filter(l => l.trim().length > 0);
         instHtml = lines.map(line => {
           const trimmed = line.trim();
-          return `<p style="margin: 3px 0;">${trimmed}</p>`;
+          return `<p style="margin: 3px 0; font-family: 'Times New Roman', Times, serif;">${trimmed}</p>`;
         }).join('');
       }
 
       return `
-        <div style="margin-bottom: 16px;">
-          <p style="font-weight: bold; margin-bottom: 4px; color: #0D0D0D; font-size: 11pt;">
+        <div style="margin-bottom: 16px; font-family: 'Times New Roman', Times, serif;">
+          <p style="font-weight: bold; margin-bottom: 4px; color: #0D0D0D; font-size: 11pt; font-family: 'Times New Roman', Times, serif;">
             Bước ${stepNum}: ${stepName}
           </p>
           ${instHtml}
@@ -1288,8 +1294,8 @@ const ProcessContentTab = ({ editor }) => {
     }).join('');
 
     return `
-      <div class="iso-detailed-steps-block-container" id="iso-detailed-steps-block-container" style="margin: 18px 0;">
-        <h3 style="font-size: 11pt; font-weight: bold; margin: 14px 0 8px 0; color: #0D0D0D;">
+      <div class="iso-detailed-steps-block-container" id="iso-detailed-steps-block-container" style="margin: 18px 0; font-family: 'Times New Roman', Times, serif;">
+        <h3 style="font-size: 11pt; font-weight: bold; margin: 14px 0 8px 0; color: #0D0D0D; font-family: 'Times New Roman', Times, serif;">
           5.2. Diễn giải chi tiết các bước thực hiện
         </h3>
         ${stepsHtml}
@@ -2094,6 +2100,12 @@ const ProcessContentTab = ({ editor }) => {
           }
         }
 
+        if (out) {
+          out = out.normalize ? out.normalize('NFC') : out;
+          out = out.replace(/font-family\s*:\s*[^;"'}]+;?/gi, 'font-family: "Times New Roman", Times, serif;');
+          out = out.replace(/<font[^>]*\sface="[^"]*"/gi, (match) => match.replace(/face="[^"]*"/, 'face="Times New Roman"'));
+        }
+
         return out;
       };
 
@@ -2620,6 +2632,7 @@ const ProcessContentTab = ({ editor }) => {
             setFormData={setFormData}
             handleSaveForm={handleSaveForm}
             onOpenFlowchartModal={() => handleOpenFlowchartModal()}
+            onSwitchToClassic={() => setEditorEngine('classic')}
             showFeedback={showFeedback}
           />
         </div>
@@ -3210,7 +3223,20 @@ const ProcessContentTab = ({ editor }) => {
                 setIsWordEditorDirty(true);
                 triggerDebouncedHeadingsUpdate();
               }}
-              onPaste={() => {
+              onPaste={(e) => {
+                e.preventDefault();
+                const html = e.clipboardData.getData('text/html');
+                const text = e.clipboardData.getData('text/plain');
+                if (html) {
+                  // Ép tất cả font-family sang Times New Roman khi paste vào Word Editor
+                  let cleanedHtml = html
+                    .replace(/font-family\s*:\s*[^;"'}]+;?/gi, 'font-family: "Times New Roman", Times, serif;')
+                    .replace(/<font[^>]*\sface="[^"]*"/gi, (match) => match.replace(/face="[^"]*"/, 'face="Times New Roman"'));
+                  document.execCommand('insertHTML', false, cleanedHtml);
+                } else if (text) {
+                  const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+                  document.execCommand('insertHTML', false, `<span style="font-family: 'Times New Roman', Times, serif;">${escaped}</span>`);
+                }
                 setIsWordEditorDirty(true);
                 setTimeout(updateDocHeadings, 200);
               }}
@@ -3248,7 +3274,7 @@ const ProcessContentTab = ({ editor }) => {
       )}
 
       {/* 4. MODAL THIẾT KẾ & CHỈNH SỬA LƯU ĐỒ */}
-      {showFlowchartModal && (
+      {showFlowchartModal && createPortal(
         <div style={{
           position: 'fixed',
           top: 0,
@@ -3256,7 +3282,7 @@ const ProcessContentTab = ({ editor }) => {
           right: 0,
           bottom: 0,
           backgroundColor: 'rgba(15, 23, 42, 0.75)',
-          zIndex: 9999,
+          zIndex: 99999,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -4371,7 +4397,8 @@ const ProcessContentTab = ({ editor }) => {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

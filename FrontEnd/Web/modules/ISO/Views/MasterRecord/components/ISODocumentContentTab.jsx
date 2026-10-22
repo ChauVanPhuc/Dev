@@ -660,6 +660,21 @@ export const ISODocumentContentTab = ({
               contentEditable="true"
               suppressContentEditableWarning={true}
               onInput={() => setIsWordEditorDirty(true)}
+              onPaste={(e) => {
+                e.preventDefault();
+                const html = e.clipboardData.getData('text/html');
+                const text = e.clipboardData.getData('text/plain');
+                if (html) {
+                  let cleanedHtml = html
+                    .replace(/font-family\s*:\s*[^;"'}]+;?/gi, 'font-family: "Times New Roman", Times, serif;')
+                    .replace(/<font[^>]*\sface="[^"]*"/gi, (match) => match.replace(/face="[^"]*"/, 'face="Times New Roman"'));
+                  document.execCommand('insertHTML', false, cleanedHtml);
+                } else if (text) {
+                  const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+                  document.execCommand('insertHTML', false, `<span style="font-family: 'Times New Roman', Times, serif;">${escaped}</span>`);
+                }
+                setIsWordEditorDirty(true);
+              }}
               style={{
                 fontFamily: wordEditorFont,
                 transform: `scale(${wordEditorZoom / 100})`,

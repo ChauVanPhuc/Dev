@@ -1101,7 +1101,7 @@ window.onload = function () {
         let sec51Idx = -1
         for (let i = 0; i < mainList.length; i++) {
           const el = mainList[i]
-          if (el.value && typeof el.value === 'string' && /5\.1|Sơ đồ lưu trình|Lưu trình/i.test(el.value)) {
+          if (el.value && typeof el.value === 'string' && /5\.1|Sơ đồ lưu trình|Lưu trình|Lưu đồ|6\.\s*Nội dung|5\.\s*Nội dung|Bước 1/i.test(el.value)) {
             sec51Idx = i
             break
           }
@@ -1133,8 +1133,11 @@ window.onload = function () {
         try {
           if (typeof (window.parent as any).__openIsoFlowchartModal === 'function') {
             (window.parent as any).__openIsoFlowchartModal()
+          } else if (typeof (window.top as any)?.__openIsoFlowchartModal === 'function') {
+            (window.top as any).__openIsoFlowchartModal()
           } else {
             window.parent.postMessage({ type: 'OPEN_ISO_FLOWCHART_DESIGNER' }, '*')
+            window.top?.postMessage({ type: 'OPEN_ISO_FLOWCHART_DESIGNER' }, '*')
           }
         } catch (_) {
           window.parent.postMessage({ type: 'OPEN_ISO_FLOWCHART_DESIGNER' }, '*')
@@ -1796,20 +1799,30 @@ window.onload = function () {
     }
   }
 
+  function triggerOpenIsoFlowchartModal() {
+    try {
+      if (typeof (window.parent as any)?.__openIsoFlowchartModal === 'function') {
+        (window.parent as any).__openIsoFlowchartModal()
+      } else if (typeof (window.top as any)?.__openIsoFlowchartModal === 'function') {
+        (window.top as any).__openIsoFlowchartModal()
+      } else {
+        window.parent.postMessage({ type: 'OPEN_ISO_FLOWCHART_DESIGNER' }, '*')
+        window.top?.postMessage({ type: 'OPEN_ISO_FLOWCHART_DESIGNER' }, '*')
+      }
+    } catch (_) {
+      try {
+        window.parent.postMessage({ type: 'OPEN_ISO_FLOWCHART_DESIGNER' }, '*')
+        window.top?.postMessage({ type: 'OPEN_ISO_FLOWCHART_DESIGNER' }, '*')
+      } catch (__) {}
+    }
+  }
+
   const flowchartDom = document.querySelector<HTMLDivElement>(
     '.menu-item__flowchart'
   )
   if (flowchartDom) {
     flowchartDom.onclick = function () {
-      try {
-        if (typeof (window.parent as any).__openIsoFlowchartModal === 'function') {
-          (window.parent as any).__openIsoFlowchartModal()
-        } else {
-          window.parent.postMessage({ type: 'OPEN_ISO_FLOWCHART_DESIGNER' }, '*')
-        }
-      } catch (_) {
-        window.parent.postMessage({ type: 'OPEN_ISO_FLOWCHART_DESIGNER' }, '*')
-      }
+      triggerOpenIsoFlowchartModal()
     }
   }
 
@@ -2255,15 +2268,19 @@ window.onload = function () {
   blockDom.onclick = function () {
     console.log('block')
     new Dialog({
-      title: 'Khối nội dung',
+      title: 'Khối nội dung & Sơ đồ',
       data: [
         {
           type: 'select',
           label: 'Loại khối',
           name: 'type',
-          value: 'iframe',
+          value: 'flowchart',
           required: true,
           options: [
+            {
+              label: '🔀 Sơ đồ lưu trình ISO (Flowchart)',
+              value: 'flowchart'
+            },
             {
               label: 'Trang web (Iframe)',
               value: 'iframe'
@@ -2306,6 +2323,10 @@ window.onload = function () {
       onConfirm: payload => {
         const type = payload.find(p => p.name === 'type')?.value
         if (!type) return
+        if (type === 'flowchart') {
+          triggerOpenIsoFlowchartModal()
+          return
+        }
         const width = payload.find(p => p.name === 'width')?.value
         const height = payload.find(p => p.name === 'height')?.value
         if (!height) return
@@ -3123,192 +3144,203 @@ window.onload = function () {
   window.addEventListener('resize', requestDrawCommentLines)
   // 8. 内部事件监听
   instance.listener.rangeStyleChange = function (payload) {
-    // 控件类型
-    payload.type === ElementType.SUBSCRIPT
-      ? subscriptDom.classList.add('active')
-      : subscriptDom.classList.remove('active')
-    payload.type === ElementType.SUPERSCRIPT
-      ? superscriptDom.classList.add('active')
-      : superscriptDom.classList.remove('active')
-    payload.type === ElementType.SEPARATOR
-      ? separatorDom.classList.add('active')
-      : separatorDom.classList.remove('active')
-    separatorOptionDom
-      .querySelectorAll('li')
-      .forEach(li => li.classList.remove('active'))
-    if (payload.type === ElementType.SEPARATOR) {
-      const separator = payload.dashArray.join(',') || '0,0'
-      const curSeparatorDom = separatorOptionDom.querySelector<HTMLLIElement>(
-        `[data-separator='${separator}']`
-      )!
-      if (curSeparatorDom) {
-        curSeparatorDom.classList.add('active')
+    try {
+      // 控件类型
+      payload.type === ElementType.SUBSCRIPT
+        ? subscriptDom.classList.add('active')
+        : subscriptDom.classList.remove('active')
+      payload.type === ElementType.SUPERSCRIPT
+        ? superscriptDom.classList.add('active')
+        : superscriptDom.classList.remove('active')
+      payload.type === ElementType.SEPARATOR
+        ? separatorDom.classList.add('active')
+        : separatorDom.classList.remove('active')
+      separatorOptionDom
+        .querySelectorAll('li')
+        .forEach(li => li.classList.remove('active'))
+      if (payload.type === ElementType.SEPARATOR) {
+        const separator = payload.dashArray.join(',') || '0,0'
+        const curSeparatorDom = separatorOptionDom.querySelector<HTMLLIElement>(
+          `[data-separator='${separator}']`
+        )
+        if (curSeparatorDom) {
+          curSeparatorDom.classList.add('active')
+        }
       }
-    }
 
-    // 富文本
-    fontOptionDom
-      .querySelectorAll<HTMLLIElement>('li')
-      .forEach(li => li.classList.remove('active'))
-    const curFontDom = fontOptionDom.querySelector<HTMLLIElement>(
-      `[data-family='${payload.font}']`
-    )
-    if (curFontDom) {
-      fontSelectDom.innerText = curFontDom.innerText
-      fontSelectDom.style.fontFamily = payload.font
-      curFontDom.classList.add('active')
-    }
-    sizeOptionDom
-      .querySelectorAll<HTMLLIElement>('li')
-      .forEach(li => li.classList.remove('active'))
-    const curSizeDom = sizeOptionDom.querySelector<HTMLLIElement>(
-      `[data-size='${payload.size}']`
-    )
-    if (curSizeDom) {
-      sizeSelectDom.innerText = curSizeDom.innerText
-      curSizeDom.classList.add('active')
-    } else {
-      sizeSelectDom.innerText = `${payload.size}`
-    }
-    payload.bold
-      ? boldDom.classList.add('active')
-      : boldDom.classList.remove('active')
-    payload.italic
-      ? italicDom.classList.add('active')
-      : italicDom.classList.remove('active')
-    payload.underline
-      ? underlineDom.classList.add('active')
-      : underlineDom.classList.remove('active')
-    payload.strikeout
-      ? strikeoutDom.classList.add('active')
-      : strikeoutDom.classList.remove('active')
-    if (payload.color) {
-      colorDom.classList.add('active')
-      colorControlDom.value = payload.color
-      colorSpanDom.style.backgroundColor = payload.color
-    } else {
-      colorDom.classList.remove('active')
-      colorControlDom.value = '#000000'
-      colorSpanDom.style.backgroundColor = '#000000'
-    }
-    if (payload.highlight) {
-      highlightDom.classList.add('active')
-      highlightControlDom.value = payload.highlight
-      highlightSpanDom.style.backgroundColor = payload.highlight
-    } else {
-      highlightDom.classList.remove('active')
-      highlightControlDom.value = '#ffff00'
-      highlightSpanDom.style.backgroundColor = '#ffff00'
-    }
-
-    // 行布局
-    leftDom.classList.remove('active')
-    centerDom.classList.remove('active')
-    rightDom.classList.remove('active')
-    alignmentDom.classList.remove('active')
-    justifyDom.classList.remove('active')
-    if (payload.rowFlex && payload.rowFlex === 'right') {
-      rightDom.classList.add('active')
-    } else if (payload.rowFlex && payload.rowFlex === 'center') {
-      centerDom.classList.add('active')
-    } else if (payload.rowFlex && payload.rowFlex === 'alignment') {
-      alignmentDom.classList.add('active')
-    } else if (payload.rowFlex && payload.rowFlex === 'justify') {
-      justifyDom.classList.add('active')
-    } else {
-      leftDom.classList.add('active')
-    }
-
-    // 行间距
-    rowOptionDom
-      .querySelectorAll<HTMLLIElement>('li')
-      .forEach(li => li.classList.remove('active'))
-    const curRowMarginDom = rowOptionDom.querySelector<HTMLLIElement>(
-      `[data-rowmargin='${payload.rowMargin}']`
-    )!
-    curRowMarginDom.classList.add('active')
-
-    // 段落间距
-    if (document.activeElement !== spacingBeforeInputDom) {
-      spacingBeforeInputDom.value = `${payload.spacingBefore ?? 0}`
-    }
-    if (document.activeElement !== spacingAfterInputDom) {
-      spacingAfterInputDom.value = `${payload.spacingAfter ?? 0}`
-    }
-
-    // 功能
-    payload.undo
-      ? undoDom.classList.remove('no-allow')
-      : undoDom.classList.add('no-allow')
-    payload.redo
-      ? redoDom.classList.remove('no-allow')
-      : redoDom.classList.add('no-allow')
-    payload.painter
-      ? painterDom.classList.add('active')
-      : painterDom.classList.remove('active')
-
-    // 标题
-    titleOptionDom
-      .querySelectorAll<HTMLLIElement>('li')
-      .forEach(li => li.classList.remove('active'))
-    if (payload.level) {
-      const curTitleDom = titleOptionDom.querySelector<HTMLLIElement>(
-        `[data-level='${payload.level}']`
-      )!
-      titleSelectDom.innerText = curTitleDom.innerText
-      curTitleDom.classList.add('active')
-    } else {
-      titleSelectDom.innerText = 'Văn bản thường'
-      titleOptionDom.querySelector('li:first-child')!.classList.add('active')
-    }
-
-    // 列表
-    listOptionDom
-      .querySelectorAll<HTMLLIElement>('li')
-      .forEach(li => li.classList.remove('active'))
-    if (payload.listType) {
-      listDom.classList.add('active')
-      const listType = payload.listType
-      const listStyle =
-        payload.listType === ListType.OL ? ListStyle.DECIMAL : payload.listType
-      const curListDom = listOptionDom.querySelector<HTMLLIElement>(
-        `[data-list-type='${listType}'][data-list-style='${listStyle}']`
+      // 富文本
+      fontOptionDom
+        .querySelectorAll<HTMLLIElement>('li')
+        .forEach(li => li.classList.remove('active'))
+      const curFontDom = fontOptionDom.querySelector<HTMLLIElement>(
+        `[data-family='${payload.font}']`
       )
-      if (curListDom) {
-        curListDom.classList.add('active')
+      if (curFontDom) {
+        fontSelectDom.innerText = curFontDom.innerText
+        fontSelectDom.style.fontFamily = payload.font
+        curFontDom.classList.add('active')
       }
-    } else {
-      listDom.classList.remove('active')
-    }
-
-    // 批注
-    commentDom
-      .querySelectorAll<HTMLDivElement>('.comment-item')
-      .forEach(commentItemDom => {
-        commentItemDom.classList.remove('active')
-      })
-    if (payload.groupIds) {
-      const [id] = payload.groupIds
-      const activeCommentDom = commentDom.querySelector<HTMLDivElement>(
-        `.comment-item[data-id='${id}']`
+      sizeOptionDom
+        .querySelectorAll<HTMLLIElement>('li')
+        .forEach(li => li.classList.remove('active'))
+      const curSizeDom = sizeOptionDom.querySelector<HTMLLIElement>(
+        `[data-size='${payload.size}']`
       )
-      if (activeCommentDom) {
-        activeCommentDom.classList.add('active')
-        scrollIntoView(commentDom, activeCommentDom)
+      if (curSizeDom) {
+        sizeSelectDom.innerText = curSizeDom.innerText
+        curSizeDom.classList.add('active')
+      } else {
+        sizeSelectDom.innerText = `${payload.size}`
       }
-    }
-    // 批注激活状态变化时重绘连接线
-    requestDrawCommentLines()
+      payload.bold
+        ? boldDom.classList.add('active')
+        : boldDom.classList.remove('active')
+      payload.italic
+        ? italicDom.classList.add('active')
+        : italicDom.classList.remove('active')
+      payload.underline
+        ? underlineDom.classList.add('active')
+        : underlineDom.classList.remove('active')
+      payload.strikeout
+        ? strikeoutDom.classList.add('active')
+        : strikeoutDom.classList.remove('active')
+      if (payload.color) {
+        colorDom.classList.add('active')
+        colorControlDom.value = payload.color
+        colorSpanDom.style.backgroundColor = payload.color
+      } else {
+        colorDom.classList.remove('active')
+        colorControlDom.value = '#000000'
+        colorSpanDom.style.backgroundColor = '#000000'
+      }
+      if (payload.highlight) {
+        highlightDom.classList.add('active')
+        highlightControlDom.value = payload.highlight
+        highlightSpanDom.style.backgroundColor = payload.highlight
+      } else {
+        highlightDom.classList.remove('active')
+        highlightControlDom.value = '#ffff00'
+        highlightSpanDom.style.backgroundColor = '#ffff00'
+      }
 
-    // 行列信息
-    const rangeContext = instance.command.getRangeContext()
-    if (rangeContext) {
-      document.querySelector<HTMLSpanElement>('.row-no')!.innerText = `${
-        rangeContext.startRowNo + 1
-      }`
-      document.querySelector<HTMLSpanElement>('.col-no')!.innerText = `${
-        rangeContext.startColNo + 1
-      }`
+      // 行布局
+      leftDom.classList.remove('active')
+      centerDom.classList.remove('active')
+      rightDom.classList.remove('active')
+      alignmentDom.classList.remove('active')
+      justifyDom.classList.remove('active')
+      if (payload.rowFlex && payload.rowFlex === 'right') {
+        rightDom.classList.add('active')
+      } else if (payload.rowFlex && payload.rowFlex === 'center') {
+        centerDom.classList.add('active')
+      } else if (payload.rowFlex && payload.rowFlex === 'alignment') {
+        alignmentDom.classList.add('active')
+      } else if (payload.rowFlex && payload.rowFlex === 'justify') {
+        justifyDom.classList.add('active')
+      } else {
+        leftDom.classList.add('active')
+      }
+
+      // 行间距
+      rowOptionDom
+        .querySelectorAll<HTMLLIElement>('li')
+        .forEach(li => li.classList.remove('active'))
+      if (payload.rowMargin !== undefined && payload.rowMargin !== null) {
+        const curRowMarginDom = rowOptionDom.querySelector<HTMLLIElement>(
+          `[data-rowmargin='${payload.rowMargin}']`
+        )
+        if (curRowMarginDom) {
+          curRowMarginDom.classList.add('active')
+        }
+      }
+
+      // 段落间距
+      if (document.activeElement !== spacingBeforeInputDom) {
+        spacingBeforeInputDom.value = `${payload.spacingBefore ?? 0}`
+      }
+      if (document.activeElement !== spacingAfterInputDom) {
+        spacingAfterInputDom.value = `${payload.spacingAfter ?? 0}`
+      }
+
+      // 功能
+      payload.undo
+        ? undoDom.classList.remove('no-allow')
+        : undoDom.classList.add('no-allow')
+      payload.redo
+        ? redoDom.classList.remove('no-allow')
+        : redoDom.classList.add('no-allow')
+      payload.painter
+        ? painterDom.classList.add('active')
+        : painterDom.classList.remove('active')
+
+      // 标题
+      titleOptionDom
+        .querySelectorAll<HTMLLIElement>('li')
+        .forEach(li => li.classList.remove('active'))
+      if (payload.level) {
+        const curTitleDom = titleOptionDom.querySelector<HTMLLIElement>(
+          `[data-level='${payload.level}']`
+        )
+        if (curTitleDom) {
+          titleSelectDom.innerText = curTitleDom.innerText
+          curTitleDom.classList.add('active')
+        } else {
+          titleSelectDom.innerText = 'Văn bản thường'
+        }
+      } else {
+        titleSelectDom.innerText = 'Văn bản thường'
+        const firstLi = titleOptionDom.querySelector('li:first-child')
+        if (firstLi) firstLi.classList.add('active')
+      }
+
+      // 列表
+      listOptionDom
+        .querySelectorAll<HTMLLIElement>('li')
+        .forEach(li => li.classList.remove('active'))
+      if (payload.listType) {
+        listDom.classList.add('active')
+        const listType = payload.listType
+        const listStyle =
+          payload.listType === ListType.OL ? ListStyle.DECIMAL : payload.listType
+        const curListDom = listOptionDom.querySelector<HTMLLIElement>(
+          `[data-list-type='${listType}'][data-list-style='${listStyle}']`
+        )
+        if (curListDom) {
+          curListDom.classList.add('active')
+        }
+      } else {
+        listDom.classList.remove('active')
+      }
+
+      // 批注
+      commentDom
+        .querySelectorAll<HTMLDivElement>('.comment-item')
+        .forEach(commentItemDom => {
+          commentItemDom.classList.remove('active')
+        })
+      if (payload.groupIds) {
+        const [id] = payload.groupIds
+        const activeCommentDom = commentDom.querySelector<HTMLDivElement>(
+          `.comment-item[data-id='${id}']`
+        )
+        if (activeCommentDom) {
+          activeCommentDom.classList.add('active')
+          scrollIntoView(commentDom, activeCommentDom)
+        }
+      }
+      // 批注激活状态变化时重绘连接线
+      requestDrawCommentLines()
+
+      // 行列信息
+      const rangeContext = instance.command.getRangeContext()
+      if (rangeContext) {
+        const rowNoDom = document.querySelector<HTMLSpanElement>('.row-no')
+        if (rowNoDom) rowNoDom.innerText = `${rangeContext.startRowNo + 1}`
+        const colNoDom = document.querySelector<HTMLSpanElement>('.col-no')
+        if (colNoDom) colNoDom.innerText = `${rangeContext.startColNo + 1}`
+      }
+    } catch (err) {
+      console.warn('Lỗi cập nhật toolbar style:', err)
     }
   }
 

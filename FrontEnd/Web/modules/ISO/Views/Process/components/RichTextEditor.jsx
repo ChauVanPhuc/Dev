@@ -6,6 +6,7 @@ import {
 
 const RichTextEditor = ({ value, onChange, placeholder, style = {} }) => {
   const editorRef = React.useRef(null);
+  const fontAppliedRef = React.useRef(false);
 
   React.useEffect(() => {
     if (editorRef.current && editorRef.current.innerHTML !== (value || '')) {
@@ -13,10 +14,45 @@ const RichTextEditor = ({ value, onChange, placeholder, style = {} }) => {
     }
   }, [value]);
 
+  // Áp dụng font Times New Roman mặc định khi editor mount
+  React.useEffect(() => {
+    if (editorRef.current && !fontAppliedRef.current) {
+      // Set default font cho toàn bộ editor
+      editorRef.current.style.fontFamily = '"Times New Roman", Times, serif';
+      fontAppliedRef.current = true;
+    }
+  }, []);
+
   const handleInput = () => {
     if (editorRef.current) {
       onChange(editorRef.current.innerHTML);
     }
+  };
+
+  // Xử lý paste: loại bỏ font-family khác, ép font Times New Roman
+  const handlePaste = (e) => {
+    e.preventDefault();
+    const html = e.clipboardData.getData('text/html');
+    const text = e.clipboardData.getData('text/plain');
+    if (html) {
+      // Strip tất cả font-family inline styles và font face attributes, ép Times New Roman
+      let cleanedHtml = html
+        .replace(/font-family\s*:\s*[^;"'}]+;?/gi, 'font-family: "Times New Roman", Times, serif;')
+        .replace(/<font[^>]*\sface="[^"]*"/gi, (match) => match.replace(/face="[^"]*"/, 'face="Times New Roman"'));
+      document.execCommand('insertHTML', false, cleanedHtml);
+    } else if (text) {
+      // Wrap plain text trong span với font Times New Roman
+      const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+      document.execCommand('insertHTML', false, `<span style="font-family: 'Times New Roman', Times, serif;">${escaped}</span>`);
+    }
+    handleInput();
+  };
+
+  // Khi focus vào editor, đảm bảo font mặc định
+  const handleFocus = () => {
+    try {
+      document.execCommand('fontName', false, 'Times New Roman');
+    } catch (_) {}
   };
 
   const executeCommand = (e, command, val = null) => {
@@ -292,6 +328,8 @@ const RichTextEditor = ({ value, onChange, placeholder, style = {} }) => {
         ref={editorRef}
         contentEditable
         onInput={handleInput}
+        onPaste={handlePaste}
+        onFocus={handleFocus}
         className="rich-editor-canvas"
         style={{
           minHeight: '260px',

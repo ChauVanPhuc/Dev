@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import api from '@webShared/Services/api.service';
 import { useOutletContext, useNavigate } from 'react-router-dom';
-import { Plus, Trash2, Edit, Search, Filter, Upload, FileText, Download, AlertCircle, CheckCircle, ExternalLink, RefreshCw, ChevronLeft, ChevronRight, FolderArchive, Layers, X, Building, User, ShieldCheck, Calendar, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Edit, Search, Filter, Upload, FileText, Download, AlertCircle, CheckCircle, ExternalLink, RefreshCw, ChevronLeft, ChevronRight, FolderArchive, Layers, X, Building, User, ShieldCheck, Calendar, Loader2, MoreVertical } from 'lucide-react';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import '@styles/components.css';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
@@ -261,6 +261,17 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
   const [filterOwner, setFilterOwner] = useState('');
   const fileInputRef = useRef(null);
   const [actionMenuId, setActionMenuId] = useState(null);
+
+  // Tự động đóng menu thao tác 3 chấm khi nhấn ra ngoài
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (!e.target.closest('.action-btn') && !e.target.closest('.action-menu')) {
+        setActionMenuId(null);
+      }
+    };
+    window.addEventListener('click', handleOutsideClick);
+    return () => window.removeEventListener('click', handleOutsideClick);
+  }, []);
 
   useEffect(() => {
     if (screenCode && title) {
@@ -909,21 +920,25 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                       <th style={{ padding: '7px 4px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '115px', textAlign: 'center', whiteSpace: 'nowrap' }}>TRẠNG THÁI</th>
                     </>
                   )}
-                  <th style={{ padding: '7px 2px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '38px', textAlign: 'center', whiteSpace: 'nowrap' }}>THAO TÁC</th>
+                  <th style={{ padding: '7px 4px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '70px', textAlign: 'center', whiteSpace: 'nowrap' }}>THAO TÁC</th>
                 </tr>
               </thead>
               <tbody>
-                {paginatedDocs.map((doc, index) => (
-                  <tr
-                    key={doc.id}
-                    style={{
-                      borderBottom: '1px solid #f1f5f9',
-                      transition: 'background-color 0.2s',
-                      backgroundColor: index % 2 === 1 ? '#fdfcfb' : 'white'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FAF6F0'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = index % 2 === 1 ? '#fdfcfb' : 'white'}
-                  >
+                {paginatedDocs.map((doc, index) => {
+                  const isDropUp = index >= paginatedDocs.length - 3 && paginatedDocs.length > 3;
+                  return (
+                    <tr
+                      key={doc.id}
+                      style={{
+                        borderBottom: '1px solid #f1f5f9',
+                        transition: 'background-color 0.2s',
+                        backgroundColor: index % 2 === 1 ? '#fdfcfb' : 'white',
+                        position: 'relative',
+                        zIndex: actionMenuId === doc.id ? 90 : 1
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FAF6F0'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = index % 2 === 1 ? '#fdfcfb' : 'white'}
+                    >
                     <td style={{ padding: '6px 4px', fontSize: '0.8rem', color: '#64748b', fontWeight: 500, textAlign: 'center', whiteSpace: 'nowrap' }}>{index + 1}</td>
                     
                     {mode === 'processes' ? (
@@ -1039,57 +1054,98 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                     <td style={{ padding: '6px 4px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                       {renderDocStatusBadge(doc.status, doc.document_level)}
                     </td>
-                    <td style={{ position: 'relative', textAlign: 'center', zIndex: actionMenuId === doc.id ? 40 : 1, whiteSpace: 'nowrap', padding: '6px 2px' }}>
-                      <button
-                        className="action-btn"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setActionMenuId(actionMenuId === doc.id ? null : doc.id);
-                        }}
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                          <circle cx="12" cy="5" r="2"/>
-                          <circle cx="12" cy="12" r="2"/>
-                          <circle cx="12" cy="19" r="2"/>
-                        </svg>
-                      </button>
-                      {actionMenuId === doc.id && (
-                        <div className="action-menu" style={{ right: '50%', transform: 'translateX(50%)', top: '80%' }}>
-                          <button
-                            className="action-menu-item"
-                            onClick={() => {
-                              setActionMenuId(null);
-                              navigate(mode === 'processes' ? `/admin/iso-processes/edit/${doc.id}` : `/admin/iso-documents/edit/${doc.id}`);
+                    <td style={{
+                      textAlign: 'center',
+                      zIndex: actionMenuId === doc.id ? 100 : 1,
+                      whiteSpace: 'nowrap',
+                      padding: '6px 4px',
+                      overflow: 'visible'
+                    }}>
+                      <div style={{ position: 'relative', display: 'inline-block' }}>
+                        <button
+                          type="button"
+                          className={`action-btn ${actionMenuId === doc.id ? 'active' : ''}`}
+                          title="Thao tác"
+                          style={{
+                            cursor: 'pointer',
+                            backgroundColor: actionMenuId === doc.id ? '#FAF6F0' : 'transparent',
+                            color: actionMenuId === doc.id ? '#7B5233' : '#64748b'
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActionMenuId(actionMenuId === doc.id ? null : doc.id);
+                          }}
+                        >
+                          <MoreVertical size={16} style={{ pointerEvents: 'none' }} />
+                        </button>
+                        {actionMenuId === doc.id && (
+                          <div
+                            className={`action-menu ${isDropUp ? 'drop-up' : ''}`}
+                            style={{
+                              position: 'absolute',
+                              right: '10px',
+                              ...(isDropUp
+                                ? { bottom: 'calc(100% + 4px)', top: 'auto' }
+                                : { top: 'calc(100% + 4px)', bottom: 'auto' }
+                              ),
+                              backgroundColor: '#FFFFFF',
+                              border: '1px solid #EADCC9',
+                              borderRadius: '8px',
+                              boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.18), 0 4px 10px rgba(0, 0, 0, 0.06)',
+                              minWidth: '185px',
+                              width: 'max-content',
+                              zIndex: 9999,
+                              display: 'flex',
+                              flexDirection: 'column',
+                              padding: '4px 0',
+                              textAlign: 'left'
                             }}
+                            onClick={(e) => e.stopPropagation()}
                           >
-                            Chỉnh sửa
-                          </button>
-                          <button
-                            className="action-menu-item"
-                            style={{ color: '#059669', display: 'flex', alignItems: 'center', gap: '6px' }}
-                            onClick={() => {
-                              setActionMenuId(null);
-                              navigate(`/admin/iso-approvals?keyword=${encodeURIComponent(doc.code)}`);
-                            }}
-                          >
-                            <CheckCircle size={14} />
-                            <span>Ký duyệt hồ sơ</span>
-                          </button>
-                          <button
-                            className="action-menu-item warn"
-                            style={{ color: '#DC2626' }}
-                            onClick={() => {
-                              setActionMenuId(null);
-                              handleDeleteDoc(doc.id, doc.code, doc.name);
-                            }}
-                          >
-                            Xóa
-                          </button>
-                        </div>
-                      )}
+                            <button
+                              type="button"
+                              className="action-menu-item"
+                              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 14px', fontSize: '0.82rem', fontWeight: 500, color: '#334155', whiteSpace: 'nowrap' }}
+                              onClick={() => {
+                                setActionMenuId(null);
+                                navigate(mode === 'processes' ? `/admin/iso-processes/edit/${doc.id}` : `/admin/iso-documents/edit/${doc.id}`);
+                              }}
+                            >
+                              <Edit size={14} color="#7B5233" />
+                              <span>Chỉnh sửa</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="action-menu-item"
+                              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 14px', fontSize: '0.82rem', fontWeight: 500, color: '#059669', whiteSpace: 'nowrap' }}
+                              onClick={() => {
+                                setActionMenuId(null);
+                                navigate(`/admin/iso-approvals?keyword=${encodeURIComponent(doc.code)}`);
+                              }}
+                            >
+                              <CheckCircle size={14} color="#059669" />
+                              <span>Ký duyệt hồ sơ</span>
+                            </button>
+                            <div style={{ height: '1px', backgroundColor: '#F1F5F9', margin: '3px 0' }} />
+                            <button
+                              type="button"
+                              className="action-menu-item danger"
+                              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 14px', fontSize: '0.82rem', fontWeight: 500, color: '#DC2626', whiteSpace: 'nowrap' }}
+                              onClick={() => {
+                                setActionMenuId(null);
+                                handleDeleteDoc(doc.id, doc.code, doc.name);
+                              }}
+                            >
+                              <Trash2 size={14} color="#DC2626" />
+                              <span>Xóa</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </td>
                   </tr>
-                ))}
+                );
+              })}
               </tbody>
             </table>
           </div>

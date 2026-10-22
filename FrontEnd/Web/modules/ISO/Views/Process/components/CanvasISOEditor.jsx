@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { GitBranch, FileText, Save, RefreshCw } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import { generateFlowchartSvgHtml } from '../FlowchartTable';
 
@@ -419,7 +420,114 @@ const CanvasISOEditor = ({
   };
 
   return (
-    <div style={{ width: '100%', height: '100%', minHeight: '680px', position: 'relative', overflow: 'hidden' }}>
+    <div style={{
+      width: '100%',
+      height: '100%',
+      minHeight: '680px',
+      position: 'relative',
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden'
+    }}>
+      {/* Thanh công cụ thao tác nhanh: Thiết kế Sơ đồ Lưu trình & Chuyển đổi chế độ */}
+      <div style={{
+        padding: '8px 16px',
+        backgroundColor: '#FAF7F2',
+        borderBottom: '1px solid #EADCC9',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: '10px',
+        flexShrink: 0,
+        zIndex: 10
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof onOpenFlowchartModal === 'function') {
+                onOpenFlowchartModal();
+              } else if (typeof window.__openIsoFlowchartModal === 'function') {
+                window.__openIsoFlowchartModal();
+              }
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 14px',
+              backgroundColor: '#7B5233',
+              color: '#FFFFFF',
+              border: 'none',
+              borderRadius: '6px',
+              fontSize: '0.85rem',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              boxShadow: '0 2px 6px rgba(123, 82, 51, 0.25)',
+              transition: 'all 0.2s ease'
+            }}
+            title="Mở Canvas vẽ lưu đồ kéo thả hoặc cấu hình bảng các bước quy trình ISO"
+          >
+            <GitBranch size={16} />
+            <span>🎨 Thiết kế / Chèn Sơ đồ Lưu trình (Flowchart)</span>
+          </button>
+
+          <span style={{ fontSize: '0.82rem', color: '#64748B' }}>
+            💡 Bấm <b>"Thiết kế / Chèn Sơ đồ Lưu trình"</b> để vẽ các khối và tự động chèn vào quy trình.
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {onSwitchToClassic && (
+            <button
+              type="button"
+              onClick={onSwitchToClassic}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '5px 12px',
+                backgroundColor: '#FFFFFF',
+                color: '#475569',
+                border: '1px solid #CBD5E1',
+                borderRadius: '5px',
+                fontSize: '0.8rem',
+                fontWeight: '500',
+                cursor: 'pointer'
+              }}
+              title="Chuyển sang chế độ soạn thảo Word A4 truyền thống"
+            >
+              <FileText size={14} />
+              <span>Chuyển sang Word A4</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={handleSaveDoc}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px',
+              padding: '5px 12px',
+              backgroundColor: '#15803D',
+              color: '#FFFFFF',
+              border: 'none',
+              borderRadius: '5px',
+              fontSize: '0.8rem',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              boxShadow: '0 1px 3px rgba(21, 128, 61, 0.25)'
+            }}
+            title="Lưu tài liệu hiện tại"
+          >
+            <Save size={14} />
+            <span>Lưu tài liệu</span>
+          </button>
+        </div>
+      </div>
+
       {/* Cảnh báo lỗi kết nối */}
       {loadError && (
         <div style={{
@@ -464,19 +572,21 @@ const CanvasISOEditor = ({
         </div>
       )}
 
-      <iframe
-        ref={iframeRef}
-        src="/canvas-editor/"
-        title="Canvas Editor Full UI"
-        onLoad={handleIframeLoaded}
-        style={{
-          width: '100%',
-          height: '100%',
-          minHeight: '680px',
-          border: 'none',
-          display: 'block'
-        }}
-      />
+      <div style={{ flex: 1, minHeight: 0, position: 'relative', width: '100%', height: '100%' }}>
+        <iframe
+          ref={iframeRef}
+          src="/canvas-editor/"
+          title="Canvas Editor Full UI"
+          onLoad={handleIframeLoaded}
+          style={{
+            width: '100%',
+            height: '100%',
+            minHeight: '650px',
+            border: 'none',
+            display: 'block'
+          }}
+        />
+      </div>
     </div>
   );
 };

@@ -1359,12 +1359,12 @@ def parse_docx_to_html_and_headings(abs_path: str) -> Dict[str, Any]:
                 })
                 h_tag = f"h{min(heading_level, 4)}"
                 html_parts.append(
-                    f'<{h_tag} id="{heading_id}" data-p-idx="{curr_p_idx}" class="iso-doc-heading level-{heading_level}">{clean_html_text(text_val)}</{h_tag}>'
+                    f'<{h_tag} id="{heading_id}" data-p-idx="{curr_p_idx}" class="iso-doc-heading level-{heading_level}" style="font-family: \'Times New Roman\', Times, serif;">{clean_html_text(text_val)}</{h_tag}>'
                 )
             elif text_val:
                 # Đoạn văn bản thông thường
                 p_html = render_paragraph_runs(p, image_map)
-                html_parts.append(f'<p class="iso-doc-paragraph" data-p-idx="{curr_p_idx}">{p_html}</p>')
+                html_parts.append(f'<p class="iso-doc-paragraph" data-p-idx="{curr_p_idx}" style="font-family: \'Times New Roman\', Times, serif;">{p_html}</p>')
             else:
                 html_parts.append(f'<p class="iso-doc-paragraph empty-p" data-p-idx="{curr_p_idx}"><br/></p>')
 
@@ -1756,32 +1756,28 @@ def get_template_original_2_pages_data(
 
 
 def clean_html_text(text: str) -> str:
-    """Escape ký tự HTML đặc biệt để chống XSS."""
+    """Escape ký tự HTML đặc biệt để chống XSS và chuẩn hóa Unicode dạng NFC."""
+    if not text:
+        return ""
+    text_nfc = unicodedata.normalize('NFC', text)
     return (
-        text.replace('&', '&amp;')
-            .replace('<', '&lt;')
-            .replace('>', '&gt;')
-            .replace('"', '&quot;')
-            .replace("'", '&#39;')
+        text_nfc.replace('&', '&amp;')
+                .replace('<', '&lt;')
+                .replace('>', '&gt;')
+                .replace('"', '&quot;')
+                .replace("'", '&#39;')
     )
 
 
 def render_paragraph_runs(p: Paragraph, image_map: Dict[str, str]) -> str:
-    """Render các Run trong Paragraph, hỗ trợ bold, italic, underline, font chữ, font size, màu sắc và ảnh."""
-    runs_html = []
-    
-    # Kiểm tra ảnh inline trong paragraph
-    for r in p.runs:
-        run_text = clean_html_text(r.text)
-        # Chuyển đổi các chuỗi xuống dòng hoặc <br/> từ text thành thẻ HTML <br/> thực thụ
-        run_text = (
-            run_text.replace('&lt;br/&gt;', '<br/>')
-                    .replace('&lt;br&gt;', '<br/>')
-                    .replace('&lt;br /&gt;', '<br/>')
-                    .replace('\n', '<br/>')
-        )
+    """Render các Run trong Paragraph, hỗ trợ bold, italic, underline, font size, màu sắc và ảnh.
+    Đặc biệt: Hợp nhất (merge) các Run liền kề có cùng định dạng để tránh vỡ từ tiếng Việt (như 'đ ế n', 'k ế t', 'v ề')
+    và chuẩn hoá 100% font chữ sang Times New Roman.
+    """
+    items = []  # Chứa các dict: {'type': 'img', 'src': ...} hoặc {'type': 'text', 'text': ..., 'bold': ..., 'italic': ..., 'underline': ..., 'size': ..., 'color': ...}
 
-        # Trích xuất ảnh nếu có
+    for r in p.runs:
+        # 1. Trích xuất ảnh inline nếu có
         try:
             blips = r._r.xpath('.//a:blip')
             for blip in blips:
@@ -1790,39 +1786,91 @@ def render_paragraph_runs(p: Paragraph, image_map: Dict[str, str]) -> str:
                 if not img_src and r_id:
                     img_src = get_vina_g7_logo_base64()
                 if img_src:
-                    runs_html.append(f'<img src="{img_src}" class="iso-doc-inline-img" alt="Hình ảnh tài liệu" style="max-width:100%; height:auto; display:block; margin:6px auto;" />')
+                    items.append({'type': 'img', 'src': img_src})
         except Exception:
             pass
 
-        if not run_text:
+        raw_text = r.text
+        if not raw_text:
             continue
 
-        if r.bold:
-            run_text = f"<strong>{run_text}</strong>"
-        if r.italic:
-            run_text = f"<em>{run_text}</em>"
-        if r.underline:
-            run_text = f"<u>{run_text}</u>"
+        raw_text = clean_html_text(raw_text)
+        raw_text = (
+            raw_text.replace('&lt;br/&gt;', '<br/>')
+                    .replace('&lt;br&gt;', '<br/>')
+                    .replace('&lt;br /&gt;', '<br/>')
+                    .replace('\n', '<br/>')
+        )
 
+        font_size = round(r.font.size.pt, 1) if (r.font and r.font.size and r.font.size.pt) else None
+        font_color = str(r.font.color.rgb) if (r.font and r.font.color and r.font.color.rgb) else None
+
+        items.append({
+            'type': 'text',
+            'text': raw_text,
+            'bold': bool(r.bold),
+            'italic': bool(r.italic),
+            'underline': bool(r.underline),
+            'size': font_size,
+            'color': font_color
+        })
+
+    # 2. Hợp nhất (merge) các text items liền nhau có cùng style để tránh vỡ âm tiết tiếng Việt
+    merged_items = []
+    for it in items:
+        if it['type'] == 'img':
+            merged_items.append(it)
+        elif it['type'] == 'text':
+            if (
+                merged_items and
+                merged_items[-1]['type'] == 'text' and
+                merged_items[-1]['bold'] == it['bold'] and
+                merged_items[-1]['italic'] == it['italic'] and
+                merged_items[-1]['underline'] == it['underline'] and
+                merged_items[-1]['size'] == it['size'] and
+                merged_items[-1]['color'] == it['color']
+            ):
+                merged_items[-1]['text'] += it['text']
+            else:
+                merged_items.append(dict(it))
+
+    # 3. Render HTML từ merged items
+    runs_html = []
+    for it in merged_items:
+        if it['type'] == 'img':
+            runs_html.append(f'<img src="{it["src"]}" class="iso-doc-inline-img" alt="Hình ảnh tài liệu" style="max-width:100%; height:auto; display:block; margin:6px auto;" />')
+            continue
+
+        txt = it['text']
+        if not txt:
+            continue
+
+        if it['bold']:
+            txt = f"<strong>{txt}</strong>"
+        if it['italic']:
+            txt = f"<em>{txt}</em>"
+        if it['underline']:
+            txt = f"<u>{txt}</u>"
+
+        # Nếu có cỡ chữ hoặc màu sắc riêng biệt thì bọc trong span với font-family Times New Roman
         styles = []
-        # Luôn chuẩn hoá toàn bộ font chữ thành Times New Roman chuẩn ISO
-        styles.append("font-family: 'Times New Roman', Times, serif;")
-        if r.font.size and r.font.size.pt:
-            styles.append(f"font-size: {r.font.size.pt:.1f}pt;")
-        if r.font.color and r.font.color.rgb:
-            styles.append(f"color: #{r.font.color.rgb};")
+        if it['size']:
+            styles.append(f"font-size: {it['size']:.1f}pt;")
+        if it['color']:
+            styles.append(f"color: #{it['color']};")
 
         if styles:
-            run_text = f'<span style="{" ".join(styles)}">{run_text}</span>'
+            styles.append("font-family: 'Times New Roman', Times, serif;")
+            txt = f'<span style="{" ".join(styles)}">{txt}</span>'
 
-        runs_html.append(run_text)
+        runs_html.append(txt)
 
     fallback_text = clean_html_text(p.text).replace('&lt;br/&gt;', '<br/>').replace('&lt;br&gt;', '<br/>').replace('\n', '<br/>')
     return "".join(runs_html) or fallback_text
 
 
 def render_cell_paragraphs(cell: Any, image_map: Dict[str, str]) -> str:
-    """Render toàn bộ các đoạn văn và ảnh trong một ô bảng Word chuẩn xác."""
+    """Render toàn bộ các đoạn văn và ảnh trong một ô bảng Word chuẩn xác, chuẩn font Times New Roman."""
     parts = []
     
     # Kiểm tra xem ô có ảnh embedded (như lưu đồ, sơ đồ quy trình, hình ảnh biểu mẫu) không
@@ -1847,7 +1895,8 @@ def render_cell_paragraphs(cell: Any, image_map: Dict[str, str]) -> str:
         
         p_html = render_paragraph_runs(p, image_map)
         
-        style_attr = f' style="{align_css}"' if align_css else ""
+        style_rule = f"{align_css} font-family: 'Times New Roman', Times, serif;".strip()
+        style_attr = f' style="{style_rule}"' if style_rule else ""
         if p_html.strip():
             parts.append(f'<p class="iso-cell-paragraph"{style_attr}>{p_html}</p>')
 
@@ -1984,7 +2033,7 @@ def render_table_to_html(tbl: Table, image_map: Dict[str, str], table_idx: int =
 
             cell_extra_class = " iso-flowchart-cell" if (r, c) in flowchart_col_merge else ""
             valign_style = "vertical-align: middle; text-align: center;" if (r, c) in flowchart_col_merge else "vertical-align: middle;"
-            html.append(f'      <{tag} data-r="{r}" data-c="{c}"{span_str} class="{tag}{cell_extra_class}" style="border:1px solid #000000; padding:6px 8px; {valign_style} word-break:break-word;">{cell_inner_html}</{tag}>')
+            html.append(f'      <{tag} data-r="{r}" data-c="{c}"{span_str} class="{tag}{cell_extra_class}" style="border:1px solid #000000; padding:6px 8px; {valign_style} word-break:break-word; font-family: \'Times New Roman\', Times, serif;">{cell_inner_html}</{tag}>')
             c += colspan
         html.append("    </tr>")
 

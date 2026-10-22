@@ -2,6 +2,7 @@ import os
 import docx
 import json
 import re
+import unicodedata
 
 def parse_iso_docx(file_path: str) -> dict:
     """
@@ -33,7 +34,7 @@ def parse_iso_docx(file_path: str) -> dict:
         return result
 
     def clean_paragraph_text(p):
-        text_val = p.text.strip()
+        text_val = unicodedata.normalize('NFC', p.text).strip()
         if not text_val:
             return ""
         is_list_paragraph = p.style.name and ("list" in p.style.name.lower() or "bullet" in p.style.name.lower())
@@ -229,7 +230,7 @@ def parse_iso_docx(file_path: str) -> dict:
                         "step_number": step_num,
                         "name": flow,
                         "assignee_role": role,
-                        "instructions": f"<p>Hướng dẫn chi tiết cho bước: <strong>{flow}</strong></p><p>Trách nhiệm thực hiện: {role}. Biểu mẫu đính kèm: {template}</p>",
+                        "instructions": f"<p style=\"font-family: 'Times New Roman', Times, serif;\">Hướng dẫn chi tiết cho bước: <strong>{flow}</strong></p><p style=\"font-family: 'Times New Roman', Times, serif;\">Trách nhiệm thực hiện: {role}. Biểu mẫu đính kèm: {template}</p>",
                         "template_files": template,
                         "node_type": node_type
                     })
@@ -324,8 +325,8 @@ def parse_iso_docx(file_path: str) -> dict:
                         c.lower().strip() in ['nguyễn hòa', 'đặng văn nam']
                     )
                 ]
-                content_p = "<p>" + "</p><p>".join(filtered_lines) + "</p>" if filtered_lines else ""
-                if content_p.replace('<p>', '').replace('</p>', '').strip():
+                content_p = "<p style=\"font-family: 'Times New Roman', Times, serif;\">" + "</p><p style=\"font-family: 'Times New Roman', Times, serif;\">".join(filtered_lines) + "</p>" if filtered_lines else ""
+                if content_p.replace('<p style="font-family: \'Times New Roman\', Times, serif;">', '').replace('</p>', '').strip():
                     result["sections"][current_section] = content_p
             
             # Giữ nguyên văn tên mục của tài liệu

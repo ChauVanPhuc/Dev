@@ -792,8 +792,44 @@ ul {
   position: relative;
 }
 
+.menu-item__flowchart {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 4px;
+  background-color: #FAF4EF;
+  border: 1px solid #7B5233 !important;
+  border-radius: 4px;
+  padding: 1px 7px !important;
+  cursor: pointer;
+  color: #7B5233;
+  font-weight: 600;
+  font-size: 11px;
+  margin: 0 3px;
+  transition: all 0.2s ease;
+}
+
+.menu-item__flowchart:hover {
+  background-color: #7B5233 !important;
+  color: #FFFFFF !important;
+}
+
 .menu-item__flowchart i {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
   background-image: url('./assets/images/flowchart.svg');
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+.menu-item__flowchart:hover i {
+  filter: brightness(0) invert(1);
+}
+
+.menu-item__flowchart .flowchart-btn-label {
+  user-select: none;
+  white-space: nowrap;
 }
 
 .menu-item__codeblock i {

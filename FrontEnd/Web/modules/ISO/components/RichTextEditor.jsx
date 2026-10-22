@@ -105,9 +105,14 @@ const RichTextEditor = ({ value, onChange, placeholder, style = {}, minHeight })
     const html = e.clipboardData.getData('text/html');
     const text = e.clipboardData.getData('text/plain');
     if (html) {
-      document.execCommand('insertHTML', false, cleanHtml(html));
+      // Strip font-family khác, ép Times New Roman trước khi clean HTML
+      let fontFixedHtml = html
+        .replace(/font-family\s*:\s*[^;"'}]+;?/gi, 'font-family: "Times New Roman", Times, serif;')
+        .replace(/<font[^>]*\sface="[^"]*"/gi, (match) => match.replace(/face="[^"]*"/, 'face="Times New Roman"'));
+      document.execCommand('insertHTML', false, cleanHtml(fontFixedHtml));
     } else if (text) {
-      document.execCommand('insertText', false, text);
+      const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+      document.execCommand('insertHTML', false, `<span style="font-family: 'Times New Roman', Times, serif;">${escaped}</span>`);
     }
     handleInput();
   };
@@ -116,6 +121,13 @@ const RichTextEditor = ({ value, onChange, placeholder, style = {}, minHeight })
     e.preventDefault();
     document.execCommand(command, false, val);
     handleInput();
+  };
+
+  // Khi focus vào editor, đảm bảo font mặc định là Times New Roman
+  const handleFocus = () => {
+    try {
+      document.execCommand('fontName', false, 'Times New Roman');
+    } catch (_) {}
   };
 
   const handleColorChange = (e, command) => {
@@ -386,6 +398,7 @@ const RichTextEditor = ({ value, onChange, placeholder, style = {}, minHeight })
         contentEditable
         onInput={handleInput}
         onPaste={handlePaste}
+        onFocus={handleFocus}
         className="rich-editor-canvas"
         style={{
           minHeight: minHeight ? (typeof minHeight === 'number' ? `${minHeight}px` : minHeight) : (style.minHeight ? (typeof style.minHeight === 'number' ? `${style.minHeight}px` : style.minHeight) : '200px'),
