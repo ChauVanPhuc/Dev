@@ -4760,6 +4760,88 @@ def _build_inspection_diff(
                 "new_val": new_color or "(Đã xóa)"
             })
 
+    # 11. Mã Lô / PO (batch_no / po_code)
+    if "batch_no" in body_data or "po_code" in body_data or "po_no" in body_data:
+        new_po = str(body_data.get("batch_no") or body_data.get("po_code") or body_data.get("po_no") or "").strip()
+        old_po = str(getattr(record, "batch_no", None) or data_dict.get("batch_no") or data_dict.get("po_code") or "").strip()
+        if new_po and old_po != new_po:
+            changes.append({
+                "field": "batch_no",
+                "label": "Mã Lô / PO",
+                "old_val": old_po or "(Trống)",
+                "new_val": new_po
+            })
+
+    # 12. Ngày ghi nhận (recorded_date / inspection_date)
+    if "recorded_date" in body_data or "inspection_date" in body_data or "inspected_at" in body_data or "created_at" in body_data:
+        new_date_raw = str(body_data.get("recorded_date") or body_data.get("inspection_date") or body_data.get("inspected_at") or body_data.get("created_at") or "").strip()
+        old_dt = getattr(record, "inspected_at", None) or getattr(record, "inspection_date", None) or getattr(record, "created_at", None)
+        old_date_str = str(old_dt) if old_dt else ""
+        if new_date_raw and new_date_raw not in old_date_str:
+            changes.append({
+                "field": "recorded_date",
+                "label": "Ngày ghi nhận",
+                "old_val": old_date_str[:16] if old_date_str else "(Chưa có)",
+                "new_val": new_date_raw[:16]
+            })
+
+    # 13. Người kiểm tra QC (inspector_name)
+    if "inspector_name" in body_data:
+        new_insp = str(body_data.get("inspector_name") or "").strip()
+        old_insp = str(getattr(record, "inspector_name", None) or data_dict.get("inspector_name") or "").strip()
+        if new_insp and old_insp != new_insp:
+            changes.append({
+                "field": "inspector_name",
+                "label": "Người kiểm tra QC",
+                "old_val": old_insp or "(Chưa có)",
+                "new_val": new_insp
+            })
+
+    # 14. SL Cần Kiểm (Lô)
+    if "required_qty" in body_data and body_data.get("required_qty") is not None:
+        try:
+            new_rq = int(body_data.get("required_qty"))
+            old_rq = int(getattr(record, "required_qty", 0) or getattr(record, "total_products", 0) or 0)
+            if new_rq != old_rq:
+                changes.append({
+                    "field": "required_qty",
+                    "label": "SL Cần Kiểm (Lô)",
+                    "old_val": f"{old_rq:,}",
+                    "new_val": f"{new_rq:,}"
+                })
+        except (ValueError, TypeError):
+            pass
+
+    # 15. SL Mẫu Kiểm Tra
+    if "sample_qty" in body_data and body_data.get("sample_qty") is not None:
+        try:
+            new_sq = int(body_data.get("sample_qty"))
+            old_sq = int(getattr(record, "sample_qty", 0) or 0)
+            if new_sq != old_sq:
+                changes.append({
+                    "field": "sample_qty",
+                    "label": "SL Mẫu Kiểm Tra",
+                    "old_val": f"{old_sq:,}",
+                    "new_val": f"{new_sq:,}"
+                })
+        except (ValueError, TypeError):
+            pass
+
+    # 16. Số Lỗi Phát Hiện
+    if "error_qty" in body_data and body_data.get("error_qty") is not None:
+        try:
+            new_eq = int(body_data.get("error_qty"))
+            old_eq = int(getattr(record, "error_qty", 0) or getattr(record, "total_defects", 0) or 0)
+            if new_eq != old_eq:
+                changes.append({
+                    "field": "error_qty",
+                    "label": "Số Lỗi Phát Hiện",
+                    "old_val": f"{old_eq:,}",
+                    "new_val": f"{new_eq:,}"
+                })
+        except (ValueError, TypeError):
+            pass
+
     return changes
 
 
@@ -5004,17 +5086,81 @@ def update_inspection_record(
     db: Session = Depends(get_db)
 ):
     """
-    [POST] Cập nhật thông tin phiếu kiểm tra (loại phiếu, công đoạn, trạng thái, kết quả, hành động xử lý)
+    [POST] Cập nhật thông tin phiếu kiểm tra (Mã PO, Ngày ghi nhận, Người kiểm tra QC,
+    Loại phiếu, Công đoạn, Trạng thái, Kết quả, Hành động xử lý, Số lượng cần kiểm, SL mẫu, Số lỗi)
     mà không bắt buộc phải hoàn tất xác nhận hồ sơ.
     Tự động ghi nhận lịch sử thay đổi (Audit Trail).
     """
-    record = db.query(InputInspection).filter(InputInspection.id == id).first()
+    record = None
+    if type == "daily":
+        record = db.query(DailyInspectionRecord).filter(DailyInspectionRecord.id == id).first()
+    if not record:
+        record = db.query(InputInspection).filter(InputInspection.id == id).first()
+    if not record:
+        record = db.query(DailyInspectionRecord).filter(DailyInspectionRecord.id == id).first()
     if not record:
         raise HTTPException(status_code=404, detail=f"Không tìm thấy phiếu kiểm tra có ID {id}")
         
     body_data = payload or {}
 
-    # Trích xuất data_dict từ data_json hiện tại
+    # Nếu là DailyInspectionRecord
+    if isinstance(record, DailyInspectionRecord):
+        if "batch_no" in body_data or "po_code" in body_data:
+            record.batch_no = str(body_data.get("batch_no") or body_data.get("po_code") or "").strip()
+        if "stage" in body_data and body_data["stage"]:
+            record.stage_name = str(body_data["stage"]).strip()
+        if "status" in body_data and body_data["status"]:
+            record.status = str(body_data["status"]).strip()
+        if "required_qty" in body_data and body_data["required_qty"] is not None:
+            try:
+                record.total_products = int(body_data["required_qty"])
+            except (ValueError, TypeError):
+                pass
+        if "error_qty" in body_data and body_data["error_qty"] is not None:
+            try:
+                record.total_defects = int(body_data["error_qty"])
+            except (ValueError, TypeError):
+                pass
+        if "inspector_id" in body_data and body_data["inspector_id"]:
+            try:
+                record.inspector_id = int(body_data["inspector_id"])
+            except (ValueError, TypeError):
+                pass
+        if "recorded_date" in body_data or "inspection_date" in body_data:
+            date_raw = body_data.get("recorded_date") or body_data.get("inspection_date")
+            if date_raw:
+                try:
+                    date_clean = str(date_raw).replace('Z', '').split('+')[0]
+                    if 'T' in date_clean:
+                        parsed_dt = datetime.datetime.fromisoformat(date_clean)
+                    elif ' ' in date_clean:
+                        parsed_dt = datetime.datetime.strptime(date_clean, "%Y-%m-%d %H:%M:%S" if len(date_clean) > 16 else "%Y-%m-%d %H:%M")
+                    else:
+                        parsed_dt = datetime.datetime.strptime(date_clean, "%Y-%m-%d")
+                    record.inspection_date = parsed_dt.date()
+                except Exception as e:
+                    logger.warning(f"Could not parse daily inspection date: {date_raw}: {e}")
+        try:
+            db.commit()
+            db.refresh(record)
+            return {
+                "message": "Cập nhật phiếu kiểm tra hằng ngày thành công",
+                "type": type,
+                "id": id,
+                "batch_no": record.batch_no,
+                "po_code": record.batch_no,
+                "stage": record.stage_name,
+                "status": record.status,
+                "required_qty": record.total_products,
+                "error_qty": record.total_defects,
+                "inspection_date": str(record.inspection_date),
+                "recorded_date": str(record.inspection_date)
+            }
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"Lỗi khi cập nhật phiếu kiểm tra hằng ngày: {str(e)}")
+
+    # Trích xuất data_dict từ data_json hiện tại cho InputInspection
     data_dict = {}
     if record.data_json:
         try:
@@ -5043,6 +5189,7 @@ def update_inspection_record(
         user_role = "Quản lý QC"
     history_note = body_data.get("history_note") or ""
 
+    changes = _build_inspection_diff(record, data_dict, body_data)
     if changes:
         _record_inspection_history(
             data_dict=data_dict,
@@ -5053,14 +5200,77 @@ def update_inspection_record(
             user_role=user_role,
             note=history_note
         )
+
+    # 1. Mã Lô / PO
+    if "batch_no" in body_data or "po_code" in body_data or "po_no" in body_data:
+        new_batch = str(body_data.get("batch_no") or body_data.get("po_code") or body_data.get("po_no") or "").strip()
+        record.batch_no = new_batch
+        data_dict["batch_no"] = new_batch
+        data_dict["po_code"] = new_batch
+
+    # 2. Ngày ghi nhận
+    if "recorded_date" in body_data or "inspection_date" in body_data or "inspected_at" in body_data or "created_at" in body_data:
+        date_raw = body_data.get("recorded_date") or body_data.get("inspection_date") or body_data.get("inspected_at") or body_data.get("created_at")
+        if date_raw:
+            try:
+                date_clean = str(date_raw).replace('Z', '').split('+')[0]
+                if 'T' in date_clean:
+                    parsed_dt = datetime.datetime.fromisoformat(date_clean)
+                elif ' ' in date_clean:
+                    parsed_dt = datetime.datetime.strptime(date_clean, "%Y-%m-%d %H:%M:%S" if len(date_clean) > 16 else "%Y-%m-%d %H:%M")
+                else:
+                    parsed_dt = datetime.datetime.strptime(date_clean, "%Y-%m-%d")
+                record.inspected_at = parsed_dt
+                record.created_at = parsed_dt
+                data_dict["recorded_date"] = parsed_dt.strftime("%Y-%m-%d %H:%M:%S")
+                data_dict["inspection_date"] = parsed_dt.strftime("%Y-%m-%d %H:%M:%S")
+                data_dict["created_at"] = parsed_dt.strftime("%Y-%m-%d %H:%M:%S")
+            except Exception as e:
+                logger.warning(f"Could not parse inspection date: {date_raw}: {e}")
+
+    # 3. Người kiểm tra QC
+    if "inspector_name" in body_data and body_data["inspector_name"] is not None:
+        new_inspector = str(body_data["inspector_name"]).strip()
+        record.inspector_name = new_inspector
+        data_dict["inspector_name"] = new_inspector
+    if "inspector_id" in body_data and body_data["inspector_id"]:
+        try:
+            record.inspector_id = int(body_data["inspector_id"])
+        except (ValueError, TypeError):
+            pass
+
+    # 4. Số lượng cần kiểm, mẫu, lỗi
+    if "required_qty" in body_data and body_data["required_qty"] is not None:
+        try:
+            req_qty = int(body_data["required_qty"])
+            record.required_qty = req_qty
+            data_dict["required_qty"] = req_qty
+        except (ValueError, TypeError):
+            pass
+
+    if "sample_qty" in body_data and body_data["sample_qty"] is not None:
+        try:
+            sam_qty = int(body_data["sample_qty"])
+            record.sample_qty = sam_qty
+            data_dict["sample_qty"] = sam_qty
+        except (ValueError, TypeError):
+            pass
+
+    if "error_qty" in body_data and body_data["error_qty"] is not None:
+        try:
+            err_qty = int(body_data["error_qty"])
+            record.error_qty = err_qty
+            data_dict["error_qty"] = err_qty
+        except (ValueError, TypeError):
+            pass
     
-    # 1. Loại phiếu & Công đoạn
+    # 5. Loại phiếu & Công đoạn
     if "inspection_type" in body_data and body_data["inspection_type"]:
         record.inspection_type = body_data["inspection_type"]
     if "stage" in body_data:
         record.stage = body_data["stage"]
         
-    # 2. Kết quả & Kết luận
+    # 6. Kết quả & Kết luận
     new_result = body_data.get("result")
     if new_result:
         record.result = new_result
@@ -5073,7 +5283,7 @@ def update_inspection_record(
             
     if "status" in body_data and body_data["status"]:
         data_dict["status"] = body_data["status"]
-        if body_data["status"] == "Đã xong":
+        if body_data["status"] in ["Đã xong", "Đã xác nhận"]:
             record.is_confirmed = True
             if not record.confirmed_at:
                 record.confirmed_at = datetime.datetime.now()
@@ -5121,13 +5331,23 @@ def update_inspection_record(
     try:
         db.commit()
         db.refresh(record)
+        rec_date_str = record.inspected_at.strftime("%Y-%m-%d %H:%M:%S") if record.inspected_at else (record.created_at.strftime("%Y-%m-%d %H:%M:%S") if record.created_at else "")
         return {
             "message": "Cập nhật phiếu kiểm tra thành công",
             "type": type,
             "id": id,
+            "batch_no": record.batch_no,
+            "po_code": record.batch_no,
+            "recorded_date": rec_date_str,
+            "inspection_date": rec_date_str,
+            "inspector_name": record.inspector_name,
+            "required_qty": record.required_qty,
+            "sample_qty": record.sample_qty,
+            "error_qty": record.error_qty,
             "inspection_type": record.inspection_type,
             "stage": record.stage,
             "result": record.result,
+            "conclusion": record.conclusion,
             "status": data_dict.get("status"),
             "action": data_dict.get("action"),
             "handling_info": data_dict.get("handling_info"),

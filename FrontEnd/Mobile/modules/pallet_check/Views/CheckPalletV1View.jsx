@@ -74,6 +74,12 @@ export const normalizeToEnglishBarcode = (raw) => {
   // Viết hoa và xóa khoảng trắng
   str = str.toUpperCase().replace(/[\s\r\n\t]/g, '');
 
+  // Khử ký tự * bao quanh (start/stop character của chuẩn Code 39: *17-2621-WHT*)
+  str = str.replace(/^\*+|\*+$/g, '');
+
+  // Khử các tiền tố nhãn thông dụng (LPN:, LPN-, SKU:, ITEM:, CODE:, MÃ:, MA:, SP:)
+  str = str.replace(/^(LPN|SKU|ITEM|CODE|MA|MÃ|SP)[:\s\-_]+/i, '');
+
   // Khử tiền tố lặp lại từ đuôi do bộ gõ
   const parts = str.split('-');
   if (parts.length >= 2) {
@@ -83,14 +89,6 @@ export const normalizeToEnglishBarcode = (raw) => {
       if (ghostRegex.test(str)) {
         str = str.replace(ghostRegex, '');
       }
-    }
-  }
-
-  // Khử tiền tố thừa trước mã số LPN (nếu có tiền tố và có đúng 9 số liền ở cuối)
-  if (!str.includes('-')) {
-    const lpn9 = str.match(/(\d{9})$/);
-    if (lpn9) {
-      return lpn9[1];
     }
   }
 
@@ -153,18 +151,16 @@ export const normalizeToEnglishBarcode = (raw) => {
     .replace(/-E5P$/, '-ESP')
     .replace(/-W0A$/, '-WOA');
 
-  // Khử ký tự * bao quanh (start/stop character của chuẩn Code 39: *17-2621-WHT*)
-  str = str.replace(/^\*+|\*+$/g, '');
-  // Khử các ký tự đặc biệt thừa ở đầu hoặc cuối mã (như khoảng trắng, ký tự rác)
+  // Khử các ký tự đặc biệt thừa ở đầu hoặc cuối mã (ngoại trừ chữ cái, số, dấu '-')
   str = str.replace(/^[^A-Z0-9]+|[^A-Z0-9]+$/g, '');
 
   return str;
 };
 
-// Phân loại mã quét là LPN hay SKU theo chuẩn quy cách:
-// - Mã LPN: Phải là đúng 9 số liền (ví dụ 061234567, 123456789)
-// - Mã SKU: Bắt buộc phải có đúng 2 dấu '-' và đuôi là chữ cái màu sơn (ví dụ 17-2621-WHT)
-// - Mã Pallet: Bắt đầu bằng PLD- hoặc PLN-
+// Phân loại mã quét là PALLET, LPN hay SKU theo chuẩn quy cách nhà máy G7:
+// - Mã PALLET: Bắt đầu bằng PLD- hoặc PLN-
+// - Mã LPN (Mã vận chuyển): Dãy số 8-14 chữ số liền (chuẩn kho hàng G7)
+// - Mã SKU (Mã sản phẩm): Có trong Catalog, hoặc có 1-4 dấu '-', hoặc chuỗi mã sản phẩm
 const classifyCode = (rawCode, standardSku = '') => {
   if (!rawCode) return null;
   const code = normalizeToEnglishBarcode(rawCode);
@@ -175,26 +171,26 @@ const classifyCode = (rawCode, standardSku = '') => {
     return { type: 'PALLET', code };
   }
 
-  // 1. Mã LPN: Đúng chính xác 9 chữ số liền
-  if (/^\d{9}$/.test(code)) {
+  // 1. Mã LPN: Chuẩn mã vận chuyển là chuỗi 8-14 chữ số liền (phổ biến nhất 9-10 số)
+  if (/^\d{8,14}$/.test(code)) {
     return { type: 'LPN', code };
   }
 
-  // 2. Tra cứu đối soát Danh mục 478 sản phẩm chuẩn của công ty:
+  // 2. Tra cứu đối soát Danh mục sản phẩm chuẩn của công ty:
   const matchedSku = matchCatalogSku(code, standardSku);
   if (matchedSku) {
     return { type: 'SKU', code: matchedSku };
   }
 
-  // 3. Fallback: Mã SKU có đúng 2 dấu '-' và đuôi là chữ cái màu sơn [A-Z]{2,5}
-  const hyphenCount = (code.match(/-/g) || []).length;
-  if (hyphenCount === 2) {
-    const parts = code.split('-');
-    if (parts[0].length >= 1 && parts[1].length >= 1 && parts[2].length >= 2) {
-      if (/^[A-Z0-9]+-[A-Z0-9]+-[A-Z]{2,5}$/.test(code)) {
-        return { type: 'SKU', code };
-      }
-    }
+  // 3. Mã SKU theo cấu trúc chuẩn (1 đến 4 dấu '-', gồm các cụm chữ và số)
+  // Ví dụ: 17-2621-WHT, APT-0102, 1-36L, 2-42-WOA-1
+  if (/^[A-Z0-9]+(-[A-Z0-9]+){1,4}$/.test(code)) {
+    return { type: 'SKU', code };
+  }
+
+  // 4. Mã SKU không dấu gạch ngang (dạng mã chữ và số kết hợp, độ dài >= 4)
+  if (/^[A-Z0-9]{4,20}$/.test(code) && /[A-Z]/.test(code) && /\d/.test(code)) {
+    return { type: 'SKU', code };
   }
 
   return null;
@@ -202,7 +198,7 @@ const classifyCode = (rawCode, standardSku = '') => {
 
 /**
  * So khớp mã SKU với Mã chuẩn SKU:
- * Cả 2 mã bắt buộc phải có đúng 2 dấu '-' theo quy định nhà máy.
+ * Hỗ trợ khớp chính xác, qua Catalog, hoặc biến thể quang học (ví dụ tiền tố APT-, v.v.)
  */
 const isOpticalVariantOfSku = (scanned, standard) => {
   if (!scanned || !standard) return false;
@@ -212,17 +208,20 @@ const isOpticalVariantOfSku = (scanned, standard) => {
 
   // Đối soát qua danh mục Master Data và bảng sửa quang học
   const matchedScanned = matchCatalogSku(sUpper, stdUpper);
-  if (matchedScanned && matchedScanned === stdUpper) return true;
-
-  // Cả hai bắt buộc phải có đúng 2 dấu '-'
-  if ((sUpper.match(/-/g) || []).length !== 2 || (stdUpper.match(/-/g) || []).length !== 2) {
-    return false;
+  if (matchedScanned && (matchedScanned === stdUpper || matchCatalogSku(stdUpper, sUpper) === matchedScanned)) {
+    return true;
   }
 
-  // Khớp chính xác 3 phần sau chuẩn hóa
-  const sParts = sUpper.split('-');
-  const stdParts = stdUpper.split('-');
-  return sParts[0] === stdParts[0] && sParts[1] === stdParts[1] && sParts[2] === stdParts[2];
+  // Khớp bỏ qua tiền tố APT- (ví dụ: APT-17-2621-WHT khớp 17-2621-WHT)
+  const stripApt = (s) => s.replace(/^APT-?/i, '');
+  if (stripApt(sUpper) === stripApt(stdUpper)) return true;
+
+  // So khớp sau khi chuẩn hóa gạch nối
+  const sNorm = sUpper.replace(/[^A-Z0-9]/g, '');
+  const stdNorm = stdUpper.replace(/[^A-Z0-9]/g, '');
+  if (sNorm && sNorm === stdNorm) return true;
+
+  return false;
 };
 
 const isOpticalVariantOfLpn = (scanned, standard) => {
@@ -230,46 +229,16 @@ const isOpticalVariantOfLpn = (scanned, standard) => {
   if (scanned === standard) return true;
   const cleanScanned = scanned.replace(/\D/g, '');
   const cleanStandard = standard.replace(/\D/g, '');
-  return cleanScanned.length === 9 && cleanStandard.length === 9 && cleanScanned === cleanStandard;
+  return cleanScanned.length >= 8 && cleanStandard.length >= 8 && cleanScanned === cleanStandard;
 };
 
 /**
  * Kiểm tra xem chuỗi quét được có phải là mã hợp lệ hay không:
- * - Mã LPN: đúng 9 số liền
- * - Mã SKU: bắt buộc phải có đúng 2 dấu '-'
- * - Mã Pallet lịch sử: bắt đầu bằng PLD- hoặc PLN-
+ * Tận dụng toàn diện logic classifyCode để đảm bảo đồng nhất 100%
  */
 const isValidBarcodeCandidate = (code, standardSku = '') => {
   if (!code) return false;
-  const upper = code.toUpperCase().trim();
-
-  // 1. Mã Pallet lịch sử (PLD-xxxx, PLN-xxxx)
-  if (upper.startsWith('PLD-') || upper.startsWith('PLN-')) {
-    return true;
-  }
-
-  // 2. Mã LPN: Đúng chính xác 9 chữ số liền
-  if (/^\d{9}$/.test(upper)) {
-    return true;
-  }
-
-  // 3. Khớp hoặc tự sửa lỗi qua Danh mục 478 sản phẩm chuẩn của công ty:
-  if (matchCatalogSku(upper, standardSku)) {
-    return true;
-  }
-
-  // 4. Mã SKU: Bắt buộc phải có đúng 2 dấu '-' và đuôi là chữ cái màu sơn hoặc biến thể quang học
-  const hyphenCount = (upper.match(/-/g) || []).length;
-  if (hyphenCount === 2) {
-    const parts = upper.split('-');
-    if (parts[0].length >= 1 && parts[1].length >= 1 && parts[2].length >= 2) {
-      if (/^[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]{2,5}$/.test(upper)) {
-        return true;
-      }
-    }
-  }
-
-  return false;
+  return classifyCode(code, standardSku) !== null;
 };
 
 const CheckPalletV1View = () => {
@@ -363,6 +332,7 @@ const CheckPalletV1View = () => {
   const html5QrCodeRef = useRef(null);
   const isStartingCameraRef = useRef(false);
   const lastCameraScannedCodeRef = useRef('');
+  const lastCameraScannedTimeRef = useRef(0);
   // Bộ lọc đồng thuận đa khung hình (Candidate Consensus Filter) - Chống 100% rác rung mờ
   const candidateScanCodeRef = useRef('');
   const candidateScanCountRef = useRef(0);
@@ -401,11 +371,11 @@ const CheckPalletV1View = () => {
     }
   }, [historyList]);
 
-  // Tự động đóng pop-up thông báo quét: 1s khi thành công để quét tiếp cực nhanh; 3.5s khi có báo động/lỗi
+  // Tự động đóng pop-up thông báo quét: 1s khi thành công để quét tiếp cực nhanh; 2s khi có báo động/lỗi
   useEffect(() => {
     if (!scanPopup) return;
     const isError = scanPopup.type === 'rejected';
-    const duration = isError ? 3500 : 1000;
+    const duration = isError ? 2000 : 1000;
     const timer = setTimeout(() => {
       setScanPopup(null);
     }, duration);
@@ -441,16 +411,18 @@ const CheckPalletV1View = () => {
     }, 120);
 
     if (!rawCode) return;
-    // Chặn nhận thêm mã khi đang hiển thị cảnh báo lỗi/báo động để người dùng xử lý xong lỗi
-    if (scanPopupRef.current?.type === 'rejected') return;
 
     // Chuẩn hóa mã sang tiếng Anh
     const clean = normalizeToEnglishBarcode(rawCode);
     if (clean.length < 2) return;
 
     const now = Date.now();
-    // Chống quét đúp trong 250ms
-    if (clean === lastProcessedCodeRef.current && now - lastProcessedTimeRef.current < 250) {
+    // Chống quét dội tia / đúp mã trong 350ms
+    if (clean === lastProcessedCodeRef.current && now - lastProcessedTimeRef.current < 350) {
+      return;
+    }
+    // Nếu đang hiển thị cảnh báo lỗi, chỉ chặn dội tia lặp lại trong 500ms thay vì khoá vĩnh viễn
+    if (scanPopupRef.current?.type === 'rejected' && now - lastProcessedTimeRef.current < 500) {
       return;
     }
     lastProcessedCodeRef.current = clean;
@@ -898,33 +870,70 @@ const CheckPalletV1View = () => {
     };
   }, [executeScannedCode, messageModal.isOpen, confirmModal.isOpen]);
 
-  // ─── ĐIỀU KHIỂN CAMERA SCANNER SIÊU TỐC (NATIVE HARDWARE BARCODEDETECTOR GPU < 10MS) ───
+  // ─── GIỮ FOCUS NGẦM CHO SÚNG BẮT MÃ / MÁY QUÉT POS TRÊN TAB QUÉT ───
+  useEffect(() => {
+    if (activeTab === 'scan') {
+      const focusScanner = () => {
+        if (document.activeElement === scanInputRef.current) return;
+        if (hiddenScannerInputRef.current && document.activeElement !== hiddenScannerInputRef.current) {
+          try {
+            hiddenScannerInputRef.current.focus({ preventScroll: true });
+          } catch (_) {}
+        }
+      };
+      focusScanner();
+      const interval = setInterval(focusScanner, 1500);
+      window.addEventListener('click', focusScanner);
+      return () => {
+        clearInterval(interval);
+        window.removeEventListener('click', focusScanner);
+      };
+    }
+  }, [activeTab]);
+
+  // ─── ĐIỀU KHIỂN CAMERA SCANNER CHUẨN HTML5-QRCODE (ĐA ĐỊNH DẠNG CODE 128, CODE 39, QR, EAN) ───
+  const stopCamera = async () => {
+    isCameraRunningRef.current = false;
+    if (html5QrCodeRef.current) {
+      try {
+        if (html5QrCodeRef.current.isScanning) {
+          await html5QrCodeRef.current.stop();
+        }
+      } catch (err) {
+        console.warn('Lỗi khi dừng camera:', err);
+      }
+      try {
+        await html5QrCodeRef.current.clear();
+      } catch (_) {}
+      html5QrCodeRef.current = null;
+    }
+    const container = document.getElementById('v1-camera-reader');
+    if (container) {
+      container.innerHTML = '';
+    }
+    setIsCameraActive(false);
+    setTorchOn(false);
+  };
+
   const startCamera = async () => {
     if (isStartingCameraRef.current) return;
     isStartingCameraRef.current = true;
     try {
       setCameraError(null);
-      setIsCameraActive(true);
 
-      // Dọn dẹp camera hoặc scanner cũ nếu đang chạy
+      // Dọn dẹp camera cũ trước khi khởi động instance mới
       await stopCamera();
-      setIsCameraActive(true);
 
       const container = document.getElementById('v1-camera-reader');
-      if (container) {
-        container.innerHTML = '';
-      }
+      if (!container) throw new Error('Không tìm thấy container camera #v1-camera-reader');
+      container.innerHTML = '';
 
-      // Callback xử lý khi phát hiện mã vạch (Siêu tốc độ, độ chính xác tuyệt đối)
+      // Callback xử lý khi phát hiện mã vạch từ luồng camera
       const onScanSuccess = (decodedText) => {
         if (!decodedText) return;
-        // Chỉ dừng quét khi đang có báo động từ chối (rejected) hoặc modal xác nhận đang mở (không chặn bởi thông báo chụp ảnh)
-        if ((scanPopupRef.current && scanPopupRef.current.type === 'rejected') || confirmModalRef.current?.isOpen) {
-          return;
-        }
+        if (confirmModalRef.current?.isOpen) return;
 
         const now = Date.now();
-        // Lấy dữ liệu chuẩn mới nhất từ Ref (triệt tiêu 100% stale closures)
         const currentTab = palletTabRef.current;
         const currentData = (currentTab === 'standing' ? standingDataRef.current : roofDataRef.current);
         const currentStdSku = currentData?.standardSku || '';
@@ -933,18 +942,16 @@ const CheckPalletV1View = () => {
         const cleanText = normalizeToEnglishBarcode(decodedText);
         if (!cleanText) return;
 
-        // Nếu trước đó đang có popup thông báo không tìm thấy mã từ nút chụp ảnh tĩnh, tự động đóng đi khi camera đã bắt được mã
+        // Tự động đóng modal cảnh báo ảnh tĩnh nếu camera đã bắt được mã
         if (messageModalRef.current?.isOpen && messageModalRef.current?.title?.includes('mã')) {
           setMessageModal(prev => ({ ...prev, isOpen: false }));
         }
 
-        // Tra cứu đối soát trực tiếp từ điển 478 SKU chuẩn của công ty (tự động sửa lỗi quang học W5T -> WHT)
         const catalogMatched = matchCatalogSku(cleanText, currentStdSku);
         const resolvedText = catalogMatched || cleanText;
 
         setLastDetectedRaw(resolvedText);
 
-        // Lọc nghiêm ngặt: Phải là ứng viên mã hợp lệ theo quy cách nhà máy
         if (!isValidBarcodeCandidate(resolvedText, currentStdSku)) {
           return;
         }
@@ -954,250 +961,88 @@ const CheckPalletV1View = () => {
 
         const { type, code: normalizedCode } = classified;
 
-        // ─── A. MÃ PALLET QR (PLD-..., PLN-...) ───
+        // A. MÃ PALLET QR (PLD-..., PLN-...)
         if (type === 'PALLET' || normalizedCode.startsWith('PLD-') || normalizedCode.startsWith('PLN-')) {
-          mismatchConfirmRef.current = null;
-          if (lastCameraScannedCodeRef.current === normalizedCode && (now - lastProcessedTimeRef.current < 1000)) {
+          if (lastCameraScannedCodeRef.current === normalizedCode && (now - lastCameraScannedTimeRef.current < 1000)) {
             return;
           }
           lastCameraScannedCodeRef.current = normalizedCode;
-          lastProcessedTimeRef.current = now;
+          lastCameraScannedTimeRef.current = now;
           executeScannedCode(normalizedCode);
           return;
         }
 
-        // ─── B. MÃ LPN (MÃ VẬN CHUYỂN 9 SỐ LIỀN) ───
+        // B. MÃ LPN (MÃ VẬN CHUYỂN)
         if (type === 'LPN') {
-          // A1. Nếu chưa có LPN chuẩn HOẶC khớp LPN chuẩn: Nhận ngay tức thì (< 10ms)!
-          if (!currentStdLpn || normalizedCode === currentStdLpn) {
-            mismatchConfirmRef.current = null;
-            // Debounce 600ms khi lia giữa các thùng cùng mã
-            if (lastCameraScannedCodeRef.current === normalizedCode && (now - lastProcessedTimeRef.current < 600)) {
-              return;
-            }
-            lastCameraScannedCodeRef.current = normalizedCode;
-            lastProcessedTimeRef.current = now;
-            executeScannedCode(normalizedCode);
+          const isLpnMatch = !currentStdLpn || normalizedCode === currentStdLpn || isOpticalVariantOfLpn(normalizedCode, currentStdLpn);
+          const finalLpn = isLpnMatch ? (currentStdLpn || normalizedCode) : normalizedCode;
+          // Throttling camera 600ms giữa 2 lần quét cùng mã trên camera
+          if (lastCameraScannedCodeRef.current === finalLpn && (now - lastCameraScannedTimeRef.current < 600)) {
             return;
           }
-
-          // A2. Nếu KHÁC LPN chuẩn (nghi ngờ sai mã vận chuyển):
-          // Yêu cầu xác nhận 2 khung hình liên tiếp trong 600ms để triệt tiêu 100% rung lắc quang học
-          if (mismatchConfirmRef.current?.code === normalizedCode && (now - mismatchConfirmRef.current.time < 600)) {
-            mismatchConfirmRef.current = null;
-            lastCameraScannedCodeRef.current = normalizedCode;
-            lastProcessedTimeRef.current = now;
-            executeScannedCode(normalizedCode);
-          } else {
-            mismatchConfirmRef.current = { code: normalizedCode, time: now };
-          }
+          lastCameraScannedCodeRef.current = finalLpn;
+          lastCameraScannedTimeRef.current = now;
+          executeScannedCode(finalLpn);
           return;
         }
 
-        // ─── C. MÃ SKU (MÃ SẢN PHẨM 2 DẤU '-') ───
+        // C. MÃ SKU (MÃ SẢN PHẨM)
         if (type === 'SKU') {
           const isSkuMatch = !currentStdSku ||
             normalizedCode === currentStdSku ||
             isOpticalVariantOfSku(normalizedCode, currentStdSku) ||
             (matchCatalogSku(normalizedCode, currentStdSku) === currentStdSku);
 
-          // C1. Nếu chưa có SKU chuẩn HOẶC khớp SKU chuẩn: Nhận ngay tức thì (< 10ms)!
-          if (isSkuMatch) {
-            mismatchConfirmRef.current = null;
-            const finalCode = currentStdSku || normalizedCode;
-            // Debounce 600ms khi lia giữa các thùng cùng mã
-            if (lastCameraScannedCodeRef.current === finalCode && (now - lastProcessedTimeRef.current < 600)) {
-              return;
-            }
-            lastCameraScannedCodeRef.current = finalCode;
-            lastProcessedTimeRef.current = now;
-            executeScannedCode(finalCode);
+          const finalCode = isSkuMatch ? (currentStdSku || normalizedCode) : normalizedCode;
+          // Throttling camera 600ms giữa 2 lần quét cùng mã trên camera
+          if (lastCameraScannedCodeRef.current === finalCode && (now - lastCameraScannedTimeRef.current < 600)) {
             return;
           }
-
-          // C2. Nếu KHÁC SKU chuẩn (nghi ngờ sai thùng sản phẩm trong pallet):
-          // Yêu cầu xác nhận 2 khung hình liên tiếp trong 600ms rồi mới hú còi báo động!
-          if (mismatchConfirmRef.current?.code === normalizedCode && (now - mismatchConfirmRef.current.time < 600)) {
-            mismatchConfirmRef.current = null;
-            lastCameraScannedCodeRef.current = normalizedCode;
-            lastProcessedTimeRef.current = now;
-            executeScannedCode(normalizedCode);
-          } else {
-            mismatchConfirmRef.current = { code: normalizedCode, time: now };
-          }
+          lastCameraScannedCodeRef.current = finalCode;
+          lastCameraScannedTimeRef.current = now;
+          executeScannedCode(finalCode);
           return;
         }
       };
-      onScanSuccessRef.current = onScanSuccess;
 
-      // 1. LẤY STREAM CAMERA ĐỘ NÉT CAO 1280X720, CONTINUOUS AUTOFOCUS
-      let stream = null;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: false,
-          video: {
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1280, min: 1024 },
-            height: { ideal: 720, min: 720 },
-            advanced: [{ focusMode: 'continuous' }]
-          }
-        });
-      } catch (mediaErr) {
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({
-            audio: false,
-            video: {
-              facingMode: { ideal: 'environment' },
-              width: { ideal: 1280 },
-              height: { ideal: 720 }
-            }
-          });
-        } catch (basicErr) {
-          stream = await navigator.mediaDevices.getUserMedia({
-            audio: false,
-            video: true
-          });
-        }
-      }
-
-      nativeStreamRef.current = stream;
-
-      const targetContainer = document.getElementById('v1-camera-reader');
-      if (!targetContainer) throw new Error('Không tìm thấy container camera #v1-camera-reader');
-
-      targetContainer.innerHTML = '';
-      const video = document.createElement('video');
-      video.id = 'v1-native-video';
-      video.setAttribute('playsinline', 'true');
-      video.setAttribute('autoplay', 'true');
-      video.setAttribute('muted', 'true');
-      video.style.width = '100%';
-      video.style.height = '100%';
-      video.style.maxHeight = '280px';
-      video.style.objectFit = 'cover';
-      video.style.display = 'block';
-      video.srcObject = stream;
-      targetContainer.appendChild(video);
-      await video.play();
-
-      videoElementRef.current = video;
-      isCameraRunningRef.current = true;
-
-      // 2. KHỞI TẠO BỘ GIẢI MÃ:
-      // A. Hardware ML Kit BarcodeDetector (Ưu tiên GPU phần cứng điện thoại)
-      let nativeDetector = null;
-      if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
-        try {
-          nativeDetector = new window.BarcodeDetector({
-            formats: ['code_39', 'code_128', 'qr_code', 'ean_13', 'itf']
-          });
-        } catch (_) {
-          try {
-            nativeDetector = new window.BarcodeDetector();
-          } catch (detectorErr) {
-            console.warn('Native BarcodeDetector không khả dụng:', detectorErr);
-            nativeDetector = null;
-          }
-        }
-      }
-      nativeDetectorRef.current = nativeDetector;
-
-      // B. High-Resolution ZXing Decoder qua Html5Qrcode (chuẩn nét 1:1, không bị ép nén canvas)
-      const zxingScanner = new Html5Qrcode('v1-camera-reader', {
+      const scanner = new Html5Qrcode('v1-camera-reader', {
         formatsToSupport: [
-          Html5QrcodeSupportedFormats.CODE_39,
           Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.QR_CODE
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.QR_CODE,
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.ITF,
+          Html5QrcodeSupportedFormats.UPC_A
         ],
-        useBarCodeDetectorIfSupported: false,
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true
+        },
         verbose: false
       });
-      html5QrCodeRef.current = zxingScanner;
+      html5QrCodeRef.current = scanner;
 
-      setCameraEngine(nativeDetector ? '⚡ GPU Hardware ML Kit (30 FPS)' : '⚡ High-Res 1:1 Engine (ZXing HD)');
-
-      // 3. OFFSCREEN CANVAS QUÉT ĐỘ PHÂN GIẢI GỐC 1:1 (TRIỆT TIÊU 100% LỖI DOWNSCALING CỦA TRÌNH DUYỆT)
-      const scanCanvas = document.createElement('canvas');
-      const scanCtx = scanCanvas.getContext('2d', { willReadFrequently: true });
-
-      let isFrameProcessing = false;
-      let lastScanTime = 0;
-
-      const scanLoop = async () => {
-        if (!isCameraRunningRef.current) return;
-        const now = performance.now();
-
-        // Chu kỳ quét tối ưu: mỗi 40ms (~25 FPS), vừa cực nhanh vừa không quá tải CPU
-        if (!isFrameProcessing && now - lastScanTime >= 40 && video.readyState >= 2 && video.videoWidth > 0) {
-          isFrameProcessing = true;
-          lastScanTime = now;
-          try {
-            let detectedText = null;
-
-            // BƯỚC 1: QUÉT TRỰC TIẾP GPU TRÊN THẺ VIDEO GỐC (Zero-copy, full sensor, không bị xén Quiet Zone viền)
-            if (nativeDetector) {
-              try {
-                const barcodes = await nativeDetector.detect(video);
-                if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
-                  detectedText = barcodes[0].rawValue;
-                }
-              } catch (_) {}
-            }
-
-            // BƯỚC 2: NẾU CHƯA THẤY, DÙNG CANVAS 1:1 CẮT RỘNG 98% (chừa lề Quiet Zone tuyệt đối)
-            if (!detectedText) {
-              const vw = video.videoWidth;
-              const vh = video.videoHeight;
-              const cropW = Math.min(vw, Math.floor(vw * 0.98));
-              const cropH = Math.min(vh, Math.floor(vh * 0.60));
-              const sx = Math.floor((vw - cropW) / 2);
-              const sy = Math.floor((vh - cropH) / 2);
-
-              if (scanCanvas.width !== cropW || scanCanvas.height !== cropH) {
-                scanCanvas.width = cropW;
-                scanCanvas.height = cropH;
-              }
-
-              scanCtx.drawImage(video, sx, sy, cropW, cropH, 0, 0, cropW, cropH);
-
-              // Thử lại nativeDetector trên scanCanvas
-              if (nativeDetector) {
-                try {
-                  const barcodes = await nativeDetector.detect(scanCanvas);
-                  if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
-                    detectedText = barcodes[0].rawValue;
-                  }
-                } catch (_) {}
-              }
-
-              // BƯỚC 3: DỰ PHÒNG ZXING HIGH-RES (dùng decodeAsync chuẩn của Html5QrcodeShim)
-              if (!detectedText && zxingScanner?.qrcode?.decodeAsync) {
-                try {
-                  const zxResult = await zxingScanner.qrcode.decodeAsync(scanCanvas);
-                  if (zxResult?.text) {
-                    detectedText = zxResult.text;
-                  }
-                } catch (_) {}
-              }
-            }
-
-            if (detectedText) {
-              onScanSuccess(detectedText);
-            }
-          } catch (err) {
-            console.warn('Lỗi xử lý frame camera:', err);
-          } finally {
-            isFrameProcessing = false;
-          }
-        }
-
-        if (isCameraRunningRef.current) {
-          animationFrameIdRef.current = requestAnimationFrame(scanLoop);
-        }
+      const config = {
+        fps: 20,
+        qrbox: (viewfinderWidth, viewfinderHeight) => {
+          const width = Math.min(viewfinderWidth, Math.floor(viewfinderWidth * 0.90));
+          const height = Math.min(viewfinderHeight, Math.floor(viewfinderHeight * 0.65));
+          return { width: Math.max(width, 220), height: Math.max(height, 120) };
+        },
+        aspectRatio: 1.777778
       };
 
-      animationFrameIdRef.current = requestAnimationFrame(scanLoop);
+      await scanner.start(
+        { facingMode: 'environment' },
+        config,
+        (decodedText) => {
+          onScanSuccess(decodedText);
+        },
+        () => {} // Bỏ qua per-frame decode miss
+      );
 
+      isCameraRunningRef.current = true;
+      setIsCameraActive(true);
+      setCameraEngine('⚡ Html5Qrcode Hardware-Accelerated Engine');
     } catch (err) {
       console.error('Lỗi khởi động camera:', err);
       const isPermissionErr = err?.name === 'NotAllowedError' || err?.message?.toLowerCase?.()?.includes('permission');
@@ -1210,43 +1055,6 @@ const CheckPalletV1View = () => {
     } finally {
       isStartingCameraRef.current = false;
     }
-  };
-
-  const stopCamera = async () => {
-    isCameraRunningRef.current = false;
-    if (animationFrameIdRef.current) {
-      cancelAnimationFrame(animationFrameIdRef.current);
-      animationFrameIdRef.current = null;
-    }
-    if (nativeStreamRef.current) {
-      try {
-        nativeStreamRef.current.getTracks().forEach(t => t.stop());
-      } catch (_) {}
-      nativeStreamRef.current = null;
-    }
-    const container = document.getElementById('v1-camera-reader');
-    if (container) {
-      container.innerHTML = '';
-    }
-
-    if (html5QrCodeRef.current) {
-      try {
-        if (html5QrCodeRef.current.isScanning) {
-          await html5QrCodeRef.current.stop();
-        }
-      } catch (err) {
-        console.warn('Lỗi khi dừng fallback camera:', err);
-      }
-      try {
-        html5QrCodeRef.current.clear();
-      } catch (_) {}
-      html5QrCodeRef.current = null;
-    }
-    videoElementRef.current = null;
-    nativeDetectorRef.current = null;
-    onScanSuccessRef.current = null;
-    setIsCameraActive(false);
-    setTorchOn(false);
   };
 
   // Tự động khởi động camera khi mở tab quét để sẵn sàng nhận mã tức thì
@@ -1266,217 +1074,69 @@ const CheckPalletV1View = () => {
   }, [activeTab]);
 
   const toggleTorch = async () => {
-    if (!isCameraActive) return;
-
+    if (!isCameraActive || !html5QrCodeRef.current) return;
     try {
       const nextTorchState = !torchOn;
-      let applied = false;
-
-      // 1. Nếu đang chạy Native Stream
-      if (nativeStreamRef.current) {
-        const track = nativeStreamRef.current.getVideoTracks?.()[0];
-        if (track) {
-          const capabilities = (typeof track.getCapabilities === 'function') ? track.getCapabilities() : {};
-          if (capabilities.torch) {
-            await track.applyConstraints({
-              advanced: [{ torch: nextTorchState }]
-            });
-            setTorchOn(nextTorchState);
-            applied = true;
-          }
-        }
-      }
-
-      // 2. Nếu đang dùng Html5Qrcode fallback
-      if (!applied && html5QrCodeRef.current) {
-        try {
-          if (typeof html5QrCodeRef.current.getRunningTrackCameraCapabilities === 'function') {
-            const cameraCapabilities = html5QrCodeRef.current.getRunningTrackCameraCapabilities();
-            const torchFeature = cameraCapabilities?.torchFeature ? cameraCapabilities.torchFeature() : null;
-            if (torchFeature && typeof torchFeature.isSupported === 'function' && torchFeature.isSupported()) {
-              await torchFeature.apply(nextTorchState);
-              setTorchOn(nextTorchState);
-              applied = true;
-            }
-          }
-        } catch (_) {}
-
-        if (!applied) {
-          const videoEl = document.querySelector('#v1-camera-reader video');
-          const stream = videoEl?.srcObject;
-          const track = stream?.getVideoTracks?.()[0];
-
-          if (track && typeof track.applyConstraints === 'function') {
-            const capabilities = (typeof track.getCapabilities === 'function') ? track.getCapabilities() : {};
-            if (capabilities.torch) {
-              await track.applyConstraints({
-                advanced: [{ torch: nextTorchState }]
-              });
-              setTorchOn(nextTorchState);
-              applied = true;
-            }
-          }
-        }
-      }
-
-      if (!applied) {
-        setMessageModal({
-          isOpen: true,
-          type: 'info',
-          title: 'Thông báo đèn Flash',
-          message: 'Thiết bị hoặc camera hiện tại không hỗ trợ đèn Flash (chỉ khả dụng trên camera sau có đèn flash LED của điện thoại).'
-        });
-      }
+      await html5QrCodeRef.current.applyVideoConstraints({
+        advanced: [{ torch: nextTorchState }]
+      });
+      setTorchOn(nextTorchState);
     } catch (err) {
-      console.warn('Lỗi khi điều khiển đèn Flash:', err);
+      console.warn('Không thể thay đổi đèn flash:', err);
       setMessageModal({
         isOpen: true,
-        type: 'warning',
-        title: 'Lỗi Flash',
-        message: 'Không thể thay đổi trạng thái đèn Flash: ' + (err.message || 'Lỗi không xác định')
+        type: 'info',
+        title: 'Thông báo đèn Flash',
+        message: 'Thiết bị hoặc camera hiện tại không hỗ trợ bật/tắt đèn Flash.'
       });
     }
   };
 
-  // ─── HÀM CHỤP ẢNH TĨNH VÀ PHÂN TÍCH ĐA TẦNG (SNAPSHOT HIGH-RES SCAN) ───
+  // ─── HÀM CHỤP ẢNH TĨNH VÀ PHÂN TÍCH MÃ TỪ FRAME VIDEO ───
   const handleSnapshotScan = async () => {
-    if (!isCameraActive || isCapturingSnapshot) return;
+    if (!isCameraActive || isCapturingSnapshot || !html5QrCodeRef.current) return;
     setIsCapturingSnapshot(true);
     setIsFlashAnimation(true);
     setTimeout(() => setIsFlashAnimation(false), 200);
 
     try {
-      const video = videoElementRef.current || document.getElementById('v1-camera-reader')?.querySelector('video');
+      const video = document.querySelector('#v1-camera-reader video');
       if (!video || video.readyState < 2 || video.videoWidth === 0) {
         setMessageModal({
           isOpen: true,
           type: 'warning',
           title: 'Camera chưa sẵn sàng',
-          message: 'Chưa nhận được khung hình từ camera. Vui lòng đợi 1 giây rồi thử lại.'
+          message: 'Chưa nhận được hình ảnh từ camera. Vui lòng đợi 1 giây rồi thử lại.'
         });
         return;
       }
 
-      const vw = video.videoWidth;
-      const vh = video.videoHeight;
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      // Tạo canvas chụp tĩnh nguyên bản 1:1 từ cảm biến camera
-      const snapCanvas = document.createElement('canvas');
-      snapCanvas.width = vw;
-      snapCanvas.height = vh;
-      const snapCtx = snapCanvas.getContext('2d', { willReadFrequently: true });
-      snapCtx.drawImage(video, 0, 0, vw, vh);
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.95));
+      if (!blob) throw new Error('Không thể tạo file ảnh từ camera');
+      const file = new File([blob], 'snapshot.jpg', { type: 'image/jpeg' });
 
-      let detectedText = null;
-
-      // Pass 1: Quét trực tiếp cảm biến camera (Hardware BarcodeDetector trên thẻ video gốc, không crop, không mất Quiet Zone)
-      if (nativeDetectorRef.current) {
-        try {
-          const results = await nativeDetectorRef.current.detect(video);
-          if (results && results.length > 0 && results[0].rawValue) {
-            detectedText = results[0].rawValue;
-          }
-        } catch (_) {}
-      }
-
-      // Pass 2: Canvas chụp tĩnh nguyên bản 100% từ cảm biến
-      if (!detectedText && nativeDetectorRef.current) {
-        try {
-          const results = await nativeDetectorRef.current.detect(snapCanvas);
-          if (results && results.length > 0 && results[0].rawValue) {
-            detectedText = results[0].rawValue;
-          }
-        } catch (_) {}
-      }
-
-      // Pass 3: ZXing Decoder trên toàn bộ snapCanvas (dùng decodeAsync đúng chuẩn)
-      if (!detectedText && html5QrCodeRef.current?.qrcode?.decodeAsync) {
-        try {
-          const zxRes = await html5QrCodeRef.current.qrcode.decodeAsync(snapCanvas);
-          if (zxRes?.text) {
-            detectedText = zxRes.text;
-          }
-        } catch (_) {}
-      }
-
-      // Pass 4: Vùng cắt trung tâm RỘNG 98% kèm lề trắng an toàn 25px (tạo Quiet Zone hoàn hảo cho Code 39/Code 128)
-      const cropW = Math.min(vw, Math.floor(vw * 0.98));
-      const cropH = Math.min(vh, Math.floor(vh * 0.65));
-      const sx = Math.floor((vw - cropW) / 2);
-      const sy = Math.floor((vh - cropH) / 2);
-
-      const margin = 25;
-      const cropCanvas = document.createElement('canvas');
-      cropCanvas.width = cropW + margin * 2;
-      cropCanvas.height = cropH + margin * 2;
-      const cropCtx = cropCanvas.getContext('2d', { willReadFrequently: true });
-      // Đổ nền trắng toàn bộ để đảm bảo Quiet Zone
-      cropCtx.fillStyle = '#FFFFFF';
-      cropCtx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
-      cropCtx.drawImage(snapCanvas, sx, sy, cropW, cropH, margin, margin, cropW, cropH);
-
-      if (!detectedText && nativeDetectorRef.current) {
-        try {
-          const results = await nativeDetectorRef.current.detect(cropCanvas);
-          if (results && results.length > 0 && results[0].rawValue) {
-            detectedText = results[0].rawValue;
-          }
-        } catch (_) {}
-      }
-
-      if (!detectedText && html5QrCodeRef.current?.qrcode?.decodeAsync) {
-        try {
-          const zxRes = await html5QrCodeRef.current.qrcode.decodeAsync(cropCanvas);
-          if (zxRes?.text) {
-            detectedText = zxRes.text;
-          }
-        } catch (_) {}
-      }
-
-      // Pass 5: Tăng cường độ tương phản (Adaptive Thresholding) để làm nét vạch mờ trên cropCanvas
-      if (!detectedText && html5QrCodeRef.current?.qrcode?.decodeAsync) {
-        try {
-          const imgData = cropCtx.getImageData(0, 0, cropCanvas.width, cropCanvas.height);
-          const data = imgData.data;
-          let sumLum = 0;
-          for (let i = 0; i < data.length; i += 4) {
-            sumLum += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-          }
-          const avgLum = Math.floor(sumLum / (data.length / 4));
-          const threshold = Math.max(105, Math.min(160, avgLum));
-
-          for (let i = 0; i < data.length; i += 4) {
-            const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-            const bw = gray < threshold ? 0 : 255;
-            data[i] = bw;
-            data[i + 1] = bw;
-            data[i + 2] = bw;
-          }
-          cropCtx.putImageData(imgData, 0, 0);
-
-          const zxRes = await html5QrCodeRef.current.qrcode.decodeAsync(cropCanvas);
-          if (zxRes?.text) {
-            detectedText = zxRes.text;
-          }
-        } catch (_) {}
-      }
-
-      if (detectedText) {
-        // Tự động đóng popup cảnh báo nếu đang mở
-        setMessageModal(prev => (prev.isOpen ? { ...prev, isOpen: false } : prev));
-        if (onScanSuccessRef.current) {
-          onScanSuccessRef.current(detectedText);
-        } else {
-          executeScannedCode(detectedText);
+      try {
+        const result = await html5QrCodeRef.current.scanFile(file, false);
+        if (result) {
+          executeScannedCode(result);
+          return;
         }
-      } else {
-        setMessageModal({
-          isOpen: true,
-          type: 'warning',
-          title: 'Chưa đọc được mã vạch',
-          message: 'Không tìm thấy mã vạch trong ảnh chụp. Vui lòng giữ camera cách thùng 20-30cm, để rõ nét và đủ sáng rồi thử lại.'
-        });
+      } catch (scanErr) {
+        console.warn('scanFile không đọc được:', scanErr);
       }
+
+      setMessageModal({
+        isOpen: true,
+        type: 'warning',
+        title: 'Chưa đọc được mã vạch',
+        message: 'Không tìm thấy mã vạch trong ảnh chụp. Vui lòng giữ camera cách thùng 20-30cm, đủ ánh sáng và vuông góc với mã rồi thử lại.'
+      });
     } catch (err) {
       console.error('Lỗi khi chụp ảnh tĩnh và phân tích mã:', err);
       setMessageModal({
@@ -2109,6 +1769,21 @@ const CheckPalletV1View = () => {
                         display: isCameraActive ? 'block' : 'none' 
                       }} 
                     />
+                    <style>{`
+                      #v1-camera-reader {
+                        border: none !important;
+                      }
+                      #v1-camera-reader video {
+                        width: 100% !important;
+                        height: 100% !important;
+                        max-height: 280px !important;
+                        object-fit: cover !important;
+                        border-radius: 8px !important;
+                      }
+                      #v1-camera-reader img {
+                        display: none !important;
+                      }
+                    `}</style>
 
                     {isCameraActive && (
                       <div style={{
@@ -3435,17 +3110,30 @@ const CheckPalletV1View = () => {
         return (
           <div style={{
             position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            backdropFilter: 'blur(3px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '20px',
-            zIndex: 9999
+            ...(isRejected ? {
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              backdropFilter: 'blur(3px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '20px',
+              zIndex: 9999
+            } : {
+              bottom: '24px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 9999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '90%',
+              maxWidth: '350px',
+              pointerEvents: 'none'
+            })
           }}>
             <div style={{
               backgroundColor: '#ffffff',

@@ -1,5 +1,4 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { GitBranch, FileText, Save, RefreshCw } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import { generateFlowchartSvgHtml } from '../FlowchartTable';
 
@@ -348,6 +347,102 @@ const CanvasISOEditor = ({
         setIsLoading(false);
         setLoadError(false);
 
+        // Đảm bảo style cho nút "Vẽ Sơ đồ" trong menu Ribbon luôn hoàn hảo và không bị bể CSS
+        try {
+          const iframeDoc = iframeRef.current?.contentDocument || iframeWin?.document;
+          if (iframeDoc && !iframeDoc.getElementById('ce-flowchart-btn-fix')) {
+            const styleEl = iframeDoc.createElement('style');
+            styleEl.id = 'ce-flowchart-btn-fix';
+            styleEl.innerHTML = `
+              .menu-item .menu-item__flowchart,
+              .menu-item > div.menu-item__flowchart {
+                display: inline-flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                gap: 6px !important;
+                width: auto !important;
+                min-width: unset !important;
+                max-width: unset !important;
+                height: 28px !important;
+                padding: 0 10px !important;
+                margin: 0 4px !important;
+                background-color: #FAF4EF !important;
+                border: 1.5px solid #7B5233 !important;
+                border-radius: 5px !important;
+                color: #7B5233 !important;
+                font-size: 12px !important;
+                font-weight: 600 !important;
+                line-height: 1 !important;
+                cursor: pointer !important;
+                box-shadow: 0 1px 3px rgba(123, 82, 51, 0.12) !important;
+                transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+                flex-shrink: 0 !important;
+                box-sizing: border-box !important;
+                white-space: nowrap !important;
+                overflow: visible !important;
+              }
+              .menu-item .menu-item__flowchart:hover,
+              .menu-item > div.menu-item__flowchart:hover {
+                background-color: #7B5233 !important;
+                color: #FFFFFF !important;
+                border-color: #7B5233 !important;
+                box-shadow: 0 2px 6px rgba(123, 82, 51, 0.25) !important;
+                transform: translateY(-0.5px);
+              }
+              .menu-item .menu-item__flowchart:active,
+              .menu-item > div.menu-item__flowchart:active {
+                transform: translateY(0);
+              }
+              .menu-item .menu-item__flowchart i,
+              .menu-item > div.menu-item__flowchart i {
+                display: inline-block !important;
+                width: 15px !important;
+                height: 15px !important;
+                min-width: 15px !important;
+                min-height: 15px !important;
+                background-image: url("data:image/svg+xml,%3csvg%20width='16'%20height='16'%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%2016'%3e%3cg%20fill='%237B5233'%3e%3crect%20x='5'%20y='1'%20width='6'%20height='3'%20rx='0.8'/%3e%3crect%20x='1'%20y='11'%20width='5'%20height='3.5'%20rx='0.8'/%3e%3cpolygon%20points='12,10%2015,12.5%2012,15%209,12.5'/%3e%3cpath%20d='M8%204v3.5h-4.5v3.5h1v-2.5h7v1.5h1V7.5H8V4z'/%3e%3c/g%3e%3c/svg%3e") !important;
+                background-size: contain !important;
+                background-repeat: no-repeat !important;
+                background-position: center !important;
+                flex-shrink: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                transition: filter 0.2s ease !important;
+              }
+              .menu-item .menu-item__flowchart:hover i,
+              .menu-item > div.menu-item__flowchart:hover i {
+                filter: brightness(0) invert(1) !important;
+              }
+              .menu-item .menu-item__flowchart span,
+              .menu-item > div.menu-item__flowchart span,
+              .menu-item .menu-item__flowchart .flowchart-btn-label,
+              .menu-item > div.menu-item__flowchart .flowchart-btn-label {
+                display: inline-block !important;
+                width: auto !important;
+                min-width: unset !important;
+                max-width: unset !important;
+                height: auto !important;
+                min-height: unset !important;
+                max-height: unset !important;
+                border: none !important;
+                background: transparent !important;
+                color: inherit !important;
+                font-size: 12px !important;
+                font-weight: 600 !important;
+                line-height: normal !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                white-space: nowrap !important;
+                user-select: none !important;
+                text-decoration: none !important;
+              }
+            `;
+            iframeDoc.head.appendChild(styleEl);
+          }
+        } catch (styleErr) {
+          console.warn('Lỗi inject style cho flowchart button:', styleErr);
+        }
+
         // Ưu tiên 1: Nạp snapshot JSON từ CSDL
         if (formData.sections && formData.sections.__canvas_editor_data__) {
           try {
@@ -429,105 +524,6 @@ const CanvasISOEditor = ({
       flexDirection: 'column',
       overflow: 'hidden'
     }}>
-      {/* Thanh công cụ thao tác nhanh: Thiết kế Sơ đồ Lưu trình & Chuyển đổi chế độ */}
-      <div style={{
-        padding: '8px 16px',
-        backgroundColor: '#FAF7F2',
-        borderBottom: '1px solid #EADCC9',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: '10px',
-        flexShrink: 0,
-        zIndex: 10
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={() => {
-              if (typeof onOpenFlowchartModal === 'function') {
-                onOpenFlowchartModal();
-              } else if (typeof window.__openIsoFlowchartModal === 'function') {
-                window.__openIsoFlowchartModal();
-              }
-            }}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 14px',
-              backgroundColor: '#7B5233',
-              color: '#FFFFFF',
-              border: 'none',
-              borderRadius: '6px',
-              fontSize: '0.85rem',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              boxShadow: '0 2px 6px rgba(123, 82, 51, 0.25)',
-              transition: 'all 0.2s ease'
-            }}
-            title="Mở Canvas vẽ lưu đồ kéo thả hoặc cấu hình bảng các bước quy trình ISO"
-          >
-            <GitBranch size={16} />
-            <span>🎨 Thiết kế / Chèn Sơ đồ Lưu trình (Flowchart)</span>
-          </button>
-
-          <span style={{ fontSize: '0.82rem', color: '#64748B' }}>
-            💡 Bấm <b>"Thiết kế / Chèn Sơ đồ Lưu trình"</b> để vẽ các khối và tự động chèn vào quy trình.
-          </span>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {onSwitchToClassic && (
-            <button
-              type="button"
-              onClick={onSwitchToClassic}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '5px',
-                padding: '5px 12px',
-                backgroundColor: '#FFFFFF',
-                color: '#475569',
-                border: '1px solid #CBD5E1',
-                borderRadius: '5px',
-                fontSize: '0.8rem',
-                fontWeight: '500',
-                cursor: 'pointer'
-              }}
-              title="Chuyển sang chế độ soạn thảo Word A4 truyền thống"
-            >
-              <FileText size={14} />
-              <span>Chuyển sang Word A4</span>
-            </button>
-          )}
-
-          <button
-            type="button"
-            onClick={handleSaveDoc}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '5px',
-              padding: '5px 12px',
-              backgroundColor: '#15803D',
-              color: '#FFFFFF',
-              border: 'none',
-              borderRadius: '5px',
-              fontSize: '0.8rem',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              boxShadow: '0 1px 3px rgba(21, 128, 61, 0.25)'
-            }}
-            title="Lưu tài liệu hiện tại"
-          >
-            <Save size={14} />
-            <span>Lưu tài liệu</span>
-          </button>
-        </div>
-      </div>
-
       {/* Cảnh báo lỗi kết nối */}
       {loadError && (
         <div style={{

@@ -731,6 +731,8 @@ function App() {
                 <Route path="reports" element={<ProtectedRoute permissionKey="reports"><InspectionReports /></ProtectedRoute>} />
                 <Route path="reports/detail/:type/:id" element={<ProtectedRoute permissionKey="reports"><InspectionDetail /></ProtectedRoute>} />
                 <Route path="quality" element={<ProtectedRoute permissionKey={["/admin/quality", "quality"]}><QualityOverview /></ProtectedRoute>} />
+                <Route path="quality/parameter" element={<ProtectedRoute permissionKey={["/admin/quality", "quality"]}><QualityOverview isParameterMode={true} /></ProtectedRoute>} />
+                <Route path="quality-parameter" element={<Navigate to="/admin/quality/parameter" replace />} />
                 <Route path="quality-targets" element={<Navigate to="/admin/kpi/dashboard" replace />} />
                 <Route path="quality-records" element={<ProtectedRoute permissionKey="quality-records"><QualityRecords /></ProtectedRoute>} />
                 <Route path="quality-records/:id" element={<ProtectedRoute permissionKey="quality-records"><QualityRecordsDetail /></ProtectedRoute>} />

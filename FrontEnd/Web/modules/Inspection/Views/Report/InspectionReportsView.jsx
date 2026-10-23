@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { 
   Search, 
@@ -32,6 +32,8 @@ import {
   User,
   PlusCircle,
   Edit,
+  Edit3,
+  Save,
   ArrowRight
 } from 'lucide-react';
 import api from '@webShared/Services/api.service';
@@ -73,6 +75,20 @@ const deduplicateInspectionImages = (imgs) => {
     }
   });
   return Array.from(stemMap.values());
+};
+
+const toDatetimeLocalValue = (dateStr) => {
+  if (!dateStr) return '';
+  try {
+    let s = String(dateStr).trim();
+    if (s.includes(' ') && !s.includes('T')) s = s.replace(' ', 'T');
+    const d = new Date(s);
+    if (isNaN(d.getTime())) return '';
+    const pad = (n) => String(n).padStart(2, '0');
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  } catch (e) {
+    return '';
+  }
 };
 
 const InspectionReportsView = () => {
@@ -490,6 +506,136 @@ const InspectionReportsView = () => {
 
   const [fallbackReportSteps, setFallbackReportSteps] = useState([]);
   const [loadingReportSteps, setLoadingReportSteps] = useState(false);
+
+  // ─── STATE & HANDLERS CHO CHỈNH SỬA THÔNG TIN PHIẾU KIỂM TRA TRÊN BÁO CÁO ───
+  const [reportBatchNo, setReportBatchNo] = useState('');
+  const [reportInspectorName, setReportInspectorName] = useState('');
+  const [reportDate, setReportDate] = useState('');
+  const [reportStatus, setReportStatus] = useState('');
+  const [reportAction, setReportAction] = useState('chap-nhan');
+  const [reportStage, setReportStage] = useState('');
+  const [reportCategory, setReportCategory] = useState('');
+  const [reportRequiredQty, setReportRequiredQty] = useState(0);
+  const [reportSampleQty, setReportSampleQty] = useState(0);
+  const [reportErrorQty, setReportErrorQty] = useState(0);
+  const [reportHandlingInfo, setReportHandlingInfo] = useState('');
+  const [isEditReportMode, setIsEditReportMode] = useState(false);
+  const [savingReport, setSavingReport] = useState(false);
+  const initialReportValuesRef = useRef(null);
+
+  useEffect(() => {
+    if (activeReportItem) {
+      const b = activeReportItem.batch_no || activeReportItem.po_code || activeReportItem.production_order_code || '';
+      const insp = getDisplayInspector(activeReportItem) || activeReportItem.inspector_name || '';
+      const d = activeReportItem.inspection_date || activeReportItem.created_at || activeReportItem.recorded_date || '';
+      const st = activeReportItem.status || (activeReportItem.is_confirmed ? 'Đã xác nhận' : 'Chưa Làm');
+      const act = activeReportItem.action || activeReportItem.handling_action || 'chap-nhan';
+      const sg = activeReportItem.stage || activeReportItem.stage_name || '';
+      const cat = activeReportItem.inspection_type || activeReportItem.category || '';
+      const req = Number(activeReportItem.required_qty ?? parsedReportData?.requiredQty ?? activeReportItem.total_products ?? 0);
+      const sam = Number(
+        activeReportItem.sample_qty ||
+        (Number(activeReportItem.passed_qty) > 0 ? activeReportItem.passed_qty : null) ||
+        activeReportItem.total_passed_qty ||
+        (activeReportItem.required_qty ? Math.max(Number(activeReportItem.required_qty) - Number(activeReportItem.error_qty || 0), 0) : 0)
+      );
+      const err = Number(activeReportItem.error_qty || activeReportItem.total_defects || 0);
+      const hInfo = activeReportItem.handling_info || parsedReportData?.handling_info || activeReportItem.action_note || '';
+
+      setReportBatchNo(b);
+      setReportInspectorName(insp);
+      setReportDate(d);
+      setReportStatus(st);
+      setReportAction(act);
+      setReportStage(sg);
+      setReportCategory(cat);
+      setReportRequiredQty(req);
+      setReportSampleQty(sam);
+      setReportErrorQty(err);
+      setReportHandlingInfo(hInfo);
+      setIsEditReportMode(false);
+
+      initialReportValuesRef.current = {
+        id: activeReportItem.id,
+        type: activeReportItem._reportType || activeReportItem.type,
+        batch_no: b,
+        inspector_name: insp,
+        date: d,
+        status: st,
+        action: act,
+        stage: sg,
+        category: cat,
+        required_qty: req,
+        sample_qty: sam,
+        error_qty: err,
+        handling_info: hInfo
+      };
+    }
+  }, [activeReportItem]);
+
+  const handleCancelReportEdit = () => {
+    if (initialReportValuesRef.current) {
+      const init = initialReportValuesRef.current;
+      setReportBatchNo(init.batch_no);
+      setReportInspectorName(init.inspector_name);
+      setReportDate(init.date);
+      setReportStatus(init.status);
+      setReportAction(init.action);
+      setReportStage(init.stage);
+      setReportCategory(init.category);
+      setReportRequiredQty(init.required_qty);
+      setReportSampleQty(init.sample_qty);
+      setReportErrorQty(init.error_qty);
+      setReportHandlingInfo(init.handling_info);
+    }
+    setIsEditReportMode(false);
+  };
+
+  const handleSaveReportEdit = async () => {
+    if (!activeReportItem) return;
+    setSavingReport(true);
+    try {
+      const rawType = activeReportItem._reportType || activeReportItem.type || activeReportItem.inspection_type;
+      const type = rawType === 'daily' ? 'daily' : (rawType === 'input' ? 'input' : 'stage');
+      const id = activeReportItem.id;
+
+      const payload = {
+        batch_no: reportBatchNo,
+        po_code: reportBatchNo,
+        recorded_date: reportDate,
+        inspection_date: reportDate,
+        inspector_name: reportInspectorName,
+        status: reportStatus,
+        stage: reportStage,
+        inspection_type: reportCategory,
+        action: reportAction,
+        required_qty: Number(reportRequiredQty),
+        sample_qty: Number(reportSampleQty),
+        error_qty: Number(reportErrorQty),
+        handling_info: reportHandlingInfo,
+        updated_by: 'Quản lý QC'
+      };
+
+      await api.post(`/inspections/update-record/${type}/${id}`, payload);
+
+      setSelectedReportItem(prev => prev ? {
+        ...prev,
+        ...payload,
+        is_confirmed: reportStatus === 'Đã xác nhận' || reportStatus === 'Đã xong' || reportStatus === 'confirmed' || reportStatus === 'Hoàn thành'
+      } : null);
+
+      setIsEditReportMode(false);
+      if (reports?.fetchData) {
+        reports.fetchData();
+      }
+      alert('Đã cập nhật thông tin phiếu kiểm tra thành công!');
+    } catch (err) {
+      console.error('Lỗi khi lưu phiếu kiểm tra:', err);
+      alert('Lỗi khi lưu: ' + (err.response?.data?.detail || err.message));
+    } finally {
+      setSavingReport(false);
+    }
+  };
 
   // Tự động nạp quy trình SOP theo công đoạn nếu báo cáo chưa lưu danh sách bước
   useEffect(() => {
@@ -2249,119 +2395,418 @@ const InspectionReportsView = () => {
                       <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
                         MÃ LÔ / PO
                       </span>
-                      <strong style={{ color: '#7B5233', fontSize: '0.92rem' }}>
-                        {activeReportItem.batch_no || activeReportItem.po_code || activeReportItem.production_order_code || '---'}
-                      </strong>
+                      {isEditReportMode ? (
+                        <input
+                          type="text"
+                          value={reportBatchNo}
+                          onChange={(e) => setReportBatchNo(e.target.value)}
+                          placeholder="Mã lô / PO..."
+                          style={{
+                            width: '100%',
+                            padding: '5px 8px',
+                            borderRadius: '6px',
+                            border: '1.5px solid #7B5233',
+                            fontSize: '0.88rem',
+                            fontWeight: '700',
+                            backgroundColor: '#FFFFFF',
+                            color: '#7B5233',
+                            outline: 'none',
+                            boxSizing: 'border-box'
+                          }}
+                        />
+                      ) : (
+                        <strong style={{ color: '#7B5233', fontSize: '0.92rem' }}>
+                          {reportBatchNo || activeReportItem.batch_no || activeReportItem.po_code || activeReportItem.production_order_code || '---'}
+                        </strong>
+                      )}
                     </div>
 
                     <div>
                       <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
                         LOẠI KIỂM TRA
                       </span>
-                      <div>{renderReportCategoryBadge(activeReportItem)}</div>
+                      {isEditReportMode ? (
+                        <select
+                          value={reportCategory}
+                          onChange={(e) => setReportCategory(e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '5px 8px',
+                            borderRadius: '6px',
+                            border: '1.5px solid #7B5233',
+                            fontSize: '0.82rem',
+                            fontWeight: '600',
+                            backgroundColor: '#FFFFFF',
+                            color: '#2D1A12',
+                            outline: 'none',
+                            boxSizing: 'border-box'
+                          }}
+                        >
+                          <option value="first_sample">Kiểm tra mẫu lần đầu</option>
+                          <option value="re_inspect">Kiểm tra lại</option>
+                          <option value="parameter">Kiểm tra thông số</option>
+                          <option value="process">Kiểm tra quy trình</option>
+                          <option value="qa">Vấn đáp</option>
+                          <option value="daily">Ghi nhận lỗi hằng ngày</option>
+                          <option value="input">Kiểm tra đầu vào / nhập kho</option>
+                          {reportCategory && !['first_sample', 're_inspect', 'parameter', 'process', 'qa', 'daily', 'input'].includes(reportCategory) && (
+                            <option value={reportCategory}>{reportCategory}</option>
+                          )}
+                        </select>
+                      ) : (
+                        <div>{renderReportCategoryBadge(activeReportItem)}</div>
+                      )}
                     </div>
 
                     <div>
                       <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
                         NGƯỜI KIỂM TRA QC
                       </span>
-                      <strong style={{ color: '#2D1A12' }}>
-                        {getDisplayInspector(activeReportItem) || activeReportItem.inspector_name || 'QC Inspector'}
-                      </strong>
+                      {isEditReportMode ? (
+                        <input
+                          type="text"
+                          value={reportInspectorName}
+                          onChange={(e) => setReportInspectorName(e.target.value)}
+                          placeholder="Tên QC..."
+                          style={{
+                            width: '100%',
+                            padding: '5px 8px',
+                            borderRadius: '6px',
+                            border: '1.5px solid #7B5233',
+                            fontSize: '0.88rem',
+                            fontWeight: '700',
+                            backgroundColor: '#FFFFFF',
+                            color: '#2D1A12',
+                            outline: 'none',
+                            boxSizing: 'border-box'
+                          }}
+                        />
+                      ) : (
+                        <strong style={{ color: '#2D1A12' }}>
+                          {reportInspectorName || getDisplayInspector(activeReportItem) || activeReportItem.inspector_name || 'QC Inspector'}
+                        </strong>
+                      )}
                     </div>
 
                     <div>
                       <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
                         NGÀY GHI NHẬN
                       </span>
-                      <span style={{ color: '#2D1A12', fontWeight: 600 }}>
-                        {formatDisplayDateTime(activeReportItem.inspection_date || activeReportItem.created_at)}
-                      </span>
+                      {isEditReportMode ? (
+                        <input
+                          type="datetime-local"
+                          value={toDatetimeLocalValue(reportDate)}
+                          onChange={(e) => setReportDate(e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '5px 8px',
+                            borderRadius: '6px',
+                            border: '1.5px solid #7B5233',
+                            fontSize: '0.82rem',
+                            fontWeight: '600',
+                            backgroundColor: '#FFFFFF',
+                            color: '#2D1A12',
+                            outline: 'none',
+                            boxSizing: 'border-box'
+                          }}
+                        />
+                      ) : (
+                        <span style={{ color: '#2D1A12', fontWeight: 600 }}>
+                          {formatDisplayDateTime(reportDate || activeReportItem.inspection_date || activeReportItem.created_at)}
+                        </span>
+                      )}
                     </div>
 
                     <div>
                       <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
                         TRẠNG THÁI XÁC NHẬN
                       </span>
-                      <div>
-                        {activeReportItem.is_confirmed || activeReportItem.status === 'confirmed' || activeReportItem.status === 'Đã xác nhận' ? (
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '5px',
-                            padding: '3px 10px',
+                      {isEditReportMode ? (
+                        <select
+                          value={reportStatus}
+                          onChange={(e) => setReportStatus(e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '5px 8px',
                             borderRadius: '6px',
-                            fontSize: '0.8rem',
-                            fontWeight: 700,
-                            backgroundColor: '#ECFDF5',
-                            color: '#059669',
-                            border: '1px solid #A7F3D0'
-                          }}>
-                            <CheckCircle2 size={13} /> Đã xác nhận
-                          </span>
-                        ) : (
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '5px',
-                            padding: '3px 10px',
-                            borderRadius: '6px',
-                            fontSize: '0.8rem',
-                            fontWeight: 700,
-                            backgroundColor: '#F3F4F6',
-                            color: '#4B5563',
-                            border: '1px solid #E5E7EB'
-                          }}>
-                            {activeReportItem.status || 'Đã hoàn thành'}
-                          </span>
-                        )}
-                      </div>
+                            border: '1.5px solid #7B5233',
+                            fontSize: '0.82rem',
+                            fontWeight: '700',
+                            backgroundColor: '#FFFFFF',
+                            color: '#2D1A12',
+                            outline: 'none',
+                            boxSizing: 'border-box'
+                          }}
+                        >
+                          <option value="Chưa Làm">Chưa Làm</option>
+                          <option value="Đang Làm">Đang Làm</option>
+                          <option value="Chờ xác nhận">Chờ xác nhận</option>
+                          <option value="Đã xác nhận">Đã xác nhận</option>
+                          <option value="Đã hoàn thành">Đã hoàn thành</option>
+                        </select>
+                      ) : (
+                        <div>
+                          {activeReportItem.is_confirmed || activeReportItem.status === 'confirmed' || activeReportItem.status === 'Đã xác nhận' ? (
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              padding: '3px 10px',
+                              borderRadius: '6px',
+                              fontSize: '0.8rem',
+                              fontWeight: 700,
+                              backgroundColor: '#ECFDF5',
+                              color: '#059669',
+                              border: '1px solid #A7F3D0'
+                            }}>
+                              <CheckCircle2 size={13} /> Đã xác nhận
+                            </span>
+                          ) : (
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              padding: '3px 10px',
+                              borderRadius: '6px',
+                              fontSize: '0.8rem',
+                              fontWeight: 700,
+                              backgroundColor: '#F3F4F6',
+                              color: '#4B5563',
+                              border: '1px solid #E5E7EB'
+                            }}>
+                              {activeReportItem.status || 'Đã hoàn thành'}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     <div>
                       <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
                         HÀNH ĐỘNG XỬ LÝ
                       </span>
-                      <div>{renderReportActionBadge(activeReportItem)}</div>
+                      {isEditReportMode ? (
+                        <select
+                          value={reportAction}
+                          onChange={(e) => setReportAction(e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '5px 8px',
+                            borderRadius: '6px',
+                            border: '1.5px solid #7B5233',
+                            fontSize: '0.82rem',
+                            fontWeight: '600',
+                            backgroundColor: '#FFFFFF',
+                            color: '#2D1A12',
+                            outline: 'none',
+                            boxSizing: 'border-box'
+                          }}
+                        >
+                          <option value="chap-nhan">Chấp nhận</option>
+                          <option value="cach-ly">Cách ly</option>
+                          <option value="tra-ve">Trả hàng</option>
+                        </select>
+                      ) : (
+                        <div>{renderReportActionBadge(activeReportItem)}</div>
+                      )}
+                    </div>
+
+                    {/* BANNER ADMIN CHỈNH SỬA THÔNG TIN PHIẾU KIỂM TRA (GIỐNG ẢNH GIAO DIỆN) */}
+                    <div style={{
+                      gridColumn: '1 / -1',
+                      border: '1px dashed #D8CCC0',
+                      borderRadius: '8px',
+                      padding: '7px 14px',
+                      backgroundColor: isEditReportMode ? '#FBF7F2' : '#FDFBF7',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      marginTop: '4px',
+                      marginBottom: '4px'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{
+                          padding: '2px 7px',
+                          backgroundColor: '#F3E8DC',
+                          color: '#7B5233',
+                          borderRadius: '4px',
+                          fontSize: '0.72rem',
+                          fontWeight: 800,
+                          letterSpacing: '0.5px'
+                        }}>
+                          ADMIN
+                        </span>
+                        <span style={{ fontSize: '0.84rem', color: '#6D4C41', fontWeight: 600 }}>
+                          {isEditReportMode ? 'Đang chỉnh sửa toàn bộ thông tin phiếu kiểm tra' : 'Chỉnh sửa thông tin phiếu kiểm tra'}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {isEditReportMode ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={handleCancelReportEdit}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '4px 10px',
+                                borderRadius: '6px',
+                                border: '1px solid #CBD5E1',
+                                backgroundColor: '#FFFFFF',
+                                color: '#64748B',
+                                fontSize: '0.8rem',
+                                fontWeight: 600,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <X size={13} />
+                              <span>Hủy</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleSaveReportEdit}
+                              disabled={savingReport}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '4px 12px',
+                                borderRadius: '6px',
+                                border: 'none',
+                                backgroundColor: '#7B5233',
+                                color: '#FFFFFF',
+                                fontSize: '0.8rem',
+                                fontWeight: 700,
+                                cursor: savingReport ? 'not-allowed' : 'pointer'
+                              }}
+                            >
+                              {savingReport ? <Loader2 size={13} className="spin" /> : <Save size={13} />}
+                              <span>Lưu thay đổi</span>
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setIsEditReportMode(true)}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              padding: '4px 12px',
+                              borderRadius: '6px',
+                              border: '1px solid #7B5233',
+                              backgroundColor: '#FFFFFF',
+                              color: '#7B5233',
+                              fontSize: '0.82rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease'
+                            }}
+                          >
+                            <Edit3 size={13} />
+                            <span>Chỉnh sửa</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     <div>
                       <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
                         SL CẦN KIỂM (LÔ)
                       </span>
-                      <strong style={{ color: '#059669', fontSize: '0.92rem' }}>
-                        {Number(activeReportItem.required_qty || parsedReportData?.requiredQty || activeReportItem.total_products || 0).toLocaleString()}
-                      </strong>
+                      {isEditReportMode ? (
+                        <input
+                          type="number"
+                          min="0"
+                          value={reportRequiredQty}
+                          onChange={(e) => setReportRequiredQty(e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '4px 8px',
+                            borderRadius: '6px',
+                            border: '1.5px solid #10B981',
+                            color: '#059669',
+                            fontWeight: 800,
+                            fontSize: '1rem',
+                            outline: 'none',
+                            backgroundColor: '#FFFFFF',
+                            boxSizing: 'border-box'
+                          }}
+                        />
+                      ) : (
+                        <strong style={{ color: '#059669', fontSize: '0.92rem' }}>
+                          {Number(reportRequiredQty || activeReportItem.required_qty || parsedReportData?.requiredQty || activeReportItem.total_products || 0).toLocaleString()}
+                        </strong>
+                      )}
                     </div>
 
                     <div>
                       <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
                         {activeReportItem.sample_qty ? 'SL MẪU KIỂM (AQL)' : 'SL ĐẠT'}
                       </span>
-                      <strong style={{ color: '#1D4ED8', fontSize: '0.92rem' }}>
-                        {Number(
-                          activeReportItem.sample_qty ||
-                          (Number(activeReportItem.passed_qty) > 0 ? activeReportItem.passed_qty : null) ||
-                          activeReportItem.total_passed_qty ||
-                          (activeReportItem.required_qty ? Math.max(Number(activeReportItem.required_qty) - Number(activeReportItem.error_qty || 0), 0) : 0)
-                        ).toLocaleString()}
-                      </strong>
+                      {isEditReportMode ? (
+                        <input
+                          type="number"
+                          min="0"
+                          value={reportSampleQty}
+                          onChange={(e) => setReportSampleQty(e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '4px 8px',
+                            borderRadius: '6px',
+                            border: '1.5px solid #3B82F6',
+                            color: '#1D4ED8',
+                            fontWeight: 800,
+                            fontSize: '1rem',
+                            outline: 'none',
+                            backgroundColor: '#FFFFFF',
+                            boxSizing: 'border-box'
+                          }}
+                        />
+                      ) : (
+                        <strong style={{ color: '#1D4ED8', fontSize: '0.92rem' }}>
+                          {Number(reportSampleQty).toLocaleString()}
+                        </strong>
+                      )}
                     </div>
 
                     <div>
                       <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
                         SỐ LỖI PHÁT HIỆN
                       </span>
-                      <strong style={{
-                        color: Number(activeReportItem.error_qty || activeReportItem.total_defects || 0) > 0 ? '#DC2626' : '#059669',
-                        fontSize: '0.92rem'
-                      }}>
-                        {Number(activeReportItem.error_qty || activeReportItem.total_defects || 0).toLocaleString()}
-                      </strong>
+                      {isEditReportMode ? (
+                        <input
+                          type="number"
+                          min="0"
+                          value={reportErrorQty}
+                          onChange={(e) => setReportErrorQty(e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '4px 8px',
+                            borderRadius: '6px',
+                            border: '1.5px solid #EF4444',
+                            color: Number(reportErrorQty) > 0 ? '#DC2626' : '#059669',
+                            fontWeight: 800,
+                            fontSize: '1rem',
+                            outline: 'none',
+                            backgroundColor: '#FFFFFF',
+                            boxSizing: 'border-box'
+                          }}
+                        />
+                      ) : (
+                        <strong style={{
+                          color: Number(reportErrorQty || activeReportItem.error_qty || activeReportItem.total_defects || 0) > 0 ? '#DC2626' : '#059669',
+                          fontSize: '0.92rem'
+                        }}>
+                          {Number(reportErrorQty || activeReportItem.error_qty || activeReportItem.total_defects || 0).toLocaleString()}
+                        </strong>
+                      )}
                     </div>
                   </div>
 
-                  {/* THÔNG TIN XỬ LÝ (READ-ONLY) */}
+                  {/* THÔNG TIN XỬ LÝ / BIỆN PHÁP KHẮC PHỤC */}
                   <div style={{ marginBottom: '16px', fontSize: '0.88rem' }}>
                     <div style={{
                       fontSize: '0.76rem',
@@ -2373,31 +2818,53 @@ const InspectionReportsView = () => {
                     }}>
                       Thông tin xử lý / Biện pháp khắc phục
                     </div>
-                    <div style={{
-                      background: '#FFFFFF',
-                      padding: '10px 14px',
-                      borderRadius: '8px',
-                      border: '1.5px solid #EADCC9',
-                      color: '#2D1A12',
-                      fontSize: '0.86rem',
-                      lineHeight: '1.45'
-                    }}>
-                      {(() => {
-                        const customInfo = activeReportItem.handling_info || parsedReportData?.handling_info || activeReportItem.action_note;
-                        if (customInfo && customInfo.trim()) return customInfo;
+                    {isEditReportMode ? (
+                      <textarea
+                        value={reportHandlingInfo}
+                        onChange={(e) => setReportHandlingInfo(e.target.value)}
+                        placeholder="Nhập thông tin xử lý / biện pháp khắc phục..."
+                        rows={3}
+                        style={{
+                          width: '100%',
+                          background: '#FFFFFF',
+                          padding: '10px 14px',
+                          borderRadius: '8px',
+                          border: '1.5px solid #7B5233',
+                          color: '#2D1A12',
+                          fontSize: '0.86rem',
+                          lineHeight: '1.45',
+                          outline: 'none',
+                          boxSizing: 'border-box',
+                          fontFamily: 'inherit'
+                        }}
+                      />
+                    ) : (
+                      <div style={{
+                        background: '#FFFFFF',
+                        padding: '10px 14px',
+                        borderRadius: '8px',
+                        border: '1.5px solid #EADCC9',
+                        color: '#2D1A12',
+                        fontSize: '0.86rem',
+                        lineHeight: '1.45'
+                      }}>
+                        {(() => {
+                          const customInfo = reportHandlingInfo || activeReportItem.handling_info || parsedReportData?.handling_info || activeReportItem.action_note;
+                          if (customInfo && customInfo.trim()) return customInfo;
 
-                        const action = activeReportItem.action || activeReportItem.handling_action;
-                        const isFail = activeReportItem.conclusion === 'fail' || activeReportItem.result === 'Không đạt' || activeReportItem.result === 'fail';
+                          const action = reportAction || activeReportItem.action || activeReportItem.handling_action;
+                          const isFail = activeReportItem.conclusion === 'fail' || activeReportItem.result === 'Không đạt' || activeReportItem.result === 'fail';
 
-                        if (action === 'tra-ve' || (isFail && action !== 'cach-ly')) {
-                          return 'Lô hàng không đạt tiêu chuẩn kỹ thuật: Yêu cầu trả hàng / xử lý lại hoặc loại bỏ theo quy định QC.';
-                        }
-                        if (action === 'cach-ly') {
-                          return 'Lô hàng phát hiện bất thường: Cách ly và lưu kho riêng chờ thẩm định chuyên sâu từ ban chất lượng.';
-                        }
-                        return 'Sản phẩm đạt yêu cầu kiểm tra: Chấp nhận nhập kho và lưu trữ hồ sơ theo quy trình chuẩn.';
-                      })()}
-                    </div>
+                          if (action === 'tra-ve' || (isFail && action !== 'cach-ly')) {
+                            return 'Lô hàng không đạt tiêu chuẩn kỹ thuật: Yêu cầu trả hàng / xử lý lại hoặc loại bỏ theo quy định QC.';
+                          }
+                          if (action === 'cach-ly') {
+                            return 'Lô hàng phát hiện bất thường: Cách ly và lưu kho riêng chờ thẩm định chuyên sâu từ ban chất lượng.';
+                          }
+                          return 'Sản phẩm đạt yêu cầu kiểm tra: Chấp nhận nhập kho và lưu trữ hồ sơ theo quy trình chuẩn.';
+                        })()}
+                      </div>
+                    )}
                   </div>
 
                   {/* GHI CHÚ (READ-ONLY) */}

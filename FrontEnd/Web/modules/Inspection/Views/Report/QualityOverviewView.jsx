@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useLocation, useOutletContext } from 'react-router-dom';
-import { Search, Filter, Edit, FileText, ChevronLeft, ChevronRight, CheckCircle2, X, Eye, RotateCcw, XCircle, Layers, Package, CheckCheck, MoreVertical, Info, Image as ImageIcon, ClipboardList, AlertTriangle, Keyboard, HelpCircle, Loader2, Save, UploadCloud, Plus, PlusCircle, History, Clock, ArrowRight, User, Scan, Sparkles } from 'lucide-react';
+import { Search, Filter, Edit, Edit3, FileText, ChevronLeft, ChevronRight, CheckCircle2, X, Eye, RotateCcw, XCircle, Layers, Package, CheckCheck, MoreVertical, Info, Image as ImageIcon, ClipboardList, AlertTriangle, Keyboard, HelpCircle, Loader2, Save, UploadCloud, Plus, PlusCircle, History, Clock, ArrowRight, User, Scan, Sparkles } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import * as XLSX from 'xlsx';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
@@ -182,6 +182,20 @@ const handleInspectionImageError = (e) => {
   e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 24 24" fill="none" stroke="%23A89F91" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2" fill="%23FAF7F2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>';
 };
 
+const toDatetimeLocalValue = (dateStr) => {
+  if (!dateStr) return '';
+  try {
+    let s = String(dateStr).trim();
+    if (s.includes(' ') && !s.includes('T')) s = s.replace(' ', 'T');
+    const d = new Date(s);
+    if (isNaN(d.getTime())) return '';
+    const pad = (n) => String(n).padStart(2, '0');
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  } catch (e) {
+    return '';
+  }
+};
+
 const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -288,6 +302,13 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
   const [modalParameter, setModalParameter] = useState('do_am');
   const [modalGlossValue, setModalGlossValue] = useState('');
   const [modalColorValue, setModalColorValue] = useState('');
+  const [modalBatchNo, setModalBatchNo] = useState('');
+  const [modalRecordedDate, setModalRecordedDate] = useState('');
+  const [modalInspectorName, setModalInspectorName] = useState('');
+  const [modalRequiredQty, setModalRequiredQty] = useState(0);
+  const [modalSampleQty, setModalSampleQty] = useState(0);
+  const [modalErrorQty, setModalErrorQty] = useState(0);
+  const [isEditTicketMode, setIsEditTicketMode] = useState(false);
   const [scanningTaskIds, setScanningTaskIds] = useState(new Set());
   const scannedOrAttemptedRef = useRef(new Set());
   const [formTypes, setFormTypes] = useState([]);
@@ -469,9 +490,30 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
       const initImgs = deduplicateInspectionImages(rawImgs);
       setModalImages(initImgs);
 
+      const initBatch = selectedTask.batch_no || selectedTask.po_code || selectedTask.po_no || '';
+      const initDate = selectedTask.recorded_date || selectedTask.inspection_date || selectedTask.inspected_at || selectedTask.created_at || '';
+      const initInspector = selectedTask.inspector_name || '';
+      const initReqQty = Number(selectedTask.required_qty ?? parsedJson?.required_qty ?? parsedJson?.total_products ?? 0);
+      const initSampleQty = Number(selectedTask.sample_qty ?? parsedJson?.sample_qty ?? 0);
+      const initErrorQty = Number(selectedTask.error_qty ?? parsedJson?.error_qty ?? parsedJson?.total_defects ?? 0);
+
+      setModalBatchNo(initBatch);
+      setModalRecordedDate(initDate);
+      setModalInspectorName(initInspector);
+      setModalRequiredQty(initReqQty);
+      setModalSampleQty(initSampleQty);
+      setModalErrorQty(initErrorQty);
+      setIsEditTicketMode(false);
+
       // Lưu snapshot giá trị ban đầu để kiểm tra thay đổi chưa lưu (Dirty Check)
       initialFormValuesRef.current = {
         taskId: selectedTask.id,
+        batch_no: initBatch,
+        recorded_date: initDate,
+        inspector_name: initInspector,
+        required_qty: initReqQty,
+        sample_qty: initSampleQty,
+        error_qty: initErrorQty,
         result: isPass ? 'pass' : 'fail',
         action: selectedTask.action || 'chap-nhan',
         inspection_type: normalizeInspectionType(rawType, selectedTask.category),
@@ -486,6 +528,33 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
       };
     }
   }, [selectedTask]);
+
+  // Hủy chỉnh sửa thông tin phiếu và khôi phục giá trị gốc
+  const handleCancelEditTicket = () => {
+    if (!initialFormValuesRef.current) {
+      setIsEditTicketMode(false);
+      return;
+    }
+    const init = initialFormValuesRef.current;
+    setModalBatchNo(init.batch_no || '');
+    setModalRecordedDate(init.recorded_date || '');
+    setModalInspectorName(init.inspector_name || '');
+    setModalRequiredQty(init.required_qty ?? 0);
+    setModalSampleQty(init.sample_qty ?? 0);
+    setModalErrorQty(init.error_qty ?? 0);
+    setModalStatus(init.status || 'Chưa Làm');
+    setModalInspectionType(init.inspection_type || 'first_sample');
+    setModalStage(init.stage || '');
+    setModalResult(init.result || 'pass');
+    setModalAction(init.action || 'chap-nhan');
+    setModalParameter(init.parameter || 'do_am');
+    setModalGlossValue(init.gloss_value || '');
+    setModalColorValue(init.color_value || '');
+    setHandlingInfo(init.handling_info || '');
+    setHandlingImages(init.handling_images || []);
+    setModalImages(init.modal_images || []);
+    setIsEditTicketMode(false);
+  };
 
   // Trích xuất dữ liệu chi tiết của phiếu từ data_json
   const parsedTaskData = useMemo(() => {
@@ -1221,13 +1290,22 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
     };
   }, [selectedTask, isUploadingHandlingImages]);
 
-  // Lưu thay đổi thông tin phiếu kiểm tra (loại phiếu, công đoạn, kết quả, xử lý, thông số, hình ảnh)
+  // Lưu thay đổi thông tin phiếu kiểm tra (loại phiếu, công đoạn, kết quả, xử lý, thông số, hình ảnh, mã PO, ngày ghi nhận, số lượng, người kiểm tra)
   const handleSaveTask = async (task) => {
     if (!task) return;
     setSavingTask(true);
     try {
       const taskType = task.type || 'input';
       const response = await api.post(`/inspections/update-record/${taskType}/${task.id}`, {
+        batch_no: modalBatchNo,
+        po_code: modalBatchNo,
+        recorded_date: modalRecordedDate,
+        inspection_date: modalRecordedDate,
+        inspector_name: modalInspectorName,
+        status: modalStatus,
+        required_qty: Number(modalRequiredQty),
+        sample_qty: Number(modalSampleQty),
+        error_qty: Number(modalErrorQty),
         inspection_type: modalInspectionType,
         stage: modalStage,
         result: modalResult,
@@ -1246,6 +1324,12 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
       // Cập nhật lại snapshot sau khi lưu thành công
       initialFormValuesRef.current = {
         taskId: task.id,
+        batch_no: modalBatchNo,
+        recorded_date: modalRecordedDate,
+        inspector_name: modalInspectorName,
+        required_qty: Number(modalRequiredQty),
+        sample_qty: Number(modalSampleQty),
+        error_qty: Number(modalErrorQty),
         result: modalResult,
         action: modalAction,
         inspection_type: modalInspectionType,
@@ -1267,6 +1351,15 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
       // Cập nhật selectedTask
       setSelectedTask(prev => prev ? {
         ...prev,
+        batch_no: modalBatchNo,
+        po_code: modalBatchNo,
+        recorded_date: modalRecordedDate,
+        inspection_date: modalRecordedDate,
+        inspector_name: modalInspectorName,
+        status: modalStatus,
+        required_qty: Number(modalRequiredQty),
+        sample_qty: Number(modalSampleQty),
+        error_qty: Number(modalErrorQty),
         inspection_type: modalInspectionType,
         stage: modalStage,
         result: modalResult,
@@ -1290,6 +1383,15 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
         if (t.id === task.id) {
           return {
             ...t,
+            batch_no: modalBatchNo,
+            po_code: modalBatchNo,
+            recorded_date: modalRecordedDate,
+            inspection_date: modalRecordedDate,
+            inspector_name: modalInspectorName,
+            status: modalStatus,
+            required_qty: Number(modalRequiredQty),
+            sample_qty: Number(modalSampleQty),
+            error_qty: Number(modalErrorQty),
             inspection_type: modalInspectionType,
             stage: modalStage,
             result: modalResult,
@@ -1310,6 +1412,7 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
         }
         return t;
       }));
+      setIsEditTicketMode(false);
       return true;
     } catch (error) {
       console.error('Error saving inspection task:', error);
@@ -1326,6 +1429,12 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
     if (initialFormValuesRef.current.taskId !== selectedTask.id) return false;
 
     const init = initialFormValuesRef.current;
+    if (modalBatchNo !== (init.batch_no || '')) return true;
+    if (toDatetimeLocalValue(modalRecordedDate) !== toDatetimeLocalValue(init.recorded_date || '')) return true;
+    if (modalInspectorName !== (init.inspector_name || '')) return true;
+    if (Number(modalRequiredQty) !== Number(init.required_qty || 0)) return true;
+    if (Number(modalSampleQty) !== Number(init.sample_qty || 0)) return true;
+    if (Number(modalErrorQty) !== Number(init.error_qty || 0)) return true;
     if (modalResult !== init.result) return true;
     if (modalAction !== init.action) return true;
     if (modalInspectionType !== init.inspection_type) return true;
@@ -3904,9 +4013,30 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
                         <span style={{ fontSize: '0.74rem', color: '#8D7B6F', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
                           MÃ LÔ / PO
                         </span>
-                        <strong style={{ color: '#3E2723', fontSize: '0.92rem' }}>
-                          {selectedTask.batch_no || 'N/A'}
-                        </strong>
+                        {isEditTicketMode ? (
+                          <input
+                            type="text"
+                            value={modalBatchNo}
+                            onChange={(e) => setModalBatchNo(e.target.value)}
+                            placeholder="Mã lô / PO..."
+                            style={{
+                              padding: '5px 8px',
+                              borderRadius: '6px',
+                              border: '1.5px solid #7B5233',
+                              fontSize: '0.88rem',
+                              fontWeight: '700',
+                              backgroundColor: '#FFFFFF',
+                              color: '#3E2723',
+                              outline: 'none',
+                              width: '100%',
+                              boxSizing: 'border-box'
+                            }}
+                          />
+                        ) : (
+                          <strong style={{ color: '#3E2723', fontSize: '0.92rem' }}>
+                            {modalBatchNo || selectedTask.batch_no || 'N/A'}
+                          </strong>
+                        )}
                       </div>
 
                       <div>
@@ -3920,7 +4050,7 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
                             style={{
                               padding: '4px 8px',
                               borderRadius: '6px',
-                              border: '1px solid #D8CCC0',
+                              border: isEditTicketMode ? '1.5px solid #7B5233' : '1px solid #D8CCC0',
                               fontSize: '0.82rem',
                               fontWeight: '600',
                               backgroundColor: '#FFFFFF',
@@ -4118,7 +4248,7 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
                             style={{
                               padding: '3px 8px',
                               borderRadius: '6px',
-                              border: '1px solid #E0D6CB',
+                              border: isEditTicketMode ? '1.5px solid #7B5233' : '1px solid #E0D6CB',
                               fontSize: '0.78rem',
                               fontWeight: '500',
                               backgroundColor: '#FAF7F2',
@@ -4143,27 +4273,93 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
                         <span style={{ fontSize: '0.74rem', color: '#8D7B6F', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
                           NGƯỜI KIỂM TRA QC
                         </span>
-                        <strong style={{ color: '#3E2723' }}>
-                          {selectedTask.inspector_name || 'QC'}
-                        </strong>
+                        {isEditTicketMode ? (
+                          <input
+                            type="text"
+                            value={modalInspectorName}
+                            onChange={(e) => setModalInspectorName(e.target.value)}
+                            placeholder="Tên QC..."
+                            style={{
+                              padding: '5px 8px',
+                              borderRadius: '6px',
+                              border: '1.5px solid #7B5233',
+                              fontSize: '0.88rem',
+                              fontWeight: '700',
+                              backgroundColor: '#FFFFFF',
+                              color: '#3E2723',
+                              outline: 'none',
+                              width: '100%',
+                              boxSizing: 'border-box'
+                            }}
+                          />
+                        ) : (
+                          <strong style={{ color: '#3E2723' }}>
+                            {modalInspectorName || selectedTask.inspector_name || 'QC'}
+                          </strong>
+                        )}
                       </div>
 
                       <div>
                         <span style={{ fontSize: '0.74rem', color: '#8D7B6F', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
                           NGÀY GHI NHẬN
                         </span>
-                        <span style={{ color: '#3E2723', fontWeight: 600 }}>
-                          {formatDateTime(selectedTask.recorded_date)}
-                        </span>
+                        {isEditTicketMode ? (
+                          <input
+                            type="datetime-local"
+                            value={toDatetimeLocalValue(modalRecordedDate)}
+                            onChange={(e) => setModalRecordedDate(e.target.value)}
+                            style={{
+                              padding: '5px 8px',
+                              borderRadius: '6px',
+                              border: '1.5px solid #7B5233',
+                              fontSize: '0.82rem',
+                              fontWeight: '600',
+                              backgroundColor: '#FFFFFF',
+                              color: '#3E2723',
+                              outline: 'none',
+                              width: '100%',
+                              boxSizing: 'border-box'
+                            }}
+                          />
+                        ) : (
+                          <span style={{ color: '#3E2723', fontWeight: 600 }}>
+                            {formatDateTime(modalRecordedDate || selectedTask.recorded_date)}
+                          </span>
+                        )}
                       </div>
 
                       <div>
                         <span style={{ fontSize: '0.74rem', color: '#8D7B6F', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>
                           TRẠNG THÁI
                         </span>
-                        <div style={{ marginTop: '2px' }}>
-                          {renderStatusBadge(selectedTask.status)}
-                        </div>
+                        {isEditTicketMode ? (
+                          <select
+                            value={modalStatus}
+                            onChange={(e) => setModalStatus(e.target.value)}
+                            style={{
+                              padding: '5px 8px',
+                              borderRadius: '6px',
+                              border: '1.5px solid #7B5233',
+                              fontSize: '0.82rem',
+                              fontWeight: '700',
+                              backgroundColor: '#FFFFFF',
+                              color: '#3E2723',
+                              outline: 'none',
+                              width: '100%',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <option value="Chưa Làm">Chưa Làm</option>
+                            <option value="Đang Làm">Đang Làm</option>
+                            <option value="Chờ xác nhận">Chờ xác nhận</option>
+                            <option value="Đã xác nhận">Đã xác nhận</option>
+                            <option value="Hoàn thành">Hoàn thành</option>
+                          </select>
+                        ) : (
+                          <div style={{ marginTop: '2px' }}>
+                            {renderStatusBadge(modalStatus || selectedTask.status)}
+                          </div>
+                        )}
                       </div>
 
                       <div>
@@ -4176,7 +4372,7 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
                           style={{
                             padding: '4px 8px',
                             borderRadius: '6px',
-                            border: '1px solid #D8CCC0',
+                            border: isEditTicketMode ? '1.5px solid #7B5233' : '1px solid #D8CCC0',
                             fontSize: '0.82rem',
                             fontWeight: '600',
                             backgroundColor: '#FFFFFF',
@@ -4193,31 +4389,199 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
                         </select>
                       </div>
 
+                      {/* BANNER ADMIN CHỈNH SỬA THÔNG TIN PHIẾU KIỂM TRA (GIỐNG ẢNH GIAO DIỆN) */}
+                      <div style={{
+                        gridColumn: '1 / -1',
+                        border: '1px dashed #D8CCC0',
+                        borderRadius: '8px',
+                        padding: '7px 14px',
+                        backgroundColor: isEditTicketMode ? '#FBF7F2' : '#FDFBF7',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        marginTop: '4px',
+                        marginBottom: '4px'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{
+                            padding: '2px 7px',
+                            backgroundColor: '#F3E8DC',
+                            color: '#7B5233',
+                            borderRadius: '4px',
+                            fontSize: '0.72rem',
+                            fontWeight: 800,
+                            letterSpacing: '0.5px'
+                          }}>
+                            ADMIN
+                          </span>
+                          <span style={{ fontSize: '0.84rem', color: '#6D4C41', fontWeight: 600 }}>
+                            {isEditTicketMode ? 'Đang chỉnh sửa toàn bộ thông tin phiếu kiểm tra' : 'Chỉnh sửa thông tin phiếu kiểm tra'}
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {isEditTicketMode ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={handleCancelEditTicket}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '4px 10px',
+                                  borderRadius: '6px',
+                                  border: '1px solid #CBD5E1',
+                                  backgroundColor: '#FFFFFF',
+                                  color: '#64748B',
+                                  fontSize: '0.8rem',
+                                  fontWeight: 600,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <X size={13} />
+                                <span>Hủy</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSaveTask(selectedTask)}
+                                disabled={savingTask}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '4px 12px',
+                                  borderRadius: '6px',
+                                  border: 'none',
+                                  backgroundColor: '#7B5233',
+                                  color: '#FFFFFF',
+                                  fontSize: '0.8rem',
+                                  fontWeight: 700,
+                                  cursor: savingTask ? 'not-allowed' : 'pointer'
+                                }}
+                              >
+                                {savingTask ? <Loader2 size={13} className="spin" /> : <Save size={13} />}
+                                <span>Lưu thay đổi</span>
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setIsEditTicketMode(true)}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                padding: '4px 12px',
+                                borderRadius: '6px',
+                                border: '1px solid #7B5233',
+                                backgroundColor: '#FFFFFF',
+                                color: '#7B5233',
+                                fontSize: '0.82rem',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              <Edit3 size={13} />
+                              <span>Chỉnh sửa</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* 3 Ô SỐ LƯỢNG */}
                       <div className="quality-kpi-chip quality-kpi-chip-green">
                         <span className="quality-kpi-label">
                           SL CẦN KIỂM (LÔ)
                         </span>
-                        <strong className="quality-kpi-value quality-kpi-value-green">
-                          {Number(selectedTask.required_qty || 0).toLocaleString()}
-                        </strong>
+                        {isEditTicketMode ? (
+                          <input
+                            type="number"
+                            min="0"
+                            value={modalRequiredQty}
+                            onChange={(e) => setModalRequiredQty(e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '4px 8px',
+                              borderRadius: '6px',
+                              border: '1.5px solid #10B981',
+                              color: '#059669',
+                              fontWeight: 800,
+                              fontSize: '1rem',
+                              outline: 'none',
+                              backgroundColor: '#FFFFFF',
+                              marginTop: '3px',
+                              boxSizing: 'border-box'
+                            }}
+                          />
+                        ) : (
+                          <strong className="quality-kpi-value quality-kpi-value-green">
+                            {Number(modalRequiredQty || selectedTask.required_qty || 0).toLocaleString()}
+                          </strong>
+                        )}
                       </div>
 
                       <div className="quality-kpi-chip quality-kpi-chip-blue">
                         <span className="quality-kpi-label">
                           SL MẪU KIỂM TRA
                         </span>
-                        <strong className="quality-kpi-value quality-kpi-value-blue">
-                          {Number(selectedTask.sample_qty || 0).toLocaleString()}
-                        </strong>
+                        {isEditTicketMode ? (
+                          <input
+                            type="number"
+                            min="0"
+                            value={modalSampleQty}
+                            onChange={(e) => setModalSampleQty(e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '4px 8px',
+                              borderRadius: '6px',
+                              border: '1.5px solid #3B82F6',
+                              color: '#1D4ED8',
+                              fontWeight: 800,
+                              fontSize: '1rem',
+                              outline: 'none',
+                              backgroundColor: '#FFFFFF',
+                              marginTop: '3px',
+                              boxSizing: 'border-box'
+                            }}
+                          />
+                        ) : (
+                          <strong className="quality-kpi-value quality-kpi-value-blue">
+                            {Number(modalSampleQty || selectedTask.sample_qty || 0).toLocaleString()}
+                          </strong>
+                        )}
                       </div>
 
-                      <div className={`quality-kpi-chip ${selectedTask.error_qty > 0 ? 'quality-kpi-chip-red' : 'quality-kpi-chip-green'}`}>
+                      <div className={`quality-kpi-chip ${(Number(modalErrorQty) > 0 || selectedTask.error_qty > 0) ? 'quality-kpi-chip-red' : 'quality-kpi-chip-green'}`}>
                         <span className="quality-kpi-label">
                           SỐ LỖI PHÁT HIỆN
                         </span>
-                        <strong className={`quality-kpi-value ${selectedTask.error_qty > 0 ? 'quality-kpi-value-red' : 'quality-kpi-value-green'}`}>
-                          {Number(selectedTask.error_qty || 0).toLocaleString()}
-                        </strong>
+                        {isEditTicketMode ? (
+                          <input
+                            type="number"
+                            min="0"
+                            value={modalErrorQty}
+                            onChange={(e) => setModalErrorQty(e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '4px 8px',
+                              borderRadius: '6px',
+                              border: '1.5px solid #EF4444',
+                              color: Number(modalErrorQty) > 0 ? '#DC2626' : '#059669',
+                              fontWeight: 800,
+                              fontSize: '1rem',
+                              outline: 'none',
+                              backgroundColor: '#FFFFFF',
+                              marginTop: '3px',
+                              boxSizing: 'border-box'
+                            }}
+                          />
+                        ) : (
+                          <strong className={`quality-kpi-value ${(Number(modalErrorQty) > 0 || selectedTask.error_qty > 0) ? 'quality-kpi-value-red' : 'quality-kpi-value-green'}`}>
+                            {Number(modalErrorQty ?? selectedTask.error_qty ?? 0).toLocaleString()}
+                          </strong>
+                        )}
                       </div>
                     </div>
 

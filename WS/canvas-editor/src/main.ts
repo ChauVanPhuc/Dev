@@ -553,8 +553,6 @@ window.onload = function () {
           size: 16,
           bold: true,
           rowFlex: 'center' as any,
-          titleId: 'iso-title-rev-log',
-          level: 'first' as any,
           disabled: true,
           deletable: false
         }
@@ -562,6 +560,8 @@ window.onload = function () {
         headingItem.disabled = true
         headingItem.deletable = false
         headingItem.rowFlex = 'center' as any
+        delete headingItem.titleId
+        delete headingItem.level
       }
 
       // Xóa sạch mọi phần tử rác/pageBreak thừa giữa Table 0 và Table 1, chỉ giữ đúng [pageBreak, headingItem, newline nhỏ]
@@ -830,8 +830,8 @@ window.onload = function () {
           bold: true,
           rowFlex: 'center' as any
         }
-        headingEl.titleId = 'iso-title-rev-log'
-        headingEl.level = 'first' as any
+        delete headingEl.titleId
+        delete headingEl.level
         headingEl.bold = true
         headingEl.disabled = true
         headingEl.deletable = false
@@ -2525,14 +2525,37 @@ window.onload = function () {
         document.querySelector<HTMLDivElement>('.catalog__main')!
       catalogMainDom.innerHTML = ''
 
-      // Lọc bỏ các mục trùng với Trang bìa hoặc Bảng sửa đổi từ catalog worker nếu có
-      const bodyItems = catalog.filter(
-        item =>
-          item.id !== 'iso-title-cover-page' &&
-          item.id !== 'iso-title-rev-log' &&
-          !item.name.includes('THEO DÕI SỬA ĐỔI') &&
-          item.pageNo >= 2
-      )
+      // Hàm đệ quy bóc tách các mục nội dung hợp lệ (từ trang 3 trở đi, pageNo >= 2)
+      // Nếu có mục cha ở trang bìa hoặc bảng sửa đổi bị lồng các mục con của trang nội dung,
+      // giải phóng các mục con đó ra ngoài để không bao giờ bị mất Tiêu đề 2, 3...
+      const extractBodyItems = (items: ICatalogItem[]): ICatalogItem[] => {
+        const result: ICatalogItem[] = []
+        for (const item of items) {
+          const isCoverOrRev =
+            item.id === 'iso-title-cover-page' ||
+            item.id === 'iso-title-rev-log' ||
+            item.name.includes('THEO DÕI SỬA ĐỔI') ||
+            (item.pageNo !== undefined && item.pageNo < 2)
+
+          if (isCoverOrRev) {
+            if (item.subCatalog && item.subCatalog.length > 0) {
+              result.push(...extractBodyItems(item.subCatalog))
+            }
+          } else {
+            const cleanSub =
+              item.subCatalog && item.subCatalog.length > 0
+                ? extractBodyItems(item.subCatalog)
+                : []
+            result.push({
+              ...item,
+              subCatalog: cleanSub
+            })
+          }
+        }
+        return result
+      }
+
+      const bodyItems = extractBodyItems(catalog)
 
       // Xây dựng danh sách mục lục chuẩn ISO luôn đầy đủ Trang 1 và Trang 2
       const fullCatalog: ICatalogItem[] = [
