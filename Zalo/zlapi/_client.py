@@ -35,7 +35,18 @@ class ZaloAPI(object):
 		self._start_fix = False
 		
 		if auto_login:
-			if (
+			if session_cookies and isinstance(session_cookies, dict) and imei:
+				try:
+					self._state.set_cookies(session_cookies)
+					self._state.login(phone, password, imei, user_agent=user_agent)
+					self._imei = self._state.user_imei
+					self.uid = self._state.user_id
+				except Exception as e:
+					if phone and password:
+						self.login(phone, password, imei, user_agent)
+					else:
+						raise
+			elif (
 				not session_cookies 
 				or not self.setSession(session_cookies) 
 				or not self.isLoggedIn()

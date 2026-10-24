@@ -98,6 +98,8 @@ node_modules_bak/
 query
 lpn_crawler/storage/
 lpn_crawler/ai_ocr_train/runs/
+*.egg-info/
+Report/output/
 
 
 

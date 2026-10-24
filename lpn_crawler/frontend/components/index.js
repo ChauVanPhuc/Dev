@@ -16,3 +16,4 @@ export * from './AiOcrScanModal';
 export * from './SyncDualMonitorModal';
 export * from './DashboardModal';
 export * from './BatchContainerScanModal';
+export * from './ZaloSendModal';

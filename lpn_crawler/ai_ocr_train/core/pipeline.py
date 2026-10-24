@@ -340,15 +340,33 @@ class AiOcrPipeline:
                 for b_obj in b_list:
                     bc_b = b_obj.get("bbox")
                     if bc_b and len(bc_b) >= 4:
-                        bx, by, bw, bh = bc_b
+                        if isinstance(bc_b[0], (list, tuple)):
+                            b_xs = [float(p[0]) for p in bc_b]
+                            b_ys = [float(p[1]) for p in bc_b]
+                            bx = min(b_xs)
+                            by = min(b_ys)
+                            bw = max(b_xs) - bx
+                            bh = max(b_ys) - by
+                        else:
+                            bx, by, bw, bh = [float(v) for v in bc_b[:4]]
+
                         for t in r_tokens:
                             tb = t.get("bbox")
                             t_text = str(t.get("text", "")).strip().upper()
                             if not t_text or len(t_text) < 4:
                                 continue
                             if tb and len(tb) >= 4:
-                                tx, ty, tw, th = tb
-                                h_inter = max(0, min(bx + bw, tx + tw) - max(bx, tx))
+                                if isinstance(tb[0], (list, tuple)):
+                                    t_xs = [float(p[0]) for p in tb]
+                                    t_ys = [float(p[1]) for p in tb]
+                                    tx = min(t_xs)
+                                    ty = min(t_ys)
+                                    tw = max(t_xs) - tx
+                                    th = max(t_ys) - ty
+                                else:
+                                    tx, ty, tw, th = [float(v) for v in tb[:4]]
+
+                                h_inter = max(0.0, min(bx + bw, tx + tw) - max(bx, tx))
                                 # Nằm sát phía dưới hoặc phía trên mã vạch trong cự ly hẹp
                                 is_near = (ty >= by + bh * 0.3 and ty <= by + bh * 2.2) or (ty + th <= by + bh * 0.4 and ty + th >= by - bh * 1.0)
                                 if is_near and (h_inter > min(tw, bw) * 0.25):

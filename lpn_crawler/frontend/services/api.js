@@ -1,6 +1,25 @@
 // Client API Service & SSE Listener cho Module LPN Crawler
 const API_BASE = '/api/v1/lpn-crawler';
 
+export const getAuthHeaders = () => {
+  const headers = { 'Content-Type': 'application/json' };
+  try {
+    const token = localStorage.getItem('token') || localStorage.getItem('access_token');
+    if (token && token !== 'null' && token !== 'undefined') {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    const rawUser = localStorage.getItem('smartflow_user');
+    if (rawUser) {
+      const u = JSON.parse(rawUser);
+      if (u) {
+        if (u.username) headers['X-User-Name'] = u.username;
+        if (u.role_name || u.role) headers['X-User-Role'] = u.role_name || u.role;
+      }
+    }
+  } catch (e) {}
+  return headers;
+};
+
 export const lpnCrawlerApi = {
   // Start job
   async startCrawlJob(force = false, mode = 'full') {
@@ -673,7 +692,9 @@ export const lpnCrawlerApi = {
   // === PHÂN HỆ ZALO BOT NOTIFICATION ===
   async getZaloStatus() {
     try {
-      const res = await fetch(`${API_BASE}/zalo/status`);
+      const res = await fetch(`${API_BASE}/zalo/status`, {
+        headers: getAuthHeaders()
+      });
       if (!res.ok) throw new Error('Không thể lấy trạng thái Zalo Bot');
       return await res.json();
     } catch (e) {
@@ -684,7 +705,9 @@ export const lpnCrawlerApi = {
 
   async getZaloConfig() {
     try {
-      const res = await fetch(`${API_BASE}/zalo/config`);
+      const res = await fetch(`${API_BASE}/zalo/config`, {
+        headers: getAuthHeaders()
+      });
       if (!res.ok) throw new Error('Không thể lấy cấu hình Zalo Bot');
       return await res.json();
     } catch (e) {
@@ -696,7 +719,7 @@ export const lpnCrawlerApi = {
   async updateZaloConfig(configData) {
     const res = await fetch(`${API_BASE}/zalo/config`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(configData)
     });
     const data = await res.json();
@@ -707,7 +730,7 @@ export const lpnCrawlerApi = {
   async testZaloConnection() {
     const res = await fetch(`${API_BASE}/zalo/test-connection`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
+      headers: getAuthHeaders()
     });
     return await res.json();
   },
@@ -715,7 +738,7 @@ export const lpnCrawlerApi = {
   async sendTestZaloMessage(phone, message) {
     const res = await fetch(`${API_BASE}/zalo/test-message`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ phone, message })
     });
     const data = await res.json();
@@ -723,11 +746,19 @@ export const lpnCrawlerApi = {
     return data;
   },
 
-  async resendContainerZaloReport(containerId, phone = null, sendImage = true) {
+  async getContainerZaloRecipients(containerId) {
+    const res = await fetch(`${API_BASE}/zalo/preview-recipients/${containerId}`, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('Không thể lấy danh sách người nhận Zalo');
+    return await res.json();
+  },
+
+  async resendContainerZaloReport(containerId, phone = null, phones = null, sendImage = true) {
     const res = await fetch(`${API_BASE}/zalo/resend/${containerId}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone, send_image: sendImage })
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ phone, phones, send_image: sendImage })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Lỗi gửi báo cáo Zalo');
@@ -742,7 +773,9 @@ export const lpnCrawlerApi = {
       if (params.container) q.append('container', params.container);
       if (params.phone) q.append('phone', params.phone);
       if (params.status) q.append('status', params.status);
-      const res = await fetch(`${API_BASE}/zalo/logs?${q.toString()}`);
+      const res = await fetch(`${API_BASE}/zalo/logs?${q.toString()}`, {
+        headers: getAuthHeaders()
+      });
       if (!res.ok) return { total: 0, items: [] };
       return await res.json();
     } catch (e) {

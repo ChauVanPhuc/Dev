@@ -3,7 +3,7 @@ import { useOutletContext } from 'react-router-dom';
 import { lpnCrawlerApi } from '../services/api';
 import { ControlPanel } from '../components/ControlPanel';
 import { ContainerTableView } from '../components/ContainerTableView';
-import { ContainerDetailModal } from '../components/ContainerDetailModal';
+import { ContainerDetailModal, checkIsAdmin } from '../components/ContainerDetailModal';
 import { DetailModal } from '../components/DetailModal';
 import { LogModal } from '../components/LogModal';
 import { CrawlMonitorModal } from '../components/CrawlMonitorModal';
@@ -16,6 +16,7 @@ import { AiOcrScanModal } from '../components/AiOcrScanModal';
 import { BatchContainerScanModal } from '../components/BatchContainerScanModal';
 import { DashboardModal } from '../components/DashboardModal';
 import { ZaloBotSettingsModal } from '../components/ZaloBotSettingsModal';
+import { ZaloSendModal } from '../components/ZaloSendModal';
 import { LayoutDashboard } from 'lucide-react';
 import useUiStore from '@shared/store/uiStore';
 import '../styles/lpnCrawler.css';
@@ -125,6 +126,8 @@ export default function LpnCrawlerView() {
   const [zaloStatus, setZaloStatus] = useState({ is_connected: false, is_configured: false });
   const [forceRestartMessage, setForceRestartMessage] = useState('');
 
+  const [zaloTargetContainer, setZaloTargetContainer] = useState(null);
+
   // Tải trạng thái Zalo Bot
   const refreshZaloStatus = useCallback(() => {
     lpnCrawlerApi.getZaloStatus().then((st) => setZaloStatus(st || {})).catch(() => {});
@@ -134,17 +137,15 @@ export default function LpnCrawlerView() {
     refreshZaloStatus();
   }, [refreshZaloStatus]);
 
-  const handleResendZalo = async (container) => {
-    const cId = container.container_id || container.id;
-    try {
-      showToast('info', `Đang gửi báo cáo Zalo cho Container ${container.container_number}...`);
-      const res = await lpnCrawlerApi.resendContainerZaloReport(cId);
-      showToast('success', res.message || `Đã gửi báo cáo Zalo thành công!`);
-      fetchContainers(true);
-      refreshZaloStatus();
-    } catch (err) {
-      showToast('error', err.message || 'Lỗi khi gửi báo cáo Zalo');
+  const handleResendZalo = (container) => {
+    if (!checkIsAdmin()) {
+      showToast('error', 'Chỉ tài khoản Quản trị viên (Admin) mới có quyền gửi tin nhắn Zalo.');
+      return;
     }
+    const contObj = typeof container === 'object'
+      ? container
+      : (items.find(r => (r.container_id || r.id) === container) || { id: container, container_id: container, container_number: `ID ${container}` });
+    setZaloTargetContainer(contObj);
   };
 
   const handleOpenMissingRows = (config = null) => {
@@ -842,6 +843,7 @@ export default function LpnCrawlerView() {
         onToggleSelectRow={handleToggleSelectRow}
         onToggleSelectAll={handleToggleSelectAll}
         onResendZalo={handleResendZalo}
+        canEdit={checkIsAdmin()}
         loading={loading}
       />
 
@@ -1083,6 +1085,20 @@ export default function LpnCrawlerView() {
             refreshZaloStatus();
           }}
           onShowToast={(msg, type) => showToast(type || 'info', msg)}
+        />
+      )}
+
+      {/* Modal Xem trước & Lựa chọn Người nhận Báo cáo Zalo */}
+      {zaloTargetContainer && (
+        <ZaloSendModal
+          isOpen={Boolean(zaloTargetContainer)}
+          container={zaloTargetContainer}
+          onClose={() => setZaloTargetContainer(null)}
+          onSuccess={() => {
+            fetchContainers(true);
+            refreshZaloStatus();
+          }}
+          showToast={showToast}
         />
       )}
     </div>

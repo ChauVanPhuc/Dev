@@ -792,6 +792,12 @@ app.mount("/uploads", SmartStaticFiles(directory=UPLOADS_DIR), name="uploads")
 app.mount("/api/v1/static", SmartStaticFiles(directory=STATIC_DIR), name="api_v1_static")
 app.mount("/api/v1/uploads", SmartStaticFiles(directory=UPLOADS_DIR), name="api_v1_uploads")
 
+# [QUALITY REPORT] Mount static assets cho báo cáo điều hành infographic
+REPORT_ASSETS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "Report", "templates", "assets"))
+if os.path.exists(REPORT_ASSETS_DIR):
+    app.mount("/report-assets", StaticFiles(directory=REPORT_ASSETS_DIR), name="report-assets")
+    app.mount("/api/v1/quality-reports/assets", StaticFiles(directory=REPORT_ASSETS_DIR), name="quality-reports-assets")
+
 
 
 # [NEW] Cấu hình Production Mode: Phân phối giao diện từ Backend

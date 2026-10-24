@@ -1760,15 +1760,19 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
           })
           
           setSpecOptions([{ value: '', label: 'Chọn quy cách' }, ...specOpts])
-          const distinctSpecs = Array.from(new Set(specOpts.map(o => o.rawSpec || o.label))).filter(Boolean)
-          // Nếu chi tiết chỉ có duy nhất 1 quy cách thì tự động chọn luôn!
-          if (specOpts.length === 1 || distinctSpecs.length === 1) {
+          // Quy tắc chọn quy cách:
+          // - Nếu chọn 1 Chi tiết mà chỉ có đúng 1 quy cách (specOpts.length === 1) thì chọn luôn quy cách đó.
+          // - Nếu có nhiều hơn 1 quy cách (specOpts.length > 1) hoặc chọn từ 2 chi tiết trở lên thì mặc định KHÔNG chọn quy cách.
+          const isSinglePart = matchedParts.length === 1
+          const hasSingleSpec = specOpts.length === 1
+
+          if (isSinglePart && hasSingleSpec) {
             applySelectedSpecs(specOpts.map(o => o.value), specOpts, totalQtySum)
           } else {
             // Mặc định không chọn trước quy cách nào
             setSelectedSpecs([])
             setSpec('')
-            if (mode === INSPECT_MODES.PARAMETER && totalQtySum > 0) {
+            if (mode === INSPECT_MODES.PARAMETER && totalQtySum > 0 && isSinglePart) {
               setTotalBatchQty(String(totalQtySum))
               totalBatchQtyRef.current = String(totalQtySum)
               setParamSample(String(totalQtySum))
@@ -1980,9 +1984,10 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
         const cabinetTag = part.sku ? `${part.part_name} (${part.sku})` : ''
         specOpts = [{ value: effSpec, label: effSpec, rawSpec: effSpec, badge: cabinetTag, productLabel: cabinetTag, qty: Number(part.total_qty) || 0 }]
       }
-      const distinctSpecs = Array.from(new Set(specOpts.map(o => o.rawSpec || o.label))).filter(Boolean)
-      // Nếu chi tiết chỉ có duy nhất 1 quy cách thì tự động chọn luôn!
-      if (specOpts.length === 1 || distinctSpecs.length === 1) {
+      // Quy tắc chọn quy cách:
+      // - Nếu chi tiết chỉ có duy nhất 1 quy cách thì tự động chọn luôn!
+      // - Nếu có nhiều hơn 1 quy cách thì mặc định không chọn trước
+      if (specOpts.length === 1) {
         setSpecOptions(specOpts)
         applySelectedSpecs(specOpts.map(o => o.value), specOpts, Number(part.total_qty) || 0)
       } else {
@@ -2059,14 +2064,19 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     })
 
     setSpecOptions(specOpts)
-    const distinctSpecs = Array.from(new Set(specOpts.map(o => o.rawSpec || o.label))).filter(Boolean)
-    // Nếu chi tiết chỉ có duy nhất 1 quy cách thì tự động chọn luôn!
-    if (specOpts.length === 1 || distinctSpecs.length === 1) {
+    // Quy tắc chọn quy cách:
+    // - Nếu chọn 1 Chi tiết mà chỉ có đúng 1 quy cách (specOpts.length === 1) thì chọn luôn quy cách đó.
+    // - Nếu có nhiều hơn 1 quy cách (specOpts.length > 1) thì KHÔNG tự động chọn.
+    // - Nếu chọn từ 2 chi tiết trở lên (selectedParts.length >= 2) thì mặc định KHÔNG chọn quy cách.
+    const isSinglePart = selectedParts.length === 1
+    const hasSingleSpec = specOpts.length === 1
+
+    if (isSinglePart && hasSingleSpec) {
       applySelectedSpecs(specOpts.map(o => o.value), specOpts, totalQtySum)
     } else {
       setSelectedSpecs([])
       setSpec('')
-      if ((mode === INSPECT_MODES.PARAMETER || mode === INSPECT_MODES.DAILY) && totalQtySum > 0) {
+      if ((mode === INSPECT_MODES.PARAMETER || mode === INSPECT_MODES.DAILY) && totalQtySum > 0 && isSinglePart) {
         setTotalBatchQty(String(totalQtySum))
         totalBatchQtyRef.current = String(totalQtySum)
         setParamSample(String(totalQtySum))

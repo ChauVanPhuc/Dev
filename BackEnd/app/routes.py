@@ -41,6 +41,7 @@ from modules.hr.routes.assessment_router import admin_assessment_router, public_
 from modules.inspection_guide.routes.inspection_guide_router import router as inspection_guide_router
 from modules.inspection_guide.routes.inspection_guide_router import parameter_router as inspection_parameter_router
 from modules.inspection_guide.routes.inspection_form_type_router import router as inspection_form_type_router
+from modules.inspection.routes.quality_report_router import router as quality_report_router
 
 api_router = APIRouter()
 
@@ -95,6 +96,7 @@ api_router.include_router(data_package_router.router, prefix="/system/data-packa
 
 api_router.include_router(inspection_router, prefix="/inspections", tags=["inspections"])
 api_router.get("/inspect_quality-overview", tags=["inspections"])(get_quality_overview)
+api_router.include_router(quality_report_router, prefix="/quality-reports", tags=["quality-reports"])
 
 api_router.include_router(equipment_router.router, prefix="/equipments", tags=["equipments"])
 api_router.include_router(machinery_router.router, prefix="/machines", tags=["machines"])

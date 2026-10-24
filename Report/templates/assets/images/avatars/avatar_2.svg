@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="48" height="48">
+  <circle cx="32" cy="32" r="30" fill="#F1F5F9" stroke="#E2E8F0" stroke-width="2"/>
+  <!-- Body/Shirt -->
+  <path d="M 14 56 C 14 44 22 40 32 40 C 42 40 50 44 50 56 Z" fill="#EC4899" />
+  <!-- Collar -->
+  <polygon points="28,40 32,45 36,40" fill="#FFFFFF" />
+  <!-- Hair Back -->
+  <path d="M 18 36 Q 16 10 32 10 Q 48 10 46 36 Q 44 45 42 48 Q 32 40 22 48 Z" fill="#7C2D12" />
+  <!-- Face -->
+  <circle cx="32" cy="27" r="13" fill="#FED7AA" />
+  <!-- Eyes -->
+  <circle cx="28" cy="26" r="1.8" fill="#1E293B" />
+  <circle cx="36" cy="26" r="1.8" fill="#1E293B" />
+  <!-- Smile -->
+  <path d="M 28 32 Q 32 36 36 32" fill="none" stroke="#1E293B" stroke-width="1.5" stroke-linecap="round"/>
+</svg>

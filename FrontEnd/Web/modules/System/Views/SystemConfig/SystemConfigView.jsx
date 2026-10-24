@@ -6,7 +6,7 @@ import DepartmentModal from '@modules/auth/Views/Department/DepartmentModal';
 import { 
   FileText, Plus, Edit2, Trash2, Search, ArrowUp, ArrowDown, Layout, Smartphone, 
   X, HelpCircle, Save, ChevronRight, CheckSquare, Square, RefreshCw, Layers, Briefcase, Users, Building2, Sliders,
-  Tag, Factory, Contact, ShieldCheck, Palette, ClipboardList, ExternalLink, AlertOctagon, ClipboardCheck
+  Tag, Factory, Contact, ShieldCheck, Palette, ClipboardList, ExternalLink, AlertOctagon, ClipboardCheck, MessageSquare
 } from 'lucide-react';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
@@ -14,6 +14,7 @@ import BeautifulConfirmModal from '@webShared/Views/components/feedback/Beautifu
 import PaintColorManagementView from '@modules/Product/Views/PaintColors/PaintColorManagementView';
 import ProductDetailsManagementView from '@modules/Product/Views/Details/ProductDetailsManagementView';
 import QCSamplingConfigView from '@modules/Inspection/Views/Config/QCSamplingConfigView';
+import ZaloBotConfigView from '@modules/System/Views/Zalo/ZaloBotConfigView';
 import '@styles/components.css';
 
 import * as Icons from 'lucide-react';
@@ -181,7 +182,7 @@ export default function SystemConfigView() {
 
   // Load Data based on active Left Menu Tab
   const loadData = async () => {
-    if (activeTab === 'paint_color' || activeTab === 'product_detail' || activeTab === 'qc_sampling') {
+    if (activeTab === 'paint_color' || activeTab === 'product_detail' || activeTab === 'qc_sampling' || activeTab === 'zalo_config') {
       setDataList([]);
       setLoading(false);
       return;
@@ -1430,7 +1431,8 @@ export default function SystemConfigView() {
               HỆ THỐNG & PHÂN QUYỀN
             </div>
             {[
-              { id: 'sidebar', label: 'Cấu hình Sidebar', icon: Sliders }
+              { id: 'sidebar', label: 'Cấu hình Sidebar', icon: Sliders },
+              { id: 'zalo_config', label: 'Cấu hình Zalo Bot', icon: MessageSquare }
             ].map(tab => {
               const IconComp = tab.icon;
               const isSelected = activeTab === tab.id;
@@ -1576,6 +1578,8 @@ export default function SystemConfigView() {
             <ProductDetailsManagementView isEmbedded={true} />
           ) : activeTab === 'qc_sampling' ? (
             <QCSamplingConfigView isEmbedded={true} />
+          ) : activeTab === 'zalo_config' ? (
+            <ZaloBotConfigView isEmbedded={true} />
           ) : (
             <>
               {/* Right Header & Search tool */}

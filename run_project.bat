@@ -67,7 +67,7 @@ echo  [SYSTEM CHECK] Environment validated.
 echo.
 
 :: --- 1. BACKEND (FastAPI + SQL Server) ---
-echo [1/3] Processing Backend (FastAPI)...
+echo [1/7] Processing Backend (FastAPI)...
 cd /d %~dp0BackEnd
 :: Pre-check for core libraries to avoid redundant and error-prone 'pip install'
 "%PYTHON_EXE%" -c "import uvicorn, fastapi, pyodbc, pydantic_settings, websockets, firebase_admin" >nul 2>&1
@@ -83,7 +83,7 @@ echo [*] Waiting for Backend to initialize and connect to SQL Server...
 powershell -NoProfile -Command "for ($i=0; $i -lt 30; $i++) { try { $r = (Invoke-WebRequest -Uri 'http://127.0.0.1:8000/docs' -UseBasicParsing -TimeoutSec 1).StatusCode; if ($r -eq 200) { Write-Host ' [OK] Backend is LIVE and READY on port 8000!' -ForegroundColor Green; break } } catch { Start-Sleep -Milliseconds 400 } }"
 
 :: --- 2. FRONTEND (Vite Web Dashboard) ---
-echo [2/3] Processing Frontend (Vite)...
+echo [2/7] Processing Frontend (Vite)...
 cd /d %~dp0FrontEnd
 if not exist node_modules (
     echo [!] node_modules missing in FrontEnd. Running 'npm install'...
@@ -95,7 +95,7 @@ if not exist node_modules (
 start "Frontend - ERP G7" cmd /k "cd /d %~dp0 && call start_frontend.bat"
 
 :: --- 3. MOBILE (Vite/Capacitor App) ---
-echo [3/3] Processing Mobile (Vite)...
+echo [3/7] Processing Mobile (Vite)...
 cd /d %~dp0FrontEnd\Mobile
 if not exist node_modules (
     echo [!] node_modules missing in Mobile. Running 'npm install'...
@@ -106,12 +106,18 @@ if not exist node_modules (
 :: Open specialized window for Mobile
 start "Mobile - ERP G7" cmd /k "cd /d %~dp0FrontEnd\Mobile && npm run dev -- --port 3000 --host 0.0.0.0"
 
-:: --- 4. GEMINI WEB2API AI SERVER ---
-echo [4/5] Starting Gemini Web2API AI Server...
+:: --- 4. QUALITY REPORT TOOL (Port 8099) ---
+if exist "%~dp0Report\app.py" (
+    echo [4/7] Starting Quality Report Tool (Port 8099)...
+    start "Report - ERP G7 (Port 8099)" cmd /k "cd /d %~dp0 && call start_report.bat"
+)
+
+:: --- 5. GEMINI WEB2API AI SERVER ---
+echo [5/7] Starting Gemini Web2API AI Server...
 start "Gemini Web2API - AI Server" cmd /k "cd /d %~dp0AI\gemini-web2api && call run.bat"
 
-:: --- 5. FEEDBACK PORTAL (Port 3001) ---
-echo [5/6] Processing Feedback Portal (Port 3001)...
+:: --- 6. FEEDBACK PORTAL (Port 3001) ---
+echo [6/7] Processing Feedback Portal (Port 3001)...
 cd /d %~dp0Feedback\FrontEnd
 if not exist node_modules (
     echo [!] node_modules missing in Feedback. Running 'npm install'...
@@ -121,23 +127,24 @@ if not exist node_modules (
 )
 start "Feedback Portal - ERP G7 (Port 3001)" cmd /k "cd /d %~dp0Feedback\FrontEnd && npm run dev"
 
-:: --- 6. CANVAS EDITOR (Port 1000) ---
+:: --- 7. CANVAS EDITOR (Port 1000) ---
 if exist "%~dp0WS\canvas-editor" (
-    echo [6/6] Starting Canvas Editor (Port 1000)...
+    echo [7/7] Starting Canvas Editor (Port 1000)...
     start "Canvas Editor - ERP G7" cmd /k "cd /d %~dp0 && call start_canvas_editor.bat"
 ) else if exist "C:\Tool\WS\canvas-editor" (
-    echo [6/6] Starting Canvas Editor (Port 1000)...
+    echo [7/7] Starting Canvas Editor (Port 1000)...
     start "Canvas Editor - ERP G7" cmd /k "cd /d %~dp0 && call start_canvas_editor.bat"
 )
 
 echo.
 echo ======================================================
 echo  SUCCESS: All systems have been signaled to start.
-echo  - Backend:       http://localhost:8000
-echo  - Web ERP:       http://localhost:5173
-echo  - Canvas Editor: http://localhost:1000/canvas-editor/
-echo  - Mobile:        http://localhost:3000
-echo  - Feedback:      http://localhost:3001
+echo  - Backend:        http://localhost:8000
+echo  - Web ERP:        http://localhost:5173
+echo  - Mobile:         http://localhost:3000
+echo  - Quality Report: http://localhost:8099
+echo  - Feedback:       http://localhost:3001
+echo  - Canvas Editor:  http://localhost:1000/canvas-editor/
 echo  Check the individual windows for status and logs.
 echo ======================================================
 pause
@@ -222,10 +229,10 @@ echo ======================================================
 echo  ERP G7 - CLOUDFLARE INTERNET PRODUCTION SERVER
 echo ======================================================
 echo.
-echo [*] Cleaning up lingering processes on Port 3000 and 5173...
-powershell -NoProfile -Command "Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -in 3000, 5173 } | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }"
+echo [*] Cleaning up lingering processes on Port 3000, 5173 and 8099...
+powershell -NoProfile -Command "Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -in 3000, 5173, 8099 } | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }"
 
-echo  [1/4] Starting Backend (FastAPI)...
+echo  [1/5] Starting Backend (FastAPI)...
 start "Backend (Cloud) - ERP G7" cmd /k "cd /d %~dp0 && call start_server.bat"
 echo [*] Waiting for Backend to initialize and connect to SQL Server...
 powershell -NoProfile -Command "for ($i=0; $i -lt 30; $i++) { try { $r = (Invoke-WebRequest -Uri 'http://127.0.0.1:8000/docs' -UseBasicParsing -TimeoutSec 1).StatusCode; if ($r -eq 200) { Write-Host ' [OK] Backend is LIVE and READY on port 8000!' -ForegroundColor Green; break } } catch { Start-Sleep -Milliseconds 400 } }"
@@ -240,13 +247,18 @@ if not exist "%~dp0FrontEnd\dist" (
     cd /d %~dp0FrontEnd && call npm run build
 )
 
-echo  [2/4] Starting Mobile App (Isolated Production Preview - Port 3000)...
+echo  [2/5] Starting Mobile App (Isolated Production Preview - Port 3000)...
 start "Mobile Frontend (Cloud) - ERP G7" cmd /k "cd /d %~dp0FrontEnd\Mobile && npm run preview -- --port 3000 --host 0.0.0.0"
 
-echo  [3/4] Starting Dashboard (Isolated Production Preview - Port 5173)...
+echo  [3/5] Starting Dashboard (Isolated Production Preview - Port 5173)...
 start "Dashboard (Cloud) - ERP G7" cmd /k "cd /d %~dp0FrontEnd && npm run preview -- --port 5173 --host 0.0.0.0"
 
-echo  [4/4] Starting Gemini Web2API AI Server...
+echo  [4/5] Starting Quality Report Tool (Port 8099)...
+if exist "%~dp0Report\app.py" (
+    start "Report (Cloud) - ERP G7" cmd /k "cd /d %~dp0 && call start_report.bat"
+)
+
+echo  [5/5] Starting Gemini Web2API AI Server...
 start "Gemini Web2API - AI Server" cmd /k "cd /d %~dp0AI\gemini-web2api && call run.bat"
 
 echo.
@@ -332,6 +344,12 @@ echo.
 cd /d %~dp0BackEnd
 :: Start Backend without reload, serving static dist folders
 start "ERP G7 PRODUCTION SERVER" cmd /k ""%PYTHON_EXE%" -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+:: Start Quality Report Tool
+if exist "%~dp0Report\app.py" (
+    echo Starting Quality Report Tool (Port 8099)...
+    start "Report - ERP G7" cmd /k "cd /d %~dp0 && call start_report.bat"
+)
 
 :: Start Gemini Web2API AI Server
 echo Starting Gemini Web2API AI Server...

@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { formatDateDMY, formatTimestampVN } from '../utils/formatters';
+import { checkIsAdmin } from './ContainerDetailModal';
 
 const resolveImgUrl = (img) => {
   if (!img) return '';
@@ -29,8 +30,13 @@ const ContainerTableViewComponent = ({
   onToggleSelectRow = () => {},
   onToggleSelectAll = () => {},
   onResendZalo = () => {},
+  canEdit = undefined,
   loading = false
 }) => {
+  const canSendZalo = useMemo(() => {
+    return canEdit !== undefined ? Boolean(canEdit) : checkIsAdmin();
+  }, [canEdit]);
+
   const effectivePageSize = (pageSize === Infinity || pageSize === 'all') ? (total || 100000) : (pageSize || 15);
   const totalPages = Math.ceil(total / effectivePageSize) || 1;
   const startIdx = total > 0 ? (page - 1) * effectivePageSize + 1 : 0;
@@ -421,43 +427,45 @@ const ContainerTableViewComponent = ({
                           <span>Chi tiết</span>
                         </button>
 
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onResendZalo(row.container_id || row.id);
-                          }}
-                          style={{
-                            background: row.zalo_notify_status === 'sent' ? '#ECFDF5' : '#FFFBEB',
-                            border: `1px solid ${row.zalo_notify_status === 'sent' ? '#A7F3D0' : '#FDE68A'}`,
-                            borderRadius: '6px',
-                            padding: '5px 8px',
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            color: row.zalo_notify_status === 'sent' ? '#047857' : '#B45309',
-                            fontSize: '0.74rem',
-                            fontWeight: '700',
-                            transition: 'all 0.15s ease'
-                          }}
-                          title={
-                            row.zalo_notify_status === 'sent'
-                              ? `Đã gửi Zalo${row.zalo_notified_at ? ` lúc ${formatTimestampVN(row.zalo_notified_at)}` : ''}. Bấm để gửi lại.`
-                              : row.zalo_notify_status === 'failed'
-                              ? 'Gửi Zalo thất bại. Bấm để thử gửi lại.'
-                              : 'Gửi kết quả kiểm tra tới Zalo'
-                          }
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.opacity = '0.85';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.opacity = '1';
-                          }}
-                        >
-                          <span style={{ fontSize: '0.8rem' }}>💬</span>
-                          <span>{row.zalo_notify_status === 'sent' ? 'Đã gửi' : 'Zalo'}</span>
-                        </button>
+                        {canSendZalo && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onResendZalo(row.container_id || row.id);
+                            }}
+                            style={{
+                              background: row.zalo_notify_status === 'sent' ? '#ECFDF5' : '#FFFBEB',
+                              border: `1px solid ${row.zalo_notify_status === 'sent' ? '#A7F3D0' : '#FDE68A'}`,
+                              borderRadius: '6px',
+                              padding: '5px 8px',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              color: row.zalo_notify_status === 'sent' ? '#047857' : '#B45309',
+                              fontSize: '0.74rem',
+                              fontWeight: '700',
+                              transition: 'all 0.15s ease'
+                            }}
+                            title={
+                              row.zalo_notify_status === 'sent'
+                                ? `Đã gửi Zalo${row.zalo_notified_at ? ` lúc ${formatTimestampVN(row.zalo_notified_at)}` : ''}. Bấm để gửi lại.`
+                                : row.zalo_notify_status === 'failed'
+                                ? 'Gửi Zalo thất bại. Bấm để thử gửi lại.'
+                                : 'Gửi kết quả kiểm tra tới Zalo'
+                            }
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.opacity = '0.85';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.opacity = '1';
+                            }}
+                          >
+                            <span style={{ fontSize: '0.8rem' }}>💬</span>
+                            <span>{row.zalo_notify_status === 'sent' ? 'Đã gửi' : 'Zalo'}</span>
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -620,30 +628,32 @@ const ContainerTableViewComponent = ({
                     Xem chi tiết
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onResendZalo(row.container_id || row.id);
-                    }}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '4px',
-                      backgroundColor: row.zalo_notify_status === 'sent' ? '#ECFDF5' : '#FFFBEB',
-                      border: `1px solid ${row.zalo_notify_status === 'sent' ? '#A7F3D0' : '#FDE68A'}`,
-                      borderRadius: '6px',
-                      padding: '8px 12px',
-                      color: row.zalo_notify_status === 'sent' ? '#047857' : '#B45309',
-                      fontSize: '0.78rem',
-                      fontWeight: '700',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <span>💬</span>
-                    <span>{row.zalo_notify_status === 'sent' ? 'Đã gửi' : 'Gửi Zalo'}</span>
-                  </button>
+                  {canSendZalo && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onResendZalo(row.container_id || row.id);
+                      }}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '4px',
+                        backgroundColor: row.zalo_notify_status === 'sent' ? '#ECFDF5' : '#FFFBEB',
+                        border: `1px solid ${row.zalo_notify_status === 'sent' ? '#A7F3D0' : '#FDE68A'}`,
+                        borderRadius: '6px',
+                        padding: '8px 12px',
+                        color: row.zalo_notify_status === 'sent' ? '#047857' : '#B45309',
+                        fontSize: '0.78rem',
+                        fontWeight: '700',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <span>💬</span>
+                      <span>{row.zalo_notify_status === 'sent' ? 'Đã gửi' : 'Gửi Zalo'}</span>
+                    </button>
+                  )}
                 </div>
               </div>
             );

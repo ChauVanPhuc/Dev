@@ -268,6 +268,28 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
   const currentUser = getCurrentUser();
   const currentEditorName = currentUser.full_name || currentUser.name || currentUser.username || 'Quản lý QC';
   const currentEditorRole = currentUser.role_name || currentUser.role || 'Quản lý QC';
+
+  // Helper kiểm tra quyền Admin chuẩn dự án (đồng bộ với /admin/lpn-crawler)
+  const isAdmin = useMemo(() => {
+    try {
+      const u = currentUser;
+      if (!u) return false;
+      if (u.is_admin === true || u.isAdmin === true) return true;
+      const username = (u.username || '').toLowerCase();
+      if (username === 'admin') return true;
+      const roleName = (u.role_name || u.roleName || u.role || '').toLowerCase();
+      if (roleName === 'it' || roleName === 'bgd' || roleName === 'admin') return true;
+      const roleDesc = (u.role_description || '').toLowerCase();
+      if (roleDesc.includes('admin') || roleDesc.includes('quản trị')) return true;
+      const permName = (u.permission_name || u.permission || '').toLowerCase();
+      if (permName.includes('admin')) return true;
+      const deptName = (u.department_name || u.department || '').toLowerCase();
+      if (deptName === 'it' || deptName === 'bgd' || deptName.includes('admin')) return true;
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }, [currentUser]);
   
   // Modal Chi tiết / Xác nhận
   const [selectedTask, setSelectedTask] = useState(null);
@@ -422,6 +444,13 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
       setModalGlossValue(rawGloss);
       setModalColorValue(rawColor);
 
+      const rawReqQty = selectedTask.required_qty !== undefined && selectedTask.required_qty !== null ? selectedTask.required_qty : (parsedJson?.required_qty || 0);
+      const rawSampQty = selectedTask.sample_qty !== undefined && selectedTask.sample_qty !== null ? selectedTask.sample_qty : (parsedJson?.sample_qty || 0);
+      const rawErrQty = selectedTask.error_qty !== undefined && selectedTask.error_qty !== null ? selectedTask.error_qty : (parsedJson?.error_qty || 0);
+      setModalRequiredQty(Number(rawReqQty) || 0);
+      setModalSampleQty(Number(rawSampQty) || 0);
+      setModalErrorQty(Number(rawErrQty) || 0);
+
       setModalStatus(selectedTask.status || parsedJson?.status || 'Chưa Làm');
       setHandlingInfo(selectedTask.handling_info || parsedJson?.handling_info || '');
 
@@ -448,6 +477,19 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
       // Khởi tạo lịch sử chỉnh sửa (Audit Trail)
       const hist = selectedTask.edit_history || parsedJson?.edit_history || [];
       setModalHistory(Array.isArray(hist) ? hist : []);
+
+      const taskType = selectedTask.type || 'input';
+      const taskId = selectedTask.id;
+      if (taskId) {
+        api.get(`/inspections/record-history/${taskType}/${taskId}`)
+          .then(res => {
+            const apiHist = res?.edit_history || (Array.isArray(res) ? res : []);
+            if (Array.isArray(apiHist) && apiHist.length > 0) {
+              setModalHistory(apiHist);
+            }
+          })
+          .catch(() => {});
+      }
 
       // Khởi tạo danh sách ảnh minh chứng từ selectedTask (có khử trùng lặp thông minh)
       const rawImgs = [];
@@ -1303,9 +1345,9 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
         inspection_date: modalRecordedDate,
         inspector_name: modalInspectorName,
         status: modalStatus,
-        required_qty: Number(modalRequiredQty),
-        sample_qty: Number(modalSampleQty),
-        error_qty: Number(modalErrorQty),
+        required_qty: Number(modalRequiredQty || 0),
+        sample_qty: Number(modalSampleQty || 0),
+        error_qty: Number(modalErrorQty || 0),
         inspection_type: modalInspectionType,
         stage: modalStage,
         result: modalResult,
@@ -1327,9 +1369,9 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
         batch_no: modalBatchNo,
         recorded_date: modalRecordedDate,
         inspector_name: modalInspectorName,
-        required_qty: Number(modalRequiredQty),
-        sample_qty: Number(modalSampleQty),
-        error_qty: Number(modalErrorQty),
+        required_qty: Number(modalRequiredQty || 0),
+        sample_qty: Number(modalSampleQty || 0),
+        error_qty: Number(modalErrorQty || 0),
         result: modalResult,
         action: modalAction,
         inspection_type: modalInspectionType,
@@ -1357,9 +1399,9 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
         inspection_date: modalRecordedDate,
         inspector_name: modalInspectorName,
         status: modalStatus,
-        required_qty: Number(modalRequiredQty),
-        sample_qty: Number(modalSampleQty),
-        error_qty: Number(modalErrorQty),
+        required_qty: Number(modalRequiredQty || 0),
+        sample_qty: Number(modalSampleQty || 0),
+        error_qty: Number(modalErrorQty || 0),
         inspection_type: modalInspectionType,
         stage: modalStage,
         result: modalResult,
@@ -1389,9 +1431,9 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
             inspection_date: modalRecordedDate,
             inspector_name: modalInspectorName,
             status: modalStatus,
-            required_qty: Number(modalRequiredQty),
-            sample_qty: Number(modalSampleQty),
-            error_qty: Number(modalErrorQty),
+            required_qty: Number(modalRequiredQty || 0),
+            sample_qty: Number(modalSampleQty || 0),
+            error_qty: Number(modalErrorQty || 0),
             inspection_type: modalInspectionType,
             stage: modalStage,
             result: modalResult,
@@ -1413,6 +1455,10 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
         return t;
       }));
       setIsEditTicketMode(false);
+      // Đồng bộ danh sách công việc tồn đọng ngầm từ server
+      if (typeof fetchPendingTasks === 'function') {
+        fetchPendingTasks().catch(() => {});
+      }
       return true;
     } catch (error) {
       console.error('Error saving inspection task:', error);
@@ -1445,6 +1491,9 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
       if ((modalGlossValue || '') !== (init.gloss_value || '')) return true;
       if ((modalColorValue || '') !== (init.color_value || '')) return true;
     }
+    if (Number(modalRequiredQty || 0) !== Number(init.required_qty || 0)) return true;
+    if (Number(modalSampleQty || 0) !== Number(init.sample_qty || 0)) return true;
+    if (Number(modalErrorQty || 0) !== Number(init.error_qty || 0)) return true;
     if ((handlingInfo || '').trim() !== (init.handling_info || '').trim()) return true;
 
     const curImgs = handlingImages || [];
@@ -1511,7 +1560,10 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
         user_role: curU?.role_name || curU?.role || currentEditorRole,
         parameter: modalInspectionType === 'parameter' ? modalParameter : undefined,
         gloss_value: (modalInspectionType === 'parameter' || isParameterMode) ? modalGlossValue : undefined,
-        color_value: (modalInspectionType === 'parameter' || isParameterMode) ? modalColorValue : undefined
+        color_value: (modalInspectionType === 'parameter' || isParameterMode) ? modalColorValue : undefined,
+        required_qty: Number(modalRequiredQty || 0),
+        sample_qty: Number(modalSampleQty || 0),
+        error_qty: Number(modalErrorQty || 0)
       });
       toast('success', `Đã xác nhận thành công phiếu #${task.ticket_code || task.id}!`);
 
@@ -3788,6 +3840,9 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
                     <button
                       type="button"
                       onClick={() => {
+                        if (!isEditTicketMode) {
+                          setIsEditTicketMode(true);
+                        }
                         setModalResult(prev => {
                           const nextResult = prev === 'pass' ? 'fail' : 'pass';
                           if (nextResult === 'pass' && modalAction === 'tra-ve') {
@@ -4046,7 +4101,10 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
                           <select
                             value={modalInspectionType}
-                            onChange={(e) => setModalInspectionType(e.target.value)}
+                            onChange={(e) => {
+                              if (!isEditTicketMode) setIsEditTicketMode(true);
+                              setModalInspectionType(e.target.value);
+                            }}
                             style={{
                               padding: '4px 8px',
                               borderRadius: '6px',
@@ -4244,7 +4302,10 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
 
                           <select
                             value={normalizeStage(modalStage)}
-                            onChange={(e) => setModalStage(e.target.value)}
+                            onChange={(e) => {
+                              if (!isEditTicketMode) setIsEditTicketMode(true);
+                              setModalStage(e.target.value);
+                            }}
                             style={{
                               padding: '3px 8px',
                               borderRadius: '6px',
@@ -4368,7 +4429,10 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
                         </span>
                         <select
                           value={modalAction}
-                          onChange={(e) => setModalAction(e.target.value)}
+                          onChange={(e) => {
+                            if (!isEditTicketMode) setIsEditTicketMode(true);
+                            setModalAction(e.target.value);
+                          }}
                           style={{
                             padding: '4px 8px',
                             borderRadius: '6px',
@@ -4522,6 +4586,7 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
                         )}
                       </div>
 
+                      {/* SL MẪU KIỂM TRA */}
                       <div className="quality-kpi-chip quality-kpi-chip-blue">
                         <span className="quality-kpi-label">
                           SL MẪU KIỂM TRA

@@ -77,6 +77,36 @@ const deduplicateInspectionImages = (imgs) => {
   return Array.from(stemMap.values());
 };
 
+const AVAILABLE_STAGES = [
+  'Định hình',
+  'Tạo phôi',
+  'Lắp ráp',
+  'Sơn',
+  'Đóng gói',
+  'Nhập kho/Đầu vào',
+  'Lưu kho'
+];
+
+const normalizeStage = (val) => {
+  if (!val) return '';
+  const clean = String(val).trim();
+  const lower = clean.toLowerCase();
+  if (lower === 'nhập kho' || lower === 'đầu vào' || lower === 'nhap kho' || lower === 'dau vao' || lower.includes('nhập kho/đầu vào')) {
+    return 'Nhập kho/Đầu vào';
+  }
+  const found = AVAILABLE_STAGES.find(s => s.toLowerCase() === lower);
+  return found || clean;
+};
+
+const getCurrentUser = () => {
+  try {
+    const raw = localStorage.getItem('smartflow_user');
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    return {};
+  }
+};
+
 const toDatetimeLocalValue = (dateStr) => {
   if (!dateStr) return '';
   try {
@@ -94,6 +124,9 @@ const toDatetimeLocalValue = (dateStr) => {
 const InspectionReportsView = () => {
   const reports = useInspectionReports();
   const navigate = useNavigate();
+  const currentUser = getCurrentUser();
+  const currentEditorName = currentUser.full_name || currentUser.name || currentUser.username || 'Quản lý QC';
+  const currentEditorRole = currentUser.role_name || currentUser.role || 'Quản lý QC';
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/reports');
 
@@ -513,6 +546,7 @@ const InspectionReportsView = () => {
   const [reportDate, setReportDate] = useState('');
   const [reportStatus, setReportStatus] = useState('');
   const [reportAction, setReportAction] = useState('chap-nhan');
+  const [reportResult, setReportResult] = useState('pass');
   const [reportStage, setReportStage] = useState('');
   const [reportCategory, setReportCategory] = useState('');
   const [reportRequiredQty, setReportRequiredQty] = useState(0);
@@ -530,6 +564,10 @@ const InspectionReportsView = () => {
       const d = activeReportItem.inspection_date || activeReportItem.created_at || activeReportItem.recorded_date || '';
       const st = activeReportItem.status || (activeReportItem.is_confirmed ? 'Đã xác nhận' : 'Chưa Làm');
       const act = activeReportItem.action || activeReportItem.handling_action || 'chap-nhan';
+      const isPass = activeReportItem.conclusion === 'pass' || 
+                     activeReportItem.result === 'Đạt' || 
+                     activeReportItem.result === 'pass' || 
+                     activeReportItem.result === 'ĐẠT';
       const sg = activeReportItem.stage || activeReportItem.stage_name || '';
       const cat = activeReportItem.inspection_type || activeReportItem.category || '';
       const req = Number(activeReportItem.required_qty ?? parsedReportData?.requiredQty ?? activeReportItem.total_products ?? 0);
@@ -547,6 +585,7 @@ const InspectionReportsView = () => {
       setReportDate(d);
       setReportStatus(st);
       setReportAction(act);
+      setReportResult(isPass ? 'pass' : 'fail');
       setReportStage(sg);
       setReportCategory(cat);
       setReportRequiredQty(req);
@@ -563,6 +602,7 @@ const InspectionReportsView = () => {
         date: d,
         status: st,
         action: act,
+        result: isPass ? 'pass' : 'fail',
         stage: sg,
         category: cat,
         required_qty: req,
@@ -581,6 +621,7 @@ const InspectionReportsView = () => {
       setReportDate(init.date);
       setReportStatus(init.status);
       setReportAction(init.action);
+      setReportResult(init.result || 'pass');
       setReportStage(init.stage);
       setReportCategory(init.category);
       setReportRequiredQty(init.required_qty);
@@ -609,25 +650,118 @@ const InspectionReportsView = () => {
         stage: reportStage,
         inspection_type: reportCategory,
         action: reportAction,
+        result: reportResult,
+        conclusion: reportResult,
         required_qty: Number(reportRequiredQty),
         sample_qty: Number(reportSampleQty),
         error_qty: Number(reportErrorQty),
         handling_info: reportHandlingInfo,
-        updated_by: 'Quản lý QC'
+        updated_by: currentEditorName,
+        user_role: currentEditorRole
       };
 
-      await api.post(`/inspections/update-record/${type}/${id}`, payload);
+      const response = await api.post(`/inspections/update-record/${type}/${id}`, payload);
+
+      const updatedHistory = response?.edit_history || (Array.isArray(response?.data?.edit_history) ? response.data.edit_history : null);
+      if (updatedHistory) {
+        setModalHistory(updatedHistory);
+      }
 
       setSelectedReportItem(prev => prev ? {
         ...prev,
         ...payload,
+        result: reportResult,
+        conclusion: reportResult,
+        edit_history: updatedHistory || prev.edit_history,
         is_confirmed: reportStatus === 'Đã xác nhận' || reportStatus === 'Đã xong' || reportStatus === 'confirmed' || reportStatus === 'Hoàn thành'
       } : null);
 
+      initialReportValuesRef.current = {
+        id: id,
+        type: type,
+        batch_no: reportBatchNo,
+        inspector_name: reportInspectorName,
+        date: reportDate,
+        status: reportStatus,
+        action: reportAction,
+        result: reportResult,
+        stage: reportStage,
+        category: reportCategory,
+        required_qty: Number(reportRequiredQty || 0),
+        sample_qty: Number(reportSampleQty || 0),
+        error_qty: Number(reportErrorQty || 0),
+        handling_info: reportHandlingInfo
+      };
+
       setIsEditReportMode(false);
-      if (reports?.fetchData) {
-        reports.fetchData();
+
+      // Cập nhật ngay lập tức vào state của bảng danh sách (tự động cập nhật giao diện mà không cần F5)
+      const updateListFn = (prevList) => {
+        if (!Array.isArray(prevList)) return prevList;
+        return prevList.map(item => {
+          if (String(item.id) === String(id)) {
+            const updatedItem = {
+              ...item,
+              ...payload,
+              batch_no: reportBatchNo,
+              po_code: reportBatchNo,
+              po: reportBatchNo,
+              date: reportDate,
+              inspection_date: reportDate,
+              inspected_at: reportDate,
+              recorded_date: reportDate,
+              inspector_name: reportInspectorName,
+              status: reportStatus,
+              stage: reportStage,
+              stage_name: reportStage,
+              inspection_type: reportCategory,
+              category: reportCategory,
+              action: reportAction,
+              result: reportResult,
+              conclusion: reportResult,
+              required_qty: Number(reportRequiredQty || 0),
+              sample_qty: Number(reportSampleQty || 0),
+              error_qty: Number(reportErrorQty || 0),
+              total_products: Number(reportRequiredQty || 0),
+              total_defects: Number(reportErrorQty || 0),
+              handling_info: reportHandlingInfo,
+              is_confirmed: reportStatus === 'Đã xác nhận' || reportStatus === 'Đã xong' || reportStatus === 'confirmed' || reportStatus === 'Hoàn thành',
+              edit_history: updatedHistory || item.edit_history
+            };
+            if (item.data_json) {
+              try {
+                const parsed = typeof item.data_json === 'string' ? JSON.parse(item.data_json) : { ...item.data_json };
+                parsed.batch_no = reportBatchNo;
+                parsed.stage = reportStage;
+                parsed.status = reportStatus;
+                parsed.action = reportAction;
+                parsed.result = reportResult;
+                parsed.handling_info = reportHandlingInfo;
+                parsed.edit_history = updatedHistory || parsed.edit_history;
+                updatedItem.data_json = JSON.stringify(parsed);
+              } catch (e) {}
+            }
+            return updatedItem;
+          }
+          return item;
+        });
+      };
+
+      if (type === 'daily') {
+        if (typeof setDailyInspections === 'function') setDailyInspections(updateListFn);
+        if (typeof reports?.setDailyInspections === 'function') reports.setDailyInspections(updateListFn);
+      } else {
+        if (typeof setStageInspections === 'function') setStageInspections(updateListFn);
+        if (typeof reports?.setStageInspections === 'function') reports.setStageInspections(updateListFn);
       }
+
+      // Đồng thời đồng bộ dữ liệu mới nhất ngầm từ server
+      if (typeof reports?.fetchData === 'function') {
+        reports.fetchData().catch(() => {});
+      } else if (typeof fetchData === 'function') {
+        fetchData().catch(() => {});
+      }
+
       alert('Đã cập nhật thông tin phiếu kiểm tra thành công!');
     } catch (err) {
       console.error('Lỗi khi lưu phiếu kiểm tra:', err);
@@ -2187,13 +2321,28 @@ const InspectionReportsView = () => {
                 )}
 
                 {/* Read-Only Result Badge */}
-                {(() => {
-                  const isPass = activeReportItem.conclusion === 'pass' || 
-                                 activeReportItem.result === 'Đạt' || 
-                                 activeReportItem.result === 'pass' || 
-                                 activeReportItem.result === 'ĐẠT';
-                  return isPass ? (
-                    <span style={{
+                {/* NÚT CHUYỂN ĐỔI KẾT QUẢ ĐẠT / KHÔNG ĐẠT */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {isEditReportMode && (
+                    <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase' }}>
+                      Kết quả:
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!isEditReportMode) {
+                        setIsEditReportMode(true);
+                      }
+                      setReportResult(prev => {
+                        const next = prev === 'pass' ? 'fail' : 'pass';
+                        if (next === 'pass' && reportAction === 'tra-ve') {
+                          setReportAction('chap-nhan');
+                        }
+                        return next;
+                      });
+                    }}
+                    style={{
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: '5px',
@@ -2201,31 +2350,26 @@ const InspectionReportsView = () => {
                       borderRadius: '20px',
                       fontSize: '0.82rem',
                       fontWeight: 800,
-                      backgroundColor: '#ECFDF5',
-                      color: '#059669',
-                      border: '1.5px solid #A7F3D0',
-                      boxShadow: '0 1px 2px rgba(16, 185, 129, 0.15)'
-                    }}>
-                      <CheckCircle2 size={15} /> ĐẠT
-                    </span>
-                  ) : (
-                    <span style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '5px',
-                      padding: '5px 12px',
-                      borderRadius: '20px',
-                      fontSize: '0.82rem',
-                      fontWeight: 800,
-                      backgroundColor: '#FEF2F2',
-                      color: '#DC2626',
-                      border: '1.5px solid #FECACA',
-                      boxShadow: '0 1px 2px rgba(239, 68, 68, 0.15)'
-                    }}>
-                      <AlertTriangle size={15} /> KHÔNG ĐẠT
-                    </span>
-                  );
-                })()}
+                      cursor: 'pointer',
+                      backgroundColor: reportResult === 'pass' ? '#ECFDF5' : '#FEF2F2',
+                      color: reportResult === 'pass' ? '#059669' : '#DC2626',
+                      border: reportResult === 'pass' ? '1.5px solid #A7F3D0' : '1.5px solid #FECACA',
+                      boxShadow: reportResult === 'pass' ? '0 1px 2px rgba(16, 185, 129, 0.15)' : '0 1px 2px rgba(239, 68, 68, 0.15)',
+                      transition: 'all 0.15s ease'
+                    }}
+                    title="Nhấp để thay đổi Đạt / Không đạt"
+                  >
+                    {reportResult === 'pass' ? (
+                      <>
+                        <CheckCircle2 size={15} /> <span>ĐẠT</span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertTriangle size={15} /> <span>KHÔNG ĐẠT</span>
+                      </>
+                    )}
+                  </button>
+                </div>
 
                 {/* Close Button */}
                 <button
@@ -2423,38 +2567,81 @@ const InspectionReportsView = () => {
 
                     <div>
                       <span style={{ fontSize: '0.74rem', color: '#8D6E63', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
-                        LOẠI KIỂM TRA
+                        LOẠI KIỂM TRA & CÔNG ĐOẠN
                       </span>
                       {isEditReportMode ? (
-                        <select
-                          value={reportCategory}
-                          onChange={(e) => setReportCategory(e.target.value)}
-                          style={{
-                            width: '100%',
-                            padding: '5px 8px',
-                            borderRadius: '6px',
-                            border: '1.5px solid #7B5233',
-                            fontSize: '0.82rem',
-                            fontWeight: '600',
-                            backgroundColor: '#FFFFFF',
-                            color: '#2D1A12',
-                            outline: 'none',
-                            boxSizing: 'border-box'
-                          }}
-                        >
-                          <option value="first_sample">Kiểm tra mẫu lần đầu</option>
-                          <option value="re_inspect">Kiểm tra lại</option>
-                          <option value="parameter">Kiểm tra thông số</option>
-                          <option value="process">Kiểm tra quy trình</option>
-                          <option value="qa">Vấn đáp</option>
-                          <option value="daily">Ghi nhận lỗi hằng ngày</option>
-                          <option value="input">Kiểm tra đầu vào / nhập kho</option>
-                          {reportCategory && !['first_sample', 're_inspect', 'parameter', 'process', 'qa', 'daily', 'input'].includes(reportCategory) && (
-                            <option value={reportCategory}>{reportCategory}</option>
-                          )}
-                        </select>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                          <select
+                            value={reportCategory}
+                            onChange={(e) => setReportCategory(e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '5px 8px',
+                              borderRadius: '6px',
+                              border: '1.5px solid #7B5233',
+                              fontSize: '0.82rem',
+                              fontWeight: '600',
+                              backgroundColor: '#FFFFFF',
+                              color: '#2D1A12',
+                              outline: 'none',
+                              boxSizing: 'border-box'
+                            }}
+                          >
+                            <option value="first_sample">Kiểm tra mẫu lần đầu</option>
+                            <option value="re_inspect">Kiểm tra lại</option>
+                            <option value="parameter">Kiểm tra thông số</option>
+                            <option value="process">Kiểm tra quy trình</option>
+                            <option value="qa">Vấn đáp</option>
+                            <option value="daily">Ghi nhận lỗi hằng ngày</option>
+                            <option value="input">Kiểm tra đầu vào / nhập kho</option>
+                            {reportCategory && !['first_sample', 're_inspect', 'parameter', 'process', 'qa', 'daily', 'input'].includes(reportCategory) && (
+                              <option value={reportCategory}>{reportCategory}</option>
+                            )}
+                          </select>
+
+                          <select
+                            value={normalizeStage(reportStage)}
+                            onChange={(e) => setReportStage(e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '4px 8px',
+                              borderRadius: '6px',
+                              border: '1.5px solid #7B5233',
+                              fontSize: '0.78rem',
+                              fontWeight: '500',
+                              backgroundColor: '#FAF7F2',
+                              color: '#6D4C41',
+                              cursor: 'pointer',
+                              outline: 'none',
+                              boxSizing: 'border-box'
+                            }}
+                          >
+                            <option value="">↳ Không gắn CĐ</option>
+                            {AVAILABLE_STAGES.map(st => (
+                              <option key={st} value={st}>↳ {st}</option>
+                            ))}
+                            {reportStage && !AVAILABLE_STAGES.some(st => st.toLowerCase() === reportStage.toLowerCase()) && (
+                              <option value={reportStage}>↳ {reportStage}</option>
+                            )}
+                          </select>
+                        </div>
                       ) : (
-                        <div>{renderReportCategoryBadge(activeReportItem)}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          {renderReportCategoryBadge(activeReportItem)}
+                          {(reportStage || activeReportItem.stage || activeReportItem.stage_name) && (
+                            <span style={{
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              backgroundColor: '#F3E8DC',
+                              color: '#7B5233',
+                              border: '1px solid #D8CCC0'
+                            }}>
+                              ↳ {normalizeStage(reportStage || activeReportItem.stage || activeReportItem.stage_name)}
+                            </span>
+                          )}
+                        </div>
                       )}
                     </div>
 

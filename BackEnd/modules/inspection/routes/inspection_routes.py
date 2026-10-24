@@ -4736,7 +4736,19 @@ def _build_inspection_diff(
                 "new_val": new_note
             })
 
-    # 9. Độ bóng (gloss_value)
+    # 9. Thông số kiểm tra (parameter)
+    if "parameter" in body_data and body_data.get("parameter"):
+        new_param = str(body_data.get("parameter") or "").strip()
+        old_param = str(data_dict.get("parameter") or "").strip()
+        if new_param and old_param != new_param:
+            changes.append({
+                "field": "parameter",
+                "label": "Thông số kiểm tra",
+                "old_val": old_param or "(Chưa có)",
+                "new_val": new_param
+            })
+
+    # 10. Độ bóng (gloss_value)
     if "gloss_value" in body_data:
         new_gloss = str(body_data.get("gloss_value") or "").strip()
         old_gloss = str(data_dict.get("gloss_value") or "").strip()
@@ -4748,7 +4760,7 @@ def _build_inspection_diff(
                 "new_val": new_gloss or "(Đã xóa)"
             })
 
-    # 10. Màu sơn (color_value)
+    # 11. Màu sơn (color_value)
     if "color_value" in body_data:
         new_color = str(body_data.get("color_value") or "").strip()
         old_color = str(data_dict.get("color_value") or "").strip()
@@ -4760,7 +4772,21 @@ def _build_inspection_diff(
                 "new_val": new_color or "(Đã xóa)"
             })
 
-    # 11. Mã Lô / PO (batch_no / po_code)
+    # 12. Hình ảnh xử lý / khắc phục (handling_images)
+    if "handling_images" in body_data and isinstance(body_data.get("handling_images"), list):
+        old_h_imgs = [str(x).strip() for x in data_dict.get("handling_images", []) if x] if isinstance(data_dict.get("handling_images"), list) else []
+        new_h_imgs = [str(x).strip() for x in body_data.get("handling_images") if x]
+        if old_h_imgs != new_h_imgs:
+            diff_h = len(new_h_imgs) - len(old_h_imgs)
+            desc = f"{len(new_h_imgs)} ảnh (+{diff_h} ảnh mới)" if diff_h > 0 else (f"{len(new_h_imgs)} ảnh (-{abs(diff_h)} ảnh đã gỡ)" if diff_h < 0 else f"{len(new_h_imgs)} ảnh (thay đổi)")
+            changes.append({
+                "field": "handling_images",
+                "label": "Ảnh xử lý khắc phục",
+                "old_val": f"{len(old_h_imgs)} ảnh" if len(old_h_imgs) > 0 else "0 ảnh",
+                "new_val": desc
+            })
+
+    # 13. Mã Lô / PO (batch_no / po_code)
     if "batch_no" in body_data or "po_code" in body_data or "po_no" in body_data:
         new_po = str(body_data.get("batch_no") or body_data.get("po_code") or body_data.get("po_no") or "").strip()
         old_po = str(getattr(record, "batch_no", None) or data_dict.get("batch_no") or data_dict.get("po_code") or "").strip()
@@ -4772,21 +4798,49 @@ def _build_inspection_diff(
                 "new_val": new_po
             })
 
-    # 12. Ngày ghi nhận (recorded_date / inspection_date)
+    # 14. Ngày ghi nhận (recorded_date / inspection_date)
     if "recorded_date" in body_data or "inspection_date" in body_data or "inspected_at" in body_data or "created_at" in body_data:
         new_date_raw = str(body_data.get("recorded_date") or body_data.get("inspection_date") or body_data.get("inspected_at") or body_data.get("created_at") or "").strip()
         old_dt = getattr(record, "inspected_at", None) or getattr(record, "inspection_date", None) or getattr(record, "created_at", None)
-        old_date_str = str(old_dt) if old_dt else ""
-        if new_date_raw and new_date_raw not in old_date_str:
+        
+        old_parsed = None
+        if isinstance(old_dt, (datetime.datetime, datetime.date)):
+            old_parsed = old_dt
+        elif old_dt:
+            try:
+                c = str(old_dt).replace('Z', '').split('+')[0]
+                old_parsed = datetime.datetime.fromisoformat(c) if 'T' in c else datetime.datetime.strptime(c, "%Y-%m-%d %H:%M:%S" if len(c) > 10 else "%Y-%m-%d")
+            except Exception:
+                pass
+
+        new_parsed = None
+        if new_date_raw:
+            try:
+                c = new_date_raw.replace('Z', '').split('+')[0]
+                new_parsed = datetime.datetime.fromisoformat(c) if 'T' in c else datetime.datetime.strptime(c, "%Y-%m-%d %H:%M:%S" if len(c) > 10 else "%Y-%m-%d")
+            except Exception:
+                pass
+
+        if old_parsed and new_parsed:
+            old_cmp = old_parsed.strftime("%Y-%m-%d %H:%M") if hasattr(old_parsed, 'hour') else old_parsed.strftime("%Y-%m-%d")
+            new_cmp = new_parsed.strftime("%Y-%m-%d %H:%M") if hasattr(new_parsed, 'hour') else new_parsed.strftime("%Y-%m-%d")
+            if old_cmp != new_cmp:
+                changes.append({
+                    "field": "recorded_date",
+                    "label": "Ngày ghi nhận",
+                    "old_val": old_parsed.strftime("%H:%M %d/%m/%Y") if hasattr(old_parsed, 'hour') else old_parsed.strftime("%d/%m/%Y"),
+                    "new_val": new_parsed.strftime("%H:%M %d/%m/%Y") if hasattr(new_parsed, 'hour') else new_parsed.strftime("%d/%m/%Y")
+                })
+        elif new_date_raw and not old_parsed:
             changes.append({
                 "field": "recorded_date",
                 "label": "Ngày ghi nhận",
-                "old_val": old_date_str[:16] if old_date_str else "(Chưa có)",
-                "new_val": new_date_raw[:16]
+                "old_val": "(Chưa có)",
+                "new_val": new_parsed.strftime("%H:%M %d/%m/%Y") if (new_parsed and hasattr(new_parsed, 'hour')) else new_date_raw[:16]
             })
 
-    # 13. Người kiểm tra QC (inspector_name)
-    if "inspector_name" in body_data:
+    # 15. Người kiểm tra QC (inspector_name)
+    if "inspector_name" in body_data and body_data["inspector_name"] is not None:
         new_insp = str(body_data.get("inspector_name") or "").strip()
         old_insp = str(getattr(record, "inspector_name", None) or data_dict.get("inspector_name") or "").strip()
         if new_insp and old_insp != new_insp:
@@ -4797,7 +4851,7 @@ def _build_inspection_diff(
                 "new_val": new_insp
             })
 
-    # 14. SL Cần Kiểm (Lô)
+    # 16. SL Cần Kiểm (Lô)
     if "required_qty" in body_data and body_data.get("required_qty") is not None:
         try:
             new_rq = int(body_data.get("required_qty"))
@@ -4812,7 +4866,7 @@ def _build_inspection_diff(
         except (ValueError, TypeError):
             pass
 
-    # 15. SL Mẫu Kiểm Tra
+    # 17. SL Mẫu Kiểm Tra
     if "sample_qty" in body_data and body_data.get("sample_qty") is not None:
         try:
             new_sq = int(body_data.get("sample_qty"))
@@ -4827,7 +4881,7 @@ def _build_inspection_diff(
         except (ValueError, TypeError):
             pass
 
-    # 16. Số Lỗi Phát Hiện
+    # 18. Số Lỗi Phát Hiện
     if "error_qty" in body_data and body_data.get("error_qty") is not None:
         try:
             new_eq = int(body_data.get("error_qty"))
@@ -5048,6 +5102,31 @@ def confirm_inspection(
         data_dict["gloss_value"] = str(body_data["gloss_value"]).strip()
     if "color_value" in body_data and body_data["color_value"] is not None:
         data_dict["color_value"] = str(body_data["color_value"]).strip()
+
+    # Cập nhật số lượng nếu có gửi lên từ Admin
+    if "required_qty" in body_data and body_data.get("required_qty") is not None:
+        try:
+            val = int(body_data.get("required_qty"))
+            record.required_qty = val
+            data_dict["required_qty"] = val
+        except (ValueError, TypeError):
+            pass
+
+    if "sample_qty" in body_data and body_data.get("sample_qty") is not None:
+        try:
+            val = int(body_data.get("sample_qty"))
+            record.sample_qty = val
+            data_dict["sample_qty"] = val
+        except (ValueError, TypeError):
+            pass
+
+    if "error_qty" in body_data and body_data.get("error_qty") is not None:
+        try:
+            val = int(body_data.get("error_qty"))
+            record.error_qty = val
+            data_dict["error_qty"] = val
+        except (ValueError, TypeError):
+            pass
         
     record.data_json = json.dumps(data_dict, ensure_ascii=False)
         
@@ -5066,6 +5145,9 @@ def confirm_inspection(
             "status": new_status,
             "inspection_type": record.inspection_type,
             "stage": record.stage,
+            "required_qty": record.required_qty,
+            "sample_qty": record.sample_qty,
+            "error_qty": record.error_qty,
             "handling_info": data_dict.get("handling_info"),
             "handling_images": data_dict.get("handling_images") or [],
             "edit_history": data_dict.get("edit_history") or [],
@@ -5103,66 +5185,9 @@ def update_inspection_record(
         
     body_data = payload or {}
 
-    # Nếu là DailyInspectionRecord
-    if isinstance(record, DailyInspectionRecord):
-        if "batch_no" in body_data or "po_code" in body_data:
-            record.batch_no = str(body_data.get("batch_no") or body_data.get("po_code") or "").strip()
-        if "stage" in body_data and body_data["stage"]:
-            record.stage_name = str(body_data["stage"]).strip()
-        if "status" in body_data and body_data["status"]:
-            record.status = str(body_data["status"]).strip()
-        if "required_qty" in body_data and body_data["required_qty"] is not None:
-            try:
-                record.total_products = int(body_data["required_qty"])
-            except (ValueError, TypeError):
-                pass
-        if "error_qty" in body_data and body_data["error_qty"] is not None:
-            try:
-                record.total_defects = int(body_data["error_qty"])
-            except (ValueError, TypeError):
-                pass
-        if "inspector_id" in body_data and body_data["inspector_id"]:
-            try:
-                record.inspector_id = int(body_data["inspector_id"])
-            except (ValueError, TypeError):
-                pass
-        if "recorded_date" in body_data or "inspection_date" in body_data:
-            date_raw = body_data.get("recorded_date") or body_data.get("inspection_date")
-            if date_raw:
-                try:
-                    date_clean = str(date_raw).replace('Z', '').split('+')[0]
-                    if 'T' in date_clean:
-                        parsed_dt = datetime.datetime.fromisoformat(date_clean)
-                    elif ' ' in date_clean:
-                        parsed_dt = datetime.datetime.strptime(date_clean, "%Y-%m-%d %H:%M:%S" if len(date_clean) > 16 else "%Y-%m-%d %H:%M")
-                    else:
-                        parsed_dt = datetime.datetime.strptime(date_clean, "%Y-%m-%d")
-                    record.inspection_date = parsed_dt.date()
-                except Exception as e:
-                    logger.warning(f"Could not parse daily inspection date: {date_raw}: {e}")
-        try:
-            db.commit()
-            db.refresh(record)
-            return {
-                "message": "Cập nhật phiếu kiểm tra hằng ngày thành công",
-                "type": type,
-                "id": id,
-                "batch_no": record.batch_no,
-                "po_code": record.batch_no,
-                "stage": record.stage_name,
-                "status": record.status,
-                "required_qty": record.total_products,
-                "error_qty": record.total_defects,
-                "inspection_date": str(record.inspection_date),
-                "recorded_date": str(record.inspection_date)
-            }
-        except Exception as e:
-            db.rollback()
-            raise HTTPException(status_code=500, detail=f"Lỗi khi cập nhật phiếu kiểm tra hằng ngày: {str(e)}")
-
-    # Trích xuất data_dict từ data_json hiện tại cho InputInspection
+    # Trích xuất data_dict từ data_json hiện tại
     data_dict = {}
-    if record.data_json:
+    if getattr(record, "data_json", None):
         try:
             data_dict = json.loads(record.data_json) if isinstance(record.data_json, str) else dict(record.data_json)
         except Exception:
@@ -5200,6 +5225,103 @@ def update_inspection_record(
             user_role=user_role,
             note=history_note
         )
+
+    # Nếu là DailyInspectionRecord
+    if isinstance(record, DailyInspectionRecord):
+        if "batch_no" in body_data or "po_code" in body_data:
+            b_val = str(body_data.get("batch_no") or body_data.get("po_code") or "").strip()
+            record.batch_no = b_val
+            data_dict["batch_no"] = b_val
+            data_dict["po_code"] = b_val
+        if "stage" in body_data and body_data["stage"]:
+            s_val = str(body_data["stage"]).strip()
+            record.stage_name = s_val
+            data_dict["stage"] = s_val
+            data_dict["stage_name"] = s_val
+        if "status" in body_data and body_data["status"]:
+            st_val = str(body_data["status"]).strip()
+            record.status = st_val
+            data_dict["status"] = st_val
+        if "required_qty" in body_data and body_data["required_qty"] is not None:
+            try:
+                rq_val = int(body_data["required_qty"])
+                record.total_products = rq_val
+                data_dict["required_qty"] = rq_val
+            except (ValueError, TypeError):
+                pass
+        if "error_qty" in body_data and body_data["error_qty"] is not None:
+            try:
+                eq_val = int(body_data["error_qty"])
+                record.total_defects = eq_val
+                data_dict["error_qty"] = eq_val
+            except (ValueError, TypeError):
+                pass
+        if "inspector_id" in body_data and body_data["inspector_id"]:
+            try:
+                record.inspector_id = int(body_data["inspector_id"])
+            except (ValueError, TypeError):
+                pass
+        if "inspector_name" in body_data and body_data["inspector_name"]:
+            new_insp_name = str(body_data["inspector_name"]).strip()
+            data_dict["inspector_name"] = new_insp_name
+            try:
+                from modules.auth.models.accounts import Account
+                acc_match = db.query(Account).filter(or_(Account.full_name == new_insp_name, Account.name == new_insp_name, Account.username == new_insp_name)).first()
+                if acc_match:
+                    record.inspector_id = acc_match.id
+            except Exception:
+                pass
+        if "recorded_date" in body_data or "inspection_date" in body_data:
+            date_raw = body_data.get("recorded_date") or body_data.get("inspection_date")
+            if date_raw:
+                try:
+                    date_clean = str(date_raw).replace('Z', '').split('+')[0]
+                    if 'T' in date_clean:
+                        parsed_dt = datetime.datetime.fromisoformat(date_clean)
+                    elif ' ' in date_clean:
+                        parsed_dt = datetime.datetime.strptime(date_clean, "%Y-%m-%d %H:%M:%S" if len(date_clean) > 16 else "%Y-%m-%d %H:%M")
+                    else:
+                        parsed_dt = datetime.datetime.strptime(date_clean, "%Y-%m-%d")
+                    record.inspection_date = parsed_dt.date()
+                    data_dict["recorded_date"] = parsed_dt.strftime("%Y-%m-%d %H:%M:%S")
+                    data_dict["inspection_date"] = parsed_dt.strftime("%Y-%m-%d %H:%M:%S")
+                except Exception as e:
+                    logger.warning(f"Could not parse daily inspection date: {date_raw}: {e}")
+        if "handling_info" in body_data:
+            data_dict["handling_info"] = str(body_data.get("handling_info") or "").strip()
+
+        record.data_json = json.dumps(data_dict, ensure_ascii=False)
+        try:
+            db.commit()
+            db.refresh(record)
+            insp_display = data_dict.get("inspector_name") or ""
+            if not insp_display and record.inspector_id:
+                try:
+                    from modules.auth.models.accounts import Account
+                    a = db.query(Account).filter(Account.id == record.inspector_id).first()
+                    if a:
+                        insp_display = a.full_name or a.name or a.username
+                except Exception:
+                    pass
+            return {
+                "message": "Cập nhật phiếu kiểm tra hằng ngày thành công",
+                "type": type,
+                "id": id,
+                "batch_no": record.batch_no,
+                "po_code": record.batch_no,
+                "stage": record.stage_name,
+                "status": record.status,
+                "required_qty": record.total_products,
+                "error_qty": record.total_defects,
+                "inspector_name": insp_display,
+                "inspection_date": str(record.inspection_date),
+                "recorded_date": str(record.inspection_date),
+                "handling_info": data_dict.get("handling_info") or "",
+                "edit_history": data_dict.get("edit_history") or []
+            }
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"Lỗi khi cập nhật phiếu kiểm tra hằng ngày: {str(e)}")
 
     # 1. Mã Lô / PO
     if "batch_no" in body_data or "po_code" in body_data or "po_no" in body_data:
@@ -5325,6 +5447,31 @@ def update_inspection_record(
         data_dict["gloss_value"] = str(body_data["gloss_value"]).strip()
     if "color_value" in body_data and body_data["color_value"] is not None:
         data_dict["color_value"] = str(body_data["color_value"]).strip()
+
+    # Cập nhật số lượng nếu có gửi lên từ Admin
+    if "required_qty" in body_data and body_data.get("required_qty") is not None:
+        try:
+            val = int(body_data.get("required_qty"))
+            record.required_qty = val
+            data_dict["required_qty"] = val
+        except (ValueError, TypeError):
+            pass
+
+    if "sample_qty" in body_data and body_data.get("sample_qty") is not None:
+        try:
+            val = int(body_data.get("sample_qty"))
+            record.sample_qty = val
+            data_dict["sample_qty"] = val
+        except (ValueError, TypeError):
+            pass
+
+    if "error_qty" in body_data and body_data.get("error_qty") is not None:
+        try:
+            val = int(body_data.get("error_qty"))
+            record.error_qty = val
+            data_dict["error_qty"] = val
+        except (ValueError, TypeError):
+            pass
         
     record.data_json = json.dumps(data_dict, ensure_ascii=False)
     
@@ -5350,6 +5497,9 @@ def update_inspection_record(
             "conclusion": record.conclusion,
             "status": data_dict.get("status"),
             "action": data_dict.get("action"),
+            "required_qty": record.required_qty,
+            "sample_qty": record.sample_qty,
+            "error_qty": record.error_qty,
             "handling_info": data_dict.get("handling_info"),
             "handling_images": data_dict.get("handling_images") or [],
             "edit_history": data_dict.get("edit_history") or [],

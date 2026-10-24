@@ -11,16 +11,18 @@ import json
 import glob
 import time
 import hashlib
+import hmac
+import threading
 import requests
-from datetime import datetime
-from typing import Dict, Any, List, Optional
+from datetime import datetime, date
+from typing import Dict, Any, List, Optional, Tuple
 
 from fastapi import APIRouter, Request, Header, Query, HTTPException, Depends, BackgroundTasks
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
 
-from app.core.database import get_db, SessionLocal
+from app.core.database import get_db
 from lpn_crawler.backend.config.settings import settings
 from lpn_crawler.backend.models.models import LpnContainer, LpnItem, LpnImage, LpnAiOcrResult
 from lpn_crawler.backend.services.storage import optimize_and_convert_to_webp, sanitize_folder_name
@@ -33,9 +35,6 @@ SAVE_TO_DATABASE = True
 # Đảm bảo thư mục lưu trữ file webhook tồn tại
 WEBHOOKS_DIR = getattr(settings, "STORAGE_WEBHOOKS_DIR", os.path.join(settings.MODULE_ROOT, "storage", "webhooks"))
 os.makedirs(WEBHOOKS_DIR, exist_ok=True)
-
-
-import hmac
 
 
 def verify_webhook_token(
@@ -52,8 +51,6 @@ def verify_webhook_token(
         )
     return True
 
-
-from fastapi.responses import JSONResponse, HTMLResponse
 
 _LOGO_CACHE: Optional[str] = None
 
@@ -1064,7 +1061,7 @@ def webhook_health_check(request: Request):
 
             items.forEach((item, idx) => {{
                 const pic = item.picture;
-                const picSrc = (pic && !pic.startsWith('http')) ? ('/api/v1/lpn-crawler/images/view?path=' + encodeURIComponent(pic.replace(/^[\/\\]+/, ''))) : pic;
+                const picSrc = (pic && !pic.startsWith('http')) ? ('/api/v1/lpn-crawler/images/view?path=' + encodeURIComponent(pic.replace(/^[/\\]+/, ''))) : pic;
                 const picHtml = picSrc 
                     ? `<a href="${{picSrc}}" target="_blank" title="Xem ảnh gốc AppSheet" class="thumb-link"><img src="${{picSrc}}" class="thumb-img" alt="Cont" /></a>`
                     : `<div class="thumb-empty">🚚</div>`;
@@ -1309,40 +1306,42 @@ def _download_and_save_webp(
     source_url: str,
     container_number: str,
     suffix_key: str,
-    sort_order: int = 1
+    sort_order: int = 1,
+    max_retries: int = 2
 ) -> Optional[Dict[str, Any]]:
     """
     Tải ảnh trực tiếp từ URL AppSheet ở độ phân giải gốc cao nhất (loại bỏ &width=600),
     nén sang WebP Full HD, xoay chuẩn EXIF và lưu tệp.
+    Có cơ chế tự động thử lại (retry) khi gặp lỗi mạng.
     """
     if not source_url or not str(source_url).startswith("http"):
         return None
+
+    effective_url = re.sub(r'([?&])width=\d+(&?)', r'\1\2', str(source_url)).rstrip('?&').replace('?&', '?')
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Referer": "https://www.appsheet.com/"
+    }
+
+    resp = None
+    for attempt in range(max_retries + 1):
+        try:
+            resp = requests.get(effective_url, timeout=25, headers=headers)
+            if resp.status_code in (200, 201, 304) and len(resp.content) >= 500:
+                break
+            # Fallback về link gốc có thể còn chữ ký CDN
+            resp = requests.get(source_url, timeout=25, headers=headers)
+            if resp.status_code in (200, 201, 304) and len(resp.content) >= 100:
+                break
+        except Exception as e:
+            if attempt == max_retries:
+                print(f"[Webhook Download Error] Lan thu {attempt+1} that bai: {e} cho URL {source_url[:60]}")
+            time.sleep(1.0)
+
+    if not resp or resp.status_code not in (200, 201, 304) or len(resp.content) < 100:
+        return None
+
     try:
-        # Bỏ tham số &width=600 của AppSheet để lấy ảnh gốc Full HD rõ nét
-        effective_url = re.sub(r'([?&])width=\d+(&?)', r'\1\2', str(source_url)).rstrip('?&').replace('?&', '?')
-
-        resp = requests.get(
-            effective_url,
-            timeout=25,
-            headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-                "Referer": "https://www.appsheet.com/"
-            }
-        )
-        if resp.status_code not in (200, 201, 304) or len(resp.content) < 500:
-            # Fallback về source_url gốc nếu link gỡ width bị lỗi
-            resp = requests.get(
-                source_url,
-                timeout=25,
-                headers={
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-                    "Referer": "https://www.appsheet.com/"
-                }
-            )
-            if resp.status_code not in (200, 201, 304) or len(resp.content) < 100:
-                return None
-
-        # Nén sang WebP Full HD siêu nhẹ (giảm ~90% dung lượng, chuẩn EXIF)
         final_bytes, file_mime, file_ext, img_hash = optimize_and_convert_to_webp(resp.content)
         file_size = len(final_bytes)
 
@@ -1373,140 +1372,405 @@ def _download_and_save_webp(
         return None
 
 
+_CONTAINER_OCR_LOCKS: Dict[int, threading.Lock] = {}
+_OCR_LOCKS_MUTEX = threading.Lock()
+
+
+def _get_container_lock(container_id: int) -> threading.Lock:
+    with _OCR_LOCKS_MUTEX:
+        if container_id not in _CONTAINER_OCR_LOCKS:
+            _CONTAINER_OCR_LOCKS[container_id] = threading.Lock()
+        return _CONTAINER_OCR_LOCKS[container_id]
+
+
+def _scan_zxing_multirot(cv_img, expected_lpn: Optional[str] = None) -> Tuple[List[str], Optional[str]]:
+    """Quét mã vạch tăng cường qua ZXing C++ với 4 góc xoay 0°, 90°, 180°, 270°."""
+    barcodes = []
+    detected_lpn = None
+    if cv_img is None:
+        return barcodes, detected_lpn
+    try:
+        import cv2
+        import zxingcpp
+        for angle in [0, 90, 180, 270]:
+            if angle == 0:
+                t_img = cv_img
+            elif angle == 90:
+                t_img = cv2.rotate(cv_img, cv2.ROTATE_90_CLOCKWISE)
+            elif angle == 180:
+                t_img = cv2.rotate(cv_img, cv2.ROTATE_180)
+            elif angle == 270:
+                t_img = cv2.rotate(cv_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
+
+            found = zxingcpp.read_barcodes(t_img)
+            for b in found:
+                b_text = str(b.text).strip()
+                if b_text and b_text not in barcodes:
+                    barcodes.append(b_text)
+                if expected_lpn and (b_text == str(expected_lpn).strip() or str(expected_lpn).strip() in b_text):
+                    detected_lpn = b_text
+            if detected_lpn:
+                break
+    except Exception:
+        pass
+    return barcodes, detected_lpn
+
+
 def _run_background_ocr_tasks(
     ocr_tasks: List[Dict[str, Any]],
     container_id: Optional[int] = None,
     target_phone: Optional[str] = None
 ):
     """
-    Tiến trình chạy ngầm quét AI OCR qua tất cả các ảnh vừa tải về.
-    Sau khi quét xong toàn bộ ảnh, tự động gửi báo cáo kết quả qua Zalo tới số điện thoại yêu cầu.
+    Quy trình Quét AI OCR 2 Vòng & Gửi Báo Cáo Zalo Nghiệm Thu (Two-Pass Verified Dispatch):
+    - VÒNG 1: Quét toàn bộ danh sách kiện/ảnh nhận được từ Webhook.
+    - RÀ SOÁT GIỮA 2 VÒNG (Audit Gate): Phát hiện các kiện thiếu ảnh, ảnh lỗi 0 byte,
+      OCR bị crash/skip hoặc chưa khớp LPN.
+    - VÒNG 2: Tự động tải lại ảnh nếu thiếu, quét lại tăng cường (đa hướng 90°/180°/270°,
+      ZXing Barcode, cân bằng tương phản).
+    - HOÀN TẤT: Chỉ gửi tin nhắn Zalo 1 lần duy nhất khi toàn bộ các kiện đã được nghiệm thu xong.
+    - Khóa Mutex chống gửi trùng lặp hoặc gửi sớm khi chưa có kiện.
     """
-    if not ocr_tasks:
+    if not container_id:
         return
 
-    from app.core.database import SessionLocal
-    from lpn_crawler.ai_ocr_train.core.pipeline import get_default_pipeline
+    cont_lock = _get_container_lock(container_id)
+    if not cont_lock.acquire(blocking=False):
+        print(f"[AI OCR Webhook] Container ID {container_id} dang co tien trinh quet hoat dong. Bo qua tien trinh trung lap.")
+        return
 
-    db = SessionLocal()
     try:
-        pipeline = get_default_pipeline()
-        for task in ocr_tasks:
-            try:
-                t0 = time.time()
-                abs_p = task["abs_path"]
-                if not os.path.isfile(abs_p):
+        from app.core.database import SessionLocal
+        from lpn_crawler.ai_ocr_train.core.pipeline import get_default_pipeline
+        import cv2
+
+        db = SessionLocal()
+        try:
+            cont = db.query(LpnContainer).filter(LpnContainer.id == container_id).first()
+            if not cont:
+                print(f"[AI OCR Webhook] Khong tim thay Container ID {container_id} trong CSDL.")
+                return
+
+            all_db_items = db.query(LpnItem).filter(LpnItem.container_id == container_id).order_by(LpnItem.item_index).all()
+            if not all_db_items:
+                print(f"[AI OCR Webhook] Container {cont.container_number} chua co kien hang nao (items=0). Bo qua quet & KHONG gui Zalo.")
+                return
+
+            print("[AI OCR Webhook] ========================================================")
+            print(f"[AI OCR Webhook] Bat dau tien trinh quet AI OCR Container: {cont.container_number} (Tong: {len(all_db_items)} kien)")
+            print("[AI OCR Webhook] ========================================================")
+
+            pipeline = get_default_pipeline()
+
+            # ---------------------------------------------------------
+            # VÒNG 1: QUÉT SƠ BỘ TOÀN BỘ ẢNH (Primary Pass)
+            # ---------------------------------------------------------
+            if ocr_tasks:
+                print(f"[AI OCR Vong 1] Dang quet {len(ocr_tasks)} anh moi...")
+                for task in ocr_tasks:
+                    try:
+                        t0 = time.time()
+                        abs_p = task.get("abs_path")
+
+                        # Kiểm tra file trên ổ đĩa
+                        if not abs_p or not os.path.isfile(abs_p) or os.path.getsize(abs_p) < 100:
+                            if task.get("source_url"):
+                                img_dl = _download_and_save_webp(
+                                    source_url=task["source_url"],
+                                    container_number=task["container_number"],
+                                    suffix_key=task["suffix_key"],
+                                    sort_order=1
+                                )
+                                if img_dl:
+                                    abs_p = img_dl["abs_path"]
+                                    task["abs_path"] = abs_p
+
+                        if not abs_p or not os.path.isfile(abs_p):
+                            continue
+
+                        expected_lpn = task.get("expected_lpn")
+                        expected_skus = task.get("expected_skus")
+
+                        res = pipeline.process(
+                            image_input=abs_p,
+                            expected_lpn=expected_lpn,
+                            expected_skus=expected_skus
+                        )
+                        dur_ms = round((time.time() - t0) * 1000, 2)
+
+                        detected_lpn = res.get("lpn")
+                        detected_sku = res.get("sku")
+                        barcodes = res.get("barcodes") or []
+                        conf = float(res.get("confidence") or 0.0)
+
+                        # ZXing tăng cường trên ảnh gốc
+                        cv_img = cv2.imread(abs_p)
+                        zx_barcodes, zx_lpn = _scan_zxing_multirot(cv_img, expected_lpn)
+                        for zb in zx_barcodes:
+                            if zb not in barcodes:
+                                barcodes.append(zb)
+                        if zx_lpn:
+                            detected_lpn = zx_lpn
+                            conf = max(conf, 0.99)
+
+                        # So sánh LPN
+                        is_lpn_match = False
+                        if expected_lpn and detected_lpn:
+                            exp_clean = re.sub(r'[^A-Za-z0-9]', '', str(expected_lpn)).upper()
+                            det_clean = re.sub(r'[^A-Za-z0-9]', '', str(detected_lpn)).upper()
+                            if exp_clean == det_clean or exp_clean in det_clean or det_clean in exp_clean:
+                                is_lpn_match = True
+
+                        # So sánh SKU
+                        is_sku_match = False
+                        if expected_skus and detected_sku:
+                            for exp_s in expected_skus:
+                                if exp_s and exp_s.strip().upper() in str(detected_sku).strip().upper():
+                                    is_sku_match = True
+                                    break
+
+                        # Upsert LpnAiOcrResult
+                        ocr_row = db.query(LpnAiOcrResult).filter(
+                            LpnAiOcrResult.item_id == task["item_id"],
+                            LpnAiOcrResult.image_id == task["image_id"]
+                        ).first()
+
+                        if not ocr_row:
+                            ocr_row = LpnAiOcrResult(
+                                item_id=task["item_id"],
+                                image_id=task["image_id"],
+                                container_number=task["container_number"],
+                                suffix_key=task["suffix_key"],
+                                model_id="AiOcrPipeline",
+                                detected_lpn=detected_lpn,
+                                detected_sku=detected_sku,
+                                detected_barcodes=json.dumps(barcodes, ensure_ascii=False) if barcodes else None,
+                                confidence=conf,
+                                is_lpn_match=is_lpn_match,
+                                is_sku_match=is_sku_match,
+                                status="success" if (is_lpn_match or res.get("success", True)) else "failed",
+                                processing_time_ms=dur_ms,
+                                scanned_at=datetime.utcnow()
+                            )
+                            db.add(ocr_row)
+                        else:
+                            ocr_row.detected_lpn = detected_lpn
+                            ocr_row.detected_sku = detected_sku
+                            ocr_row.detected_barcodes = json.dumps(barcodes, ensure_ascii=False) if barcodes else None
+                            ocr_row.confidence = conf
+                            ocr_row.is_lpn_match = is_lpn_match
+                            ocr_row.is_sku_match = is_sku_match
+                            ocr_row.status = "success" if (is_lpn_match or res.get("success", True)) else "failed"
+                            ocr_row.processing_time_ms = dur_ms
+                            ocr_row.scanned_at = datetime.utcnow()
+
+                        if is_lpn_match:
+                            db_item = db.query(LpnItem).filter(LpnItem.id == task["item_id"]).first()
+                            if db_item:
+                                db_item.resolution_status = "resolved"
+                                db_item.resolution_note = f"Khớp AI OCR Vòng 1 ({detected_lpn})"
+                                db_item.resolved_at = datetime.utcnow()
+                                db_item.resolved_by = "AI_WEBHOOK_P1"
+
+                        db.commit()
+                        try:
+                            print(f"[AI OCR Vong 1] {task['suffix_key']}: LPN={detected_lpn} | Match={is_lpn_match} ({dur_ms}ms)")
+                        except Exception:
+                            pass
+                    except Exception as item_err:
+                        db.rollback()
+                        try:
+                            print(f"[AI OCR Vong 1 Loi] {task.get('suffix_key')}: {item_err}")
+                        except Exception:
+                            pass
+
+            # ---------------------------------------------------------
+            # RÀ SOÁT SAU VÒNG 1 (Audit Gate): Tìm các kiện cần quét lại lần 2
+            # ---------------------------------------------------------
+            retry_candidates = []
+            for item in all_db_items:
+                if item.resolution_status == "resolved":
                     continue
 
-                expected_lpn = task.get("expected_lpn")
-                expected_skus = task.get("expected_skus")
+                imgs = db.query(LpnImage).filter(LpnImage.lpn_item_id == item.id).all()
+                ocrs = db.query(LpnAiOcrResult).filter(LpnAiOcrResult.item_id == item.id).all()
 
-                # Quét AI OCR qua pipeline (YOLO detect + Barcode + OCR)
-                res = pipeline.process(
-                    image_input=abs_p,
-                    expected_lpn=expected_lpn,
-                    expected_skus=expected_skus
-                )
-                dur_ms = round((time.time() - t0) * 1000, 2)
+                needs_retry = False
+                latest_ocr = ocrs[-1] if ocrs else None
 
-                detected_lpn = res.get("lpn")
-                detected_sku = res.get("sku")
-                barcodes = res.get("barcodes") or []
-                conf = float(res.get("confidence") or 0.0)
+                # 1. Chưa có kết quả OCR
+                if not latest_ocr:
+                    needs_retry = True
+                # 2. OCR bị lỗi (status != success)
+                elif latest_ocr.status != "success":
+                    needs_retry = True
+                # 3. OCR chưa đọc được hoặc chưa khớp LPN
+                elif not latest_ocr.is_lpn_match:
+                    needs_retry = True
 
-                # 1. Quét tăng cường Barcode trực tiếp qua ZXing C++ trên ảnh Full HD
-                try:
-                    import zxingcpp, cv2
-                    cv_img = cv2.imread(abs_p)
-                    if cv_img is not None:
-                        for b in zxingcpp.read_barcodes(cv_img):
-                            b_text = str(b.text).strip()
-                            if b_text and b_text not in barcodes:
-                                barcodes.append(b_text)
-                            if expected_lpn and (b_text == str(expected_lpn).strip() or str(expected_lpn).strip() in b_text):
-                                detected_lpn = b_text
-                                conf = max(conf, 0.99)
-                except Exception:
-                    pass
-
-                # So sánh khớp LPN
-                is_lpn_match = False
-                if expected_lpn and detected_lpn:
-                    exp_clean = re.sub(r'[^A-Za-z0-9]', '', str(expected_lpn)).upper()
-                    det_clean = re.sub(r'[^A-Za-z0-9]', '', str(detected_lpn)).upper()
-                    if exp_clean == det_clean or exp_clean in det_clean or det_clean in exp_clean:
-                        is_lpn_match = True
-
-                # So sánh khớp SKU
-                is_sku_match = False
-                if expected_skus and detected_sku:
-                    for exp_s in expected_skus:
-                        if exp_s and exp_s.strip().upper() in str(detected_sku).strip().upper():
-                            is_sku_match = True
+                # 4. Ảnh bị thiếu hoặc 0 bytes
+                has_valid_img = False
+                for img in imgs:
+                    if img.local_path:
+                        abs_f = os.path.join(settings.PROJECT_ROOT, img.local_path)
+                        if os.path.isfile(abs_f) and os.path.getsize(abs_f) >= 100:
+                            has_valid_img = True
                             break
+                if not has_valid_img:
+                    needs_retry = True
 
-                # Upsert vào lpn_ai_ocr_results
-                ocr_row = db.query(LpnAiOcrResult).filter(
-                    LpnAiOcrResult.item_id == task["item_id"],
-                    LpnAiOcrResult.image_id == task["image_id"]
-                ).first()
-                if not ocr_row:
-                    ocr_row = LpnAiOcrResult(
-                        item_id=task["item_id"],
-                        image_id=task["image_id"],
-                        container_number=task["container_number"],
-                        suffix_key=task["suffix_key"],
-                        model_id="AiOcrPipeline",
-                        detected_lpn=detected_lpn,
-                        detected_sku=detected_sku,
-                        detected_barcodes=json.dumps(barcodes, ensure_ascii=False) if barcodes else None,
-                        confidence=conf,
-                        is_lpn_match=is_lpn_match,
-                        is_sku_match=is_sku_match,
-                        status="success" if (is_lpn_match or res.get("success", True)) else "failed",
-                        processing_time_ms=dur_ms,
-                        scanned_at=datetime.utcnow()
-                    )
-                    db.add(ocr_row)
-                else:
-                    ocr_row.detected_lpn = detected_lpn
-                    ocr_row.detected_sku = detected_sku
-                    ocr_row.detected_barcodes = json.dumps(barcodes, ensure_ascii=False) if barcodes else None
-                    ocr_row.confidence = conf
-                    ocr_row.is_lpn_match = is_lpn_match
-                    ocr_row.is_sku_match = is_sku_match
-                    ocr_row.status = "success" if (is_lpn_match or res.get("success", True)) else "failed"
-                    ocr_row.processing_time_ms = dur_ms
-                    ocr_row.scanned_at = datetime.utcnow()
+                if needs_retry:
+                    retry_candidates.append({
+                        "item": item,
+                        "images": imgs,
+                        "latest_ocr": latest_ocr
+                    })
 
-                # Nếu khớp LPN -> Cập nhật trạng thái resolved cho LpnItem
-                if is_lpn_match:
-                    db_item = db.query(LpnItem).filter(LpnItem.id == task["item_id"]).first()
-                    if db_item:
-                        db_item.resolution_status = "resolved"
-                        db_item.resolution_note = f"Khớp AI OCR tự động ({detected_lpn})"
-                        db_item.resolved_at = datetime.utcnow()
-                        db_item.resolved_by = "AI_WEBHOOK"
+            # ---------------------------------------------------------
+            # VÒNG 2: QUÉT LẠI LẦN NỮA NẾU CÓ ẢNH LỖI HOẶC THIẾU (Secondary Pass)
+            # ---------------------------------------------------------
+            if retry_candidates:
+                print(f"[AI OCR Vong 2] >>> Phat hien {len(retry_candidates)} kien can quet lai lan 2 cho Container {cont.container_number}...")
+                for candidate in retry_candidates:
+                    try:
+                        item = candidate["item"]
+                        imgs = candidate["images"]
+                        latest_ocr = candidate["latest_ocr"]
+                        t0 = time.time()
 
-                db.commit()
-                try:
-                    print(f"[AI OCR Webhook] Scanned {task['suffix_key']} ({task['container_number']}): LPN={detected_lpn} | Match={is_lpn_match} ({dur_ms}ms)")
-                except Exception:
-                    pass
-            except Exception as item_err:
-                db.rollback()
-                try:
-                    print(f"[AI OCR Webhook Error] {task.get('suffix_key')}: {str(item_err).encode('ascii', errors='replace').decode('ascii')}")
-                except Exception:
-                    pass
-    finally:
-        db.close()
+                        # 1. Đảm bảo có ảnh hợp lệ trên đĩa (thử tải lại nếu thiếu/hỏng)
+                        target_img_obj = imgs[0] if imgs else None
+                        abs_p = None
+                        if target_img_obj and target_img_obj.local_path:
+                            chk_p = os.path.join(settings.PROJECT_ROOT, target_img_obj.local_path)
+                            if os.path.isfile(chk_p) and os.path.getsize(chk_p) >= 100:
+                                abs_p = chk_p
 
-    # TỰ ĐỘNG GỬI BÁO CÁO KẾT QUẢ QUÉT QUA ZALO
-    if container_id:
+                        if (not abs_p) and target_img_obj and target_img_obj.source_url:
+                            print(f"[AI OCR Vong 2] Dang tai lai anh cho {item.suffix_key}...")
+                            dl_retry = _download_and_save_webp(
+                                source_url=target_img_obj.source_url,
+                                container_number=cont.container_number,
+                                suffix_key=item.suffix_key,
+                                sort_order=1,
+                                max_retries=2
+                            )
+                            if dl_retry:
+                                abs_p = dl_retry["abs_path"]
+                                target_img_obj.local_path = dl_retry["rel_path"]
+                                target_img_obj.file_size = dl_retry["file_size"]
+                                target_img_obj.image_hash = dl_retry["image_hash"]
+                                db.commit()
+
+                        if not abs_p or not os.path.isfile(abs_p):
+                            print(f"[AI OCR Vong 2] Khong the tai anh cho {item.suffix_key}. Bo qua quet lai.")
+                            continue
+
+                        # 2. Đọc ảnh và thử giải mã tăng cường Barcode qua ZXing ở 4 góc xoay
+                        cv_img = cv2.imread(abs_p)
+                        zx_barcodes, zx_lpn = _scan_zxing_multirot(cv_img, expected_lpn=item.lpn)
+
+                        # 3. Quét qua pipeline với chế độ tăng cường (auto_rotate=True, apply_super_res=True)
+                        exp_skus = [item.sku] if item.sku else []
+                        res = pipeline.process(
+                            image_input=abs_p,
+                            auto_crop=True,
+                            auto_rotate=True,
+                            apply_super_res=True,
+                            expected_lpn=item.lpn,
+                            expected_skus=exp_skus,
+                            package_position=item.suffix_key
+                        )
+
+                        detected_lpn = zx_lpn or res.get("lpn")
+                        detected_sku = res.get("sku")
+                        barcodes = res.get("barcodes") or []
+                        for zb in zx_barcodes:
+                            if zb not in barcodes:
+                                barcodes.append(zb)
+
+                        conf = float(res.get("confidence") or 0.0)
+                        if zx_lpn:
+                            conf = max(conf, 0.99)
+
+                        # So sánh LPN lần 2
+                        is_lpn_match = False
+                        if item.lpn and detected_lpn:
+                            exp_clean = re.sub(r'[^A-Za-z0-9]', '', str(item.lpn)).upper()
+                            det_clean = re.sub(r'[^A-Za-z0-9]', '', str(detected_lpn)).upper()
+                            if exp_clean == det_clean or exp_clean in det_clean or det_clean in exp_clean:
+                                is_lpn_match = True
+
+                        # So sánh SKU lần 2
+                        is_sku_match = False
+                        if exp_skus and detected_sku:
+                            for exp_s in exp_skus:
+                                if exp_s and exp_s.strip().upper() in str(detected_sku).strip().upper():
+                                    is_sku_match = True
+                                    break
+
+                        dur_ms = round((time.time() - t0) * 1000, 2)
+
+                        # Cập nhật kết quả OCR Vòng 2 vào CSDL
+                        target_img_id = target_img_obj.id if target_img_obj else None
+                        ocr_row = db.query(LpnAiOcrResult).filter(
+                            LpnAiOcrResult.item_id == item.id
+                        ).first()
+
+                        if not ocr_row:
+                            ocr_row = LpnAiOcrResult(
+                                item_id=item.id,
+                                image_id=target_img_id,
+                                container_number=cont.container_number,
+                                suffix_key=item.suffix_key,
+                                model_id="AiOcrPipeline_Pass2",
+                                detected_lpn=detected_lpn,
+                                detected_sku=detected_sku,
+                                detected_barcodes=json.dumps(barcodes, ensure_ascii=False) if barcodes else None,
+                                confidence=conf,
+                                is_lpn_match=is_lpn_match,
+                                is_sku_match=is_sku_match,
+                                status="success" if (is_lpn_match or res.get("success", True)) else "failed",
+                                processing_time_ms=dur_ms,
+                                scanned_at=datetime.utcnow()
+                            )
+                            db.add(ocr_row)
+                        else:
+                            ocr_row.detected_lpn = detected_lpn
+                            ocr_row.detected_sku = detected_sku
+                            ocr_row.detected_barcodes = json.dumps(barcodes, ensure_ascii=False) if barcodes else None
+                            ocr_row.confidence = conf
+                            ocr_row.is_lpn_match = is_lpn_match
+                            ocr_row.is_sku_match = is_sku_match
+                            ocr_row.status = "success" if (is_lpn_match or res.get("success", True)) else "failed"
+                            ocr_row.processing_time_ms = dur_ms
+                            ocr_row.scanned_at = datetime.utcnow()
+
+                        if is_lpn_match:
+                            item.resolution_status = "resolved"
+                            item.resolution_note = f"Khớp AI OCR Vòng 2 ({detected_lpn})"
+                            item.resolved_at = datetime.utcnow()
+                            item.resolved_by = "AI_WEBHOOK_P2"
+
+                        db.commit()
+                        print(f"[AI OCR Vong 2] {item.suffix_key}: LPN={detected_lpn} | Match={is_lpn_match} ({dur_ms}ms)")
+                    except Exception as p2_err:
+                        db.rollback()
+                        print(f"[AI OCR Vong 2 Loi] {candidate['item'].suffix_key}: {p2_err}")
+
+                print(f"[AI OCR Vong 2] <<< Hoan tat quet lai lan 2 cho Container {cont.container_number}.")
+            else:
+                print("[AI OCR Webhook] 100% kien deu da dat sau Vong 1. Khong can quet lai Vong 2.")
+
+        finally:
+            db.close()
+
+        # -------------------------------------------------------------
+        # HOÀN TẤT TOÀN BỘ: TỰ ĐỘNG GỬI BÁO CÁO ZALO CHÍNH THỨC
+        # -------------------------------------------------------------
         try:
             from lpn_crawler.backend.services.zalo_bot_service import ZaloBotService
-            print(f"[Zalo Bot] Tu dong gui bao cao ket qua quet Container ID {container_id} toi SDT: {target_phone}...")
+            print(f"[Zalo Bot] Tat ca kien da hoan tat (Vong 1 + Vong 2). Dang gui bao cao Zalo cho Container ID {container_id} toi SDT: {target_phone}...")
             z_res = ZaloBotService.send_container_report(
                 container_id=container_id,
                 target_phone=target_phone,
@@ -1514,7 +1778,10 @@ def _run_background_ocr_tasks(
             )
             print(f"[Zalo Bot] Ket qua gui Zalo: {z_res.get('message')}")
         except Exception as ze:
-            print(f"[Zalo Bot Error] Loi gui bao cao Zalo: {ze}")
+            print(f"[Zalo Bot Error] Loi gui bao cao Zalo sau khi quet xong: {ze}")
+
+    finally:
+        cont_lock.release()
 
 
 def _compute_content_hash(data: Any) -> str:
@@ -1559,7 +1826,7 @@ async def receive_appsheet_webhook(
     # 1. Đọc Raw Body và JSON payload
     try:
         payload = await request.json()
-    except Exception as e:
+    except Exception:
         raw_body = (await request.body()).decode("utf-8", errors="replace")
         err_filename = f"webhook_error_{timestamp_str}.txt"
         err_path = os.path.join(WEBHOOKS_DIR, err_filename)
@@ -1995,13 +2262,12 @@ async def receive_appsheet_webhook(
             # 5.4. Lên lịch chạy ngầm AI OCR qua BackgroundTasks
             if ocr_tasks:
                 background_tasks.add_task(_run_background_ocr_tasks, ocr_tasks, container_id=db_cont.id, target_phone=operator_phone)
+            elif items_count > 0:
+                # Nếu tất cả ảnh đều đã cache không cần quét lại mới -> Vẫn chạy qua Audit Gate để kiểm tra và gửi báo cáo Zalo
+                background_tasks.add_task(_run_background_ocr_tasks, [], container_id=db_cont.id, target_phone=operator_phone)
             else:
-                # Nếu tất cả ảnh đều đã cache không cần quét lại -> Vẫn gửi thông báo Zalo
-                try:
-                    from lpn_crawler.backend.services.zalo_bot_service import ZaloBotService
-                    background_tasks.add_task(ZaloBotService.send_container_report, db_cont.id, operator_phone)
-                except Exception:
-                    pass
+                # items_count == 0 (Container rỗng vừa tạo, chưa có chi tiết kiện) -> Tuyệt đối KHÔNG gửi Zalo
+                print(f"[Webhook AppSheet] Container {c_num} ({c_clean}): items_count = 0. Bo qua gui Zalo, cho goi tin co chi tiet kien.")
 
         except Exception as db_err:
             db.rollback()

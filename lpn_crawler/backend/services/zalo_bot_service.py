@@ -16,7 +16,7 @@ import re
 import json
 import logging
 from datetime import datetime
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger("zalo_bot_service")
 
@@ -24,8 +24,11 @@ logger = logging.getLogger("zalo_bot_service")
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, "..", "..", ".."))
 ZALO_DIR = os.path.join(PROJECT_ROOT, "Zalo")
-if ZALO_DIR not in sys.path:
-    sys.path.insert(0, ZALO_DIR)
+BACKEND_DIR = os.path.join(PROJECT_ROOT, "BackEnd")
+
+for p in [ZALO_DIR, BACKEND_DIR, PROJECT_ROOT]:
+    if p not in sys.path:
+        sys.path.insert(0, p)
 
 try:
     from zlapi import ZaloAPI
@@ -33,21 +36,30 @@ try:
     ZLAPI_AVAILABLE = True
 except Exception as e:
     logger.warning(f"Chua the import zlapi: {e}")
-    ZALO_AVAILABLE = False
-    ZaloAPI = None
-    Message = None
-    ThreadType = None
+    ZLAPI_AVAILABLE = False
 
-from app.core.database import SessionLocal
-from lpn_crawler.backend.models.models import (
+    class _ThreadTypeStub:
+        USER = 0
+        GROUP = 1
+
+    ThreadType = _ThreadTypeStub  # type: ignore
+
+    class _MessageStub:
+        def __init__(self, text: Optional[str] = None, **kwargs):
+            self.text = text
+
+    Message = _MessageStub  # type: ignore
+    ZaloAPI = object  # type: ignore
+
+from app.core.database import SessionLocal  # noqa: E402
+from lpn_crawler.backend.models.models import (  # noqa: E402
     LpnContainer,
     LpnItem,
-    LpnImage,
     LpnAiOcrResult,
     LpnZaloConfig,
     LpnZaloLog
 )
-from lpn_crawler.backend.config.settings import settings
+from lpn_crawler.backend.config.settings import settings  # noqa: E402
 
 # Bộ nhớ tạm (In-Memory Cache) ánh xạ SĐT -> Zalo UID để tránh gọi API Zalo liên tục
 _PHONE_UID_CACHE: Dict[str, Dict[str, Any]] = {}
@@ -164,7 +176,8 @@ class ZaloBotService:
 
         try:
             info = client.fetchAccountInfo()
-            bot_name = getattr(info, "displayName", None) or getattr(info, "name", None) or cfg.bot_name
+            profile = getattr(info, "profile", info)
+            bot_name = getattr(profile, "displayName", None) or getattr(profile, "name", None) or cfg.bot_name
             cfg.is_connected = True
             cfg.last_connected_at = now
             cfg.last_checked_at = now
@@ -177,8 +190,8 @@ class ZaloBotService:
                 "message": f"Kết nối Zalo Bot thành công! Tài khoản: {bot_name}",
                 "bot_name": bot_name,
                 "bot_phone": cfg.bot_phone,
-                "user_id": getattr(info, "userId", None) or getattr(info, "uid", None),
-                "avatar": getattr(info, "avatar", None)
+                "user_id": getattr(profile, "userId", None) or getattr(profile, "uid", None) or getattr(client, "uid", None),
+                "avatar": getattr(profile, "avatar", None)
             }
         except Exception as e:
             err_msg = str(e)
@@ -210,7 +223,7 @@ class ZaloBotService:
             user_info = client.fetchPhoneNumber(clean_phone)
             if not user_info:
                 return None
-            
+
             uid = getattr(user_info, "userId", None) or getattr(user_info, "uid", None) or getattr(user_info, "id", None)
             if uid:
                 d_name = getattr(user_info, "displayName", None) or getattr(user_info, "zaloName", None) or clean_phone
@@ -230,7 +243,7 @@ class ZaloBotService:
         """Gửi tin nhắn văn bản tới một userId Zalo"""
         try:
             msg = Message(text=text)
-            res = client.send(msg, thread_id=user_id, thread_type=ThreadType.USER)
+            client.send(msg, thread_id=user_id, thread_type=ThreadType.USER)
             return True
         except Exception as e:
             logger.error(f"Loi khi gui tin nhan Zalo toi UID {user_id}: {e}")
@@ -268,26 +281,57 @@ class ZaloBotService:
         matched_items = 0
         unmatched_list = []
 
-        # Map item_id -> ocr_result
-        ocr_map = {r.item_id: r for r in ocr_results}
+        # Gom nhóm kết quả OCR theo item_id
+        ocr_by_item: Dict[int, List[LpnAiOcrResult]] = {}
+        for r in ocr_results:
+            ocr_by_item.setdefault(r.item_id, []).append(r)
 
         for item in items:
-            ocr = ocr_map.get(item.id)
+            item_ocrs = ocr_by_item.get(item.id, [])
             is_match = False
-            if ocr and (ocr.is_lpn_match or ocr.status == "success"):
+
+            # 1. Nếu kiện đã được người dùng xác nhận Đạt thủ công (resolved)
+            if item.resolution_status == "resolved":
                 is_match = True
-            elif item.resolution_status == "resolved":
-                is_match = True
+            else:
+                # 2. Tiêu chuẩn NGHIỆM THU: Khớp LPN và Khớp SKU (nếu có yêu cầu SKU)
+                exp_sku = str(item.sku or "").strip()
+                has_sku_req = exp_sku.lower() not in ["", "none", "0", "—", "null"]
+
+                for ocr in item_ocrs:
+                    if ocr.status == "success":
+                        lpn_ok = bool(ocr.is_lpn_match)
+                        sku_ok = bool(ocr.is_sku_match) if has_sku_req else True
+                        if lpn_ok and sku_ok:
+                            is_match = True
+                            break
 
             if is_match:
                 matched_items += 1
             else:
-                det_lpn = ocr.detected_lpn if ocr else item.lpn
-                reason = "Không quét được mã LPN/Barcode"
-                if det_lpn and item.lpn and det_lpn != item.lpn:
-                    reason = f"Lệch LPN (Dự kiến: {item.lpn} | Quét: {det_lpn})"
-                elif ocr and not ocr.is_sku_match and item.sku:
-                    reason = f"Lệch SKU (Dự kiến: {item.sku} | Quét: {ocr.detected_sku or 'N/A'})"
+                latest_ocr = item_ocrs[-1] if item_ocrs else None
+                det_lpn = latest_ocr.detected_lpn if latest_ocr else None
+                det_sku = latest_ocr.detected_sku if latest_ocr else None
+                exp_sku = str(item.sku or "").strip()
+                has_sku_req = exp_sku.lower() not in ["", "none", "0", "—", "null"]
+
+                if not latest_ocr:
+                    reason = "Chưa có ảnh hoặc chưa quét AI OCR"
+                elif latest_ocr.status != "success":
+                    reason = f"Lỗi quét ảnh OCR ({latest_ocr.error_reason or 'Không đọc được'})"
+                elif not latest_ocr.is_lpn_match:
+                    if det_lpn and item.lpn and str(det_lpn).strip() != str(item.lpn).strip():
+                        reason = f"Lệch LPN (Dự kiến: {item.lpn} | Quét: {det_lpn})"
+                    else:
+                        reason = f"Không đọc được mã LPN (Dự kiến: {item.lpn or '—'})"
+                elif has_sku_req and not latest_ocr.is_sku_match:
+                    if det_sku and item.sku and str(det_sku).strip() != str(item.sku).strip():
+                        reason = f"Lệch SKU (Dự kiến: {item.sku} | Quét: {det_sku})"
+                    else:
+                        reason = f"Không đọc được mã SKU (Dự kiến: {item.sku or '—'})"
+                else:
+                    reason = "Không đạt tiêu chuẩn kiểm tra"
+
                 unmatched_list.append(f"• {item.suffix_key}: {reason}")
 
         issue_count = total_items - matched_items
@@ -318,7 +362,7 @@ class ZaloBotService:
         lines.extend([
             "",
             "🔗 Xem chi tiết & Ảnh quét trên SmartFlow:",
-            f"https://smartflowg7.cloud/admin/lpn-crawler?container={c_num.replace(' ', '')}",
+            f"https://dashboard.smartflowg7.cloud/admin/lpn-crawler?container={c_num.replace(' ', '')}",
             "━━━━━━━━━━━━━━━━━━━━",
             "Hệ thống Tự động SmartFlow ERP v3"
         ])
@@ -326,15 +370,76 @@ class ZaloBotService:
         return "\n".join(lines)
 
     @classmethod
+    def get_preview_recipients(cls, container_id: int) -> Dict[str, Any]:
+        """Lấy danh sách người sẽ nhận tin nhắn báo cáo cho Container cụ thể"""
+        db = SessionLocal()
+        try:
+            cont = db.query(LpnContainer).filter(LpnContainer.id == container_id).first()
+            if not cont:
+                return {"success": False, "message": "Container không tồn tại"}
+
+            cfg = cls.get_or_create_config(db)
+            recipients = []
+
+            # 1. Người phụ trách cont (hoặc SĐT mặc định)
+            primary_phone = normalize_vietnam_phone(cont.operator_phone or cfg.default_recipient_phone or "")
+            if primary_phone:
+                recipients.append({
+                    "phone": primary_phone,
+                    "name": cont.operator_name or ("Người phụ trách cont" if cont.operator_phone else "Số mặc định hệ thống"),
+                    "role": "Người phụ trách cont" if cont.operator_phone else "SĐT nhận mặc định",
+                    "is_primary": True,
+                    "is_selected": True
+                })
+
+            # 2. Danh sách Quản lý / Người cùng nhận
+            manager_list = []
+            try:
+                if cfg.fallback_manager_phones:
+                    raw = json.loads(cfg.fallback_manager_phones)
+                    if isinstance(raw, list):
+                        manager_list = raw
+            except Exception:
+                pass
+
+            for item in manager_list:
+                p = item.get("phone") if isinstance(item, dict) else str(item)
+                clean_p = normalize_vietnam_phone(p)
+                if not clean_p or clean_p == primary_phone:
+                    continue
+                name = item.get("name") if isinstance(item, dict) else ""
+                role = item.get("role") if isinstance(item, dict) else "Quản lý nhận đồng thời"
+                mode = item.get("mode") if isinstance(item, dict) else "always"
+                recipients.append({
+                    "phone": clean_p,
+                    "name": name or f"Quản lý ({clean_p})",
+                    "role": role or "Quản lý nhận đồng thời",
+                    "is_primary": False,
+                    "is_selected": True if mode == "always" else False,
+                    "mode": mode
+                })
+
+            return {
+                "success": True,
+                "container_id": cont.id,
+                "container_number": cont.container_number,
+                "operator_name": cont.operator_name,
+                "recipients": recipients
+            }
+        finally:
+            db.close()
+
+    @classmethod
     def send_container_report(
         cls,
         container_id: int,
         target_phone: Optional[str] = None,
+        target_phones: Optional[List[str]] = None,
         send_image: bool = True
     ) -> Dict[str, Any]:
         """
         Tổng hợp toàn bộ kết quả quét của 1 Container và tự động gửi tin nhắn Zalo
-        tới số điện thoại yêu cầu. Nếu gặp sự cố, tự động chuyển tiếp tới số Quản lý dự phòng.
+        tới danh sách người nhận (Người phụ trách + Danh sách Quản lý nhận đồng thời).
         """
         db = SessionLocal()
         try:
@@ -347,96 +452,119 @@ class ZaloBotService:
                 logger.info(f"Tinh nang tu dong gui Zalo dang tat. Bo qua Container {cont.container_number}")
                 return {"success": False, "message": "Tính năng tự động gửi Zalo đang tắt trong cấu hình"}
 
-            client = cls.get_client(db)
-            if not client:
-                logger.warning("Zalo Client chua san sang (chua co Cookies/IMEI).")
-                return {"success": False, "message": "Zalo Bot chưa được kết nối. Vui lòng cập nhật Cookies/IMEI."}
-
             items = db.query(LpnItem).filter(LpnItem.container_id == container_id).all()
+            if not items:
+                logger.info(f"[Zalo Bot] Container {cont.container_number} chua co kien hang nao (0 items). Bo qua gui Zalo.")
+                return {"success": False, "message": f"Container {cont.container_number} chưa có kiện hàng nào, không gửi Zalo"}
+
             item_ids = [it.id for it in items]
             ocr_results = db.query(LpnAiOcrResult).filter(LpnAiOcrResult.item_id.in_(item_ids)).all() if item_ids else []
 
-            # 1. Xác định số điện thoại nhận tin
-            phone_to_use = target_phone or cont.operator_phone or cfg.default_recipient_phone
-            clean_phone = normalize_vietnam_phone(phone_to_use)
-
-            # 2. Biên tập nội dung tin nhắn
             report_msg = cls.build_report_message(cont, items, ocr_results)
 
-            # 3. Tra cứu người nhận
-            user_data = cls.lookup_user_by_phone(clean_phone, client) if clean_phone else None
-            sent_success = False
-            recipient_uid = None
-            recipient_name = None
-            error_reason = None
+            client = cls.get_client(db)
+            if not client:
+                err_reason = "Zalo Bot chưa được kết nối. Vui lòng cập nhật Cookies/IMEI trong cấu hình Zalo Bot."
+                logger.warning(f"[Zalo Bot] {err_reason}")
+                cont.zalo_notify_status = "FAILED"
+                cont.zalo_notified_at = datetime.utcnow()
+                db.commit()
+                return {"success": False, "message": err_reason}
 
-            if user_data:
-                recipient_uid = user_data["userId"]
-                recipient_name = user_data["displayName"]
-                sent_success = cls.send_text_message(client, recipient_uid, report_msg)
-                
-                # Gửi kèm ảnh cont nếu có
-                if sent_success and send_image and cont.container_image:
-                    abs_cont_img = os.path.join(settings.PROJECT_ROOT, cont.container_image.lstrip("/\\"))
-                    if os.path.exists(abs_cont_img):
-                        cls.send_image_message(client, recipient_uid, abs_cont_img, caption=f"Ảnh Container {cont.container_number}")
+            # 1. Xác định danh sách số điện thoại cần gửi
+            phones_to_send: List[str] = []
+            if target_phones:
+                for tp in target_phones:
+                    c = normalize_vietnam_phone(tp)
+                    if c and c not in phones_to_send:
+                        phones_to_send.append(c)
+            elif target_phone:
+                c = normalize_vietnam_phone(target_phone)
+                if c:
+                    phones_to_send.append(c)
             else:
-                error_reason = f"Không tìm thấy tài khoản Zalo cho số điện thoại: {phone_to_use}"
+                # Mặc định: Người phụ trách / SĐT mặc định
+                primary_phone = normalize_vietnam_phone(cont.operator_phone or cfg.default_recipient_phone or "")
+                if primary_phone and primary_phone not in phones_to_send:
+                    phones_to_send.append(primary_phone)
 
-            # 4. Ghi log lần gửi
-            log_status = "SUCCESS" if sent_success else "FAILED"
-            log_entry = LpnZaloLog(
-                container_id=cont.id,
-                container_number=cont.container_number,
-                recipient_phone=clean_phone or "UNKNOWN",
-                recipient_zalo_id=recipient_uid,
-                recipient_name=recipient_name,
-                message_content=report_msg,
-                status=log_status,
-                error_reason=error_reason,
-                sent_at=datetime.utcnow()
-            )
-            db.add(log_entry)
-
-            # 5. Nếu thất bại -> Chuyển tiếp (Fallback) tới các SĐT Quản lý dự phòng
-            if not sent_success:
-                fallback_phones = []
+                # Và bổ sung danh sách Quản lý nhận đồng thời (Broadcast)
                 try:
                     if cfg.fallback_manager_phones:
-                        fallback_phones = json.loads(cfg.fallback_manager_phones)
+                        raw = json.loads(cfg.fallback_manager_phones)
+                        if isinstance(raw, list):
+                            for it in raw:
+                                p = it.get("phone") if isinstance(it, dict) else str(it)
+                                mode = it.get("mode", "always") if isinstance(it, dict) else "always"
+                                if mode == "always":
+                                    c_p = normalize_vietnam_phone(p)
+                                    if c_p and c_p not in phones_to_send:
+                                        phones_to_send.append(c_p)
                 except Exception:
                     pass
 
-                for fb_phone in fallback_phones:
-                    fb_clean = normalize_vietnam_phone(fb_phone)
-                    if fb_clean and fb_clean != clean_phone:
-                        fb_user = cls.lookup_user_by_phone(fb_clean, client)
-                        if fb_user:
-                            fb_notice = f"⚠️ [CHUYỂN TIẾP DO KHÔNG GỬI ĐƯỢC CHO {clean_phone}]\n\n" + report_msg
-                            if cls.send_text_message(client, fb_user["userId"], fb_notice):
-                                db.add(LpnZaloLog(
-                                    container_id=cont.id,
-                                    container_number=cont.container_number,
-                                    recipient_phone=fb_clean,
-                                    recipient_zalo_id=fb_user["userId"],
-                                    recipient_name=fb_user["displayName"],
-                                    message_content=fb_notice,
-                                    status="FALLBACK_SENT",
-                                    error_reason=f"Chuyển tiếp do không gửi được cho {clean_phone}: {error_reason}",
-                                    sent_at=datetime.utcnow()
-                                ))
+            if not phones_to_send:
+                return {"success": False, "message": "Không có số điện thoại nào được chỉ định để nhận tin."}
 
-            # 6. Cập nhật trạng thái thông báo trên Container
-            cont.zalo_notify_status = "SENT" if sent_success else "FAILED"
+            results_summary = []
+            overall_success = False
+
+            abs_cont_img = None
+            if send_image and cont.container_image:
+                abs_cont_img = os.path.join(settings.PROJECT_ROOT, cont.container_image.lstrip("/\\"))
+                if not os.path.exists(abs_cont_img):
+                    abs_cont_img = None
+
+            for phone in phones_to_send:
+                user_data = cls.lookup_user_by_phone(phone, client)
+                sent_ok = False
+                u_id = None
+                display_name = None
+                err = None
+
+                if user_data:
+                    u_id = user_data["userId"]
+                    display_name = user_data["displayName"]
+                    sent_ok = cls.send_text_message(client, u_id, report_msg)
+                    if sent_ok and abs_cont_img:
+                        cls.send_image_message(client, u_id, abs_cont_img, caption=f"Ảnh Container {cont.container_number}")
+                else:
+                    err = f"Không tìm thấy tài khoản Zalo cho số điện thoại: {phone}"
+
+                log_entry = LpnZaloLog(
+                    container_id=cont.id,
+                    container_number=cont.container_number,
+                    recipient_phone=phone,
+                    recipient_zalo_id=u_id,
+                    recipient_name=display_name,
+                    message_content=report_msg,
+                    status="SUCCESS" if sent_ok else "FAILED",
+                    error_reason=err if not sent_ok else None,
+                    sent_at=datetime.utcnow()
+                )
+                db.add(log_entry)
+
+                if sent_ok:
+                    overall_success = True
+
+                results_summary.append({
+                    "phone": phone,
+                    "name": display_name,
+                    "status": "SUCCESS" if sent_ok else "FAILED",
+                    "error": err
+                })
+
+            cont.zalo_notify_status = "SENT" if overall_success else "FAILED"
             cont.zalo_notified_at = datetime.utcnow()
             db.commit()
 
+            success_count = sum(1 for r in results_summary if r["status"] == "SUCCESS")
             return {
-                "success": sent_success,
-                "recipient_phone": clean_phone,
-                "recipient_name": recipient_name,
-                "error_reason": error_reason,
-                "message": "Đã gửi thông báo Zalo thành công" if sent_success else f"Gửi tin thất bại: {error_reason}"
+                "success": overall_success,
+                "total_sent": len(phones_to_send),
+                "success_count": success_count,
+                "results": results_summary,
+                "message": f"Đã gửi báo cáo Zalo cho {success_count}/{len(phones_to_send)} người nhận."
             }
         except Exception as e:
             db.rollback()

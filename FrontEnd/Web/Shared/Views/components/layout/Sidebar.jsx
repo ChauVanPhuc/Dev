@@ -90,11 +90,33 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
           }
         }
 
-        // 1. Chuẩn hóa nhóm "Module chất lượng": Đổi tên và icon ShieldCheck, đưa Dashboard Thống Kê, Mã Lỗi, Claim khách hàng lên đầu
+        // 1. Chuẩn hóa nhóm "Module chất lượng": Đổi tên và icon ShieldCheck, đảm bảo Báo cáo Điều hành (Infographic) luôn xuất hiện
         const qualityGroup = list.find(item => item.title === 'Quản lý chất lượng' || item.title === 'Quản lý Chất Lượng' || item.title === 'Module chất lượng' || item.id === 28);
         if (qualityGroup) {
           qualityGroup.title = 'Module chất lượng';
           qualityGroup.icon = 'ShieldCheck';
+
+          if (Array.isArray(qualityGroup.children)) {
+            const hasReport = qualityGroup.children.some(c => c.route_path === '/admin/quality-reports' || c.title?.includes('Infographic'));
+            if (!hasReport) {
+              const infographicMenuItem = {
+                id: 'sub-quality-infographic-report',
+                parent_id: qualityGroup.id,
+                title: 'Báo cáo Điều hành (Infographic)',
+                route_path: '/admin/quality-reports',
+                icon: 'FileBarChart2',
+                sort_order: 1,
+                is_active: true,
+                permission_key: 'reports'
+              };
+              const overviewIdx = qualityGroup.children.findIndex(c => c.route_path === '/admin/quality' || c.title?.includes('Tổng quan'));
+              if (overviewIdx !== -1) {
+                qualityGroup.children.splice(overviewIdx + 1, 0, infographicMenuItem);
+              } else {
+                qualityGroup.children.unshift(infographicMenuItem);
+              }
+            }
+          }
         }
 
         // 2. Chuẩn hóa nhóm "Quản lý kinh doanh": Đổi icon sang Code (<>) chuẩn theo thiết kế
@@ -196,7 +218,8 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
       '/admin/prices',
       '/admin/lpn-crawler',
       '/admin/ai-ocr-train',
-      '/admin/system-config'
+      '/admin/system-config',
+      '/admin/quality-reports'
     ];
     if (allowByDefaultRoutes.includes(item.route_path)) {
       if (perm === 'none') return true;
@@ -392,6 +415,8 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
     if ((group.title === 'Module chất lượng' || group.title === 'Quản lý chất lượng' || group.title === 'Quản lý Chất Lượng') && (
       location.pathname === '/admin/quality' || 
       location.pathname === '/admin/quality/' ||
+      location.pathname === '/admin/quality/parameter' ||
+      location.pathname === '/admin/quality/parameter/' ||
       location.pathname === '/admin/claim-dashboard' ||
       location.pathname === '/admin/claim-dashboard/' ||
       location.pathname === '/admin/defects' ||

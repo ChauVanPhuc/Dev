@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>{{ metadata.report_title }} - {{ metadata.curr_period_str }}</title>
+  <link rel="stylesheet" href="assets/css/infographic.css?v=2.0">
+  <script src="assets/js/chart.umd.min.js"></script>
+</head>
+<body>
+
+  <!-- Controls Toolbar (Không xuất hiện khi in ấn hoặc chụp ảnh poster) -->
+  <header class="report-toolbar no-print">
+    <div class="toolbar-main-row">
+      <div class="toolbar-brand">
+        <span class="toolbar-badge">SMARTFLOW QLCL</span>
+      </div>
+
+      <!-- Mode Switcher -->
+      <div class="toolbar-group mode-switcher">
+        <a href="/?type=weekly&param={{ available_weeks[0].week if available_weeks else '42' }}" 
+           class="mode-btn {{ 'active' if report_type == 'weekly' else '' }}">
+          Tuần
+        </a>
+        <a href="/?type=daily&param={{ available_dates[0] if available_dates else 'today' }}" 
+           class="mode-btn {{ 'active' if report_type == 'daily' else '' }}">
+          Ngày
+        </a>
+      </div>
+
+      <!-- Dynamic Week / Date Selector -->
+      <div class="toolbar-group period-selector">
+        {% if report_type == 'weekly' %}
+          <span class="toolbar-label">Chọn tuần:</span>
+          <select class="toolbar-select" onchange="window.location.href='/?type=weekly&param=' + this.value">
+            {% for w in available_weeks %}
+              <option value="{{ w.week }}" {% if report_param == w.week|string %}selected{% endif %}>
+                Tuần {{ w.week }} ({{ w.year }})
+              </option>
+            {% endfor %}
+          </select>
+        {% else %}
+          <span class="toolbar-label">Chọn ngày:</span>
+          <select class="toolbar-select" onchange="window.location.href='/?type=daily&param=' + this.value">
+            {% for d in available_dates %}
+              <option value="{{ d }}" {% if report_param == d %}selected{% endif %}>
+                {{ d }}
+              </option>
+            {% endfor %}
+          </select>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Action Buttons Row -->
+    <div class="toolbar-actions-row">
+      <div class="toolbar-actions">
+        <button class="toolbar-btn btn-export-img" onclick="exportToImage()">
+          📷 Tải Ảnh
+        </button>
+        <a href="/export/excel?type={{ report_type }}&param={{ report_param }}" class="toolbar-btn" style="text-decoration: none;">
+          📊 Excel
+        </a>
+        <a href="/export/word?type={{ report_type }}&param={{ report_param }}" class="toolbar-btn" style="text-decoration: none;">
+          📑 Word
+        </a>
+        <button class="toolbar-btn btn-print" onclick="window.print()">
+          🖨️ In A4
+        </button>
+        <a href="#drilldownSection" class="toolbar-btn btn-drilldown" style="text-decoration: none;">
+          🔍 Chi tiết số liệu
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==============================================================
+       1. POSTER CANVAS (1-PAGE A4 LANDSCAPE - 1420px x 860px)
+       ============================================================== -->
+  <main class="poster-wrapper">
+    <div class="infographic-canvas" id="posterCanvas">
+      
+      <!-- HEADER BANNER -->
+      <section class="header-banner">
+        <div class="header-left">
+          <img src="assets/images/trend_up.svg" alt="Trend Up Graphic" class="header-svg-trend">
+        </div>
+        <div class="header-center">
+          <div class="org-tag">{{ metadata.org_name }}</div>
+          <h1 class="main-title">{{ metadata.report_title }}</h1>
+          <div class="subtitle">
+            Kỳ báo cáo: <strong>{{ metadata.curr_period_str }}</strong> 
+            &nbsp;|&nbsp; Đối chiếu: <span>{{ metadata.prev_period_str }}</span> 
+            &nbsp;|&nbsp; Mã ISO: <strong>{{ metadata.iso_code }}</strong>
+          </div>
+        </div>
+        <div class="header-right">
+          <img src="assets/images/building_banner.svg" alt="Factory Building" class="header-svg-building">
+        </div>
+      </section>
+
+      <!-- ROW 1: SECTION I & THÔNG ĐIỆP ĐIỀU HÀNH -->
+      <section class="row-overview">
+        <div class="overview-left-col">
+          <div class="section-ribbon ribbon-navy">
+            <span class="ribbon-icon">📊</span>
+            <span>I. TỔNG QUAN KẾT QUẢ CHẤT LƯỢNG {{ metadata.curr_label }}</span>
+          </div>
+
+          <!-- 8 Primary Operational KPI Cards -->
+          <div class="kpi-grid-8">
+            <!-- 1. Tỷ lệ phiếu Đạt -->
+            <div class="kpi-card card-kpi-1">
+              <div class="kpi-top">
+                <div class="kpi-icon-circle bg-green-light">✔</div>
+                <div class="kpi-title">Tỷ lệ phiếu Đạt</div>
+              </div>
+              <div class="kpi-hero-row">
+                <span class="kpi-hero-num txt-green">{{ kpis.pass_rate.curr }}%</span>
+                <span class="kpi-detail-tag">{{ kpis.raw_curr.pass }}/{{ kpis.raw_curr.total }} Đạt</span>
+              </div>
+              <div class="kpi-compare-row">
+                <span class="kpi-prev-text">vs {{ metadata.prev_label }}: {{ kpis.pass_rate.prev }}%</span>
+                <span class="kpi-diff-pill {{ 'pill-green' if kpis.pass_rate.is_positive else 'pill-red' }}">
+                  {{ '▲' if kpis.pass_rate.is_up else '▼' }}{{ '+' if kpis.pass_rate.diff > 0 else '' }}{{ kpis.pass_rate.diff }}%
+                </span>
+              </div>
+              <div class="kpi-progress-track">
+                <div class="kpi-progress-bar bar-green" style="width: {{ kpis.pass_rate.curr }}%;"></div>
+              </div>
+            </div>
+
+            <!-- 2. Tỷ lệ lỗi trên SP -->
+            <div class="kpi-card card-kpi-2">
+              <div class="kpi-top">
+                <div class="kpi-icon-circle bg-red-light">🏷️</div>
+                <div class="kpi-title">Tỷ lệ lỗi trên SP</div>
+              </div>
+              <div class="kpi-hero-row">
+                <span class="kpi-hero-num {{ 'txt-green' if not kpis.defect_rate.is_up else 'txt-red' }}">{{ kpis.defect_rate.curr }}%</span>
+                <span class="kpi-detail-tag">{{ kpis.raw_curr.daily_defects }} lỗi</span>
+              </div>
+              <div class="kpi-compare-row">
+                <span class="kpi-prev-text">vs {{ metadata.prev_label }}: {{ kpis.defect_rate.prev }}%</span>
+                <span class="kpi-diff-pill {{ 'pill-green' if kpis.defect_rate.is_positive else 'pill-red' }}">
+                  {{ '▼' if not kpis.defect_rate.is_up else '▲' }}{{ '+' if kpis.defect_rate.diff > 0 else '' }}{{ kpis.defect_rate.diff }}%
+                </span>
+              </div>
+              <div class="kpi-progress-track">
+                <div class="kpi-progress-bar bar-red" style="width: {{ [kpis.defect_rate.curr * 3, 100]|min }}%;"></div>
+              </div>
+            </div>
+
+            <!-- 3. Tổng số lỗi phát hiện Daily -->
+            <div class="kpi-card card-kpi-3">
+              <div class="kpi-top">
+                <div class="kpi-icon-circle bg-amber-light">⚙️</div>
+                <div class="kpi-title">Tổng số lỗi Daily</div>
+              </div>
+              <div class="kpi-hero-row">
+                <span class="kpi-hero-num txt-navy">{{ kpis.daily_defects.curr }}</span>
+                <span class="kpi-detail-tag">TB {{ (kpis.raw_curr.daily_defects / 7)|round(0)|int if kpis.raw_curr.daily_defects else 0 }}/ng</span>
+              </div>
+              <div class="kpi-compare-row">
+                <span class="kpi-prev-text">vs {{ metadata.prev_label }}: {{ kpis.daily_defects.prev }}</span>
+                <span class="kpi-diff-pill {{ 'pill-green' if kpis.daily_defects.is_positive else 'pill-red' }}">
+                  {{ '▼' if not kpis.daily_defects.is_up else '▲' }}{{ kpis.daily_defects.diff_pct }}%
+                </span>
+              </div>
+              <div class="kpi-progress-track">
+                <div class="kpi-progress-bar bar-amber" style="width: {{ [(kpis.daily_defects.curr / (kpis.daily_defects.prev or 1) * 100)|round(0), 100]|min }}%;"></div>
+              </div>
+            </div>
+
+            <!-- 4. Số lượng SP lỗi -->
+            <div class="kpi-card card-kpi-4">
+              <div class="kpi-top">
+                <div class="kpi-icon-circle bg-purple-light">📦</div>
+                <div class="kpi-title">Số lượng SP lỗi</div>
+              </div>
+              <div class="kpi-hero-row">
+                <span class="kpi-hero-num txt-purple">{{ kpis.error_qty.curr }}</span>
+                <span class="kpi-detail-tag">Phế phẩm</span>
+              </div>
+              <div class="kpi-compare-row">
+                <span class="kpi-prev-text">vs {{ metadata.prev_label }}: {{ kpis.error_qty.prev }}</span>
+                <span class="kpi-diff-pill {{ 'pill-green' if kpis.error_qty.is_positive else 'pill-red' }}">
+                  {{ '▼' if not kpis.error_qty.is_up else '▲' }}{{ kpis.error_qty.diff_pct }}%
+                </span>
+              </div>
+              <div class="kpi-progress-track">
+                <div class="kpi-progress-bar bar-purple" style="width: {{ [(kpis.error_qty.curr / (kpis.error_qty.prev or 1) * 100)|round(0), 100]|min }}%;"></div>
+              </div>
+            </div>
+
+            <!-- 5. Sản phẩm kiểm tra Daily -->
+            <div class="kpi-card card-kpi-5">
+              <div class="kpi-top">
+                <div class="kpi-icon-circle bg-cyan-light">🔍</div>
+                <div class="kpi-title">SP kiểm tra Daily</div>
+              </div>
+              <div class="kpi-hero-row">
+                <span class="kpi-hero-num txt-cyan">{{ kpis.daily_checked.curr }}</span>
+                <span class="kpi-detail-tag">Kiểm định</span>
+              </div>
+              <div class="kpi-compare-row">
+                <span class="kpi-prev-text">vs {{ metadata.prev_label }}: {{ (kpis.daily_checked.prev / 1000)|round(1) }}k</span>
+                <span class="kpi-diff-pill {{ 'pill-green' if kpis.daily_checked.is_positive else 'pill-red' }}">
+                  {{ '▲' if kpis.daily_checked.is_up else '▼' }}{{ '+' if kpis.daily_checked.diff > 0 else '' }}{{ kpis.daily_checked.diff_pct }}%
+                </span>
+              </div>
+              <div class="kpi-progress-track">
+                <div class="kpi-progress-bar bar-cyan" style="width: 72%;"></div>
+              </div>
+            </div>
+
+            <!-- 6. Tỷ lệ xác nhận phiếu kiểm -->
+            <div class="kpi-card card-kpi-6">
+              <div class="kpi-top">
+                <div class="kpi-icon-circle bg-blue-light">🛡️</div>
+                <div class="kpi-title">Tỷ lệ ký xác nhận</div>
+              </div>
+              <div class="kpi-hero-row">
+                <span class="kpi-hero-num txt-blue">{{ kpis.confirmed_rate.curr }}%</span>
+                <span class="kpi-detail-tag">{{ kpis.raw_curr.confirmed }}/{{ kpis.raw_curr.total }} ký</span>
+              </div>
+              <div class="kpi-compare-row">
+                <span class="kpi-prev-text">vs {{ metadata.prev_label }}: {{ kpis.confirmed_rate.prev }}%</span>
+                <span class="kpi-diff-pill {{ 'pill-green' if kpis.confirmed_rate.is_positive else 'pill-red' }}">
+                  {{ '▲' if kpis.confirmed_rate.is_up else '▼' }}{{ '+' if kpis.confirmed_rate.diff > 0 else '' }}{{ kpis.confirmed_rate.diff }}%
+                </span>
+              </div>
+              <div class="kpi-progress-track">
+                <div class="kpi-progress-bar bar-blue" style="width: {{ kpis.confirmed_rate.curr }}%;"></div>
+              </div>
+            </div>
+
+            <!-- 7. Tổng số phiếu kiểm tra -->
+            <div class="kpi-card card-kpi-7">
+              <div class="kpi-top">
+                <div class="kpi-icon-circle bg-indigo-light">📋</div>
+                <div class="kpi-title">Tổng phiếu kiểm tra</div>
+              </div>
+              <div class="kpi-hero-row">
+                <span class="kpi-hero-num txt-indigo">{{ kpis.total_tickets.curr }}</span>
+                <span class="kpi-detail-tag">IQC • PQC • FQC</span>
+              </div>
+              <div class="kpi-compare-row">
+                <span class="kpi-prev-text">vs {{ metadata.prev_label }}: {{ kpis.total_tickets.prev }}</span>
+                <span class="kpi-diff-pill {{ 'pill-green' if kpis.total_tickets.is_positive else 'pill-red' }}">
+                  {{ '▲' if kpis.total_tickets.is_up else '▼' }}{{ '+' if kpis.total_tickets.diff > 0 else '' }}{{ kpis.total_tickets.diff_pct }}%
+                </span>
+              </div>
+              <div class="kpi-progress-track">
+                <div class="kpi-progress-bar bar-indigo" style="width: 60%;"></div>
+              </div>
+            </div>
+
+            <!-- 8. Phiếu lỗi -->
+            <div class="kpi-card card-kpi-8">
+              <div class="kpi-top">
+                <div class="kpi-icon-circle bg-red-light">⚠️</div>
+                <div class="kpi-title">Phiếu không đạt</div>
+              </div>
+              <div class="kpi-hero-row">
+                <span class="kpi-hero-num {{ 'txt-green' if kpis.fail_tickets.curr == 0 else 'txt-red' }}">{{ kpis.fail_tickets.curr }}</span>
+                <span class="kpi-detail-tag">{{ kpis.raw_curr.fail }} K.Đạt</span>
+              </div>
+              <div class="kpi-compare-row">
+                <span class="kpi-prev-text">vs {{ metadata.prev_label }}: {{ kpis.fail_tickets.prev }}</span>
+                <span class="kpi-diff-pill {{ 'pill-green' if kpis.fail_tickets.is_positive else 'pill-red' }}">
+                  {{ '▼' if not kpis.fail_tickets.is_up else '▲' }}{{ kpis.fail_tickets.diff_pct }}%
+                </span>
+              </div>
+              <div class="kpi-progress-track">
+                <div class="kpi-progress-bar bar-red" style="width: {{ [(kpis.fail_tickets.curr / (kpis.fail_tickets.prev or 1) * 100)|round(0), 100]|min }}%;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Side: Thông Điệp Điều Hành Chiến Lược -->
+        <div class="overview-right-col">
+          <div class="takeaway-box">
+            <div class="takeaway-header">
+              <div class="takeaway-title-wrap">
+                <span class="takeaway-bulb">💡</span>
+                <span class="takeaway-title">THÔNG ĐIỆP ĐIỀU HÀNH CHIẾN LƯỢC</span>
+              </div>
+              <span class="takeaway-badge">{{ metadata.curr_label }}</span>
+            </div>
+
+            <!-- Executive Quick-Stat Chips -->
+            <div class="takeaway-summary-bar">
+              <div class="summary-chip chip-pass">
+                <span class="chip-label">🎯 Đạt:</span>
+                <span class="chip-val">{{ kpis.pass_rate.curr }}%</span>
+              </div>
+              <div class="summary-chip chip-copq">
+                <span class="chip-label">💰 Tổn thất:</span>
+                <span class="chip-val">{{ copq.total_curr_millions if copq else '72.8' }} tr</span>
+              </div>
+              <div class="summary-chip chip-warn">
+                <span class="chip-label">⚠️ Nghẽn:</span>
+                <span class="chip-val">Sơn (8 lỗi)</span>
+              </div>
+            </div>
+
+            <!-- Structured Takeaways with Categorized Pills -->
+            <div class="takeaway-list">
+              {% for note in takeaways %}
+                <div class="takeaway-item item-{{ loop.index }}">
+                  <span class="takeaway-category-tag tag-{{ loop.index }}">
+                    {% if loop.index == 1 %}HIỆU SUẤT{% elif loop.index == 2 %}ĐIỂM NGHỄN{% elif loop.index == 3 %}ĐỈNH LỖI{% else %}ĐIỂM NÓNG{% endif %}
+                  </span>
+                  <div class="takeaway-text">
+                    {{ note }}
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ROW 2: SECTION II - PHÂN TÍCH CHI TIẾT (4 CHARTS) -->
+      <section class="row-charts">
+        <div class="section-ribbon ribbon-navy" style="margin-bottom: 6px;">
+          <span class="ribbon-icon">📊</span>
+          <span>II. PHÂN TÍCH CHI TIẾT CHẤT LƯỢNG</span>
+        </div>
+
+        <div class="charts-grid-4">
+          <!-- Chart 1: So sánh chỉ số vận hành -->
+          <div class="chart-card">
+            <div class="chart-header">
+              1. SO SÁNH CÁC CHỈ SỐ VẬN HÀNH ({{ metadata.prev_label }} vs {{ metadata.curr_label }})
+            </div>
+            <!-- Sleek Top Comparison Indicators for Rate & Fail Tickets -->
+            <div class="op-metrics-strip">
+              <div class="op-pill-item">
+                <span class="op-pill-label">Đạt:</span>
+                <span class="op-pill-prev">{{ kpis.pass_rate.prev }}%</span>
+                <span class="op-pill-arrow">➔</span>
+                <span class="op-pill-curr txt-green">{{ kpis.pass_rate.curr }}%</span>
+                <span class="op-pill-diff {{ 'pill-green' if kpis.pass_rate.is_positive else 'pill-red' }}">
+                  {{ '▲' if kpis.pass_rate.is_up else '▼' }}{{ kpis.pass_rate.diff }}%
+                </span>
+              </div>
+              <div class="op-pill-item">
+                <span class="op-pill-label">Lỗi SP:</span>
+                <span class="op-pill-prev">{{ kpis.defect_rate.prev }}%</span>
+                <span class="op-pill-arrow">➔</span>
+                <span class="op-pill-curr {{ 'txt-green' if not kpis.defect_rate.is_up else 'txt-red' }}">{{ kpis.defect_rate.curr }}%</span>
+                <span class="op-pill-diff {{ 'pill-green' if kpis.defect_rate.is_positive else 'pill-red' }}">
+                  {{ '▼' if not kpis.defect_rate.is_up else '▲' }}{{ '+' if kpis.defect_rate.diff > 0 else '' }}{{ kpis.defect_rate.diff }}%
+                </span>
+              </div>
+              <div class="op-pill-item">
+                <span class="op-pill-label">K.Đạt:</span>
+                <span class="op-pill-prev">{{ kpis.fail_tickets.prev }}</span>
+                <span class="op-pill-arrow">➔</span>
+                <span class="op-pill-curr {{ 'txt-green' if kpis.fail_tickets.curr == 0 else 'txt-red' }}">{{ kpis.fail_tickets.curr }}</span>
+                <span class="op-pill-diff {{ 'pill-green' if kpis.fail_tickets.is_positive else 'pill-red' }}">
+                  {{ '▼' if not kpis.fail_tickets.is_up else '▲' }}{{ kpis.fail_tickets.diff_pct }}%
+                </span>
+              </div>
+            </div>
+            <div class="chart-canvas-container" style="min-height: 155px;">
+              <canvas id="chartOperating"></canvas>
+            </div>
+          </div>
+
+          <!-- Chart 2: Top lỗi kỹ thuật phát sinh -->
+          <div class="chart-card">
+            <div class="chart-header">
+              2. TOP LỖI KỸ THUẬT PHÁT SINH {{ metadata.curr_label }}
+            </div>
+            <div class="chart-split-body">
+              <div class="chart-split-canvas">
+                <canvas id="chartTopDefects"></canvas>
+              </div>
+              <div class="chart-split-table">
+                <table class="mini-defect-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 25px;">SL</th>
+                      <th style="width: 34px;">Tỷ lệ</th>
+                      <th style="width: 48px;">Biến động</th>
+                      <th style="width: 28px;">AQL</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for d in defects[:4] %}
+                      <tr>
+                        <td style="font-weight: bold; color: #1E293B;">{{ d.curr_qty }}</td>
+                        <td>{{ d.share_pct }}%</td>
+                        <td class="{{ 'txt-green' if d.diff < 0 else 'txt-red' }}" style="font-size: 7.5px; font-weight: 700;">
+                          {{ '▲' if d.diff > 0 else '▼' }}{{ d.diff_pct }}%
+                        </td>
+                        <td>
+                          <span class="badge-aql {{ 'aql-crit' if d.get('aql_class') == 'Critical' else ('aql-maj' if d.get('aql_class') == 'Major' else 'aql-min') }}">
+                            {{ (d.get('aql_class', 'MIN')[:3])|upper }}
+                          </span>
+                        </td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Chart 3: Phân bố lỗi theo công đoạn -->
+          <div class="chart-card">
+            <div class="chart-header">
+              3. PHÂN BỐ LỖI THEO CÔNG ĐOẠN ({{ metadata.curr_label }})
+            </div>
+            <div class="chart-canvas-container">
+              <canvas id="chartStageDist"></canvas>
+            </div>
+            <!-- Dynamic Callout Warning based on actual max stage error -->
+            {% set worst_stg = stages|sort(attribute='curr_fail', reverse=True)|first %}
+            <div class="alert-callout-red">
+              <span class="callout-icon">⚠️</span>
+              <span>Công đoạn <strong>{{ worst_stg.stage }}</strong> ghi nhận <strong>{{ matrix.stage_totals[worst_stg.stage] if matrix and matrix.stage_totals else worst_stg.curr_fail }}</strong> lỗi ({{ worst_stg.defect_share }}%) & <strong>{{ worst_stg.curr_fail }}</strong> phiếu lỗi.</span>
+            </div>
+          </div>
+
+          <!-- Chart 4: Tỷ lệ đạt theo công đoạn -->
+          <div class="chart-card">
+            <div class="chart-header">
+              4. TỶ LỆ ĐẠT THEO CÔNG ĐOẠN ({{ metadata.curr_label }})
+            </div>
+            <div class="chart-canvas-container">
+              <canvas id="chartStagePass"></canvas>
+            </div>
+            <!-- Symmetrical Callout instead of overlapping floating pill -->
+            <div class="alert-callout-amber">
+              <span class="callout-icon">⚡</span>
+              <span>Điểm nghẽn: <strong>{{ worst_stg.stage }}</strong> đạt <strong>{{ worst_stg.curr_pass_rate }}%</strong> ({{ worst_stg.curr_fail }} phiếu lỗi) — 4 công đoạn còn lại đạt 100%.</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ROW 3: SECTION III (ĐIỂM NÓNG) & SECTION IV (HÀNH ĐỘNG ƯU TIÊN) -->
+      <section class="row-bottom">
+        
+        <!-- Left: Section III - Điểm Nóng Chất Lượng & Dòng Hàng -->
+        <div class="bottom-left-hotspots">
+          <div class="section-ribbon ribbon-navy" style="margin-bottom: 6px;">
+            <span class="ribbon-icon">🔥</span>
+            <span>III. ĐIỂM NÓNG CHẤT LƯỢNG & PHÂN TÍCH DÒNG HÀNG</span>
+          </div>
+
+          <div class="hotspots-subgrid">
+            <!-- 1. Top Lô Hàng Lỗi -->
+            <div class="hotspot-subpanel subpanel-batch">
+              <div class="subpanel-title">1. TOP LÔ HÀNG LỖI (TOP 5)</div>
+              <div class="table-responsive no-scrollbar">
+                <table class="hotspot-table batch-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 18px;">#</th>
+                      <th style="width: 62px;">Mã lô</th>
+                      <th style="text-align: left; padding-left: 5px;">Chi tiết / Phụ tùng</th>
+                      <th style="width: 38px;">C.Đoạn</th>
+                      <th style="width: 38px;">Phiếu</th>
+                      <th style="width: 44px;">Lỗi SP</th>
+                      <th style="width: 66px;">Rủi ro</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for b in batches[:5] %}
+                      <tr>
+                        <td style="font-weight: bold; color: #DC2626;">{{ loop.index }}</td>
+                        <td style="font-weight: 700; color: #1E293B; white-space: nowrap;">{{ b.batch_no }}</td>
+                        <td style="text-align: left; padding-left: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: #1E293B;" title="{{ b.part_name }}">
+                          {{ b.part_name }}
+                        </td>
+                        <td><span class="badge-stage">{{ b.stage }}</span></td>
+                        <td style="color: #DC2626; font-weight: 700;">{{ b.fail_records }}/{{ b.total_records }}</td>
+                        <td style="font-weight: 800; color: #DC2626;">{{ b.error_qty }}</td>
+                        <td style="text-align: center;">
+                          {% if b.fail_records >= 5 %}
+                            <span class="badge-tag tag-red">🔴 Báo động</span>
+                          {% elif b.error_qty > 100 %}
+                            <span class="badge-tag tag-orange">⚠️ Cảnh báo</span>
+                          {% else %}
+                            <span class="badge-tag tag-blue">🔍 Theo dõi</span>
+                          {% endif %}
+                        </td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- 2. Tỷ lệ lỗi theo Dòng Hàng -->
+            <div class="hotspot-subpanel subpanel-lines">
+              <div class="subpanel-title">2. TỶ LỆ LỖI THEO DÒNG HÀNG</div>
+              <div class="table-responsive no-scrollbar">
+                <table class="hotspot-table line-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 38px;">Dòng</th>
+                      <th style="width: 48px;">Phiếu</th>
+                      <th style="width: 42px;">SP Lỗi</th>
+                      <th style="width: 48px;">Tỷ lệ lỗi</th>
+                      <th style="width: 44px;">Đạt (%)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for pl in product_lines %}
+                      <tr>
+                        <td>
+                          <span class="badge-line line-{{ pl.code|lower }}">{{ pl.code }}</span>
+                        </td>
+                        <td style="font-weight: 600; color: #334155;">{{ pl.pass_tickets }}/{{ pl.total_tickets }}</td>
+                        <td style="font-weight: 700; color: {{ '#DC2626' if pl.error_qty > 0 else '#16A34A' }};">
+                          {{ pl.error_qty }}
+                        </td>
+                        <td>
+                          <span class="line-err-pct {{ 'txt-red' if pl.defect_rate >= 10 else ('txt-amber' if pl.defect_rate >= 5 else 'txt-green') }}">
+                            {{ pl.defect_rate }}%
+                          </span>
+                        </td>
+                        <td>
+                          <span class="line-pass-tag {{ 'pill-green' if pl.pass_rate >= 95 else ('pill-amber' if pl.pass_rate >= 90 else 'pill-red') }}">
+                            {{ pl.pass_rate }}%
+                          </span>
+                        </td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- 3. QC Audit -->
+            <div class="hotspot-subpanel subpanel-inspectors">
+              <div class="subpanel-title">3. QC AUDIT (ĐIỂM NHẤN KIỂM ĐỊNH)</div>
+              <div class="inspectors-list">
+                {% for insp in inspectors[:4] %}
+                  <div class="inspector-card">
+                    <div class="insp-avatar-wrap">
+                      <img src="assets/images/avatars/{{ insp.avatar }}" alt="{{ insp.name }}">
+                      <span class="insp-rank-badge rank-{{ loop.index }}">{{ loop.index }}</span>
+                    </div>
+                    <div class="insp-details">
+                      <div class="insp-name-row">
+                        <span class="insp-name" title="{{ insp.name }}">{{ insp.name }}</span>
+                        <span class="insp-eval-pill eval-{{ 'good' if insp.evaluation == 'Xuất sắc' else ('std' if insp.evaluation == 'Đạt chuẩn' else 'warn') }}">
+                          {{ insp.evaluation }}
+                        </span>
+                      </div>
+                      <div class="insp-sub-row">
+                        <span class="insp-stage-tag">Tổ: <strong>{{ insp.stage }}</strong></span>
+                        <span class="insp-stat-text"><strong>{{ insp.total }}</strong> phiếu | <span class="{{ 'txt-green' if insp.pass_rate >= 90 else 'txt-red' }}">{{ insp.pass_rate }}%</span></span>
+                      </div>
+                      <div class="insp-progress-track">
+                        <div class="insp-progress-fill {{ 'fill-green' if insp.pass_rate >= 90 else 'fill-amber' }}" style="width: {{ insp.pass_rate }}%;"></div>
+                      </div>
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Section IV - Hành Động Ưu Tiên (CAPA 5W2H) -->
+        {% if actions %}
+        <div class="bottom-right-actions">
+          <div class="section-ribbon ribbon-navy" style="margin-bottom: 6px;">
+            <span class="ribbon-icon">🎯</span>
+            <span>IV. KẾ HOẠCH HÀNH ĐỘNG ƯU TIÊN (5W2H)</span>
+          </div>
+          <div class="actions-2x2-grid">
+            {% for act in actions %}
+              <div class="action-card card-{{ loop.index }}">
+                <div class="action-num-box box-color-{{ loop.index }}">{{ loop.index }}</div>
+                <div class="action-body">
+                  <div class="action-title-row">
+                    <span class="action-prio-tag prio-{{ loop.index }}">P{{ loop.index }}</span>
+                    <span class="action-title" title="{{ act.title }}">{{ act.title }}</span>
+                  </div>
+                  <div class="action-desc" title="{{ act.desc }}">{{ act.desc }}</div>
+                  <div class="action-meta-row">
+                    <span class="meta-pill dept" title="{{ act.dept }}">🏢 {{ act.dept }}</span>
+                    <span class="meta-pill kpi" title="{{ act.kpi }}">🎯 {{ act.kpi }}</span>
+                    <span class="meta-pill time" title="{{ act.timeline }}">⏱️ {{ act.timeline }}</span>
+                  </div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+      </section>
+
+    </div>
+  </main>
+
+  <!-- ==============================================================
+       2. BẢNG PHÂN TÍCH KỸ THUẬT TOÀN DIỆN (DRILLDOWN SECTION)
+       Hiển thị trực quan ngay bên dưới Poster trên màn hình web
+       ============================================================== -->
+  <section class="drilldown-container no-print" id="drilldownSection">
+    
+    <div class="drilldown-header-banner">
+      <div class="drilldown-title-box">
+        <span class="drilldown-badge">PHÂN TÍCH KỸ THUẬT CHUYÊN SÂU</span>
+        <h2 class="drilldown-title">BẢNG DỮ LIỆU ĐIỀU HÀNH & MA TRẬN CHẤT LƯỢNG CHI TIẾT</h2>
+        <p class="drilldown-sub">Dữ liệu trích xuất thời gian thực từ cơ sở dữ liệu SmartFlow ERP V3 — Kỳ {{ metadata.curr_period_str }}</p>
+      </div>
+    </div>
+
+    <!-- Drilldown Grid 1: Ma trận Lỗi x Công đoạn & Cơ cấu loại phiếu -->
+    <div class="drilldown-row-2col">
+      
+      <!-- Bảng 1: Ma trận 2 chiều Lỗi x 5 Công đoạn -->
+      <div class="drilldown-panel">
+        <div class="panel-header">
+          <span class="panel-icon">🧩</span>
+          <span class="panel-title">1. MA TRẬN PHÂN BỐ LỖI KỸ THUẬT THEO CÔNG ĐOẠN (DEFECT × STAGE MATRIX)</span>
+        </div>
+        <div class="table-responsive">
+          <table class="drilldown-table">
+            <thead>
+              <tr>
+                <th style="text-align: left;">Dạng lỗi kỹ thuật</th>
+                {% for stg in matrix.stages %}
+                  <th>{{ stg }}</th>
+                {% endfor %}
+                <th style="background: #E0F2FE; color: #0369A1;">Tổng</th>
+                <th>Tỷ trọng</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in matrix.rows %}
+                <tr>
+                  <td style="font-weight: 700; text-align: left; color: #0F172A;">{{ row.name }}</td>
+                  {% for stg in matrix.stages %}
+                    <td class="{{ 'highlight-fail' if row[stg] > 50 else '' }}">
+                      {{ row[stg] if row[stg] > 0 else '-' }}
+                    </td>
+                  {% endfor %}
+                  <td style="font-weight: 800; background: #F0F9FF; color: #0284C7;">{{ row.total }}</td>
+                  <td style="font-weight: 600;">{{ row.share_pct }}%</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+            <tfoot>
+              <tr style="background: #F1F5F9; font-weight: 800;">
+                <td style="text-align: right;">TỔNG SỐ LỖI THEO CÔNG ĐOẠN:</td>
+                {% for stg in matrix.stages %}
+                  <td style="color: #DC2626; font-size: 11px;">{{ matrix.stage_totals[stg] }}</td>
+                {% endfor %}
+                <td style="color: #0284C7; font-size: 13px;">{{ matrix.total_defects }}</td>
+                <td style="color: #0284C7;">100%</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+
+      <!-- Bảng 2: Cơ cấu Loại Phiếu Kiểm Định -->
+      <div class="drilldown-panel">
+        <div class="panel-header">
+          <span class="panel-icon">📋</span>
+          <span class="panel-title">2. CƠ CẤU PHIẾU KIỂM ĐỊNH (INSPECTION TYPES BREAKDOWN)</span>
+        </div>
+        <div class="table-responsive">
+          <table class="drilldown-table">
+            <thead>
+              <tr>
+                <th>Loại phiếu kiểm</th>
+                <th>Tổng phiếu</th>
+                <th>Phiếu Đạt</th>
+                <th>Phiếu Không đạt</th>
+                <th>Tỷ lệ Đạt</th>
+                <th>Số lượng SP lỗi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for t in ticket_types %}
+                <tr>
+                  <td style="font-weight: 700; text-align: left; color: #0F172A;">
+                    <span class="badge-type">
+                      {% if t.type == 'first_sample' %}Mẫu đầu chuyền
+                      {% elif t.type == 'parameter' %}Đo kiểm thông số
+                      {% elif t.type == 'daily' %}Kiểm tra tuần tra
+                      {% else %}{{ t.type_vn or t.title or t.type }}
+                      {% endif %}
+                    </span>
+                  </td>
+                  <td style="font-weight: 700;">{{ t.total }}</td>
+                  <td style="color: #15803D; font-weight: 700;">{{ t.pass_cnt }}</td>
+                  <td style="color: #DC2626; font-weight: 700;">{{ t.fail_cnt }}</td>
+                  <td>
+                    <span class="pass-pill {{ 'pill-good' if t.pass_rate >= 90 else 'pill-bad' }}">
+                      {{ t.pass_rate }}%
+                    </span>
+                  </td>
+                  <td style="font-weight: 800; color: #DC2626;">{{ t.error_qty }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        
+        <!-- Thống kê năng suất tổng hợp -->
+        <div class="productivity-summary-box">
+          <div class="prod-stat-item">
+            <span class="prod-label">Tổng lượng mẫu kiểm:</span>
+            <span class="prod-val">{{ kpis.raw_curr.sample_qty }} SP</span>
+          </div>
+          <div class="prod-stat-item">
+            <span class="prod-label">Tổng phế phẩm ghi nhận:</span>
+            <span class="prod-val val-red">{{ kpis.raw_curr.error_qty }} SP</span>
+          </div>
+          <div class="prod-stat-item">
+            <span class="prod-label">Tỷ lệ ký số hoàn tất:</span>
+            <span class="prod-val val-green">{{ kpis.confirmed_rate.curr }}%</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Drilldown Grid 2: Top Phụ Tùng Lỗi & Toàn Bộ Đội Ngũ KCS -->
+    <div class="drilldown-row-2col" style="margin-top: 14px;">
+      
+      <!-- Bảng 3: Top Chi Tiết / Phụ Tùng -->
+      <div class="drilldown-panel">
+        <div class="panel-header">
+          <span class="panel-icon">⚙️</span>
+          <span class="panel-title">3. TOP CHI TIẾT / PHỤ TÙNG PHÁT SINH LỖI CAO NHẤT</span>
+        </div>
+        <div class="table-responsive">
+          <table class="drilldown-table">
+            <thead>
+              <tr>
+                <th style="width: 35px;">STT</th>
+                <th>Tên chi tiết / Phụ tùng</th>
+                <th>Số lượt kiểm</th>
+                <th>Số lượt lỗi</th>
+                <th>Tỷ lệ lỗi</th>
+                <th>Tổng số SP lỗi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for p in parts[:8] %}
+                <tr>
+                  <td style="font-weight: bold;">{{ loop.index }}</td>
+                  <td style="text-align: left; font-weight: 700; color: #1E293B;">{{ p.part_name }}</td>
+                  <td>{{ p.total_records }}</td>
+                  <td style="color: #DC2626; font-weight: 700;">{{ p.fail_records }}</td>
+                  <td>
+                    {{ ((p.fail_records / p.total_records * 100)|round(1)) if p.total_records > 0 else 0 }}%
+                  </td>
+                  <td style="font-weight: 800; color: #DC2626;">{{ p.error_qty }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Bảng 4: Toàn Bộ Đội Ngũ QC Audit -->
+      <div class="drilldown-panel">
+        <div class="panel-header">
+          <span class="panel-icon">👥</span>
+          <span class="panel-title">4. ĐÁNH GIÁ NĂNG SUẤT TOÀN BỘ ĐỘI NGŨ KIỂM ĐỊNH (QC AUDIT ROSTER)</span>
+        </div>
+        <div class="table-responsive">
+          <table class="drilldown-table">
+            <thead>
+              <tr>
+                <th>Họ tên KCS</th>
+                <th>Công đoạn chính</th>
+                <th>Số phiếu</th>
+                <th>Đạt</th>
+                <th>Không đạt</th>
+                <th>Tỷ lệ Đạt</th>
+                <th>SP lỗi</th>
+                <th>Xếp loại</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for insp in inspectors %}
+                <tr>
+                  <td style="font-weight: 700; text-align: left;">{{ insp.name }}</td>
+                  <td><span class="badge-stage">{{ insp.stage }}</span></td>
+                  <td>{{ insp.total }}</td>
+                  <td style="color: #15803D;">{{ insp.pass_cnt }}</td>
+                  <td style="color: #DC2626;">{{ insp.fail_cnt }}</td>
+                  <td style="font-weight: 700;">{{ insp.pass_rate }}%</td>
+                  <td style="color: #DC2626; font-weight: 800;">{{ insp.error_qty }}</td>
+                  <td>
+                    <span class="insp-eval-pill eval-{{ 'good' if insp.evaluation == 'Xuất sắc' else ('std' if insp.evaluation == 'Đạt chuẩn' else 'warn') }}">
+                      {{ insp.evaluation }}
+                    </span>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Drilldown Grid 2B: Phân tích theo Dòng Hàng & Tỷ lệ lỗi (Full Width) -->
+    <div class="drilldown-row-full" style="margin-top: 14px;">
+      <div class="drilldown-panel" style="width: 100%;">
+        <div class="panel-header">
+          <span class="panel-icon">🏷️</span>
+          <span class="panel-title">5. MA TRẬN CHẤT LƯỢNG & TỶ LỆ LỖI THEO DÒNG HÀNG (PRODUCT LINE QUALITY & DEFECT MATRIX)</span>
+        </div>
+        <div class="table-responsive">
+          <table class="drilldown-table">
+            <thead>
+              <tr>
+                <th style="width: 45px;">STT</th>
+                <th style="width: 80px;">Mã dòng</th>
+                <th style="text-align: left;">Tên dòng hàng</th>
+                <th>Tổng phiếu</th>
+                <th>Phiếu Đạt</th>
+                <th>Phiếu K.Đạt</th>
+                <th>Tỷ lệ Đạt</th>
+                <th>SP kiểm định</th>
+                <th>SP lỗi</th>
+                <th>Tỷ lệ lỗi trên SP</th>
+                <th>Tỷ trọng lỗi xưởng</th>
+                <th>Đánh giá rủi ro</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for pl in product_lines %}
+                <tr>
+                  <td style="font-weight: 700;">{{ pl.stt }}</td>
+                  <td><span class="badge-line line-{{ pl.code|lower }}">{{ pl.code }}</span></td>
+                  <td style="text-align: left; font-weight: 700; color: #0F172A;">{{ pl.name }}</td>
+                  <td style="font-weight: 700;">{{ pl.total_tickets }}</td>
+                  <td style="color: #15803D; font-weight: 700;">{{ pl.pass_tickets }}</td>
+                  <td style="color: #DC2626; font-weight: 700;">{{ pl.fail_tickets }}</td>
+                  <td>
+                    <span class="pass-pill {{ 'pill-good' if pl.pass_rate >= 95 else ('pill-warn' if pl.pass_rate >= 90 else 'pill-bad') }}">
+                      {{ pl.pass_rate }}%
+                    </span>
+                  </td>
+                  <td>{{ pl.sample_qty }}</td>
+                  <td style="font-weight: 800; color: #DC2626;">{{ pl.error_qty }}</td>
+                  <td>
+                    <span style="font-weight: 800; color: {{ '#DC2626' if pl.defect_rate >= 10 else ('#D97706' if pl.defect_rate >= 5 else '#16A34A') }};">
+                      {{ pl.defect_rate }}%
+                    </span>
+                  </td>
+                  <td style="font-weight: 600;">{{ pl.defect_share }}%</td>
+                  <td>
+                    {% if pl.risk == 'Báo động' %}
+                      <span class="badge-tag tag-red">🔴 Báo động</span>
+                    {% elif pl.risk == 'Cảnh báo' %}
+                      <span class="badge-tag tag-orange">⚠️ Cảnh báo</span>
+                    {% else %}
+                      <span class="badge-tag tag-green">🟢 An toàn</span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Drilldown Grid 3: Diễn biến theo ngày (Full Width) -->
+    <div class="drilldown-row-full" style="margin-top: 14px;">
+      
+      <!-- Bảng 6: Diễn biến 7 ngày trong tuần -->
+      <div class="drilldown-panel" style="width: 100%;">
+        <div class="panel-header">
+          <span class="panel-icon">📅</span>
+          <span class="panel-title">6. DIỄN BIẾN CHẤT LƯỢNG CHI TIẾT THEO NGÀY (DAILY TREND BREAKDOWN)</span>
+        </div>
+        <div class="table-responsive">
+          <table class="drilldown-table">
+            <thead>
+              <tr>
+                <th>Thứ / Ngày</th>
+                <th>Tổng phiếu</th>
+                <th>Đạt</th>
+                <th>Không đạt</th>
+                <th>Tỷ lệ Đạt</th>
+                <th>Mẫu kiểm</th>
+                <th>SP lỗi</th>
+                <th>Tỷ lệ lỗi</th>
+                <th>Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for d in daily_breakdown %}
+                <tr class="{{ 'peak-day-row' if d.is_peak else '' }}">
+                  <td style="font-weight: 700; text-align: left;">
+                    {{ d.day_name }} <small style="color: #64748B;">({{ d.date_str }})</small>
+                    {% if d.is_peak %}<span style="color: #DC2626; font-size: 10px;">★ Đỉnh lỗi</span>{% endif %}
+                  </td>
+                  <td style="font-weight: bold;">{{ d.total }}</td>
+                  <td style="color: #15803D;">{{ d.pass_cnt }}</td>
+                  <td style="color: #DC2626; font-weight: bold;">{{ d.fail_cnt }}</td>
+                  <td>
+                    <span class="pass-pill {{ 'pill-good' if d.pass_rate >= 90 else 'pill-bad' }}">
+                      {{ d.pass_rate }}%
+                    </span>
+                  </td>
+                  <td>{{ d.sample_qty }}</td>
+                  <td style="font-weight: 800; color: #DC2626;">{{ d.error_qty }}</td>
+                  <td>{{ d.defect_rate }}%</td>
+                  <td>
+                    {% if d.status == 'Điểm đen' %}
+                      <span class="badge-status-black">Điểm đen</span>
+                    {% elif d.status == 'Cảnh báo' %}
+                      <span class="badge-status-yellow">Cảnh báo</span>
+                    {% else %}
+                      <span class="badge-status-green">Bình thường</span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+  </section>
+
+  <!-- Floating Mobile Quick Navigation (Chỉ hiện trên Mobile/Tablet) -->
+  <aside class="mobile-quick-nav no-print" id="mobileQuickNav">
+    <a href="#drilldownSection" class="mobile-nav-pill" id="btnToDrilldown">
+      <span>📊 Xem Số Liệu Chi Tiết</span>
+    </a>
+    <button class="mobile-nav-pill btn-scroll-top" onclick="window.scrollTo({top: 0, behavior: 'smooth'})" title="Lên đầu trang">
+      <span>▲ Đầu trang</span>
+    </button>
+  </aside>
+
+  <!-- Embed Raw Data for Chart.js Rendering -->
+  <script id="reportData" type="application/json">
+    {{ data_json | safe }}
+  </script>
+  
+  <script src="assets/js/infographic.js"></script>
+</body>
+</html>

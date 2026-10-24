@@ -22,6 +22,7 @@ class DailyInspectionRecord(Base):
     total_defects = Column(Integer, default=0)
     defect_rate = Column(Float, default=0.0)
     created_at = Column(DateTime, default=datetime.datetime.now)
+    data_json = Column(NVARCHAR(None), nullable=True)
 
     # Relationships
     defects = relationship("DailyInspectionDefect", back_populates="record", cascade="all, delete-orphan")
