@@ -8,8 +8,9 @@ import {
   TABLE_CONTEXT_ATTR
 } from '../../dataset/constant/Element'
 import {
-  titleOrderNumberMapping,
-  titleSizeMapping
+  applyHeadingTextCase,
+  getTitleFormatting,
+  titleOrderNumberMapping
 } from '../../dataset/constant/Title'
 import { defaultWatermarkOption } from '../../dataset/constant/Watermark'
 import {
@@ -456,11 +457,13 @@ export class CommandAdapt {
         changeElementList.push(enterElement)
         renderOption = { curIndex: endIndex }
       } else {
-        this.draw.render({
-          curIndex: endIndex,
-          isCompute: false,
-          isSubmitHistory: false
-        })
+        const paragraphElements = this.range.getRangeParagraphElementList()
+        if (paragraphElements && paragraphElements.length) {
+          changeElementList = paragraphElements.filter(
+            el => isTextLikeElement(el) || (!el.type && el.value === ZERO)
+          )
+        }
+        renderOption = { curIndex: endIndex, isSetCursor: true }
       }
     }
     if (!changeElementList.length) return
@@ -472,7 +475,12 @@ export class CommandAdapt {
       ) {
         return
       }
-      el.size = payload
+      this.draw.setElementProperty(el, { size: payload })
+      if (el.valueList && Array.isArray(el.valueList)) {
+        el.valueList.forEach(child => {
+          this.draw.setElementProperty(child, { size: payload })
+        })
+      }
       isExistUpdate = true
     })
     if (isExistUpdate) {
@@ -502,31 +510,34 @@ export class CommandAdapt {
       // 设置默认样式
       const style = this.range.getDefaultStyle()
       const anchorSize = style?.size || enterElement.size || defaultSize
+      const nextSize = anchorSize + 2 > maxSize ? maxSize : anchorSize + 2
       this.range.setDefaultStyle({
-        size: anchorSize + 2 > maxSize ? maxSize : anchorSize + 2
+        size: nextSize
       })
       if (enterElement?.value === ZERO) {
         changeElementList.push(enterElement)
         renderOption = { curIndex: endIndex }
       } else {
-        this.draw.render({
-          curIndex: endIndex,
-          isCompute: false,
-          isSubmitHistory: false
-        })
+        const paragraphElements = this.range.getRangeParagraphElementList()
+        if (paragraphElements && paragraphElements.length) {
+          changeElementList = paragraphElements.filter(
+            el => isTextLikeElement(el) || (!el.type && el.value === ZERO)
+          )
+        }
+        renderOption = { curIndex: endIndex, isSetCursor: true }
       }
     }
     if (!changeElementList.length) return
     let isExistUpdate = false
     changeElementList.forEach(el => {
-      if (!el.size) {
-        el.size = defaultSize
-      }
-      if (el.size >= maxSize) return
-      if (el.size + 2 > maxSize) {
-        el.size = maxSize
-      } else {
-        el.size += 2
+      const curSize = el.size || defaultSize
+      if (curSize >= maxSize) return
+      const newSize = curSize + 2 > maxSize ? maxSize : curSize + 2
+      this.draw.setElementProperty(el, { size: newSize })
+      if (el.valueList && Array.isArray(el.valueList)) {
+        el.valueList.forEach(child => {
+          this.draw.setElementProperty(child, { size: newSize })
+        })
       }
       isExistUpdate = true
     })
@@ -556,31 +567,34 @@ export class CommandAdapt {
       const enterElement = elementList[endIndex]
       const style = this.range.getDefaultStyle()
       const anchorSize = style?.size || enterElement.size || defaultSize
+      const nextSize = anchorSize - 2 < minSize ? minSize : anchorSize - 2
       this.range.setDefaultStyle({
-        size: anchorSize - 2 < minSize ? minSize : anchorSize - 2
+        size: nextSize
       })
       if (enterElement?.value === ZERO) {
         changeElementList.push(enterElement)
         renderOption = { curIndex: endIndex }
       } else {
-        this.draw.render({
-          curIndex: endIndex,
-          isCompute: false,
-          isSubmitHistory: false
-        })
+        const paragraphElements = this.range.getRangeParagraphElementList()
+        if (paragraphElements && paragraphElements.length) {
+          changeElementList = paragraphElements.filter(
+            el => isTextLikeElement(el) || (!el.type && el.value === ZERO)
+          )
+        }
+        renderOption = { curIndex: endIndex, isSetCursor: true }
       }
     }
     if (!changeElementList.length) return
     let isExistUpdate = false
     changeElementList.forEach(el => {
-      if (!el.size) {
-        el.size = defaultSize
-      }
-      if (el.size <= minSize) return
-      if (el.size - 2 < minSize) {
-        el.size = minSize
-      } else {
-        el.size -= 2
+      const curSize = el.size || defaultSize
+      if (curSize <= minSize) return
+      const newSize = curSize - 2 < minSize ? minSize : curSize - 2
+      this.draw.setElementProperty(el, { size: newSize })
+      if (el.valueList && Array.isArray(el.valueList)) {
+        el.valueList.forEach(child => {
+          this.draw.setElementProperty(child, { size: newSize })
+        })
       }
       isExistUpdate = true
     })
@@ -598,8 +612,14 @@ export class CommandAdapt {
     const selection = this.range.getSelectionElementList()
     if (selection?.length) {
       const noBoldIndex = selection.findIndex(s => !s.bold)
+      const nextBold = !!~noBoldIndex
       selection.forEach(el => {
-        el.bold = !!~noBoldIndex
+        this.draw.setElementProperty(el, { bold: nextBold })
+        if (el.valueList && Array.isArray(el.valueList)) {
+          el.valueList.forEach(child => {
+            this.draw.setElementProperty(child, { bold: nextBold })
+          })
+        }
       })
       this.draw.render({ isSetCursor: false })
     } else {
@@ -608,18 +628,33 @@ export class CommandAdapt {
       if (!~endIndex) return
       const elementList = this.draw.getElementList()
       const enterElement = elementList[endIndex]
+      const nextBold = !(this.range.getDefaultStyle()?.bold ?? enterElement.bold)
       this.range.setDefaultStyle({
-        bold: !(this.range.getDefaultStyle()?.bold ?? enterElement.bold)
+        bold: nextBold
       })
+      let changeElementList: IElement[] = []
       if (enterElement?.value === ZERO) {
-        enterElement.bold = !enterElement.bold
+        changeElementList.push(enterElement)
       } else {
-        isSubmitHistory = false
+        const paragraphElements = this.range.getRangeParagraphElementList()
+        if (paragraphElements && paragraphElements.length) {
+          changeElementList = paragraphElements.filter(
+            el => isTextLikeElement(el) || (!el.type && el.value === ZERO)
+          )
+        }
       }
+      changeElementList.forEach(el => {
+        this.draw.setElementProperty(el, { bold: nextBold })
+        if (el.valueList && Array.isArray(el.valueList)) {
+          el.valueList.forEach(child => {
+            this.draw.setElementProperty(child, { bold: nextBold })
+          })
+        }
+      })
       this.draw.render({
         isSubmitHistory,
         curIndex: endIndex,
-        isCompute: false
+        isCompute: true
       })
     }
   }
@@ -925,26 +960,72 @@ export class CommandAdapt {
     // 设置值
     const titleId = getUUID()
     const titleOptions = this.draw.getOptions().title
-    changeElementList.forEach(el => {
-      if (!el.type && el.value === ZERO) return
-      if (payload) {
+    if (payload) {
+      const formatting = getTitleFormatting(payload, titleOptions)
+      const textElements = changeElementList.filter(
+        el => !(!el.type && el.value === ZERO) && isTextLikeElement(el)
+      )
+      applyHeadingTextCase(textElements, payload)
+      changeElementList.forEach(el => {
         this.draw.setElementProperty(el, { level: payload, titleId })
-        if (isTextLikeElement(el)) {
+        if (el.type === ElementType.TITLE || (el as any).type === 'title') {
           this.draw.setElementProperty(el, {
-            size: titleOptions[titleSizeMapping[payload]],
-            bold: true
+            size: formatting.size,
+            ...(formatting.bold ? { bold: true } : {}),
+            ...(formatting.italic ? { italic: true } : {})
           })
+          if (el.valueList) {
+            el.valueList.forEach(child => {
+              this.draw.setElementProperty(child, {
+                level: payload,
+                titleId,
+                size: formatting.size,
+                ...(formatting.bold ? { bold: true } : {}),
+                ...(formatting.italic ? { italic: true } : {})
+              })
+            })
+          }
         }
-      } else {
+        if (isTextLikeElement(el) || (!el.type && el.value === ZERO)) {
+          this.draw.setElementProperty(el, {
+            size: formatting.size
+          })
+          if (formatting.bold) {
+            this.draw.setElementProperty(el, { bold: true })
+          } else {
+            this.draw.deleteElementProperty(el, ['bold'])
+          }
+          if (formatting.italic) {
+            this.draw.setElementProperty(el, { italic: true })
+          } else {
+            this.draw.deleteElementProperty(el, ['italic'])
+          }
+        }
+      })
+    } else {
+      changeElementList.forEach(el => {
         this.draw.deleteElementProperty(el, [
           'titleId',
           'title',
           'level',
           'size',
-          'bold'
+          'bold',
+          'italic'
         ])
-      }
-    })
+        if (el.valueList) {
+          el.valueList.forEach(child => {
+            this.draw.deleteElementProperty(child, [
+              'titleId',
+              'title',
+              'level',
+              'size',
+              'bold',
+              'italic'
+            ])
+          })
+        }
+      })
+    }
     // 光标定位
     const isSetCursor = startIndex === endIndex
     const curIndex = isSetCursor ? endIndex : startIndex
@@ -955,6 +1036,18 @@ export class CommandAdapt {
     const isReadonly = this.draw.isReadonly()
     if (isReadonly) return
     this.draw.getListParticle().setList(listType, listStyle)
+  }
+
+  public restartListNumbering() {
+    const isReadonly = this.draw.isReadonly()
+    if (isReadonly) return
+    this.draw.getListParticle().restartListNumbering()
+  }
+
+  public continueListNumbering() {
+    const isReadonly = this.draw.isReadonly()
+    if (isReadonly) return
+    this.draw.getListParticle().continueListNumbering()
   }
 
   public rowFlex(payload: RowFlex) {
@@ -2334,6 +2427,70 @@ export class CommandAdapt {
       elementList: IElement[],
       titleId: string
     ): (IRange & IPositionContext) | null {
+      if (titleId.startsWith('__para_catalog__:')) {
+        const startHint = Number(titleId.split(':')[1])
+        if (!Number.isNaN(startHint) && startHint >= 0 && startHint < elementList.length) {
+          let newIndex = startHint
+          while (newIndex + 1 < elementList.length) {
+            const nextEl = elementList[newIndex + 1]
+            if (nextEl.value === ZERO || nextEl.value === '\n') break
+            newIndex++
+          }
+          return {
+            isTable: false,
+            startIndex: newIndex,
+            endIndex: newIndex
+          }
+        }
+      }
+      if (titleId.startsWith('__list_catalog__:')) {
+        const parts = titleId.split(':')
+        const targetListId = parts[1]
+        const startHint = Number(parts[2])
+        let matchStart = -1
+        if (
+          !Number.isNaN(startHint) &&
+          startHint >= 0 &&
+          startHint < elementList.length &&
+          elementList[startHint]?.listId === targetListId
+        ) {
+          matchStart = startHint
+        } else {
+          let bestDist = Infinity
+          for (let i = 0; i < elementList.length; i++) {
+            const el = elementList[i]
+            if (
+              el.listId === targetListId &&
+              (el.value === ZERO || el.value === '\n' || i === 0 || elementList[i - 1]?.listId !== targetListId) &&
+              !el.listWrap
+            ) {
+              const dist = Number.isNaN(startHint) ? 0 : Math.abs(i - startHint)
+              if (dist < bestDist) {
+                bestDist = dist
+                matchStart = i
+              }
+            }
+          }
+        }
+        if (~matchStart) {
+          let newIndex = matchStart
+          while (newIndex + 1 < elementList.length) {
+            const nextEl = elementList[newIndex + 1]
+            if (
+              nextEl.listId !== targetListId ||
+              ((nextEl.value === ZERO || nextEl.value === '\n') && !nextEl.listWrap)
+            ) {
+              break
+            }
+            newIndex++
+          }
+          return {
+            isTable: false,
+            startIndex: newIndex,
+            endIndex: newIndex
+          }
+        }
+      }
       for (let e = 0; e < elementList.length; e++) {
         const element = elementList[e]
         if (element.type === ElementType.TABLE) {

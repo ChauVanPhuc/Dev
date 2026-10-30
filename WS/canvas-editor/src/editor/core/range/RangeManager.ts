@@ -1,6 +1,7 @@
 import { ElementType } from '../..'
 import { ZERO } from '../../dataset/constant/Common'
 import { TEXTLIKE_ELEMENT_TYPE } from '../../dataset/constant/Element'
+import { getTitleFormatting } from '../../dataset/constant/Title'
 import { ControlComponent } from '../../dataset/enum/Control'
 import { EditorContext } from '../../dataset/enum/Editor'
 import { IControlContext } from '../../interface/Control'
@@ -75,9 +76,15 @@ export class RangeManager {
   ): IElement | null {
     const anchorElement = getAnchorElement(elementList, anchorIndex)
     if (!anchorElement) return null
+    if (anchorElement.value === ZERO) {
+      return {
+        ...anchorElement,
+        ...this.defaultStyle
+      }
+    }
     return {
-      ...anchorElement,
-      ...this.defaultStyle
+      ...this.defaultStyle,
+      ...anchorElement
     }
   }
 
@@ -517,10 +524,19 @@ export class RangeManager {
     // 类型
     const type = curElement.type || ElementType.TEXT
     // 富文本
+    const level = curElement.level || null
+    const titleFormatting = level
+      ? getTitleFormatting(level, this.options.title)
+      : null
     const font = curElement.font || this.options.defaultFont
-    const size = curElement.size || this.options.defaultSize
-    const bold = !~curElementList.findIndex(el => !el.bold)
-    const italic = !~curElementList.findIndex(el => !el.italic)
+    const size =
+      curElement.size || titleFormatting?.size || this.options.defaultSize
+    const bold = titleFormatting
+      ? (curElement.bold ?? titleFormatting.bold)
+      : !~curElementList.findIndex(el => !el.bold)
+    const italic = titleFormatting
+      ? (curElement.italic ?? titleFormatting.italic)
+      : !~curElementList.findIndex(el => !el.italic)
     const underline = !~curElementList.findIndex(
       el => !el.underline && !el.control?.underline
     )
@@ -532,7 +548,6 @@ export class RangeManager {
     const spacingBefore = curElement.spacingBefore ?? 0
     const spacingAfter = curElement.spacingAfter ?? 0
     const dashArray = curElement.dashArray || []
-    const level = curElement.level || null
     const listType = curElement.listType || null
     const listStyle = curElement.listStyle || null
     const textDecoration = underline ? curElement.textDecoration || null : null

@@ -60,7 +60,7 @@ export class SettingsModal {
         this.currentOptions.paperDirection || PaperDirection.VERTICAL,
       margins: [m[0] ?? 100, m[1] ?? 120, m[2] ?? 100, m[3] ?? 120],
       defaultFont: this.currentOptions.defaultFont || 'Times New Roman',
-      defaultSize: this.currentOptions.defaultSize || 16,
+      defaultSize: this.currentOptions.defaultSize || 13,
       defaultColor: this.currentOptions.defaultColor || '#000000',
       defaultRowMargin: this.currentOptions.defaultRowMargin || 1,
       watermarkEnabled: !!(wm && wm.data),
@@ -399,10 +399,10 @@ export class SettingsModal {
             <label class="settings-label">Cỡ chữ mặc định (pt/px)</label>
             <select class="settings-select" id="setting-default-size">
               <option value="12" ${this.formState.defaultSize === 12 ? 'selected' : ''}>12 pt</option>
-              <option value="13" ${this.formState.defaultSize === 13 ? 'selected' : ''}>13 pt</option>
+              <option value="13" ${this.formState.defaultSize === 13 ? 'selected' : ''}>13 pt (Tiêu chuẩn)</option>
               <option value="14" ${this.formState.defaultSize === 14 ? 'selected' : ''}>14 pt</option>
               <option value="15" ${this.formState.defaultSize === 15 ? 'selected' : ''}>15 pt</option>
-              <option value="16" ${this.formState.defaultSize === 16 ? 'selected' : ''}>16 pt (Tiêu chuẩn)</option>
+              <option value="16" ${this.formState.defaultSize === 16 ? 'selected' : ''}>16 pt</option>
               <option value="18" ${this.formState.defaultSize === 18 ? 'selected' : ''}>18 pt</option>
               <option value="20" ${this.formState.defaultSize === 20 ? 'selected' : ''}>20 pt</option>
               <option value="24" ${this.formState.defaultSize === 24 ? 'selected' : ''}>24 pt</option>
@@ -812,7 +812,7 @@ export class SettingsModal {
       paperDirection: PaperDirection.VERTICAL,
       margins: [100, 120, 100, 120],
       defaultFont: 'Times New Roman',
-      defaultSize: 16,
+      defaultSize: 13,
       defaultColor: '#000000',
       defaultRowMargin: 1,
       watermarkEnabled: false,

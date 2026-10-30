@@ -708,7 +708,9 @@ export const commentList: IComment[] = []
 
 export const options: IEditorOption = {
   locale: 'vi',
+  scale: 0.8,
   defaultFont: 'Times New Roman',
+  defaultColor: '#000000',
   margins: [100, 120, 100, 120],
   lab: {
     incrementalCompute: true

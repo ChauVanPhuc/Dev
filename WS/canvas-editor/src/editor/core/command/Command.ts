@@ -33,6 +33,8 @@ export class Command {
   public executeHighlight: CommandAdapt['highlight']
   public executeTitle: CommandAdapt['title']
   public executeList: CommandAdapt['list']
+  public executeRestartListNumbering: CommandAdapt['restartListNumbering']
+  public executeContinueListNumbering: CommandAdapt['continueListNumbering']
   public executeRowFlex: CommandAdapt['rowFlex']
   public executeRowMargin: CommandAdapt['rowMargin']
   public executeSpacingBefore: CommandAdapt['spacingBefore']
@@ -256,6 +258,14 @@ export class Command {
     // 标题、对齐方式、列表
     this.executeTitle = this.wrap('executeTitle', adapt.title.bind(adapt))
     this.executeList = this.wrap('executeList', adapt.list.bind(adapt))
+    this.executeRestartListNumbering = this.wrap(
+      'executeRestartListNumbering',
+      adapt.restartListNumbering.bind(adapt)
+    )
+    this.executeContinueListNumbering = this.wrap(
+      'executeContinueListNumbering',
+      adapt.continueListNumbering.bind(adapt)
+    )
     this.executeRowFlex = this.wrap('executeRowFlex', adapt.rowFlex.bind(adapt))
     this.executeRowMargin = this.wrap(
       'executeRowMargin',

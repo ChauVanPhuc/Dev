@@ -48,11 +48,14 @@ export class IncrementalRowComputer {
       firstElement.value === ZERO &&
       !firstElement.listWrap
     ) {
-      const count = snapshot.listIndexMap.get(firstElement.listId)
+      const listKey = `${firstElement.listId}_${firstElement.listLevel ?? 0}_${
+        firstElement.listType || 'ol'
+      }`
+      const count = snapshot.listIndexMap.get(listKey)
       if (count === 0) {
-        snapshot.listIndexMap.delete(firstElement.listId)
+        snapshot.listIndexMap.delete(listKey)
       } else if (count != null) {
-        snapshot.listIndexMap.set(firstElement.listId, count - 1)
+        snapshot.listIndexMap.set(listKey, count - 1)
       }
     }
     this.snapshotMap.set(row, snapshot)
@@ -246,7 +249,8 @@ export class IncrementalRowComputer {
       if (
         !lastRow ||
         lastRow.elementList.length !== 1 ||
-        lastRow.elementList[0] !== elementList[convergedStartIndex]
+        lastRow.elementList[0] !== elementList[convergedStartIndex] ||
+        (lastRow.offsetX || 0) !== (rawRowList[convergedOldRowIdx].offsetX || 0)
       ) {
         return null
       }

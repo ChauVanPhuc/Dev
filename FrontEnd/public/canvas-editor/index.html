@@ -6,8 +6,91 @@
   <link rel="icon" type="image/png" href="/canvas-editor/assets/favicon-B2ZRofZp.png" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Trình soạn thảo văn bản Canvas (Canvas Editor)</title>
-  <script type="module" crossorigin src="/canvas-editor/assets/index-BLCIJZh1.js"></script>
-  <link rel="stylesheet" crossorigin href="/canvas-editor/assets/index-j7wGLk3J.css">
+  <style>.menu-item__codeblock,.menu-item__control,.menu-item__checkbox,.menu-item__radio,.menu-item__latex,.menu-item__date,.menu-item__block,.menu-item__watermark,.menu-item__separator,.menu-item__hyperlink,.menu-item__strikeout,.menu-item__export-docx,.menu-item__import-docx{display:none!important}.menu-item .comment-line-toggle,.menu-item>div.comment-line-toggle,.comment-line-toggle,.comment-line-toggle.is-active{width:auto!important;min-width:unset!important;max-width:unset!important;white-space:nowrap!important;-webkit-user-select:none!important;user-select:none!important;cursor:pointer!important;color:#7b5233!important;box-sizing:border-box!important;z-index:10!important;background-color:#faf4ef!important;border:1.5px solid #7b5233!important;border-radius:5px!important;flex-shrink:0!important;justify-content:center!important;align-items:center!important;gap:7px!important;height:28px!important;margin:0 4px 0 8px!important;padding:0 10px!important;display:inline-flex!important;position:static!important;inset:auto!important;overflow:visible!important;transform:none!important;box-shadow:0 1px 3px #7b52331f!important}.comment-line-toggle:has(#comment-line-switch:checked){width:auto!important;min-width:unset!important;max-width:unset!important;white-space:nowrap!important;-webkit-user-select:none!important;user-select:none!important;cursor:pointer!important;color:#7b5233!important;box-sizing:border-box!important;z-index:10!important;background-color:#faf4ef!important;border:1.5px solid #7b5233!important;border-radius:5px!important;flex-shrink:0!important;justify-content:center!important;align-items:center!important;gap:7px!important;height:28px!important;margin:0 4px 0 8px!important;padding:0 10px!important;display:inline-flex!important;position:static!important;inset:auto!important;overflow:visible!important;transform:none!important;box-shadow:0 1px 3px #7b52331f!important}.menu-item .comment-line-toggle:hover,.menu-item>div.comment-line-toggle:hover,.comment-line-toggle:hover{background-color:#f5ebe1!important;border-color:#7b5233!important;box-shadow:0 2px 6px #7b523333!important}.menu-item .comment-line-toggle span,.menu-item>div.comment-line-toggle span,.comment-line-toggle span,.comment-line-toggle.is-active span{width:auto!important;min-width:unset!important;max-width:unset!important;height:auto!important;min-height:unset!important;max-height:unset!important;color:#7b5233!important;white-space:nowrap!important;letter-spacing:.2px!important;border:none!important;margin:0!important;padding:0!important;font-size:12px!important;font-weight:700!important;line-height:1!important;display:inline-block!important}.comment-line-toggle:has(#comment-line-switch:checked) span{width:auto!important;min-width:unset!important;max-width:unset!important;height:auto!important;min-height:unset!important;max-height:unset!important;color:#7b5233!important;white-space:nowrap!important;letter-spacing:.2px!important;border:none!important;margin:0!important;padding:0!important;font-size:12px!important;font-weight:700!important;line-height:1!important;display:inline-block!important}.menu-item .comment-line-toggle .comment-line-toggle__switch,.menu-item>div.comment-line-toggle .comment-line-toggle__switch,.comment-line-toggle .comment-line-toggle__switch{cursor:pointer!important;flex-shrink:0!important;width:32px!important;height:18px!important;margin:0!important;padding:0!important;display:inline-block!important;position:relative!important}.menu-item .comment-line-toggle .comment-line-toggle__switch input,.comment-line-toggle .comment-line-toggle__switch input{display:none!important}.menu-item .comment-line-toggle .comment-line-toggle__switch i,.comment-line-toggle .comment-line-toggle__switch i{cursor:pointer!important;background:#c0c6cf!important;border-radius:9px!important;width:32px!important;height:18px!important;margin:0!important;padding:0!important;transition:all .2s!important;display:block!important;position:absolute!important;inset:0!important}.menu-item .comment-line-toggle .comment-line-toggle__switch i:before,.comment-line-toggle .comment-line-toggle__switch i:before{content:""!important;background:#fff!important;border-radius:50%!important;width:14px!important;height:14px!important;transition:all .2s!important;position:absolute!important;top:2px!important;left:2px!important}.menu-item .comment-line-toggle .comment-line-toggle__switch input:checked+i,.comment-line-toggle .comment-line-toggle__switch input:checked+i{background:#7b5233!important}.menu-item .comment-line-toggle .comment-line-toggle__switch input:checked+i:before,.comment-line-toggle .comment-line-toggle__switch input:checked+i:before{transform:translate(14px)!important}#btn-compare-original,.menu-item #btn-compare-original,.menu-item>div#btn-compare-original,.menu-item .menu-item__compare-original,.menu-item>div.menu-item__compare-original,.menu-item__compare-original{width:auto!important;min-width:unset!important;max-width:unset!important;white-space:nowrap!important;color:#7b5233!important;box-sizing:border-box!important;cursor:pointer!important;-webkit-user-select:none!important;user-select:none!important;z-index:10!important;background-color:#faf4ef!important;border:1.5px solid #7b5233!important;border-radius:5px!important;flex-shrink:0!important;justify-content:center!important;align-items:center!important;gap:6px!important;height:28px!important;min-height:28px!important;max-height:28px!important;margin:0 4px!important;padding:0 10px!important;font-size:12px!important;font-weight:700!important;line-height:1!important;transition:all .2s!important;display:inline-flex!important;position:static!important;inset:auto!important;overflow:visible!important;transform:none!important;box-shadow:0 1px 3px #7b52331f!important}#btn-compare-original:hover,.menu-item #btn-compare-original:hover,.menu-item>div#btn-compare-original:hover,.menu-item .menu-item__compare-original:hover,.menu-item>div.menu-item__compare-original:hover,.menu-item__compare-original:hover{color:#fff!important;background-color:#7b5233!important;border-color:#7b5233!important;box-shadow:0 2px 6px #7b523340!important}#btn-compare-original svg,.menu-item #btn-compare-original svg,.menu-item>div#btn-compare-original svg,.menu-item .menu-item__compare-original svg,.menu-item>div.menu-item__compare-original svg,.menu-item__compare-original svg{stroke:currentColor!important;border:none!important;flex-shrink:0!important;width:14px!important;min-width:14px!important;max-width:14px!important;height:14px!important;min-height:14px!important;max-height:14px!important;margin:0!important;padding:0!important;display:inline-block!important;position:static!important}#btn-compare-original span,.menu-item #btn-compare-original span,.menu-item>div#btn-compare-original span,.menu-item .menu-item__compare-original span,.menu-item>div.menu-item__compare-original span,.menu-item__compare-original span{width:auto!important;min-width:unset!important;max-width:unset!important;height:auto!important;min-height:unset!important;max-height:unset!important;color:inherit!important;white-space:nowrap!important;letter-spacing:.2px!important;background:0 0!important;border:none!important;margin:0!important;padding:0!important;font-size:12px!important;font-weight:700!important;line-height:1!important;display:inline-block!important;position:static!important}.catalog{box-sizing:border-box!important;z-index:10!important;background-color:#faf7f2!important;border-right:1.5px solid #eadcc9!important;width:200px!important;padding:10px 10px 16px 12px!important;position:fixed!important;top:76px!important;bottom:38px!important;left:0!important;overflow:hidden!important;box-shadow:2px 0 10px #7b523314!important}.catalog .catalog__header{border-bottom:1px solid #eadcc9!important;justify-content:space-between!important;align-items:center!important;height:36px!important;margin-bottom:6px!important;padding-bottom:4px!important;display:flex!important}.catalog .catalog__header span{color:#7b5233!important;letter-spacing:.2px!important;font-size:14px!important;font-weight:700!important}.catalog .catalog__header__actions{align-items:center!important;gap:4px!important;display:flex!important}.catalog .catalog__header__auto,.catalog .catalog__header__close{cursor:pointer!important;border-radius:4px!important;justify-content:center!important;align-items:center!important;width:24px!important;height:24px!important;transition:all .2s!important;display:flex!important}.catalog .catalog__header__auto:hover,.catalog .catalog__header__close:hover{background:#eadcc9!important}.catalog__main{height:calc(100% - 46px)!important;padding:4px 0!important;overflow-y:auto!important}.catalog__main .catalog-item{box-sizing:border-box!important;width:100%!important;padding-left:10px!important}.catalog__main>.catalog-item{padding-left:0!important}.catalog__main .catalog-item .catalog-item__content{white-space:nowrap!important;text-overflow:ellipsis!important;border-radius:4px!important;width:100%!important;padding:2px 4px!important;transition:background-color .15s!important;overflow:hidden!important}.catalog__main .catalog-item .catalog-item__content:hover{background-color:#f5ebe1!important}.catalog__main .catalog-item .catalog-item__content span{color:#4a3525!important;cursor:pointer!important;-webkit-user-select:none!important;user-select:none!important;font-size:12px!important;font-weight:600!important;line-height:24px!important;transition:color .15s!important}.catalog__main .catalog-item .catalog-item__content:hover>span{color:#7b5233!important}body.has-catalog .editor{box-sizing:border-box!important;width:calc(100% - 200px)!important;margin-left:200px!important;transition:margin-left .2s,width .2s!important}body:has(.catalog:not([style*="display: none"])) .editor{box-sizing:border-box!important;width:calc(100% - 200px)!important;margin-left:200px!important;transition:margin-left .2s,width .2s!important}#app:has(.catalog:not([style*="display: none"])) .editor{box-sizing:border-box!important;width:calc(100% - 200px)!important;margin-left:200px!important;transition:margin-left .2s,width .2s!important}body.has-catalog .editor>div,body.has-catalog .editor .ce-page-container{margin:85px auto 30px!important;transition:margin .2s!important}body:has(.catalog:not([style*="display: none"])) .editor>div{margin:85px auto 30px!important;transition:margin .2s!important}body:has(.catalog:not([style*="display: none"])) .editor .ce-page-container{margin:85px auto 30px!important;transition:margin .2s!important}#app:has(.catalog:not([style*="display: none"])) .editor>div{margin:85px auto 30px!important;transition:margin .2s!important}#app:has(.catalog:not([style*="display: none"])) .editor .ce-page-container{margin:85px auto 30px!important;transition:margin .2s!important}body:not(.has-catalog) .editor{box-sizing:border-box!important;width:100%!important;margin-left:0!important;transition:margin-left .2s,width .2s!important}body:has(.catalog[style*="display: none"]) .editor{box-sizing:border-box!important;width:100%!important;margin-left:0!important;transition:margin-left .2s,width .2s!important}#app:has(.catalog[style*="display: none"]) .editor{box-sizing:border-box!important;width:100%!important;margin-left:0!important;transition:margin-left .2s,width .2s!important}.editor{overflow-x:auto!important}#btn-catalog-tab-open{z-index:9!important;color:#7b5233!important;cursor:pointer!important;-webkit-user-select:none!important;user-select:none!important;background-color:#faf4ef!important;border:1.5px solid #7b5233!important;border-left:none!important;border-radius:0 5px 5px 0!important;padding:4px 8px!important;font-size:11px!important;font-weight:700!important;transition:all .2s!important;display:none!important;position:fixed!important;top:90px!important;left:0!important;box-shadow:1px 2px 6px #7b523326!important}#btn-catalog-tab-open:hover{color:#fff!important;background-color:#7b5233!important}body:not(.has-catalog) #btn-catalog-tab-open{display:block!important}body:has(.catalog[style*="display: none"]) #btn-catalog-tab-open{display:block!important}html,body,#app{overflow-x:auto!important}</style>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      function setupCommentToggle() {
+        var sw = document.getElementById('comment-line-switch');
+        var toggle = document.querySelector('.comment-line-toggle');
+        if (sw && toggle) {
+          function update() {
+            if (sw.checked) {
+              toggle.classList.add('is-active');
+            } else {
+              toggle.classList.remove('is-active');
+            }
+          }
+          sw.addEventListener('change', update);
+          update();
+        } else {
+          setTimeout(setupCommentToggle, 200);
+        }
+      }
+      setupCommentToggle();
+      function setupCompareBtn() {
+        var btnCompare = document.getElementById('btn-compare-original');
+        if (btnCompare) {
+          btnCompare.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (window.parent && typeof window.parent.__openCompareMode__ === 'function') {
+              window.parent.__openCompareMode__();
+            } else {
+              window.parent.postMessage({ type: 'OPEN_COMPARE_MODE' }, '*');
+              if (window.top && window.top !== window.parent) {
+                window.top.postMessage({ type: 'OPEN_COMPARE_MODE' }, '*');
+              }
+            }
+          });
+        } else {
+          setTimeout(setupCompareBtn, 200);
+        }
+      }
+      setupCompareBtn();
+      function syncCatalogState() {
+        var catalog = document.querySelector('.catalog');
+        if (catalog) {
+          var isVisible = catalog.style.display !== 'none' && getComputedStyle(catalog).display !== 'none';
+          document.body.classList.toggle('has-catalog', isVisible);
+        }
+      }
+      document.addEventListener('click', function(e) {
+        if (e.target && (e.target.closest('.catalog-mode') || e.target.closest('.catalog__header__close') || e.target.closest('#btn-catalog-tab-open'))) {
+          setTimeout(syncCatalogState, 60);
+        }
+      });
+      function ensureCatalogTab() {
+        if (!document.getElementById('btn-catalog-tab-open')) {
+          var tabBtn = document.createElement('div');
+          tabBtn.id = 'btn-catalog-tab-open';
+          tabBtn.title = 'Mở danh mục Mục lục';
+          tabBtn.innerHTML = '📑 Mục lục';
+          tabBtn.onclick = function() {
+            var cat = document.querySelector('.catalog');
+            if (cat) {
+              cat.style.display = 'block';
+              if (typeof window.updateCatalog === 'function') window.updateCatalog();
+              syncCatalogState();
+            }
+          };
+          document.body.appendChild(tabBtn);
+        }
+      }
+      ensureCatalogTab();
+      try {
+        var catEl = document.querySelector('.catalog');
+        if (catEl) {
+          var observer = new MutationObserver(syncCatalogState);
+          observer.observe(catEl, { attributes: true, attributeFilter: ['style', 'class'] });
+        }
+      } catch(_) {}
+      syncCatalogState();
+
+
+    });
+  </script>
+  <script type="module" crossorigin src="/canvas-editor/assets/index-CEKFKAQC.js"></script>
+  <link rel="stylesheet" crossorigin href="/canvas-editor/assets/index-C5-f4z0Z.css">
 </head>
 
 <body>
@@ -48,7 +131,7 @@
           </div>
         </div>
         <div class="menu-item__size">
-          <span class="select" title="Cỡ chữ">16</span>
+          <span class="select" title="Cỡ chữ">13</span>
           <div class="options">
             <ul>
               <li data-size="56">56</li>
@@ -61,9 +144,13 @@
               <li data-size="20">20</li>
               <li data-size="18">18</li>
               <li data-size="16">16</li>
+              <li data-size="15">15</li>
               <li data-size="14">14</li>
+              <li data-size="13" class="active">13</li>
               <li data-size="12">12</li>
+              <li data-size="11">11</li>
               <li data-size="10">10</li>
+              <li data-size="9">9</li>
               <li data-size="8">8</li>
               <li data-size="7">7</li>
               <li data-size="6">6</li>
@@ -180,6 +267,14 @@
           </div>
         </div>
       </div>
+      <div class="menu-divider"></div>
+      <div class="comment-line-toggle" editor-component="comment-line-toggle" title="Hiện/Ẩn đường chỉ dẫn bình luận">
+        <span>Chỉ dẫn</span>
+        <label class="comment-line-toggle__switch" title="Hiện/Ẩn đường chỉ dẫn bình luận">
+          <input type="checkbox" id="comment-line-switch" />
+          <i></i>
+        </label>
+      </div>
       </div>
       <div class="menu-row menu-row-2">
       <div class="menu-item">
@@ -188,13 +283,13 @@
           <span class="select" title="Kiểu đề mục">Văn bản thường</span>
           <div class="options">
             <ul>
-              <li style="font-size:16px;">Văn bản thường</li>
-              <li data-level="first" style="font-size:26px;">Tiêu đề 1</li>
-              <li data-level="second" style="font-size:24px;">Tiêu đề 2</li>
-              <li data-level="third" style="font-size:22px;">Tiêu đề 3</li>
-              <li data-level="fourth" style="font-size:20px;">Tiêu đề 4</li>
-              <li data-level="fifth" style="font-size:18px;">Tiêu đề 5</li>
-              <li data-level="sixth" style="font-size:16px;">Tiêu đề 6</li>
+              <li style="font-size:13px; font-weight:normal; font-style:normal;">Văn bản thường</li>
+              <li data-level="first" style="font-size:16px; font-weight:bold; text-transform:uppercase;">Tiêu đề 1</li>
+              <li data-level="second" style="font-size:14px; font-weight:bold; text-transform:capitalize;">Tiêu đề 2</li>
+              <li data-level="third" style="font-size:13px; font-weight:bold;">Tiêu đề 3</li>
+              <li data-level="fourth" style="font-size:13px; font-weight:bold; font-style:italic;">Tiêu đề 4</li>
+              <li data-level="fifth" style="font-size:13px; font-weight:bold; font-style:italic;">Tiêu đề 5</li>
+              <li data-level="sixth" style="font-size:13px; font-weight:normal; font-style:italic;">Tiêu đề 6</li>
             </ul>
           </div>
         </div>
@@ -259,11 +354,32 @@
                   <span class="list-subtitle">Không áp dụng kiểu danh sách</span>
                 </div>
               </li>
-              <li data-list-type="ol" data-list-style='decimal' title="Tạo danh sách đánh số thứ tự">
+              <li data-list-type="ol" data-list-style='decimal' title="Tạo danh sách đánh số thứ tự (1., 2., 3.)">
                 <span class="list-preview-box">1.</span>
                 <div class="list-info">
                   <span class="list-title">Danh sách có số</span>
-                  <span class="list-subtitle">1., 2., 3. theo thứ tự</span>
+                  <span class="list-subtitle">1., 2., 3. theo thứ tự (nhấn Tab để thụt cấp)</span>
+                </div>
+              </li>
+              <li data-list-type="ol" data-list-style='lower-alpha-paren' title="Tạo danh sách chữ cái a), b), c)">
+                <span class="list-preview-box">a)</span>
+                <div class="list-info">
+                  <span class="list-title">Danh sách chữ cái a), b)</span>
+                  <span class="list-subtitle">a), b), c) theo thứ tự</span>
+                </div>
+              </li>
+              <li data-list-type="ol" data-list-style='lower-alpha' title="Tạo danh sách chữ cái a., b., c.">
+                <span class="list-preview-box">a.</span>
+                <div class="list-info">
+                  <span class="list-title">Danh sách chữ cái a., b.</span>
+                  <span class="list-subtitle">a., b., c. theo thứ tự</span>
+                </div>
+              </li>
+              <li data-list-type="ol" data-list-style='lower-roman' title="Tạo danh sách số La Mã i., ii., iii.">
+                <span class="list-preview-box">i.</span>
+                <div class="list-info">
+                  <span class="list-title">Danh sách số La Mã</span>
+                  <span class="list-subtitle">i., ii., iii. theo thứ tự</span>
                 </div>
               </li>
               <li data-list-type="ul" data-list-style='checkbox' title="Tạo danh sách việc cần làm">
@@ -292,6 +408,20 @@
                 <div class="list-info">
                   <span class="list-title">Dấu ô vuông rỗng</span>
                   <span class="list-subtitle">Kiểu ô vuông rỗng (Square)</span>
+                </div>
+              </li>
+              <li data-list-action="continue" title="Nối tiếp số thứ tự với danh sách phía trên">
+                <span class="list-preview-box">↪</span>
+                <div class="list-info">
+                  <span class="list-title">Tiếp tục đánh số</span>
+                  <span class="list-subtitle">Nối tiếp số thứ tự của mục trên</span>
+                </div>
+              </li>
+              <li data-list-action="restart" title="Đặt lại số thứ tự bắt đầu từ 1.">
+                <span class="list-preview-box">1↺</span>
+                <div class="list-info">
+                  <span class="list-title">Đánh số lại từ 1</span>
+                  <span class="list-subtitle">Bắt đầu lại bộ đếm từ 1.</span>
                 </div>
               </li>
             </ul>
@@ -387,9 +517,16 @@
         <div class="menu-item__export-docx" title="Xuất file Word (.docx)">
           <i></i>
         </div>
-        <div class="menu-item__import-docx" title="Mở / Nhập file Word (.docx)">
+        <div class="menu-item__import-docx" title="Mở / Nhập file Word (.docx, .doc)">
           <i></i>
-          <input type="file" id="docx-input" accept=".docx" style="display:none" />
+          <input type="file" id="docx-input" accept=".docx,.doc" style="display:none" />
+        </div>
+                <div class="menu-item__compare-original" id="btn-compare-original" title="So sánh song song với bản gốc (Toàn màn hình)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="20" height="18" rx="2" ry="2"></rect>
+            <line x1="12" y1="3" x2="12" y2="21"></line>
+          </svg>
+          <span>So sánh bản gốc</span>
         </div>
       </div>
       </div>
@@ -409,13 +546,6 @@
       <div class="catalog__main"></div>
     </div>
     <div class="editor"></div>
-    <div class="comment-line-toggle" editor-component="comment-line-toggle">
-      <span>Chỉ dẫn</span>
-      <label class="comment-line-toggle__switch" title="Hiện/Ẩn đường chỉ dẫn bình luận">
-        <input type="checkbox" id="comment-line-switch" />
-        <i></i>
-      </label>
-    </div>
     <div class="comment" editor-component="comment"></div>
     <div class="footer" editor-component="footer">
       <div>

@@ -1293,7 +1293,7 @@ ul {
 }
 
 .editor > div {
-  margin: 95px auto;
+  margin: 85px auto 30px auto;
 }
 
 /* 标尺滚动吸附时避开固定工具栏 */

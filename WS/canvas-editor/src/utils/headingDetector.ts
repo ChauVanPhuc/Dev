@@ -1,4 +1,8 @@
 import Editor, { IElement, TitleLevel, ElementType } from '../editor'
+import {
+  applyHeadingTextCase,
+  getTitleFormatting
+} from '../editor/dataset/constant/Title'
 import { getUUID } from '../editor/utils'
 
 export interface IAutoDetectHeadingsOptions {
@@ -39,13 +43,17 @@ export function autoDetectHeadings(
   const elementList = result?.data?.main
   if (!elementList || !elementList.length) return 0
 
-  // If not forcing, check if titles already exist
-  if (!options?.force) {
-    const hasExistingTitles = elementList.some(
-      (el: IElement) => !!el.titleId && !!el.level
+  if (
+    options?.force === false &&
+    elementList.some(
+      el => el.type === ElementType.TITLE || (el.titleId && el.level)
     )
-    if (hasExistingTitles) return 0
+  ) {
+    return 0
   }
+
+  // Paragraphs that already have a titleId/level are skipped individually below,
+  // so the detector must still run when the cover title already has one.
 
   // Group elements into paragraphs (separated by \n or tables)
   interface IParagraph {
@@ -58,7 +66,7 @@ export function autoDetectHeadings(
 
   for (let i = 0; i < elementList.length; i++) {
     const el = elementList[i]
-    if (el.type === ElementType.TABLE) {
+    if (el.type === ElementType.TABLE || el.type === ElementType.LIST) {
       if (currentGroup.length) {
         const text = currentGroup
           .map(e => e.value || '')
@@ -121,7 +129,7 @@ export function autoDetectHeadings(
     // Check formatting indicators: bold or large font size
     const isBold = elements.some(e => !!e.bold)
     const maxFontSize = Math.max(...elements.map(e => e.size || 0))
-    const isLarge = maxFontSize >= 18 // >= 13.5pt (default size in canvas-editor is 16)
+    const isLarge = maxFontSize >= 15 // >= 15px (default normal text size is 13)
 
     let matchedLevel: TitleLevel | null = null
 
@@ -133,6 +141,9 @@ export function autoDetectHeadings(
       matchedLevel = TitleLevel.FIRST
     } else if (NUMBERED_REGEX.test(text)) {
       matchedLevel = hasRomanOrMajor ? TitleLevel.SECOND : TitleLevel.FIRST
+      if (hasRomanOrMajor && !isBold && text !== text.toUpperCase()) {
+        matchedLevel = null
+      }
     } else if (SUB_SECTION_REGEX.test(text) || LETTER_REGEX.test(text)) {
       matchedLevel = TitleLevel.SECOND
     } else if (SUB_LETTER_REGEX.test(text)) {
@@ -149,12 +160,23 @@ export function autoDetectHeadings(
 
     if (matchedLevel) {
       const titleId = getUUID()
+      const formatting = getTitleFormatting(matchedLevel)
+      const textElements = elements.filter(el => el.value !== '\n')
+      applyHeadingTextCase(textElements, matchedLevel)
       for (const el of elements) {
         if (el.value === '\n') continue
         el.titleId = titleId
         el.level = matchedLevel
+        if (el.size === undefined) {
+          el.size = formatting.size
+        }
         if (el.bold === undefined) {
-          el.bold = true
+          el.bold = formatting.bold
+        }
+        if (formatting.italic) {
+          el.italic = true
+        } else if (el.italic === undefined) {
+          delete el.italic
         }
       }
       detectedCount++

@@ -35,32 +35,67 @@ window.onload = function () {
   const isApple =
     typeof navigator !== 'undefined' && /Mac OS X/.test(navigator.userAgent)
   let updateCatalogRef: (() => Promise<void>) | null = null
+  let updateCatalogTimer: any = null
+
+  function isIsoCoverTable(tbl: any): boolean {
+    if (!tbl || tbl.type !== 'table' || !tbl.trList || tbl.trList.length < 3) return false
+    if (tbl.id === 'iso-cover-table') return true
+    const s = JSON.stringify(tbl).toUpperCase()
+    return (
+      (s.includes('TRÁCH NHIỆM') && s.includes('KÝ TÊN')) ||
+      (s.includes('VINA G7') && s.includes('BIÊN SOẠN')) ||
+      (s.includes('PHÊ DUYỆT') && s.includes('BIÊN SOẠN'))
+    )
+  }
+
+  function isIsoRevisionTable(tbl: any): boolean {
+    if (!tbl || tbl.type !== 'table' || !tbl.trList || tbl.trList.length < 2) return false
+    if (tbl.id === 'iso-revision-table') return true
+    const s = JSON.stringify(tbl).toUpperCase()
+    return (
+      (s.includes('SỐ TT') || s.includes('SỐ THỨ TỰ') || s.includes('STT')) &&
+      (s.includes('NỘI DUNG SỬA ĐỔI') || s.includes('NGÀY SỬA'))
+    )
+  }
 
   // Hàm định dạng logo trang bìa luôn nằm lọt trong khung (Cell 0,0) và căn giữa ngang + dọc
   function formatCoverLogoCell(t0: any): boolean {
     if (!t0?.trList?.[0]?.tdList?.[0]) return false
     const r0 = t0.trList[0]
-    r0.height = 75
-    r0.minHeight = 75
+    r0.height = 85
+    r0.minHeight = 85
 
     const c00 = r0.tdList[0]
     c00.verticalAlign = 'middle' as any
-    c00.height = 75
-    c00.realHeight = 75
-    c00.realMinHeight = 75
+    c00.height = 85
+    c00.realHeight = 85
+    c00.realMinHeight = 85
+    c00.width = 160
+    c00.colspan = 1
+    c00.rowspan = 1
 
     if (r0.tdList[1]) {
       r0.tdList[1].verticalAlign = 'middle' as any
-      r0.tdList[1].height = 75
-      r0.tdList[1].realHeight = 75
-      r0.tdList[1].realMinHeight = 75
+      r0.tdList[1].height = 85
+      r0.tdList[1].realHeight = 85
+      r0.tdList[1].realMinHeight = 85
+      r0.tdList[1].rowspan = 1
+      if (t0.colgroup && t0.colgroup.length >= 5) {
+        r0.tdList[1].colspan = t0.colgroup.length - 1
+        let wSum = 0
+        for (let wi = 1; wi < t0.colgroup.length; wi++) wSum += (t0.colgroup[wi].width || 0)
+        r0.tdList[1].width = wSum || 558
+      } else {
+        r0.tdList[1].width = 558
+        r0.tdList[1].colspan = 3
+      }
     }
 
     if (!c00.value || !Array.isArray(c00.value)) return false
 
     let imgItem: any = null
     for (const it of c00.value) {
-      if (it.type === 'image') {
+      if (it.type === 'image' || (it.value && typeof it.value === 'string' && (it.value.startsWith('data:image') || it.value.startsWith('http')))) {
         imgItem = it
         break
       }
@@ -72,27 +107,14 @@ window.onload = function () {
       delete imgItem.imgFloatPosition
       delete imgItem.translateX
       delete imgItem.left
+      delete imgItem.top
+      imgItem.type = 'image'
       imgItem.rowFlex = 'center' as any
       imgItem.disabled = true
 
-      // 2. Chuẩn hóa kích thước logo để nằm lọt gọn gàng trong khung (140 x 75)
-      const origW = Number(imgItem.width) || 80
-      const origH = Number(imgItem.height) || 80
-      const maxW = 100
-      const maxH = 50
-      let targetW = origW
-      let targetH = origH
-
-      if (targetH > maxH) {
-        targetW = Math.round(targetW * (maxH / targetH))
-        targetH = maxH
-      }
-      if (targetW > maxW) {
-        targetH = Math.round(targetH * (maxW / targetW))
-        targetW = maxW
-      }
-      imgItem.width = targetW
-      imgItem.height = targetH
+      // 2. Chuẩn hóa kích thước logo để nằm lọt gọn gàng trong khung (160 x 85)
+      imgItem.width = 105
+      imgItem.height = 55
 
       // 3. Giữ duy nhất logo trong ô, căn giữa 100%
       c00.value = [imgItem]
@@ -250,6 +272,8 @@ window.onload = function () {
       deptName?: string
       issuer?: string
       approver?: string
+      approver_bgd?: string
+      document_level?: string
     } = {}
   ): boolean {
     if (!el || el.type !== 'table' || !el.trList) return false
@@ -257,13 +281,19 @@ window.onload = function () {
     ;(el as any).id = 'iso-cover-table'
     el.rowMargin = 0
 
-    // 0. Căn giữa logo ô (0, 0)
+    // 0. Bảng bìa 4 cột chuẩn A4 (160 + 210 + 150 + 198 = 718px)
+    el.colgroup = [{ width: 160 }, { width: 210 }, { width: 150 }, { width: 198 }]
+
+    // 0b. Căn giữa logo ô (0, 0)
     formatCoverLogoCell(el)
 
     // 1. Ô Header (0, 1): "CÔNG TY CỔ PHẦN VINA G7"
     if (el.trList[0]?.tdList?.[1]) {
       const c01 = el.trList[0].tdList[1]
       c01.verticalAlign = 'middle' as any
+      c01.width = 558
+      c01.colspan = 3
+      c01.rowspan = 1
       c01.value = [
         {
           value: 'CÔNG TY CỔ PHẦN VINA G7',
@@ -273,6 +303,7 @@ window.onload = function () {
           rowFlex: 'center' as any
         }
       ]
+      el.trList[0].tdList = el.trList[0].tdList.slice(0, 2)
     }
 
     // 2. Lấy thông tin từ form cha
@@ -287,7 +318,13 @@ window.onload = function () {
     const effIssueDate = (meta.issueDate || '').trim() || (pForm?.issue_date || '').trim()
     const effDept = (meta.deptName || '').trim() || (pForm?.folder || pForm?.department_name || '').trim()
     const effIssuer = (meta.issuer || '').trim() || (pForm?.issuer || pForm?.editor || pForm?.owner || '').trim()
-    const effApprover = (meta.approver || '').trim() || (pForm?.approver || '').trim()
+    const effDocLevel = (meta.document_level || pForm?.document_level || '').trim()
+    const effApproverBgd = (meta.approver_bgd || pForm?.approver_bgd || '').trim()
+    const rawApprover = (meta.approver || pForm?.approver || '').trim()
+    const effApprover =
+      effDocLevel === 'Cấp công ty' || effApproverBgd
+        ? effApproverBgd || rawApprover
+        : rawApprover
 
     // 3. Ô thân bìa (Row 1, Cell 0): Tiêu đề + Bảng thông tin nhỏ 4 dòng nét đứt
     if (el.trList[1]?.tdList?.[0]) {
@@ -334,86 +371,94 @@ window.onload = function () {
       el.trList[1].minHeight = targetTr1Height
     }
 
-    // 4. Bảng phân công trách nhiệm (Rows 2, 3, 4) - Xóa triệt để tên cứng cũ
+    // 4. Bảng phân công trách nhiệm (Rows 2, 3, 4) - Chuẩn 4 cột 718px không bao giờ lệch cột
+    const widths = [160, 210, 150, 198]
+
     if (el.trList[2]) {
       el.trList[2].height = 30
       el.trList[2].minHeight = 30
       const headers = ['TRÁCH NHIỆM', 'HỌ TÊN', 'CHỨC VỤ', 'KÝ TÊN']
-      for (let c = 0; c < 4 && c < (el.trList[2].tdList || []).length; c++) {
-        const td = el.trList[2].tdList[c]
+      const row2Tds: any[] = []
+      for (let c = 0; c < 4; c++) {
+        const td = (el.trList[2].tdList && el.trList[2].tdList[c]) ? el.trList[2].tdList[c] : {}
+        td.colspan = 1
+        td.rowspan = 1
+        td.width = widths[c]
         td.verticalAlign = 'middle' as any
         td.value = [
           { value: headers[c], size: 12, bold: true, font: 'Times New Roman', rowFlex: 'center' as any }
         ]
+        row2Tds.push(td)
       }
+      el.trList[2].tdList = row2Tds
     }
 
     if (el.trList[3]) {
       el.trList[3].height = 38
       el.trList[3].minHeight = 38
-      const tds = el.trList[3].tdList || []
-      if (tds[0]) {
-        tds[0].verticalAlign = 'middle' as any
-        tds[0].value = [{ value: 'Biên soạn', size: 12, font: 'Times New Roman', rowFlex: 'center' as any }]
+      const issVal = effIssuer || '[Họ tên người biên soạn]'
+      const posVal = effIssuer ? (pForm?.issuer_role || 'Nhân viên') : '[CV NBS]'
+      const row3Tds: any[] = []
+      for (let c = 0; c < 4; c++) {
+        const td = (el.trList[3].tdList && el.trList[3].tdList[c]) ? el.trList[3].tdList[c] : {}
+        td.colspan = 1
+        td.rowspan = 1
+        td.width = widths[c]
+        td.verticalAlign = 'middle' as any
+        if (c === 0) {
+          td.value = [{ value: 'Biên soạn', size: 12, font: 'Times New Roman', rowFlex: 'center' as any }]
+        } else if (c === 1) {
+          td.value = [{ value: issVal, size: 12, font: 'Times New Roman', rowFlex: 'center' as any, bold: !!effIssuer }]
+        } else if (c === 2) {
+          td.value = [{ value: posVal, size: 12, font: 'Times New Roman', rowFlex: 'center' as any }]
+        } else {
+          td.value = [{ value: '', size: 12, rowFlex: 'center' as any }]
+        }
+        row3Tds.push(td)
       }
-      if (tds[1]) {
-        tds[1].verticalAlign = 'middle' as any
-        const issVal = effIssuer || '[Họ tên người biên soạn]'
-        tds[1].value = [{ value: issVal, size: 12, font: 'Times New Roman', rowFlex: 'center' as any, bold: !!effIssuer }]
-      }
-      if (tds[2]) {
-        tds[2].verticalAlign = 'middle' as any
-        const posVal = effIssuer ? (pForm?.issuer_role || 'Nhân viên') : '[CV NBS]'
-        tds[2].value = [{ value: posVal, size: 12, font: 'Times New Roman', rowFlex: 'center' as any }]
-      }
-      if (tds[3]) {
-        tds[3].verticalAlign = 'middle' as any
-        tds[3].value = [{ value: '', size: 12, rowFlex: 'center' as any }]
-      }
+      el.trList[3].tdList = row3Tds
     }
 
     if (el.trList[4]) {
       el.trList[4].height = 38
       el.trList[4].minHeight = 38
-      const tds = el.trList[4].tdList || []
-      if (tds[0]) {
-        tds[0].verticalAlign = 'middle' as any
-        tds[0].value = [{ value: 'Phê duyệt', size: 12, font: 'Times New Roman', rowFlex: 'center' as any }]
+      const appVal = effApprover || '[Họ tên người phê duyệt]'
+      let posVal = effApprover ? (pForm?.approver_role || 'Ban Giám Đốc') : 'Ban Giám Đốc'
+      posVal = posVal.replace(/^Trưởng phòng\s*\/\s*/i, '').trim()
+      if (posVal === 'BGĐ' || posVal === 'BGD') posVal = 'Ban Giám Đốc'
+      const row4Tds: any[] = []
+      for (let c = 0; c < 4; c++) {
+        const td = (el.trList[4].tdList && el.trList[4].tdList[c]) ? el.trList[4].tdList[c] : {}
+        td.colspan = 1
+        td.rowspan = 1
+        td.width = widths[c]
+        td.verticalAlign = 'middle' as any
+        if (c === 0) {
+          td.value = [{ value: 'Phê duyệt', size: 12, font: 'Times New Roman', rowFlex: 'center' as any }]
+        } else if (c === 1) {
+          td.value = [{ value: appVal, size: 12, font: 'Times New Roman', rowFlex: 'center' as any, bold: !!effApprover }]
+        } else if (c === 2) {
+          td.value = [{ value: posVal, size: 12, font: 'Times New Roman', rowFlex: 'center' as any }]
+        } else {
+          td.value = [{ value: '', size: 12, rowFlex: 'center' as any }]
+        }
+        row4Tds.push(td)
       }
-      if (tds[1]) {
-        tds[1].verticalAlign = 'middle' as any
-        const appVal = effApprover || '[Họ tên người phê duyệt]'
-        tds[1].value = [{ value: appVal, size: 12, font: 'Times New Roman', rowFlex: 'center' as any, bold: !!effApprover }]
-      }
-      if (tds[2]) {
-        tds[2].verticalAlign = 'middle' as any
-        const posVal = effApprover ? (pForm?.approver_role || 'Trưởng phòng / BGĐ') : '[CV NPD]'
-        tds[2].value = [{ value: posVal, size: 12, font: 'Times New Roman', rowFlex: 'center' as any }]
-      }
-      if (tds[3]) {
-        tds[3].verticalAlign = 'middle' as any
-        tds[3].value = [{ value: '', size: 12, rowFlex: 'center' as any }]
-      }
+      el.trList[4].tdList = row4Tds
     }
 
-    if (el.colgroup) {
-      if (el.colgroup.length === 5) {
-        el.colgroup[0].width = 45
-        el.colgroup[1].width = 55 // Tổng 100px cho TRÁCH NHIỆM
-        el.colgroup[2].width = 175 // HỌ TÊN
-        el.colgroup[3].width = 145 // CHỨC VỤ
-        el.colgroup[4].width = 175 // KÝ TÊN (tăng rộng ra)
-      } else if (el.colgroup.length >= 4) {
-        el.colgroup[0].width = 100 // TRÁCH NHIỆM (nhỏ lại từ 130 xuống 100px)
-        el.colgroup[1].width = 175 // HỌ TÊN
-        el.colgroup[2].width = 145 // CHỨC VỤ
-        el.colgroup[3].width = 175 // KÝ TÊN (dài ra thêm từ 135 lên 175px)
-      }
+    // Cắt bỏ hàng dư thừa nếu có (tối đa 5 hàng)
+    if (el.trList.length > 5) {
+      el.trList = el.trList.slice(0, 5)
     }
 
-    // 5. Khóa toàn bộ các ô để không cho gõ bậy làm lệch khung
+    // 5. Xóa sạch vị trí cũ (colIndex, rowIndex, x, y) và khóa toàn bộ ô
     for (const tr of el.trList) {
       for (const td of tr.tdList || []) {
+        delete td.colIndex
+        delete td.rowIndex
+        delete td.x
+        delete td.y
         td.disabled = true
         td.deletable = false
         for (const inner of td.value || []) {
@@ -424,6 +469,10 @@ window.onload = function () {
             inner.deletable = false
             for (const ntr of inner.trList) {
               for (const ntd of ntr.tdList || []) {
+                delete ntd.colIndex
+                delete ntd.rowIndex
+                delete ntd.x
+                delete ntd.y
                 ntd.disabled = true
                 ntd.deletable = false
                 for (const nEl of ntd.value || []) {
@@ -440,14 +489,28 @@ window.onload = function () {
     return true
   }
 
-  // Chuẩn hóa Table 1 (Trang 2 - Nhật ký sửa đổi): Giới hạn tối đa 10 hàng để TUYỆT ĐỐI KHÔNG tràn sang trang 3
+  // Chuẩn hóa Table 1 (Trang 2 - Nhật ký sửa đổi): Luôn duy trì bảng dài 15 dòng chuẩn theo form ISO
   function formatTable1Revision(t1: any): boolean {
     if (!t1 || t1.type !== 'table' || !t1.trList) return false
     t1.noSplit = true
     t1.rowMargin = 0
 
-    // Giới hạn tối đa 10 hàng (1 tiêu đề + 9 hàng dữ liệu) để luôn nằm vừa khít trong Trang 2
-    while (t1.trList.length > 10) {
+    // Đảm bảo bảng luôn có tối thiểu 15 dòng (1 tiêu đề + 14 dòng dữ liệu) theo yêu cầu chuẩn ISO
+    while (t1.trList.length < 15) {
+      const templateRow = t1.trList.length > 1 ? t1.trList[1] : t1.trList[0]
+      const cloneRow = JSON.parse(JSON.stringify(templateRow))
+      delete cloneRow.id
+      cloneRow.height = 34
+      cloneRow.minHeight = 34
+      for (const td of cloneRow.tdList || []) {
+        delete td.id
+        td.value = [{ value: '\u200B', size: 12, font: 'Times New Roman' }]
+      }
+      t1.trList.push(cloneRow)
+    }
+
+    // Giới hạn tối đa 16 hàng để luôn nằm vừa khít trong Trang 2, tuyệt đối không tràn sang Trang 3
+    while (t1.trList.length > 16) {
       t1.trList.pop()
     }
 
@@ -490,6 +553,9 @@ window.onload = function () {
               if (d === 1 && innerEl.value && /^\d{4}-\d{2}-\d{2}$/.test(innerEl.value.trim())) {
                 innerEl.value = innerEl.value.trim().replace(/^(\d{4})-(\d{2})-(\d{2})$/, '$3/$2/$1')
               }
+              if (d === 3 && innerEl.value && innerEl.value.trim().toLowerCase() === 'tất cả') {
+                innerEl.value = 'Toàn bộ'
+              }
             }
           } else if (d === 2) {
             for (const innerEl of td.value || []) {
@@ -504,8 +570,78 @@ window.onload = function () {
     return true
   }
 
+  function isFloatingSignatureImage(it: any): boolean {
+    if (!it) return false
+    if (it.type === 'image' || it.type === ElementType.IMAGE) {
+      if (it.imgDisplay === 'float' || it.imgFloatPosition) {
+        return true
+      }
+    }
+    return false
+  }
+
+  function isEndSignatureTable(t: any): boolean {
+    if (!t || t.type !== 'table' || !t.trList) return false
+    if (t.trList.length <= 2) {
+      const s = JSON.stringify(t).toUpperCase()
+      if (
+        s.includes('NGUYỄN HÒA') ||
+        s.includes('GIÁM ĐỐC') ||
+        s.includes('PHÊ DUYỆT') ||
+        s.includes('BAN GIÁM ĐỐC') ||
+        s.includes('P.TỔNG')
+      ) {
+        return true
+      }
+    }
+    return false
+  }
+
+  function getElementText(it: any): string {
+    if (!it) return ''
+    if (typeof it.value === 'string' && it.value.trim().length > 0) {
+      return it.value
+    }
+    if (Array.isArray(it.valueList) && it.valueList.length > 0) {
+      return it.valueList.map((v: any) => (typeof v.value === 'string' ? v.value : '')).join('')
+    }
+    return ''
+  }
+
   // Hàm bảo đảm tuyệt đối: Trang 1 và 2 luôn bị khóa (không thể sửa/xóa/gõ), luôn có PageBreak ngăn cách, và mặc định luôn có Trang 3
+    // Hàm đảm bảo toàn bộ văn bản và bảng biểu luôn hiển thị màu đen (#000000)
+  function enforceAllTextBlack(elementList: any[]) {
+    if (!Array.isArray(elementList)) return
+    for (const el of elementList) {
+      if (!el) continue
+      if (el.color && el.color !== '#000000' && el.color !== '#000') {
+        el.color = '#000000'
+      }
+      if (Array.isArray(el.valueList)) {
+        enforceAllTextBlack(el.valueList)
+      }
+      if (el.trList && Array.isArray(el.trList)) {
+        for (const tr of el.trList) {
+          if (tr && Array.isArray(tr.tdList)) {
+            for (const td of tr.tdList) {
+              if (td && Array.isArray(td.value)) {
+                enforceAllTextBlack(td.value)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   function lockAndEnsureThreePages(mainList: any[]): boolean {
+    let pF: any = null
+    try {
+      pF = (window.parent as any)?.__ISO_FORM_DATA__ || (window.parent as any)?.formData
+    } catch (_) {}
+    if (pF && pF.apply_iso_template === false) {
+      return false
+    }
     if (!Array.isArray(mainList) || mainList.length === 0) return false
     let modified = false
     let tblCount = 0
@@ -581,9 +717,9 @@ window.onload = function () {
       modified = true
     }
 
-    // 4. Đảm bảo luôn có PageBreak sau Table 1 và mặc định có Trang 3
+    // 4. Đảm bảo luôn có đúng DUY NHẤT 1 PageBreak sau Table 1 (không có trang trắng/dư thừa)
     if (t1Idx !== -1) {
-      if (mainList[t1Idx + 1]?.type !== ElementType.PAGE_BREAK) {
+      if (mainList[t1Idx + 1]?.type !== ElementType.PAGE_BREAK && mainList[t1Idx + 1]?.type !== 'pageBreak') {
         mainList.splice(t1Idx + 1, 0, {
           type: ElementType.PAGE_BREAK as any,
           value: '',
@@ -595,34 +731,101 @@ window.onload = function () {
         mainList[t1Idx + 1].disabled = true
         mainList[t1Idx + 1].deletable = false
       }
-      while (
-        mainList[t1Idx + 1]?.type === ElementType.PAGE_BREAK &&
-        mainList[t1Idx + 2]?.type === ElementType.PAGE_BREAK
-      ) {
-        mainList.splice(t1Idx + 2, 1)
-        modified = true
+
+      // Loại bỏ mọi pageBreak liên tiếp hoặc pageBreak nằm trong vài phần tử đầu tiên sau Table 1
+      let nextPos = t1Idx + 2
+      while (nextPos < mainList.length && nextPos <= t1Idx + 6) {
+        const item = mainList[nextPos]
+        if (item?.type === ElementType.PAGE_BREAK || item?.type === 'pageBreak') {
+          mainList.splice(nextPos, 1)
+          modified = true
+          continue
+        }
+        // Xóa pageBreak lồng bên trong valueList của phần tử tiêu đề đầu tiên sau Table 1 (gây trang 3 trắng)
+        if (item?.valueList && Array.isArray(item.valueList)) {
+          const originalLen = item.valueList.length
+          item.valueList = item.valueList.filter(
+            (v: any) => v.type !== ElementType.PAGE_BREAK && v.type !== 'pageBreak'
+          )
+          if (item.valueList.length !== originalLen) {
+            modified = true
+          }
+        }
+        if (item?.value && item.value.trim().length > 0) {
+          break
+        }
+        nextPos++
       }
 
-      // 5. Kiểm tra và bảo đảm mặc định có Trang 3 trống hoàn toàn cho người dùng soạn thảo
+      // 5. Kiểm tra và bảo đảm mặc định có Trang 3 cho người dùng soạn thảo
       const elementsAfterT1 = mainList.slice(t1Idx + 2)
-      const isPlaceholderOnly =
-        elementsAfterT1.length === 0 ||
-        (elementsAfterT1.length <= 3 &&
-          elementsAfterT1.every(
-            (el: any) =>
-              !el.value ||
-              el.value.trim() === '' ||
-              el.value.includes('1. MỤC ĐÍCH') ||
-              el.value.includes('1.1.')
-          ))
-
-      if (isPlaceholderOnly) {
-        mainList.splice(t1Idx + 2, mainList.length - (t1Idx + 2), {
+      if (elementsAfterT1.length === 0) {
+        mainList.splice(t1Idx + 2, 0, {
           value: '\n',
           size: 14
         })
         modified = true
       }
+    }
+
+    // 6. Chuẩn hóa toàn bộ chữ sang màu đen (#000000)
+    for (const el of mainList) {
+      if (el.color && el.color !== '#000000') {
+        delete el.color
+        modified = true
+      }
+      if (el.valueList && Array.isArray(el.valueList)) {
+        for (const child of el.valueList) {
+          if (child.color && child.color !== '#000000') {
+            delete child.color
+            modified = true
+          }
+        }
+      }
+    }
+
+    // Phương án 1: Loại bỏ ảnh chữ ký scan trôi nổi (chữ ký a Hòa...)
+    for (let i = mainList.length - 1; i >= 0; i--) {
+      if (isFloatingSignatureImage(mainList[i])) {
+        mainList.splice(i, 1)
+        modified = true
+      }
+    }
+
+    // Phương án 1: Dọn dẹp bảng ký thủ công cũ và chức danh ký cuối văn bản (để duyệt qua hệ thống ERP)
+    while (mainList.length > 0) {
+      const lastIdx = mainList.length - 1
+      if (lastIdx <= (t1Idx !== -1 ? t1Idx + 1 : 1)) break
+      const lastIt = mainList[lastIdx]
+      if (lastIt.type === 'pageBreak' || lastIt.type === ElementType.PAGE_BREAK) {
+        mainList.pop()
+        modified = true
+        continue
+      }
+      if (isEndSignatureTable(lastIt)) {
+        mainList.pop()
+        modified = true
+        continue
+      }
+      const lastVal = getElementText(lastIt)
+      const lastTrim = (typeof lastVal === 'string' ? lastVal : '').trim().toUpperCase()
+      if (!lastIt.type && lastTrim === '') {
+        mainList.pop()
+        modified = true
+        continue
+      }
+      if (
+        lastTrim === 'P.TỔNG GIÁM ĐỐC' ||
+        lastTrim === 'P. TỔNG GIÁM ĐỐC' ||
+        lastTrim === 'TỔNG GIÁM ĐỐC' ||
+        lastTrim === 'GIÁM ĐỐC' ||
+        lastTrim === 'NGUYỄN HÒA'
+      ) {
+        mainList.pop()
+        modified = true
+        continue
+      }
+      break
     }
 
     return modified
@@ -685,9 +888,22 @@ window.onload = function () {
       }
     }
 
-    // 3. Lần ban hành
-    if (meta.version !== undefined) {
-      const verVal = meta.version || ''
+    // 3. Lần ban hành (tự động tính theo tổng số lần sửa đổi trong revision_logs nếu có)
+    let effVersion = meta.version || ''
+    try {
+      const pF = (window.parent as any)?.__ISO_FORM_DATA__ || (window.parent as any)?.formData
+      if (pF && Array.isArray(pF.revision_logs) && pF.revision_logs.length > 0) {
+        const valid = pF.revision_logs.filter((l: any) => l && (l.content || l.rev_date || l.seq_no))
+        const seqNums = valid.map((l: any) => Number(l.seq_no)).filter((n: number) => !isNaN(n) && n > 0)
+        const maxSeq = seqNums.length > 0 ? Math.max(...seqNums) : valid.length
+        if (maxSeq > 0) {
+          effVersion = String(maxSeq).padStart(2, '0')
+        }
+      }
+    } catch (_) {}
+
+    if (effVersion !== '') {
+      const verVal = effVersion
       const lanIdx = footerList.findIndex(el => el.value && el.value.includes('Lần ban hành'))
       if (lanIdx !== -1) {
         const targetVal = `Lần ban hành: ${verVal}`
@@ -710,11 +926,121 @@ window.onload = function () {
     return changed
   }
 
+  // Chuẩn hóa tính liên tục của danh sách có số thứ tự (ol) theo đúng phân cấp Word (I, II, III / 1, 2, 3 / a, b, c)
+  function normalizeOrderedListContinuity(mainList: any[]) {
+    if (!Array.isArray(mainList) || mainList.length === 0) return
+    const activeOlMap = new Map<string, string>()
+    let tempIdCounter = 0
+
+    const isSubListStyle = (style?: string) =>
+      style === 'lower-alpha' ||
+      style === 'lower-alpha-paren' ||
+      style === 'lower-roman' ||
+      style === 'lowerAlpha' ||
+      style === 'lowerAlphaParen' ||
+      style === 'lowerRoman'
+
+    const isUpperRomanOrAlpha = (style?: string) =>
+      style === 'upper-roman' ||
+      style === 'upper-alpha' ||
+      style === 'upperRoman' ||
+      style === 'upperAlpha'
+
+    const clearSubLists = () => {
+      for (const k of Array.from(activeOlMap.keys())) {
+        const [lvlStr, styleStr] = k.split('_')
+        if (Number(lvlStr) > 0 || isSubListStyle(styleStr)) {
+          activeOlMap.delete(k)
+        }
+      }
+    }
+
+    for (let i = 0; i < mainList.length; i++) {
+      const el = mainList[i]
+      if (!el) continue
+
+      if (
+        el.type === ElementType.TITLE ||
+        el.level ||
+        el.titleId ||
+        el.type === ElementType.PAGE_BREAK ||
+        el.type === ElementType.TABLE
+      ) {
+        activeOlMap.clear()
+        continue
+      }
+
+      if (el.type === ElementType.LIST || el.listId || el.listType) {
+        const lType = el.listType || ListType.UL
+        const lStyle = String(
+          el.listStyle || (lType === ListType.OL ? ListStyle.DECIMAL : lType)
+        )
+        const lLevel = el.listLevel ?? 0
+        if (lType === ListType.OL) {
+          const key = `${lLevel}_${lStyle}`
+          let sharedId = activeOlMap.get(key)
+          if (!sharedId) {
+            sharedId = `norm_ol_${++tempIdCounter}`
+            activeOlMap.set(key, sharedId)
+          }
+          el.listId = sharedId
+          if (Array.isArray(el.valueList)) {
+            for (const child of el.valueList) {
+              if (
+                child &&
+                (child.listType === ListType.OL || !child.listType) &&
+                (child.listLevel ?? lLevel) === lLevel
+              ) {
+                child.listId = sharedId
+              }
+            }
+          }
+          // Khi gặp mục cấp lớn (I., II. hoặc 1., 2.), reset bộ đếm của các danh sách con (a., b., c. hoặc cấp sâu hơn)
+          if (!isSubListStyle(lStyle)) {
+            clearSubLists()
+          }
+          if (isUpperRomanOrAlpha(lStyle)) {
+            for (const existingKey of Array.from(activeOlMap.keys())) {
+              if (existingKey !== key) {
+                activeOlMap.delete(existingKey)
+              }
+            }
+          } else {
+            for (const existingKey of Array.from(activeOlMap.keys())) {
+              const [lvlStr] = existingKey.split('_')
+              if (Number(lvlStr) > lLevel) {
+                activeOlMap.delete(existingKey)
+              }
+            }
+          }
+        }
+        continue
+      }
+
+      const val = typeof el.value === 'string' ? el.value : ''
+      if (val.replace(/[\n\r\s\u200B]+/g, '') === '') {
+        continue
+      }
+
+      // Đoạn văn bản thường (ví dụ diễn giải hoặc mục 6.1., 6.2.) sẽ ngắt danh sách con a., b., c.
+      // nhưng vẫn giữ mạch đánh số của mục lớn I., II., III. hoặc 1., 2., 3.
+      clearSubLists()
+    }
+  }
+
 
   // 1. Khởi tạo Editor
   const container = document.querySelector<HTMLDivElement>('.editor')!
+  let pInitForm: any = null
+  try {
+    pInitForm = (window.parent as any)?.__ISO_FORM_DATA__ || (window.parent as any)?.formData
+  } catch (_) {}
   if (Array.isArray(data)) {
-    lockAndEnsureThreePages(data)
+    if (pInitForm && pInitForm.apply_iso_template) {
+      lockAndEnsureThreePages(data)
+    }
+    normalizeOrderedListContinuity(data)
+    enforceAllTextBlack(data)
   }
   const instance = new Editor(
     container,
@@ -729,17 +1055,44 @@ window.onload = function () {
   // Đăng ký plugin xuất/nhập Word (.docx)
   instance.use(docxPlugin)
 
-  // Bọc executeSetValue để mọi lần nạp dữ liệu đều khóa Trang 1 & 2 và đảm bảo Trang 3
+  // Bọc executeSetValue để mọi lần nạp dữ liệu đều khóa Trang 1 & 2 và đảm bảo Trang 3 + chuẩn hóa danh sách đánh số
   const originalSetValue = instance.command.executeSetValue
   if (typeof originalSetValue === 'function') {
     instance.command.executeSetValue = function (dataPayload: any) {
       try {
+        if (dataPayload && Array.isArray(dataPayload.header) && dataPayload.header.length > 0) {
+          const hStr = JSON.stringify(dataPayload.header).toUpperCase()
+          if (hStr.includes('CÔNG TY CỔ PHẦN') || hStr.includes('PHÚ TÀI') || hStr.includes('TAM PHƯỚC') || hStr.includes('VINAG7') || hStr.includes('GIÁM ĐỐC')) {
+            dataPayload.header = []
+          }
+        }
+        let pF: any = null
+        try {
+          pF = (window.parent as any)?.__ISO_FORM_DATA__ || (window.parent as any)?.formData
+        } catch (_) {}
         const mainList = dataPayload?.main || (Array.isArray(dataPayload) ? dataPayload : null)
         if (mainList) {
-          lockAndEnsureThreePages(mainList)
+          if (!pF || pF.apply_iso_template !== false) {
+            lockAndEnsureThreePages(mainList)
+          }
+          normalizeOrderedListContinuity(mainList)
+          enforceAllTextBlack(mainList)
+        }
+        if (dataPayload && Array.isArray(dataPayload.header)) {
+          enforceAllTextBlack(dataPayload.header)
+        }
+        if (dataPayload && Array.isArray(dataPayload.footer)) {
+          enforceAllTextBlack(dataPayload.footer)
         }
       } catch (_) {}
-      return originalSetValue.call(instance.command, dataPayload)
+      const ret = originalSetValue.call(instance.command, dataPayload)
+      clearTimeout(updateCatalogTimer)
+      updateCatalogTimer = setTimeout(() => {
+        if (typeof updateCatalogRef === 'function') {
+          updateCatalogRef()
+        }
+      }, 120)
+      return ret
     }
   }
 
@@ -749,6 +1102,27 @@ window.onload = function () {
   if (typeof originalImportDocx === 'function') {
     instance.command.executeImportDocx = async function (payload: any) {
       if (payload && payload.arrayBuffer) {
+        // Tự động gọi API chuẩn hóa Backend để trích xuất Lưu đồ (DrawingML) thành ảnh sắc nét và sửa số bước
+        try {
+          const formData = new FormData()
+          const blob = new Blob([payload.arrayBuffer], {
+            type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+          })
+          formData.append('file', blob, 'document.docx')
+          const prepRes = await fetch('/api/v1/iso-master-records/preprocess-word-for-canvas', {
+            method: 'POST',
+            body: formData
+          })
+          if (prepRes.ok) {
+            const stdBuf = await prepRes.arrayBuffer()
+            if (stdBuf && stdBuf.byteLength > 2000) {
+              payload.arrayBuffer = stdBuf
+            }
+          }
+        } catch (prepErr) {
+          console.warn('[executeImportDocx] Preprocess docx fallback:', prepErr)
+        }
+
         const src = payload.arrayBuffer
         try {
           if (!(src instanceof ArrayBuffer)) {
@@ -761,146 +1135,321 @@ window.onload = function () {
           console.warn('Lỗi chuyển đổi ArrayBuffer sang Realm nội bộ:', convErr)
         }
       }
-      const res = await originalImportDocx.call(instance.command, payload)
-      // Tự động căn giữa bảng nhỏ thông tin quy trình nếu nằm trong ô
+
+      // 1. Lưu lại snapshot Trang 1 (Cover) và Trang 2 (Revision) HIỆN TẠI của Editor trước khi import
+      let preCover: any = null
+      let preRev: any = null
       try {
-        const curData = instance.command.getValue().data
-        let updateCatalogTimer: any = null
-        let tableIndex = 0
-        let modified = false
-        let pForm: any = null
-        try {
-          pForm = (window.parent as any)?.__ISO_FORM_DATA__ || (window.parent as any)?.formData
-        } catch (_) {}
-        const parentCode = (pForm?.new_code || pForm?.code || '').trim()
-        const parentVersion = (pForm?.version || '').trim()
-        const parentIssueDate = (pForm?.issue_date || '').trim()
-        const scanElements = (elements: any[]) => {
-          if (!elements) return
-          for (const el of elements) {
-            if (el.type === 'table' && el.trList) {
-              const currentTblIdx = tableIndex++
-              if (currentTblIdx === 0) {
-                // Table 0 (Trang 1 - Bìa quy trình chuẩn 100% Ảnh 4)
-                formatAndSyncCoverTable(el)
-                modified = true
-              } else if (currentTblIdx === 1) {
-                // Table 1 (Trang 2 - Bảng theo dõi sửa đổi tối đa 10 hàng không bao giờ tràn)
-                formatTable1Revision(el)
-                modified = true
-              }
+        const preData = instance.command.getValue()?.data || {}
+        const preMain = preData.main || []
+        for (const item of preMain) {
+          if (item.type === 'table' && item.trList) {
+            if (!preCover && isIsoCoverTable(item)) {
+              preCover = JSON.parse(JSON.stringify(item))
+            } else if (!preRev && isIsoRevisionTable(item)) {
+              preRev = JSON.parse(JSON.stringify(item))
             }
           }
         }
-        scanElements(curData.main || [])
+      } catch (_) {}
 
-        // 5. Chuẩn hóa cấu trúc 3 trang chuẩn mực:
-        // Trang 1: Table 0 (Trang bìa - cao 921px, neo sát mép lề dưới trang 1)
-        // Trang 2: Tiêu đề sửa đổi + Table 1 (15 dòng chuẩn) + Ngắt trang
-        // Trang 3: Vùng soạn thảo nội dung người dùng
-        const originalMain = curData.main || []
-        let t0: any = null
-        let t1: any = null
-        let revTitleItem: any = null
-        const userElements: any[] = []
-        let tblFound = 0
+      // Lấy thông tin form từ parent để đồng bộ metadata
+      let pForm: any = null
+      try {
+        pForm = (window.parent as any)?.__ISO_FORM_DATA__ || (window.parent as any)?.formData
+      } catch (_) {}
+      const pCode = (pForm?.new_code || pForm?.code || '').trim()
+      const validLogs = (pForm?.revision_logs || []).filter((l: any) => l && (l.content || l.rev_date || l.seq_no))
+      const seqNums = validLogs.map((l: any) => Number(l.seq_no)).filter((n: number) => !isNaN(n) && n > 0)
+      const maxSeq = seqNums.length > 0 ? Math.max(...seqNums) : validLogs.length
+      const pVer = maxSeq > 0 ? String(maxSeq).padStart(2, '0') : ((pForm?.version || '').trim() || '01')
+      const pDate = (pForm?.issue_date || '').trim()
+      const pTitle = (pForm?.name || pForm?.title || '').trim().toUpperCase()
+      const pDept = (pForm?.folder || pForm?.department_name || '').trim()
+      const pIssuer = (pForm?.issuer || pForm?.editor || pForm?.owner || '').trim()
+      const pDocLevel = (pForm?.document_level || '').trim()
+      const pApproverBgd = (pForm?.approver_bgd || '').trim()
+      const pApprover = (
+        pDocLevel === 'Cấp công ty' || pApproverBgd
+          ? pApproverBgd || pForm?.approver || ''
+          : pForm?.approver || ''
+      ).trim()
 
-        for (let i = 0; i < originalMain.length; i++) {
-          const item = originalMain[i]
-          if (item.type === 'table') {
-            tblFound++
-            if (tblFound === 1) t0 = item
-            else if (tblFound === 2) t1 = item
-            else userElements.push(item)
-          } else if (tblFound >= 2) {
-            // Sau Table 1: gom nội dung người dùng (bỏ các pageBreak thừa bám sát Table 1)
-            if (item.type !== 'pageBreak' || userElements.length > 0) {
-              userElements.push(item)
-            }
-          } else if (tblFound === 1) {
-            if (item.value && item.value.includes('THEO DÕI SỬA ĐỔI')) {
-              revTitleItem = item
-            }
-          }
+      function mkTd(w: number, c?: number, txt?: string, b?: boolean, s?: number): any {
+        const v: any[] = []
+        if (txt) v.push({ value: txt, size: s || 12, bold: Boolean(b), font: 'Times New Roman', rowFlex: 'center' as any })
+        return { colspan: c || 1, rowspan: 1, width: w, height: 28, realHeight: 28, verticalAlign: 'middle' as any, value: v }
+      }
+
+      function mkCover(): any {
+        let lg: any = null
+        try { lg = (window.parent as any)?.__ISO_LOGO__ } catch (_) {}
+        const c00 = mkTd(160, 1, '')
+        if (lg) c00.value = [{ type: 'image', value: lg, width: 105, height: 55, rowFlex: 'center' as any }]
+        return {
+          type: 'table',
+          id: 'iso-cover-table',
+          noSplit: true,
+          rowMargin: 0,
+          colgroup: [{ width: 160 }, { width: 210 }, { width: 150 }, { width: 198 }],
+          trList: [
+            { height: 85, minHeight: 85, tdList: [c00, mkTd(558, 3, 'CÔNG TY CỔ PHẦN VINA G7', true, 16)] },
+            { height: 550, minHeight: 550, tdList: [mkTd(718, 4, '')] },
+            { height: 30, minHeight: 30, tdList: [mkTd(160, 1, 'TRÁCH NHIỆM', true), mkTd(210, 1, 'HỌ TÊN', true), mkTd(150, 1, 'CHỨC VỤ', true), mkTd(198, 1, 'KÝ TÊN', true)] },
+            { height: 38, minHeight: 38, tdList: [mkTd(160, 1, 'Biên soạn'), mkTd(210, 1, ''), mkTd(150, 1, ''), mkTd(198, 1, '')] },
+            { height: 38, minHeight: 38, tdList: [mkTd(160, 1, 'Phê duyệt'), mkTd(210, 1, ''), mkTd(150, 1, ''), mkTd(198, 1, '')] }
+          ]
+        }
+      }
+
+      function mkRev(): any {
+        const rows: any[] = [
+          { height: 38, minHeight: 38, tdList: [mkTd(55, 1, 'Số TT', true), mkTd(120, 1, 'Ngày sửa', true), mkTd(453, 1, 'Nội dung sửa đổi', true), mkTd(90, 1, 'Trang số', true)] },
+          { height: 34, minHeight: 34, tdList: [mkTd(55, 1, '1'), mkTd(120, 1, ''), mkTd(453, 1, 'Ban hành lần đầu'), mkTd(90, 1, 'Toàn bộ')] }
+        ]
+        while (rows.length < 15) {
+          rows.push({
+            height: 34,
+            minHeight: 34,
+            tdList: [mkTd(55, 1, ''), mkTd(120, 1, ''), mkTd(453, 1, ''), mkTd(90, 1, '')]
+          })
+        }
+        return {
+          type: 'table',
+          id: 'iso-revision-table',
+          noSplit: true,
+          rowMargin: 0,
+          colgroup: [{ width: 55 }, { width: 120 }, { width: 453 }, { width: 90 }],
+          trList: rows
+        }
+      }
+
+      const res = await originalImportDocx.call(instance.command, payload)
+
+      try {
+        const curData = instance.command.getValue().data || {}
+        const rawMain = curData.main || []
+
+        // 3. Chuẩn bị Trang 1 (Bìa ISO chuẩn)
+        const cover = preCover || mkCover()
+        if (cover) {
+          formatAndSyncCoverTable(cover, {
+            title: pTitle,
+            code: pCode,
+            version: pVer,
+            issueDate: pDate,
+            deptName: pDept,
+            issuer: pIssuer,
+            approver: pApprover
+          })
+          formatCoverLogoCell(cover)
         }
 
-        const headingEl = revTitleItem || {
+        // 4. Chuẩn bị Trang 2 (Bảng sửa đổi ISO chuẩn)
+        const rev = preRev || mkRev()
+        if (rev) {
+          formatTable1Revision(rev)
+        }
+        const revTitle = {
           value: 'THEO DÕI SỬA ĐỔI NỘI DUNG TÀI LIỆU\n',
           size: 16,
           bold: true,
-          rowFlex: 'center' as any
+          rowFlex: 'center' as any,
+          titleId: 'iso-title-rev-log',
+          disabled: true,
+          deletable: false
         }
-        delete headingEl.titleId
-        delete headingEl.level
-        headingEl.bold = true
-        headingEl.disabled = true
-        headingEl.deletable = false
-        headingEl.rowFlex = 'center' as any
 
-        // Lắp ráp lại danh sách phần tử hoàn chỉnh:
-        // Trang 1: Table 0 (Trang bìa đầy đủ các hàng)
-        // Ngắt trang sang Trang 2
-        // Trang 2: Tiêu đề theo dõi sửa đổi + Table 1 (Bảng lịch sử)
-        // Ngắt trang sang Trang 3
-        // Trang 3: Nội dung soạn thảo người dùng (mặc định luôn có ít nhất 1 trang 3)
-        const cleanMain: any[] = []
-        if (t0) {
-          t0.disabled = true
-          t0.deletable = false
-          cleanMain.push(t0)
-          cleanMain.push({ type: 'pageBreak', value: '', disabled: true, deletable: false })
+        // 5. LỌC BÌA / SỬA ĐỔI CŨ CỦA FILE WORD TẢI LÊN (NẾU CÓ):
+        // GIỮ NGUYÊN 100% NỘI DUNG THÂN BÀI (bao gồm bảng chữ ký cuối, Nguyễn Hòa, Đồng Nai...)
+        function isFrontTable(t: any): boolean {
+          if (!t || t.type !== 'table' || !t.trList) return false
+          const s = JSON.stringify(t).toUpperCase()
+          // 1. Header / Logo công ty cũ ở trang bìa
+          if (
+            (s.includes('PHÚ TÀI') || s.includes('TAM PHƯỚC') || s.includes('VINAG7') || s.includes('VI NA G7') || s.includes('CÔNG TY CỔ PHẦN')) &&
+            (s.includes('MÃ:') || s.includes('G7.ISO') || s.includes('MÃ HIỆU') || s.includes('ĐC:') || s.includes('CCN TAM PHƯỚC') || s.includes('LẦN BAN HÀNH'))
+          ) {
+            return true
+          }
+          // 2. Bảng trách nhiệm / chữ ký ở trang bìa cũ
+          if (
+            (s.includes('TRÁCH NHIỆM') && s.includes('KÝ TÊN')) ||
+            (s.includes('BIÊN SOẠN') && s.includes('PHÊ DUYỆT')) ||
+            (s.includes('PHÊ DUYỆT') && s.includes('SOÁT XÉT'))
+          ) {
+            return true
+          }
+          // 3. Bảng sửa đổi cũ
+          if (
+            (s.includes('SỐ TT') || s.includes('SỐ THỨ TỰ')) &&
+            (s.includes('NGÀY SỬA') || s.includes('NỘI DUNG SỬA ĐỔI') || s.includes('LẦN SỬA'))
+          ) {
+            return true
+          }
+          return false
         }
-        cleanMain.push(headingEl)
-        cleanMain.push({ value: '\n', size: 6, disabled: true, deletable: false })
-        if (t1) {
-          t1.disabled = true
-          t1.deletable = false
-          cleanMain.push(t1)
-        }
-        cleanMain.push({ type: 'pageBreak', value: '', disabled: true, deletable: false })
 
-        const filteredUserElements = userElements.filter(
-          el =>
-            !el.value ||
-            (!el.value.includes('1. MỤC ĐÍCH') &&
-              !el.value.includes('1.1.') &&
-              el.titleId !== 'iso-title-section-1')
-        )
-        // Loại bỏ các pageBreak thừa ở đầu nội dung người dùng tránh tạo thêm trang trắng
+
+        const cleanBody: any[] = []
+        let pastFrontMatter = false
+
+        for (let k = 0; k < rawMain.length; k++) {
+          const it = rawMain[k]
+
+          // Phương án 1: Bỏ ảnh chữ ký tay trôi nổi cũ (chữ ký a Hòa.jpg)
+          if (isFloatingSignatureImage(it)) {
+            continue
+          }
+
+          if (!pastFrontMatter) {
+            if (it.type === 'pageBreak' || it.type === ElementType.PAGE_BREAK) {
+              continue
+            }
+            if (it.type === 'table' && it.trList) {
+              if (isFrontTable(it)) {
+                continue
+              }
+              // Gặp bảng đầu tiên không phải front-table -> bắt đầu thân bài
+              pastFrontMatter = true
+              cleanBody.push(it)
+              continue
+            }
+
+            // Tiêu đề phân cấp (Title / Heading) từ Word KHÔNG BAO GIỜ là rác bìa/header
+            if (it.type === 'title' || it.type === ElementType.TITLE || (it.level && it.valueList)) {
+              pastFrontMatter = true
+              cleanBody.push(it)
+              continue
+            }
+
+            const val = getElementText(it)
+            const valTrim = val.trim().toUpperCase()
+
+            if (valTrim.length === 0) {
+              continue
+            }
+            if (valTrim.includes('THEO DÕI SỬA ĐỔI')) {
+              continue
+            }
+
+            // Lọc bỏ đoạn header / thông tin công ty cũ ở đầu file
+            const isFrontHeader =
+              valTrim.includes('CCN TAM PHƯỚC') ||
+              valTrim.includes('ĐIỆN THOẠI: (0251)') ||
+              valTrim.includes('3513634') ||
+              valTrim.includes('3513633') ||
+              (valTrim.includes('CÔNG TY CỔ PHẦN') && (valTrim.includes('TAM PHƯỚC') || valTrim.includes('PHÚ TÀI') || valTrim.length < 50)) ||
+              (valTrim.includes('PHÚ TÀI') && valTrim.length < 50) ||
+              (valTrim.startsWith('MÃ HIỆU:') && valTrim.length < 35)
+
+            if (isFrontHeader) {
+              continue
+            }
+
+            // Gặp phần tử nội dung thực tế đầu tiên (tiêu đề tài liệu, tiêu đề mục hoặc đoạn văn bản)
+            pastFrontMatter = true
+            cleanBody.push(it)
+            continue
+          }
+
+          // KHI ĐÃ VÀO THÂN BÀI (pastFrontMatter === true):
+          cleanBody.push(it)
+        }
+
+        // Phương án 1: Dọn dẹp bảng ký thủ công cũ, dòng enter thừa và chức danh ký cuối văn bản (để duyệt qua hệ thống ERP)
+        while (cleanBody.length > 0) {
+          const lastIt = cleanBody[cleanBody.length - 1]
+          if (lastIt.type === 'pageBreak' || lastIt.type === ElementType.PAGE_BREAK) {
+            cleanBody.pop()
+            continue
+          }
+          if (isEndSignatureTable(lastIt)) {
+            cleanBody.pop()
+            continue
+          }
+          const lastVal = getElementText(lastIt)
+          const lastTrim = (typeof lastVal === 'string' ? lastVal : '').trim().toUpperCase()
+          if (!lastIt.type && lastTrim === '') {
+            cleanBody.pop()
+            continue
+          }
+          if (
+            lastTrim === 'P.TỔNG GIÁM ĐỐC' ||
+            lastTrim === 'P. TỔNG GIÁM ĐỐC' ||
+            lastTrim === 'TỔNG GIÁM ĐỐC' ||
+            lastTrim === 'GIÁM ĐỐC' ||
+            lastTrim === 'NGUYỄN HÒA'
+          ) {
+            cleanBody.pop()
+            continue
+          }
+          break
+        }
+
         while (
-          filteredUserElements.length > 0 &&
-          (filteredUserElements[0].type === 'pageBreak' || filteredUserElements[0].type === ElementType.PAGE_BREAK)
+          cleanBody.length > 0 &&
+          (cleanBody[0].type === 'pageBreak' ||
+            cleanBody[0].type === ElementType.PAGE_BREAK ||
+            (!cleanBody[0].type && typeof cleanBody[0].value === 'string' && cleanBody[0].value.trim() === ''))
         ) {
-          filteredUserElements.shift()
-        }
-        const hasUserContent = filteredUserElements.some(
-          el => (el.value && el.value.trim().length > 0) || el.type === 'table' || el.type === 'image'
-        )
-        if (hasUserContent) {
-          cleanMain.push(...filteredUserElements)
-        } else {
-          // Mặc định Trang 3 hoàn toàn trống rỗng cho người dùng soạn thảo
-          cleanMain.push({
-            value: '\n',
-            size: 14
-          })
+          cleanBody.shift()
         }
 
-        lockAndEnsureThreePages(cleanMain)
-        curData.main = cleanMain
+        // Xóa pageBreak lồng bên trong valueList của phần tử đầu tiên nếu có
+        if (cleanBody.length > 0 && cleanBody[0].valueList && Array.isArray(cleanBody[0].valueList)) {
+          cleanBody[0].valueList = cleanBody[0].valueList.filter(
+            (v: any) => v.type !== 'pageBreak' && v.type !== ElementType.PAGE_BREAK
+          )
+        }
+
+        if (cleanBody.length === 0) {
+          cleanBody.push({ value: '\n', size: 14 })
+        }
+
+        // 6. GHÉP CHUẨN 100% CẤU TRÚC TÀI LIỆU:
+        // Trang 1: Trang bìa ISO chuẩn
+        // Ngắt trang
+        // Trang 2: Tiêu đề sửa đổi + Bảng lịch sử sửa đổi chuẩn
+        // Ngắt trang
+        // Trang 3 trở đi: Nội dung sạch từ file Word upload lên!
+        const finalMain: any[] = []
+        if (cover) {
+          cover.disabled = true
+          cover.deletable = false
+          finalMain.push(cover)
+          finalMain.push({ type: 'pageBreak', value: '', disabled: true, deletable: false })
+        }
+        finalMain.push(revTitle)
+        finalMain.push({ value: '\n', size: 6, disabled: true, deletable: false })
+        if (rev) {
+          rev.disabled = true
+          rev.deletable = false
+          finalMain.push(rev)
+        }
+        finalMain.push({ type: 'pageBreak', value: '', disabled: true, deletable: false })
+        finalMain.push(...cleanBody)
+
+        lockAndEnsureThreePages(finalMain)
+        curData.main = finalMain
+        // Bản edit không hiển thị header lặp (Ảnh 2)
+        curData.header = []
 
         // Đồng bộ Footer metadata nếu có thông tin form từ parent
         if (pForm) {
           updateFooterMetadata(curData.footer || [], {
-            code: parentCode,
-            issueDate: parentIssueDate,
-            version: parentVersion
+            code: pCode,
+            issueDate: pDate,
+            version: pVer
           })
         }
 
         instance.command.executeSetValue(curData)
         try {
           autoDetectHeadings(instance, { force: true })
+        } catch (_) {}
+        try {
+          updateCatalog()
         } catch (_) {}
 
         // Tự động đặt con trỏ chuột vào vị trí bắt đầu soạn thảo tại Trang 3 (sau Bảng sửa đổi)
@@ -957,10 +1506,30 @@ window.onload = function () {
     deptName?: string
     issuer?: string
     approver?: string
-  }) {
+  } = {}) {
     try {
+      if (!meta) meta = {}
       const curData = instance.command.getValue().data
       if (!curData || !curData.main) return
+      let pF: any = null
+      try {
+        pF = (window.parent as any)?.__ISO_FORM_DATA__ || (window.parent as any)?.formData
+      } catch (_) {}
+      if (!pF || !pF.apply_iso_template) {
+        let t0: any = null
+        for (const el of curData.main) {
+          if (el.type === 'table' && el.trList) {
+            t0 = el
+            break
+          }
+        }
+        if (t0) {
+          formatCoverLogoCell(t0)
+          instance.command.executeSetValue(curData)
+        }
+        return
+      }
+
       let modified = false
 
       let t0: any = null
@@ -1027,7 +1596,28 @@ window.onload = function () {
     }
   }
 
+  function formatCoverOnly() {
+    try {
+      const curData = instance.command.getValue().data
+      if (!curData || !curData.main) return
+      let t0: any = null
+      for (const el of curData.main) {
+        if (el.type === 'table' && el.trList) {
+          t0 = el
+          break
+        }
+      }
+      if (t0) {
+        formatCoverLogoCell(t0)
+        instance.command.executeSetValue(curData)
+      }
+    } catch (_) {}
+  }
+
   Reflect.set(window, '__updateCoverMetadata__', updateCoverMetadata)
+  Reflect.set(window, '__formatCoverLogo__', formatCoverOnly)
+  Reflect.set(window, '__formatCoverTable__', formatCoverOnly)
+  Reflect.set(window, '__formatCoverTable', formatCoverOnly)
 
   function insertOrUpdateFlowchartSvg(payload: {
     svgDataUrl: string
@@ -1070,7 +1660,7 @@ window.onload = function () {
             }
             const low = tableText.toLowerCase()
             // Bảng lưu đồ có chứa "bước 1" và ("trách nhiệm" hoặc "lưu đồ" hoặc "bước 2" hoặc "phụ lục")
-            if (low.includes('bước 1') && (low.includes('bước 2') || low.includes('trách nhiệm') || low.includes('lưu đồ') || low.includes('phụ lục'))) {
+            if ((low.includes('trách nhiệm') || low.includes('lưu đồ')) && (low.includes('bước') || low.includes('nội dung')) && (low.includes('biểu mẫu') || low.includes('tài liệu') || low.includes('phụ lục') || low.includes('lưu đồ'))) {
               existingTableIndex = i
               break
             }
@@ -1271,8 +1861,13 @@ window.onload = function () {
     sizeOptionDom.classList.toggle('visible')
   }
   sizeOptionDom.onclick = function (evt) {
-    const li = evt.target as HTMLLIElement
-    instance.command.executeSize(Number(li.dataset.size!))
+    const li = (evt.target as HTMLElement).closest('li') as HTMLLIElement | null
+    if (!li || !li.dataset.size) return
+    const newSize = Number(li.dataset.size)
+    sizeSelectDom.innerText = li.innerText
+    sizeOptionDom.classList.remove('visible')
+    instance.command.executeSize(newSize)
+    instance.focus()
   }
 
   const sizeAddDom = document.querySelector<HTMLDivElement>(
@@ -1397,9 +1992,25 @@ window.onload = function () {
     titleOptionDom.classList.toggle('visible')
   }
   titleOptionDom.onclick = function (evt) {
-    const li = evt.target as HTMLLIElement
+    const li = (evt.target as HTMLElement).closest('li') as HTMLLIElement | null
+    if (!li) return
     const level = <TitleLevel>li.dataset.level
+    titleSelectDom.innerText = li.innerText
+    titleOptionDom.classList.remove('visible')
     instance.command.executeTitle(level || null)
+    if (level === 'first') {
+      sizeSelectDom.innerText = '16'
+    } else if (level === 'second') {
+      sizeSelectDom.innerText = '14'
+    } else if (level === 'third') {
+      sizeSelectDom.innerText = '13'
+    } else if (!level) {
+      sizeSelectDom.innerText = '13'
+    }
+    if (typeof updateCatalogRef === 'function') {
+      setTimeout(() => updateCatalogRef?.(), 60)
+    }
+    instance.focus()
   }
 
   const leftDom = document.querySelector<HTMLDivElement>('.menu-item__left')!
@@ -1511,10 +2122,29 @@ window.onload = function () {
     listOptionDom.classList.toggle('visible')
   }
   listOptionDom.onclick = function (evt) {
-    const li = evt.target as HTMLLIElement
+    const li = (evt.target as HTMLElement).closest('li') as HTMLLIElement | null
+    if (!li) return
+    const listAction = li.dataset.listAction
+    if (listAction === 'continue') {
+      instance.command.executeContinueListNumbering()
+      if (typeof updateCatalogRef === 'function') {
+        setTimeout(() => updateCatalogRef?.(), 60)
+      }
+      return
+    }
+    if (listAction === 'restart') {
+      instance.command.executeRestartListNumbering()
+      if (typeof updateCatalogRef === 'function') {
+        setTimeout(() => updateCatalogRef?.(), 60)
+      }
+      return
+    }
     const listType = <ListType>li.dataset.listType || null
     const listStyle = <ListStyle>(<unknown>li.dataset.listStyle)
     instance.command.executeList(listType, listStyle)
+    if (typeof updateCatalogRef === 'function') {
+      setTimeout(() => updateCatalogRef?.(), 60)
+    }
   }
 
   // 4. | 表格 | 图片 | 超链接 | 分割线 | 水印 | 代码块 | 分隔符 | 控件 | 复选框 | LaTeX | 日期选择器
@@ -2485,10 +3115,6 @@ window.onload = function () {
       const file = (e.target as HTMLInputElement).files?.[0]
       if (!file) return
       try {
-        if (typeof (window.parent as any)?.__uploadAndMergeCanvasWord__ === 'function') {
-          await (window.parent as any).__uploadAndMergeCanvasWord__(file)
-          return
-        }
         const arrayBuffer = await file.arrayBuffer()
         await instance.command.executeImportDocx({ arrayBuffer })
 
@@ -2503,6 +3129,14 @@ window.onload = function () {
         if (isCatalogShow) {
           await updateCatalog()
         }
+
+        // Đồng bộ lên server và giao diện cha
+        if (typeof (window.parent as any)?.__smartWordUpload__ === 'function') {
+          (window.parent as any).__smartWordUpload__(file)
+        } else if (typeof (window.parent as any)?.__uploadAndMergeCanvasWord__ === 'function') {
+          await (window.parent as any).__uploadAndMergeCanvasWord__(file)
+        }
+        return
       } catch (err) {
         console.error('Lỗi khi mở file Word:', err)
       } finally {
@@ -2534,8 +3168,7 @@ window.onload = function () {
           const isCoverOrRev =
             item.id === 'iso-title-cover-page' ||
             item.id === 'iso-title-rev-log' ||
-            item.name.includes('THEO DÕI SỬA ĐỔI') ||
-            (item.pageNo !== undefined && item.pageNo < 2)
+            item.name.includes('THEO DÕI SỬA ĐỔI')
 
           if (isCoverOrRev) {
             if (item.subCatalog && item.subCatalog.length > 0) {
@@ -2546,8 +3179,11 @@ window.onload = function () {
               item.subCatalog && item.subCatalog.length > 0
                 ? extractBodyItems(item.subCatalog)
                 : []
+            let cleanName = (item.name || '').split(/[\r\n]+/)[0].trim()
+            cleanName = cleanName.replace(/^(.*\D)(\d+\.\d+)$/, '$1').trim()
             result.push({
               ...item,
+              name: cleanName,
               subCatalog: cleanSub
             })
           }
@@ -3324,7 +3960,8 @@ window.onload = function () {
         listDom.classList.add('active')
         const listType = payload.listType
         const listStyle =
-          payload.listType === ListType.OL ? ListStyle.DECIMAL : payload.listType
+          payload.listStyle ||
+          (payload.listType === ListType.OL ? ListStyle.DECIMAL : payload.listType)
         const curListDom = listOptionDom.querySelector<HTMLLIElement>(
           `[data-list-type='${listType}'][data-list-style='${listStyle}']`
         )
@@ -3577,6 +4214,32 @@ window.onload = function () {
             ])
           }
         })
+      }
+    },
+    {
+      name: 'Tiếp tục đánh số',
+      icon: 'list',
+      when: payload => {
+        return (
+          !payload.isReadonly &&
+          payload.startElement?.listType === ListType.OL
+        )
+      },
+      callback: (command: Command) => {
+        command.executeContinueListNumbering()
+      }
+    },
+    {
+      name: 'Đánh số lại từ 1',
+      icon: 'list',
+      when: payload => {
+        return (
+          !payload.isReadonly &&
+          payload.startElement?.listType === ListType.OL
+        )
+      },
+      callback: (command: Command) => {
+        command.executeRestartListNumbering()
       }
     },
     {

@@ -33,9 +33,10 @@ import {
 } from '../dataset/constant/List'
 import { START_LINE_BREAK_REG } from '../dataset/constant/Regular'
 import {
+  applyHeadingTextCase,
+  getTitleFormatting,
   titleNodeNameMapping,
-  titleOrderNumberMapping,
-  titleSizeMapping
+  titleOrderNumberMapping
 } from '../dataset/constant/Title'
 import { BlockType } from '../dataset/enum/Block'
 import { ImageDisplay, LocationPosition } from '../dataset/enum/Common'
@@ -147,6 +148,12 @@ export function formatElementList(
       elementList.splice(i, 1)
       // 格式化元素
       const valueList = el.valueList || []
+      if (el.level) {
+        applyHeadingTextCase(
+          valueList.filter(v => isTextLikeElement(v)),
+          el.level
+        )
+      }
       formatElementList(valueList, {
         ...options,
         isHandleFirstElement: false,
@@ -167,13 +174,27 @@ export function formatElementList(
             value.titleId = titleId
             value.level = el.level
           }
-          // 文本型元素设置字体及加粗
-          if (isTextLikeElement(value)) {
-            if (!value.size) {
-              value.size = titleOptions[titleSizeMapping[value.level!]]
+          if (el.listId) {
+            value.listId = value.listId || el.listId
+            value.listType = value.listType || el.listType
+            value.listStyle = value.listStyle || el.listStyle
+            if (el.listLevel !== undefined && value.listLevel === undefined) {
+              value.listLevel = el.listLevel
+            }
+          }
+          // 文本型元素设置字体、加粗及斜体（保留用户自定义的加粗、字号与斜体设置）
+          if (isTextLikeElement(value) && value.level) {
+            const formatting = getTitleFormatting(value.level, titleOptions)
+            if (value.size === undefined) {
+              value.size = formatting.size
             }
             if (value.bold === undefined) {
-              value.bold = true
+              value.bold = formatting.bold
+            }
+            if (value.italic === undefined) {
+              if (formatting.italic) {
+                value.italic = true
+              }
             }
           }
           elementList.splice(i, 0, value)
@@ -193,8 +214,9 @@ export function formatElementList(
       })
       // 追加节点
       if (valueList.length) {
+        const rootLevel = el.listLevel ?? 0
         const fallbackListId = el.listId || getUUID()
-        const listIdMap = new Map<number, string>([[0, fallbackListId]])
+        const listIdMap = new Map<number, string>([[rootLevel, fallbackListId]])
         for (let v = 0; v < valueList.length; v++) {
           const value = valueList[v]
           const listLevel = value.listLevel ?? el.listLevel ?? 0
@@ -815,7 +837,13 @@ export function zipElementList(
           title: element.title,
           titleId,
           value: '',
-          level
+          level,
+          ...(element.listId ? { listId: element.listId } : {}),
+          ...(element.listType ? { listType: element.listType } : {}),
+          ...(element.listStyle ? { listStyle: element.listStyle } : {}),
+          ...(element.listLevel !== undefined
+            ? { listLevel: element.listLevel }
+            : {})
         }
         const valueList: IElement[] = []
         while (e < elementList.length) {
@@ -838,17 +866,24 @@ export function zipElementList(
       if (listId) {
         const listType = element.listType
         const listStyle = element.listStyle
+        const rootListLevel = element.listLevel ?? 0
         const listElement: IElement = {
           type: ElementType.LIST,
           value: '',
           listId,
           listType,
-          listStyle
+          listStyle,
+          ...(rootListLevel ? { listLevel: rootListLevel } : {})
         }
         const valueList: IElement[] = []
         while (e < elementList.length) {
           const listE = elementList[e]
           if (!listE.listId || listType !== listE.listType) {
+            e--
+            break
+          }
+          const curLevel = listE.listLevel ?? 0
+          if (curLevel <= rootListLevel && listE.listId !== listId) {
             e--
             break
           }
@@ -1037,6 +1072,9 @@ export function zipElementList(
     }
     // 组合元素
     const pickElement = pickElementAttr(element, { extraPickAttrs })
+    if (element.type === ElementType.LIST && element.listId) {
+      pickElement.listId = element.listId
+    }
     if (
       !element.type ||
       element.type === ElementType.TEXT ||

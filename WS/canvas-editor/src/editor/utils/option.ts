@@ -229,7 +229,7 @@ export function mergeOption(
     defaultType: 'TEXT',
     defaultColor: '#000000',
     defaultFont: options.defaultFont || 'Times New Roman',
-    defaultSize: 16,
+    defaultSize: 13,
     minSize: 5,
     maxSize: 72,
     defaultRowMargin: 1,

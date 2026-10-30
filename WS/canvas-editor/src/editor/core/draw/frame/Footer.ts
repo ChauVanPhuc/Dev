@@ -219,19 +219,32 @@ export class Footer {
     ): IElement[] => {
       if (!elements || elements.length === 0) return elements
       const newElements = elements.map(el => ({ ...el }))
+      for (const el of newElements) {
+        if (el.trList) {
+          for (const tr of el.trList) {
+            for (const td of (tr.tdList || [])) {
+              if (td.value) {
+                td.value = replacePageInElementList(td.value, pageNumber, totalPages)
+              }
+            }
+          }
+        }
+      }
       const fullText = newElements.map(el => el.value || '').join('')
 
-      // Khớp dạng "Trang 1", "Trang 1 / 3", "Page 1", v.v.
-      const regex = /((?:Trang|Page)\s*)(\d+)(\s*(?:\/|-)\s*(\d+))?/gi
+      // Khớp dạng "Trang 1", "Trang: 1", "Trang: 1/6", "Trang 1 / 3", "Page: 1/6", v.v.
+      const regex = /((?:Trang|Page)\s*[:：]?\s*)(\d+)(\s*(?:\/|-|trên|of)\s*(\d+))?/gi
       let match: RegExpExecArray | null
 
       while ((match = regex.exec(fullText)) !== null) {
-        const prefixLen = match[1].length
-        const pageDigitStart = match.index + prefixLen
-        const pageDigitEnd = pageDigitStart + match[2].length
+        const matchStart = match.index
+        const matchEnd = match.index + match[0].length
+        const prefix = match[1]
+        const hasTotal = Boolean(match[3])
+        const targetString = prefix + String(pageNumber) + (hasTotal ? `/${totalPages}` : '')
 
         let curOffset = 0
-        let replacedPage = false
+        let replaced = false
 
         for (let i = 0; i < newElements.length; i++) {
           const el = newElements[i]
@@ -240,17 +253,17 @@ export class Footer {
           const elEnd = curOffset + val.length
           curOffset = elEnd
 
-          // Kiểm tra chồng lấn với dải chữ số trang
-          if (elEnd > pageDigitStart && elStart < pageDigitEnd) {
+          // Kiểm tra chồng lấn với dải chữ số trang [matchStart, matchEnd]
+          if (elEnd > matchStart && elStart < matchEnd) {
             const prefixPart =
-              elStart < pageDigitStart
-                ? val.slice(0, pageDigitStart - elStart)
+              elStart < matchStart
+                ? val.slice(0, matchStart - elStart)
                 : ''
             const suffixPart =
-              elEnd > pageDigitEnd ? val.slice(pageDigitEnd - elStart) : ''
-            if (!replacedPage) {
-              el.value = prefixPart + String(pageNumber) + suffixPart
-              replacedPage = true
+              elEnd > matchEnd ? val.slice(matchEnd - elStart) : ''
+            if (!replaced) {
+              el.value = prefixPart + targetString + suffixPart
+              replaced = true
             } else {
               el.value = suffixPart
             }

@@ -1,6 +1,7 @@
 import { version } from '../../../../package.json'
 import { ZERO } from '../../dataset/constant/Common'
 import { RowFlex } from '../../dataset/enum/Row'
+import { ListType } from '../../dataset/enum/List'
 import {
   IAppendElementListOption,
   IComputeRowListPayload,
@@ -1779,6 +1780,130 @@ export class Draw {
     )
   }
 
+  /**
+   * Tính độ thụt lề 1 tab cho các dòng nội dung nằm dưới mỗi chỉ mục (Heading / Mục đánh số 1., 1.1., I., a)...).
+   */
+  public computeChiMucIndentMap(
+    elementList: IElement[],
+    scale: number
+  ): Map<number, number> {
+    const indentMap = new Map<number, number>()
+    if (!elementList.length) return indentMap
+    const tabIndent = this.options.defaultTabWidth * scale
+    const STRUCTURAL_TYPES = new Set<ElementType | undefined>([
+      ElementType.TABLE,
+      ElementType.PAGE_BREAK,
+      ElementType.SEPARATOR,
+      ElementType.BLOCK
+    ])
+    const CHI_MUC_REGEX =
+      /^\s*(?:(?:I|II|III|IV|V|VI|VII|VIII|IX|X|XI|XII)\.\s+\S*|[0-9]+(?:\.[0-9]+)*\.(?:\s*\S.*|\s*$)|[a-zA-Z]\)(?:\s*\S.*|\s*$)|[a-zA-Z]\.\s+\S+)/
+
+    let hasActiveChiMuc = false
+    let prevTitleId: string | undefined = undefined
+    let i = 0
+    while (i < elementList.length) {
+      const pStart = i
+      const startEl = elementList[pStart]
+      if (STRUCTURAL_TYPES.has(startEl.type)) {
+        hasActiveChiMuc = false
+        prevTitleId = undefined
+        i++
+        continue
+      }
+      let pEnd = pStart
+      while (pEnd + 1 < elementList.length) {
+        const nextEl = elementList[pEnd + 1]
+        if (nextEl.value === ZERO || STRUCTURAL_TYPES.has(nextEl.type)) {
+          break
+        }
+        pEnd++
+      }
+
+      let curTitleId: string | undefined = startEl.titleId
+      let curLevel: string | undefined = startEl.level
+      let curListId: string | undefined = startEl.listId
+      let curListType: ListType | undefined = startEl.listType
+      let curListStyle: string | undefined = startEl.listStyle
+      let curListLevel: number | undefined = startEl.listLevel
+      let rowFlex: RowFlex | undefined = startEl.rowFlex
+      let paraText = ''
+
+      for (let k = pStart; k <= pEnd; k++) {
+        const el = elementList[k]
+        if (!rowFlex && el.rowFlex) rowFlex = el.rowFlex
+        if (!curTitleId && el.titleId) curTitleId = el.titleId
+        if (!curLevel && el.level) curLevel = el.level
+        if (!curListId && el.listId) curListId = el.listId
+        if (!curListType && el.listType) curListType = el.listType
+        if (!curListStyle && el.listStyle) curListStyle = el.listStyle
+        if (curListLevel === undefined && el.listLevel !== undefined) {
+          curListLevel = el.listLevel
+        }
+        if (
+          el.value &&
+          el.value !== ZERO &&
+          el.type !== ElementType.TAB &&
+          !STRUCTURAL_TYPES.has(el.type)
+        ) {
+          paraText += el.value
+        }
+      }
+
+      const isCenteredOrRight =
+        rowFlex === RowFlex.CENTER || rowFlex === RowFlex.RIGHT
+      if (isCenteredOrRight) {
+        hasActiveChiMuc = false
+        prevTitleId = curTitleId
+        i = pEnd + 1
+        continue
+      }
+
+      const isSoftListWrap = !!startEl.listWrap
+      const isHeadingChiMuc =
+        !!curTitleId && !!curLevel && curTitleId !== prevTitleId
+      const isSubAlphaList =
+        !!curListId &&
+        curListType === ListType.OL &&
+        (curListStyle === 'lower-alpha' ||
+          curListStyle === 'lower-alpha-paren' ||
+          curListStyle === 'lower-roman' ||
+          curListStyle === 'lowerAlpha' ||
+          curListStyle === 'lowerAlphaParen' ||
+          curListStyle === 'lowerRoman')
+      const isOrderedListChiMuc =
+        !!curListId &&
+        curListType === ListType.OL &&
+        !isSoftListWrap &&
+        !isSubAlphaList
+      const isTextChiMuc = CHI_MUC_REGEX.test(paraText)
+
+      const isChiMuc =
+        isHeadingChiMuc || isOrderedListChiMuc || isTextChiMuc
+
+      if (isChiMuc) {
+        hasActiveChiMuc = true
+      } else if (hasActiveChiMuc) {
+        const listLevel = curListLevel ?? 0
+        const shouldIndent =
+          !curListId ||
+          ((curListType === ListType.UL || isSubAlphaList) && listLevel === 0)
+        if (shouldIndent) {
+          for (let k = pStart; k <= pEnd; k++) {
+            indentMap.set(k, tabIndent)
+          }
+        }
+      } else if (isSubAlphaList) {
+        hasActiveChiMuc = true
+      }
+
+      prevTitleId = curTitleId
+      i = pEnd + 1
+    }
+
+    return indentMap
+  }
+
   public computeRowList(payload: IComputeRowListPayload) {
     const {
       innerWidth,
@@ -1811,6 +1936,10 @@ export class Draw {
     }
     // 计算列表偏移宽度
     const listStyleMap = this.listParticle.computeListStyle(ctx, elementList)
+    const chiMucIndentMap =
+      !isFromTable && elementList === this.elementList
+        ? this.computeChiMucIndentMap(elementList, scale)
+        : null
     const rowList: IRow[] = []
     let layout =
       isPagingMode && !isFromTable ? this.columnManager.getLayout() : null
@@ -1920,14 +2049,23 @@ export class Draw {
         boundingBoxDescent: 0
       }
       // 实际可用宽度
+      const chiMucIndent = chiMucIndentMap?.get(i) || 0
+      if (curRow.offsetX === undefined && curRow.elementList.length === 0) {
+        if (!element.listId) {
+          curRow.chiMucIndent = chiMucIndent || 0
+          curRow.offsetX = chiMucIndent || 0
+        }
+      }
       const offsetX =
-        curRow.offsetX ||
-        (element.listId &&
-          (listStyleMap.get(element.listId) || 0) +
-            (element.listLevel
-              ? this.listParticle.LIST_INDENT_WIDTH * element.listLevel * scale
-              : 0)) ||
-        0
+        (curRow.offsetX !== undefined
+          ? curRow.offsetX
+          : (element.listId
+            ? (listStyleMap.get(element.listId) || 0) +
+              (element.listLevel
+                ? this.listParticle.LIST_INDENT_WIDTH * element.listLevel * scale
+                : 0) +
+              chiMucIndent
+            : chiMucIndent)) || 0
       const rowMaxWidth =
         isColumnEnabled && layout ? layout.width : currentInnerWidth
       const availableWidth = rowMaxWidth - offsetX
@@ -2305,13 +2443,25 @@ export class Draw {
       }
       // 列表信息
       if (element.listId && element.value === ZERO && !element.listWrap) {
-        if (listIndexMap.has(element.listId)) {
-          listIndexMap.set(
-            element.listId,
-            (listIndexMap.get(element.listId) ?? 0) + 1
-          )
+        const curListLevel = element.listLevel ?? 0
+        const listKey = `${element.listId}_${curListLevel}_${
+          element.listType || 'ol'
+        }`
+        if (listIndexMap.has(listKey)) {
+          listIndexMap.set(listKey, (listIndexMap.get(listKey) ?? 0) + 1)
         } else {
-          listIndexMap.set(element.listId, 0)
+          listIndexMap.set(listKey, 0)
+        }
+        // 父级递增时重置同一 listId 下更深层级的子列表计数
+        const prefix = `${element.listId}_`
+        for (const key of Array.from(listIndexMap.keys())) {
+          if (key.startsWith(prefix)) {
+            const rest = key.slice(prefix.length)
+            const lvl = Number(rest.split('_')[0])
+            if (!Number.isNaN(lvl) && lvl > curListLevel) {
+              listIndexMap.delete(key)
+            }
+          }
         }
       }
       // 计算四周环绕导致的元素偏移量
@@ -2392,15 +2542,32 @@ export class Draw {
             }
           }
         }
-        // 列表缩进
+        // 列表缩进 & 索引下内容缩进 (Chỉ mục indent)
         if (element.listId) {
+          const listKey = `${element.listId}_${element.listLevel ?? 0}_${
+            element.listType || 'ol'
+          }`
           row.isList = true
+          row.chiMucIndent = chiMucIndent
           row.offsetX =
             (listStyleMap.get(element.listId!) || 0) +
             (element.listLevel
               ? this.listParticle.LIST_INDENT_WIDTH * element.listLevel * scale
-              : 0)
-          row.listIndex = listIndexMap.get(element.listId!) ?? 0
+              : 0) +
+            chiMucIndent
+          row.listIndex = listIndexMap.get(listKey) ?? 0
+        } else if (chiMucIndent) {
+          // Chỉ thụt lề dòng đầu tiên của đoạn văn. Khi rớt dòng do hết chiều rộng trang (isWidthNotEnough), dòng sau bắt đầu từ lề trái (offsetX = 0).
+          if (!isWidthNotEnough) {
+            row.chiMucIndent = chiMucIndent
+            row.offsetX = chiMucIndent
+          } else {
+            row.chiMucIndent = 0
+            row.offsetX = 0
+          }
+        } else {
+          row.chiMucIndent = 0
+          row.offsetX = 0
         }
         // Y轴偏移量
         row.offsetY =
@@ -2422,15 +2589,23 @@ export class Draw {
         // 与换行分支诞生新行时的赋值保持一致（文档首行与全量计算一致不补齐）
         if (payload.resume && curRow.elementList.length === 0 && i !== 0) {
           if (element.listId) {
+            const listKey = `${element.listId}_${element.listLevel ?? 0}_${
+              element.listType || 'ol'
+            }`
             curRow.isList = true
+            curRow.chiMucIndent = chiMucIndent
             curRow.offsetX =
               (listStyleMap.get(element.listId) || 0) +
               (element.listLevel
                 ? this.listParticle.LIST_INDENT_WIDTH *
                   element.listLevel *
                   scale
-                : 0)
-            curRow.listIndex = listIndexMap.get(element.listId) ?? 0
+                : 0) +
+              chiMucIndent
+            curRow.listIndex = listIndexMap.get(listKey) ?? 0
+          } else if (chiMucIndent) {
+            curRow.chiMucIndent = chiMucIndent
+            curRow.offsetX = chiMucIndent
           }
           curRow.offsetY =
             !isFromTable &&

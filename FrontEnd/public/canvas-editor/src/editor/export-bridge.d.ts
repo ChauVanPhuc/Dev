@@ -1,9 +1,0 @@
-export { TitleLevel } from './dataset/enum/Title';
-export { PaperDirection } from './dataset/enum/Editor';
-export { NumberType, ImageDisplay } from './dataset/enum/Common';
-export { RowFlex } from './dataset/enum/Row';
-export { ElementType } from './dataset/enum/Element';
-export { ListStyle, ListType } from './dataset/enum/List';
-export { VerticalAlign } from './dataset/enum/VerticalAlign';
-export { TableBorder, TdBorder } from './dataset/enum/table/Table';
-export { ControlType } from './dataset/enum/Control';

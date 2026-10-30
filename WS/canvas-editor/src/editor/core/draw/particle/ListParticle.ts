@@ -1,5 +1,8 @@
 import { ZERO } from '../../../dataset/constant/Common'
-import { ulStyleMapping } from '../../../dataset/constant/List'
+import {
+  formatOrderedListMarker,
+  ulStyleMapping
+} from '../../../dataset/constant/List'
 import { ElementType } from '../../../dataset/enum/Element'
 import { KeyMap } from '../../../dataset/enum/KeyMap'
 import { ListStyle, ListType, UlStyle } from '../../../dataset/enum/List'
@@ -39,24 +42,173 @@ export class ListParticle {
     if (!changeElementList || !changeElementList.length) return
     // 如果包含列表则设置为取消列表
     const isUnsetList = changeElementList.find(
-      el => el.listType === listType && el.listStyle === listStyle
+      el =>
+        el.listType === listType && (!listStyle || el.listStyle === listStyle)
     )
     if (isUnsetList || !listType) {
       this.unsetList()
       return
     }
+    // 保留当前缩进层级（如已按 Tab 缩进后再切换列表样式）
+    const targetLevel =
+      changeElementList.find(el => el.listLevel !== undefined)?.listLevel ?? 0
+    const elementList = this.draw.getElementList()
+    const firstEl = changeElementList[0]
+    const oldListId = firstEl?.listId
+    // 自动查找前序同级同类型列表以连续编号（如被子列表 • 或空行隔开时继续 1., 2., 3.）
+    const listId =
+      this.findContinuableListId(
+        firstEl,
+        listType,
+        listStyle,
+        targetLevel,
+        elementList
+      ) || getUUID()
     // 设置值
-    const listId = getUUID()
     this.draw.setElementProperty(changeElementList, {
       listId,
       listType,
       listStyle,
-      listLevel: 0
+      listLevel: targetLevel
     })
+    // 若原属于某个列表且仅切换有序列表样式，同步更新同列表后续项
+    if (oldListId && oldListId !== listId) {
+      const lastChanged = changeElementList[changeElementList.length - 1]
+      const afterIdx = elementList.indexOf(lastChanged)
+      if (~afterIdx) {
+        for (let i = afterIdx + 1; i < elementList.length; i++) {
+          const el = elementList[i]
+          if (el.listId === oldListId && (el.listLevel ?? 0) === targetLevel) {
+            this.draw.setElementProperty(el, { listId, listType, listStyle })
+          }
+        }
+      }
+    }
     // 光标定位
     const isSetCursor = startIndex === endIndex
     const curIndex = isSetCursor ? endIndex : startIndex
     this.draw.render({ curIndex, isSetCursor })
+  }
+
+  // 重新开始编号（从 1 开始 - Restart at 1）
+  public restartListNumbering() {
+    const isReadonly = this.draw.isReadonly()
+    if (isReadonly) return
+    const { startIndex, endIndex } = this.range.getRange()
+    if (!~startIndex && !~endIndex) return
+    const segments = this.extractListSegments()
+    if (!segments.length) return
+    const elementList = this.draw.getElementList()
+    const firstEl = segments[0][0]
+    const oldListId = firstEl?.listId
+    if (!oldListId) return
+    const targetLevel = firstEl.listLevel ?? 0
+    const newListId = getUUID()
+    const startPos = elementList.indexOf(firstEl)
+    if (!~startPos) return
+    for (let i = startPos; i < elementList.length; i++) {
+      const el = elementList[i]
+      if (el.listId === oldListId && (el.listLevel ?? 0) === targetLevel) {
+        this.draw.setElementProperty(el, { listId: newListId })
+      }
+    }
+    const isSetCursor = startIndex === endIndex
+    const curIndex = isSetCursor ? endIndex : startIndex
+    this.draw.render({ curIndex, isSetCursor })
+  }
+
+  // 继续上一列表编号（Continue numbering）
+  public continueListNumbering() {
+    const isReadonly = this.draw.isReadonly()
+    if (isReadonly) return
+    const { startIndex, endIndex } = this.range.getRange()
+    if (!~startIndex && !~endIndex) return
+    const segments = this.extractListSegments()
+    if (!segments.length) return
+    const elementList = this.draw.getElementList()
+    const firstEl = segments[0][0]
+    const oldListId = firstEl?.listId
+    if (!oldListId) return
+    const targetLevel = firstEl.listLevel ?? 0
+    const targetType = firstEl.listType || ListType.OL
+    const startPos = elementList.indexOf(firstEl)
+    if (!~startPos) return
+    let prevListId: string | undefined
+    let prevListStyle: ListStyle | undefined
+    for (let i = startPos - 1; i >= 0; i--) {
+      const pre = elementList[i]
+      if (!pre?.listId || pre.listId === oldListId) continue
+      if (pre.listType === targetType && (pre.listLevel ?? 0) === targetLevel) {
+        prevListId = pre.listId
+        prevListStyle = pre.listStyle
+        break
+      }
+    }
+    if (!prevListId) return
+    for (let i = startPos; i < elementList.length; i++) {
+      const el = elementList[i]
+      if (el.listId === oldListId && (el.listLevel ?? 0) === targetLevel) {
+        this.draw.setElementProperty(el, {
+          listId: prevListId,
+          ...(prevListStyle ? { listStyle: prevListStyle } : {})
+        })
+      }
+    }
+    const isSetCursor = startIndex === endIndex
+    const curIndex = isSetCursor ? endIndex : startIndex
+    this.draw.render({ curIndex, isSetCursor })
+  }
+
+  // 查找同一章节内可延续编号的前序 listId（支持跳过内嵌子列表 • 或空行）
+  private findContinuableListId(
+    element: IElement | undefined,
+    listType: ListType,
+    listStyle: ListStyle | undefined,
+    level: number,
+    elementList: IElement[]
+  ): string | undefined {
+    if (!element) return
+    const start = elementList.indexOf(element)
+    if (!~start) return
+    for (let i = start - 1; i >= 0; i--) {
+      const pre = elementList[i]
+      if (!pre) continue
+      // 遇到标题、表格、分页符则视为新章节，不再跨章节自动延续
+      if (
+        pre.titleId ||
+        pre.level ||
+        pre.type === ElementType.TITLE ||
+        pre.type === ElementType.TABLE ||
+        pre.type === ElementType.PAGE_BREAK
+      ) {
+        break
+      }
+      if (pre.listId) {
+        const preLevel = pre.listLevel ?? 0
+        // 子列表遇到更浅层父项时停止查找
+        if (preLevel < level) break
+        // 跳过更深层级的子列表
+        if (preLevel > level) continue
+        if (
+          pre.listType === listType &&
+          (!listStyle || !pre.listStyle || pre.listStyle === listStyle)
+        ) {
+          return pre.listId
+        }
+        // 顶级有序列表允许跳过中间夹杂的无序符号子项（•）继续编号
+        if (listType === ListType.OL && pre.listType === ListType.UL) {
+          continue
+        }
+      } else {
+        // 跳过空行或空白字符
+        if (pre.value === ZERO || !pre.value?.trim()) {
+          continue
+        }
+        // 若存在普通正文段落，则停止自动合并（用户仍可手动右键选择“继续编号”）
+        break
+      }
+    }
+    return
   }
 
   public unsetList() {
@@ -302,31 +454,21 @@ export class ListParticle {
     elementList: IElement[]
   ): Map<string, number> {
     const listStyleMap = new Map<string, number>()
-    let start = 0
-    let curListId = elementList[start].listId
-    let curElementList: IElement[] = []
-    const elementLength = elementList.length
-    while (start < elementLength) {
-      const curElement = elementList[start]
-      if (curListId && curListId === curElement.listId) {
-        curElementList.push(curElement)
-      } else {
-        if (curElement.listId && curElement.listId !== curListId) {
-          // 列表结束
-          if (curElementList.length) {
-            const width = this.getListStyleWidth(ctx, curElementList)
-            listStyleMap.set(curListId!, width)
-          }
-          curListId = curElement.listId
-          curElementList = curListId ? [curElement] : []
-        }
+    const groupedByListId = new Map<string, IElement[]>()
+    for (let i = 0; i < elementList.length; i++) {
+      const curElement = elementList[i]
+      if (!curElement.listId) continue
+      let group = groupedByListId.get(curElement.listId)
+      if (!group) {
+        group = []
+        groupedByListId.set(curElement.listId, group)
       }
-      start++
+      group.push(curElement)
     }
-    if (curElementList.length) {
-      const width = this.getListStyleWidth(ctx, curElementList)
-      listStyleMap.set(curListId!, width)
-    }
+    groupedByListId.forEach((groupElements, listId) => {
+      const width = this.getListStyleWidth(ctx, groupElements)
+      listStyleMap.set(listId, width)
+    })
     return listStyleMap
   }
 
@@ -334,6 +476,9 @@ export class ListParticle {
     let styleElement = elementList[0]
     for (let i = 1; i < elementList.length; i++) {
       const element = elementList[i]
+      if (!element.value || element.value === ZERO || element.value.trim() === '') {
+        continue
+      }
       if (element.font || element.size || element.bold || element.italic) {
         styleElement = element
         break
@@ -343,9 +488,21 @@ export class ListParticle {
   }
 
   private getListFontStyle(elementList: IElement[], scale: number): string {
-    if (this.options.list.inheritStyle) {
-      const styleElement = this.findStyledElement(elementList)
-      return this.draw.getElementFont(styleElement, scale)
+    const startElement = elementList[0]
+    const styleElement = this.findStyledElement(elementList)
+    const isOrderedList = startElement?.listType === ListType.OL
+    const isHeadingRow = elementList.some(el => !!(el.titleId || el.level))
+    if (
+      isOrderedList ||
+      this.options.list.inheritStyle ||
+      isHeadingRow ||
+      styleElement?.bold ||
+      styleElement?.italic
+    ) {
+      const effectiveStyle: IElement = isOrderedList
+        ? { ...styleElement, bold: true }
+        : styleElement
+      return this.draw.getElementFont(effectiveStyle, scale)
     } else {
       const { defaultFont, defaultSize } = this.options
       return `${defaultSize * scale}px ${defaultFont}`
@@ -360,8 +517,11 @@ export class ListParticle {
     const startElement = listElementList[0]
     // 非递增样式返回固定值
     if (
-      startElement.listStyle &&
-      startElement.listStyle !== ListStyle.DECIMAL
+      startElement.listType === ListType.UL ||
+      startElement.listStyle === ListStyle.DISC ||
+      startElement.listStyle === ListStyle.CIRCLE ||
+      startElement.listStyle === ListStyle.SQUARE ||
+      startElement.listStyle === ListStyle.CHECKBOX
     ) {
       if (startElement.listStyle === ListStyle.CHECKBOX) {
         return (checkbox.width + this.LIST_GAP) * scale
@@ -370,7 +530,7 @@ export class ListParticle {
     }
     // 计算列表数量
     const count = listElementList.reduce((pre, cur) => {
-      if (cur.value === ZERO) {
+      if (cur.value === ZERO && !cur.listWrap) {
         pre += 1
       }
       return pre
@@ -379,9 +539,17 @@ export class ListParticle {
     ctx.save()
     ctx.font = this.getListFontStyle(listElementList, scale)
     // 以递增样式最大宽度为准
-    const text = `${this.MEASURE_BASE_TEXT.repeat(String(count).length - 1 || 1)}${
-      KeyMap.PERIOD
-    }`
+    const sampleMarker = formatOrderedListMarker(
+      count - 1,
+      startElement.listStyle
+    )
+    const minDecimalText = `${this.MEASURE_BASE_TEXT.repeat(
+      String(count).length - 1 || 1
+    )}${KeyMap.PERIOD}`
+    const text =
+      sampleMarker.length > minDecimalText.length
+        ? sampleMarker
+        : minDecimalText
     const textMetrics = ctx.measureText(text)
     ctx.restore()
     return Math.ceil((textMetrics.width + this.LIST_GAP) * scale)
@@ -409,9 +577,10 @@ export class ListParticle {
         leftTop: [startX, startY]
       }
     } = position
-    const indentWidth = startElement.listLevel
-      ? this.LIST_INDENT_WIDTH * startElement.listLevel * scale
-      : 0
+    const indentWidth =
+      (startElement.listLevel
+        ? this.LIST_INDENT_WIDTH * startElement.listLevel * scale
+        : 0) + (row.chiMucIndent || 0)
     const x = startX - offsetX! + indentWidth + tabWidth
     const y = startY + ascent
     // 复选框样式特殊处理
@@ -450,7 +619,7 @@ export class ListParticle {
             : rotated
         text = ulStyleMapping[fallbackStyle] || ulStyleMapping[UlStyle.DISC]
       } else {
-        text = `${listIndex! + 1}${KeyMap.PERIOD}`
+        text = formatOrderedListMarker(listIndex!, startElement.listStyle)
       }
       if (!text) return
       ctx.save()

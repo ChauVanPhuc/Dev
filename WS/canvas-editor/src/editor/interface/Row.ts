@@ -27,6 +27,7 @@ export interface IRow {
   isList?: boolean
   listIndex?: number
   offsetX?: number
+  chiMucIndent?: number
   offsetY?: number
   // 段后间距（已计入height，绘制选区等视觉效果时需剔除）
   spacingAfter?: number
