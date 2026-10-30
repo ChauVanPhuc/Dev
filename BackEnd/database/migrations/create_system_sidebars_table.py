@@ -90,8 +90,8 @@ def upgrade():
             {
                 "title": "Hồ sơ ISO", "icon": "FileText", "sort_order": 4,
                 "children": [
-                    {"title": "Quản lý mẫu tài liệu", "route_path": "/admin/iso-documents", "icon": "File", "sort_order": 1, "permission_key": None},
-                    {"title": "Quy trình nghiệp vụ", "route_path": "/admin/iso-processes", "icon": "Layers", "sort_order": 2, "permission_key": None},
+                    {"title": "Mẫu tài liệu", "route_path": "/admin/iso-documents", "icon": "File", "sort_order": 1, "permission_key": None},
+                    {"title": "Tài liệu nghiệp vụ", "route_path": "/admin/iso-processes", "icon": "Layers", "sort_order": 2, "permission_key": None},
                 ]
             },
             {

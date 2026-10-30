@@ -1,5 +1,23 @@
-# Reloaded at: 1791180307.193231
-# Reload triggered: Mounted lpn-crawler and dashboard routers
+import os
+# Cap thread count for CPU-bound computation (PyTorch, OpenCV, OpenMP, MKL, BLAS)
+# Prevents OCR/AI inference from starving FastAPI/Uvicorn event loop on 56-core server
+os.environ.setdefault("OMP_NUM_THREADS", "2")
+os.environ.setdefault("MKL_NUM_THREADS", "2")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "2")
+os.environ.setdefault("NUMEXPR_NUM_THREADS", "2")
+os.environ.setdefault("VECLIB_MAXIMUM_THREADS", "2")
+
+try:
+    import cv2
+    cv2.setNumThreads(2)
+except Exception:
+    pass
+
+try:
+    import torch
+    torch.set_num_threads(2)
+except Exception:
+    pass
 
 import logging
 
@@ -15,8 +33,6 @@ logging.getLogger("groq._base_client").setLevel(logging.WARNING)
 from fastapi import FastAPI, HTTPException, Request
 
 import mimetypes
-
-import os
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -445,6 +461,7 @@ async def check_write_permissions(request: Request, call_next):
             "/api/v1/inspections/upload",
             "/api/v1/deliveries/upload-image",
             "/api/v1/assessment",
+            "/api/v1/iso-documents/onlyoffice/callback",
             "/health",
             "/ws",
         )
@@ -798,6 +815,16 @@ if os.path.exists(REPORT_ASSETS_DIR):
     app.mount("/report-assets", StaticFiles(directory=REPORT_ASSETS_DIR), name="report-assets")
     app.mount("/api/v1/quality-reports/assets", StaticFiles(directory=REPORT_ASSETS_DIR), name="quality-reports-assets")
 
+# [CANVAS EDITOR] Mount ứng dụng Canvas Editor (cho iframe soạn thảo văn bản ISO)
+CANVAS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "FrontEnd", "dist", "canvas-editor"))
+if not os.path.exists(CANVAS_DIR) or not os.path.exists(os.path.join(CANVAS_DIR, "index.html")):
+    CANVAS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "WS", "canvas-editor", "dist"))
+if not os.path.exists(CANVAS_DIR) or not os.path.exists(os.path.join(CANVAS_DIR, "index.html")):
+    CANVAS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "FrontEnd", "public", "canvas-editor"))
+
+if os.path.exists(CANVAS_DIR):
+    app.mount("/canvas-editor", StaticFiles(directory=CANVAS_DIR, html=True), name="canvas_editor")
+
 
 
 # [NEW] Cấu hình Production Mode: Phân phối giao diện từ Backend
@@ -828,6 +855,32 @@ async def serve_ui(request: Request, full_path: str):
 
     # Loại bỏ leading slashes để chuẩn hóa đường dẫn tránh bypass (ví dụ: //static/...)
     full_path_clean = full_path.lstrip("/")
+
+    # [CANVAS EDITOR] Phục vụ Canvas Editor nếu truy cập qua SPA route
+    if full_path_clean == "canvas-editor" or full_path_clean.startswith("canvas-editor/"):
+        sub_path = full_path_clean[len("canvas-editor"):].lstrip("/")
+        if not sub_path:
+            sub_path = "index.html"
+            
+        candidate_dirs = [
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "FrontEnd", "dist", "canvas-editor")),
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "WS", "canvas-editor", "dist")),
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "FrontEnd", "public", "canvas-editor")),
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "FrontEnd", "Mobile", "dist", "canvas-editor")),
+        ]
+        for cdir in candidate_dirs:
+            target_f = os.path.join(cdir, sub_path)
+            if os.path.isfile(target_f):
+                headers = {}
+                if sub_path.endswith(".html"):
+                    headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+                return FileResponse(target_f, headers=headers)
+        # Fallback về index.html của canvas-editor
+        for cdir in candidate_dirs:
+            target_idx = os.path.join(cdir, "index.html")
+            if os.path.isfile(target_idx):
+                return FileResponse(target_idx, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+        raise HTTPException(status_code=404, detail="Canvas Editor not found")
 
     # Phục vụ file tĩnh và uploads với cơ chế SmartStaticFiles fallback
     if full_path_clean.startswith("static/"):
@@ -867,7 +920,9 @@ async def serve_ui(request: Request, full_path: str):
         "dashboard" in host or 
         "dashboard" in forwarded_host or
         "/dashboard" in referer or 
-        full_path_clean.startswith("dashboard")
+        full_path_clean.startswith("dashboard") or
+        full_path_clean.startswith("admin") or
+        "/admin" in referer
     )
 
     # Nếu được xác định là Dashboard

@@ -32,6 +32,7 @@ from modules.defect.router import router as defect_router
 
 from modules.purchasing.routes import purchase_requisition_router, purchase_order_item_router
 from modules.inspection.routes.iso_router import router as iso_router
+from modules.inspection.routes.onlyoffice_router import router as onlyoffice_router
 from modules.inspection.routes.iso_master_record_router import router as iso_master_record_router
 from modules.iso_approval.routes.iso_approval_router import router as iso_approval_router
 from modules.iso_signature.routes.iso_signature_router import router as iso_signature_router
@@ -133,6 +134,7 @@ api_router.include_router(inspection_guide_router, prefix="/inspection-guides", 
 api_router.include_router(inspection_parameter_router, prefix="/inspection-parameters", tags=["inspection-parameters"])
 api_router.include_router(inspection_form_type_router, prefix="/inspection-form-types", tags=["inspection-form-types"])
 api_router.include_router(iso_router, prefix="/iso-documents", tags=["iso-documents"])
+api_router.include_router(onlyoffice_router, prefix="/iso-documents/onlyoffice", tags=["onlyoffice"])
 api_router.include_router(iso_master_record_router, prefix="/iso-master-records", tags=["iso-master-records"])
 api_router.include_router(iso_master_record_router, prefix="/iso-records", tags=["iso-master-records"])
 api_router.include_router(iso_approval_router, prefix="/iso-approvals", tags=["iso-approvals"])

@@ -29,7 +29,7 @@ def add_iso_records_sidebar():
                 db.execute(text(f"""
                     SET IDENTITY_INSERT system_sidebars ON;
                     INSERT INTO system_sidebars (id, title, route_path, icon, parent_id, sort_order, is_active, platform)
-                    VALUES ({new_id}, N'Quản lý hồ sơ', '/admin/iso-records', 'FolderArchive', {parent_id}, 3, 1, 'Web');
+                    VALUES ({new_id}, N'Quản lý bộ tài liệu', '/admin/iso-records', 'FolderArchive', {parent_id}, 3, 1, 'Web');
                     SET IDENTITY_INSERT system_sidebars OFF;
                 """))
                 db.commit()
@@ -37,7 +37,7 @@ def add_iso_records_sidebar():
                 db.rollback()
                 db.execute(text(f"""
                     INSERT INTO system_sidebars (title, route_path, icon, parent_id, sort_order, is_active, platform)
-                    VALUES (N'Quản lý hồ sơ', '/admin/iso-records', 'FolderArchive', {parent_id}, 3, 1, 'Web')
+                    VALUES (N'Quản lý bộ tài liệu', '/admin/iso-records', 'FolderArchive', {parent_id}, 3, 1, 'Web')
                 """))
                 db.commit()
 

@@ -16,21 +16,21 @@ def seed_iso_sidebars():
 
         items = [
             {
-                "title": "Quản lý mẫu tài liệu",
+                "title": "Mẫu tài liệu",
                 "route_path": "/admin/iso-documents",
                 "icon": "FileText",
                 "sort_order": 1,
                 "permission_key": "iso-documents"
             },
             {
-                "title": "Quy trình nghiệp vụ",
+                "title": "Tài liệu nghiệp vụ",
                 "route_path": "/admin/iso-processes",
                 "icon": "Layers",
                 "sort_order": 2,
                 "permission_key": "iso-processes"
             },
             {
-                "title": "Quản lý hồ sơ",
+                "title": "Quản lý bộ tài liệu",
                 "route_path": "/admin/iso-records",
                 "icon": "FolderArchive",
                 "sort_order": 3,

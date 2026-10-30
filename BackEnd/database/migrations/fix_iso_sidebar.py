@@ -15,7 +15,7 @@ try:
     # Cập nhật parent_id và sort_order cho /admin/iso-records
     db.execute(text(f"""
         UPDATE system_sidebars 
-        SET parent_id = {parent_id}, sort_order = 3, is_active = 1, icon = 'FolderArchive', title = N'Quản lý hồ sơ'
+        SET parent_id = {parent_id}, sort_order = 3, is_active = 1, icon = 'FolderArchive', title = N'Quản lý bộ tài liệu'
         WHERE route_path = '/admin/iso-records' OR id = 3101
     """))
     db.commit()
