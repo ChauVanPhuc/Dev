@@ -135,7 +135,7 @@ const ISOMasterRecordDetailModal = ({
   return (
     <>
       <div className="iso-modal-overlay" onClick={handleRequestClose}>
-        <div className="iso-viewer-modal iso-record-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="iso-viewer-modal iso-record-modal" onClick={(e) => e.stopPropagation()} style={isCreateMode ? { width: '92vw', maxWidth: '600px', height: 'auto', maxHeight: '90vh' } : undefined}>
           
           {/* 1. Header Bar */}
           <div className="iso-viewer-header">
@@ -145,28 +145,30 @@ const ISOMasterRecordDetailModal = ({
               </span>
               <h3 
                 className="iso-viewer-header-title" 
-                title={isEditing ? editFormData.document_name : (selectedChildDoc?.document_name || selectedChildDoc?.file_name || detailRecord.document_name)}
+                title={isCreateMode ? 'Thêm mới hồ sơ' : (isEditing ? editFormData.document_name : (selectedChildDoc?.document_name || selectedChildDoc?.file_name || detailRecord.document_name))}
               >
-                {isEditing ? editFormData.document_name : (selectedChildDoc?.document_name || selectedChildDoc?.file_name || detailRecord.document_name)}
+                {isCreateMode ? 'Thêm mới hồ sơ' : (isEditing ? editFormData.document_name : (selectedChildDoc?.document_name || selectedChildDoc?.file_name || detailRecord.document_name))}
               </h3>
             </div>
             
             <div className="iso-viewer-header-actions">
-              {!isEditing ? (
-                <button 
-                  type="button"
-                  onClick={handleStartEdit}
-                  className="iso-viewer-header-edit-btn"
-                  title="Chuyển sang chế độ chỉnh sửa thông tin"
-                >
-                  <Edit size={14} />
-                  <span>Chỉnh sửa</span>
-                </button>
-              ) : (
-                <span className="iso-viewer-header-editing-badge" title="Đang ở chế độ chỉnh sửa thông tin">
-                  <Edit size={13} />
-                  <span>Đang chỉnh sửa</span>
-                </span>
+              {!isCreateMode && (
+                !isEditing ? (
+                  <button 
+                    type="button"
+                    onClick={handleStartEdit}
+                    className="iso-viewer-header-edit-btn"
+                    title="Chuyển sang chế độ chỉnh sửa thông tin"
+                  >
+                    <Edit size={14} />
+                    <span>Chỉnh sửa</span>
+                  </button>
+                ) : (
+                  <span className="iso-viewer-header-editing-badge" title="Đang ở chế độ chỉnh sửa thông tin">
+                    <Edit size={13} />
+                    <span>Đang chỉnh sửa</span>
+                  </span>
+                )
               )}
 
               <button 
@@ -180,7 +182,8 @@ const ISOMasterRecordDetailModal = ({
             </div>
           </div>
 
-          {/* 2. Top Tabs Bar: 5 tabs */}
+          {/* 2. Top Tabs Bar: 5 tabs (chỉ hiển thị khi xem / sửa) */}
+          {!isCreateMode && (
           <div className="iso-viewer-tabs-bar">
             <button
               type="button"
@@ -227,8 +230,86 @@ const ISOMasterRecordDetailModal = ({
               <span>5. Hồ sơ liên quan</span>
             </button>
           </div>
+          )}
 
-          {/* 3. Modal Body: Render Active Tab */}
+          {/* 3. Modal Body */}
+          {isCreateMode ? (
+            <div className="iso-viewer-body" style={{ padding: '24px 28px', backgroundColor: '#FFFFFF', flex: 1, overflowY: 'auto' }}>
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '4px',
+                  fontSize: '0.85rem', 
+                  fontWeight: '700', 
+                  color: '#4B5563', 
+                  marginBottom: '8px', 
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.4px' 
+                }}>
+                  <span>Tên hồ sơ</span>
+                  <span style={{ color: '#DC2626' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  autoFocus
+                  className="iso-form-input"
+                  placeholder="Nhập tên hồ sơ..."
+                  value={editFormData?.document_name || ''}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, document_name: e.target.value }))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && editFormData?.document_name?.trim()) {
+                      e.preventDefault();
+                      handleSaveDraft();
+                    }
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '11px 14px',
+                    fontSize: '0.95rem',
+                    borderRadius: '8px',
+                    border: '1.5px solid #D1D5DB',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '10px' }}>
+                <label style={{ 
+                  display: 'block', 
+                  fontSize: '0.85rem', 
+                  fontWeight: '700', 
+                  color: '#4B5563', 
+                  marginBottom: '8px', 
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.4px' 
+                }}>
+                  Mô tả
+                </label>
+                <textarea
+                  className="iso-form-textarea"
+                  placeholder="Nhập mô tả hồ sơ..."
+                  rows={5}
+                  value={editFormData?.notes || ''}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, notes: e.target.value }))}
+                  style={{
+                    width: '100%',
+                    padding: '11px 14px',
+                    fontSize: '0.92rem',
+                    borderRadius: '8px',
+                    border: '1.5px solid #D1D5DB',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                    resize: 'vertical',
+                    minHeight: '120px',
+                    fontFamily: 'inherit',
+                    lineHeight: '1.5'
+                  }}
+                />
+              </div>
+            </div>
+          ) : (
           <div className="iso-viewer-body" style={{ flex: 1, minHeight: 0, height: '100%', overflowY: viewerActiveTab === 'content' ? 'hidden' : 'auto', overflowX: 'hidden' }}>
             {viewerActiveTab === 'general' && (
               <ISOGeneralInfoTab
@@ -344,6 +425,7 @@ const ISOMasterRecordDetailModal = ({
               <ISORelatedRecordsTab />
             )}
           </div>
+          )}
 
           {/* 4. Footer Bar */}
           <div className="iso-viewer-footer">
@@ -362,18 +444,18 @@ const ISOMasterRecordDetailModal = ({
               type="button"
               className="iso-viewer-footer-btn btn-draft"
               onClick={handleSaveDraft}
-              disabled={actionLoading || (!acceptedDraft && detailRecord.source_status === 'Dự thảo' && !isFormDirty)}
-              title={acceptedDraft ? 'Lưu chính thức phiên bản mới sau chuyển đổi' : (isEditing ? 'Lưu thay đổi hồ sơ' : 'Lưu hồ sơ ở trạng thái Dự thảo')}
+              disabled={actionLoading || (isCreateMode ? !editFormData?.document_name?.trim() : (!acceptedDraft && detailRecord.source_status === 'Dự thảo' && !isFormDirty))}
+              title={isCreateMode ? 'Lưu hồ sơ mới' : (acceptedDraft ? 'Lưu chính thức phiên bản mới sau chuyển đổi' : (isEditing ? 'Lưu' : 'Lưu nháp'))}
             >
               <Save size={15} />
-              <span>{actionLoading ? 'Đang lưu...' : (acceptedDraft ? 'Lưu phiên bản mới' : (isEditing ? 'Lưu' : 'Lưu nháp'))}</span>
+              <span>{actionLoading ? 'Đang lưu...' : (isCreateMode ? 'Lưu' : (acceptedDraft ? 'Lưu phiên bản mới' : (isEditing ? 'Lưu' : 'Lưu nháp')))}</span>
             </button>
 
             <button
               type="button"
               className="iso-viewer-footer-btn btn-submit"
               onClick={handleSubmitApproval}
-              disabled={actionLoading || (detailRecord.source_status === 'Chờ duyệt' && !isFormDirty)}
+              disabled={actionLoading || (isCreateMode ? !editFormData?.document_name?.trim() : (detailRecord.source_status === 'Chờ duyệt' && !isFormDirty))}
               title="Gửi hồ sơ vào quy trình phê duyệt"
             >
               <Send size={15} />

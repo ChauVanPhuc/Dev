@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import api from '@webShared/Services/api.service';
 import { 
   AlertCircle, AlertTriangle, X, CheckCircle, Info 
@@ -18,6 +18,9 @@ import ISOImportExcelModal from './components/ISOImportExcelModal';
 import ISODocumentViewerModal from './components/ISODocumentViewerModal';
 import ISODocumentCompareModal from './components/ISODocumentCompareModal';
 import ISODirectWordEditorModal from './components/ISODirectWordEditorModal';
+import ISOMasterRecordChildDocsTable from './components/ISOMasterRecordChildDocsTable';
+import ISOMasterRecordDocSelectorModal from './components/ISOMasterRecordDocSelectorModal';
+import ISOProcessPreviewModal from '../../components/ISOProcessPreviewModal';
 
 const ISOMasterRecordListView = () => {
   const navigate = useNavigate();
@@ -31,6 +34,60 @@ const ISOMasterRecordListView = () => {
       return {};
     }
   }, []);
+
+  // Level 2 (Bên trong bộ tài liệu) states
+  const [currentFolder, setCurrentFolder] = useState(null);
+  const [childDocs, setChildDocs] = useState([]);
+  const [loadingChildren, setLoadingChildren] = useState(false);
+  const [isDocSelectorOpen, setIsDocSelectorOpen] = useState(false);
+
+  // Preview document modal
+  const [previewDoc, setPreviewDoc] = useState(null);
+  const [previewIndex, setPreviewIndex] = useState(0);
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+
+  const { id: routeFolderId } = useParams();
+
+  const fetchChildren = async (folderId) => {
+    if (!folderId) return;
+    setLoadingChildren(true);
+    try {
+      const res = await api.get(`/iso-master-records/${folderId}/children`);
+      const children = res?.children || res?.data?.children || [];
+      const record = res?.record || res?.data?.record;
+      if (record) {
+        setCurrentFolder(record);
+      }
+      setChildDocs(children);
+    } catch (err) {
+      console.error('Lỗi tải tài liệu trong bộ:', err);
+      toast.error('Không thể tải danh sách tài liệu trong bộ');
+    } finally {
+      setLoadingChildren(false);
+    }
+  };
+
+  // Đồng bộ với URL route: /admin/iso-records/:id
+  useEffect(() => {
+    if (routeFolderId) {
+      fetchChildren(routeFolderId);
+    } else {
+      setCurrentFolder(null);
+      setChildDocs([]);
+    }
+  }, [routeFolderId]);
+
+  const handleSelectFolder = (rec) => {
+    setCurrentFolder(rec);
+    navigate(`/admin/iso-records/${rec.id}`);
+  };
+
+  const handleBackToFolders = () => {
+    setCurrentFolder(null);
+    setChildDocs([]);
+    navigate('/admin/iso-records');
+    fetchRecords();
+  };
 
   // Data states
   const [records, setRecords] = useState([]);
@@ -272,8 +329,70 @@ const ISOMasterRecordListView = () => {
   const [confirmDelete, setConfirmDelete] = useState({
     show: false,
     id: null,
+    name: '',
     isBatch: false
   });
+
+  // Dedicated Folder Edit Modal state
+  const [editFolderModal, setEditFolderModal] = useState({
+    show: false,
+    folder: null,
+    name: '',
+    dept: '',
+    status: 'Dự thảo',
+    notes: '',
+    loading: false
+  });
+
+  const handleStartEditFolder = (folderToEdit) => {
+    if (!folderToEdit) return;
+    setEditFolderModal({
+      show: true,
+      folder: folderToEdit,
+      name: folderToEdit.document_name || '',
+      dept: folderToEdit.department_in_charge || '',
+      status: folderToEdit.source_status || 'Dự thảo',
+      notes: folderToEdit.notes || '',
+      loading: false
+    });
+  };
+
+  const handleSaveEditFolder = async () => {
+    if (!editFolderModal.name.trim()) {
+      toast.warning('Vui lòng nhập tên bộ tài liệu');
+      return;
+    }
+    setEditFolderModal(prev => ({ ...prev, loading: true }));
+    try {
+      const payload = {
+        document_name: editFolderModal.name.trim(),
+        department_in_charge: editFolderModal.dept.trim() || loggedInUser?.department_name || '',
+        source_status: editFolderModal.status || 'Dự thảo',
+        notes: editFolderModal.notes.trim()
+      };
+      await api.put(`/iso-master-records/${editFolderModal.folder.id}`, payload);
+      toast.success('Đã cập nhật thông tin bộ tài liệu thành công!');
+      
+      if (currentFolder && (currentFolder.id === editFolderModal.folder.id || currentFolder.id === Number(editFolderModal.folder.id))) {
+        setCurrentFolder(prev => ({ ...prev, ...payload }));
+      }
+      
+      setEditFolderModal({
+        show: false,
+        folder: null,
+        name: '',
+        dept: '',
+        status: 'Dự thảo',
+        notes: '',
+        loading: false
+      });
+      fetchRecords();
+      fetchFilterOptions();
+    } catch (err) {
+      toast.error('Lỗi khi cập nhật bộ tài liệu: ' + (err?.response?.data?.detail || err.message));
+      setEditFolderModal(prev => ({ ...prev, loading: false }));
+    }
+  };
 
   // Audit log states
   const [auditLogs, setAuditLogs] = useState([]);
@@ -396,7 +515,12 @@ const ISOMasterRecordListView = () => {
       if (!e.target.closest('.iso-filter-dropdown-wrapper')) {
         setActiveDropdown(null);
       }
-      if (!e.target.closest('.iso-action-menu') && !e.target.closest('.iso-action-btn')) {
+      if (
+        !e.target.closest('.iso-action-menu') && 
+        !e.target.closest('.iso-action-btn') &&
+        !e.target.closest('.iso-dropdown-menu') &&
+        !e.target.closest('.iso-folder-action-wrapper')
+      ) {
         setActionMenuId(null);
       }
       if (!e.target.closest('.iso-file-more-btn') && !e.target.closest('.iso-file-menu-dropdown')) {
@@ -756,8 +880,19 @@ const ISOMasterRecordListView = () => {
     setSelectedChildDoc(initialChild);
     setExpandedChildDocId(null);
     setDetailRecord(rec);
-    setInitialFormData({ ...initialChild });
-    setEditFormData({ ...initialChild });
+    const formVals = {
+      ...rec,
+      ...initialChild,
+      id: rec.id,
+      document_name: rec.document_name || initialChild?.document_name || '',
+      department_in_charge: rec.department_in_charge || initialChild?.department_in_charge || '',
+      notes: rec.notes || initialChild?.notes || '',
+      source_status: rec.source_status || initialChild?.source_status || 'Dự thảo',
+      management_group: rec.management_group || initialChild?.management_group || 'Hồ sơ',
+      classification: rec.classification || initialChild?.classification || 'HỒ SƠ'
+    };
+    setInitialFormData(formVals);
+    setEditFormData(formVals);
     setIsEditing(!!editDirectly);
     setShowUnsavedWarning(false);
     setPendingAction(null);
@@ -1643,7 +1778,7 @@ const ISOMasterRecordListView = () => {
     const currentData = isEditing ? editFormData : detailRecord;
     const docName = (currentData?.document_name || '').trim();
     if (!docName) {
-      toast.warning('Vui lòng nhập Tên tài liệu / quy trình trước khi lưu.');
+      toast.warning('Vui lòng nhập Tên hồ sơ trước khi lưu.');
       return;
     }
     setActionLoading(true);
@@ -1696,20 +1831,23 @@ const ISOMasterRecordListView = () => {
 
       if (isCreateMode) {
         if (!payload.department_in_charge || !String(payload.department_in_charge).trim()) {
-          toast.warning('Vui lòng chọn hoặc nhập Phòng ban trước khi lưu hồ sơ mới.');
-          setActionLoading(false);
-          return;
+          payload.department_in_charge = loggedInUser?.department_name || 'Hồ sơ chung';
         }
         if (!payload.management_group || !String(payload.management_group).trim()) {
-          toast.warning('Vui lòng nhập Nhóm tài liệu quản lý trước khi lưu hồ sơ mới.');
-          setActionLoading(false);
-          return;
+          payload.management_group = 'Hồ sơ';
+        }
+        if (!payload.classification || !String(payload.classification).trim()) {
+          payload.classification = 'HỒ SƠ';
+        }
+        if (!payload.source_status || !String(payload.source_status).trim()) {
+          payload.source_status = 'Dự thảo';
         }
         const res = await api.post('/iso-master-records/', payload);
         const newRecord = res?.data || res;
         toast.success('Đã tạo mới và lưu nháp hồ sơ thành công!');
         setIsCreateMode(false);
         setIsEditing(false);
+        setShowDetailModal(false);
         setDetailRecord(newRecord);
         setSelectedChildDoc(newRecord);
         setInitialFormData(newRecord);
@@ -1717,14 +1855,15 @@ const ISOMasterRecordListView = () => {
         fetchRecords();
         fetchFilterOptions();
       } else {
-        const targetRecordId = selectedChildDoc?.source_row_id || selectedChildDoc?.id || detailRecord.id;
+        const targetRecordId = detailRecord?.id || selectedChildDoc?.source_row_id || selectedChildDoc?.id;
         await api.put(`/iso-master-records/${targetRecordId}`, payload);
         const updated = { ...(selectedChildDoc || detailRecord), ...payload };
         setSelectedChildDoc(updated);
         setInitialFormData({ ...updated });
         setEditFormData({ ...updated });
         setIsEditing(false);
-        toast.success('Đã lưu nháp hồ sơ thành công!');
+        setShowDetailModal(false);
+        toast.success('Đã cập nhật thông tin hồ sơ thành công!');
         fetchRecords();
         if (targetRecordId) fetchAuditLogs(targetRecordId);
       }
@@ -1740,7 +1879,7 @@ const ISOMasterRecordListView = () => {
     const currentData = isEditing ? editFormData : detailRecord;
     const docName = (currentData?.document_name || '').trim();
     if (!docName) {
-      toast.warning('Vui lòng nhập Tên tài liệu / quy trình trước khi gửi duyệt.');
+      toast.warning('Vui lòng nhập Tên hồ sơ trước khi gửi duyệt.');
       return;
     }
     setActionLoading(true);
@@ -1775,20 +1914,23 @@ const ISOMasterRecordListView = () => {
 
       if (isCreateMode) {
         if (!payload.department_in_charge || !String(payload.department_in_charge).trim()) {
-          toast.warning('Vui lòng chọn hoặc nhập Phòng ban trước khi gửi duyệt hồ sơ mới.');
-          setActionLoading(false);
-          return;
+          payload.department_in_charge = loggedInUser?.department_name || 'Hồ sơ chung';
         }
         if (!payload.management_group || !String(payload.management_group).trim()) {
-          toast.warning('Vui lòng nhập Nhóm tài liệu quản lý trước khi gửi duyệt hồ sơ mới.');
-          setActionLoading(false);
-          return;
+          payload.management_group = 'Hồ sơ';
+        }
+        if (!payload.classification || !String(payload.classification).trim()) {
+          payload.classification = 'HỒ SƠ';
+        }
+        if (!payload.source_status || !String(payload.source_status).trim()) {
+          payload.source_status = 'Chờ duyệt';
         }
         const res = await api.post('/iso-master-records/', payload);
         const newRecord = res?.data || res;
         toast.success('Đã tạo mới và gửi hồ sơ đi phê duyệt thành công!');
         setIsCreateMode(false);
         setIsEditing(false);
+        setShowDetailModal(false);
         setDetailRecord(newRecord);
         setSelectedChildDoc(newRecord);
         setInitialFormData(newRecord);
@@ -1797,7 +1939,7 @@ const ISOMasterRecordListView = () => {
         fetchFilterOptions();
         if (newRecord?.id) fetchAuditLogs(newRecord.id);
       } else {
-        const targetRecordId = selectedChildDoc?.source_row_id || selectedChildDoc?.id || detailRecord.id;
+        const targetRecordId = detailRecord?.id || selectedChildDoc?.source_row_id || selectedChildDoc?.id;
         if (!targetRecordId) {
           toast.warning('Không tìm thấy mã hồ sơ để gửi duyệt.');
           setActionLoading(false);
@@ -1809,6 +1951,7 @@ const ISOMasterRecordListView = () => {
         setInitialFormData({ ...updated });
         setEditFormData({ ...updated });
         setIsEditing(false);
+        setShowDetailModal(false);
         toast.success('Đã gửi hồ sơ đi phê duyệt thành công!');
         fetchRecords();
         if (targetRecordId) fetchAuditLogs(targetRecordId);
@@ -1836,13 +1979,16 @@ const ISOMasterRecordListView = () => {
         setSelectedIds([]);
       } else if (confirmDelete.id) {
         await api.delete(`/iso-master-records/${confirmDelete.id}`);
-        toast.success('Đã xóa bản ghi thành công.');
+        toast.success('Đã xóa bộ tài liệu thành công.');
+        if (currentFolder && (currentFolder.id === confirmDelete.id || currentFolder.id === Number(confirmDelete.id))) {
+          handleBackToFolders();
+        }
       }
-      setConfirmDelete({ show: false, id: null, isBatch: false });
+      setConfirmDelete({ show: false, id: null, isBatch: false, name: '' });
       fetchRecords();
       fetchFilterOptions();
     } catch (err) {
-      toast.error('Có lỗi xảy ra khi xóa bản ghi.');
+      toast.error('Có lỗi xảy ra khi xóa bộ tài liệu: ' + (err?.response?.data?.detail || err.message));
     }
   };
 
@@ -1892,9 +2038,26 @@ const ISOMasterRecordListView = () => {
 
   return (
     <>
-      {/* 1. Main Table Coordinator */}
-      <ISOMasterRecordTable
-        records={records}
+      {/* 1. Main Table Coordinator / Child Documents Table */}
+      {(routeFolderId || currentFolder) ? (
+        <ISOMasterRecordChildDocsTable
+          folder={currentFolder || { id: routeFolderId, document_name: 'Đang tải...' }}
+          children={childDocs}
+          loading={loadingChildren}
+          onBack={handleBackToFolders}
+          onOpenAddDocs={() => setIsDocSelectorOpen(true)}
+          onOpenEditFolder={handleStartEditFolder}
+          onRefresh={() => fetchChildren(routeFolderId || currentFolder?.id)}
+          onPreviewDoc={(doc, idx) => {
+            setPreviewDoc(doc);
+            setPreviewIndex(idx);
+            setIsPreviewModalOpen(true);
+          }}
+        />
+      ) : (
+        <ISOMasterRecordTable
+          records={records}
+          onSelectFolder={handleSelectFolder}
         loading={loading}
         totalCount={totalCount}
         totalPages={totalPages}
@@ -1946,7 +2109,8 @@ const ISOMasterRecordListView = () => {
         openCreateModal={openCreateModal}
         openUploadModal={() => setShowUploadModal(true)}
         handleExportExcel={handleExportExcel}
-        handleSingleDelete={(recOrId) => setConfirmDelete({ show: true, id: typeof recOrId === 'object' && recOrId !== null ? recOrId.id : recOrId, isBatch: false })}
+        onOpenEditFolder={handleStartEditFolder}
+        handleSingleDelete={(recOrId) => setConfirmDelete({ show: true, id: typeof recOrId === 'object' && recOrId !== null ? recOrId.id : recOrId, name: typeof recOrId === 'object' && recOrId !== null ? recOrId.document_name : '', isBatch: false })}
         activeNoteModal={activeNoteModal}
         setActiveNoteModal={setActiveNoteModal}
         actionMenuId={actionMenuId}
@@ -1956,6 +2120,7 @@ const ISOMasterRecordListView = () => {
         isOtherOpen={isOtherOpen}
         setIsOtherOpen={setIsOtherOpen}
       />
+      )}
 
       {/* 2. Detail 5-Tab Modal */}
       <ISOMasterRecordDetailModal
@@ -2151,6 +2316,132 @@ const ISOMasterRecordListView = () => {
         initialHtml={editorInitialHtml}
       />
 
+            {/* Dedicated Folder Edit Modal */}
+      {editFolderModal.show && (
+        <div className="iso-modal-overlay" onClick={() => !editFolderModal.loading && setEditFolderModal(prev => ({ ...prev, show: false }))}>
+          <div className="iso-modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px', width: '92vw', borderRadius: '14px', overflow: 'hidden' }}>
+            <div className="iso-modal-header" style={{ backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '1.25rem' }}>📁</span>
+                <h3 className="iso-modal-title" style={{ color: '#7B5233', fontSize: '1.05rem', fontWeight: '700', margin: 0 }}>
+                  Chỉnh sửa thông tin bộ tài liệu
+                </h3>
+              </div>
+              <button 
+                type="button"
+                disabled={editFolderModal.loading}
+                onClick={() => setEditFolderModal(prev => ({ ...prev, show: false }))}
+                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#6B7280' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="iso-modal-body" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: '#4B5563', marginBottom: '6px' }}>
+                  TÊN BỘ TÀI LIỆU <span style={{ color: '#DC2626' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  autoFocus
+                  className="iso-form-input"
+                  value={editFolderModal.name}
+                  onChange={(e) => setEditFolderModal(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="Nhập tên bộ tài liệu..."
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.90rem', boxSizing: 'border-box' }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleSaveEditFolder();
+                    }
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: '#4B5563', marginBottom: '6px' }}>
+                    PHÒNG BAN PHỤ TRÁCH
+                  </label>
+                  <input
+                    type="text"
+                    className="iso-form-input"
+                    value={editFolderModal.dept}
+                    onChange={(e) => setEditFolderModal(prev => ({ ...prev, dept: e.target.value }))}
+                    placeholder="VD: Ban Giám Đốc..."
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.90rem', boxSizing: 'border-box' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: '#4B5563', marginBottom: '6px' }}>
+                    TRẠNG THÁI
+                  </label>
+                  <select
+                    className="iso-form-input"
+                    value={editFolderModal.status}
+                    onChange={(e) => setEditFolderModal(prev => ({ ...prev, status: e.target.value }))}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.90rem', backgroundColor: '#FFFFFF', boxSizing: 'border-box', cursor: 'pointer' }}
+                  >
+                    <option value="Dự thảo">Dự thảo</option>
+                    <option value="Chờ duyệt">Chờ duyệt</option>
+                    <option value="Ban hành">Ban hành</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: '#4B5563', marginBottom: '6px' }}>
+                  MÔ TẢ / GHI CHÚ
+                </label>
+                <textarea
+                  className="iso-form-textarea"
+                  value={editFolderModal.notes}
+                  onChange={(e) => setEditFolderModal(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="Nhập mô tả bộ tài liệu..."
+                  rows={4}
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #D1D5DB', fontSize: '0.88rem', boxSizing: 'border-box', resize: 'vertical' }}
+                />
+              </div>
+            </div>
+
+            <div className="iso-modal-footer" style={{ padding: '12px 20px', borderTop: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button 
+                type="button" 
+                className="iso-page-btn" 
+                disabled={editFolderModal.loading}
+                onClick={() => setEditFolderModal(prev => ({ ...prev, show: false }))}
+                style={{ padding: '8px 16px', borderRadius: '6px', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', color: '#475569', cursor: 'pointer', fontWeight: '600' }}
+              >
+                Hủy
+              </button>
+              <button 
+                type="button" 
+                disabled={editFolderModal.loading || !editFolderModal.name.trim()}
+                onClick={handleSaveEditFolder}
+                style={{
+                  padding: '8px 20px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  backgroundColor: '#7B5233',
+                  color: '#FFFFFF',
+                  fontWeight: '700',
+                  fontSize: '0.88rem',
+                  cursor: editFolderModal.loading || !editFolderModal.name.trim() ? 'not-allowed' : 'pointer',
+                  opacity: editFolderModal.loading || !editFolderModal.name.trim() ? 0.6 : 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 2px 4px rgba(123, 82, 51, 0.2)'
+                }}
+              >
+                {editFolderModal.loading ? 'Đang lưu...' : 'Lưu thay đổi'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 7. Confirm Delete Modal */}
       {confirmDelete.show && (
         <div className="iso-modal-overlay" onClick={() => setConfirmDelete({ show: false, id: null, isBatch: false })}>
@@ -2172,7 +2463,7 @@ const ISOMasterRecordListView = () => {
               <p style={{ margin: 0, fontSize: '0.9rem', color: '#374151' }}>
                 {confirmDelete.isBatch 
                   ? `Bạn có chắc chắn muốn xóa ${selectedIds.length} mục đã chọn không?` 
-                  : 'Bạn có chắc chắn muốn xóa mục này khỏi danh mục Master List?'}
+                  : `Bạn có chắc chắn muốn xóa bộ tài liệu "${confirmDelete.name || 'này'}" không?`}
               </p>
             </div>
             <div className="iso-modal-footer">
@@ -2311,6 +2602,36 @@ const ISOMasterRecordListView = () => {
           </div>
         </div>
       )}
+      {/* 8. Modal chọn tài liệu vào bộ (Checkbox checklist) */}
+      <ISOMasterRecordDocSelectorModal
+        isOpen={isDocSelectorOpen}
+        onClose={() => setIsDocSelectorOpen(false)}
+        folder={currentFolder || { id: routeFolderId }}
+        currentAssignedIds={childDocs.map(c => c.id)}
+        onSaved={() => {
+          const activeId = routeFolderId || currentFolder?.id;
+          if (activeId) {
+            fetchChildren(activeId);
+          }
+          fetchRecords();
+        }}
+      />
+
+      {/* 9. Modal xem trước tài liệu / quy trình */}
+      <ISOProcessPreviewModal
+        isOpen={isPreviewModalOpen}
+        doc={previewDoc}
+        docList={childDocs}
+        currentIndex={previewIndex}
+        onSelectIndex={(idx) => {
+          setPreviewIndex(idx);
+          setPreviewDoc(childDocs[idx]);
+        }}
+        onClose={() => {
+          setIsPreviewModalOpen(false);
+          setPreviewDoc(null);
+        }}
+      />
     </>
   );
 };

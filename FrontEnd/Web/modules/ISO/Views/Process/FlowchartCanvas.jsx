@@ -108,42 +108,107 @@ const DiamondNode = ({ data, selected }) => {
   );
 };
 
-// ─── Oval Node (Terminal Step - Bắt đầu / Kết thúc) ────────────────────────────
+// ─── Oval Node (Terminal Step - Bắt đầu / Kết thúc - True Mathematical Ellipse) ──
 const OvalNode = ({ data, selected }) => {
+  const w = 185;
+  const h = 58;
   return (
     <div style={{
-      width: "185px",
-      minHeight: "52px",
-      border: selected ? "2px solid #7B5233" : "1.5px solid #000000",
-      borderRadius: "26px",
+      position: "relative",
+      width: `${w}px`,
+      height: `${h}px`,
+      borderRadius: "50%",
+      ...nodeBase(selected)
+    }}>
+      {/* Target Handles */}
+      <Handle type="target" position={Position.Top} id="top" style={{ background: "#000000", zIndex: 10, width: 7, height: 7, top: "-3px" }} />
+      <Handle type="target" position={Position.Left} id="left-target" style={{ background: "#000000", zIndex: 10, width: 7, height: 7, left: "-3px", top: `${h / 2}px` }} />
+      <Handle type="target" position={Position.Right} id="right-target" style={{ background: "#000000", zIndex: 10, width: 7, height: 7, right: "-3px", top: `${h / 2}px` }} />
+
+      {/* SVG True Mathematical Ellipse (Hình Elip chuẩn 100% không cạnh thẳng) */}
+      <svg width={w} height={h} style={{ position: "absolute", top: 0, left: 0 }}>
+        <ellipse
+          cx={w / 2}
+          cy={h / 2}
+          rx={w / 2 - 2}
+          ry={h / 2 - 2}
+          fill={selected ? "#FAF7F2" : "#ffffff"}
+          stroke={selected ? "#7B5233" : "#000000"}
+          strokeWidth={selected ? "2.5" : "1.5"}
+        />
+      </svg>
+      
+      {/* Content overlay */}
+      <div style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        width: `${w}px`,
+        height: `${h}px`,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        fontFamily: "'Times New Roman', Times, serif",
+        padding: "4px 22px",
+        boxSizing: "border-box",
+        pointerEvents: "none",
+        zIndex: 2
+      }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "100%", marginBottom: "1px" }}>
+          <span style={{ fontSize: "8px", fontWeight: "bold", background: "#000000", color: "#ffffff", padding: "1px 6px", borderRadius: "10px" }}>
+            B{data.stepNumber}
+          </span>
+        </div>
+        <div style={{ fontSize: "11px", fontWeight: "bold", color: "#000000", textAlign: "center", lineHeight: "1.25", wordBreak: "break-word", maxWidth: "140px" }}>
+          {data.label}
+        </div>
+      </div>
+
+      {/* Source Handles */}
+      <Handle type="source" position={Position.Bottom} id="bottom" style={{ background: "#000000", zIndex: 10, width: 7, height: 7, bottom: "-3px" }} />
+      <Handle type="source" position={Position.Left} id="left" style={{ background: "#000000", zIndex: 10, width: 7, height: 7, left: "-3px", top: `${h / 2}px` }} />
+      <Handle type="source" position={Position.Right} id="right" style={{ background: "#000000", zIndex: 10, width: 7, height: 7, right: "-3px", top: `${h / 2}px` }} />
+    </div>
+  );
+};
+
+// ─── Circle Node (Start / Connector - Bắt đầu / Đầu nối) ──────────────────────
+const CircleNode = ({ data, selected }) => {
+  return (
+    <div style={{
+      width: "80px",
+      height: "80px",
+      borderRadius: "50%",
+      border: selected ? "2.5px solid #7B5233" : "1.5px solid #000000",
       backgroundColor: selected ? "#FAF7F2" : "#ffffff",
       display: "flex",
       flexDirection: "column",
       alignItems: "center",
       justifyContent: "center",
       fontFamily: "'Times New Roman', Times, serif",
-      padding: "6px 14px",
+      padding: "6px",
       boxSizing: "border-box",
       position: "relative",
       ...nodeBase(selected)
     }}>
-      <Handle type="target" position={Position.Top} id="top" style={{ background: "#000000", width: 7, height: 7 }} />
-      <Handle type="target" position={Position.Left} id="left-target" style={{ background: "#000000", width: 7, height: 7, top: "50%" }} />
-      <Handle type="target" position={Position.Right} id="right-target" style={{ background: "#000000", width: 7, height: 7, top: "50%" }} />
-      
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", width: "100%", marginBottom: "2px", pointerEvents: "none" }}>
-        <span style={{ fontSize: "8.5px", fontWeight: "bold", background: "#000000", color: "#ffffff", padding: "1px 6px", borderRadius: "10px" }}>
+      <Handle type="target" position={Position.Top} id="top" style={{ background: "#000000", width: 7, height: 7, top: "-3px" }} />
+      <Handle type="target" position={Position.Left} id="left-target" style={{ background: "#000000", width: 7, height: 7, left: "-3px", top: "50%" }} />
+      <Handle type="target" position={Position.Right} id="right-target" style={{ background: "#000000", width: 7, height: 7, right: "-3px", top: "50%" }} />
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "100%", marginBottom: "2px", pointerEvents: "none" }}>
+        <span style={{ fontSize: "8px", fontWeight: "bold", background: "#000000", color: "#ffffff", padding: "1px 5px", borderRadius: "10px" }}>
           B{data.stepNumber}
         </span>
       </div>
 
-      <div style={{ fontSize: "11px", fontWeight: "bold", color: "#000000", textAlign: "center", lineHeight: "1.3", wordBreak: "break-word", pointerEvents: "none" }}>
+      <div style={{ fontSize: "9.5px", fontWeight: "bold", color: "#000000", textAlign: "center", lineHeight: "1.1", wordBreak: "break-word", pointerEvents: "none", maxHeight: "40px", overflow: "hidden" }}>
         {data.label}
       </div>
 
-      <Handle type="source" position={Position.Bottom} id="bottom" style={{ background: "#000000", width: 7, height: 7 }} />
-      <Handle type="source" position={Position.Left} id="left" style={{ background: "#000000", width: 7, height: 7, top: "50%" }} />
-      <Handle type="source" position={Position.Right} id="right" style={{ background: "#000000", width: 7, height: 7, top: "50%" }} />
+      <Handle type="source" position={Position.Bottom} id="bottom" style={{ background: "#000000", width: 7, height: 7, bottom: "-3px" }} />
+      <Handle type="source" position={Position.Left} id="left" style={{ background: "#000000", width: 7, height: 7, left: "-3px", top: "50%" }} />
+      <Handle type="source" position={Position.Right} id="right" style={{ background: "#000000", width: 7, height: 7, right: "-3px", top: "50%" }} />
     </div>
   );
 };
@@ -154,6 +219,8 @@ const nodeTypes = {
   terminal: OvalNode,
   start: OvalNode,
   end: OvalNode,
+  circle: CircleNode,
+  start_circle: CircleNode,
   default: TaskNode,
 };
 
@@ -266,8 +333,12 @@ const PALETTE = [
     icon: <svg width={36} height={36}><polygon points="18,2 34,18 18,34 2,18" fill="#ffffff" stroke="#000000" strokeWidth="1.5" /></svg>
   },
   {
-    type: "terminal", label: "Oval",
-    icon: <div style={{ width: 44, height: 24, border: "1.5px solid #000000", borderRadius: 12, backgroundColor: "#ffffff" }} />
+    type: "terminal", label: "Elip / B.Đầu - K.Thúc",
+    icon: <svg width={44} height={22}><ellipse cx={22} cy={11} rx={20} ry={9} fill="#ffffff" stroke="#000000" strokeWidth="1.5" /></svg>
+  },
+  {
+    type: "circle", label: "Tròn / Bắt đầu",
+    icon: <div style={{ width: 26, height: 26, border: "1.5px solid #000000", borderRadius: "50%", backgroundColor: "#ffffff" }} />
   },
 ];
 
@@ -383,7 +454,8 @@ const PropertiesPanel = ({ step, stepIndex, steps, relatedTemplates = [], dbTemp
           >
             <option value="task">▭ Bước Xử Lý (Chữ nhật)</option>
             <option value="decision">◇ Quyết Định (Hình thoi Yes/No)</option>
-            <option value="terminal">⬭ Oval (Bắt đầu / Kết thúc)</option>
+            <option value="terminal">⬭ Elip / Oval (Bắt đầu / Kết thúc - ISO)</option>
+            <option value="circle">○ Hình tròn (Điểm Bắt đầu)</option>
           </select>
         </div>
 
@@ -623,8 +695,9 @@ const FlowCanvas = ({ steps, onPositionsChange, onAddStep, onUpdateStep, onDelet
 
   // Helper to calculate dimensions based on node type
   const getNodeDimensions = useCallback((nodeType) => {
+    if (nodeType === "circle" || nodeType === "start_circle") return { width: 80, height: 80 };
     if (nodeType === "decision") return { width: 124, height: 124 };
-    if (nodeType === "terminal" || nodeType === "start" || nodeType === "end") return { width: 185, height: 52 };
+    if (nodeType === "terminal" || nodeType === "start" || nodeType === "end") return { width: 185, height: 58 };
     return { width: 185, height: 58 }; // task
   }, []);
 
@@ -674,16 +747,28 @@ const FlowCanvas = ({ steps, onPositionsChange, onAddStep, onUpdateStep, onDelet
     const processedSteps = steps.map((step, idx) => {
       let nodeType = (step.node_type || "").toLowerCase();
       const stepName = (step.name || "").toLowerCase();
-      if (!nodeType || nodeType === "task" || nodeType === "start" || nodeType === "end" || nodeType === "terminal") {
-        if (nodeType === "start" || idx === 0 || /bắt đầu|tiếp nhận/i.test(stepName)) {
-          nodeType = "terminal";
-        } else if (nodeType === "end" || (idx === totalSteps - 1 && /kết thúc|lưu trữ|hoàn tất/i.test(stepName))) {
-          nodeType = "terminal";
-        } else if (/phê duyệt|quyết định|kiểm tra|thẩm định|đối chiếu/i.test(stepName) || (step.fail_path && step.fail_path.length > 0)) {
-          nodeType = "decision";
-        } else {
-          nodeType = "task";
-        }
+
+      // Nếu người dùng đã chọn cụ thể circle / decision / terminal thì giữ nguyên
+      if (nodeType === "circle" || nodeType === "start_circle") {
+        return { ...step, node_type: "circle" };
+      }
+      if (nodeType === "decision") {
+        return { ...step, node_type: "decision" };
+      }
+      if (nodeType === "terminal" || nodeType === "start" || nodeType === "end") {
+        return { ...step, node_type: "terminal" };
+      }
+
+      // Tự động suy luận nếu chưa có nodeType hoặc đang để task mặc định
+      if (idx === 0 || /bắt đầu|tiếp nhận/i.test(stepName)) {
+        nodeType = "terminal";
+      } else if (idx === totalSteps - 1 || /kết thúc|lưu\s*hồ\s*sơ|lưu\s*trữ|hoàn\s*tất|nghiệm\s*thu|đóng/i.test(stepName)) {
+        // BƯỚC CUỐI CÙNG LUÔN LUÔN LÀ KẾT THÚC (ELIP/TERMINAL)
+        nodeType = "terminal";
+      } else if (/phê duyệt|quyết định|kiểm tra|thẩm định|đối chiếu/i.test(stepName) || (step.fail_path && step.fail_path.length > 0)) {
+        nodeType = "decision";
+      } else {
+        nodeType = "task";
       }
       return { ...step, node_type: nodeType };
     });

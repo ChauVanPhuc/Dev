@@ -76,14 +76,23 @@ function renderRectNode({ cx, cy, label, w = RECT.w, h = RECT.h }) {
 }
 
 function renderOvalNode({ cx, cy, label, w = OVAL.w, h = OVAL.h }) {
-  const x = cx - w / 2;
-  const y = cy - h / 2;
-  const rx = h / 2;
+  const rx = w / 2;
+  const ry = h / 2;
   const fontSize = h < 42 ? 9 : 9.5;
   return `
     <g>
-      <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" ry="${rx}" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
-      ${renderWrappedText(cx, cy, label, 20, fontSize, "bold", "#000000", "middle", 0)}
+      <ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+      ${renderWrappedText(cx, cy, label, 18, fontSize, "bold", "#000000", "middle", 0)}
+    </g>
+  `;
+}
+
+function renderCircleNode({ cx, cy, label, r = 24 }) {
+  const fontSize = 8.5;
+  return `
+    <g>
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+      ${renderWrappedText(cx, cy, label, 12, fontSize, "bold", "#000000", "middle", 0)}
     </g>
   `;
 }
@@ -115,17 +124,20 @@ export function getFlowchartRowHeight(totalSteps) {
   return Math.max(68, Math.floor(700 / totalSteps));
 }
 
-const nodeBottom = (type, cy, diamH = DIAM.h, ovalH = OVAL.h, rectH = RECT.h) => cy + (type === "decision" ? diamH / 2 : (type === "terminal" ? ovalH / 2 : rectH / 2));
-const nodeTop    = (type, cy, diamH = DIAM.h, ovalH = OVAL.h, rectH = RECT.h) => cy - (type === "decision" ? diamH / 2 : (type === "terminal" ? ovalH / 2 : rectH / 2));
-const nodeRight  = (type, cx, diamW = DIAM.w) => cx + (type === "decision" ? diamW / 2 : (type === "terminal" ? OVAL.w / 2 : RECT.w / 2));
+const CIRCLE_R = 24;
+const nodeBottom = (type, cy, diamH = DIAM.h, ovalH = OVAL.h, rectH = RECT.h) => cy + (type === "circle" ? CIRCLE_R : (type === "decision" ? diamH / 2 : (type === "terminal" ? ovalH / 2 : rectH / 2)));
+const nodeTop    = (type, cy, diamH = DIAM.h, ovalH = OVAL.h, rectH = RECT.h) => cy - (type === "circle" ? CIRCLE_R : (type === "decision" ? diamH / 2 : (type === "terminal" ? ovalH / 2 : rectH / 2)));
+const nodeRight  = (type, cx, diamW = DIAM.w) => cx + (type === "circle" ? CIRCLE_R : (type === "decision" ? diamW / 2 : (type === "terminal" ? OVAL.w / 2 : RECT.w / 2)));
 
 function getNodeType(step, idx, total) {
   const raw = (step.node_type || "").toLowerCase();
+  if (raw === "circle" || raw === "start_circle") return "circle";
   if (raw === "decision" || (step.fail_path && step.fail_path.length > 0)) return "decision";
   if (raw === "terminal" || raw === "start" || raw === "end") return "terminal";
   const name = (step.name || "").toLowerCase();
   if (idx === 0 || /bắt đầu|tiếp nhận/i.test(name)) return "terminal";
-  if (idx === total - 1 && /kết thúc|lưu trữ|hoàn tất/i.test(name)) return "terminal";
+  // BƯỚC CUỐI CÙNG LUÔN LUÔN LÀ KẾT THÚC (ELIP/TERMINAL)
+  if (idx === total - 1 || /kết thúc|lưu\s*hồ\s*sơ|lưu\s*trữ|hoàn\s*tất|nghiệm\s*thu|đóng/i.test(name)) return "terminal";
   if (/phê duyệt|quyết định|kiểm tra|thẩm định|đối chiếu/i.test(name)) return "decision";
   return "task";
 }
@@ -201,7 +213,7 @@ export function generateFlowchartSvgHtml(steps = []) {
     elems.push(roleSvgLines);
 
     // 3. Cột Phụ lục (Biểu mẫu / Hồ sơ)
-    const rawTplStr = step.template_files || step.template_file || step.forms || step.form_name || step.template || "";
+    const rawTplStr = step.template_files || step.template_file || step.forms || step.form_name || step.template || step.transition?.template_files || "";
     if (rawTplStr && rawTplStr !== "---") {
       const rawTpls = rawTplStr
         .split(/[,;\n]+/)
@@ -224,7 +236,9 @@ export function generateFlowchartSvgHtml(steps = []) {
     }
 
     // 4. Khối lưu đồ (Node)
-    const nodeStr = type === "terminal"
+    const nodeStr = type === "circle"
+      ? renderCircleNode({ cx: MAIN_CX, cy, label: step.name || `Bước ${stepNumber}` })
+      : type === "terminal"
       ? renderOvalNode({ cx: MAIN_CX, cy, label: step.name || `Bước ${stepNumber}`, h: curOvalH })
       : type === "decision"
       ? renderDiamondNode({ cx: MAIN_CX, cy, label: step.name || `Bước ${stepNumber}`, w: curDiamW, h: curDiamH })

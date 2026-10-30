@@ -1,6 +1,8 @@
-from sqlalchemy import Column, Integer, Boolean
+from sqlalchemy import Column, Integer, Boolean, ForeignKey
 from sqlalchemy.dialects.mssql import NVARCHAR
+from sqlalchemy.orm import relationship
 from config.database import Base
+from modules.inspection.models.iso_models import ISOProcess
 
 class ISOMasterRecord(Base):
     """
@@ -102,3 +104,19 @@ class ISOMasterRecordAuditLog(Base):
     created_at = Column(NVARCHAR(50), nullable=True)      # Định dạng chuẩn VN: DD/MM/YYYY HH:mm
     timestamp = Column(NVARCHAR(50), nullable=True)       # ISO timestamp phục vụ sắp xếp chính xác
 
+
+
+class ISOMasterRecordProcess(Base):
+    """
+    Model lưu trữ quan hệ Cha - Con giữa Bộ tài liệu (ISOMasterRecord)
+    và các Tài liệu / Quy trình nghiệp vụ (ISOProcess).
+    """
+    __tablename__ = "iso_master_record_processes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    master_record_id = Column(Integer, ForeignKey("iso_master_records.id", ondelete="CASCADE"), nullable=False, index=True)
+    process_id = Column(Integer, ForeignKey("iso_processes.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at = Column(NVARCHAR(50), nullable=True)
+
+    master_record = relationship("ISOMasterRecord", backref="linked_process_associations", cascade="all, delete", passive_deletes=True)
+    process = relationship("ISOProcess", backref="master_record_associations")

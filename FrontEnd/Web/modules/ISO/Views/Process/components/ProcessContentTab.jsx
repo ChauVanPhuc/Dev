@@ -4,7 +4,7 @@ import {
   Undo, Redo, Bold, Italic, Underline, Strikethrough, AlignLeft, AlignCenter, AlignRight,
   AlignJustify, List, ListOrdered, ChevronLeft, ChevronRight, Table as TableIcon,
   ZoomOut, ZoomIn, RotateCcw, BookOpen, Save, RefreshCw, X, FileText, Edit, Check,
-  GitBranch, Plus, Trash2, Layout, Eye, Scissors, Search
+  GitBranch, Plus, Trash2, Layout, Eye, Scissors, Search, Columns
 } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import '../../MasterRecord/isoMasterRecord.css';
@@ -12,6 +12,8 @@ import FlowchartTable, { generateFlowchartSvgHtml } from '../FlowchartTable';
 import FlowchartCanvas from '../FlowchartCanvas';
 import logoCty from '../utils/logoCty';
 import CanvasISOEditor from './CanvasISOEditor';
+import FaithfulPageViewer from './FaithfulPageViewer';
+import OnlyOfficeEditorModal from './OnlyOfficeEditorModal';
 
 const ProcessContentTab = ({ editor }) => {
   const {
@@ -89,7 +91,14 @@ const ProcessContentTab = ({ editor }) => {
     const name = (f.name || f.title || '').trim().toLowerCase();
     const formatted = formatTemplateDisplay(f).toLowerCase();
     return currentItems.some(item => {
-      return item === formatted || (code && item.includes(code)) || (name && item === name);
+      if (item === formatted) return true;
+      if (code && (item.includes(code) || code.includes(item))) return true;
+      if (name && (item.includes(name) || name.includes(item))) return true;
+      // So sánh theo mã số BM (ví dụ bm01, bm02)
+      const itemBmMatch = item.match(/bm\d+/i);
+      const codeBmMatch = code.match(/bm\d+/i);
+      if (itemBmMatch && codeBmMatch && itemBmMatch[0].toLowerCase() === codeBmMatch[0].toLowerCase()) return true;
+      return false;
     });
   }, [formatTemplateDisplay]);
 
@@ -176,6 +185,10 @@ const ProcessContentTab = ({ editor }) => {
   const [loadingDoc, setLoadingDoc] = useState(false);
   const [totalSheetsCount, setTotalSheetsCount] = useState(3);
   const [wordUploading, setWordUploading] = useState(false);
+  const [applyIsoTemplate, setApplyIsoTemplate] = useState(false);
+  const [faithfulPages, setFaithfulPages] = useState([]);
+  const [showFaithfulViewer, setShowFaithfulViewer] = useState(false);
+  const [showOnlyOfficeModal, setShowOnlyOfficeModal] = useState(false);
 
   // Flowchart Modal & Navigation states
   const [showFlowchartModal, setShowFlowchartModal] = useState(false);
@@ -189,11 +202,50 @@ const ProcessContentTab = ({ editor }) => {
 
   const updateHeadingsTimerRef = useRef(null);
 
+  // Helper tính toán 4 trường Footer chuẩn ISO theo quy định:
+  // 1. Mã hiệu lấy từ Mã mới (new_code ưu tiên, fallback code)
+  // 2. Lần ban hành dựa vào lịch sử thay đổi (revision_logs)
+  // 3. Ngày ban hành lấy ngày mới nhất của lần ban hành
+  // 4. Số trang lấy trang hiện tại / tổng số trang
+  const getEffectiveFooterData = useCallback((data) => {
+    const fData = data || formData || {};
+    const rawCode = (fData.new_code || '').trim() || (fData.code || '').trim() || (fData.symbol || '').trim() || (formData?.new_code || '').trim() || (formData?.code || '').trim();
+    const effCode = rawCode || 'G7.CL -QT01';
+    const rawLogs = Array.isArray(fData.revision_logs) ? fData.revision_logs : [];
+    const validLogs = rawLogs.filter(l => l && (l.content || l.rev_date || l.seq_no));
+
+    let effVer = (fData.version || '01').trim();
+    let effDate = (fData.issue_date || '').trim();
+
+    if (validLogs.length > 0) {
+      const seqNums = validLogs.map(l => Number(l.seq_no)).filter(n => !isNaN(n) && n > 0);
+      const maxSeq = seqNums.length > 0 ? Math.max(...seqNums) : validLogs.length;
+      effVer = String(maxSeq).padStart(2, '0');
+
+      for (let i = validLogs.length - 1; i >= 0; i--) {
+        const d = validLogs[i].rev_date;
+        if (d && String(d).trim()) {
+          effDate = String(d).trim();
+          break;
+        }
+      }
+    }
+
+    if (/^\d+$/.test(effVer)) {
+      effVer = effVer.padStart(2, '0');
+    }
+
+    if (!effDate) {
+      effDate = (fData.issue_date || '15/10/2026').trim();
+    }
+
+    return { effCode, effVer, effDate };
+  }, [formData]);
+
   // Helper tạo một tờ A4 chuẩn kích thước 794px x 1123px kèm Header & Footer
   const createNewA4Sheet = useCallback((pageNum, contentHtml = '<p><br></p>') => {
-    const docCode = formData.code || formData.new_code || '';
-    const issueDate = formData.issue_date || '';
-    const version = formData.version || '';
+    const { effCode, effVer, effDate } = getEffectiveFooterData(formData);
+    const totalSheets = totalSheetsCount || 3;
 
     const sheet = document.createElement('div');
     sheet.className = 'iso-a4-sheet';
@@ -208,18 +260,18 @@ const ProcessContentTab = ({ editor }) => {
 
     const footerDiv = document.createElement('div');
     footerDiv.className = 'iso-a4-sheet-footer';
-    footerDiv.style.cssText = 'height: 32px; min-height: 32px; border-top: 1px solid #000000; padding-top: 6px; margin-top: 6px; display: flex; justify-content: space-between; align-items: center; font-family: "Times New Roman", serif; font-size: 10pt; font-style: italic; color: #0D0D0D; user-select: none; box-sizing: border-box;';
+    footerDiv.style.cssText = 'height: 28px; min-height: 28px; border-top: 1px solid #000000; padding-top: 5px; margin-top: 6px; display: flex; justify-content: space-between; align-items: center; font-family: "Times New Roman", Times, serif; font-size: 10pt; color: #0D0D0D; user-select: none; box-sizing: border-box; width: 100%;';
     footerDiv.innerHTML = `
-      <span>Mã hiệu: ${docCode}</span>
-      <span>Ngày ban hành: ${issueDate}</span>
-      <span>Lần ban hành: ${version}</span>
-      <span class="iso-sheet-page-num">Trang ${pageNum}</span>
+      <span>Mã hiệu: ${effCode}</span>
+      <span>Lần ban hành: ${effVer}</span>
+      <span>Ngày ban hành: ${effDate}</span>
+      <span class="iso-sheet-page-num">Trang: ${pageNum}/${totalSheets}</span>
     `;
 
     sheet.appendChild(contentDiv);
     sheet.appendChild(footerDiv);
     return sheet;
-  }, [formData.new_code, formData.code, formData.issue_date, formData.version]);
+  }, [formData, getEffectiveFooterData, totalSheetsCount]);
 
   // Đánh lại số trang và đồng bộ mã hiệu cho tất cả các tờ A4 trong tài liệu
   const reindexAllSheetFooters = useCallback(() => {
@@ -259,11 +311,10 @@ const ProcessContentTab = ({ editor }) => {
       });
     }
 
-    const sheets = wordEditorRef.current.querySelectorAll('.iso-a4-sheet');
-    setTotalSheetsCount(sheets.length || 3);
-    const docCode = formData.code || formData.new_code || '';
-    const issueDate = formData.issue_date || '';
-    const version = formData.version || '';
+    const sheets = Array.from(wordEditorRef.current.querySelectorAll('.iso-a4-sheet'));
+    const totalSheets = sheets.length || 3;
+    setTotalSheetsCount(totalSheets);
+    const { effCode, effVer, effDate } = getEffectiveFooterData(formData);
 
     sheets.forEach((sheet, idx) => {
       const pageNum = idx + 1;
@@ -279,29 +330,35 @@ const ProcessContentTab = ({ editor }) => {
       sheet.style.justifyContent = 'space-between';
       sheet.style.boxSizing = 'border-box';
 
+      // Trang bìa (Trang 1): Ẩn footer nếu có
+      if (idx === 0 || sheet.id === 'iso-heading-cover-page') {
+        const coverFooter = sheet.querySelector('.iso-a4-sheet-footer');
+        if (coverFooter) coverFooter.style.display = 'none';
+        return;
+      }
+
       let footer = sheet.querySelector('.iso-a4-sheet-footer');
       if (!footer) {
         footer = document.createElement('div');
         footer.className = 'iso-a4-sheet-footer';
-        footer.style.cssText = 'height: 32px; min-height: 32px; border-top: 1px solid #000000; padding-top: 6px; margin-top: 6px; display: flex; justify-content: space-between; align-items: center; font-family: "Times New Roman", serif; font-size: 10pt; font-style: italic; color: #0D0D0D; user-select: none; box-sizing: border-box;';
         sheet.appendChild(footer);
       } else if (footer.parentElement !== sheet) {
         sheet.appendChild(footer);
       }
+      footer.style.cssText = 'height: 28px; min-height: 28px; border-top: 1px solid #000000; padding-top: 5px; margin-top: 6px; display: flex; justify-content: space-between; align-items: center; font-family: "Times New Roman", Times, serif; font-size: 10pt; color: #0D0D0D; user-select: none; box-sizing: border-box; width: 100%;';
       footer.innerHTML = `
-        <span>Mã hiệu: ${docCode}</span>
-        <span>Ngày ban hành: ${issueDate}</span>
-        <span>Lần ban hành: ${version}</span>
-        <span class="iso-sheet-page-num">Trang ${pageNum}</span>
+        <span>Mã hiệu: ${effCode}</span>
+        <span>Lần ban hành: ${effVer}</span>
+        <span>Ngày ban hành: ${effDate}</span>
+        <span class="iso-sheet-page-num">Trang: ${pageNum}/${totalSheets}</span>
       `;
     });
-  }, [formData.code, formData.new_code, formData.issue_date, formData.version, createNewA4Sheet]);
+  }, [formData, getEffectiveFooterData, createNewA4Sheet]);
 
   // Helper chia nhỏ phần nội dung chính (bodyHtml) thành các trang A4 độc lập chuẩn 1123px
   const buildSheetsFromBodyHtml = useCallback((bodyHtml, startPageNum = 3) => {
-    const docCode = formData.code || formData.new_code || '';
-    const issueDate = formData.issue_date || '';
-    const version = formData.version || '';
+    const { effCode, effVer, effDate } = getEffectiveFooterData(formData);
+    const totalSheets = totalSheetsCount || 3;
 
     if (!bodyHtml || !bodyHtml.trim()) {
       return `
@@ -309,11 +366,11 @@ const ProcessContentTab = ({ editor }) => {
           <div class="iso-a4-sheet-content" style="flex:1 1 auto; width:100%; min-height:1015px; height:auto; box-sizing:border-box; font-family:'Times New Roman', Times, serif;">
             <p><br></p>
           </div>
-          <div class="iso-a4-sheet-footer" style="height:32px; min-height:32px; border-top:1px solid #000000; padding-top:6px; margin-top:6px; display:flex; justify-content:space-between; align-items:center; font-family:'Times New Roman', serif; font-size:10pt; font-style:italic; color:#0D0D0D; user-select:none; box-sizing:border-box;">
-            <span>Mã hiệu: ${docCode}</span>
-            <span>Ngày ban hành: ${issueDate}</span>
-            <span>Lần ban hành: ${version}</span>
-            <span class="iso-sheet-page-num">Trang ${startPageNum}</span>
+          <div class="iso-a4-sheet-footer" style="height:28px; min-height:28px; border-top:1px solid #000000; padding-top:5px; margin-top:6px; display:flex; justify-content:space-between; align-items:center; font-family:'Times New Roman', Times, serif; font-size:10pt; color:#0D0D0D; user-select:none; box-sizing:border-box; width:100%;">
+            <span>Mã hiệu: ${effCode}</span>
+            <span>Lần ban hành: ${effVer}</span>
+            <span>Ngày ban hành: ${effDate}</span>
+            <span class="iso-sheet-page-num">Trang: ${startPageNum}/${totalSheets}</span>
           </div>
         </div>
       `;
@@ -338,11 +395,11 @@ const ProcessContentTab = ({ editor }) => {
                 <div class="iso-a4-sheet-content" style="flex:1 1 auto; width:100%; min-height:1015px; height:auto; box-sizing:border-box; font-family:'Times New Roman', Times, serif;">
                   ${fc.outerHTML}
                 </div>
-                <div class="iso-a4-sheet-footer" style="height:32px; min-height:32px; border-top:1px solid #000000; padding-top:6px; margin-top:6px; display:flex; justify-content:space-between; align-items:center; font-family:'Times New Roman', serif; font-size:10pt; font-style:italic; color:#0D0D0D; user-select:none; box-sizing:border-box;">
-                  <span>Mã hiệu: ${docCode}</span>
-                  <span>Ngày ban hành: ${issueDate}</span>
-                  <span>Lần ban hành: ${version}</span>
-                  <span class="iso-sheet-page-num">Trang ${pageNum}</span>
+                <div class="iso-a4-sheet-footer" style="height:28px; min-height:28px; border-top:1px solid #000000; padding-top:5px; margin-top:6px; display:flex; justify-content:space-between; align-items:center; font-family:'Times New Roman', Times, serif; font-size:10pt; color:#0D0D0D; user-select:none; box-sizing:border-box; width:100%;">
+                  <span>Mã hiệu: ${effCode}</span>
+                  <span>Lần ban hành: ${effVer}</span>
+                  <span>Ngày ban hành: ${effDate}</span>
+                  <span class="iso-sheet-page-num">Trang: ${pageNum}/${totalSheets}</span>
                 </div>
               </div>
             `;
@@ -389,17 +446,18 @@ const ProcessContentTab = ({ editor }) => {
             if (!footer) {
               const footerEl = doc.createElement('div');
               footerEl.className = 'iso-a4-sheet-footer';
-              footerEl.style.cssText = 'height:32px; min-height:32px; border-top:1px solid #000000; padding-top:6px; margin-top:6px; display:flex; justify-content:space-between; align-items:center; font-family:"Times New Roman", serif; font-size:10pt; font-style:italic; color:#0D0D0D; user-select:none; box-sizing:border-box;';
-              footerEl.innerHTML = `
-                <span>Mã hiệu: ${docCode}</span>
-                <span>Ngày ban hành: ${issueDate}</span>
-                <span>Lần ban hành: ${version}</span>
-                <span class="iso-sheet-page-num">Trang ${pageNum}</span>
-              `;
               sheet.appendChild(footerEl);
+              footer = footerEl;
             } else if (footer.parentElement !== sheet) {
               sheet.appendChild(footer);
             }
+            footer.style.cssText = 'height:28px; min-height:28px; border-top:1px solid #000000; padding-top:5px; margin-top:6px; display:flex; justify-content:space-between; align-items:center; font-family:"Times New Roman", Times, serif; font-size:10pt; color:#0D0D0D; user-select:none; box-sizing:border-box; width:100%;';
+            footer.innerHTML = `
+              <span>Mã hiệu: ${effCode}</span>
+              <span>Lần ban hành: ${effVer}</span>
+              <span>Ngày ban hành: ${effDate}</span>
+              <span class="iso-sheet-page-num">Trang: ${pageNum}/${totalSheets}</span>
+            `;
           });
 
           return wrapper.innerHTML;
@@ -488,11 +546,11 @@ const ProcessContentTab = ({ editor }) => {
                 <div class="iso-a4-sheet-content" style="flex:1 1 auto; width:100%; min-height:1015px; height:auto; box-sizing:border-box; font-family:'Times New Roman', Times, serif;">
                   ${safeContent}
                 </div>
-                <div class="iso-a4-sheet-footer" style="height:32px; min-height:32px; border-top:1px solid #000000; padding-top:6px; margin-top:6px; display:flex; justify-content:space-between; align-items:center; font-family:'Times New Roman', serif; font-size:10pt; font-style:italic; color:#0D0D0D; user-select:none; box-sizing:border-box;">
-                  <span>Mã hiệu: ${docCode}</span>
-                  <span>Ngày ban hành: ${issueDate}</span>
-                  <span>Lần ban hành: ${version}</span>
-                  <span class="iso-sheet-page-num">Trang ${pNum}</span>
+                <div class="iso-a4-sheet-footer" style="height:28px; min-height:28px; border-top:1px solid #000000; padding-top:5px; margin-top:6px; display:flex; justify-content:space-between; align-items:center; font-family:'Times New Roman', Times, serif; font-size:10pt; color:#0D0D0D; user-select:none; box-sizing:border-box; width:100%;">
+                  <span>Mã hiệu: ${effCode}</span>
+                  <span>Lần ban hành: ${effVer}</span>
+                  <span>Ngày ban hành: ${effDate}</span>
+                  <span class="iso-sheet-page-num">Trang: ${pNum}/${chunks.length + 2}</span>
                 </div>
               </div>
             `;
@@ -532,12 +590,10 @@ const ProcessContentTab = ({ editor }) => {
     pageChunks = mergedRawPages;
 
     // 2. Tách các phân hệ/mục lớn của quy trình ISO ra các trang độc lập:
-    //    - Mục 5. Nội dung quy trình (bao gồm cả Lưu đồ 5.1 và Diễn giải chi tiết 5.2)
-    //    - LƯU Ý QUAN TRỌNG: KHÔNG tách rời Mục 5.2 sang trang riêng nếu Lưu đồ ngắn (<= 6 bước như ở Ảnh 2),
-    //      Mục 5.2 sẽ tiếp tục đi liền ngay dưới Lưu đồ trên cùng 1 trang A4.
-    //    - Mục 6 Biểu mẫu và hồ sơ lưu trữ bắt đầu ở trang mới
-    //    - Mục 7 Phụ lục bắt đầu ở trang mới
-    const secSplitRegex = /(?=<div class="iso-flowchart-block-container"|<h[1-4][^>]*>\s*(?:5\s*\.(?!\d)|5\s+Nội dung)|<div class="iso-doc-forms-container"|<h[1-4][^>]*>\s*(?:6\s*\.(?!\d)|6\s+|Danh mục biểu mẫu|Biểu mẫu và hồ sơ)|<p[^>]*>\s*(?:<[^>]+>\s*)*(?:6\s*\.(?!\d)|6\s+|Danh mục biểu mẫu|Biểu mẫu và hồ sơ)|<h[1-4][^>]*>\s*(?:7\s*\.(?!\d)|7\s+|Phụ lục)|<p[^>]*>\s*(?:<[^>]+>\s*)*(?:7\s*\.(?!\d)|7\s+|Phụ lục))/i;
+    //    - Khối Mục 5: iso-flowchart-block-container (đã bao gồm tiêu đề 5. Nội dung quy trình)
+    //    - Khối Mục 6: iso-doc-forms-container (đã bao gồm tiêu đề 6. Danh mục biểu mẫu)
+    //    - Khối Mục 7: 7. Phụ lục
+    const secSplitRegex = /(?=<div class="iso-flowchart-block-container"|<div class="iso-doc-forms-container"|<h[1-4][^>]*>\s*(?:7\s*[\.\:\-]\s*Phụ lục)|<p[^>]*>\s*(?:<[^>]+>\s*)*(?:7\s*[\.\:\-]\s*Phụ lục))/i;
 
     const structuredChunks = [];
     pageChunks.forEach(chunk => {
@@ -547,23 +603,10 @@ const ProcessContentTab = ({ editor }) => {
         return;
       }
 
-      // Hợp nhất tiêu đề "5. Nội dung quy trình" đứng trước khối Lưu đồ 5.1 lên cùng trang Lưu đồ
+      // Hợp nhất nếu có đoạn mở container bị tách khỏi nội dung
       let i = 0;
       while (i < subParts.length) {
         const cur = subParts[i];
-        const curText = cur.replace(/<[^>]*>/g, '').replace(/&nbsp;|\u00a0/g, ' ').trim().toLowerCase();
-
-        // 1. Hợp nhất tiêu đề "5. Nội dung quy trình" đứng trước khối Lưu đồ 5.1 lên cùng trang Lưu đồ
-        if (i + 1 < subParts.length && curText.length < 160) {
-          const nextPart = subParts[i + 1];
-          if ((curText.startsWith('5.') || curText.includes('nội dung quy trình')) && (nextPart.includes('iso-flowchart-block-container') || /5[\.\s]*1/i.test(nextPart))) {
-            structuredChunks.push(cur + '\n' + nextPart);
-            i += 2;
-            continue;
-          }
-        }
-
-        // 2. Hợp nhất thẻ mở container nếu bị tách khỏi nội dung bên trong
         if (i + 1 < subParts.length) {
           const nextPart = subParts[i + 1];
           if (
@@ -597,10 +640,42 @@ const ProcessContentTab = ({ editor }) => {
       finalChunks.push(p);
     });
 
-    pageChunks = finalChunks.filter(isChunkNotEmpty);
+    // 4. Thuật toán kiểm tra và dời toàn bộ Tiêu đề mồ côi (Orphan Headings) ở dòng cuối cùng của trang sang đầu trang kế tiếp
+    const orphanCleanedChunks = [];
+    for (let cIdx = 0; cIdx < finalChunks.length; cIdx++) {
+      let curChunk = finalChunks[cIdx];
+      if (cIdx + 1 < finalChunks.length) {
+        try {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(`<div>${curChunk}</div>`, 'text/html');
+          const root = doc.body.firstElementChild || doc.body;
+          const lastEl = root.lastElementChild;
+          if (lastEl) {
+            const tag = lastEl.tagName.toLowerCase();
+            const lastText = (lastEl.textContent || '').trim();
+            const isOrphanHeading = (
+              ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(tag) ||
+              lastEl.classList?.contains('iso-doc-heading') ||
+              (tag === 'p' && (lastEl.querySelector('strong, b') || /^\d+\.\s+[^\n]+$/i.test(lastText)) && lastText.length < 80)
+            );
+            if (isOrphanHeading) {
+              const orphanHtml = lastEl.outerHTML;
+              lastEl.remove();
+              curChunk = root.innerHTML;
+              finalChunks[cIdx + 1] = orphanHtml + '\n' + finalChunks[cIdx + 1];
+            }
+          }
+        } catch (_) {}
+      }
+      orphanCleanedChunks.push(curChunk);
+    }
+
+    pageChunks = orphanCleanedChunks.filter(isChunkNotEmpty);
     if (pageChunks.length === 0) {
       pageChunks = ['<p><br></p>'];
     }
+
+    const calculatedTotal = Math.max(totalSheets, pageChunks.length + 2);
 
     return pageChunks.map((chunkHtml, idx) => {
       const pNum = startPageNum + idx;
@@ -610,16 +685,16 @@ const ProcessContentTab = ({ editor }) => {
           <div class="iso-a4-sheet-content" style="flex:1 1 auto; width:100%; min-height:1015px; height:auto; box-sizing:border-box; font-family:'Times New Roman', Times, serif;">
             ${safeContent}
           </div>
-          <div class="iso-a4-sheet-footer" style="height:32px; min-height:32px; border-top:1px solid #000000; padding-top:6px; margin-top:6px; display:flex; justify-content:space-between; align-items:center; font-family:'Times New Roman', serif; font-size:10pt; font-style:italic; color:#0D0D0D; user-select:none; box-sizing:border-box;">
-            <span>Mã hiệu: ${docCode}</span>
-            <span>Ngày ban hành: ${issueDate}</span>
-            <span>Lần ban hành: ${version}</span>
-            <span class="iso-sheet-page-num">Trang ${pNum}</span>
+          <div class="iso-a4-sheet-footer" style="height:28px; min-height:28px; border-top:1px solid #000000; padding-top:5px; margin-top:6px; display:flex; justify-content:space-between; align-items:center; font-family:'Times New Roman', Times, serif; font-size:10pt; color:#0D0D0D; user-select:none; box-sizing:border-box; width:100%;">
+            <span>Mã hiệu: ${effCode}</span>
+            <span>Lần ban hành: ${effVer}</span>
+            <span>Ngày ban hành: ${effDate}</span>
+            <span class="iso-sheet-page-num">Trang: ${pNum}/${calculatedTotal}</span>
           </div>
         </div>
       `;
     }).join('\n');
-  }, [formData.new_code, formData.code, formData.issue_date, formData.version, formData.steps]);
+  }, [formData, getEffectiveFooterData, totalSheetsCount]);
 
   const setCursorToNodeStart = (el) => {
     if (!el) return;
@@ -733,13 +808,6 @@ const ProcessContentTab = ({ editor }) => {
       return;
     }
 
-    if (fileNameLower.endsWith('.doc')) {
-      if (showFeedback) showFeedback('error', 'Hệ thống chỉ hỗ trợ phân tích tự động định dạng Word (.docx). Vui lòng chuyển đổi tệp (.doc) sang (.docx) trước khi tải lên.');
-      else alert('Hệ thống chỉ hỗ trợ phân tích tự động định dạng Word (.docx). Vui lòng chuyển đổi tệp (.doc) sang (.docx) trước khi tải lên.');
-      if (e.target) e.target.value = '';
-      return;
-    }
-
     const formDataPay = new FormData();
     formDataPay.append('file', file);
 
@@ -747,9 +815,22 @@ const ProcessContentTab = ({ editor }) => {
     if (showFeedback) showFeedback('info', 'Đang đọc và phân tích nội dung từ file Word...');
 
     try {
+      formDataPay.append('apply_iso_template', applyIsoTemplate ? 'true' : 'false');
       const parsedData = await api.post('/iso-documents/upload', formDataPay, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
+      setFaithfulPages(parsedData?.faithful_pages || []);
+      if ((parsedData?.faithful_pages || []).length > 0) setShowFaithfulViewer(true);
+
+      // Nếu có sẵn Canvas Editor hoặc hàm nạp Canvas Editor, nạp ngay file vào Canvas Editor
+      if (typeof window.__importBufferToCanvasEditor__ === 'function') {
+        try {
+          const fileBuf = await file.arrayBuffer();
+          await window.__importBufferToCanvasEditor__(fileBuf);
+        } catch (bufErr) {
+          console.warn('Lỗi nạp file vào Canvas Editor:', bufErr);
+        }
+      }
 
       // 1. Giữ nguyên 2 trang đầu hiện tại (Trang bìa & Bảng theo dõi sửa đổi)
       let page1And2Html = '';
@@ -766,7 +847,8 @@ const ProcessContentTab = ({ editor }) => {
       // 2. Lấy nội dung từ file Word được chọn (parsedData.html_content)
       let bodyHtml = parsedData?.html_content || '';
 
-      // Tách bỏ trang bìa và bảng theo dõi sửa đổi của file Word để giữ nguyên 2 trang đầu chuẩn
+      // Chỉ khi bật 'Áp mẫu ISO': tách bỏ bìa + theo dõi sửa đổi của file Word để dùng 2 trang mẫu chuẩn
+      if (applyIsoTemplate) {
       const heading1Pos = bodyHtml.search(/(?:<h[1-4][^>]*>|<p[^>]*>\s*(?:<[^>]+>\s*)*)\s*(?:1\s*[\.\:\-]|Mục đích)/i);
       if (heading1Pos > 0) {
         bodyHtml = bodyHtml.substring(heading1Pos);
@@ -775,6 +857,7 @@ const ProcessContentTab = ({ editor }) => {
         if (afterRevMatch && afterRevMatch[1] && afterRevMatch[1].replace(/<[^>]*>/g, '').trim().length > 10) {
           bodyHtml = afterRevMatch[1];
         }
+      }
       }
       // Dọn sạch mọi thẻ đóng thừa </div> và ngắt trang thừa ở đầu bodyHtml tránh làm vỡ cấu trúc DOM
       bodyHtml = bodyHtml.replace(/^(?:\s*<\/div>\s*)+/i, '').replace(/^(?:\s*<div class="iso-doc-page-break-divider">[\s\S]*?<\/div>\s*)+/i, '').trim();
@@ -810,13 +893,12 @@ const ProcessContentTab = ({ editor }) => {
       bodyHtml = replaceRelatedFormsInHtml(bodyHtml);
       if (bodyHtml) {
         bodyHtml = bodyHtml.normalize ? bodyHtml.normalize('NFC') : bodyHtml;
-        bodyHtml = bodyHtml.replace(/font-family\s*:\s*[^;"'}]+;?/gi, 'font-family: "Times New Roman", Times, serif;');
-        bodyHtml = bodyHtml.replace(/<font[^>]*\sface="[^"]*"/gi, (match) => match.replace(/face="[^"]*"/, 'face="Times New Roman"'));
+        // Giữ nguyên font gốc của file Word (không ép Times New Roman hàng loạt)
       }
 
-      // 4. Phân trang nội dung file chọn vào các trang A4 từ trang 3 trở đi
-      const bodySheets = buildSheetsFromBodyHtml(bodyHtml, 3);
-      const combinedHtml = `${page1And2Html}\n${bodySheets}`;
+      // 4. Phân trang nội dung: bật 'Áp mẫu ISO' -> từ trang 3 (sau 2 trang mẫu); mặc định -> từ trang 1 (giữ nguyên file gốc)
+      const bodySheets = buildSheetsFromBodyHtml(bodyHtml, applyIsoTemplate ? 3 : 1);
+      const combinedHtml = applyIsoTemplate ? `${page1And2Html}\n${bodySheets}` : bodySheets;
 
       // 5. Gán trực tiếp vào bộ soạn thảo
       if (wordEditorRef.current) {
@@ -1218,6 +1300,9 @@ const ProcessContentTab = ({ editor }) => {
 
     return `
       <div class="iso-flowchart-block-container" id="iso-flowchart-block-container" data-flowchart-block="true" data-flowchart-v="9" data-steps-sig="${stepsSig}" data-step-count="${totalSteps}" style="margin: 6px 0 10px 0; position: relative; font-family: 'Times New Roman', Times, serif;">
+        <h2 id="heading-sec-5" class="iso-doc-heading level-1" style="font-size: 13pt; font-weight: bold; margin: 16px 0 8px 0; color: #0D0D0D; font-family: 'Times New Roman', Times, serif; text-transform: uppercase;">
+          5. Nội dung quy trình
+        </h2>
         <div class="iso-flowchart-header-actions" style="margin: 0 0 8px 0; display: flex; justify-content: space-between; align-items: center; font-family: 'Times New Roman', Times, serif;">
           <h3 style="font-size: 11pt; font-weight: bold; margin: 0; color: #000000; font-family: 'Times New Roman', Times, serif;">
             5.1. Sơ đồ lưu trình kiểm soát công tác ${displayProcTitle.toLowerCase()}
@@ -1303,177 +1388,216 @@ const ProcessContentTab = ({ editor }) => {
     `;
   }, [cleanTitle, deptName]);
 
-  // Helper tạo Bảng 6. Biểu mẫu đi kèm chuẩn ISO 5 cột theo quy chuẩn
+  // Helper tạo Bảng 6. Danh mục biểu mẫu và hồ sơ lưu trữ chuẩn ISO 4 cột đúng như Ảnh 5
+  // Ăn theo biểu mẫu (tài liệu đính kèm) áp dụng trong lưu đồ (steps)
   const buildRelatedFormsTableHtml = useCallback((existingContent = '') => {
     const leadIn = `<p style="margin: 6pt 0 10pt 0; font-size: 11pt; line-height: 1.5; color: #000000; font-family: 'Times New Roman', serif;">Toàn bộ các biểu mẫu phục vụ quy trình này phải được kiểm soát theo danh mục sau:</p>`;
 
-    const isCorrupted = typeof existingContent === 'string' && (
-      existingContent.includes('doc-paragraph') ||
-      existingContent.includes('doc - paragraph') ||
-      existingContent.includes('data-p-idx') ||
-      existingContent.includes('data - p - idx')
-    );
-
-    if (!isCorrupted && existingContent && typeof existingContent === 'string' && existingContent.includes('<table') && existingContent.includes('Mã biểu mẫu')) {
-      if (!existingContent.includes('Toàn bộ các biểu mẫu')) {
-        return `${leadIn}\n${existingContent}`;
-      }
-      return existingContent;
-    }
-
-    const baseCode = (formData.code || formData.new_code || 'G7.HC.QT15').trim();
+    const baseCode = (formData.new_code || formData.code || 'G7.ISO.QT01').trim();
     const deptText = (formData.folder || formData.department_name || deptName || '').trim();
     const defaultDept = (deptText && deptText !== '---' && !/phòng\s*ban/i.test(deptText))
       ? deptText
-      : 'Ban Quản trị Chất lượng & ISO (QLCL)';
+      : 'Ban hệ thống ISO\n(ISO)';
 
     const items = [];
+    const seenCodes = new Set();
 
-    // 1. Ưu tiên hàng đầu: Lấy từ mảng related_templates đã upload/cấu hình ở Tab Tài liệu liên quan
-    if (formData.related_templates && formData.related_templates.length > 0) {
-      formData.related_templates.forEach((t, tIdx) => {
-        const code = (t.code || '').trim();
-        const name = (t.title || t.name || '').trim();
-        if (code || name) {
-          items.push({
-            code: code || `${baseCode} - BM0${tIdx + 1}`,
-            name: name || `Biểu mẫu 0${tIdx + 1}`,
-            storage: t.storage_location || defaultDept,
-            retention: t.retention_period || '03 năm'
+    // 1. ƯU TIÊN SỐ 1 TUYỆT ĐỐI: Lấy biểu mẫu (tài liệu đính kèm) áp dụng trong lưu đồ (steps)
+    if (formData.steps && formData.steps.length > 0) {
+      formData.steps.forEach(s => {
+        const rawTplStr = s.template_files || s.template || s.transition?.template_files || '';
+        if (rawTplStr && rawTplStr !== '---') {
+          const parts = rawTplStr.split(/[,;\n]+/).map(p => p.trim()).filter(Boolean);
+          parts.forEach(p => {
+            // Đối chiếu với related_templates để lấy đầy đủ mã hiệu, tên, nơi lưu và thời hạn lưu
+            let matched = null;
+            if (formData.related_templates && formData.related_templates.length > 0) {
+              matched = formData.related_templates.find(rt => {
+                const rtCode = (rt.code || '').trim().toLowerCase();
+                const rtTitle = (rt.title || rt.name || '').trim().toLowerCase();
+                const pLow = p.toLowerCase();
+                return (rtCode && (pLow.includes(rtCode) || rtCode.includes(pLow))) ||
+                       (rtTitle && (pLow.includes(rtTitle) || rtTitle.includes(pLow))) ||
+                       (rt.file_name && pLow.includes(rt.file_name.toLowerCase()));
+              });
+            }
+
+            let code = '';
+            let name = '';
+            let storage = matched?.storage_location || 'Ban hệ thống ISO\n(ISO)';
+            let retention = matched?.retention_period || '12 tháng';
+
+            if (matched) {
+              code = matched.code || '';
+              name = matched.title || matched.name || '';
+            } else {
+              // Bóc tách từ chuỗi p (ví dụ: "Kế hoạch họp XXCLĐ - (đã họp) (G7.ISO.QT03-BM01)")
+              const codeParenMatch = p.match(/\(([A-Z0-9\.\/_-]+(?:[-_]BM\d+)?)\)/i);
+              const codePrefixMatch = p.match(/^([A-Z0-9\.\/_-]+(?:[-_]BM\d+)?)\s*[-–—:]\s*(.+)$/i);
+              if (codeParenMatch) {
+                code = codeParenMatch[1].trim();
+                name = p.replace(/\([^\)]+\)/, '').trim();
+              } else if (codePrefixMatch) {
+                code = codePrefixMatch[1].trim();
+                name = codePrefixMatch[2].trim();
+              } else {
+                code = p;
+                name = `Biểu mẫu kiểm soát ${s.name || ''}`.trim();
+              }
+            }
+
+            // Chuẩn hóa định dạng mã: BM01 -> G7.ISO.QT03-BM01
+            if (/^(?:BM|HD|PL)\d+/i.test(code)) {
+              code = `${baseCode}-${code.toUpperCase()}`;
+            } else {
+              code = code.replace(/\s*-\s*(BM|HD|PL)/gi, '-$1');
+            }
+
+            const key = (code || name).toLowerCase();
+            if (key && !seenCodes.has(key)) {
+              seenCodes.add(key);
+              items.push({
+                code: code || `${baseCode}-BM0${items.length + 1}`,
+                name: name || `Biểu mẫu 0${items.length + 1}`,
+                storage,
+                retention
+              });
+            }
           });
         }
       });
     }
 
-    if (items.length === 0 && existingContent && typeof existingContent === 'string') {
-      const rawLines = [];
+    // 2. Nếu trong các bước chưa gán biểu mẫu nào -> Lấy từ Tab Tài liệu liên quan (related_templates)
+    if (items.length === 0 && formData.related_templates && formData.related_templates.length > 0) {
+      formData.related_templates.forEach((t, tIdx) => {
+        const code = (t.code || '').trim();
+        const name = (t.title || t.name || '').trim();
+        if (code || name) {
+          const key = (code || name).toLowerCase();
+          if (!seenCodes.has(key)) {
+            seenCodes.add(key);
+            items.push({
+              code: code || `${baseCode}-BM0${tIdx + 1}`,
+              name: name || `Biểu mẫu 0${tIdx + 1}`,
+              storage: t.storage_location || 'Ban hệ thống ISO\n(ISO)',
+              retention: t.retention_period || '12 tháng'
+            });
+          }
+        }
+      });
+    }
 
-      // Nếu chứa bảng (kể cả bảng bị dính thuộc tính cũ), bóc tách text từng dòng
+    // 3. Bóc tách từ existingContent (tách riêng 4 cột độc lập, không gộp text)
+    if (items.length === 0 && existingContent && typeof existingContent === 'string') {
       if (existingContent.includes('<tr')) {
         try {
           const parser = new DOMParser();
           const doc = parser.parseFromString(`<div>${existingContent}</div>`, 'text/html');
-          doc.querySelectorAll('tr').forEach(r => {
-            const cells = Array.from(r.querySelectorAll('td'));
-            if (cells.length >= 2) {
-              const cellTexts = cells.map(c => c.textContent.trim()).filter(Boolean);
-              if (cellTexts.length >= 2) {
-                rawLines.push(cellTexts.join(' - '));
+          const rows = Array.from(doc.querySelectorAll('tr'));
+          rows.forEach(r => {
+            if (r.querySelector('th') || /mã\s*hiệu\s*biểu\s*mẫu|tên\s*biểu\s*mẫu/i.test(r.textContent)) {
+              return;
+            }
+            const cells = Array.from(r.querySelectorAll('td')).map(c => c.textContent.replace(/[\u00a0\s]+/g, ' ').trim());
+            if (cells.length < 2) return;
+
+            let rowCode = '';
+            let rowName = '';
+            let rowStorage = '';
+            let rowRetention = '';
+
+            if (cells.length >= 5) {
+              rowCode = cells[1];
+              rowName = cells[2];
+              rowStorage = cells[3];
+              rowRetention = cells[4];
+            } else if (cells.length === 4) {
+              rowCode = cells[0];
+              rowName = cells[1];
+              rowStorage = cells[2];
+              rowRetention = cells[3];
+            } else if (cells.length === 3) {
+              rowCode = cells[0];
+              rowName = cells[1];
+              if (/\d+\s*(?:tháng|năm)/i.test(cells[2])) {
+                rowRetention = cells[2];
+              } else {
+                rowStorage = cells[2];
+              }
+            } else if (cells.length === 2) {
+              rowCode = cells[0];
+              rowName = cells[1];
+            }
+
+            rowCode = rowCode.replace(/^[-*•\d\.\s]+/, '').trim();
+            rowName = rowName.replace(/^[-*•\d\.\s]+/, '').trim();
+
+            if (rowCode || rowName) {
+              const key = (rowCode || rowName).toLowerCase();
+              if (!seenCodes.has(key)) {
+                seenCodes.add(key);
+                items.push({
+                  code: rowCode,
+                  name: rowName,
+                  storage: rowStorage || defaultDept,
+                  retention: rowRetention || '12 tháng'
+                });
               }
             }
           });
         } catch (_) {}
       }
-
-      // Tách các dòng văn bản thông thường
-      const textLines = existingContent
-        .replace(/<\/tr>|<\/p>|<\/li>|<br\s*\/?>/gi, '\n')
-        .split('\n')
-        .map(l => l.replace(/<[^>]*>/g, ' ').replace(/&nbsp;|\u00a0/g, ' ').trim())
-        .filter(l => l.length > 0 && !/^(?:(?:6\.)?\s*(?:biểu\s*mẫu|hồ\s*sơ)(?:\s*đi\s*kèm)?\s*:?|toàn\s*bộ\s*các\s*biểu\s*mẫu.*|danh\s*mục\s*biểu\s*mẫu.*|stt\s+mã\s+biểu\s+mẫu.*)$/i.test(l));
-
-      rawLines.push(...textLines);
-
-      rawLines.forEach(line => {
-        let clean = line.replace(/<[^>]*>/g, ' ').replace(/&nbsp;|\u00a0/g, ' ');
-        // Xóa sạch mọi rác ký tự thuộc tính HTML cũ bị lẫn vào text
-        clean = clean.replace(/^(?:(?:iso\s*[-_]\s*)?doc\s*[-_]\s*paragraph"?\s*(?:data\s*[-_]\s*p\s*[-_]\s*idx="?\d+"?)?>?|data\s*[-_]\s*p\s*[-_]\s*idx="?\d+"?>?)\s*[-–—:\s]*/i, '').trim();
-        clean = clean.replace(/^[-*•\d\.\s]+/, '').trim();
-        clean = clean.replace(/^(?:(?:iso\s*[-_]\s*)?doc\s*[-_]\s*paragraph"?\s*(?:data\s*[-_]\s*p\s*[-_]\s*idx="?\d+"?)?>?)\s*[-–—:\s]*/i, '').trim();
-        clean = clean.replace(/^[-*•\d\.\s]+/, '').trim();
-        if (!clean) return;
-
-        let code = '';
-        let name = '';
-        const parts = clean.split(/\s*[-–—:]\s*/).filter(Boolean);
-        if (parts.length >= 3 && /^(?:BM|HD|PL|SOP|WI|QD|QĐ)\d*/i.test(parts[1])) {
-          code = `${parts[0]} - ${parts[1]}`;
-          name = parts.slice(2).join(' - ');
-        } else if (parts.length >= 2) {
-          if (/^(?:BM|HD|PL|SOP|WI|QD|QĐ)\d*/i.test(parts[0])) {
-            code = `${baseCode} - ${parts[0]}`;
-            name = parts.slice(1).join(' - ');
-          } else {
-            code = parts[0];
-            name = parts.slice(1).join(' - ');
-          }
-        } else {
-          code = '';
-          name = clean;
-        }
-
-        if (code || name) {
-          if (/^(?:BM|HD|PL|SOP|WI|QD|QĐ)\d*/i.test(code)) {
-            code = `${baseCode} - ${code}`;
-          }
-          items.push({ code, name });
-        }
-      });
     }
 
-    if (items.length === 0 && formData.steps) {
-      const seen = new Set();
-      formData.steps.forEach(s => {
-        if (s.template_files && s.template_files !== '---') {
-          const tpls = s.template_files.split(/[,;\n]+/).map(t => t.trim()).filter(Boolean);
-          tpls.forEach(t => {
-            if (!seen.has(t)) {
-              seen.add(t);
-              const fmtCode = /^(?:BM|HD|PL)\d*/i.test(t) ? `${baseCode} - ${t}` : t;
-              items.push({ code: fmtCode, name: `Biểu mẫu kiểm soát ${s.name || ''}`.trim() });
-            }
-          });
-        }
-      });
-    }
-
+    // 4. Mặc định khớp 100% Ảnh 5
     if (items.length === 0) {
-      const procName = formData.name || 'Quy trình đào tạo';
-      items.push({ code: `${baseCode} - BM01`, name: `Biểu mẫu theo dõi ${procName}` });
-      items.push({ code: `${baseCode} - BM02`, name: `Phiếu kiểm tra ${procName}` });
-      items.push({ code: `${baseCode} - BM03`, name: 'Sổ tổng hợp và lưu trữ dữ liệu quy trình định kỳ' });
-      items.push({ code: `${baseCode} - HD01`, name: `Hướng dẫn thực hiện ${procName}` });
+      items.push({ code: `${baseCode}-BM01`, name: 'Kế hoạch kiểm soát quy trình', storage: 'Ban hệ thống ISO\n(ISO)', retention: '12 tháng' });
+      items.push({ code: `${baseCode}-BM02`, name: 'Phiếu ghi nhận thông tin/khiếu nại', storage: 'Ban hệ thống ISO\n(ISO)', retention: '12 tháng' });
+      items.push({ code: `${baseCode}-BM03`, name: 'Biên bản xác minh thông tin', storage: 'Ban hệ thống ISO\n(ISO)', retention: '12 tháng' });
     }
 
     const rowsHtml = items.map((item, idx) => {
       const seq = idx + 1;
-      let code = item.code || `${baseCode} - BM0${seq}`;
-      const name = item.name || `[Tên biểu mẫu 0${seq}]`;
+      let code = (item.code || `${baseCode}-BM0${seq}`).trim();
+      const name = (item.name || `Biểu mẫu 0${seq}`).trim();
 
-      // Chuẩn hóa định dạng mã biểu mẫu: G7.HC.QT15 - BM01
-      if (/^(?:BM|HD|PL)\d*/i.test(code)) {
-        code = `${baseCode} - ${code}`;
+      if (/^(?:BM|HD|PL)\d+/i.test(code)) {
+        code = `${baseCode}-${code.toUpperCase()}`;
+      } else {
+        code = code.replace(/\s*-\s*(BM|HD|PL)/gi, '-$1');
       }
 
       let storage = item.storage || defaultDept;
-      if (!item.storage && (idx === 1 || code.includes('BM02') || code.includes('ISO') || code.includes('QLCL'))) {
-        storage = 'Ban ISO / QLCL';
+      if (!item.storage && (code.includes('ISO') || code.includes('BM'))) {
+        storage = 'Ban hệ thống ISO\n(ISO)';
       }
 
-      const retention = item.retention || ((idx === 1 || idx === 3 || code.includes('BM02') || code.includes('HD') || code.includes('ISO')) ? '05 năm' : '03 năm');
+      const retention = item.retention || '12 tháng';
 
       return `
-        <tr style="height: 26pt; page-break-inside: avoid; background: #ffffff;">
-          <td style="border: 1.0pt solid #000000; text-align: center; padding: 5pt 4pt; font-size: 10.5pt; font-family: 'Times New Roman', serif; vertical-align: middle;">${seq}</td>
-          <td style="border: 1.0pt solid #000000; padding: 5pt 8pt; font-size: 10.5pt; font-family: 'Times New Roman', serif; font-weight: bold; color: #0369a1; vertical-align: middle;">${code}</td>
-          <td style="border: 1.0pt solid #000000; padding: 5pt 8pt; font-size: 10.5pt; font-family: 'Times New Roman', serif; color: #000000; vertical-align: middle;">${name}</td>
-          <td style="border: 1.0pt solid #000000; padding: 5pt 8pt; font-size: 10.5pt; font-family: 'Times New Roman', serif; color: #000000; vertical-align: middle;">${storage}</td>
-          <td style="border: 1.0pt solid #000000; text-align: center; padding: 5pt 4pt; font-size: 10.5pt; font-family: 'Times New Roman', serif; vertical-align: middle;">${retention}</td>
+        <tr style="height: 32pt; page-break-inside: avoid; background: #ffffff;">
+          <td style="border: 1.0pt solid #000000; text-align: left; padding: 6pt 8pt; font-size: 11pt; font-family: 'Times New Roman', serif; color: #000000; vertical-align: middle;">${code}</td>
+          <td style="border: 1.0pt solid #000000; text-align: left; padding: 6pt 8pt; font-size: 11pt; font-family: 'Times New Roman', serif; color: #000000; vertical-align: middle;">${name}</td>
+          <td style="border: 1.0pt solid #000000; text-align: center; padding: 6pt 6pt; font-size: 11pt; font-family: 'Times New Roman', serif; color: #000000; vertical-align: middle; white-space: pre-line;">${storage}</td>
+          <td style="border: 1.0pt solid #000000; text-align: center; padding: 6pt 6pt; font-size: 11pt; font-family: 'Times New Roman', serif; color: #000000; vertical-align: middle;">${retention}</td>
         </tr>
       `;
     }).join('');
 
     return `
-      <div class="iso-doc-forms-container" style="margin: 12pt 0;">
+      <div class="iso-doc-forms-container" id="iso-doc-forms-container" style="margin: 16px 0; font-family: 'Times New Roman', Times, serif;">
+        <h2 id="heading-sec-6" class="iso-doc-heading level-1" style="font-size: 13pt; font-weight: bold; margin: 18px 0 10px 0; color: #0D0D0D; font-family: 'Times New Roman', Times, serif;">
+          6. Danh mục biểu mẫu và hồ sơ lưu trữ
+        </h2>
         ${leadIn}
-        <table class="iso-doc-forms-table" style="width: 100%; border-collapse: collapse; border: 1.5pt solid #000000; table-layout: fixed; margin-top: 6pt;">
+        <table class="iso-doc-forms-table" style="width: 100%; border-collapse: collapse; border: 1.0pt solid #000000; table-layout: fixed; margin-top: 6pt; background: #ffffff;">
           <thead>
-            <tr style="background: #f1f5f9; font-weight: bold; text-align: center; height: 26pt;">
-              <th style="border: 1.0pt solid #000000; width: 8%; padding: 5pt 4pt; font-size: 10.5pt; font-family: 'Times New Roman', serif; text-align: center;">STT</th>
-              <th style="border: 1.0pt solid #000000; width: 25%; padding: 5pt 8pt; font-size: 10.5pt; font-family: 'Times New Roman', serif; text-align: center;">Mã biểu mẫu</th>
-              <th style="border: 1.0pt solid #000000; width: 35%; padding: 5pt 8pt; font-size: 10.5pt; font-family: 'Times New Roman', serif; text-align: center;">Tên biểu mẫu</th>
-              <th style="border: 1.0pt solid #000000; width: 20%; padding: 5pt 8pt; font-size: 10.5pt; font-family: 'Times New Roman', serif; text-align: center;">Nơi lưu trữ</th>
-              <th style="border: 1.0pt solid #000000; width: 12%; padding: 5pt 4pt; font-size: 10.5pt; font-family: 'Times New Roman', serif; text-align: center;">Thời hạn lưu</th>
+            <tr style="background: #ffffff; font-weight: bold; text-align: center; height: 32pt;">
+              <th style="border: 1.0pt solid #000000; width: 26%; padding: 6pt 6pt; font-size: 11pt; font-family: 'Times New Roman', serif; text-align: center; vertical-align: middle;">Mã hiệu biểu mẫu</th>
+              <th style="border: 1.0pt solid #000000; width: 38%; padding: 6pt 8pt; font-size: 11pt; font-family: 'Times New Roman', serif; text-align: center; vertical-align: middle;">Tên biểu mẫu / Hồ sơ kiểm soát</th>
+              <th style="border: 1.0pt solid #000000; width: 20%; padding: 6pt 6pt; font-size: 11pt; font-family: 'Times New Roman', serif; text-align: center; vertical-align: middle;">Nơi lưu trữ</th>
+              <th style="border: 1.0pt solid #000000; width: 16%; padding: 6pt 6pt; font-size: 11pt; font-family: 'Times New Roman', serif; text-align: center; vertical-align: middle;">Thời hạn lưu</th>
             </tr>
           </thead>
           <tbody>
@@ -1484,7 +1608,7 @@ const ProcessContentTab = ({ editor }) => {
     `;
   }, [formData.code, formData.new_code, formData.name, formData.folder, formData.department_name, formData.steps, formData.related_templates, deptName]);
 
-  // Helper thay thế bảng lưu đồ Word thô hoặc bảng phiên bản cũ bằng SVG Flowchart 4 cột chuẩn ISO có nút Chỉnh sửa
+    // Helper thay thế bảng lưu đồ Word thô hoặc bảng phiên bản cũ bằng SVG Flowchart 4 cột chuẩn ISO có nút Chỉnh sửa
   const replaceFlowchartInHtml = useCallback((htmlContent, steps) => {
     if (!htmlContent || !steps || steps.length === 0) return htmlContent;
     try {
@@ -1492,6 +1616,14 @@ const ProcessContentTab = ({ editor }) => {
       const doc = parser.parseFromString(`<div>${htmlContent}</div>`, 'text/html');
       const root = (doc.body.children.length === 1 && doc.body.firstElementChild) ? doc.body.firstElementChild : doc.body;
       if (!root) return htmlContent;
+
+      // 0. Dọn sạch mọi đoạn rác tham chiếu in ấn cũ như "(Xem trang sau)" trong toàn bộ tài liệu
+      root.querySelectorAll('p, div, span').forEach(el => {
+        const t = (el.textContent || '').trim();
+        if (/^\(?\s*xem\s+trang\s+(?:sau|tiếp|dưới)\s*\)?\.?$/i.test(t)) {
+          el.remove();
+        }
+      });
 
       const newFlowchartHtml = buildFlowchartTableHtml(steps);
 
@@ -1502,12 +1634,42 @@ const ProcessContentTab = ({ editor }) => {
         return root.innerHTML;
       }
 
+      // Helper dọn các thẻ tiêu đề cũ, đoạn rác hoặc thẻ rỗng đứng ngay trước bảng/lưu đồ để không bị mồ côi
+      const cleanPrecedingHeadings = (targetNode) => {
+        let prev = targetNode.previousElementSibling;
+        while (prev) {
+          const prevTxt = (prev.textContent || '').replace(/[\s\u00a0]+/g, ' ').trim().toLowerCase();
+          const toRemove = prev;
+          prev = prev.previousElementSibling;
+
+          // Nếu là thẻ rỗng hoặc chỉ chứa khoảng trắng/br
+          if (!prevTxt || prevTxt === '' || prevTxt === '<br>' || toRemove.innerHTML.trim() === '<br>') {
+            toRemove.remove();
+            continue;
+          }
+
+          // Nếu là thẻ tham chiếu trang hoặc tiêu đề mục 5 / lưu đồ
+          if (
+            /^\(?\s*xem\s+trang\s+(?:sau|tiếp|dưới)\s*\)?\.?$/i.test(prevTxt) ||
+            /^(?:5[\.\s]*\s*nội\s*dung|lưu\s*đồ\s*quy\s*trình|sơ\s*đồ\s*quy\s*trình)/i.test(prevTxt) ||
+            prevTxt === '5. nội dung' ||
+            prevTxt === 'lưu đồ quy trình'
+          ) {
+            toRemove.remove();
+            continue;
+          }
+
+          // Gặp nội dung khác thì dừng lại
+          break;
+        }
+      };
+
       // 2. Tìm khối tiêu đề 5.1 (Sơ đồ / Lưu đồ)
       const allCandidateNodes = root.querySelectorAll('h1, h2, h3, h4, h5, p, div');
       const sec51Node = Array.from(allCandidateNodes).find(el => {
         const txt = (el.textContent || '').trim().toLowerCase();
         return (
-          /5[\.\s]*1[\.\s]/.test(txt) &&
+          (/5[\.\s]*1[\.\s]/.test(txt) || /lưu đồ quy trình/i.test(txt) || /sơ đồ quy trình/i.test(txt)) &&
           (/sơ đồ/i.test(txt) || /lưu đồ/i.test(txt) || /lưu trình/i.test(txt) || /flowchart/i.test(txt))
         );
       });
@@ -1516,7 +1678,9 @@ const ProcessContentTab = ({ editor }) => {
         const headingEl = sec51Node.closest('h1, h2, h3, h4, h5, p') || sec51Node;
         const parentTable = headingEl.closest('table');
         if (parentTable) {
+          if (parentTable.querySelector('img')) return htmlContent;
           const wrapper = parentTable.closest('.iso-doc-table-wrapper') || parentTable;
+          cleanPrecedingHeadings(wrapper);
           wrapper.outerHTML = newFlowchartHtml;
           return root.innerHTML;
         }
@@ -1526,12 +1690,18 @@ const ProcessContentTab = ({ editor }) => {
         let targetTable = null;
         for (let i = 0; i < 5 && sib; i++) {
           if (sib.tagName === 'TABLE' || (sib.querySelector && sib.querySelector('table'))) {
-            targetTable = sib;
+            targetTable = sib.tagName === 'TABLE' ? sib : sib.querySelector('table');
             break;
           }
           sib = sib.nextElementSibling;
         }
 
+        if (targetTable && targetTable.querySelector('img')) {
+          // Bảng lưu đồ đã có hình ảnh sơ đồ hoàn chỉnh từ file Word gốc -> Giữ nguyên 100%
+          return htmlContent;
+        }
+
+        cleanPrecedingHeadings(headingEl);
         if (targetTable) {
           const wrapper = targetTable.closest('.iso-doc-table-wrapper') || targetTable;
           wrapper.outerHTML = newFlowchartHtml;
@@ -1544,16 +1714,21 @@ const ProcessContentTab = ({ editor }) => {
         }
       }
 
-      // 3. Fallback: Tìm bảng có tiêu đề 4 cột lưu đồ (Bước, Trách nhiệm, Lưu đồ, Biểu mẫu)
+      // 3. Fallback: Tìm bảng có tiêu đề 4 cột lưu đồ (Bước, Trách nhiệm, Lưu đồ, Biểu mẫu/Phụ lục)
       const allTables = root.querySelectorAll('table');
       const flowTable = Array.from(allTables).find(tbl => {
         const firstRow = tbl.querySelector('tr');
         const txt = (firstRow?.textContent || '').toLowerCase();
-        return (txt.includes('lưu đồ') || txt.includes('sơ đồ')) && txt.includes('trách nhiệm');
+        return (txt.includes('lưu đồ') || txt.includes('sơ đồ')) && (txt.includes('trách nhiệm') || txt.includes('bước'));
       });
 
       if (flowTable) {
+        if (flowTable.querySelector('img')) {
+          // Bảng lưu đồ đã có hình ảnh sơ đồ hoàn chỉnh từ file Word gốc -> Giữ nguyên 100%
+          return htmlContent;
+        }
         const wrapper = flowTable.closest('.iso-doc-table-wrapper') || flowTable;
+        cleanPrecedingHeadings(wrapper);
         wrapper.outerHTML = newFlowchartHtml;
         return root.innerHTML;
       }
@@ -1606,7 +1781,8 @@ const ProcessContentTab = ({ editor }) => {
         if (!hasFormsTable) {
           toRemove.forEach(el => el.remove());
           const newFormsTableHtml = buildRelatedFormsTableHtml(contentHtml);
-          sec6Heading.insertAdjacentHTML('afterend', newFormsTableHtml);
+          // Thay thế trực tiếp thẻ sec6Heading bằng newFormsTableHtml (đã chứa sẵn tiêu đề chuẩn bên trong container)
+          sec6Heading.outerHTML = newFormsTableHtml;
           return root.innerHTML;
         }
       }
@@ -1680,7 +1856,7 @@ const ProcessContentTab = ({ editor }) => {
   }, [formData.issue_date]);
 
   // Mở Flowchart Modal thiết kế & chỉnh sửa lưu đồ (Hỗ trợ chỉ định mục đích / vị trí con trỏ chuột)
-  const handleOpenFlowchartModal = useCallback((targetEl = null) => {
+  const handleOpenFlowchartModal = useCallback(async (targetEl = null) => {
     if (targetEl) {
       targetSectionRef.current = targetEl;
     } else if (!targetSectionRef.current) {
@@ -1699,21 +1875,45 @@ const ProcessContentTab = ({ editor }) => {
       } catch (_) {}
     }
 
-    // Không gán cứng data mẫu - người dùng sẽ tạo lưu đồ từ đầu khi bấm Thêm lưu đồ
-    if (!formData.steps) {
-      if (setFormData) {
-        setFormData(prev => ({
-          ...prev,
-          steps: [],
-          has_flowchart: false
-        }));
+    let currentSteps = (formData.steps && formData.steps.length > 0) ? formData.steps : [];
+
+    // Tự động trích xuất các bước từ tệp Word nếu formData.steps còn đang rỗng
+    if (currentSteps.length === 0) {
+      const targetPath = formData.file_path || formData.docx_path || formData.document_path;
+      if (targetPath) {
+        try {
+          const res = await api.get('/iso-master-records/extract-doc-steps', {
+            params: { path: targetPath }
+          });
+          const resData = res?.data || res;
+          if (resData?.steps && resData.steps.length > 0) {
+            currentSteps = resData.steps;
+            if (setFormData) {
+              setFormData(prev => ({
+                ...prev,
+                steps: currentSteps,
+                has_flowchart: true
+              }));
+            }
+          }
+        } catch (eSteps) {
+          console.warn('Lỗi trích xuất steps từ file:', eSteps);
+        }
       }
+    }
+
+    if (!formData.steps && setFormData) {
+      setFormData(prev => ({
+        ...prev,
+        steps: currentSteps,
+        has_flowchart: currentSteps.length > 0
+      }));
     }
 
     setIsEditing(true);
     setActiveModalTab('canvas');
     setShowFlowchartModal(true);
-  }, [formData.steps, setFormData]);
+  }, [formData.steps, formData.file_path, formData.docx_path, formData.document_path, setFormData]);
 
   // Expose global callback cho nút Chỉnh sửa trên Bảng HTML
   useEffect(() => {
@@ -1916,19 +2116,46 @@ const ProcessContentTab = ({ editor }) => {
         setTimeout(updateDocHeadings, 150);
         setIsWordEditorDirty(true);
 
-        // C. CẬP NHẬT FORM DATA STATE VỚI HTML MỚI NHẤT
-        if (setFormData) {
-          setFormData(prev => ({
-            ...prev,
-            has_flowchart: true,
-            steps: formData.steps,
-            revision_logs: updatedLogs,
-            sections: {
-              ...(prev.sections || {}),
-              '__full_html__': finalHtml,
-              '5. Nội dung quy trình': combinedFlowchartBlockHtml
+        // Đồng thời cập nhật Bảng Mục 6 (ăn theo các biểu mẫu trong các bước vừa lưu)
+        const updatedSec6Html = buildRelatedFormsTableHtml();
+        let sec6El = wordEditorRef.current?.querySelector('#iso-doc-forms-container, .iso-doc-forms-container');
+        if (sec6El) {
+          sec6El.outerHTML = updatedSec6Html;
+        } else {
+          const heading6 = Array.from(wordEditorRef.current?.querySelectorAll('h1, h2, h3, p, .iso-doc-heading') || []).find(el =>
+            /6\.\s*(?:danh\s*mục\s*)?biểu\s*mẫu/i.test(el.innerText || '')
+          );
+          if (heading6) {
+            let sib = heading6.nextElementSibling;
+            while (sib && !/^(?:7\.|8\.|phụ\s*lục)/i.test((sib.innerText || '').trim())) {
+              const toDel = sib;
+              sib = sib.nextElementSibling;
+              toDel.remove();
             }
-          }));
+            heading6.outerHTML = updatedSec6Html;
+          }
+        }
+        finalHtml = wordEditorRef.current?.innerHTML || finalHtml;
+
+        // C. CẬP NHẬT FORM DATA STATE VỚI HTML MỚI NHẤT VÀ MỤC 6 MỚI NHẤT
+        if (setFormData) {
+          setFormData(prev => {
+            const nextSecs = { ...(prev.sections || {}) };
+            const sec6Key = Object.keys(nextSecs).find(k => /6\.\s*(?:danh\s*mục\s*)?biểu\s*mẫu/i.test(k)) || '6. Danh mục biểu mẫu và hồ sơ lưu trữ';
+            nextSecs[sec6Key] = updatedSec6Html;
+            return {
+              ...prev,
+              has_flowchart: true,
+              steps: formData.steps,
+              revision_logs: updatedLogs,
+              sections: {
+                ...nextSecs,
+                '__full_html__': finalHtml,
+                '5. Nội dung quy trình': combinedFlowchartBlockHtml,
+                [sec6Key]: updatedSec6Html
+              }
+            };
+          });
         }
 
         // D. LƯU TRỰC TIẾP TỆP DRAFT WORD NẾU CÓ FILE_PATH
@@ -2615,8 +2842,8 @@ const ProcessContentTab = ({ editor }) => {
   return (
     <div style={{
       ...cardStyle,
-      height: '84vh',
-      minHeight: '700px',
+      height: 'calc(100vh - 160px)',
+      minHeight: '620px',
       display: 'flex',
       flexDirection: 'column',
       overflow: 'hidden',
@@ -2628,9 +2855,12 @@ const ProcessContentTab = ({ editor }) => {
       {editorEngine === 'canvas' ? (
         <div style={{ flex: 1, minHeight: 0, position: 'relative', width: '100%', height: '100%' }}>
           <CanvasISOEditor
+            key={formData?.id || 'new'}
             formData={formData}
             setFormData={setFormData}
             handleSaveForm={handleSaveForm}
+            applyIsoTemplate={true}
+            faithfulPages={faithfulPages}
             onOpenFlowchartModal={() => handleOpenFlowchartModal()}
             onSwitchToClassic={() => setEditorEngine('classic')}
             showFeedback={showFeedback}
@@ -3004,7 +3234,68 @@ const ProcessContentTab = ({ editor }) => {
               {wordUploading ? 'Đang đọc file Word...' : 'Cập nhật từ Word'}
             </span>
           </button>
+          {faithfulPages.length > 0 && (
+            <button
+              type="button"
+              className="iso-ribbon-btn"
+              onClick={() => setShowFaithfulViewer(true)}
+              title="Xem file Word gốc đúng khổ giấy, hướng trang, bảng, hình, lưu đồ"
+              style={{ backgroundColor: '#FFF7ED', border: '1px solid #FED7AA', color: '#9A3412', fontWeight: '600' }}
+            >
+              <span style={{ fontSize: '0.74rem' }}>Xem bản gốc ({faithfulPages.length} trang)</span>
+            </button>
+          )}
+          {(formData?.file_path || (faithfulPages && faithfulPages.length > 0)) && (
+            <button
+              type="button"
+              className="iso-ribbon-btn"
+              onClick={() => {
+                if (typeof window.__openCompareMode__ === 'function') {
+                  window.__openCompareMode__();
+                }
+              }}
+              title="Mở toàn màn hình so sánh song song với file Word gốc ban đầu"
+              style={{ backgroundColor: '#FAF4EF', border: '1px solid #7B5233', color: '#7B5233', fontWeight: 'bold', marginLeft: '4px' }}
+            >
+              <Columns size={13} color="#7B5233" style={{ marginRight: '3px' }} />
+              <span style={{ fontSize: '0.74rem' }}>So sánh với bản gốc</span>
+            </button>
+          )}
+          {(formData?.file_path || (faithfulPages && faithfulPages.length > 0)) && (
+            <button
+              type="button"
+              className="iso-ribbon-btn"
+              onClick={() => setShowOnlyOfficeModal(true)}
+              title="Soạn thảo trực tiếp trên file Word gốc bằng ONLYOFFICE (Giữ 100% định dạng, lưu đè file gốc)"
+              style={{ backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE', color: '#1D4ED8', fontWeight: '600', marginLeft: '4px' }}
+            >
+              <FileText size={13} color="#1D4ED8" style={{ marginRight: '3px' }} />
+              <span style={{ fontSize: '0.74rem' }}>Sửa trực tiếp Word (100% Gốc)</span>
+            </button>
+          )}
+          {showFaithfulViewer && (
+            <FaithfulPageViewer pages={faithfulPages} onClose={() => setShowFaithfulViewer(false)} />
+          )}
+          {showOnlyOfficeModal && (
+            <OnlyOfficeEditorModal
+              isOpen={showOnlyOfficeModal}
+              onClose={() => setShowOnlyOfficeModal(false)}
+              filePath={formData?.file_path}
+              documentTitle={formData?.name || 'Tài liệu quy trình Word'}
+              onSaved={async () => {
+                if (formData?.file_path) {
+                  try {
+                    const pRes = await api.get('/iso-documents/onlyoffice/pages', {
+                      params: { file_path: formData.file_path }
+                    });
+                    if (pRes?.pages) setFaithfulPages(pRes.pages);
+                  } catch (_) {}
+                }
+              }}
+            />
+          )}
         </div>
+
 
         {/* Nhóm 8: Thu phóng & Nút Chỉnh sửa */}
         <div className="iso-ribbon-group zoom-group" style={{ marginLeft: 'auto', borderRight: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -3709,9 +4000,10 @@ const ProcessContentTab = ({ editor }) => {
                                         boxSizing: 'border-box'
                                       }}
                                     >
-                                      <option value="task">▭ Bước Xử Lý</option>
-                                      <option value="decision">◇ Quyết Định</option>
-                                      <option value="terminal">⬭ Bắt đầu / K.Thúc</option>
+                                      <option value="task">▭ Bước Xử Lý (Chữ nhật)</option>
+                                      <option value="decision">◇ Quyết Định (Hình thoi)</option>
+                                      <option value="terminal">⬭ Bắt đầu / K.Thúc (Elip - ISO)</option>
+                                      <option value="circle">○ Bắt đầu (Hình tròn)</option>
                                     </select>
                                   </td>
 

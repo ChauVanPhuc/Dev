@@ -11,7 +11,10 @@ from sqlalchemy import or_, desc, asc
 import openpyxl
 
 from config.database import get_db
-from modules.inspection.models.iso_master_record_model import ISOMasterRecord, ISOMasterRecordAuditLog
+from modules.inspection.models.iso_master_record_model import ISOMasterRecord, ISOMasterRecordAuditLog, ISOMasterRecordProcess
+from modules.inspection.models.iso_models import ISOProcess, ISODocument
+from sqlalchemy.orm import defer, joinedload, selectinload
+from sqlalchemy import func
 from modules.inspection.services.iso_file_service import (
     get_base_iso_dir,
     resolve_safe_path,
@@ -352,22 +355,22 @@ def get_master_records(
     )
 
     if has_active_filters:
-        # Nhóm match nếu BẤT KỲ child document nào thỏa mãn điều kiện
-        matched_groups = set()
-        has_matched_empty = False
+        matched_codes = set()
+        standalone_ids = set()
         for r in all_matched_records:
-            mg = (r.management_group or "").strip()
-            if mg:
-                matched_groups.add(mg)
+            sc = (r.suggested_doc_code or "").strip()
+            if sc:
+                matched_codes.add(sc)
             else:
-                has_matched_empty = True
+                standalone_ids.add(r.id)
 
-        if matched_groups or has_matched_empty:
-            conds = []
-            if matched_groups:
-                conds.append(ISOMasterRecord.management_group.in_(list(matched_groups)))
-            if has_matched_empty:
-                conds.append(or_(ISOMasterRecord.management_group == None, ISOMasterRecord.management_group == ''))
+        conds = []
+        if matched_codes:
+            conds.append(ISOMasterRecord.suggested_doc_code.in_(list(matched_codes)))
+        if standalone_ids:
+            conds.append(ISOMasterRecord.id.in_(list(standalone_ids)))
+
+        if conds:
             all_grouped_records = db.query(ISOMasterRecord).filter(or_(*conds)).order_by(asc(sort_col)).all()
         else:
             all_grouped_records = []
@@ -376,10 +379,17 @@ def get_master_records(
 
     groups_dict = {}
     for rec in all_grouped_records:
-        raw_mg = (rec.management_group or "").strip()
         raw_code = (rec.suggested_doc_code or "").strip()
-        g_key = raw_mg if raw_mg else (raw_code if raw_code else (rec.source_code or f"rec_{rec.id}"))
+        g_key = raw_code if raw_code else f"rec_{rec.id}"
         groups_dict.setdefault(g_key, []).append(rec)
+
+    # Đếm số lượng tài liệu con cho từng bộ tài liệu
+    mrp_counts = dict(
+        db.query(
+            ISOMasterRecordProcess.master_record_id,
+            func.count(ISOMasterRecordProcess.id)
+        ).group_by(ISOMasterRecordProcess.master_record_id).all()
+    )
 
     group_items = []
     DOCUMENT_LEVEL_FIELDS = [
@@ -497,6 +507,7 @@ def get_master_records(
             "identified_forms_count": rep.identified_forms_count,
             "form_code": rep.form_code,
             "is_checked": rep.is_checked,
+            "children_count": mrp_counts.get(rep.id, 0),
             "distinct_meta": distinct_meta,
             "has_conflict": False,
             "conflict_fields": [],
@@ -855,12 +866,12 @@ def create_master_record(payload: dict = Body(...), request: Request = None, db:
     [POST] Thêm mới thủ công một bản ghi Master List và ghi log lịch sử.
     Tự động tổ chức thư mục lưu trữ: Hồ sơ G7/<Phòng ban>/<Nhóm tài liệu quản lý>/
     """
-    dept = payload.get("department_in_charge")
-    group = payload.get("management_group")
-    if not dept or not str(dept).strip():
-        raise HTTPException(status_code=400, detail="Vui lòng bổ sung đầy đủ thông tin Phòng ban để xác định thư mục lưu trữ trong Hồ sơ G7.")
-    if not group or not str(group).strip():
-        raise HTTPException(status_code=400, detail="Vui lòng bổ sung đầy đủ thông tin Nhóm tài liệu quản lý để xác định thư mục lưu trữ trong Hồ sơ G7.")
+    dept = payload.get("department_in_charge") or "Hồ sơ chung"
+    group = payload.get("management_group") or "Hồ sơ"
+    if not str(dept).strip():
+        dept = "Hồ sơ chung"
+    if not str(group).strip():
+        group = "Hồ sơ" 
 
     # Khởi tạo hoặc chuẩn bị cấu trúc thư mục lưu trữ chuẩn trong Hồ sơ G7
     try:
@@ -1067,6 +1078,8 @@ def delete_master_record(record_id: int, db: Session = Depends(get_db)):
     record = db.query(ISOMasterRecord).filter(ISOMasterRecord.id == record_id).first()
     if not record:
         raise HTTPException(status_code=404, detail="Không tìm thấy bản ghi")
+    db.query(ISOMasterRecordProcess).filter(ISOMasterRecordProcess.master_record_id == record_id).delete(synchronize_session=False)
+    db.query(ISOMasterRecordAuditLog).filter(ISOMasterRecordAuditLog.record_id == record_id).delete(synchronize_session=False)
     db.delete(record)
     db.commit()
     return {"success": True, "message": "Xóa thành công"}
@@ -1079,6 +1092,8 @@ def batch_delete_master_records(payload: dict = Body(...), db: Session = Depends
     ids = payload.get("ids", [])
     if not ids:
         raise HTTPException(status_code=400, detail="Danh sách ID rỗng")
+    db.query(ISOMasterRecordProcess).filter(ISOMasterRecordProcess.master_record_id.in_(ids)).delete(synchronize_session=False)
+    db.query(ISOMasterRecordAuditLog).filter(ISOMasterRecordAuditLog.record_id.in_(ids)).delete(synchronize_session=False)
     db.query(ISOMasterRecord).filter(ISOMasterRecord.id.in_(ids)).delete(synchronize_session=False)
     db.commit()
     return {"success": True, "message": f"Đã xóa thành công {len(ids)} mục."}
@@ -1341,6 +1356,8 @@ def get_default_template_docx(
     issuer_name: Optional[str] = Query(None),
     issuer_role: Optional[str] = Query(None),
     approver_name: Optional[str] = Query(None),
+    approver_bgd: Optional[str] = Query(None),
+    document_level: Optional[str] = Query(None),
     approver_role: Optional[str] = Query(None),
     dept_name: Optional[str] = Query(None),
     version: Optional[str] = Query(None),
@@ -1357,6 +1374,8 @@ def get_default_template_docx(
         "issuer_name": issuer_name,
         "issuer_role": issuer_role,
         "approver_name": approver_name,
+        "approver_bgd": approver_bgd,
+        "document_level": document_level,
         "approver_role": approver_role,
         "dept_name": dept_name,
         "version": version or "01",
@@ -1387,6 +1406,8 @@ async def upload_and_merge_word(
     issuer_name: Optional[str] = Query(None),
     issuer_role: Optional[str] = Query(None),
     approver_name: Optional[str] = Query(None),
+    approver_bgd: Optional[str] = Query(None),
+    document_level: Optional[str] = Query(None),
     approver_role: Optional[str] = Query(None),
     dept_name: Optional[str] = Query(None),
     version: Optional[str] = Query(None),
@@ -1436,6 +1457,8 @@ async def upload_and_merge_word(
         "issuer_name": issuer_name,
         "issuer_role": issuer_role,
         "approver_name": approver_name,
+        "approver_bgd": approver_bgd,
+        "document_level": document_level,
         "approver_role": approver_role,
         "dept_name": target_dept,
         "version": version or "01",
@@ -1502,17 +1525,199 @@ async def upload_and_merge_word(
             )
             db.commit()
 
+        # Trích xuất danh sách các bước lưu đồ quy trình để nạp vào Flowchart Designer
+        steps = []
+        try:
+            from modules.inspection.services.iso_parser import parse_iso_docx
+            parsed_iso = parse_iso_docx(abs_path)
+            steps = parsed_iso.get("steps", [])
+            if not steps:
+                import docx
+                from modules.inspection.services.iso_file_service import _fc_find_flow_table, _fc_flow_col_index
+                doc_std = docx.Document(abs_path)
+                tbl = _fc_find_flow_table(doc_std)
+                if tbl and len(tbl.rows) > 1:
+                    col = _fc_flow_col_index(tbl)
+                    tot = len(tbl.rows) - 1
+                    for r_idx, r in enumerate(tbl.rows[1:], start=1):
+                        cells = [c.text.strip() for c in r.cells]
+                        s_name = cells[col] if col < len(cells) else f"Bước {r_idx}"
+                        role = cells[1] if len(cells) > 1 else "Bộ phận phụ trách"
+                        tmpl = cells[3] if len(cells) > 3 else (cells[len(cells)-1] if len(cells) > 2 else "")
+                        is_dec = bool(re.search(r"phê duyệt|thẩm định|quyết định|kiểm tra|đánh giá|kiểm soát", s_name, re.I)) and 1 < r_idx < tot
+                        nt = "start" if r_idx == 1 else ("end" if r_idx == tot else ("decision" if is_dec else "task"))
+                        st_item = {
+                            "step_number": r_idx,
+                            "name": s_name,
+                            "assignee_role": role,
+                            "template_files": tmpl,
+                            "node_type": nt,
+                            "has_branch": is_dec,
+                            "instructions": f"<p>Thực hiện bước {r_idx}: <strong>{s_name}</strong>. Trách nhiệm: {role}.</p>",
+                            "flow_node_id": f"node_{r_idx}"
+                        }
+                        if is_dec:
+                            st_item["fail_path"] = [{"return_to_step": max(1, r_idx - 1), "edge_label": "K.Đạt"}]
+                            st_item["transition"] = {"next_step": r_idx + 1}
+                        elif r_idx < tot:
+                            st_item["transition"] = {"next_step": r_idx + 1}
+                        else:
+                            st_item["transition"] = {"next_step": None, "name": "Hoàn tất"}
+                        steps.append(st_item)
+            
+            # Chuẩn hóa cấu trúc node_type và fail_path
+            tot_s = len(steps)
+            for idx, s in enumerate(steps):
+                st_num = s.get("step_number") or (idx + 1)
+                s["step_number"] = st_num
+                s["flow_node_id"] = f"node_{st_num}"
+                nt = (s.get("node_type") or "").lower()
+                s_name = s.get("name", "")
+                is_dec = nt == "decision" or (bool(re.search(r"phê duyệt|thẩm định|quyết định|kiểm tra|đánh giá|kiểm soát", s_name, re.I)) and 0 < idx < tot_s - 1)
+                if is_dec:
+                    s["node_type"] = "decision"
+                    s["has_branch"] = True
+                    if not s.get("fail_path"):
+                        s["fail_path"] = [{"return_to_step": max(1, st_num - 1), "edge_label": "K.Đạt"}]
+                    if not s.get("transition"):
+                        s["transition"] = {"next_step": st_num + 1}
+                elif idx == 0:
+                    s["node_type"] = "start"
+                    if not s.get("transition") and tot_s > 1:
+                        s["transition"] = {"next_step": 2}
+                elif idx == tot_s - 1:
+                    s["node_type"] = "end"
+                    if not s.get("transition"):
+                        s["transition"] = {"next_step": None, "name": "Hoàn tất"}
+                else:
+                    s["node_type"] = "task"
+                    if not s.get("transition") and idx + 1 < tot_s:
+                        s["transition"] = {"next_step": st_num + 1}
+        except Exception as e_steps:
+            print(f"[UploadAndMergeWord] Lỗi trích xuất steps: {e_steps}")
+
         return {
             "success": True,
             "message": "Đã ghép 2 trang đầu chuẩn VINA G7 và nối nội dung từ Mục đích thành công!",
             "file_path": rel_path,
             "file_name": safe_fn,
             "size_bytes": len(merged_bytes),
-            "headings": headings
+            "headings": headings,
+            "steps": steps,
+            "step_count": len(steps)
         }
     except Exception as e:
         print(f"[UploadAndMergeWord] Error: {e}")
         raise HTTPException(status_code=500, detail=f"Lỗi khi ghép tài liệu: {str(e)}")
+
+
+@router.get("/extract-doc-steps")
+def extract_doc_steps(
+    path: str = Query(..., description="Đường dẫn tương đối tới file .docx"),
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Trích xuất danh sách các bước lưu đồ (steps) từ tệp Word (.docx) để nạp vào Flowchart Designer.
+    Hỗ trợ cả bóc tách từ Diễn giải (parse_iso_docx) và từ Bảng quy trình (_fc_find_flow_table).
+    """
+    abs_path, err = resolve_safe_path(path)
+    if not abs_path or not os.path.exists(abs_path):
+        raise HTTPException(status_code=400, detail=err or "Không tìm thấy tệp tài liệu")
+
+    try:
+        from modules.inspection.services.iso_parser import parse_iso_docx
+        parsed = parse_iso_docx(abs_path)
+        steps = parsed.get("steps", [])
+
+        # Nếu chưa có steps hoặc rỗng, thử bóc tách từ bảng lưu đồ trong file Word
+        if not steps:
+            import docx
+            doc = docx.Document(abs_path)
+            from modules.inspection.services.iso_file_service import _fc_find_flow_table, _fc_flow_col_index
+            tbl = _fc_find_flow_table(doc)
+            if tbl and len(tbl.rows) > 1:
+                col = _fc_flow_col_index(tbl)
+                total_rows = len(tbl.rows) - 1
+                for r_idx, r in enumerate(tbl.rows[1:], start=1):
+                    cells = [c.text.strip() for c in r.cells]
+                    step_name = cells[col] if col < len(cells) else ""
+                    if not step_name:
+                        step_name = f"Bước {r_idx}"
+                    role = cells[1] if len(cells) > 1 else "Bộ phận phụ trách"
+                    tmpl = cells[3] if len(cells) > 3 else (cells[len(cells)-1] if len(cells) > 2 else "")
+                    
+                    is_decision = bool(re.search(r"phê duyệt|thẩm định|quyết định|kiểm tra|đánh giá|kiểm soát|soát xét", step_name, re.I)) and 1 < r_idx < total_rows
+                    node_type = "start" if r_idx == 1 else ("end" if r_idx == total_rows else ("decision" if is_decision else "task"))
+
+                    step_item = {
+                        "step_number": r_idx,
+                        "name": step_name,
+                        "assignee_role": role,
+                        "template_files": tmpl,
+                        "node_type": node_type,
+                        "has_branch": is_decision,
+                        "instructions": f"<p>Thực hiện bước {r_idx}: <strong>{step_name}</strong>. Trách nhiệm: {role}.</p>",
+                        "flow_node_id": f"node_{r_idx}"
+                    }
+                    if is_decision:
+                        step_item["fail_path"] = [{
+                            "return_to_step": max(1, r_idx - 1),
+                            "edge_label": "K.Đạt"
+                        }]
+                        step_item["transition"] = {
+                            "next_step": r_idx + 1
+                        }
+                    elif r_idx < total_rows:
+                        step_item["transition"] = {
+                            "next_step": r_idx + 1
+                        }
+                    else:
+                        step_item["transition"] = {
+                            "next_step": None,
+                            "name": "Hoàn tất"
+                        }
+                    steps.append(step_item)
+
+        # Chuẩn hóa cấu trúc node_type và fail_path cho từng bước
+        total_s = len(steps)
+        for idx, s in enumerate(steps):
+            st_num = s.get("step_number") or (idx + 1)
+            s["step_number"] = st_num
+            s["flow_node_id"] = f"node_{st_num}"
+            nt = (s.get("node_type") or "").lower()
+            s_name = s.get("name", "")
+            is_dec = nt == "decision" or (bool(re.search(r"phê duyệt|thẩm định|quyết định|kiểm tra|đánh giá|kiểm soát", s_name, re.I)) and 0 < idx < total_s - 1)
+            if is_dec:
+                s["node_type"] = "decision"
+                s["has_branch"] = True
+                if not s.get("fail_path"):
+                    s["fail_path"] = [{
+                        "return_to_step": max(1, st_num - 1),
+                        "edge_label": "K.Đạt"
+                    }]
+                if not s.get("transition"):
+                    s["transition"] = {"next_step": st_num + 1}
+            elif idx == 0:
+                s["node_type"] = "start"
+                if not s.get("transition") and total_s > 1:
+                    s["transition"] = {"next_step": 2}
+            elif idx == total_s - 1:
+                s["node_type"] = "end"
+                if not s.get("transition"):
+                    s["transition"] = {"next_step": None, "name": "Hoàn tất"}
+            else:
+                s["node_type"] = "task"
+                if not s.get("transition") and idx + 1 < total_s:
+                    s["transition"] = {"next_step": st_num + 1}
+
+        return {
+            "success": True,
+            "steps": steps,
+            "step_count": len(steps)
+        }
+    except Exception as e:
+        print(f"[extract_doc_steps] Error: {e}")
+        raise HTTPException(status_code=500, detail=f"Lỗi khi trích xuất lưu đồ: {str(e)}")
 
 
 @router.get("/file-preview/excel")
@@ -1614,6 +1819,21 @@ def stream_file(
         "Access-Control-Expose-Headers": "Content-Disposition",
         "Accept-Ranges": "bytes"
     }
+
+    if ext_lower in [".docx", ".doc"] and not download:
+        try:
+            import docx
+            from fastapi.responses import Response
+            from modules.inspection.services.iso_file_service import standardize_iso_docx_document, ensure_docx_path
+            target_path = ensure_docx_path(abs_path)
+            doc_std = docx.Document(target_path)
+            standardize_iso_docx_document(doc_std)
+            buf = io.BytesIO()
+            doc_std.save(buf)
+            docx_media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            return Response(content=buf.getvalue(), media_type=docx_media_type, headers=headers)
+        except Exception as e_stream_std:
+            print(f"[stream_file] Warning standardize: {e_stream_std}")
 
     return FileResponse(abs_path, media_type=media_type, headers=headers)
 
@@ -2660,6 +2880,304 @@ def update_record_metadata_endpoint(
     except Exception as e:
         print(f"[UpdateMetadataEndpoint] Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/preprocess-word-for-canvas")
+async def preprocess_word_for_canvas(file: UploadFile = File(...)):
+    """
+    [POST] Chuẩn hóa nhanh file Word (.docx) trước khi nạp vào Canvas Editor:
+    1. Trích xuất DrawingML vector shapes trong cột Lưu đồ và chuyển đổi thành ảnh PNG sắc nét (2x resolution).
+    2. Gộp cột Lưu đồ (từ Hàng 1 đến Hàng cuối) và nhúng ảnh PNG vào ô.
+    3. Điền số thứ tự rõ ràng cho cột Bước (1., 2., 3...).
+    4. Chuẩn hóa độ rộng các cột bảng quy trình.
+    Trả về file .docx đã chuẩn hóa hoàn chỉnh dưới dạng binary stream.
+    """
+    raw_content = b""
+    try:
+        raw_content = await file.read()
+        if not raw_content:
+            raise HTTPException(status_code=400, detail="Tệp tin rỗng")
+        
+        from modules.inspection.services.iso_file_service import standardize_iso_docx_document, ensure_docx_bytes
+        import docx
+        
+        docx_bytes = ensure_docx_bytes(raw_content, file.filename or "document.doc")
+        doc_in = docx.Document(io.BytesIO(docx_bytes))
+        doc_std = standardize_iso_docx_document(doc_in)
+        
+        out_stream = io.BytesIO()
+        doc_std.save(out_stream)
+        out_stream.seek(0)
+        
+        return StreamingResponse(
+            out_stream,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={
+                "Content-Disposition": 'attachment; filename="standardized_document.docx"'
+            }
+        )
+    except Exception as e:
+        import traceback
+        print(f"[preprocess_word_for_canvas] Lỗi chuẩn hóa: {e}")
+        traceback.print_exc()
+        # Trả về chi tiết lỗi trong header để debug
+        return StreamingResponse(
+            io.BytesIO(raw_content),
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"X-Preprocess-Error": str(e).replace("\n", " ")[:200]}
+        )
+
+
+# ==============================================================================
+# QUẢN LÝ TÀI LIỆU CON TRONG BỘ TÀI LIỆU (PARENT - CHILD RELATIONSHIP)
+# ==============================================================================
+
+@router.get("/all-available-documents")
+def get_all_available_documents(
+    search: Optional[str] = None,
+    department: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Lấy danh sách toàn bộ quy trình / tài liệu thực tế trong hệ thống (từ iso_processes)
+    phục vụ cho Modal chọn tài liệu vào bộ (Checkbox checklist).
+    """
+    query = (
+        db.query(ISOProcess)
+        .options(
+            defer(ISOProcess.diagram_data),
+            defer(ISOProcess.notes),
+            joinedload(ISOProcess.iso_document),
+            selectinload(ISOProcess.documents)
+        )
+    )
+    if department:
+        query = query.filter(ISOProcess.department_name.ilike(f"%{department.strip()}%"))
+    if search:
+        s = f"%{search.strip()}%"
+        query = query.filter(
+            or_(
+                ISOProcess.name.ilike(s),
+                ISOProcess.new_code.ilike(s),
+                ISOProcess.code.ilike(s),
+                ISOProcess.editor.ilike(s),
+                ISOProcess.approver.ilike(s)
+            )
+        )
+    
+    procs = query.order_by(asc(ISOProcess.new_code), asc(ISOProcess.code)).all()
+    results = []
+    for p in procs:
+        results.append({
+            "id": p.id,
+            "code": p.code or "",
+            "new_code": getattr(p, "new_code", "") or "",
+            "name": p.name or "",
+            "department_id": p.department_id,
+            "department_name": p.department_name or "",
+            "document_level": p.document_level or "Cấp phòng",
+            "editor": p.editor or "",
+            "approver": p.approver or "",
+            "approver_bgd": getattr(p, "approver_bgd", "") or "",
+            "issue_date": p.issue_date or "",
+            "updated_at": p.updated_at or p.issue_date or p.created_at or "",
+            "status": p.status or "Soạn thảo",
+            "documents_count": len(p.documents) if p.documents else 0,
+            "documents": [
+                {
+                    "id": d.id,
+                    "code": d.code,
+                    "name": d.name,
+                    "symbol": d.symbol,
+                    "status": d.status
+                }
+                for d in (p.documents or [])
+            ]
+        })
+    return results
+
+
+@router.get("/{record_id}/children")
+def get_master_record_children(
+    record_id: int,
+    search: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Lấy danh sách các tài liệu con thuộc bộ tài liệu record_id.
+    Cấu trúc trả về giống 100% /admin/iso-processes.
+    """
+    record = db.query(ISOMasterRecord).filter(ISOMasterRecord.id == record_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Không tìm thấy bộ tài liệu")
+
+    links = db.query(ISOMasterRecordProcess).filter(ISOMasterRecordProcess.master_record_id == record_id).all()
+    process_ids = [l.process_id for l in links]
+
+    if not process_ids:
+        return {
+            "record": {
+                "id": record.id,
+                "document_name": record.document_name,
+                "department_in_charge": record.department_in_charge,
+                "source_status": record.source_status,
+                "notes": record.notes
+            },
+            "children": [],
+            "total": 0
+        }
+
+    query = (
+        db.query(ISOProcess)
+        .options(
+            defer(ISOProcess.diagram_data),
+            defer(ISOProcess.notes),
+            joinedload(ISOProcess.iso_document),
+            selectinload(ISOProcess.documents)
+        )
+        .filter(ISOProcess.id.in_(process_ids))
+    )
+
+    if search:
+        s = f"%{search.strip()}%"
+        query = query.filter(
+            or_(
+                ISOProcess.name.ilike(s),
+                ISOProcess.new_code.ilike(s),
+                ISOProcess.code.ilike(s),
+                ISOProcess.editor.ilike(s),
+                ISOProcess.approver.ilike(s),
+                ISOProcess.department_name.ilike(s)
+            )
+        )
+
+    procs = query.order_by(asc(ISOProcess.new_code), asc(ISOProcess.code)).all()
+    children = []
+    for p in procs:
+        children.append({
+            "id": p.id,
+            "code": p.code or "",
+            "new_code": getattr(p, "new_code", "") or "",
+            "name": p.name or "",
+            "department_id": p.department_id,
+            "department_name": p.department_name or "",
+            "document_level": p.document_level or "Cấp phòng",
+            "editor": p.editor or "",
+            "approver": p.approver or "",
+            "approver_bgd": getattr(p, "approver_bgd", "") or "",
+            "issue_date": p.issue_date or "",
+            "updated_at": p.updated_at or p.issue_date or p.created_at or "",
+            "status": p.status or "Soạn thảo",
+            "documents_count": len(p.documents) if p.documents else 0,
+            "documents": [
+                {
+                    "id": d.id,
+                    "code": d.code,
+                    "name": d.name,
+                    "symbol": d.symbol,
+                    "status": d.status
+                }
+                for d in (p.documents or [])
+            ],
+            "file_path": p.file_path,
+            "original_file_path": getattr(p, "original_file_path", None)
+        })
+
+    return {
+        "record": {
+            "id": record.id,
+            "document_name": record.document_name,
+            "department_in_charge": record.department_in_charge,
+            "source_status": record.source_status,
+            "notes": record.notes
+        },
+        "children": children,
+        "total": len(children)
+    }
+
+
+@router.post("/{record_id}/assign-children")
+def assign_master_record_children(
+    record_id: int,
+    payload: dict,
+    db: Session = Depends(get_db)
+):
+    """
+    [POST] Gán danh sách tài liệu con vào bộ tài liệu (payload: {"process_ids": [1, 2, 5, ...]}).
+    Tài liệu nào được gửi lên sẽ thuộc bộ, tài liệu nào không gửi sẽ bị gỡ khỏi bộ.
+    """
+    record = db.query(ISOMasterRecord).filter(ISOMasterRecord.id == record_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Không tìm thấy bộ tài liệu")
+
+    process_ids = set(payload.get("process_ids") or [])
+    now_str = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
+
+    # Lấy các liên kết hiện tại
+    current_links = db.query(ISOMasterRecordProcess).filter(
+        ISOMasterRecordProcess.master_record_id == record_id
+    ).all()
+    current_proc_ids = {l.process_id for l in current_links}
+
+    # Xóa các liên kết không còn trong process_ids
+    to_remove = current_proc_ids - process_ids
+    if to_remove:
+        db.query(ISOMasterRecordProcess).filter(
+            ISOMasterRecordProcess.master_record_id == record_id,
+            ISOMasterRecordProcess.process_id.in_(list(to_remove))
+        ).delete(synchronize_session=False)
+
+    # Thêm các liên kết mới
+    to_add = process_ids - current_proc_ids
+    for pid in to_add:
+        link = ISOMasterRecordProcess(
+            master_record_id=record_id,
+            process_id=pid,
+            created_at=now_str
+        )
+        db.add(link)
+
+    # Ghi log lịch sử kiểm toán
+    actor_name = payload.get("actor_name") or "Administrator"
+    log = ISOMasterRecordAuditLog(
+        record_id=record_id,
+        action_type="UPDATE_CHILDREN",
+        action_label="Cập nhật tài liệu trong bộ",
+        actor_name=actor_name,
+        target_name=record.document_name,
+        details=json.dumps({"total_assigned": len(process_ids), "added": list(to_add), "removed": list(to_remove)}, ensure_ascii=False),
+        created_at=now_str,
+        timestamp=datetime.datetime.now().isoformat()
+    )
+    db.add(log)
+    db.commit()
+
+    return {
+        "message": "Đã cập nhật danh sách tài liệu trong bộ thành công!",
+        "record_id": record_id,
+        "total_children": len(process_ids)
+    }
+
+
+@router.delete("/{record_id}/children/{process_id}")
+def remove_master_record_child(
+    record_id: int,
+    process_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    [DELETE] Loại bỏ nhanh 1 tài liệu con khỏi bộ tài liệu.
+    """
+    link = db.query(ISOMasterRecordProcess).filter(
+        ISOMasterRecordProcess.master_record_id == record_id,
+        ISOMasterRecordProcess.process_id == process_id
+    ).first()
+    if not link:
+        raise HTTPException(status_code=404, detail="Tài liệu không nằm trong bộ này")
+
+    db.delete(link)
+    db.commit()
+    return {"message": "Đã loại tài liệu khỏi bộ thành công!"}
 
 
 @router.get("/{record_id}")

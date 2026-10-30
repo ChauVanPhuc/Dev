@@ -17,7 +17,10 @@ class ISODocument(Base):
     issuer = Column(NVARCHAR(100))                                       # Người soạn thảo / ban hành
     approver = Column(NVARCHAR(100))                                     # Người phê duyệt (Cấp phòng / Trưởng phòng)
     approver_bgd = Column(NVARCHAR(150), nullable=True)                  # Người phê duyệt cấp công ty (Ban Giám Đốc)
-    file_path = Column(NVARCHAR(500), nullable=True)                     # Đường dẫn file tải lên
+    file_path = Column(NVARCHAR(500), nullable=True)                     # Đường dẫn file làm việc / đã chỉnh sửa (.docx)
+    original_file_path = Column(NVARCHAR(500), nullable=True)            # Đường dẫn file gốc bất biến lúc tải lên (.doc, .docx)
+    original_file_name = Column(NVARCHAR(250), nullable=True)            # Tên file gốc ban đầu (ví dụ: QuyTrinh01.docx)
+    sub_files = Column(NVARCHAR(None), nullable=True)                     # Danh sách file con đính kèm dạng JSON string
     status = Column(NVARCHAR(50), default="Hiệu lực")                    # Hiệu lực, Hết hiệu lực, Dự thảo
     folder = Column(NVARCHAR(100), nullable=True)                        # Thư mục quản lý (ví dụ: "3/2/1")
     doc_type = Column(NVARCHAR(100), nullable=True)                      # Loại tài liệu phê duyệt (ví dụ: "Phê duyệt 1 cấp")
@@ -96,12 +99,14 @@ class ISOProcess(Base):
     __tablename__ = "iso_processes"
 
     id = Column(Integer, primary_key=True, index=True)
-    code = Column(NVARCHAR(100), unique=True, index=True, nullable=False) # Mã quy trình thực tế (ví dụ: TB001)
-    name = Column(NVARCHAR(250), nullable=False)                         # Tên quy trình thực tế (ví dụ: QT01)
+    code = Column(NVARCHAR(100), unique=False, index=True, nullable=True) # Mã quy trình cũ / thực tế (ví dụ: QT12, TB001)
+    name = Column(NVARCHAR(250), nullable=False)                         # Tên quy trình thực tế (ví dụ: Quy trình...)
     iso_document_id = Column(Integer, ForeignKey("iso_documents.id"), nullable=True) # Khuôn mẫu gốc (nếu có)
     department_id = Column(Integer, nullable=True)                      # ID Phòng ban chịu trách nhiệm
     department_name = Column(NVARCHAR(100), nullable=True)              # Tên Phòng ban chịu trách nhiệm
-    file_path = Column(NVARCHAR(500), nullable=True)                    # Đường dẫn file Word của quy trình (.docx)
+    file_path = Column(NVARCHAR(500), nullable=True)                    # Đường dẫn file làm việc / đã chỉnh sửa (.docx)
+    original_file_path = Column(NVARCHAR(500), nullable=True)           # Đường dẫn file gốc bất biến lúc tải lên (.doc, .docx)
+    original_file_name = Column(NVARCHAR(250), nullable=True)           # Tên file gốc ban đầu (ví dụ: QuyTrinh01.docx)
     owner = Column(NVARCHAR(100))                                       # Người phụ trách / chịu trách nhiệm
     editor = Column(NVARCHAR(100))                                      # Người biên soạn / thực thi
     approver = Column(NVARCHAR(100))                                    # Người duyệt (Cấp phòng / Trưởng phòng)
@@ -117,7 +122,7 @@ class ISOProcess(Base):
     role = Column(NVARCHAR(100), nullable=True)                          # Vai trò của người phê duyệt
     diagram_data = Column(NVARCHAR(None), nullable=True)                 # JSON sơ đồ lưu đồ tùy chỉnh riêng cho quy trình này
     inspection_guide_id = Column(Integer, ForeignKey("inspection_guides.id", ondelete="SET NULL"), nullable=True, unique=True)
-    new_code = Column(NVARCHAR(100), nullable=True)                      # Mã quy trình mới (ví dụ: G7.QL.QT.01)
+    new_code = Column(NVARCHAR(100), unique=True, index=True, nullable=True) # Mã quy trình mới - KEY duy nhất (ví dụ: G7.QL.QT.01)
     doc_type_id = Column(Integer, ForeignKey("iso_document_types.id", ondelete="SET NULL"), nullable=True) # ID Loại hồ sơ
     doc_type_code = Column(NVARCHAR(50), nullable=True)                  # Viết tắt loại hồ sơ (ví dụ: QT, HD...)
     created_at = Column(NVARCHAR(50))

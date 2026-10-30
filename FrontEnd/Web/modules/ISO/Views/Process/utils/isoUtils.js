@@ -8,7 +8,16 @@ const removeDiacritics = (str) => {
 const isGenericNameText = (text) => {
   if (!text) return false;
   const clean = removeDiacritics(text.normalize('NFC')).trim().toLowerCase().replace(/[\[\]]/g, '');
-  return ['ten quy trinh', 'ten tai lieu', 'ten bieu mau', 'ten'].some(val => clean.includes(val));
+  const genericPlaceholders = ['ten quy trinh', 'ten tai lieu', 'ten bieu mau', 'ten van ban', 'ten', 'quy trinh kiem soat chat luong moi'];
+  return genericPlaceholders.includes(clean);
+};
+
+const cleanDocumentTitle = (text) => {
+  if (!text) return '';
+  let str = text.trim();
+  str = str.replace(/^(?:tên\s+tài\s+liệu|tên\s+quy\s+trình|tên\s+biểu\s+mẫu|tiêu\s+đề|document\s+title)\s*[:：\-]\s*/i, '');
+  if (isGenericNameText(str)) return '';
+  return str.trim();
 };
 
 const generateNextQTCode = async (isProcess) => {
@@ -36,4 +45,4 @@ const generateNextQTCode = async (isProcess) => {
   }
 };
 
-export { removeDiacritics, isGenericNameText, generateNextQTCode };
+export { removeDiacritics, isGenericNameText, cleanDocumentTitle, generateNextQTCode };

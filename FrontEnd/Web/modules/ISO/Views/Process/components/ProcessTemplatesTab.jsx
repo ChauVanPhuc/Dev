@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import api from '@webShared/Services/api.service';
 import {
   Plus, Trash2, Edit, Upload, Eye, FileText, Settings, Download,
-  X, ZoomIn, ZoomOut, RotateCcw, ExternalLink, RefreshCw, AlertTriangle, FileSpreadsheet
+  X, ZoomIn, ZoomOut, RotateCcw, ExternalLink, RefreshCw, AlertTriangle, FileSpreadsheet,
+  Paperclip
 } from 'lucide-react';
 import '../../MasterRecord/isoMasterRecord.css';
 
@@ -20,6 +21,7 @@ const ProcessTemplatesTab = ({ editor }) => {
   const {
     activeTab, formData, handleAddRelatedTemplate, handleDeleteAttachment,
     handleDeleteRelatedTemplate, handleOpenSystemTemplatesModal, handleUpdateRelatedTemplate, handleUploadAttachment,
+    handleUploadChildFiles, handleDeleteChildFile,
     selectedTemplateId, setSelectedTemplateId, systemScreens,
   } = editor;
 
@@ -44,12 +46,89 @@ const ProcessTemplatesTab = ({ editor }) => {
   // State phóng to hình ảnh lưu đồ / sơ đồ (Lightbox)
   const [lightboxImage, setLightboxImage] = useState(null);
 
+  // Trợ giúp định dạng dung lượng file
+  const formatFileSize = (bytes) => {
+    if (!bytes || bytes <= 0) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  // Trợ giúp lấy icon và màu nhận diện định dạng file
+  const getFileIconInfo = (ext) => {
+    const e = (ext || '').toLowerCase().replace(/^\./, '');
+    if (['doc', 'docx'].includes(e)) {
+      return { icon: FileText, color: '#2563eb', bg: '#eff6ff', label: 'Word' };
+    }
+    if (['xls', 'xlsx', 'csv'].includes(e)) {
+      return { icon: FileSpreadsheet, color: '#16a34a', bg: '#f0fdf4', label: 'Excel' };
+    }
+    if (['pdf'].includes(e)) {
+      return { icon: FileText, color: '#dc2626', bg: '#fef2f2', label: 'PDF' };
+    }
+    if (['ppt', 'pptx'].includes(e)) {
+      return { icon: FileText, color: '#ea580c', bg: '#fff7ed', label: 'PowerPoint' };
+    }
+    if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'].includes(e)) {
+      return { icon: Eye, color: '#9333ea', bg: '#faf5ff', label: 'Ảnh' };
+    }
+    return { icon: FileText, color: '#7B5233', bg: '#FAF6F0', label: e.toUpperCase() || 'TỆP' };
+  };
+
+  // Trợ giúp chuẩn hóa mã biểu mẫu đầy đủ có tiền tố
+  const getFullTemplateCode = (code) => {
+    const raw = (code || '').trim();
+    if (!raw) return '';
+    const baseCode = (formData.code || 'QT').trim();
+    const regex = new RegExp(`^(${baseCode}[-_]|QT\\d+[-_])`, 'i');
+    if (!regex.test(raw)) {
+      return `${baseCode}-${raw.replace(/^[\s_-]+/, '')}`;
+    }
+    return raw.replace(/_/g, '-');
+  };
+
+  // Trợ giúp lấy tên hiển thị của tệp con có tiền tố biểu mẫu cha
+  const getChildFileDisplayName = (parentT, childFile) => {
+    if (!childFile) return '';
+    const raw = childFile.file_name || childFile.original_file_name || '';
+    if (!parentT || !parentT.code) return raw;
+    const parentCode = getFullTemplateCode(parentT.code);
+    if (raw && !raw.toUpperCase().startsWith(parentCode.toUpperCase())) {
+      return `${parentCode} - ${raw}`;
+    }
+    return raw;
+  };
+
+  // Trợ giúp lấy tên thật của file biểu mẫu đính kèm (có đầy đủ tiền tố mã biểu mẫu)
+  const getTemplateDisplayName = (item) => {
+    if (!item) return '';
+    const rawName = item.original_file_name || item.file_name || '';
+    const rawPath = item.file_path || '';
+    const ext = (rawPath.split('.').pop() || (rawName.split('.').pop() || '')).toLowerCase();
+    const isUuid = /^[0-9a-fA-F-]{32,38}(\.[a-zA-Z0-9]+)?$/.test(rawName);
+
+    let coreName = (rawName && !isUuid) ? rawName : (item.title || item.name || '');
+    if (ext && !coreName.toLowerCase().endsWith(`.${ext}`)) {
+      coreName = `${coreName}.${ext}`;
+    }
+
+    const code = getFullTemplateCode(item.code);
+    if (code && coreName) {
+      const codeRegex = new RegExp(`^${code.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}[\\s_-]*`, 'i');
+      if (!codeRegex.test(coreName)) {
+        return `${code} - ${coreName}`;
+      }
+    }
+
+    return coreName || rawPath.split('/').pop() || 'tai_lieu_dinh_kem';
+  };
+
   // Trợ giúp tạo URL file
   const getFileUrls = (item) => {
     if (!item) return { downloadUrl: '', rawUrl: '', streamUrl: '', ext: '', fileName: '' };
     const rawPath = item.file_path || '';
-    const fileName = item.file_name || rawPath.split('/').pop() || 'tai_lieu_dinh_kem';
-    const ext = (fileName.split('.').pop() || '').toLowerCase();
+    const fileName = item.is_child ? (item.file_name || item.original_file_name) : getTemplateDisplayName(item);
+    const ext = (item.file_type || fileName.split('.').pop() || (rawPath.split('.').pop() || '')).toLowerCase();
 
     const apiBase = (api.defaults?.baseURL || '').replace(/\/$/, '');
     const serverHost = apiBase.replace(/\/api\/v1\/?$/, '');
@@ -233,12 +312,30 @@ const ProcessTemplatesTab = ({ editor }) => {
                     transition: 'all 0.15s ease'
                   }}
                 >
-                  <span
-                    style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '72%' }}
-                    title={`${t.code} - ${t.title}`}
-                  >
-                    {t.code} - {t.title}
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', maxWidth: '72%', overflow: 'hidden' }}>
+                    <span
+                      style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                      title={`${getFullTemplateCode(t.code)} - ${t.title}`}
+                    >
+                      {getFullTemplateCode(t.code)} - {t.title}
+                    </span>
+                    {Array.isArray(t.sub_files) && t.sub_files.length > 0 && (
+                      <span
+                        title={`${t.sub_files.length} tệp con đính kèm`}
+                        style={{
+                          fontSize: '0.66rem',
+                          backgroundColor: '#FEF3C7',
+                          color: '#92400E',
+                          padding: '1px 5px',
+                          borderRadius: '10px',
+                          fontWeight: '700',
+                          flexShrink: 0
+                        }}
+                      >
+                        +{t.sub_files.length}
+                      </span>
+                    )}
+                  </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
                     {/* Nút Xem Trước (Icon Eye) */}
                     <button
@@ -357,16 +454,37 @@ const ProcessTemplatesTab = ({ editor }) => {
                       Mã biểu mẫu <span style={{ color: '#ef4444' }}>*</span>
                     </label>
                     {(() => {
-                      const procCodePrefix = formData.code ? `${formData.code}_` : 'QT_';
+                      const baseCode = formData.code || 'QT';
+                      let matchedPrefix = '';
+                      const possiblePrefixes = [
+                        `${baseCode}-`,
+                        `${baseCode}_`,
+                        formData.new_code ? `${formData.new_code}-` : '',
+                        formData.new_code ? `${formData.new_code}_` : '',
+                      ].filter(Boolean);
+
+                      for (const p of possiblePrefixes) {
+                        if (selectedT.code && selectedT.code.startsWith(p)) {
+                          matchedPrefix = p;
+                          break;
+                        }
+                      }
+                      // Mặc định dùng dấu '-' chuẩn ISO toàn hệ thống (ví dụ: QT34-)
+                      const procCodePrefix = matchedPrefix || (formData.code ? `${formData.code}-` : 'QT-');
+
                       let currentSuffix = selectedT.code || '';
                       if (selectedT.code && selectedT.code.startsWith(procCodePrefix)) {
                         currentSuffix = selectedT.code.slice(procCodePrefix.length);
-                      } else if (selectedT.code && formData.code && selectedT.code.startsWith(`${formData.code}_`)) {
-                        currentSuffix = selectedT.code.slice(`${formData.code}_`.length);
+                      } else if (selectedT.code) {
+                        const regex = new RegExp(`^(${baseCode}[-_]|QT\\d+[-_])`, 'i');
+                        const m = selectedT.code.match(regex);
+                        if (m) {
+                          currentSuffix = selectedT.code.slice(m[0].length);
+                        }
                       }
 
                       const handleSuffixChange = (e) => {
-                        let val = e.target.value.replace(/^[\s_]+/, '');
+                        let val = e.target.value.replace(/^[\s_-]+/, '');
                         const newFullCode = `${procCodePrefix}${val}`;
                         handleUpdateRelatedTemplate(selectedT.id, 'code', newFullCode);
                       };
@@ -536,36 +654,71 @@ const ProcessTemplatesTab = ({ editor }) => {
                   />
                 </div>
 
-                {/* File attachment upload area */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 'bold', color: '#64748b', marginBottom: '6px' }}>
-                    Tài liệu đính kèm
-                  </label>
-                  
+                {/* PHẦN 1: TÀI LIỆU ĐÍNH KÈM (TỆP CHÍNH) */}
+                <div style={{
+                  padding: '16px',
+                  border: '1px solid #EADCC9',
+                  borderRadius: '8px',
+                  backgroundColor: '#FDFAF7',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <label style={{ fontSize: '0.82rem', fontWeight: 'bold', color: '#2d1a12', margin: 0 }}>
+                        Tài liệu đính kèm (Tệp chính)
+                      </label>
+                      <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontStyle: 'italic' }}>
+                        (Không bắt buộc)
+                      </span>
+                    </div>
+                    {selectedT.file_path && (
+                      <span style={{
+                        fontSize: '0.68rem',
+                        fontWeight: '700',
+                        color: '#15803d',
+                        backgroundColor: '#dcfce7',
+                        padding: '2px 8px',
+                        borderRadius: '4px'
+                      }}>
+                        Tệp chính
+                      </span>
+                    )}
+                  </div>
+
                   {selectedT.file_path ? (
-                    /* If file is attached */
+                    /* Khi đã có file chính */
                     <div style={{
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       padding: '12px 16px',
                       border: '1px solid #EADCC9',
-                      borderRadius: '8px',
-                      backgroundColor: '#FAF6F0'
+                      borderRadius: '6px',
+                      backgroundColor: 'white'
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <FileText size={20} style={{ color: '#7B5233' }} />
-                        <div>
-                          <span style={{ fontSize: '0.82rem', fontWeight: 'bold', color: '#2d1a12', display: 'block' }}>
-                            {selectedT.file_name || selectedT.file_path.split('/').pop()}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
+                        <FileText size={20} style={{ color: '#7B5233', flexShrink: 0 }} />
+                        <div style={{ overflow: 'hidden' }}>
+                          <span style={{
+                            fontSize: '0.82rem',
+                            fontWeight: 'bold',
+                            color: '#2d1a12',
+                            display: 'block',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            {getTemplateDisplayName(selectedT)}
                           </span>
                           <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
                             Đã tải lên hệ thống
                           </span>
                         </div>
                       </div>
-                      
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
                         {/* Nút Xem Trước */}
                         <button
                           type="button"
@@ -592,11 +745,11 @@ const ProcessTemplatesTab = ({ editor }) => {
                         {/* Nút Tải xuống */}
                         <a
                           href={selectedT.doc_id 
-                            ? `${api.defaults.baseURL.replace(/\/$/, '')}/iso-documents/${selectedT.doc_id}/download-raw`
-                            : `${api.defaults.baseURL.replace('/api/v1', '')}/${selectedT.file_path}`}
+                            ? `${api.defaults?.baseURL?.replace(/\/$/, '')}/iso-documents/${selectedT.doc_id}/download-raw`
+                            : `${api.defaults?.baseURL?.replace('/api/v1', '')}/${selectedT.file_path}`}
                           target="_blank"
                           rel="noreferrer"
-                          download
+                          download={getTemplateDisplayName(selectedT)}
                           style={{
                             padding: '6px 12px',
                             backgroundColor: '#7B5233',
@@ -617,7 +770,7 @@ const ProcessTemplatesTab = ({ editor }) => {
                         {/* Nút Xóa file */}
                         <button
                           type="button"
-                          onClick={() => handleDeleteAttachment(selectedT.id)}
+                          onClick={() => handleDeleteAttachment && handleDeleteAttachment(selectedT.id)}
                           style={{
                             padding: '6px 12px',
                             backgroundColor: '#fee2e2',
@@ -637,36 +790,276 @@ const ProcessTemplatesTab = ({ editor }) => {
                       </div>
                     </div>
                   ) : (
-                    /* If NO file is attached - Upload Area */
+                    /* Nếu CHƯA có file chính - Vùng tải lên */
                     <div
-                      onClick={() => document.getElementById(`file-upload-input-${selectedT.id}`).click()}
+                      onClick={() => document.getElementById(`main-file-upload-input-${selectedT.id}`).click()}
                       style={{
                         border: '2px dashed #cbd5e1',
-                        borderRadius: '8px',
-                        padding: '24px',
+                        borderRadius: '6px',
+                        padding: '16px',
                         textAlign: 'center',
                         cursor: 'pointer',
-                        backgroundColor: '#f8fafc',
+                        backgroundColor: 'white',
                         transition: 'all 0.15s ease'
                       }}
                       onMouseOver={(e) => { e.currentTarget.style.borderColor = '#7B5233'; e.currentTarget.style.backgroundColor = '#FAF6F0'; }}
-                      onMouseOut={(e) => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.backgroundColor = '#f8fafc'; }}
+                      onMouseOut={(e) => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.backgroundColor = 'white'; }}
                     >
                       <input
                         type="file"
-                        id={`file-upload-input-${selectedT.id}`}
+                        id={`main-file-upload-input-${selectedT.id}`}
                         style={{ display: 'none' }}
-                        accept=".pdf,.doc,.docx,.xlsx,.xls"
-                        onChange={(e) => handleUploadAttachment(e, selectedT.id)}
+                        accept=".pdf,.doc,.docx,.xlsx,.xls,.ppt,.pptx,.png,.jpg,.jpeg,.webp"
+                        onChange={(e) => handleUploadAttachment && handleUploadAttachment(e, selectedT.id)}
                       />
                       <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '500' }}>
-                          Tải file từ máy (chấp nhận file PDF, Word .docx, Excel .xlsx)
+                        <Upload size={15} style={{ color: '#7B5233' }} />
+                        <span style={{ fontSize: '0.82rem', color: '#64748b', fontWeight: '500' }}>
+                          Tải tệp chính từ máy (Word, Excel, PDF, PPT, Ảnh...) hoặc kéo thả vào đây
                         </span>
-                        <Upload size={16} style={{ color: '#64748b' }} />
                       </div>
                     </div>
                   )}
+                </div>
+
+                {/* PHẦN 2: TỆP CON ĐÍNH KÈM / PHỤ LỤC PHỤ THUỘC */}
+                <div style={{
+                  padding: '16px',
+                  border: '1px solid #EADCC9',
+                  borderRadius: '8px',
+                  backgroundColor: 'white',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px'
+                }}>
+                  {/* Header của Phần tệp con */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Paperclip size={16} style={{ color: '#7B5233' }} />
+                      <label style={{ fontSize: '0.82rem', fontWeight: 'bold', color: '#2d1a12', margin: 0 }}>
+                        Tệp con đính kèm (Phụ lục phụ thuộc)
+                      </label>
+                      <span style={{
+                        fontSize: '0.7rem',
+                        fontWeight: '700',
+                        color: (selectedT.sub_files || []).length > 0 ? '#7B5233' : '#94a3b8',
+                        backgroundColor: (selectedT.sub_files || []).length > 0 ? '#FAF6F0' : '#f1f5f9',
+                        padding: '2px 8px',
+                        borderRadius: '10px'
+                      }}>
+                        {(selectedT.sub_files || []).length} tệp con
+                      </span>
+                    </div>
+
+                    {/* Nút bấm + Thêm file con */}
+                    <button
+                      type="button"
+                      onClick={() => document.getElementById(`child-files-upload-input-${selectedT.id}`).click()}
+                      style={{
+                        padding: '6px 14px',
+                        backgroundColor: '#7B5233',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontSize: '0.76rem',
+                        fontWeight: 'bold',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        cursor: 'pointer',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <Plus size={14} /> Thêm file con
+                    </button>
+
+                    <input
+                      type="file"
+                      id={`child-files-upload-input-${selectedT.id}`}
+                      style={{ display: 'none' }}
+                      multiple
+                      accept=".docx,.doc,.pdf,.xlsx,.xls,.ppt,.pptx,.png,.jpg,.jpeg,.webp,.svg,.csv,.txt,.zip,.rar,.7z"
+                      onChange={(e) => handleUploadChildFiles && handleUploadChildFiles(e, selectedT.id)}
+                    />
+                  </div>
+
+                  {/* Danh sách các tệp con đã đính kèm */}
+                  {Array.isArray(selectedT.sub_files) && selectedT.sub_files.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {selectedT.sub_files.map((child, cIdx) => {
+                        const childExt = (child.file_type || (child.file_name || '').split('.').pop() || '').toLowerCase();
+                        const iconInfo = getFileIconInfo(childExt);
+                        const IconComp = iconInfo.icon;
+                        const childDisplayName = getChildFileDisplayName(selectedT, child);
+                        const { downloadUrl } = getFileUrls({ ...child, is_child: true });
+
+                        return (
+                          <div
+                            key={child.id || `child_${cIdx}`}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '10px 14px',
+                              border: '1px solid #f1f5f9',
+                              borderRadius: '6px',
+                              backgroundColor: '#f8fafc',
+                              transition: 'all 0.15s ease'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden', flex: 1, marginRight: '12px' }}>
+                              <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: '30px',
+                                height: '30px',
+                                borderRadius: '6px',
+                                backgroundColor: iconInfo.bg,
+                                color: iconInfo.color,
+                                flexShrink: 0
+                              }}>
+                                <IconComp size={16} />
+                              </span>
+                              <div style={{ overflow: 'hidden', flex: 1 }}>
+                                <div style={{
+                                  fontSize: '0.8rem',
+                                  fontWeight: '600',
+                                  color: '#1e293b',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap'
+                                }} title={childDisplayName}>
+                                  {childDisplayName}
+                                </div>
+                                <div style={{ fontSize: '0.7rem', color: '#64748b', display: 'flex', gap: '8px', alignItems: 'center', marginTop: '2px' }}>
+                                  <span style={{
+                                    fontSize: '0.65rem',
+                                    fontWeight: '700',
+                                    color: iconInfo.color,
+                                    backgroundColor: iconInfo.bg,
+                                    padding: '1px 5px',
+                                    borderRadius: '3px'
+                                  }}>
+                                    {iconInfo.label}
+                                  </span>
+                                  {child.file_size ? <span>{formatFileSize(child.file_size)}</span> : null}
+                                  {child.uploaded_at ? <span>• {child.uploaded_at}</span> : null}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}>
+                              {/* Nút Xem Trước tệp con */}
+                              <button
+                                type="button"
+                                onClick={() => handlePreviewTemplateFile({ ...child, is_child: true })}
+                                style={{
+                                  padding: '5px 10px',
+                                  backgroundColor: 'white',
+                                  color: '#7B5233',
+                                  border: '1px solid #cbd5e1',
+                                  borderRadius: '5px',
+                                  fontSize: '0.73rem',
+                                  fontWeight: '600',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s ease'
+                                }}
+                                title={`Xem trước "${childDisplayName}"`}
+                              >
+                                <Eye size={12} /> Xem trước
+                              </button>
+
+                              {/* Nút Tải xuống tệp con */}
+                              <a
+                                href={downloadUrl || `${api.defaults?.baseURL?.replace('/api/v1', '')}/${child.file_path}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                download={childDisplayName}
+                                style={{
+                                  padding: '5px 10px',
+                                  backgroundColor: '#FAF6F0',
+                                  color: '#7B5233',
+                                  border: '1px solid #EADCC9',
+                                  borderRadius: '5px',
+                                  fontSize: '0.73rem',
+                                  fontWeight: '600',
+                                  textDecoration: 'none',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  cursor: 'pointer'
+                                }}
+                                title={`Tải xuống "${childDisplayName}"`}
+                              >
+                                <Download size={12} /> Tải xuống
+                              </a>
+
+                              {/* Nút Xóa tệp con */}
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteChildFile && handleDeleteChildFile(selectedT.id, child.id)}
+                                style={{
+                                  padding: '5px 8px',
+                                  backgroundColor: '#fee2e2',
+                                  color: '#ef4444',
+                                  border: '1px solid #fee2e2',
+                                  borderRadius: '5px',
+                                  fontSize: '0.73rem',
+                                  fontWeight: 'bold',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center'
+                                }}
+                                title="Xóa tệp con này"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    /* Trạng thái chưa có tệp con */
+                    <div style={{
+                      padding: '16px',
+                      border: '1px dashed #cbd5e1',
+                      borderRadius: '6px',
+                      textAlign: 'center',
+                      backgroundColor: '#f8fafc',
+                      color: '#94a3b8',
+                      fontSize: '0.78rem',
+                      fontStyle: 'italic'
+                    }}>
+                      Chưa có tệp con nào được đính kèm. Bấm nút <strong>"+ Thêm file con"</strong> ở trên để tải lên 1 hoặc nhiều tệp phụ lục đi kèm.
+                    </div>
+                  )}
+
+                  {/* Vùng Dropzone nhỏ bổ sung */}
+                  <div
+                    onClick={() => document.getElementById(`child-files-upload-input-${selectedT.id}`).click()}
+                    style={{
+                      border: '1px dashed #EADCC9',
+                      borderRadius: '6px',
+                      padding: '10px',
+                      textAlign: 'center',
+                      cursor: 'pointer',
+                      backgroundColor: '#FDFAF7',
+                      transition: 'all 0.15s ease',
+                      marginTop: '4px'
+                    }}
+                    onMouseOver={(e) => { e.currentTarget.style.borderColor = '#7B5233'; e.currentTarget.style.backgroundColor = '#FAF6F0'; }}
+                    onMouseOut={(e) => { e.currentTarget.style.borderColor = '#EADCC9'; e.currentTarget.style.backgroundColor = '#FDFAF7'; }}
+                  >
+                    <span style={{ fontSize: '0.75rem', color: '#7B5233', fontWeight: '500' }}>
+                      + Kéo thả hoặc bấm vào đây để tải lên thêm 1 hoặc nhiều file con
+                    </span>
+                  </div>
                 </div>
               </div>
             );

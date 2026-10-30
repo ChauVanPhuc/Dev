@@ -68,7 +68,7 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
     iso_document_code: '',
     iso_document_name: '',
     revision_logs: [
-      { seq_no: 1, rev_date: '', content: 'Ban h├ánh lß║ºn ─æß║ºu', page_no: 'Tß║Ñt cß║ú' }
+      { seq_no: 1, rev_date: '', content: 'Ban hành lần đầu', page_no: 'Toàn bộ' }
     ],
     sections: {},
     section_types: {},
@@ -128,7 +128,8 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
           if (t.id === templateId) {
             return {
               ...t,
-              file_name: res.file_name,
+              file_name: res.file_name || file.name,
+              original_file_name: res.file_name || file.name,
               file_path: res.file_path
             };
           }
@@ -156,19 +157,87 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
         return t;
       })
     }));
-    showFeedback('success', '─É├ú x├│a file ─æ├¡nh k├¿m!');
+    showFeedback('success', 'Đã xóa file đính kèm chính!');
+  };
+
+  const handleUploadChildFiles = async (e, templateId) => {
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    if (!files.length) return;
+
+    const formDataPay = new FormData();
+    files.forEach(file => {
+      formDataPay.append('files', file);
+    });
+
+    showFeedback('info', `Đang tải lên ${files.length} tệp con đính kèm...`);
+    try {
+      const res = await api.post('/iso-documents/upload-multiple-attachments', formDataPay, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+
+      const newUploadedFiles = res.data?.files || res.files || [];
+      if (!newUploadedFiles.length) {
+        showFeedback('warning', 'Không có tệp con nào được tải lên hợp lệ.');
+        return;
+      }
+
+      setFormData(prev => ({
+        ...prev,
+        related_templates: (prev.related_templates || []).map(t => {
+          if (t.id === templateId) {
+            const currentSubFiles = Array.isArray(t.sub_files) ? [...t.sub_files] : [];
+            return {
+              ...t,
+              sub_files: [...currentSubFiles, ...newUploadedFiles]
+            };
+          }
+          return t;
+        })
+      }));
+      showFeedback('success', `Đã tải lên thành công ${newUploadedFiles.length} tệp con đính kèm!`);
+    } catch (err) {
+      console.error('Lỗi khi upload tệp con đính kèm:', err);
+      showFeedback('error', err.response?.data?.detail || 'Không thể tải lên tệp con đính kèm');
+    } finally {
+      if (e.target) e.target.value = '';
+    }
+  };
+
+  const handleDeleteChildFile = (templateId, childFileId) => {
+    setFormData(prev => ({
+      ...prev,
+      related_templates: (prev.related_templates || []).map(t => {
+        if (t.id === templateId) {
+          const updatedSubFiles = (t.sub_files || []).filter(f => f.id !== childFileId);
+          return {
+            ...t,
+            sub_files: updatedSubFiles
+          };
+        }
+        return t;
+      })
+    }));
+    showFeedback('success', 'Đã xóa tệp con đính kèm!');
   };
 
   const handleAddRelatedTemplate = () => {
     const newId = `template_${Date.now()}`;
+    const nextIdx = (formData.related_templates || []).length + 1;
+    const suffix = `BM${String(nextIdx).padStart(2, '0')}`;
+    const procCode = (formData.new_code || formData.code || 'G7.QL.QT01').trim();
     const newT = {
       id: newId,
-      code: `BM${String((formData.related_templates || []).length + 1).padStart(2, '0')}`,
-      title: 'T├ái liß╗çu mß╗øi',
-      scope: 'Tß║Ñt cß║ú',
+      code: `${procCode}-${suffix}`,
+      title: `Biểu mẫu ${suffix}`,
+      scope: 'Tất cả',
       note: '',
       file_name: '',
-      file_path: ''
+      file_path: '',
+      sub_files: [],
+      storage_location: formData.department_name || 'Ban Quản trị Chất lượng & ISO (QLCL)',
+      retention_period: '03 năm'
     };
     setFormData(prev => ({
       ...prev,
@@ -766,9 +835,11 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
       generateNextQTCode(isProcessMode).then(nextCode => {
         const parsedName = parsed.name || '';
         const isGenericName = isGenericNameText(parsedName);
+        const resolvedCode = (parsed.code || '').trim() || (parsed.symbol || '').trim() || nextCode || 'G7.CL -QT01';
         setFormData({
           id: null,
-          code: nextCode,
+          code: resolvedCode,
+          new_code: resolvedCode,
           name: isGenericName ? '' : parsedName,
           version: parsed.version || '01',
           issue_date: parsed.issue_date || new Date().toISOString().split('T')[0],
@@ -782,9 +853,12 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
           doc_type: parsed.doc_type || '',
           document_level: parsed.document_level || '',
           revision_logs: parsed.revision_logs && parsed.revision_logs.length > 0 ? parsed.revision_logs : [
-            { seq_no: 1, rev_date: '', content: 'Ban h├ánh lß║ºn ─æß║ºu', page_no: 'Tß║Ñt cß║ú' }
+            { seq_no: 1, rev_date: '', content: 'Ban hành lần đầu', page_no: 'Toàn bộ' }
           ],
-          sections: newSections,
+          sections: {
+            ...newSections,
+            ...(parsed.html_content ? { '__full_html__': parsed.html_content } : {})
+          },
           template_sections: newSections,
           section_types: newSectionTypes,
           steps: (parsed.steps || []).map(step => ({
@@ -822,7 +896,8 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
       generateNextQTCode(isProcessMode).then(nextCode => {
         setFormData(prev => ({
           ...prev,
-          code: nextCode
+          code: nextCode,
+          new_code: nextCode
         }));
       });
     }
@@ -949,6 +1024,8 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
         section_types: sectionTypes,
         steps: (data.steps || []).map(step => ({
           ...step,
+          template_files: step.template_files || step.transition?.template_files || '',
+          standard: step.standard || step.transition?.standard || '',
           node_type: step.transition?.node_type || step.node_type || 'task',
           has_branch: step.transition?.has_branch !== undefined ? step.transition.has_branch : (step.has_branch || false),
           fail_path: step.transition?.fail_path || step.fail_path || [],
@@ -1588,6 +1665,27 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
     const previewEl = document.getElementById("pdf-preview-document-root");
     if (!previewEl) return;
 
+    const rawCode = (formData.new_code || '').trim() || (formData.code || '').trim() || (formData.symbol || '').trim();
+    const effCode = rawCode || 'G7.CL -QT01';
+    const rawLogs = Array.isArray(formData.revision_logs) ? formData.revision_logs : [];
+    const validLogs = rawLogs.filter(l => l && (l.content || l.rev_date || l.seq_no));
+    let effVer = (formData.version || '01').trim();
+    let effDate = (formData.issue_date || '').trim();
+    if (validLogs.length > 0) {
+      const seqNums = validLogs.map(l => Number(l.seq_no)).filter(n => !isNaN(n) && n > 0);
+      const maxSeq = seqNums.length > 0 ? Math.max(...seqNums) : validLogs.length;
+      effVer = String(maxSeq).padStart(2, '0');
+      for (let i = validLogs.length - 1; i >= 0; i--) {
+        const d = validLogs[i].rev_date;
+        if (d && String(d).trim()) {
+          effDate = String(d).trim();
+          break;
+        }
+      }
+    }
+    if (/^\d+$/.test(effVer)) effVer = effVer.padStart(2, '0');
+    if (!effDate) effDate = (formData.issue_date || '15/10/2026').trim();
+
     // Clone the DOM so we can manipulate it (replacing SVGs with PNGs for Word compat)
     const clone = previewEl.cloneNode(true);
 
@@ -1793,8 +1891,8 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
               border: none !important;
               border-top: 1.0pt solid windowtext !important;
               font-family: 'Times New Roman', serif;
-              font-size: 9.5pt;
-              font-style: italic;
+              font-size: 10pt;
+              font-style: normal;
             }
             table.MsoFooter td {
               border: none !important;
@@ -1819,6 +1917,17 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
               border: 1.0pt solid windowtext;
               padding: 10px;
               margin-bottom: 15px;
+            table.MsoFooter, table.MsoFooter tr, table.MsoFooter td {
+              border: none !important;
+              mso-border-alt: none !important;
+              mso-border-top-alt: none !important;
+              mso-border-bottom-alt: none !important;
+              mso-border-left-alt: none !important;
+              mso-border-right-alt: none !important;
+            }
+            table.MsoFooter {
+              border-top: 1.0pt solid windowtext !important;
+              mso-border-top-alt: 1.0pt solid windowtext !important;
             }
           </style>
         </head>
@@ -1826,14 +1935,14 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
           <div class="Section1">
             ${html}
           </div>
-          <!-- Real Word Footer pinned to bottom margin of every page -->
+          <!-- Real Word Footer pinned to bottom margin of every page (Khong co ke khung o, chi co duong ke ngang don o tren) -->
           <div style="mso-element:footer" id="f1">
-            <table class="MsoFooter">
-              <tr>
-                <td style="text-align:left; width:28%;">Mã hiệu: ${formData.code || '---'}</td>
-                <td style="text-align:center; width:28%;">Ngày ban hành: ${formData.issue_date || '---'}</td>
-                <td style="text-align:center; width:24%;">Lần ban hành: ${formData.version || '01'}</td>
-                <td style="text-align:right; width:20%;">Trang <span style="mso-field-code: PAGE "></span> / <span style="mso-field-code: NUMPAGES "></span></td>
+            <table class="MsoFooter" border="0" cellspacing="0" cellpadding="0" style="width:100%; border-collapse:collapse; border:none !important; mso-border-alt:none !important; border-top:1.0pt solid windowtext !important; mso-border-top-alt:1.0pt solid windowtext !important; font-family:'Times New Roman',serif; font-size:10pt; color:#0D0D0D; margin-top:4pt;">
+              <tr style="border:none !important; mso-border-alt:none !important;">
+                <td style="border:none !important; mso-border-alt:none !important; padding:3pt 0; text-align:left; width:28%;">Mã hiệu: ${effCode}</td>
+                <td style="border:none !important; mso-border-alt:none !important; padding:3pt 0; text-align:center; width:22%;">Lần ban hành: ${effVer}</td>
+                <td style="border:none !important; mso-border-alt:none !important; padding:3pt 0; text-align:center; width:28%;">Ngày ban hành: ${effDate}</td>
+                <td style="border:none !important; mso-border-alt:none !important; padding:3pt 0; text-align:right; width:22%;">Trang: <span style="mso-field-code: PAGE ">1</span>/<span style="mso-field-code: NUMPAGES ">${pages?.length || 6}</span></td>
               </tr>
             </table>
           </div>
@@ -2076,8 +2185,12 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
       });
 
       const stepsToSave = formData.steps.map(step => {
+        const tFiles = step.template_files || step.transition?.template_files || '';
+        const std = step.standard || step.transition?.standard || '';
         const nextTransition = {
           ...(step.transition || {}),
+          template_files: tFiles,
+          standard: std,
           node_type: step.node_type || 'task',
           has_branch: step.has_branch || false,
           fail_path: getStepFailPath(step),
@@ -2085,6 +2198,8 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
         };
         return {
           ...step,
+          template_files: tFiles,
+          standard: std,
           transition: nextTransition
         };
       });
@@ -2283,6 +2398,8 @@ const useISOProcessEditor = ({ setCustomTitle, setCustomSubtitle, setCustomScree
     handleSetFlowchartMode,
     fetchSystemTemplates,
     handleUploadAttachment,
+    handleUploadChildFiles,
+    handleDeleteChildFile,
     handleDeleteAttachment,
     handleAddRelatedTemplate,
     handleDeleteRelatedTemplate,

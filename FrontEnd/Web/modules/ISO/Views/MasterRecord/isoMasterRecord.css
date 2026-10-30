@@ -18,6 +18,7 @@
   min-height: 0 !important;
   padding: 8px 14px 8px 14px !important;
   overflow: hidden !important;
+  overflow-x: hidden !important;
   display: flex !important;
   flex-direction: column !important;
   box-sizing: border-box !important;
@@ -4356,12 +4357,13 @@
   display: flex !important;
   justify-content: space-between !important;
   align-items: center !important;
-  font-family: 'Times New Roman', serif !important;
+  font-family: 'Times New Roman', Times, serif !important;
   font-size: 10pt !important;
-  font-style: italic !important;
+  font-style: normal !important;
   color: #0D0D0D !important;
   user-select: none !important;
   box-sizing: border-box !important;
+  width: 100% !important;
 }
 
 .iso-word-a4-page:focus {

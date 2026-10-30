@@ -500,7 +500,7 @@ export const SignatureModal = ({
                 <input
                   type="text"
                   className="iso-search-input"
-                  placeholder="VD: Nguyễn Văn An, Trần Đình Hùng..."
+                  placeholder="VD: Đặng Văn Nam, Lương Thị Thanh Tâm..."
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   required

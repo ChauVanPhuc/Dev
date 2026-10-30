@@ -1,0 +1,141 @@
+/* Cây biểu mẫu đính kèm quy trình ISO (Gold Design System) */
+.iso-tree {
+  margin-top: 4px;
+  max-width: 420px;
+}
+
+.iso-tree-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px 2px 4px;
+  border: 1px solid #EADCC9;
+  border-radius: 12px;
+  background: #FAF7F2;
+  color: #7B5233;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.iso-tree-toggle:hover {
+  background: #F3E9DA;
+  border-color: #D9C7AE;
+}
+
+.iso-tree-chevron {
+  transition: transform 0.25s ease;
+}
+
+.iso-tree.is-open .iso-tree-chevron {
+  transform: rotate(90deg);
+}
+
+/* Animation mở/đóng bằng grid-template-rows */
+.iso-tree-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.25s ease;
+}
+
+.iso-tree.is-open .iso-tree-body {
+  grid-template-rows: 1fr;
+}
+
+.iso-tree-body-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+.iso-tree.is-open .iso-tree-body-inner {
+  max-height: 260px;
+  overflow-y: auto;
+  padding-top: 4px;
+}
+
+.iso-tree-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 10px;
+}
+
+.iso-tree-list--nested {
+  padding-left: 22px;
+}
+
+.iso-tree-node {
+  position: relative;
+  padding: 2px 0 2px 18px;
+}
+
+/* Đường dọc */
+.iso-tree-node::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-left: 1.5px solid #D9C7AE;
+}
+
+.iso-tree-node.is-last::before {
+  bottom: auto;
+  height: 14px;
+}
+
+/* Đường ngang */
+.iso-tree-node::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 14px;
+  width: 14px;
+  border-top: 1.5px solid #D9C7AE;
+}
+
+.iso-tree-node-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 8px;
+  border: 1px solid #E2E8F0;
+  border-radius: 6px;
+  background: #F8FAFC;
+  font-size: 0.8rem;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.iso-tree-node-content:hover {
+  background: #FAF6F0;
+  border-color: #EADCC9;
+}
+
+.iso-tree-node--child > .iso-tree-node-content {
+  background: #FFFDF9;
+  font-size: 0.77rem;
+}
+
+.iso-tree-code {
+  font-weight: 700;
+  color: #7B5233;
+  white-space: nowrap;
+}
+
+.iso-tree-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #334155;
+  font-weight: 500;
+}
+
+.iso-tree-version {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #64748B;
+}

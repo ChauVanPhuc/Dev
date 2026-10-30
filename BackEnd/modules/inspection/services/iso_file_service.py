@@ -15,6 +15,7 @@ import datetime
 import unicodedata
 from typing import List, Dict, Any, Optional, Tuple
 import copy
+import math
 
 import docx
 from docx.oxml import parse_xml, OxmlElement
@@ -59,6 +60,143 @@ os.makedirs(DRAFTS_ISO_DIR, exist_ok=True)
 # Thư mục gốc chuẩn mới 'Hồ sơ G7'
 HO_SO_G7_DIR = os.path.join(WORKSPACE_ROOT, "Hồ sơ G7")
 os.makedirs(HO_SO_G7_DIR, exist_ok=True)
+
+
+# Danh sách ngày nghỉ lễ Việt Nam cố định và âm lịch theo yêu cầu chuẩn hóa Revision Logs
+_HOLIDAYS_2025_MAR_MAY = {
+    datetime.date(2025, 4, 7),   # Giỗ Tổ Hùng Vương (10/3 AL)
+    datetime.date(2025, 4, 30),  # 30/4
+    datetime.date(2025, 5, 1),   # 1/5
+    datetime.date(2025, 5, 2),   # Nghỉ bù / hoán đổi dịp lễ
+}
+
+_HOLIDAYS_2026_JAN_JUN = {
+    datetime.date(2026, 1, 1),
+    datetime.date(2026, 1, 2),
+    # Tết Nguyên Đán 2026 (14/02 - 22/02/2026)
+    datetime.date(2026, 2, 14), datetime.date(2026, 2, 15), datetime.date(2026, 2, 16),
+    datetime.date(2026, 2, 17), datetime.date(2026, 2, 18), datetime.date(2026, 2, 19),
+    datetime.date(2026, 2, 20), datetime.date(2026, 2, 21), datetime.date(2026, 2, 22),
+    # Giỗ Tổ Hùng Vương 2026
+    datetime.date(2026, 4, 26), datetime.date(2026, 4, 27),
+    # 30/4 - 1/5 2026
+    datetime.date(2026, 4, 30), datetime.date(2026, 5, 1), datetime.date(2026, 5, 2), datetime.date(2026, 5, 3),
+}
+
+_HOLIDAYS_2026_SEP_OCT = {
+    datetime.date(2026, 9, 1),
+    datetime.date(2026, 9, 2),
+    datetime.date(2026, 9, 3),
+}
+
+def _get_business_days_pool(start_date: datetime.date, end_date: datetime.date, holidays: set) -> List[datetime.date]:
+    days = []
+    curr = start_date
+    while curr <= end_date:
+        if curr.weekday() not in (5, 6) and curr not in holidays:
+            days.append(curr)
+        curr += datetime.timedelta(days=1)
+    return days
+
+_POOL_MAR_MAY_2025 = _get_business_days_pool(datetime.date(2025, 3, 1), datetime.date(2025, 5, 31), _HOLIDAYS_2025_MAR_MAY)
+_POOL_JAN_JUN_2026 = _get_business_days_pool(datetime.date(2026, 1, 1), datetime.date(2026, 6, 30), _HOLIDAYS_2026_JAN_JUN)
+_POOL_SEP_OCT_2026 = _get_business_days_pool(datetime.date(2026, 9, 1), datetime.date(2026, 10, 31), _HOLIDAYS_2026_SEP_OCT)
+
+def generate_standard_revision_logs(seed_key: Any = None) -> List[Dict[str, Any]]:
+    """
+    Sinh danh sách lịch sử sửa đổi (Revision Logs) chuẩn hóa theo quy định:
+    1. Lần ban hành đầu tiên (seq_no = 1): Ngày làm việc ngẫu nhiên Tháng 3 - Tháng 5/2025 (loại trừ T7, CN, ngày lễ).
+       Nội dung: 'Ban hành lần đầu', Trang số: 'Toàn bộ'.
+    2. Lần ban hành 2, 3 (ngẫu nhiên 0, 1 hoặc 2 lần trung gian): Ngày làm việc ngẫu nhiên Tháng 1 - Tháng 6/2026 (tăng dần).
+       Nội dung: 'Điều chỉnh, cập nhật, nội dung định kỳ', Trang số: 'Toàn bộ'.
+    3. Lần ban hành tiếp theo (lần cuối cùng hiện tại - seq_no = 2, 3 hoặc 4): Ngày làm việc ngẫu nhiên Tháng 9 - Tháng 10/2026.
+       Nội dung: 'Thay đổi khung mẫu tài liệu', Trang số: 'Toàn bộ'.
+    """
+    import random
+    seed_val = None
+    if seed_key is not None:
+        if isinstance(seed_key, int):
+            seed_val = seed_key
+        else:
+            seed_val = sum(ord(c) * (31 ** (i % 8)) for i, c in enumerate(str(seed_key)))
+    
+    rng = random.Random(seed_val)
+    
+    # 1. Ban hành lần đầu
+    d1 = rng.choice(_POOL_MAR_MAY_2025)
+    logs = [{
+        "seq_no": 1,
+        "rev_date": d1.strftime("%d/%m/%Y"),
+        "content": "Ban hành lần đầu",
+        "page_no": "Toàn bộ",
+        "modifier": "Hệ thống"
+    }]
+    
+    # 2. Lần ban hành 2, 3 (ngẫu nhiên 0, 1 hoặc 2 lần)
+    middle_count = rng.choice([0, 1])
+    if middle_count > 0:
+        middle_dates = sorted(rng.sample(_POOL_JAN_JUN_2026, middle_count))
+        for m_d in middle_dates:
+            logs.append({
+                "seq_no": len(logs) + 1,
+                "rev_date": m_d.strftime("%d/%m/%Y"),
+                "content": "Điều chỉnh, cập nhật, nội dung định kỳ",
+                "page_no": "Toàn bộ",
+                "modifier": "Hệ thống"
+            })
+            
+    # 3. Lần ban hành tiếp theo (thay đổi khung mẫu tài liệu)
+    d_final = rng.choice(_POOL_SEP_OCT_2026)
+    logs.append({
+        "seq_no": len(logs) + 1,
+        "rev_date": d_final.strftime("%d/%m/%Y"),
+        "content": "Thay đổi khung mẫu tài liệu",
+        "page_no": "Toàn bộ",
+        "modifier": "Hệ thống"
+    })
+    
+    return logs
+
+def get_department_acronym(dept_name: Optional[str] = None, db: Any = None) -> str:
+    """Trả về ký tự viết tắt 2 ký tự chuẩn của phòng ban (QL, ISO, HC, AT, SX, KT, MH, KH, MT, KD, IT)."""
+    if not dept_name:
+        return "QL"
+    d_clean = str(dept_name).strip()
+    upper = d_clean.upper()
+    # 1. Quản lý Môi trường
+    if "MÔI TRƯỜNG" in upper or "MOI TRUONG" in upper:
+        return "MT"
+    # 2. Ban QLCL
+    if "QLCL" in upper or "CHẤT LƯỢNG" in upper or "CHAT LUONG" in upper:
+        return "QL"
+    # 3. Ban Giám Đốc hoặc Ban ISO (user quy ước BG thành ISO luôn)
+    if "GIÁM ĐỐC" in upper or "GIAM DOC" in upper or "BGD" in upper or "BG" in upper or "ISO" in upper:
+        return "ISO"
+    # 4. Hành chính - Nhân sự
+    if "HÀNH CHÍNH" in upper or "NHÂN SỰ" in upper or "HANH CHINH" in upper or "NHAN SU" in upper or "HCNS" in upper:
+        return "HC"
+    # 5. ATVSLĐ & PCCC
+    if "AN TOÀN" in upper or "PCCC" in upper or "ATVSLĐ" in upper or "AT" in upper:
+        return "AT"
+    # 6. Sản xuất
+    if "SẢN XUẤT" in upper or "SAN XUAT" in upper or "SX" in upper:
+        return "SX"
+    # 7. Kỹ thuật / Cơ điện
+    if "KỸ THUẬT" in upper or "CƠ ĐIỆN" in upper or "KY THUAT" in upper:
+        return "KT"
+    # 8. Mua hàng / Vật tư
+    if "MUA HÀNG" in upper or "MUA HANG" in upper or "NLVT" in upper or "VẬT TƯ" in upper or "MH" in upper:
+        return "MH"
+    # 9. Kho
+    if "KHO" in upper:
+        return "KH"
+    # 10. Kinh doanh / Bán hàng
+    if "KINH DOANH" in upper or "BÁN HÀNG" in upper or "BAN HANG" in upper:
+        return "KD"
+    # 11. IT
+    if "IT" in upper:
+        return "IT"
+    return "QL"
 
 _CACHED_VINA_G7_LOGO_B64: Optional[str] = None
 
@@ -272,6 +410,40 @@ def ensure_docx_path(abs_path: str) -> str:
         except Exception as e:
             print(f"[EnsureDocx] Lỗi convert .doc sang .docx: {e}")
     return abs_path
+
+
+def ensure_docx_bytes(file_bytes: bytes, original_filename: str = "document.doc") -> bytes:
+    """
+    Nhận vào byte stream của file Word (.doc hoặc .docx).
+    - Nếu đã là .docx (bắt đầu bằng ZIP signature PK: 0x50, 0x4B): trả về nguyên bản.
+    - Nếu là .doc: Lưu file tạm vào PREVIEW_CACHE_DIR, gọi Word COM chuyển đổi sang .docx, đọc lại byte và trả về.
+    """
+    if not file_bytes or len(file_bytes) < 4:
+        return file_bytes
+
+    # Kiểm tra ZIP signature: 0x50, 0x4B (PK)
+    if file_bytes[:2] == b"PK":
+        return file_bytes
+
+    import uuid
+    temp_id = uuid.uuid4().hex
+    temp_doc = os.path.join(PREVIEW_CACHE_DIR, f"upload_{temp_id}.doc")
+    try:
+        with open(temp_doc, "wb") as f:
+            f.write(file_bytes)
+        docx_path = ensure_docx_path(temp_doc)
+        if docx_path and os.path.exists(docx_path) and docx_path.lower().endswith(".docx"):
+            with open(docx_path, "rb") as f_out:
+                return f_out.read()
+    except Exception as e:
+        print(f"[ensure_docx_bytes] Lỗi chuyển đổi .doc sang .docx: {e}")
+    finally:
+        if os.path.exists(temp_doc):
+            try:
+                os.remove(temp_doc)
+            except Exception:
+                pass
+    return file_bytes
 
 
 def update_file_usage_status(
@@ -1251,7 +1423,172 @@ def get_record_files_and_word_docs(record, sibling_records: Optional[List[Any]] 
 
 
 
-def parse_docx_to_html_and_headings(abs_path: str) -> Dict[str, Any]:
+def _post_process_parsed_html(full_html: str) -> str:
+    """
+    Hậu xử lý HTML sau khi phân tích từ .docx:
+    1. Tự động chuyển danh sách Biểu mẫu dạng văn bản (Mục 6) thành Bảng 5 cột chuẩn ISO
+       (STT | Mã biểu mẫu | Tên biểu mẫu | Nơi lưu trữ | Thời hạn lưu)
+    2. Điền các khối node lưu đồ quy trình có màu sắc + mũi tên vào cột "Lưu đồ" (cột 2)
+       của bảng 4 cột nếu ô đó bị rỗng hoặc thiếu node trực quan.
+    """
+    if not full_html:
+        return full_html
+
+    try:
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(f"<div>{full_html}</div>", "html.parser")
+
+        # --- 0. BẢO TOÀN NGUYÊN VẸN KHỐI BẢNG HEADER THÔNG TIN CÔNG TY (Ảnh 3: Phú Tài - Vina G7) ---
+        # Giữ nguyên 100% nội dung gốc: file nào có thì giữ nguyên, không xóa bỏ bất kỳ phần nào
+
+        # Giữ nguyên 100% nội dung file gốc (không xóa bỏ bất kỳ bảng biểu, chữ ký hay đoạn văn nào)
+
+        # --- 1. TỰ ĐỘNG CHUYỂN DANH SÁCH BIỂU MẪU DẠNG CHỮ THÀNH BẢNG 5 CỘT ---
+        sec6 = None
+        for el in soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'p', 'div']):
+            txt = el.get_text(strip=True).lower()
+            if re.search(r'^(?:6[\.\s]*\s*biểu\s*mẫu|danh\s*mục\s*biểu\s*mẫu)', txt):
+                sec6 = el
+                break
+
+        if sec6:
+            form_items = []
+            sib = sec6.find_next_sibling()
+            nodes_to_remove = []
+            has_table = False
+            while sib and not re.match(r'^h[1-6]$', sib.name, re.I):
+                if 'iso-doc-footer-wrapper' in (sib.get('class') or []):
+                    break
+                if sib.name == 'table' or sib.find('table'):
+                    has_table = True
+                    break
+                text_line = sib.get_text(strip=True)
+                if text_line:
+                    m = re.match(r'^([A-Z0-9\.\/_-]+)\s*[\-_:]\s*(.+)$', text_line, re.I)
+                    if m:
+                        code = m.group(1).strip('_ ')
+                        name = m.group(2).strip('_ ')
+                        form_items.append({"code": code, "name": name})
+                        nodes_to_remove.append(sib)
+                    elif any(k in text_line.upper() for k in ['G7.', 'BM', 'QT', 'TCKT', 'QD', 'QĐ']):
+                        parts = re.split(r'\s*[\-_:]\s*', text_line, maxsplit=1)
+                        code = parts[0].strip('_ ')
+                        name = parts[1].strip('_ ') if len(parts) > 1 else text_line
+                        form_items.append({"code": code, "name": name})
+                        nodes_to_remove.append(sib)
+                sib = sib.find_next_sibling()
+
+            if not has_table and form_items:
+                for n in nodes_to_remove:
+                    n.decompose()
+                
+                rows_html = ""
+                for idx, item in enumerate(form_items):
+                    seq = idx + 1
+                    raw_code = item["code"].strip()
+                    code_str = re.sub(r'\s*-\s*', '-', raw_code)
+                    name_str = item["name"].strip()
+                    storage = "Ban hệ thống ISO\n(ISO)" if any(k in code_str.upper() for k in ["BM02", "BM03", "BM04", "ISO", "QLCL"]) else "Ban hệ thống ISO"
+                    retention = "12 tháng"
+                    rows_html += f"""
+                    <tr style="height: 30pt; background: #ffffff;">
+                      <td style="border: 1px solid #000000; text-align: left; padding: 6px 8px; font-size: 11pt; font-family: 'Times New Roman', serif; color: #000000; vertical-align: middle;">{code_str}</td>
+                      <td style="border: 1px solid #000000; text-align: left; padding: 6px 8px; font-size: 11pt; font-family: 'Times New Roman', serif; color: #000000; vertical-align: middle;">{name_str}</td>
+                      <td style="border: 1px solid #000000; padding: 6px 6px; font-size: 11pt; font-family: 'Times New Roman', serif; color: #000000; text-align: center; vertical-align: middle; white-space: pre-line;">{storage}</td>
+                      <td style="border: 1px solid #000000; text-align: center; padding: 6px 6px; font-size: 11pt; font-family: 'Times New Roman', serif; color: #000000; vertical-align: middle;">{retention}</td>
+                    </tr>
+                    """
+                
+                forms_table_soup = BeautifulSoup(f"""
+                <div class="iso-doc-forms-container" style="margin: 16px 0; font-family: 'Times New Roman', Times, serif;">
+                  <table class="iso-doc-forms-table" style="width: 100%; border-collapse: collapse; border: 1px solid #000000; table-layout: fixed; margin-top: 8px; background: #ffffff;">
+                    <thead>
+                      <tr style="background: #ffffff; font-weight: bold; text-align: center; height: 32pt;">
+                        <th style="border: 1px solid #000000; width: 26%; padding: 6px 6px; font-size: 11pt; font-family: 'Times New Roman', serif; text-align: center; vertical-align: middle;">Mã hiệu biểu mẫu</th>
+                        <th style="border: 1px solid #000000; width: 38%; padding: 6px 8px; font-size: 11pt; font-family: 'Times New Roman', serif; text-align: center; vertical-align: middle;">Tên biểu mẫu / Hồ sơ kiểm soát</th>
+                        <th style="border: 1px solid #000000; width: 20%; padding: 6px 6px; font-size: 11pt; font-family: 'Times New Roman', serif; text-align: center; vertical-align: middle;">Nơi lưu trữ</th>
+                        <th style="border: 1px solid #000000; width: 16%; padding: 6px 6px; font-size: 11pt; font-family: 'Times New Roman', serif; text-align: center; vertical-align: middle;">Thời hạn lưu</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows_html}
+                    </tbody>
+                  </table>
+                </div>
+                """, "html.parser")
+                sec6.insert_after(forms_table_soup)
+
+        # --- 2. TỰ ĐỘNG ĐIỀN KHỐI LƯU ĐỒ VÀO CỘT 2 NẾU RỖNG HOẶC CHƯA CÓ NODE ---
+        step_names = {}
+        for p in soup.find_all(['p', 'div', 'h1', 'h2', 'h3']):
+            t = p.get_text(strip=True)
+            m = re.match(r'^(?:Bước|B)\s*(\d+)[\s:.-]+(.+)$', t, re.I)
+            if m:
+                num = int(m.group(1))
+                name = m.group(2).strip()
+                if num not in step_names:
+                    step_names[num] = name
+
+        for tbl in soup.find_all('table'):
+            r0 = tbl.find('tr')
+            if not r0:
+                continue
+            txt = r0.get_text().lower()
+            if ('lưu đồ' in txt or 'sơ đồ' in txt) and ('trách nhiệm' in txt or 'bước' in txt):
+                # NẾU BẢNG ĐÃ CÓ HÌNH ẢNH SƠ ĐỒ/LƯU ĐỒ (IMG) ĐƯỢC CHÈN HOÀN CHỈNH TỪ FILE HOẶC DRAWING -> GIỮ NGUYÊN 100%
+                if tbl.find('img'):
+                    continue
+                rows = tbl.find_all('tr')
+                total_data_rows = len(rows) - 1
+                for r_idx in range(1, len(rows)):
+                    row = rows[r_idx]
+                    tds = row.find_all(['td', 'th'])
+                    if len(tds) >= 3:
+                        cell_flow = tds[2]
+                        if cell_flow.find('img'):
+                            continue
+                        cell_flow_text = cell_flow.get_text(strip=True)
+                        has_box = bool(cell_flow.find('div', style=re.compile(r'border')))
+                        if not has_box or not cell_flow_text or cell_flow_text == '&nbsp;' or cell_flow_text == '':
+                            step_num = r_idx
+                            step_title = step_names.get(step_num, f"Bước {step_num}")
+                            
+                            is_start = (step_num == 1)
+                            is_end = (step_num == total_data_rows)
+                            is_decision = ("kiểm tra" in step_title.lower() and ("đầu vào" in step_title.lower() or "chất lượng" in step_title.lower())) or "quyết định" in step_title.lower()
+                            
+                            bg_color = "#f0fdf4" if (is_start or is_end) else ("#fffbeb" if is_decision else "#eff6ff")
+                            border_color = "#16a34a" if (is_start or is_end) else ("#d97706" if is_decision else "#2563eb")
+                            text_color = "#15803d" if (is_start or is_end) else ("#b45309" if is_decision else "#1d4ed8")
+                            border_radius = "20px" if (is_start or is_end) else "6px"
+                            
+                            arrow_html = ""
+                            if step_num < total_data_rows:
+                                arrow_html = f'''
+                                <div style="display:flex; justify-content:center; align-items:center; margin:3px 0 -3px 0;">
+                                  <span style="font-size:12pt; color:{border_color}; font-weight:bold; line-height:1;">&#8595;</span>
+                                </div>
+                                '''
+                            
+                            node_box = f'''
+                            <div style="background:{bg_color}; border:1.5px solid {border_color}; border-radius:{border_radius}; padding:6px 10px; margin:4px auto; max-width:180px; text-align:center; font-family:'Times New Roman', serif; font-size:10.5pt; font-weight:bold; color:{text_color}; box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+                              {step_title}
+                            </div>
+                            {arrow_html}
+                            '''
+                            cell_flow.clear()
+                            cell_flow.append(BeautifulSoup(node_box, "html.parser"))
+
+        res = str(soup)
+        if res.startswith("<div>") and res.endswith("</div>"):
+            return res[5:-6]
+        return res
+    except Exception as e_post:
+        print(f"[_post_process_parsed_html] Warning: {e_post}")
+        return full_html
+
+
+def parse_docx_to_html_and_headings(abs_path: str, prepend_template: bool = True) -> Dict[str, Any]:
     """
     Phân tích file Word .docx thành HTML có cấu trúc và danh sách Mục lục (Headings).
     Giữ nguyên tối đa bảng biểu, định dạng, font chữ và hình ảnh embedded (dưới dạng Base64).
@@ -1260,6 +1597,7 @@ def parse_docx_to_html_and_headings(abs_path: str) -> Dict[str, Any]:
         raise FileNotFoundError(f"Không tìm thấy file: {abs_path}")
 
     doc = docx.Document(abs_path)
+    _NUMBERING_TRACKERS.clear()
 
     headings: List[Dict[str, Any]] = []
     html_parts: List[str] = []
@@ -1285,6 +1623,7 @@ def parse_docx_to_html_and_headings(abs_path: str) -> Dict[str, Any]:
             p_counter += 1
             text_val = p.text.strip()
             style_name = (p.style.name if p.style else "").lower()
+            list_label, list_left_tw = get_paragraph_list_label(p)
 
             # Kiểm tra xem đoạn văn có phải là Heading không
             is_heading = False
@@ -1358,13 +1697,22 @@ def parse_docx_to_html_and_headings(abs_path: str) -> Dict[str, Any]:
                     "level": heading_level
                 })
                 h_tag = f"h{min(heading_level, 4)}"
+                heading_text_html = clean_html_text(text_val)
+                if list_label and not text_val.startswith(list_label):
+                    heading_text_html = f'{list_label}&nbsp;{heading_text_html}'
                 html_parts.append(
-                    f'<{h_tag} id="{heading_id}" data-p-idx="{curr_p_idx}" class="iso-doc-heading level-{heading_level}" style="font-family: \'Times New Roman\', Times, serif;">{clean_html_text(text_val)}</{h_tag}>'
+                    f'<{h_tag} id="{heading_id}" data-p-idx="{curr_p_idx}" class="iso-doc-heading level-{heading_level}" style="font-family: \'Times New Roman\', Times, serif;">{heading_text_html}</{h_tag}>'
                 )
             elif text_val:
+                # Bỏ qua các đoạn văn bản rác tham chiếu in ấn cũ
+                if re.match(r'^\(?\s*xem\s+trang\s+(?:sau|tiếp|dưới)\s*\)?\.?$', text_val, re.IGNORECASE):
+                    continue
                 # Đoạn văn bản thông thường
                 p_html = render_paragraph_runs(p, image_map)
-                html_parts.append(f'<p class="iso-doc-paragraph" data-p-idx="{curr_p_idx}" style="font-family: \'Times New Roman\', Times, serif;">{p_html}</p>')
+                if list_label:
+                    p_html = f'<span class="iso-list-label">{list_label}&nbsp;</span>{p_html}'
+                p_css = _paragraph_css(p, list_left_tw)
+                html_parts.append(f'<p class="iso-doc-paragraph" data-p-idx="{curr_p_idx}" style="font-family: \'Times New Roman\', Times, serif; {p_css}">{p_html}</p>')
             else:
                 html_parts.append(f'<p class="iso-doc-paragraph empty-p" data-p-idx="{curr_p_idx}"><br/></p>')
 
@@ -1393,7 +1741,7 @@ def parse_docx_to_html_and_headings(abs_path: str) -> Dict[str, Any]:
     has_rev_log = any("THEO DÕI SỬA ĐỔI" in h.get("title", "").upper() for h in headings)
 
     # NẾU TÀI LIỆU CHƯA CÓ TRANG BÌA HOẶC THEO DÕI SỬA ĐỔI -> CẮT GỐC 2 TRANG ĐÓ TỪ MẪU QUY TRÌNH.DOCX GHÉP VÀO ĐẦU
-    if not has_standard_cover or not has_rev_log:
+    if prepend_template and (not has_standard_cover or not has_rev_log):
         try:
             candidates = [
                 os.path.join(WORKSPACE_ROOT, "Mẩu quy trình.docx"),
@@ -1472,6 +1820,7 @@ def parse_docx_to_html_and_headings(abs_path: str) -> Dict[str, Any]:
             )
 
     full_html = "\n".join(html_parts)
+    full_html = _post_process_parsed_html(full_html)
     return {
         "headings": headings,
         "html_content": full_html,
@@ -1676,6 +2025,22 @@ def get_template_original_2_pages_data(
             "content": "Ban hành lần đầu",
             "page_no": "Toàn bộ"
         }]
+    else:
+        seq_nums = []
+        for l in parsed_logs:
+            try:
+                n = int(l.get("seq_no", 0))
+                if n > 0:
+                    seq_nums.append(n)
+            except Exception:
+                pass
+        if seq_nums:
+            eff_ver = str(max(seq_nums)).zfill(2)
+        for l in reversed(parsed_logs):
+            d = str(l.get("rev_date") or "").strip()
+            if d:
+                eff_date = d
+                break
 
     # Dựng 9 hàng dữ liệu chuẩn (tổng 10 dòng gồm 1 header + 9 hàng dữ liệu) để luôn nằm vừa khít trong Trang 2
     total_rows = 9
@@ -1734,11 +2099,11 @@ def get_template_original_2_pages_data(
           </tbody>
         </table>
       </div>
-      <div class="iso-a4-sheet-footer" style="border-top:1px solid #000000; padding-top:6px; margin-top:20px; display:flex; justify-content:space-between; font-family:'Times New Roman', serif; font-size:10pt; font-style:italic; color:#0D0D0D;">
+      <div class="iso-a4-sheet-footer" style="height:28px; min-height:28px; border-top:1px solid #000000; padding-top:5px; margin-top:20px; display:flex; justify-content:space-between; align-items:center; font-family:'Times New Roman', serif; font-size:10pt; color:#0D0D0D; width:100%; box-sizing:border-box;">
         <span>Mã hiệu: {eff_code}</span>
-        <span>Ngày ban hành: {eff_date}</span>
         <span>Lần ban hành: {eff_ver}</span>
-        <span>Trang 2</span>
+        <span>Ngày ban hành: {eff_date}</span>
+        <span class="iso-sheet-page-num">Trang: 2/6</span>
       </div>
     </div>
     '''
@@ -1767,6 +2132,165 @@ def clean_html_text(text: str) -> str:
                 .replace('"', '&quot;')
                 .replace("'", '&#39;')
     )
+
+
+_NUMBERING_TRACKERS: Dict[int, Any] = {}
+
+
+def _int_to_roman(n: int) -> str:
+    vals = [(1000, 'M'), (900, 'CM'), (500, 'D'), (400, 'CD'), (100, 'C'), (90, 'XC'),
+            (50, 'L'), (40, 'XL'), (10, 'X'), (9, 'IX'), (5, 'V'), (4, 'IV'), (1, 'I')]
+    out = ''
+    for v, s in vals:
+        while n >= v:
+            out += s
+            n -= v
+    return out
+
+
+def _format_list_number(n: int, fmt: str) -> str:
+    if fmt == 'decimal':
+        return str(n)
+    if fmt == 'decimalZero':
+        return f"{n:02d}"
+    if fmt in ('lowerLetter', 'upperLetter'):
+        s = ''
+        m = n
+        while m > 0:
+            m, r = divmod(m - 1, 26)
+            s = chr(97 + r) + s
+        return s.upper() if fmt == 'upperLetter' else s
+    if fmt == 'lowerRoman':
+        return _int_to_roman(n).lower()
+    if fmt == 'upperRoman':
+        return _int_to_roman(n)
+    return str(n)
+
+
+class _ListNumbering:
+    """Tính nhãn đánh số (1., 2., a), •...) của Word từ numbering.xml, theo đúng thứ tự tài liệu."""
+
+    def __init__(self, part):
+        self.levels: Dict[Tuple[str, int], Dict[str, Any]] = {}   # (numId, ilvl) -> định nghĩa
+        self.counters: Dict[str, List[int]] = {}
+        try:
+            root = part.numbering_part.element
+        except Exception:
+            return
+        W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+        abstract = {}
+        for an in root.findall(f'{W}abstractNum'):
+            aid = an.get(f'{W}abstractNumId')
+            lv = {}
+            for lvl in an.findall(f'{W}lvl'):
+                ilvl = int(lvl.get(f'{W}ilvl', '0'))
+                start = lvl.find(f'{W}start')
+                fmt = lvl.find(f'{W}numFmt')
+                txt = lvl.find(f'{W}lvlText')
+                ind = lvl.find(f'{W}pPr/{W}ind')
+                left = None
+                if ind is not None:
+                    left = ind.get(f'{W}left') or ind.get(f'{W}start')
+                lv[ilvl] = {
+                    'start': int(start.get(f'{W}val')) if start is not None else 1,
+                    'fmt': fmt.get(f'{W}val') if fmt is not None else 'decimal',
+                    'text': txt.get(f'{W}val') if txt is not None else '%1.',
+                    'left_tw': int(left) if left and str(left).lstrip('-').isdigit() else None,
+                }
+            abstract[aid] = lv
+        for num in root.findall(f'{W}num'):
+            nid = num.get(f'{W}numId')
+            ref = num.find(f'{W}abstractNumId')
+            if ref is None:
+                continue
+            base = abstract.get(ref.get(f'{W}val'), {})
+            for ilvl, d in base.items():
+                self.levels[(nid, ilvl)] = dict(d)
+            for ov in num.findall(f'{W}lvlOverride'):
+                ilvl = int(ov.get(f'{W}ilvl', '0'))
+                so = ov.find(f'{W}startOverride')
+                if so is not None and (nid, ilvl) in self.levels:
+                    self.levels[(nid, ilvl)]['start'] = int(so.get(f'{W}val'))
+
+    @staticmethod
+    def _num_props(p: Paragraph):
+        W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+        num_pr = p._p.find(f'{W}pPr/{W}numPr')
+        style = p.style
+        guard = 0
+        while num_pr is None and style is not None and guard < 8:
+            num_pr = style.element.find(f'{W}pPr/{W}numPr')
+            style = style.base_style
+            guard += 1
+        if num_pr is None:
+            return None, 0
+        nid = num_pr.find(f'{W}numId')
+        il = num_pr.find(f'{W}ilvl')
+        nid_v = nid.get(f'{W}val') if nid is not None else None
+        il_v = int(il.get(f'{W}val')) if il is not None else 0
+        if not nid_v or nid_v == '0':
+            return None, 0
+        return nid_v, il_v
+
+    def label(self, p: Paragraph) -> Tuple[str, Optional[int]]:
+        """Trả về (nhãn, thụt lề trái twips) hoặc ('', None) nếu đoạn không đánh số."""
+        nid, ilvl = self._num_props(p)
+        if nid is None or (nid, ilvl) not in self.levels:
+            return '', None
+        d = self.levels[(nid, ilvl)]
+        cnt = self.counters.setdefault(nid, [0] * 9)
+        cnt[ilvl] = (cnt[ilvl] + 1) if cnt[ilvl] else d['start']
+        for deeper in range(ilvl + 1, 9):
+            cnt[deeper] = 0
+        if d['fmt'] == 'none':
+            return '', d['left_tw']
+        if d['fmt'] == 'bullet':
+            return '•', d['left_tw']
+        text = d['text']
+        for lv in range(ilvl + 1):
+            fmt_lv = self.levels.get((nid, lv), {}).get('fmt', 'decimal')
+            val = cnt[lv] if cnt[lv] else self.levels.get((nid, lv), {}).get('start', 1)
+            text = text.replace(f'%{lv + 1}', _format_list_number(val, fmt_lv))
+        return text, d['left_tw']
+
+
+def get_paragraph_list_label(p: Paragraph) -> Tuple[str, Optional[int]]:
+    """Nhãn đánh số của một đoạn (gọi đúng 1 lần cho mỗi đoạn, theo thứ tự tài liệu)."""
+    try:
+        part = p.part
+        key = id(part)
+        tracker = _NUMBERING_TRACKERS.get(key)
+        if tracker is None:
+            tracker = _ListNumbering(part)
+            _NUMBERING_TRACKERS[key] = tracker
+        return tracker.label(p)
+    except Exception as e_num:
+        print(f"[ListNumbering] Bỏ qua đánh số: {e_num}")
+        return '', None
+
+
+def _paragraph_css(p: Paragraph, list_left_tw: Optional[int] = None) -> str:
+    """CSS căn lề + thụt lề + khoảng cách đoạn theo định dạng Word gốc."""
+    css = []
+    try:
+        al = p.alignment
+        if al is not None:
+            css.append({0: 'text-align:left;', 1: 'text-align:center;', 2: 'text-align:right;', 3: 'text-align:justify;'}.get(int(al), ''))
+        pf = p.paragraph_format
+        left_pt = pf.left_indent.pt if pf.left_indent is not None else None
+        if left_pt is None and list_left_tw is not None:
+            left_pt = list_left_tw / 20.0
+        if left_pt:
+            css.append(f'padding-left:{left_pt:.1f}pt;')
+        if pf.first_line_indent is not None and pf.first_line_indent.pt:
+            css.append(f'text-indent:{pf.first_line_indent.pt:.1f}pt;')
+        if pf.space_before is not None:
+            css.append(f'margin-top:{pf.space_before.pt:.1f}pt;')
+        if pf.space_after is not None:
+            css.append(f'margin-bottom:{pf.space_after.pt:.1f}pt;')
+    except Exception:
+        pass
+    return ''.join(c for c in css if c)
 
 
 def render_paragraph_runs(p: Paragraph, image_map: Dict[str, str]) -> str:
@@ -1894,6 +2418,9 @@ def render_cell_paragraphs(cell: Any, image_map: Dict[str, str]) -> str:
             align_css = "text-align: justify;"
         
         p_html = render_paragraph_runs(p, image_map)
+        cell_label, _cell_left = get_paragraph_list_label(p)
+        if cell_label and p_html.strip():
+            p_html = f'<span class="iso-list-label">{cell_label}&nbsp;</span>{p_html}'
         
         style_rule = f"{align_css} font-family: 'Times New Roman', Times, serif;".strip()
         style_attr = f' style="{style_rule}"' if style_rule else ""
@@ -1904,6 +2431,19 @@ def render_cell_paragraphs(cell: Any, image_map: Dict[str, str]) -> str:
     if cell_imgs and not any('<img' in part for part in parts):
         for img_tag in cell_imgs:
             parts.insert(0, f'<p class="iso-cell-paragraph" style="text-align:center;">{img_tag}</p>')
+
+    # Nếu ô vẫn rỗng nhưng có văn bản nằm trong Drawing Shapes / Textbox / VML
+    if not parts or all(p.strip() == '<p class="iso-cell-paragraph"></p>' for p in parts):
+        shape_texts = []
+        for t_node in cell._tc.iter():
+            tag_name = t_node.tag.split('}')[-1]
+            if tag_name == 't' and t_node.text and t_node.text.strip():
+                clean_t = t_node.text.strip()
+                if clean_t not in shape_texts and not clean_t.isdigit():
+                    shape_texts.append(clean_t)
+        if shape_texts:
+            shape_combined = "<br/>".join([clean_html_text(t) for t in shape_texts])
+            parts.append(f'<p class="iso-cell-paragraph" style="text-align:center; font-family:\'Times New Roman\', serif; font-weight:bold; color:#0369a1; background:#f0f9ff; padding:4px 6px; border-radius:4px; border:1px solid #bae6fd;">{shape_combined}</p>')
 
     if not parts:
         return "&nbsp;"
@@ -1936,6 +2476,10 @@ def render_table_to_html(tbl: Table, image_map: Dict[str, str], table_idx: int =
     grid = [[tbl.rows[r].cells[c]._tc for c in range(n_cols)] for r in range(n_rows)]
     visited = set()
 
+    # Kiểm tra xem bảng có phải bảng quy trình/lưu đồ 4 cột (Bước, Trách nhiệm, Lưu đồ, Biểu mẫu/Phụ lục) không
+    first_row_text = "".join([tbl.rows[0].cells[c].text.lower() for c in range(n_cols)]) if n_rows > 0 else ""
+    is_step_flow_table = ("bước" in first_row_text or "stt" in first_row_text) and ("trách nhiệm" in first_row_text or "lưu đồ" in first_row_text)
+
     # Tự động phát hiện cột lưu đồ quy trình / hình ảnh cần gộp nhiều dòng (flowchart rowspan)
     # Xử lý trường hợp tác giả Word chèn 1 hình ảnh lưu đồ ở Bước 1 và để trống các ô Bước 2..N bên dưới
     flowchart_col_merge = {}
@@ -1946,7 +2490,7 @@ def render_table_to_html(tbl: Table, image_map: Dict[str, str], table_idx: int =
             for start_r in range(1, n_rows - 1):
                 cell_start = tbl.rows[start_r].cells[col_idx]
                 has_img = bool(cell_start._tc.xpath('.//a:blip'))
-                if has_img or is_fc_header:
+                if has_img:
                     empty_below = 0
                     for next_r in range(start_r + 1, n_rows):
                         next_cell = tbl.rows[next_r].cells[col_idx]
@@ -1956,7 +2500,7 @@ def render_table_to_html(tbl: Table, image_map: Dict[str, str], table_idx: int =
                             empty_below += 1
                         else:
                             break
-                    if empty_below >= 1 and (has_img or is_fc_header):
+                    if empty_below >= 1:
                         flowchart_col_merge[(start_r, col_idx)] = 1 + empty_below
                         break
 
@@ -2023,6 +2567,10 @@ def render_table_to_html(tbl: Table, image_map: Dict[str, str], table_idx: int =
             # Trích xuất nội dung ô (gồm các đoạn văn và ảnh)
             cell_inner_html = render_cell_paragraphs(cell, image_map)
 
+            # Nếu là bảng quy trình và ô cột Bước (c=0, r>0) bị rỗng do Word dùng numbering XML tự động: Tự động bù số bước
+            if is_step_flow_table and c == 0 and r > 0 and (not cell_inner_html or cell_inner_html.strip() == '&nbsp;' or cell_inner_html.strip() == ''):
+                cell_inner_html = f'<p class="iso-cell-paragraph" style="text-align:center; font-family:\'Times New Roman\', serif; font-weight:bold; font-size:11pt; color:#0D0D0D;">{r}</p>'
+
             # Đảm bảo ô (0, 0) của Bìa chuẩn (Table 0) luôn luôn hiển thị logo VINA G7
             if table_idx == 0 and r == 0 and c == 0:
                 logo_b64 = get_vina_g7_logo_base64()
@@ -2033,7 +2581,15 @@ def render_table_to_html(tbl: Table, image_map: Dict[str, str], table_idx: int =
 
             cell_extra_class = " iso-flowchart-cell" if (r, c) in flowchart_col_merge else ""
             valign_style = "vertical-align: middle; text-align: center;" if (r, c) in flowchart_col_merge else "vertical-align: middle;"
-            html.append(f'      <{tag} data-r="{r}" data-c="{c}"{span_str} class="{tag}{cell_extra_class}" style="border:1px solid #000000; padding:6px 8px; {valign_style} word-break:break-word; font-family: \'Times New Roman\', Times, serif;">{cell_inner_html}</{tag}>')
+            
+            # Cột Bước luôn khóa chống rớt chữ và căn giữa
+            extra_cell_style = ""
+            if is_step_flow_table and c == 0:
+                extra_cell_style = "white-space: nowrap; min-width: 65px; text-align: center; font-weight: bold;"
+            elif is_step_flow_table and c == 2:
+                extra_cell_style = "min-width: 140px; text-align: center;"
+
+            html.append(f'      <{tag} data-r="{r}" data-c="{c}"{span_str} class="{tag}{cell_extra_class}" style="border:1px solid #000000; padding:6px 8px; {valign_style} {extra_cell_style} word-break:break-word; font-family: \'Times New Roman\', Times, serif;">{cell_inner_html}</{tag}>')
             c += colspan
         html.append("    </tr>")
 
@@ -3795,6 +4351,51 @@ def get_document_page_images(doc_rel_path: str, dpi: int = 120) -> List[Dict[str
         return []
 
 
+def render_document_pages(abs_path: str, dpi: int = 170) -> Dict[str, Any]:
+    """
+    Render trung thực từng trang của file Word/PDF gốc (Word COM -> PDF -> PyMuPDF).
+    Trả về kích thước thật (pt, mm), hướng trang (portrait/landscape) và ảnh data URL từng trang.
+    Không chỉnh sửa file gốc.
+    """
+    result: Dict[str, Any] = {"success": False, "pages": [], "page_count": 0}
+    if not abs_path or not os.path.isfile(abs_path):
+        return result
+
+    pdf_abs = abs_path if abs_path.lower().endswith('.pdf') else convert_word_to_pdf_preview(abs_path)
+    if not pdf_abs or not os.path.isfile(pdf_abs):
+        return result
+
+    try:
+        import fitz
+        doc = fitz.open(pdf_abs)
+        pages = []
+        for i, page in enumerate(doc):
+            w_pt, h_pt = page.rect.width, page.rect.height
+            pix = page.get_pixmap(dpi=dpi)
+            try:
+                img_bytes = pix.tobytes('jpeg', jpg_quality=92)
+            except TypeError:
+                img_bytes = pix.tobytes('jpeg')
+            b64 = base64.b64encode(img_bytes).decode('ascii')
+            pages.append({
+                "page_number": i + 1,
+                "width_pt": round(w_pt, 2),
+                "height_pt": round(h_pt, 2),
+                "width_mm": round(w_pt * 25.4 / 72, 1),
+                "height_mm": round(h_pt * 25.4 / 72, 1),
+                "orientation": "landscape" if w_pt > h_pt else "portrait",
+                "width": pix.width,
+                "height": pix.height,
+                "data_url": f"data:image/jpeg;base64,{b64}"
+            })
+        doc.close()
+        result.update({"success": True, "pages": pages, "page_count": len(pages)})
+        return result
+    except Exception as e:
+        print(f"[RenderPages] Lỗi render trang: {e}")
+        return result
+
+
 def save_direct_edited_word_content(
     draft_rel_path: str,
     html_content: str,
@@ -4069,17 +4670,22 @@ def get_iso_process_template_path() -> str:
 
 def find_muc_dich_start_element(doc: docx.Document) -> Tuple[int, Optional[str]]:
     """
-    Tìm vị trí element bắt đầu của phần 'Mục đích'.
-    Hỗ trợ các dạng: '1. Mục đích', '1. MỤC ĐÍCH', 'I. MỤC ĐÍCH', 'Mục đích:', 'Mục đích và phạm vi'...
+    Tìm vị trí element bắt đầu của phần nội dung chính (Mục 1 / Mục đích / Tổng quan / Điều 1...).
+    Ưu tiên 1: Đề mục bắt đầu bằng số 1 (ví dụ: '1. Mục đích', '1. Tổng quan', 'I. Quy định chung', 'Điều 1'...)
+    Ưu tiên 2: Tiêu đề 'Mục đích' độc lập (không đi kèm số thứ tự >= 2)
     """
-    pattern = re.compile(r'^(?:(?:\d+|[IVXLCDM]+)[\.\:\s]+)?\s*mục\s*đích', re.IGNORECASE)
+    sec1_pattern = re.compile(r'^\s*(?:1\s*[\.\:\-]|I\s*[\.\:\-]|Điều\s*1\b|Phần\s*(?:1|I)\b|Chương\s*(?:1|I)\b)', re.IGNORECASE)
+    muc_dich_pattern = re.compile(r'^\s*(?:(?:1|I)[\.\:\s]+)?\s*mục\s*đích', re.IGNORECASE)
+
     for idx, child in enumerate(doc.element.body):
-        if isinstance(child, CT_P):
+        tag = child.tag.split('}')[-1]
+        if tag == 'p':
             p = docx.text.paragraph.Paragraph(child, doc)
             text = p.text.strip()
-            if pattern.search(text):
+            if sec1_pattern.match(text) or muc_dich_pattern.match(text):
                 return idx, text
     return -1, None
+
 
 
 def fill_metadata_into_template_docx(doc_tpl: docx.Document, metadata: Dict[str, Any]):
@@ -4094,10 +4700,45 @@ def fill_metadata_into_template_docx(doc_tpl: docx.Document, metadata: Dict[str,
     doc_code = (metadata.get("doc_code") or metadata.get("code") or metadata.get("new_code") or "").strip()
     version = (metadata.get("version") or metadata.get("edition") or "").strip()
     issue_date = (metadata.get("issue_date") or "").strip()
+
+    # Chuẩn hóa revision_logs và đồng bộ version, issue_date theo quy định
+    revision_logs = metadata.get("revision_logs")
+    if revision_logs:
+        if isinstance(revision_logs, str):
+            try:
+                revision_logs = json.loads(revision_logs)
+            except Exception:
+                revision_logs = []
+    if not revision_logs:
+        code_key = (doc_code or metadata.get("code") or metadata.get("new_code") or doc_title or "").strip()
+        revision_logs = generate_standard_revision_logs(code_key)
+
+    if revision_logs and isinstance(revision_logs, list):
+        seq_nums = []
+        for l in revision_logs:
+            try:
+                n = int(l.get("seq_no", 0))
+                if n > 0:
+                    seq_nums.append(n)
+            except Exception:
+                pass
+        if seq_nums:
+            version = str(max(seq_nums)).zfill(2)
+        elif len(revision_logs) > 0:
+            version = str(len(revision_logs)).zfill(2)
+
+        for l in reversed(revision_logs):
+            d = str(l.get("rev_date") or "").strip()
+            if d:
+                issue_date = d
+                break
     dept_name = (metadata.get("dept_name") or metadata.get("department_name") or metadata.get("folder") or "").strip()
     issuer_name = (metadata.get("issuer_name") or metadata.get("issuer") or metadata.get("editor") or metadata.get("owner") or "").strip()
     issuer_role = (metadata.get("issuer_role") or "").strip()
-    approver_name = (metadata.get("approver_name") or metadata.get("approver") or "").strip()
+    doc_level = (metadata.get("document_level") or "").strip()
+    approver_bgd = (metadata.get("approver_bgd") or "").strip()
+    raw_approver = (metadata.get("approver_name") or metadata.get("approver") or "").strip()
+    approver_name = (approver_bgd or raw_approver) if (doc_level == "Cấp công ty" or approver_bgd) else raw_approver
     approver_role = (metadata.get("approver_role") or "").strip()
 
     if issuer_name and not issuer_role:
@@ -4106,9 +4747,12 @@ def fill_metadata_into_template_docx(doc_tpl: docx.Document, metadata: Dict[str,
         issuer_role = "Nhân viên"
 
     if approver_name and not approver_role:
-        approver_role = _resolve_user_position(approver_name, default_title="Trưởng phòng / Ban Giám Đốc")
+        approver_role = _resolve_user_position(approver_name, default_title="Ban Giám Đốc")
     if not approver_role:
-        approver_role = "Trưởng phòng / Ban Giám Đốc"
+        approver_role = "Ban Giám Đốc"
+    approver_role = re.sub(r"^Trưởng phòng\s*/\s*", "", approver_role, flags=re.IGNORECASE).strip()
+    if approver_role in ["BGĐ", "BGD"]:
+        approver_role = "Ban Giám Đốc"
 
     # 1. Bìa (Table 0)
     def replace_placeholder_in_paragraphs(paras):
@@ -4338,8 +4982,12 @@ def fill_metadata_into_template_docx(doc_tpl: docx.Document, metadata: Dict[str,
     # 2. Bảng nhật ký sửa đổi (Table 1)
     if len(doc_tpl.tables) > 1:
         table_rev = doc_tpl.tables[1]
-        # Giới hạn tối đa 10 dòng (1 header + 9 dòng dữ liệu) để Table 1 TUYỆT ĐỐI KHÔNG tràn sang Trang 3
-        while len(table_rev.rows) > 10:
+        # Bổ sung thêm dòng nếu bảng có ít hơn 15 dòng (1 header + 14 dòng dữ liệu)
+        while len(table_rev.rows) < 15:
+            table_rev.add_row()
+
+        # Giới hạn tối đa 16 dòng để Table 1 TUYỆT ĐỐI KHÔNG tràn sang Trang 3
+        while len(table_rev.rows) > 16:
             last_row = table_rev.rows[-1]
             table_rev._tbl.remove(last_row._tr)
 
@@ -4354,20 +5002,9 @@ def fill_metadata_into_template_docx(doc_tpl: docx.Document, metadata: Dict[str,
             trHeight.set(qn('w:val'), h_val)
             trHeight.set(qn('w:hRule'), 'atLeast')
 
-        revision_logs = metadata.get("revision_logs")
-        if revision_logs:
-            if isinstance(revision_logs, str):
-                try:
-                    revision_logs = json.loads(revision_logs)
-                except Exception:
-                    revision_logs = []
         if not revision_logs:
-            revision_logs = [{
-                "seq_no": 1,
-                "rev_date": issue_date or "",
-                "content": "Ban hành lần đầu",
-                "page_no": "Tất cả"
-            }]
+            code_key = (doc_code or metadata.get("code") or metadata.get("new_code") or doc_title or "").strip()
+            revision_logs = generate_standard_revision_logs(code_key)
 
         if isinstance(revision_logs, list) and revision_logs:
             for idx, log in enumerate(revision_logs):
@@ -4378,8 +5015,11 @@ def fill_metadata_into_template_docx(doc_tpl: docx.Document, metadata: Dict[str,
                     if len(cells) >= 4:
                         cells[0].text = str(log.get("seq_no", idx + 1)).zfill(2)
                         cells[1].text = str(log.get("rev_date") or issue_date or "")
-                        cells[2].text = str(log.get("content") or "Cập nhật tài liệu")
-                        cells[3].text = str(log.get("page_no") or "Toàn bộ")
+                        cells[2].text = str(log.get("content") or "Thay đổi khung mẫu tài liệu")
+                        p_no = str(log.get("page_no") or "Toàn bộ")
+                        if p_no.lower() in ("tất cả", "tat ca", "all"):
+                            p_no = "Toàn bộ"
+                        cells[3].text = p_no
 
             # Xóa các chuỗi placeholder còn lại trong Table 1
             for clean_idx in range(len(revision_logs) + 1, len(table_rev.rows)):
@@ -4420,6 +5060,1066 @@ def fill_metadata_into_template_docx(doc_tpl: docx.Document, metadata: Dict[str,
 
 
 
+_FC_NS = {
+    'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
+    'wpg': 'http://schemas.microsoft.com/office/word/2010/wordprocessingGroup',
+    'wps': 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape',
+    'a': 'http://schemas.openxmlformats.org/drawingml/2006/main',
+    'wp': 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing',
+}
+
+
+def _fc_q(prefix: str, tag: str) -> str:
+    return '{%s}%s' % (_FC_NS[prefix], tag)
+
+
+def _fc_xfrm(sp_pr):
+    x = sp_pr.find('a:xfrm', _FC_NS) if sp_pr is not None else None
+    if x is None:
+        return None
+    off, ext = x.find('a:off', _FC_NS), x.find('a:ext', _FC_NS)
+    ch_off, ch_ext = x.find('a:chOff', _FC_NS), x.find('a:chExt', _FC_NS)
+    g = lambda e, k: float(e.attrib.get(k, 0)) if e is not None else 0.0
+    return dict(
+        x=g(off, 'x'), y=g(off, 'y'), w=g(ext, 'cx'), h=g(ext, 'cy'),
+        cx=g(ch_off, 'x'), cy=g(ch_off, 'y'), cw=g(ch_ext, 'cx'), ch=g(ch_ext, 'cy'),
+        flipH=x.attrib.get('flipH') in ('1', 'true'), flipV=x.attrib.get('flipV') in ('1', 'true'),
+    )
+
+
+def _fc_shape_info(wsp, T):
+    sp = wsp.find('wps:spPr', _FC_NS)
+    xf = _fc_xfrm(sp)
+    if xf is None:
+        return None
+    ax, bx, ay, by = T
+    prst = sp.find('a:prstGeom', _FC_NS)
+    geom = prst.attrib.get('prst', 'rect') if prst is not None else 'rect'
+    ln = sp.find('a:ln', _FC_NS)
+    tail_el = ln.find('a:tailEnd', _FC_NS) if ln is not None else None
+    head_el = ln.find('a:headEnd', _FC_NS) if ln is not None else None
+    tail = tail_el is not None and tail_el.attrib.get('type', 'none') != 'none'
+    head = head_el is not None and head_el.attrib.get('type', 'none') != 'none'
+    paras = []
+    for p in wsp.iter(_fc_q('w', 'p')):
+        t = ''.join((e.text or '') for e in p.iter(_fc_q('w', 't')))
+        if t.strip():
+            paras.append(' '.join(t.split()))
+    color, bold = '000000', False
+    for rpr in wsp.iter(_fc_q('w', 'rPr')):
+        c = rpr.find('w:color', _FC_NS)
+        if c is not None and c.attrib.get(_fc_q('w', 'val'), 'auto') != 'auto':
+            color = c.attrib.get(_fc_q('w', 'val'))
+        if rpr.find('w:b', _FC_NS) is not None:
+            bold = True
+        if c is not None:
+            break
+    return dict(
+        geom=geom, x=ax * xf['x'] + bx, y=ay * xf['y'] + by, w=ax * xf['w'], h=ay * xf['h'],
+        flipH=xf['flipH'], flipV=xf['flipV'], text=unicodedata.normalize('NFC', ' '.join(paras)),
+        tail=tail, head=head, color=color, bold=bold,
+    )
+
+
+def _fc_walk(node, T, out):
+    """Duyệt đệ quy group lồng nhau (wgp/grpSp), áp dụng đúng phép biến đổi off/ext/chOff/chExt."""
+    for ch in node:
+        tag = ch.tag.split('}')[1]
+        if tag == 'wsp':
+            s = _fc_shape_info(ch, T)
+            if s:
+                out.append(s)
+        elif tag in ('grpSp', 'wgp'):
+            xf = _fc_xfrm(ch.find('wpg:grpSpPr', _FC_NS))
+            if xf is None:
+                _fc_walk(ch, T, out)
+                continue
+            ax, bx, ay, by = T
+            ox, oy = ax * xf['x'] + bx, ay * xf['y'] + by
+            nax = (ax * xf['w']) / xf['cw'] if xf['cw'] else 1.0
+            nay = (ay * xf['h']) / xf['ch'] if xf['ch'] else 1.0
+            _fc_walk(ch, (nax, ox - xf['cx'] * nax, nay, oy - xf['cy'] * nay), out)
+
+
+def extract_flowchart_drawing_shapes(doc_element):
+    """Lấy toàn bộ shape (toạ độ tuyệt đối, EMU) của group lưu đồ lớn nhất trong file + các nhãn rời."""
+    best, best_n, labels = None, 0, []
+    for dw in doc_element.iter(_fc_q('w', 'drawing')):
+        anc = dw.find('wp:anchor', _FC_NS)
+        if anc is None:
+            anc = dw.find('wp:inline', _FC_NS)
+        if anc is None:
+            continue
+        top = dw.find('.//wpg:wgp', _FC_NS)
+        if top is not None:
+            shapes = []
+            xf = _fc_xfrm(top.find('wpg:grpSpPr', _FC_NS))
+            if xf:
+                a_x = xf['w'] / xf['cw'] if xf['cw'] else 1.0
+                a_y = xf['h'] / xf['ch'] if xf['ch'] else 1.0
+                T = (a_x, xf['x'] - xf['cx'] * a_x, a_y, xf['y'] - xf['cy'] * a_y)
+            else:
+                T = (1, 0, 1, 0)
+            _fc_walk(top, T, shapes)
+            if len(shapes) > best_n:
+                best, best_n = shapes, len(shapes)
+        else:
+            for wsp in dw.iter(_fc_q('wps', 'wsp')):
+                s = _fc_shape_info(wsp, (1, 0, 1, 0))
+                if s and s['text']:
+                    labels.append(s)
+    return best, labels
+
+
+def _fc_is_line(geom: str) -> bool:
+    g = (geom or '').lower()
+    return 'line' in g or 'connector' in g
+
+
+def render_flowchart_shapes_to_png(shapes, labels=None) -> Optional[Tuple[io.BytesIO, float, float]]:
+    """
+    Vẽ lại lưu đồ ĐÚNG như bố cục trong file Word (hình khối, vị trí, mũi tên, màu chữ, rẽ nhánh quay lại).
+    - Hỗ trợ đầy đủ khối quyết định (hình thoi) có rẽ nhánh quay lại (Return Branch) khi không đạt / không duyệt.
+    - Tự động nhận diện và vẽ mũi tên thẳng dọc, mũi tên ngang, mũi tên quay lại và các nhãn (Đồng ý, Đạt, NG, Không đạt).
+    Trả về (png_bytes_io, width_inch, height_inch).
+    """
+    from PIL import Image, ImageDraw, ImageFont
+    if not shapes:
+        return None
+    SC = 1.0 / 4762.5  # 2px / 9525 EMU (độ phân giải 2x sắc nét)
+    MARGIN = 16
+    boxes = [s for s in shapes if not _fc_is_line(s.get('geom', '')) and s.get('text')]
+    if not boxes:
+        return None
+
+    diamonds = [b for b in boxes if b.get('geom') == 'diamond']
+    lines = [s for s in shapes if _fc_is_line(s.get('geom', ''))]
+
+    # Kiểm tra và xác định các khối hình thoi (quyết định) cần vẽ rẽ nhánh quay lại
+    return_branches_to_draw = []
+    ordered_boxes = sorted(boxes, key=lambda b: b['y'])
+    box_to_idx = {b['text']: idx for idx, b in enumerate(ordered_boxes)}
+
+    for d_box in diamonds:
+        d_cy = d_box['y'] + d_box['h'] / 2
+        d_rx = d_box['x'] + d_box['w']
+        has_right_exit = any(
+            (l['x'] >= d_rx - 80000 or (l['x'] + l['w']) >= d_rx - 80000) and
+            abs((l['y'] + l['h'] / 2) - d_cy) < 200000
+            for l in lines
+        )
+        if not has_right_exit:
+            curr_i = box_to_idx.get(d_box['text'], 0)
+            if curr_i > 0:
+                tgt_box = ordered_boxes[curr_i - 1]
+                return_branches_to_draw.append((d_box, tgt_box))
+
+    # Mở rộng kích thước canvas bên phải vừa vặn nếu có rẽ nhánh quay lại để đủ chỗ chứa đường nối và nhãn
+    extra_w = 480000.0 if return_branches_to_draw else 0.0
+    xs = [s['x'] for s in shapes] + [s['x'] + s['w'] for s in shapes]
+    if return_branches_to_draw:
+        xs.append(max(xs) + extra_w)
+    ys = [s['y'] for s in shapes] + [s['y'] + s['h'] for s in shapes]
+    minx, miny, maxx, maxy = min(xs), min(ys), max(xs), max(ys)
+    W = int((maxx - minx) * SC) + MARGIN * 2
+    H = int((maxy - miny) * SC) + MARGIN * 2
+    px = lambda v: (v - minx) * SC + MARGIN
+    py = lambda v: (v - miny) * SC + MARGIN
+
+    img = Image.new('RGB', (W, H), (255, 255, 255))
+    d = ImageDraw.Draw(img)
+
+    def _font(bold=False, size=20):
+        names = (['timesbd.ttf', 'TimesNewRomanPS-BoldMT.ttf'] if bold else ['times.ttf']) + ['arial.ttf', 'DejaVuSerif.ttf']
+        for base in ('C:/Windows/Fonts/', '/usr/share/fonts/truetype/msttcorefonts/', '/usr/share/fonts/truetype/dejavu/'):
+            for n in names:
+                if os.path.exists(base + n):
+                    try:
+                        return ImageFont.truetype(base + n, size)
+                    except Exception:
+                        pass
+        return ImageFont.load_default()
+
+    def _arrow(x0, y0, x1, y1, color=(0, 0, 0)):
+        d.line([(x0, y0), (x1, y1)], fill=color, width=2)
+        ang = math.atan2(y1 - y0, x1 - x0)
+        L, Wd = 13, 5
+        bx, by = x1 - L * math.cos(ang), y1 - L * math.sin(ang)
+        d.polygon([(x1, y1), (bx + Wd * math.sin(ang), by - Wd * math.cos(ang)),
+                   (bx - Wd * math.sin(ang), by + Wd * math.cos(ang))], fill=color)
+
+    def _hex(c):
+        c = (c or '17365D').lstrip('#')
+        try:
+            return tuple(int(c[i:i + 2], 16) for i in (0, 2, 4))
+        except Exception:
+            return (23, 54, 93)
+
+    # 1) Khối hình (vẽ theo đúng thứ tự z-order của file)
+    for s in boxes:
+        x0, y0, x1, y1 = px(s['x']), py(s['y']), px(s['x'] + s['w']), py(s['y'] + s['h'])
+        cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+        theme_border = (23, 54, 93)
+        if s['geom'] == 'ellipse':
+            d.ellipse([x0, y0, x1, y1], fill=(255, 255, 255), outline=theme_border, width=2)
+            inner = 0.72
+        elif s['geom'] == 'diamond':
+            d.polygon([(cx, y0), (x1, cy), (cx, y1), (x0, cy)], fill=(255, 255, 255), outline=theme_border)
+            d.line([(cx, y0), (x1, cy), (cx, y1), (x0, cy), (cx, y0)], fill=theme_border, width=2)
+            inner = 0.52
+        else:
+            d.rectangle([x0, y0, x1, y1], fill=(255, 255, 255), outline=theme_border, width=2)
+            inner = 0.92
+
+        font = _font(s.get('bold', False), 22)
+        max_w = (x1 - x0) * inner
+        words, rows, cur = s['text'].split(), [], ''
+        for wd in words:
+            cand = (cur + ' ' + wd).strip()
+            if d.textlength(cand, font=font) <= max_w or not cur:
+                cur = cand
+            else:
+                rows.append(cur)
+                cur = wd
+        if cur:
+            rows.append(cur)
+        lh = 26
+        ty = cy - len(rows) * lh / 2
+        for r_i, r in enumerate(rows):
+            tw = d.textlength(r, font=font)
+            d.text((cx - tw / 2, ty + r_i * lh), r, fill=_hex(s.get('color')), font=font)
+
+    # 2) Connector có sẵn trong file
+    covered_vertical = []
+
+    def _draw_line(s):
+        x0, y0, x1, y1 = s['x'], s['y'], s['x'] + s['w'], s['y'] + s['h']
+        if s['flipH'] and s['w'] > 0:
+            x0, x1 = x1, x0
+        if s['flipV'] and s['h'] > 0:
+            y0, y1 = y1, y0
+        if s['head'] and not s['tail']:
+            x0, y0, x1, y1 = x1, y1, x0, y0
+        if s['tail'] or s['head']:
+            _arrow(px(x0), py(y0), px(x1), py(y1))
+        else:
+            d.line([(px(x0), py(y0)), (px(x1), py(y1))], fill=(0, 0, 0), width=2)
+        if s['w'] == 0:
+            covered_vertical.append((s['x'], min(s['y'], s['y'] + s['h']), max(s['y'], s['y'] + s['h'])))
+
+    for s in shapes:
+        if _fc_is_line(s.get('geom', '')):
+            _draw_line(s)
+
+    # 3) Suy ra mũi tên thẳng dọc bị thiếu giữa 2 khối xếp chồng dọc
+    gap_arrows = []
+    for i, a in enumerate(ordered_boxes):
+        a_cx = a['x'] + a['w'] / 2
+        a_bottom = a['y'] + a['h']
+        nxt = None
+        for b in ordered_boxes[i + 1:]:
+            if b['y'] >= a_bottom - 1 and b['x'] - 1 <= a_cx <= b['x'] + b['w'] + 1:
+                nxt = b
+                break
+        if not nxt:
+            continue
+        gap_top, gap_bot = a_bottom, nxt['y']
+        if gap_bot - gap_top < 60000:
+            continue
+        has = any(gap_top - 80000 <= ly1 and ly0 <= gap_bot + 80000 and a['x'] <= lx <= a['x'] + a['w']
+                  for (lx, ly0, ly1) in covered_vertical)
+        if not has:
+            ax_ = a_cx if nxt['x'] <= a_cx <= nxt['x'] + nxt['w'] else nxt['x'] + nxt['w'] / 2
+            _arrow(px(ax_), py(gap_top), px(ax_), py(gap_bot))
+            gap_arrows.append((a, ax_, gap_top, gap_bot))
+
+    # 4) Xử lý nhãn thuận quy trình ("Đồng ý", "Đạt", "Phê duyệt")
+    has_custom_ok_label = False
+    for lb in (labels or []):
+        t = lb['text'].strip()
+        tl = t.lower()
+        if tl in ('đồng ý', 'đạt', 'ok', 'yes', 'phê duyệt'):
+            for a, ax_, gt, gb in gap_arrows:
+                if a['geom'] == 'diamond':
+                    font_lbl = _font(False, 18)
+                    d.text((px(ax_) + 6, py(gt) + 4), t, fill=(3, 105, 161), font=font_lbl)
+                    has_custom_ok_label = True
+                    break
+
+    # Nếu file không có nhãn riêng nhưng có khối quyết định -> tự thêm nhãn thuận quy trình
+    if not has_custom_ok_label:
+        for a, ax_, gt, gb in gap_arrows:
+            if a['geom'] == 'diamond':
+                font_ok = _font(False, 18)
+                lbl_ok = "Phê duyệt" if "phê duyệt" in a['text'].lower() else "Đạt"
+                d.text((px(ax_) + 6, (py(gt) + py(gb)) / 2 - 9), lbl_ok, fill=(3, 105, 161), font=font_ok)
+
+    # 5) Vẽ Rẽ nhánh quay lại (Return Branch) cho khối quyết định (diamond)
+    for d_box, tgt_box in return_branches_to_draw:
+        x_dec_right = px(d_box['x'] + d_box['w'])
+        y_dec_cy = py(d_box['y'] + d_box['h'] / 2)
+        x_tgt_right = px(tgt_box['x'] + tgt_box['w'])
+        y_tgt_cy = py(tgt_box['y'] + tgt_box['h'] / 2)
+
+        max_right = max(px(s['x'] + s['w']) for s in boxes)
+        x_turn = max_right + 65
+
+        col_branch = (220, 38, 38)
+        # Đường gấp khúc 3 đoạn: Ngang -> Đi Lên -> Rẽ Trái vào khối đích (mũi tên hướng vào tgt)
+        d.line([(x_dec_right, y_dec_cy), (x_turn, y_dec_cy), (x_turn, y_tgt_cy), (x_tgt_right, y_tgt_cy)], fill=col_branch, width=2)
+        _arrow(x_tgt_right + 12, y_tgt_cy, x_tgt_right, y_tgt_cy, color=col_branch)
+
+        font_fail = _font(False, 18)
+        lbl_fail = "Không duyệt" if "phê duyệt" in d_box['text'].lower() else "K.Đạt"
+        lbl_x = x_dec_right + 8
+        lbl_y = y_dec_cy - 20
+        d.text((lbl_x, lbl_y), lbl_fail, fill=col_branch, font=font_fail)
+
+    # 6) Nhãn NG / Không đạt từ file Word (đặt tại nhánh rẽ ngang bên phải của diamond)
+    for lb in (labels or []):
+        t = lb['text'].strip()
+        tl = t.lower()
+        if tl in ('ng', 'không đạt', 'không', 'no', 'trả lại', 'lỗi', 'không duyệt'):
+            for db in diamonds:
+                d_rx = px(db['x'] + db['w'])
+                d_cy = py(db['y'] + db['h'] / 2)
+                font_lbl = _font(False, 18)
+                d.text((d_rx + 8, d_cy - 20), t, fill=(220, 38, 38), font=font_lbl)
+                break
+
+    out = io.BytesIO()
+    img.save(out, format='PNG')
+    out.seek(0)
+    return out, (W / 2.0) / 96.0, (H / 2.0) / 96.0
+
+
+def _fc_remove_broken_pictures(doc: docx.Document) -> int:
+    """Xoá các ảnh trong thân văn bản có r:embed trỏ tới relationship không tồn tại (ảnh hỏng -> ô trắng)."""
+    R_EMBED = '{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed'
+    removed = 0
+    rels = doc.part.rels
+    for dw in list(doc.element.iter(_fc_q('w', 'drawing'))):
+        for blip in dw.iter('{%s}blip' % _FC_NS['a']):
+            rid = blip.attrib.get(R_EMBED)
+            if rid and rid not in rels:
+                run = dw.getparent()
+                if run is not None and run.tag == _fc_q('w', 'r'):
+                    others = [c for c in run if c is not dw and c.tag != _fc_q('w', 'rPr')]
+                    if not others and run.getparent() is not None:
+                        run.getparent().remove(run)
+                        removed += 1
+                        break
+                if dw.getparent() is not None:
+                    dw.getparent().remove(dw)
+                    removed += 1
+                break
+    return removed
+
+
+def get_cell_full_text(cell) -> str:
+    """Lấy toàn bộ nội dung văn bản trong ô bảng, kể cả văn bản nằm trong hình vẽ VML (w:pict, v:shape, v:roundrect) hoặc DrawingML."""
+    if cell is None:
+        return ""
+    t = cell.text.strip()
+    if t:
+        return t
+    vml_texts = []
+    for elem in cell._tc.xpath('.//*[local-name()="shape" or local-name()="roundrect" or local-name()="rect" or local-name()="oval"]'):
+        txt = ''.join(elem.xpath('.//text()')).strip()
+        if txt:
+            vml_texts.append(txt)
+    if vml_texts:
+        return ' '.join(vml_texts)
+    dml_texts = []
+    for elem in cell._tc.xpath('.//*[local-name()="drawing"]'):
+        txt = ''.join(elem.xpath('.//*[local-name()="t"]/text()')).strip()
+        if txt:
+            dml_texts.append(txt)
+    if dml_texts:
+        return ' '.join(dml_texts)
+    return ""
+
+
+def _fc_find_flow_table(doc: docx.Document):
+    for tbl in doc.tables:
+        if len(tbl.rows) < 2:
+            continue
+        h_text = " ".join([c.text.lower() for c in tbl.rows[0].cells])
+        if (
+            ('lưu đồ' in h_text or 'sơ đồ' in h_text or 'nội dung' in h_text or 'tiến trình' in h_text or 'quy trình' in h_text) and
+            ('trách nhiệm' in h_text or 'bước' in h_text or 'stt' in h_text)
+        ):
+            return tbl
+    return None
+
+
+def _fc_flow_col_index(tbl) -> int:
+    for i, c in enumerate(tbl.rows[0].cells):
+        t = c.text.lower()
+        if 'lưu đồ' in t or 'sơ đồ' in t or 'tiến trình' in t:
+            return i
+    for i, c in enumerate(tbl.rows[0].cells):
+        t = c.text.lower()
+        if 'nội dung' in t or 'quy trình' in t:
+            return i
+    return 2
+
+
+def _fc_shapes_from_table(doc: docx.Document, step_names_dict: Optional[Dict[int, str]] = None):
+    """
+    Dựng chuỗi các bước lưu đồ từ chính bảng quy trình:
+    - Nhận diện các bước công việc (Hình chữ nhật), bước bắt đầu/kết thúc (Hình elip).
+    - Tự động nhận diện bước Quyết định/Phê duyệt/Thẩm định/Kiểm tra (Hình thoi) kèm rẽ nhánh quay lại.
+    """
+    tbl = _fc_find_flow_table(doc)
+    if not tbl:
+        return None
+    col = _fc_flow_col_index(tbl)
+
+    step_names = dict(step_names_dict or {})
+    if not step_names:
+        for p in doc.paragraphs:
+            m = re.match(r'^(?:Bước|B)\s*(\d+)\s*[:.\-]\s*(.+)$', p.text.strip(), re.I)
+            if m and int(m.group(1)) not in step_names:
+                step_names[int(m.group(1))] = m.group(2).strip()
+
+    names = []
+    for idx, r in enumerate(tbl.rows[1:], start=1):
+        cells = r.cells
+        txt = get_cell_full_text(cells[col]) if col < len(cells) else ''
+        txt = re.sub(r'[【】\[\]↓↑→]', ' ', txt)
+        txt = ' '.join(txt.split())
+        name = txt or step_names.get(idx, '')
+        if not name:
+            first = cells[0].text.strip() if cells else ''
+            name = first if first and not first.isdigit() else f"Bước {idx}"
+        names.append(unicodedata.normalize('NFC', name))
+    if not names:
+        return None
+
+    BW, GAP = 1450000.0, 220000.0
+    shapes, y = [], 0.0
+    n = len(names)
+    for i, name in enumerate(names):
+        is_decision = bool(re.search(r'phê duyệt|thẩm định|quyết định|kiểm tra|đánh giá|kiểm soát|soát xét|xem xét|nghiệm thu|thử nghiệm', name, re.I)) and 0 < i < n - 1
+        lines = max(1, math.ceil(len(name) / (16 if is_decision else 22)))
+        h = 240000.0 + 140000.0 * lines
+        w = BW
+        geom = 'ellipse' if (i == 0 or i == n - 1) else ('diamond' if is_decision else 'rect')
+        if geom == 'diamond':
+            h, w = h * 1.35, BW * 1.15
+        if geom == 'ellipse':
+            h = max(h, 420000.0)
+        shapes.append(dict(geom=geom, x=(BW * 1.15 - w) / 2, y=y, w=w, h=h, flipH=False, flipV=False,
+                           text=name, tail=False, head=False, color='17365D', bold=False))
+        y += h + GAP
+    return shapes
+
+
+def build_complete_flowchart_image_from_docx(doc: docx.Document, step_names_dict: Optional[Dict[int, str]] = None):
+    """
+    Dựng lại lưu đồ HOÀN CHỈNH từ chính file docx:
+    1) Nếu file có hình vẽ (DrawingML, kể cả group lồng nhau): vẽ lại đúng hình khối/vị trí/mũi tên.
+    2) Nếu file không có hình vẽ: dựng chuỗi lưu đồ chuẩn ISO từ các bước trong bảng quy trình kèm rẽ nhánh quay lại.
+    Trả về (BytesIO PNG, width_inch, height_inch) hoặc None.
+    """
+    try:
+        _fc_remove_broken_pictures(doc)
+        shapes, labels = extract_flowchart_drawing_shapes(doc.element)
+        if not shapes:
+            shapes, labels = _fc_shapes_from_table(doc, step_names_dict), []
+        if not shapes:
+            return None
+        return render_flowchart_shapes_to_png(shapes, labels)
+    except Exception as e:
+        print(f"[build_complete_flowchart_image_from_docx] Lỗi tạo ảnh lưu đồ: {e}")
+        return None
+
+
+
+def standardize_iso_docx_document(doc: docx.Document, metadata: Optional[Dict[str, Any]] = None) -> docx.Document:
+    """
+    Chuẩn hóa cấu trúc file Word (.docx) của quy trình ISO:
+    1. Bóc tách tên các bước từ phần Diễn giải chi tiết (Bước 1..Bước N).
+    2. Điền số thứ tự vào cột Bước (c=0) và chèn Lưu đồ hoàn chỉnh vào cột Lưu đồ (chuẩn hóa gộp hàng từ H1 đến cuối).
+    3. Tự động nhận diện các dòng Biểu mẫu (Mục 6), xóa các paragraph văn bản thô
+       và tạo Bảng 5 cột chuẩn ISO (STT | Mã biểu mẫu | Tên biểu mẫu | Nơi lưu trữ | Thời hạn lưu).
+    4. Xóa bỏ hoàn toàn các đoạn văn rác in ấn cũ như '(Xem trang sau)'.
+    """
+    try:
+        from docx.shared import Pt, Inches, RGBColor
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.enum.table import WD_TABLE_ALIGNMENT
+        from docx.oxml import OxmlElement, parse_xml
+        from docx.oxml.ns import nsdecls, qn
+
+        def _set_cell_border(cell, **kwargs):
+            tcPr = cell._tc.get_or_add_tcPr()
+            tcBorders = tcPr.first_child_found_in("w:tcBorders")
+            if tcBorders is None:
+                tcBorders = OxmlElement('w:tcBorders')
+                tcPr.append(tcBorders)
+            for edge in ('top', 'left', 'bottom', 'right', 'insideH', 'insideV'):
+                edge_data = kwargs.get(edge)
+                if edge_data:
+                    tag = f'w:{edge}'
+                    element = tcBorders.find(qn(tag))
+                    if element is None:
+                        element = OxmlElement(tag)
+                        tcBorders.append(element)
+                    for key, attr in [("val", "w:val"), ("color", "w:color"), ("sz", "w:sz"), ("space", "w:space")]:
+                        if key in edge_data:
+                            element.set(qn(attr), str(edge_data[key]))
+
+        def _set_cell_shd(cell, color_hex):
+            shading_xml = f'<w:shd {nsdecls("w")} w:fill="{color_hex}"/>'
+            cell._tc.get_or_add_tcPr().append(parse_xml(shading_xml))
+
+        # 0. Chuẩn hóa tiêu đề phân cấp và tách các đoạn văn bị dính nhiều mục số do soft linebreak (\n / Shift+Enter)
+        def _set_para_heading_style(p, level: int):
+            try:
+                p._p.get_or_add_pPr().get_or_add_pStyle().val = f"Heading{level}"
+            except Exception:
+                pass
+
+        for p in list(doc.paragraphs):
+            full_text = p.text
+            if not full_text:
+                continue
+
+            lines = [l.strip() for l in full_text.split('\n') if l.strip()]
+            if len(lines) > 1 and any(re.match(r'^\d+(\.\d+)*\.?\s*', l) for l in lines):
+                first_line = lines[0]
+                p.text = first_line
+                if re.match(r'^\d+\.\s+', first_line) or re.match(r'^(?:I|II|III|IV|V|VI|VII|VIII|IX|X)\.\s+', first_line):
+                    _set_para_heading_style(p, 1)
+                elif re.match(r'^\d+\.\d+\.?\s*', first_line):
+                    _set_para_heading_style(p, 2)
+                elif re.match(r'^\d+\.\d+\.\d+\.?\s*', first_line):
+                    _set_para_heading_style(p, 3)
+
+                cur_p = p
+                for next_line in lines[1:]:
+                    new_p_elem = OxmlElement('w:p')
+                    cur_p._p.addnext(new_p_elem)
+                    new_p = docx.text.paragraph.Paragraph(new_p_elem, cur_p._parent)
+                    new_p.text = next_line
+
+                    if re.match(r'^\d+\.\s+', next_line) or re.match(r'^(?:I|II|III|IV|V|VI|VII|VIII|IX|X)\.\s+', next_line):
+                        _set_para_heading_style(new_p, 1)
+                    elif re.match(r'^\d+\.\d+\.?\s*', next_line):
+                        _set_para_heading_style(new_p, 2)
+                    elif re.match(r'^\d+\.\d+\.\d+\.?\s*', next_line):
+                        _set_para_heading_style(new_p, 3)
+
+                    cur_p = new_p
+            else:
+                txt = full_text.strip()
+                if 3 <= len(txt) <= 120:
+                    if re.match(r'^\d+\.\d+\.?\s+[^\n]+$', txt):
+                        if not p.style or 'heading' not in p.style.name.lower():
+                            _set_para_heading_style(p, 2)
+                    elif re.match(r'^\d+\.\s+[A-ZÀ-Ỹ\s]+$', txt):
+                        if not p.style or 'heading' not in p.style.name.lower():
+                            _set_para_heading_style(p, 1)
+
+        # Đảm bảo tất cả các paragraph tiêu đề đều kết thúc bằng \n để không bị dính vào đoạn văn nội dung
+        for p in doc.paragraphs:
+            txt = p.text
+            if not txt:
+                continue
+            is_heading = (p.style and 'heading' in p.style.name.lower()) or \
+                         bool(re.match(r'^\d+\.\s+[^\n]+', txt.strip())) or \
+                         bool(re.match(r'^\d+\.\d+\.?\s*', txt.strip()))
+            if is_heading and not txt.endswith('\n'):
+                if p.runs:
+                    p.runs[-1].text = p.runs[-1].text.rstrip('\r\n') + '\n'
+                else:
+                    p.text = txt.rstrip('\r\n') + '\n'
+
+
+        # 1. Bóc tách tên các bước từ phần Diễn giải
+        step_names = {}
+        for p in doc.paragraphs:
+            t = p.text.strip()
+            m = re.match(r'^(?:Bước|B)\s*(\d+)[\s:.-]+(.+)$', t, re.I)
+            if m:
+                num = int(m.group(1))
+                name = m.group(2).strip()
+                if num not in step_names:
+                    step_names[num] = name
+
+        # 2. Xử lý Bảng Lưu đồ (Table quy trình) - Tạo và chèn Lưu đồ hoàn chỉnh nguyên bản từ file
+        for tbl in doc.tables:
+            if len(tbl.rows) < 2:
+                continue
+            h_text = " ".join([c.text.lower() for c in tbl.rows[0].cells])
+            if (
+                ('lưu đồ' in h_text or 'sơ đồ' in h_text or 'nội dung' in h_text or 'tiến trình' in h_text or 'quy trình' in h_text) and
+                ('trách nhiệm' in h_text or 'bước' in h_text or 'stt' in h_text)
+            ):
+                total_steps = len(tbl.rows) - 1
+                for r_idx in range(1, len(tbl.rows)):
+                    row = tbl.rows[r_idx]
+                    if len(row.cells) >= 1:
+                        # Cột 0: Bước
+                        cell_step = row.cells[0]
+                        txt_val = cell_step.text.strip()
+                        # Chuẩn hóa số bước (1., 2., 3...) tránh lỗi lặp 1. từ định dạng Word list
+                        if not txt_val or txt_val in ('.', '-', '1.', '1') or re.match(r'^[1\.\s-]+$', txt_val) or not any(c.isdigit() for c in txt_val) or txt_val == '1.':
+                            cell_step.text = f"{r_idx}."
+                        elif not txt_val.endswith('.'):
+                            cell_step.text = f"{txt_val}."
+                        for p in cell_step.paragraphs:
+                            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                            p.paragraph_format.space_before = Pt(3)
+                            p.paragraph_format.space_after = Pt(3)
+                            for r in p.runs:
+                                r.font.name = 'Times New Roman'
+                                r.font.bold = True
+                                r.font.size = Pt(11)
+
+                        # Dọn dẹp dòng trống thừa trong cột Trách nhiệm (c=1)
+                        if len(row.cells) > 1:
+                            cell_resp = row.cells[1]
+                            resp_paras = [p.text.strip() for p in cell_resp.paragraphs if p.text.strip()]
+                            if resp_paras:
+                                cell_resp.text = "\n".join(resp_paras)
+                                for p in cell_resp.paragraphs:
+                                    p.paragraph_format.space_before = Pt(2)
+                                    p.paragraph_format.space_after = Pt(2)
+                                    p.paragraph_format.line_spacing = 1.15
+                                    for r in p.runs:
+                                        r.font.name = 'Times New Roman'
+                                        r.font.size = Pt(11)
+
+                        # Dọn dẹp dòng trống thừa trong cột Phụ lục (c=3)
+                        if len(row.cells) > 3:
+                            cell_app = row.cells[3]
+                            app_paras = [p.text.strip() for p in cell_app.paragraphs if p.text.strip()]
+                            if app_paras:
+                                cell_app.text = "\n".join(app_paras)
+                                for p in cell_app.paragraphs:
+                                    p.paragraph_format.space_before = Pt(2)
+                                    p.paragraph_format.space_after = Pt(2)
+                                    p.paragraph_format.line_spacing = 1.15
+                                    for r in p.runs:
+                                        r.font.name = 'Times New Roman'
+                                        r.font.size = Pt(10)
+
+                # Chuẩn hóa độ rộng 4 cột của Bảng quy trình về chuẩn A4 (Bước: 0.60" | Trách nhiệm: 1.65" | Lưu đồ: 2.75" | Biểu mẫu: 1.75")
+                std_col_widths_in = [0.60, 1.65, 2.75, 1.75]
+                if len(tbl.columns) == 4 or all(len(r.cells) == 4 for r in tbl.rows):
+                    for r in tbl.rows:
+                        for c_i, w_in in enumerate(std_col_widths_in):
+                            if c_i < len(r.cells):
+                                r.cells[c_i].width = Inches(w_in)
+
+                # Sinh ảnh Lưu đồ hoàn chỉnh từ chính dữ liệu và drawing của file docx
+                try:
+                    fc_result = build_complete_flowchart_image_from_docx(doc, step_names)
+                    flow_col = _fc_flow_col_index(tbl)
+                    if fc_result and len(tbl.rows) >= 2 and flow_col < len(tbl.rows[1].cells):
+                        flowchart_img_io, fc_w_in, fc_h_in = fc_result
+                        
+                        # Trước khi gộp, dọn dẹp các đối tượng pict/drawing cũ trong cột flow để tránh đè hoặc xung đột
+                        for r_idx in range(1, len(tbl.rows)):
+                            c_f = tbl.rows[r_idx].cells[flow_col]
+                            for pict in list(c_f._tc.xpath('.//*[local-name()="pict"]')):
+                                if pict.getparent() is not None:
+                                    pict.getparent().remove(pict)
+                            for dw in list(c_f._tc.xpath('.//*[local-name()="drawing"]')):
+                                if dw.getparent() is not None:
+                                    dw.getparent().remove(dw)
+
+                        # Gộp các ô của Cột Lưu đồ từ Hàng 1 đến Hàng cuối cùng
+                        start_flow_cell = tbl.rows[1].cells[flow_col]
+                        for r_idx in range(2, len(tbl.rows)):
+                            try:
+                                start_flow_cell.merge(tbl.rows[r_idx].cells[flow_col])
+                            except Exception:
+                                pass
+
+                        cell_w_in = (start_flow_cell.width / 914400.0) if start_flow_cell.width else 2.75
+                        # Căn chỉnh kích thước ảnh vừa vặn hoàn hảo trong ô cột Lưu đồ (tối đa 2.65", không tràn viền)
+                        target_w_in = min(fc_w_in, min(max(cell_w_in - 0.10, 1.5), 2.65))
+
+                        start_flow_cell.text = ""
+                        p_flow = start_flow_cell.paragraphs[0]
+                        p_flow.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        p_flow.paragraph_format.space_before = Pt(4)
+                        p_flow.paragraph_format.space_after = Pt(4)
+                        run_img = p_flow.add_run()
+                        run_img.add_picture(flowchart_img_io, width=Inches(target_w_in))
+                except Exception as e_fc:
+                    print(f"[standardize_iso_docx_document] Lỗi chèn ảnh lưu đồ hoàn chỉnh: {e_fc}")
+
+
+        # 3. Xử lý đoạn "(Xem trang sau)" và Mục 6 (Biểu mẫu)
+        paragraphs_to_remove = []
+        forms_to_table = []
+        sec6_para = None
+        is_in_sec6 = False
+
+        for p in doc.paragraphs:
+            t = p.text.strip()
+            if re.match(r'^\(?\s*xem\s+trang\s+(?:sau|tiếp|dưới)\s*\)?\.?$', t, re.I):
+                paragraphs_to_remove.append(p)
+                continue
+            
+            if re.search(r'^(?:6[\.\s]*\s*biểu\s*mẫu|danh\s*mục\s*biểu\s*mẫu)', t, re.I):
+                is_in_sec6 = True
+                sec6_para = p
+                continue
+            
+            if is_in_sec6:
+                if re.match(r'^\d+[\.\:]\s+[A-ZÀ-Ỹ]', t) and not re.search(r'biểu\s*mẫu', t, re.I):
+                    is_in_sec6 = False
+                    continue
+                
+                m = re.match(r'^([A-Z0-9\.\/_-]+)\s*[\-_:]\s*(.+)$', t, re.I)
+                if m:
+                    code = m.group(1).strip('_ ')
+                    name = m.group(2).strip('_ ')
+                    forms_to_table.append({"code": code, "name": name})
+                    paragraphs_to_remove.append(p)
+                elif any(k in t.upper() for k in ['G7.', 'BM', 'QT', 'TCKT', 'QD', 'QĐ']):
+                    parts = re.split(r'\s*[\-_:]\s*', t, maxsplit=1)
+                    code = parts[0].strip('_ ')
+                    name = parts[1].strip('_ ') if len(parts) > 1 else t
+                    forms_to_table.append({"code": code, "name": name})
+                    paragraphs_to_remove.append(p)
+
+        for p in paragraphs_to_remove:
+            try:
+                p._element.getparent().remove(p._element)
+            except Exception:
+                pass
+
+        has_existing_forms_table = any(
+            len(t.rows) > 0 and any("mã biểu mẫu" in c.text.lower() for c in t.rows[0].cells)
+            for t in doc.tables
+        )
+
+        if sec6_para and forms_to_table and not has_existing_forms_table:
+            table_forms = doc.add_table(rows=1 + len(forms_to_table), cols=4)
+            table_forms.alignment = WD_TABLE_ALIGNMENT.CENTER
+            
+            headers = ["Mã hiệu biểu mẫu", "Tên biểu mẫu / Hồ sơ kiểm soát", "Nơi lưu trữ", "Thời hạn lưu"]
+            col_widths = [Inches(1.75), Inches(2.55), Inches(1.35), Inches(1.10)]
+            hdr_cells = table_forms.rows[0].cells
+            for i, h_name in enumerate(headers):
+                hdr_cells[i].text = h_name
+                hdr_cells[i].width = col_widths[i]
+                _set_cell_border(hdr_cells[i], top={"sz": 8, "val": "single", "color": "000000"},
+                                               bottom={"sz": 8, "val": "single", "color": "000000"},
+                                               left={"sz": 8, "val": "single", "color": "000000"},
+                                               right={"sz": 8, "val": "single", "color": "000000"})
+                p = hdr_cells[i].paragraphs[0]
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                for r in p.runs:
+                    r.font.name = 'Times New Roman'
+                    r.font.bold = True
+                    r.font.size = Pt(11)
+                    r.font.color.rgb = RGBColor(0x00, 0x00, 0x00)
+                    
+            for r_i, item in enumerate(forms_to_table):
+                row_cells = table_forms.rows[1 + r_i].cells
+                raw_code = item["code"].strip()
+                code_str = re.sub(r'\s*-\s*', '-', raw_code)
+                name_str = item["name"].strip()
+                storage_str = "Ban hệ thống ISO\n(ISO)" if any(k in code_str.upper() for k in ["BM02", "BM03", "BM04", "ISO", "QLCL"]) else "Ban hệ thống ISO"
+                retention_str = "12 tháng"
+                
+                row_cells[0].text = code_str
+                row_cells[1].text = name_str
+                row_cells[2].text = storage_str
+                row_cells[3].text = retention_str
+                
+                for c_i, cell in enumerate(row_cells):
+                    cell.width = col_widths[c_i]
+                    _set_cell_border(cell, top={"sz": 8, "val": "single", "color": "000000"},
+                                          bottom={"sz": 8, "val": "single", "color": "000000"},
+                                          left={"sz": 8, "val": "single", "color": "000000"},
+                                          right={"sz": 8, "val": "single", "color": "000000"})
+                    p = cell.paragraphs[0]
+                    if c_i in [2, 3]:
+                        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    else:
+                        p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                    for r in p.runs:
+                        r.font.name = 'Times New Roman'
+                        r.font.size = Pt(11)
+                        r.font.color.rgb = RGBColor(0x00, 0x00, 0x00)
+
+            sec6_para._element.addnext(table_forms._element)
+
+        # 4. Chuẩn hóa Footer: Trang bìa không có footer, từ trang 2 hiển thị 4 trường trên 1 hàng
+        std_code = ""
+        std_ver = ""
+        std_date = ""
+        if metadata:
+            std_code = str(metadata.get("new_code") or "").strip() or str(metadata.get("code") or "").strip() or str(metadata.get("symbol") or "").strip()
+            std_ver = str(metadata.get("version") or "").strip()
+            std_date = str(metadata.get("issue_date") or "").strip()
+            rev_logs = metadata.get("revision_logs") or []
+            if rev_logs:
+                seq_nums = []
+                for l in rev_logs:
+                    try:
+                        n = int(l.get("seq_no", 0))
+                        if n > 0:
+                            seq_nums.append(n)
+                    except Exception:
+                        pass
+                if seq_nums:
+                    std_ver = str(max(seq_nums)).zfill(2)
+                for l in reversed(rev_logs):
+                    d = str(l.get("rev_date") or "").strip()
+                    if d:
+                        std_date = d
+                        break
+
+        # Nếu chưa tìm thấy mã hiệu / ngày / phiên bản -> Quét từ footer cũ của file Word trước khi xóa
+        if not std_code or not std_ver or not std_date:
+            for s in doc.sections:
+                for p in (list(s.footer.paragraphs) + list(s.header.paragraphs)):
+                    p_txt = p.text.strip()
+                    if not p_txt:
+                        continue
+                    if not std_code:
+                        m_c = re.search(r'(?:Mã\s*hiệu|Mã\s*quy\s*trình|Mã\s*số)\s*[\:\-]?\s*([A-Z0-9\.\_\s\-]+?)(?:\s{2,}|Ngày|Lần|Trang|$)', p_txt, re.I)
+                        if m_c:
+                            candidate_c = m_c.group(1).strip()
+                            if len(candidate_c) >= 3 and not candidate_c.lower().startswith("ngày"):
+                                std_code = candidate_c
+                    if not std_ver:
+                        m_v = re.search(r'(?:Lần\s*ban\s*hành|Phiên\s*bản)\s*[\:\-]?\s*(\d+)', p_txt, re.I)
+                        if m_v:
+                            std_ver = m_v.group(1).strip().zfill(2)
+                    if not std_date:
+                        m_d = re.search(r'(?:Ngày\s*ban\s*hành|Hiệu\s*lực\s*từ)\s*[\:\-]?\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})', p_txt, re.I)
+                        if m_d:
+                            std_date = m_d.group(1).strip()
+
+        # Quét thêm từ các bảng nếu vẫn chưa có
+        if not std_code or not std_ver or not std_date:
+            for tbl in doc.tables:
+                for row in tbl.rows:
+                    row_txt = " ".join([c.text for c in row.cells])
+                    if not std_code:
+                        m_c = re.search(r'Mã\s*hiệu\s*[\:\-]?\s*([A-Z0-9\.\_\s\-]+?)(?:\s{2,}|\n|Ngày|Lần|Trang|$)', row_txt, re.I)
+                        if m_c:
+                            candidate_c = m_c.group(1).strip()
+                            if len(candidate_c) >= 3 and not candidate_c.lower().startswith("ngày"):
+                                std_code = candidate_c
+                    if not std_ver:
+                        m_v = re.search(r'Lần\s*ban\s*hành\s*[\:\-]?\s*(\d+)', row_txt, re.I)
+                        if m_v:
+                            std_ver = m_v.group(1).strip().zfill(2)
+                    if not std_date:
+                        m_d = re.search(r'Ngày\s*ban\s*hành\s*[\:\-]?\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})', row_txt, re.I)
+                        if m_d:
+                            std_date = m_d.group(1).strip()
+
+        # Giá trị mặc định dự phòng chuẩn tuyệt đối không bao giờ để rỗng
+        if not std_code:
+            std_code = "G7.CL -QT01"
+        if not std_ver:
+            std_ver = "01"
+        if not std_date:
+            import datetime
+            std_date = datetime.date.today().strftime("%d/%m/%Y")
+        elif "-" in std_date and len(std_date.split("-")) == 3:
+            pts = std_date.split("-")
+            if len(pts[0]) == 4:
+                std_date = f"{pts[2]}/{pts[1]}/{pts[0]}"
+
+        footer_xml_str = f"""<w:p xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:pPr>
+    <w:pBdr>
+      <w:top w:val="single" w:sz="6" w:space="4" w:color="000000"/>
+    </w:pBdr>
+    <w:tabs>
+      <w:tab w:val="left" w:pos="3100"/>
+      <w:tab w:val="left" w:pos="5900"/>
+      <w:tab w:val="right" w:pos="9360"/>
+    </w:tabs>
+    <w:rPr>
+      <w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/>
+      <w:sz w:val="20"/>
+      <w:szCs w:val="20"/>
+    </w:rPr>
+  </w:pPr>
+  <w:r>
+    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="20"/></w:rPr>
+    <w:t>Mã hiệu: {std_code}</w:t>
+  </w:r>
+  <w:r><w:tab/></w:r>
+  <w:r>
+    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="20"/></w:rPr>
+    <w:t>Lần ban hành: {std_ver}</w:t>
+  </w:r>
+  <w:r><w:tab/></w:r>
+  <w:r>
+    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="20"/></w:rPr>
+    <w:t>Ngày ban hành: {std_date}</w:t>
+  </w:r>
+  <w:r><w:tab/></w:r>
+  <w:r>
+    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="20"/></w:rPr>
+    <w:t xml:space="preserve">Trang: </w:t>
+  </w:r>
+  <w:r>
+    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="20"/></w:rPr>
+    <w:fldChar w:fldCharType="begin"/>
+  </w:r>
+  <w:r>
+    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="20"/></w:rPr>
+    <w:instrText xml:space="preserve"> PAGE </w:instrText>
+  </w:r>
+  <w:r>
+    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="20"/></w:rPr>
+    <w:fldChar w:fldCharType="separate"/>
+  </w:r>
+  <w:r>
+    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="20"/></w:rPr>
+    <w:t>1</w:t>
+  </w:r>
+  <w:r>
+    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="20"/></w:rPr>
+    <w:fldChar w:fldCharType="end"/>
+  </w:r>
+  <w:r>
+    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="20"/></w:rPr>
+    <w:t>/</w:t>
+  </w:r>
+  <w:r>
+    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="20"/></w:rPr>
+    <w:fldChar w:fldCharType="begin"/>
+  </w:r>
+  <w:r>
+    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="20"/></w:rPr>
+    <w:instrText xml:space="preserve"> NUMPAGES </w:instrText>
+  </w:r>
+  <w:r>
+    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="20"/></w:rPr>
+    <w:fldChar w:fldCharType="separate"/>
+  </w:r>
+  <w:r>
+    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="20"/></w:rPr>
+    <w:t>6</w:t>
+  </w:r>
+  <w:r>
+    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="20"/></w:rPr>
+    <w:fldChar w:fldCharType="end"/>
+  </w:r>
+</w:p>"""
+
+        for sec in doc.sections:
+            sec.different_first_page_header_footer = True
+            
+            # Xóa sạch bảng logo/header công ty cũ (Ảnh 2) khỏi header của tất cả các trang
+            for h in (sec.header, getattr(sec, 'first_page_header', None)):
+                if h is not None:
+                    for old_tbl in list(h.tables):
+                        try:
+                            old_tbl._tbl.getparent().remove(old_tbl._tbl)
+                        except Exception:
+                            pass
+                    for old_p in list(h.paragraphs):
+                        try:
+                            old_p._p.getparent().remove(old_p._p)
+                        except Exception:
+                            pass
+
+            footer = sec.footer
+            for old_p in list(footer.paragraphs):
+                old_p._p.getparent().remove(old_p._p)
+            for old_tbl in list(footer.tables):
+                old_tbl._tbl.getparent().remove(old_tbl._tbl)
+            footer._element.append(parse_xml(footer_xml_str))
+
+        # Phương án 1: Loại bỏ ảnh chữ ký scan cũ và khung ký thô ở cuối văn bản (để duyệt qua hệ thống ERP)
+        # 1. Xóa ảnh chữ ký tay scan cũ trôi nổi (chữ ký a Hòa.jpg...)
+        for p in doc.paragraphs:
+            for r in list(p.runs):
+                xml = r._r.xml.lower()
+                if 'chữ ký' in xml or 'chu ky' in xml or 'a hòa.jpg' in xml or 'a hoa.jpg' in xml:
+                    try:
+                        r._r.getparent().remove(r._r)
+                    except Exception:
+                        pass
+
+        # 2. Xóa bảng chữ ký thủ công ở cuối tài liệu (Bảng 1x1 Nguyễn Hòa / Giám Đốc)
+        for tbl in list(doc.tables):
+            if len(tbl.rows) <= 2 and len(tbl.columns) <= 2:
+                t_txt = " ".join([c.text.strip().upper() for r in tbl.rows for c in r.cells])
+                if any(k in t_txt for k in ["NGUYỄN HÒA", "GIÁM ĐỐC", "BAN GIÁM ĐỐC", "P.TỔNG GIÁM ĐỐC"]):
+                    try:
+                        tbl._tbl.getparent().remove(tbl._tbl)
+                    except Exception:
+                        pass
+
+        # 3. Xóa các dòng enter/tab thừa ở cuối và dòng chức danh ký tay P.TỔNG GIÁM ĐỐC (giữ lại dòng ngày tháng)
+        while doc.paragraphs:
+            last_p = doc.paragraphs[-1]
+            txt = last_p.text.strip().upper()
+            if not txt or txt in ["P.TỔNG GIÁM ĐỐC", "P. TỔNG GIÁM ĐỐC", "TỔNG GIÁM ĐỐC", "GIÁM ĐỐC", "NGUYỄN HÒA"]:
+                try:
+                    last_p._p.getparent().remove(last_p._p)
+                except Exception:
+                    break
+            else:
+                break
+
+        try:
+            w_settings = doc.settings.element
+            update_fields_el = parse_xml(r'<w:updateFields xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:val="true"/>')
+            w_settings.append(update_fields_el)
+        except Exception:
+            pass
+
+    except Exception as e_std:
+        print(f"[standardize_iso_docx_document] Warning: {e_std}")
+
+    return doc
+
+
+_FRONT_MATTER_TABLE_KEYWORDS = (
+    "CÔNG TY CỔ PHẦN", "VINA G7", "VINAG7", "PHÚ TÀI", "MÃ HIỆU", "MÃ:",
+    "TRÁCH NHIỆM", "KÝ TÊN", "BIÊN SOẠN", "PHÊ DUYỆT",
+    "SỐ TT", "NGÀY SỬA", "NỘI DUNG SỬA ĐỔI", "TRANG SỐ",
+)
+
+
+def find_content_start_after_front_matter(doc: docx.Document) -> int:
+    """
+    Tìm vị trí bắt đầu nội dung thực sự của file upload khi không có mục 'Mục đích'.
+    Bỏ qua phần đầu file gồm: bảng header/bìa/sửa đổi cũ, đoạn trống, ngắt trang, tiêu đề
+    'THEO DÕI SỬA ĐỔI'. Dừng tại đoạn văn có chữ đầu tiên không thuộc nhóm trên.
+    """
+    last_front_idx = -1
+    for idx, child in enumerate(doc.element.body):
+        tag = child.tag.split('}')[-1]
+        if tag == 'sectPr':
+            continue
+        text = ''.join(child.itertext()).strip()
+        if tag == 'tbl':
+            upper = text.upper()
+            if any(k in upper for k in _FRONT_MATTER_TABLE_KEYWORDS):
+                last_front_idx = idx
+                continue
+            break
+        if tag == 'p':
+            if not text or 'THEO DÕI SỬA ĐỔI' in text.upper():
+                last_front_idx = idx
+                continue
+            break
+        break
+    return last_front_idx + 1
+
+
 def merge_template_2_pages_with_upload_doc(
     upload_file_bytes: bytes,
     metadata: Optional[Dict[str, Any]] = None,
@@ -4436,13 +6136,14 @@ def merge_template_2_pages_with_upload_doc(
     if metadata:
         fill_metadata_into_template_docx(doc_tpl, metadata)
 
-    # Đọc file upload
+    # Đọc file upload (hỗ trợ cả .doc và .docx)
+    upload_file_bytes = ensure_docx_bytes(upload_file_bytes)
     upload_io = io.BytesIO(upload_file_bytes)
     doc_upload = docx.Document(upload_io)
 
     start_idx, match_text = find_muc_dich_start_element(doc_upload)
     if start_idx == -1:
-        start_idx = 0
+        start_idx = find_content_start_after_front_matter(doc_upload)
 
     # Thêm Page Break sau trang 2 của template trước khi nối
     p_break = doc_tpl.add_paragraph()
@@ -4466,6 +6167,7 @@ def merge_template_2_pages_with_upload_doc(
             except Exception:
                 pass
 
+    doc_tpl = standardize_iso_docx_document(doc_tpl, metadata)
     return doc_tpl
 
 
@@ -4483,6 +6185,10 @@ def generate_default_created_new_doc(
     doc_tpl = docx.Document(template_path)
     if metadata:
         fill_metadata_into_template_docx(doc_tpl, metadata)
+
+    for s in doc_tpl.sections:
+        s.left_margin = docx.shared.Cm(1.0)
+        s.right_margin = docx.shared.Cm(1.0)
 
     # Thêm ngắt trang sau trang 2
     p_break = doc_tpl.add_paragraph()

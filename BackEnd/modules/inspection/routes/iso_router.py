@@ -1,11 +1,13 @@
 import os
+import re
 import uuid
 import datetime
 import json
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer, joinedload, selectinload
+from sqlalchemy import func
 from config.database import get_db
 from modules.inspection.models.iso_models import ISODocument, ISORevisionLog, ISOSection, ISOProcessStep, ISOProcess, ISOProcessSection, ISOProcessStepInstance, ISODocumentType
 from modules.inspection.services.iso_parser import parse_iso_docx
@@ -25,9 +27,12 @@ async def upload_attachment(
     [POST] Tải lên tài liệu đính kèm (PDF, doc, docx) liên quan đến quy trình.
     """
     filename_lower = file.filename.lower()
-    allowed_exts = (".docx", ".doc", ".pdf", ".xlsx", ".xls")
+    allowed_exts = (
+        ".docx", ".doc", ".pdf", ".xlsx", ".xls", ".ppt", ".pptx",
+        ".png", ".jpg", ".jpeg", ".webp", ".svg", ".csv", ".txt", ".zip", ".rar", ".7z"
+    )
     if not any(filename_lower.endswith(ext) for ext in allowed_exts):
-        raise HTTPException(status_code=400, detail="Chỉ hỗ trợ định dạng file PDF, Word (.doc, .docx) hoặc Excel (.xls, .xlsx)")
+        raise HTTPException(status_code=400, detail="Chỉ hỗ trợ file Word, Excel, PDF, PPT, Ảnh hoặc File nén")
 
     file_ext = os.path.splitext(file.filename)[1]
     unique_filename = f"{uuid.uuid4()}{file_ext}"
@@ -40,15 +45,67 @@ async def upload_attachment(
         relative_path = f"static/uploads/iso_documents/{unique_filename}"
         return {
             "file_name": file.filename,
-            "file_path": relative_path
+            "original_file_name": file.filename,
+            "file_path": relative_path,
+            "file_size": len(content),
+            "file_type": file_ext.lstrip(".").lower()
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi khi lưu file đính kèm: {str(e)}")
 
 
+@router.post("/upload-multiple-attachments")
+async def upload_multiple_attachments(
+    files: List[UploadFile] = File(...)
+):
+    """
+    [POST] Tải lên đồng thời nhiều file con đính kèm (Word, Excel, PDF, PPT, Ảnh, File nén...)
+    """
+    uploaded_results = []
+    allowed_exts = (
+        ".docx", ".doc", ".pdf", ".xlsx", ".xls", ".ppt", ".pptx",
+        ".png", ".jpg", ".jpeg", ".webp", ".svg", ".csv", ".txt", ".zip", ".rar", ".7z"
+    )
+
+    for file in files:
+        if not file.filename:
+            continue
+        filename_lower = file.filename.lower()
+        if not any(filename_lower.endswith(ext) for ext in allowed_exts):
+            continue
+
+        file_ext = os.path.splitext(file.filename)[1]
+        unique_filename = f"{uuid.uuid4()}{file_ext}"
+        file_path = os.path.join(UPLOAD_DIR, unique_filename)
+
+        try:
+            content = await file.read()
+            with open(file_path, "wb") as f:
+                f.write(content)
+            relative_path = f"static/uploads/iso_documents/{unique_filename}"
+            now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+            uploaded_results.append({
+                "id": f"child_{uuid.uuid4().hex[:8]}",
+                "file_name": file.filename,
+                "original_file_name": file.filename,
+                "file_path": relative_path,
+                "file_size": len(content),
+                "file_type": file_ext.lstrip(".").lower(),
+                "uploaded_at": now_str
+            })
+        except Exception as e:
+            print(f"Lỗi khi lưu file con {file.filename}: {e}")
+
+    return {
+        "success": True,
+        "files": uploaded_results
+    }
+
+
 @router.post("/upload")
 async def upload_iso_document(
     file: UploadFile = File(...),
+    apply_iso_template: bool = Form(False),
     db: Session = Depends(get_db)
 ):
     """
@@ -57,53 +114,192 @@ async def upload_iso_document(
     filename_lower = file.filename.lower()
     if not (filename_lower.endswith(".docx") or filename_lower.endswith(".doc")):
         raise HTTPException(status_code=400, detail="Chỉ hỗ trợ định dạng file Word (.doc, .docx)")
-        
-    if filename_lower.endswith(".doc"):
-        raise HTTPException(status_code=400, detail="Hệ thống chỉ hỗ trợ phân tích tự động định dạng Word (.docx). Vui lòng chuyển đổi tệp (.doc) sang (.docx) trước khi tải lên.")
 
-    # Lưu file tạm thời
+    # Lưu file GỐC (bất biến - không chuẩn hóa/ghi đè)
     file_ext = os.path.splitext(file.filename)[1]
     unique_filename = f"{uuid.uuid4()}{file_ext}"
     file_path = os.path.join(UPLOAD_DIR, unique_filename)
-    
+    work_path = file_path  # file dùng để phân tích (bản sao đã chuẩn hóa)
+
     try:
         content = await file.read()
         with open(file_path, "wb") as f:
             f.write(content)
+
+        from modules.inspection.services.iso_file_service import (
+            standardize_iso_docx_document, ensure_docx_path
+        )
+        import docx
+        import shutil
+
+        # .doc -> .docx (Word COM) để phân tích; file gốc .doc vẫn giữ nguyên
+        docx_source = ensure_docx_path(file_path)
+        if not docx_source.lower().endswith(".docx"):
+            raise HTTPException(status_code=400, detail="Không thể chuyển đổi tệp .doc sang .docx (cần cài Microsoft Word trên máy chủ).")
+
+        # Chuẩn hóa chạy trên BẢN SAO, không đụng tới file gốc
+        work_path = os.path.join(UPLOAD_DIR, f"{uuid.uuid4()}_work.docx")
+        shutil.copyfile(docx_source, work_path)
+        try:
+            std_doc = docx.Document(work_path)
+            standardize_iso_docx_document(std_doc)
+            std_doc.save(work_path)
+        except Exception as e_std:
+            print(f"[upload_iso_document] Warning standardize docx (bản sao): {e_std}")
+            shutil.copyfile(docx_source, work_path)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi khi lưu file: {str(e)}")
 
     # Phân tích file Word
     try:
-        parsed_data = parse_iso_docx(file_path)
-        # Bổ sung đường dẫn file phục vụ lưu trữ sau này
-        parsed_data["file_path"] = file_path.replace("\\", "/")
-        
-        # Nếu không bóc tách được mã quy trình từ nội dung file, tự động trích xuất từ tên tệp tin gốc
-        if (not parsed_data.get("code") or parsed_data.get("code").strip() == "") and file.filename:
+        docx_filename = f"{os.path.splitext(unique_filename)[0]}.docx"
+        docx_final_path = os.path.join(UPLOAD_DIR, docx_filename)
+        shutil.copyfile(work_path, docx_final_path)
+        rel_docx_path = f"static/uploads/iso_documents/{docx_filename}"
+        rel_upload_path = f"static/uploads/iso_documents/{unique_filename}"
+
+        parsed_data = parse_iso_docx(work_path, original_filename=file.filename or "")
+        parsed_data["file_path"] = rel_docx_path
+        parsed_data["docx_path"] = rel_docx_path
+        parsed_data["raw_file_path"] = rel_upload_path
+        parsed_data["original_file_path"] = rel_upload_path
+        parsed_data["original_file_name"] = file.filename or ""
+        parsed_data["abs_path"] = docx_final_path.replace("\\", "/")
+        parsed_data["original_filename"] = file.filename or ""
+
+        # Kiểm tra nếu code bị rỗng hoặc là UUID thì bóc tách từ tên tệp tin gốc
+        from modules.inspection.services.iso_parser import is_uuid_str
+        filename_clean = os.path.splitext(file.filename)[0].strip() if file.filename else ""
+        if (not parsed_data.get("code") or is_uuid_str(parsed_data.get("code", ""))) and filename_clean:
             import re
-            filename_clean = os.path.splitext(file.filename)[0]
-            filename_clean = re.sub(r'\s+', ' ', filename_clean)
-            match = re.search(r'^([A-Z0-9\s._-]+?)(?:_|\s+Quy trình|\s+Mẫu|\s+QT|\s+qt|$)', filename_clean, re.IGNORECASE)
-            if match and len(match.group(1).strip()) >= 3:
-                parsed_data["code"] = match.group(1).strip()
+            m_dual = re.match(r'^(G7\.[A-Za-z0-9._-]+)\s*[-_]\s*([A-Za-z0-9._-]+)\s*[-_]\s*(.*)$', filename_clean)
+            if m_dual:
+                parsed_data["new_code"] = m_dual.group(1).strip()
+                parsed_data["code"] = m_dual.group(2).strip()
+                if not parsed_data.get("name") or parsed_data.get("name").strip() == "":
+                    parsed_data["name"] = m_dual.group(3).strip()
             else:
-                parsed_data["code"] = filename_clean[:15].strip()
+                m_single = re.match(r'^([A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*(?:\s*[-_]\s*[A-Za-z0-9]+)?)\s*[-_]\s*(.*)$', filename_clean)
+                if m_single:
+                    parsed_data["code"] = m_single.group(1).strip()
+                    if not parsed_data.get("name") or parsed_data.get("name").strip() == "":
+                        parsed_data["name"] = m_single.group(2).strip()
+                elif re.match(r'^[A-Za-z0-9._-]+$', filename_clean):
+                    parsed_data["code"] = filename_clean
+
+        # Tự động trích xuất tên tài liệu nếu tên hiện tại bị generic hoặc rỗng
+        generic_names = ['quy trình kiểm soát chất lượng mới', 'quy trình', '[tên quy trình]', 'tên quy trình', '[tên tài liệu]', 'tên tài liệu', 'theo dõi sửa đổi nội dung tài liệu', 'theo dõi sửa đổi', 'nhật ký sửa đổi', '']
+        current_name = (parsed_data.get("name") or "").strip().lower()
+        if (current_name in generic_names or any(g in current_name for g in ['sửa đổi nội dung', 'nhật ký sửa đổi'])) and file_path:
+            extracted_title = ""
+            try:
+                import docx
+                doc_obj = docx.Document(file_path)
+                skip_phrases = ['THEO DÕI SỬA ĐỔI', 'NHẬT KÝ SỬA ĐỔI', 'LỊCH SỬ SỬA ĐỔI', 'TRANG BÌA', 'BẢN QUYỀN', 'HỌ TÊN', 'CHỨC VỤ', 'KÝ TÊN', 'ĐC:', 'ĐỊA CHỈ:']
+                title_kw = ['MỤC TIÊU', 'QUY TRÌNH', 'QUY ĐỊNH', 'HƯỚNG DẪN', 'SỔ TAY', 'CHÍNH SÁCH', 'TIÊU CHUẨN', 'QUYẾT ĐỊNH', 'QUY CHẾ', 'SƠ ĐỒ', 'BIỂU MẪU', 'THÔNG BÁO', 'BÁO CÁO']
+                
+                # Check tables first
+                for tbl in doc_obj.tables[:3]:
+                    for r in tbl.rows:
+                        for cl in r.cells:
+                            ctext = cl.text.strip().replace('\n', ' ')
+                            cupper = ctext.upper()
+                            if 5 <= len(ctext) <= 200 and not any(k in cupper for k in skip_phrases) and cupper not in ['TRÁCH NHIỆM', 'CÔNG TY', 'CÔNG TY CỔ PHẦN VINA G7']:
+                                if any(k in cupper for k in title_kw):
+                                    extracted_title = ctext
+                                    break
+                        if extracted_title:
+                            break
+                    if extracted_title:
+                        break
+
+                if not extracted_title:
+                    for p in doc_obj.paragraphs[:30]:
+                        txt = p.text.strip()
+                        if txt and 5 <= len(txt) <= 200:
+                            txt_upper = txt.upper()
+                            if any(k in txt_upper for k in skip_phrases) or txt_upper in ['TRÁCH NHIỆM', 'CÔNG TY', 'CÔNG TY CỔ PHẦN VINA G7']:
+                                continue
+                            if re.match(r'^(?:[I|V|X]+\.|\d+\.)\s+', txt):
+                                continue
+                            is_upper = (txt == txt_upper)
+                            starts_with_kw = any(txt_upper.startswith(k) for k in title_kw)
+                            if (is_upper or starts_with_kw) and any(k in txt_upper for k in title_kw):
+                                extracted_title = txt
+                                break
+                            if not extracted_title and is_upper and not txt_upper.startswith("CÔNG TY"):
+                                extracted_title = txt
+            except Exception:
+                pass
+
+            if extracted_title:
+                parsed_data["name"] = extracted_title
+            elif filename_clean:
+                clean_title = re.sub(r'^[A-Za-z0-9._-]+\s*[-_.]\s*', '', filename_clean).strip()
+                parsed_data["name"] = clean_title or filename_clean
+
+        # Phát hiện loại tài liệu (doc_type) tự động từ mã hoặc tiêu đề
+        detected_doc_type = "QT"
+        name_check = (parsed_data.get("name") or "").upper()
+        code_check = (parsed_data.get("code") or "").upper()
+        if "MỤC TIÊU" in name_check or ".MT" in code_check or code_check.startswith("MT"):
+            detected_doc_type = "MT"
+        elif "HƯỚNG DẪN" in name_check or ".HD" in code_check or code_check.startswith("HD"):
+            detected_doc_type = "HD"
+        elif "QUY ĐỊNH" in name_check or ".QD" in code_check or ".QĐ" in code_check or code_check.startswith("QD"):
+            detected_doc_type = "QD"
+        elif "CHÍNH SÁCH" in name_check or ".CS" in code_check or code_check.startswith("CS"):
+            detected_doc_type = "CS"
+        elif "SỔ TAY" in name_check or ".ST" in code_check or code_check.startswith("ST"):
+            detected_doc_type = "ST"
+        elif "QUY CHẾ" in name_check or ".QC" in code_check:
+            detected_doc_type = "QC"
+        elif "SƠ ĐỒ" in name_check or ".SD" in code_check:
+            detected_doc_type = "SD"
+        elif "BIỂU MẪU" in name_check or ".BM" in code_check or code_check.startswith("BM"):
+            detected_doc_type = "BM"
+        parsed_data["doc_type"] = detected_doc_type
 
         # Trích xuất toàn bộ nội dung HTML nguyên bản có cấu trúc kèm bảng biểu và hình ảnh
         try:
             from modules.inspection.services.iso_file_service import parse_docx_to_html_and_headings
-            docx_html_data = parse_docx_to_html_and_headings(file_path)
+            docx_html_data = parse_docx_to_html_and_headings(work_path, prepend_template=apply_iso_template)
             parsed_data["html_content"] = docx_html_data.get("html_content", "")
             parsed_data["headings"] = docx_html_data.get("headings", [])
         except Exception as e_html:
             print(f"[upload_iso_document] Warning parse html: {e_html}")
-                
+
+        # Render trung thực từ FILE GỐC: đúng khổ giấy, hướng trang, bảng, hình, lưu đồ
+        try:
+            from modules.inspection.services.iso_file_service import render_document_pages
+            rendered = render_document_pages(file_path)
+            parsed_data["faithful_pages"] = rendered.get("pages", [])
+            parsed_data["page_count"] = rendered.get("page_count", 0)
+            parsed_data["page_setup"] = [
+                {
+                    "page_number": p["page_number"],
+                    "width_mm": p["width_mm"],
+                    "height_mm": p["height_mm"],
+                    "orientation": p["orientation"],
+                } for p in rendered.get("pages", [])
+            ]
+        except Exception as e_render:
+            print(f"[upload_iso_document] Warning render pages: {e_render}")
+
         return parsed_data
     except Exception as e:
         if os.path.exists(file_path):
             os.remove(file_path)
         raise HTTPException(status_code=500, detail=f"Lỗi phân tích cú pháp tài liệu: {str(e)}")
+    finally:
+        if work_path != file_path and os.path.exists(work_path):
+            try:
+                os.remove(work_path)
+            except OSError as e_rm:
+                print(f"[upload_iso_document] Không xóa được file tạm: {e_rm}")
+
 
 
 @router.post("/save")
@@ -139,6 +335,8 @@ def save_iso_document(
             approver=payload.get("approver", ""),
             approver_bgd=payload.get("approver_bgd", ""),
             file_path=payload.get("file_path", ""),
+            original_file_path=payload.get("original_file_path") or payload.get("raw_file_path") or payload.get("file_path", ""),
+            original_file_name=payload.get("original_file_name", ""),
             status=payload.get("status", "Hiệu lực"),
             folder=payload.get("folder", ""),
             doc_type=payload.get("doc_type", ""),
@@ -169,7 +367,14 @@ def save_iso_document(
         doc.issuer = payload.get("issuer", doc.issuer)
         doc.approver = payload.get("approver", doc.approver)
         doc.approver_bgd = payload.get("approver_bgd", getattr(doc, "approver_bgd", ""))
-        doc.file_path = payload.get("file_path", doc.file_path)
+        if payload.get("file_path"):
+            doc.file_path = payload.get("file_path")
+        if payload.get("original_file_path") or payload.get("raw_file_path"):
+            doc.original_file_path = payload.get("original_file_path") or payload.get("raw_file_path")
+        if payload.get("original_file_name"):
+            doc.original_file_name = payload.get("original_file_name")
+        if not doc.original_file_path and doc.file_path:
+            doc.original_file_path = doc.file_path
         doc.status = payload.get("status", doc.status)
         doc.folder = payload.get("folder", doc.folder)
         doc.doc_type = payload.get("doc_type", doc.doc_type)
@@ -193,7 +398,7 @@ def save_iso_document(
     now_date = now_str[:10]
 
     revision_logs = payload.get("revision_logs", [])
-    if edit_note:
+    if payload.get("append_revision") and edit_note:
         last_log = revision_logs[-1] if revision_logs else None
         is_exact_dup = (
             last_log and 
@@ -372,7 +577,32 @@ def get_iso_document_details(id: int, db: Session = Depends(get_db)):
     """
     doc = db.query(ISODocument).filter(ISODocument.id == id).first()
     if not doc:
-        raise HTTPException(status_code=404, detail="Không tìm thấy tài liệu quy trình")
+        proc = db.query(ISOProcess).filter(ISOProcess.id == id).first()
+        if proc:
+            return {
+                "id": proc.id,
+                "code": proc.code or "",
+                "name": proc.name or "",
+                "version": proc.version or "01",
+                "issue_date": str(proc.issue_date) if proc.issue_date else datetime.date.today().isoformat(),
+                "file_path": proc.file_path or "",
+                "status": proc.status or "Hiệu lực",
+                "sections": {s.section_name: s.content_html for s in proc.sections} if proc.sections else {},
+                "steps": []
+            }
+        return {
+            "id": id,
+            "code": "",
+            "name": "",
+            "version": "01",
+            "issue_date": datetime.date.today().isoformat(),
+            "status": "Hiệu lực",
+            "document_level": "Cấp phòng",
+            "file_path": "",
+            "sections": {},
+            "steps": [],
+            "is_new": True
+        }
 
     # Nhật ký sửa đổi
     revision_logs = [
@@ -385,6 +615,14 @@ def get_iso_document_details(id: int, db: Session = Depends(get_db)):
         }
         for l in sorted(doc.revision_logs, key=lambda x: x.seq_no)
     ]
+
+    eff_version = doc.version or "01"
+    if revision_logs:
+        max_seq = max([l.get("seq_no") or 0 for l in revision_logs], default=0)
+        cnt = max_seq if max_seq > 0 else len(revision_logs)
+        if cnt > 0:
+            eff_version = f"{cnt:02d}" if cnt < 10 else str(cnt)
+
 
     # Các phần văn bản
     sections = {}
@@ -423,7 +661,8 @@ def get_iso_document_details(id: int, db: Session = Depends(get_db)):
         "id": doc.id,
         "code": doc.code,
         "name": doc.name,
-        "version": doc.version,
+        "version": eff_version,
+        "effective_version": eff_version,
         "issue_date": doc.issue_date,
         "issuer": doc.issuer,
         "approver": doc.approver,
@@ -489,39 +728,12 @@ def delete_iso_document(id: int, db: Session = Depends(get_db)):
 # QUẢN LÝ QUY TRÌNH THỰC TẾ (ISO PROCESS INSTANCES) APIS
 # -----------------------------------------------------------------------------
 
-def _resolve_dept_acronym(role_name: str, desc: str = "") -> str:
-    name_upper = (role_name or "").upper().strip()
-    desc_upper = (desc or "").upper().strip()
-    comb = f"{name_upper} {desc_upper}"
-    if "QLCL" in comb or "CHẤT LƯỢNG" in comb or "ISO" in comb:
-        return "QL"
-    if "BGD" in comb or "GIÁM ĐỐC" in comb:
-        return "BG"
-    if "IT" in name_upper or "CÔNG NGHỆ THÔNG TIN" in comb:
-        return "IT"
-    if "HCNS" in comb or "HÀNH CHÍNH" in comb or "NHÂN SỰ" in comb:
-        return "HC"
-    if "SX" in name_upper or "SẢN XUẤT" in comb:
-        return "SX"
-    if "KETOAN" in name_upper or "KẾ TOÁN" in comb:
-        return "KT"
-    if "KỸ THUẬT" in comb or "CƠ ĐIỆN" in comb or name_upper == "KT":
-        return "KT"
-    if "MH" in name_upper or "MUA HÀNG" in comb or "VẬT TƯ" in comb:
-        return "MH"
-    if "KHO" in comb or "KHO VẬN" in comb:
-        return "KH"
-    if "KD" in name_upper or "KINH DOANH" in comb:
-        return "KD"
-    return name_upper[:2] if len(name_upper) >= 2 else "QL"
-
-
 @router.get("/meta/departments")
 def get_iso_meta_departments(db: Session = Depends(get_db)):
     """
-    [GET] Lấy danh sách phòng ban từ CSDL (bảng roles) phục vụ chọn khi tạo/sửa quy trình mới.
+    [GET] Lấy danh sách phòng ban trực tiếp từ CSDL (bảng roles) phục vụ chọn khi tạo/sửa quy trình mới.
+    Mã phòng ban (code) lấy trực tiếp từ database (r.code), không gán cứng.
     """
-    from modules.auth.models.permissions import Permission
     from modules.auth.models.role import Role
     
     roles = db.query(Role).filter(Role.is_active == True).order_by(Role.id).all()
@@ -530,12 +742,32 @@ def get_iso_meta_departments(db: Session = Depends(get_db)):
     for r in roles:
         if r.name in skip_roles:
             continue
-        full_name = r.description if r.description and r.description.strip() else r.name
-        code_2 = _resolve_dept_acronym(r.name, r.description or "")
+        
+        # 1. Mã phòng ban (code): Lấy trực tiếp từ cột code trong CSDL
+        dept_code = (getattr(r, "code", None) or "").strip()
+        if not dept_code:
+            # Fallback nếu dòng cũ chưa điền cột code
+            if r.description and len(r.description.strip()) <= 6 and r.description.strip().isupper():
+                dept_code = r.description.strip()
+            elif r.name and len(r.name.strip()) <= 6 and r.name.strip().isupper():
+                dept_code = r.name.strip()
+            else:
+                dept_code = (r.name or "PB").strip()
+
+        # 2. Tên đầy đủ phòng ban (name)
+        if r.description and len(r.description.strip()) > len(r.name.strip()):
+            full_name = r.description.strip()
+        elif r.name and len(r.name.strip()) > 4:
+            full_name = r.name.strip()
+        elif r.description and r.description.strip():
+            full_name = r.description.strip()
+        else:
+            full_name = r.name.strip()
+
         result.append({
             "id": r.id,
             "name": full_name,
-            "code": code_2,
+            "code": dept_code,
             "role_name": r.name
         })
     return result
@@ -544,7 +776,7 @@ def get_iso_meta_departments(db: Session = Depends(get_db)):
 @router.get("/approvers/department-heads")
 def get_iso_department_heads(db: Session = Depends(get_db)):
     """
-    [GET] Lấy danh sách Người duyệt có Vị trí là Trưởng phòng.
+    [GET] Lấy danh sách Người duyệt có Vị trí là Trưởng phòng (loại trừ Ban Giám Đốc).
     """
     from modules.auth.models.accounts import Account
     from modules.auth.models.permissions import Permission
@@ -559,7 +791,8 @@ def get_iso_department_heads(db: Session = Depends(get_db)):
     
     query = db.query(Account).filter(
         (Account.permission_id.in_(tp_perm_ids)) |
-        (Account.permission_level.ilike("%Trưởng Phòng%"))
+        (Account.permission_level.ilike("%Trưởng Phòng%")) |
+        (Account.department_id == 3060)
     )
     accounts = query.all()
     
@@ -567,8 +800,17 @@ def get_iso_department_heads(db: Session = Depends(get_db)):
     for a in accounts:
         d_name = depts_map.get(a.department_id, "")
         r_name = roles_map.get(getattr(a, "role_id", None), "")
-        dept_display = d_name or r_name or "Phòng ban"
         
+        # Loại trừ Ban Giám Đốc khỏi danh sách Trưởng phòng
+        if d_name in ["Giám Đốc", "Ban Giám Đốc"] or r_name == "BGD":
+            continue
+            
+        dept_display = d_name or r_name or "Phòng ban"
+        if a.username == "nam.dv" or "QLCL" in dept_display or a.department_id == 3060:
+            display_name = f"{a.full_name} (Trưởng phòng QLCL)"
+        else:
+            display_name = f"{a.full_name} ({dept_display})" if a.full_name else a.username
+            
         result.append({
             "id": a.id,
             "username": a.username,
@@ -576,7 +818,44 @@ def get_iso_department_heads(db: Session = Depends(get_db)):
             "department_id": a.department_id,
             "department_name": d_name,
             "role_name": r_name,
-            "display_name": f"{a.full_name} ({dept_display})" if a.full_name else a.username
+            "display_name": display_name
+        })
+    return result
+
+
+@router.get("/approvers/bgd")
+def get_iso_bgd_approvers(db: Session = Depends(get_db)):
+    """
+    [GET] Lấy danh sách Người phê duyệt thuộc Ban Giám Đốc (BGD) thực tế từ CSDL.
+    """
+    from sqlalchemy import text
+    sql = text("""
+        SELECT a.id, a.username, a.full_name, a.permission_level, 
+               COALESCE(d.name, '') as dept_name, COALESCE(r.name, '') as role_name
+        FROM accounts a
+        LEFT JOIN departments d ON a.department_id = d.id
+        LEFT JOIN roles r ON d.role_id = r.id
+        WHERE a.is_active = 1
+          AND a.username != 'admin'
+          AND (
+              r.name = 'BGD' 
+              OR d.name LIKE '%Giám Đốc%' 
+              OR a.permission_level LIKE '%Giám Đốc%'
+          )
+        ORDER BY a.id ASC
+    """)
+    rows = db.execute(sql).fetchall()
+    
+    result = []
+    for r in rows:
+        fn = r.full_name or r.username
+        pos = r.dept_name or "Ban Giám Đốc"
+        result.append({
+            "id": r.id,
+            "username": r.username,
+            "full_name": fn,
+            "position": pos,
+            "display_name": f"{fn} ({pos})"
         })
     return result
 
@@ -589,7 +868,15 @@ def get_iso_processes(
     """
     [GET] Lấy danh sách các quy trình thực tế áp dụng. Có hỗ trợ lọc theo trạng thái (status).
     """
-    query = db.query(ISOProcess)
+    query = (
+        db.query(ISOProcess)
+        .options(
+            defer(ISOProcess.diagram_data),
+            defer(ISOProcess.notes),
+            joinedload(ISOProcess.iso_document),
+            selectinload(ISOProcess.documents)
+        )
+    )
     if status:
         query = query.filter(ISOProcess.status.ilike(f"%{status.strip()}%"))
     procs = query.order_by(ISOProcess.code).all()
@@ -650,12 +937,13 @@ def save_iso_process(
     1 Quy trình có nhiều Mẫu tài liệu. Có thể tải file Word (.docx) lên trực tiếp.
     """
     proc_id = payload.get("id")
-    code = payload.get("code")
-    name = payload.get("name")
+    code = (payload.get("code") or "").strip()
+    name = (payload.get("name") or "").strip()
+    new_code = (payload.get("new_code") or "").strip()
     iso_doc_id = payload.get("iso_document_id")
 
-    if not code or not name:
-        raise HTTPException(status_code=400, detail="Mã quy trình và Tên quy trình không được bỏ trống")
+    if not name:
+        raise HTTPException(status_code=400, detail="Tên tài liệu / quy trình không được bỏ trống")
 
     now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -667,20 +955,51 @@ def save_iso_process(
         except:
             iso_doc = None
 
-    # Kiểm tra trùng mã code nếu tạo mới
     is_new_proc = (proc_id is None or proc_id == "" or proc_id == "new")
+
+    # Nếu client truyền mã G7 trong code mà chưa có new_code, đồng bộ sang new_code
+    if (not new_code or new_code == "G7.xx.yy.zz") and code and code.strip().startswith("G7."):
+        new_code = code.strip()
+
+    # 1. KIỂM TRA MÃ MỚI (new_code) - BẮT BUỘC LÀ KEY DUY NHẤT (k trùng)
+    if new_code and new_code != "G7.xx.yy.zz" and "xx" not in new_code and "yy" not in new_code:
+        dup_query = db.query(ISOProcess).filter(func.lower(ISOProcess.new_code) == func.lower(new_code))
+        if not is_new_proc:
+            dup_query = dup_query.filter(ISOProcess.id != int(proc_id))
+        dup = dup_query.first()
+        if dup:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Mã mới '{new_code}' đã tồn tại trong hệ thống (tại quy trình: '{dup.name}', ID: {dup.id}). Mã mới là khóa duy nhất (không trùng), vui lòng kiểm tra lại!"
+            )
+    else:
+        # Nếu chưa có mã mới, tự động sinh mã mới duy nhất theo quy tắc G7.<dept>.<type>.<seq>
+        from modules.inspection.services.iso_file_service import get_department_acronym
+        dept_name = payload.get("department_name") or ""
+        dept_acr = get_department_acronym(dept_name, db=db)
+        t_code = (payload.get("doc_type_code") or "QT").strip().upper()
+        next_data = get_next_process_code(
+            department_code=dept_acr,
+            doc_type_code=t_code,
+            exclude_id=int(proc_id) if not is_new_proc else None,
+            db=db
+        )
+        new_code = next_data["next_code"]
+
+    # 2. MÃ CŨ (code): ăn theo file hoặc form, nếu để trống thì gán bằng new_code
+    if not code:
+        code = new_code
+
     if is_new_proc:
-        existing = db.query(ISOProcess).filter(ISOProcess.code == code).first()
-        if existing:
-            raise HTTPException(status_code=400, detail=f"Mã quy trình áp dụng '{code}' đã tồn tại trong hệ thống")
-        
         proc = ISOProcess(
             code=code,
             name=name,
             iso_document_id=int(iso_doc_id) if (iso_doc_id is not None and iso_doc_id != "") else None,
             department_id=payload.get("department_id"),
             department_name=payload.get("department_name", ""),
-            file_path=payload.get("file_path", ""),
+            file_path=(payload.get("file_path") or payload.get("docx_path") or "").replace("\\", "/"),
+            original_file_path=(payload.get("original_file_path") or payload.get("raw_file_path") or payload.get("file_path") or payload.get("docx_path") or "").replace("\\", "/"),
+            original_file_name=payload.get("original_file_name", ""),
             owner=payload.get("owner", ""),
             editor=payload.get("editor", ""),
             approver=payload.get("approver", ""),
@@ -696,7 +1015,7 @@ def save_iso_process(
             document_level=payload.get("document_level") or (iso_doc.document_level if iso_doc else "") or "Cấp phòng",
             diagram_data=payload.get("diagram_data", (iso_doc.diagram_data if iso_doc else "") or ""),
             inspection_guide_id=payload.get("inspection_guide_id"),
-            new_code=payload.get("new_code", ""),
+            new_code=new_code,
             doc_type_id=payload.get("doc_type_id"),
             doc_type_code=payload.get("doc_type_code", ""),
             created_at=now_str,
@@ -727,12 +1046,9 @@ def save_iso_process(
         if not proc:
             raise HTTPException(status_code=404, detail="Không tìm thấy thông tin quy trình thực tế")
 
-        existing = db.query(ISOProcess).filter(ISOProcess.code == code, ISOProcess.id != int(proc_id)).first()
-        if existing:
-            raise HTTPException(status_code=400, detail=f"Mã quy trình áp dụng '{code}' đã tồn tại ở một quy trình khác")
-
-        # Cập nhật thông tin chung
+        # Cập nhật thông tin chung (new_code đã được kiểm tra không trùng ở trên)
         proc.code = code
+        proc.new_code = new_code
         proc.name = name
         if "iso_document_id" in payload:
             proc.iso_document_id = int(payload["iso_document_id"]) if payload["iso_document_id"] else None
@@ -746,8 +1062,16 @@ def save_iso_process(
             proc.doc_type_id = payload.get("doc_type_id")
         if "doc_type_code" in payload:
             proc.doc_type_code = payload.get("doc_type_code")
-        if "file_path" in payload:
-            proc.file_path = payload.get("file_path")
+        new_fp = payload.get("file_path") or payload.get("docx_path")
+        if new_fp and str(new_fp).strip():
+            proc.file_path = str(new_fp).strip().replace("\\", "/")
+        new_orig_fp = payload.get("original_file_path") or payload.get("raw_file_path")
+        if new_orig_fp and str(new_orig_fp).strip():
+            proc.original_file_path = str(new_orig_fp).strip().replace("\\", "/")
+        if "original_file_name" in payload and payload.get("original_file_name"):
+            proc.original_file_name = payload.get("original_file_name")
+        if not proc.original_file_path and proc.file_path:
+            proc.original_file_path = proc.file_path
         proc.owner = payload.get("owner", proc.owner)
         proc.editor = payload.get("editor", proc.editor)
         proc.approver = payload.get("approver", proc.approver)
@@ -779,6 +1103,14 @@ def save_iso_process(
                         new_g.process_id = proc.id
 
         # Xóa các chi tiết cũ của quy trình để ghi đè cập nhật mới
+        payload_sections = payload.get("sections")
+        if isinstance(payload_sections, dict) and not payload_sections.get("__canvas_editor_data__"):
+            old_snapshot = db.query(ISOProcessSection).filter(
+                ISOProcessSection.process_id == proc.id,
+                ISOProcessSection.section_name == "__canvas_editor_data__"
+            ).first()
+            if old_snapshot and old_snapshot.content_html:
+                payload_sections["__canvas_editor_data__"] = old_snapshot.content_html
         db.query(ISOProcessSection).filter(ISOProcessSection.process_id == proc.id).delete()
         db.query(ISOProcessStepInstance).filter(ISOProcessStepInstance.process_id == proc.id).delete()
         db.query(ISORevisionLog).filter(ISORevisionLog.process_id == proc.id).delete()
@@ -814,8 +1146,24 @@ def save_iso_process(
             checklist = step.get("checklist")
             checklist_str = json.dumps(checklist) if checklist is not None else step.get("checklist_json", "")
             
-            transition = step.get("transition")
-            transition_str = json.dumps(transition) if transition is not None else step.get("transition_json", "")
+            raw_trans = step.get("transition")
+            if isinstance(raw_trans, dict):
+                transition = dict(raw_trans)
+            elif isinstance(raw_trans, str) and raw_trans:
+                try:
+                    transition = json.loads(raw_trans)
+                except:
+                    transition = {}
+            else:
+                transition = {}
+
+            # Đảm bảo template_files và standard luôn được đóng gói vào transition_json
+            if step.get("template_files"):
+                transition["template_files"] = step.get("template_files")
+            if step.get("standard"):
+                transition["standard"] = step.get("standard")
+
+            transition_str = json.dumps(transition) if transition else step.get("transition_json", "")
 
             db_step = ISOProcessStepInstance(
                 process_id=proc.id,
@@ -847,7 +1195,20 @@ def save_iso_process(
     # Nếu là cập nhật quy trình đã có
     if proc_id:
         if not revision_logs:
-            if iso_doc and iso_doc.revision_logs:
+            # Ưu tiên giữ nguyên revision_logs hiện có của quy trình
+            existing_proc_logs = db.query(ISORevisionLog).filter(ISORevisionLog.process_id == proc.id).order_by(ISORevisionLog.seq_no.asc()).all()
+            if existing_proc_logs:
+                revision_logs = [
+                    {
+                        "seq_no": l.seq_no,
+                        "rev_date": l.rev_date,
+                        "content": l.content,
+                        "page_no": l.page_no or "Toàn bộ",
+                        "modifier": l.modifier or "Hệ thống"
+                    }
+                    for l in existing_proc_logs
+                ]
+            elif iso_doc and iso_doc.revision_logs:
                 revision_logs = [
                     {
                         "seq_no": l.seq_no,
@@ -867,22 +1228,13 @@ def save_iso_process(
                     "modifier": editor_name
                 }]
 
-        # Kiểm tra dòng cuối cùng có trùng lặp tuyệt đối với cùng nội dung và ngày sửa không
-        last_log = revision_logs[-1] if revision_logs else None
-        is_exact_dup = (
-            last_log and 
-            last_log.get("rev_date") == now_date and 
-            last_log.get("content") == edit_note and 
-            last_log.get("page_no") == edit_page_no and
-            last_log.get("modifier") == editor_name
-        )
-
-        if not is_exact_dup:
+        # Chỉ thêm dòng nhật ký nếu người dùng chủ động yêu cầu ban hành bản sửa đổi mới (append_revision)
+        if payload.get("append_revision") and payload.get("revision_note"):
             next_seq = len(revision_logs) + 1
             revision_logs.append({
                 "seq_no": next_seq,
                 "rev_date": now_date,
-                "content": edit_note,
+                "content": payload.get("revision_note"),
                 "page_no": edit_page_no,
                 "modifier": editor_name
             })
@@ -937,12 +1289,25 @@ def save_iso_process(
             tpl_code = (tpl.get("code") or "").strip()
             tpl_title = (tpl.get("title") or tpl.get("name") or "").strip()
             tpl_file = tpl.get("file_path") or ""
+            tpl_fname = tpl.get("original_file_name") or tpl.get("file_name") or ""
             tpl_note = tpl.get("note") or ""
+            tpl_sub_files = tpl.get("sub_files") or []
+            sub_files_json = json.dumps(tpl_sub_files, ensure_ascii=False) if tpl_sub_files else None
             doc_id = tpl.get("doc_id")
 
-            # Chuẩn hóa mã biểu mẫu: luôn lấy theo định dạng (Mã QT_người dùng nhập)
-            if tpl_code and not tpl_code.startswith(f"{proc.code}_"):
-                tpl_code = f"{proc.code}_{tpl_code}"
+            # Chuẩn hóa mã biểu mẫu theo chuẩn G7.AA.BBCC-DDEE (dùng proc.new_code)
+            if tpl_code:
+                parent_prefix = proc.new_code or proc.code
+                has_prefix = (
+                    tpl_code.startswith(f"{parent_prefix}-") or
+                    tpl_code.startswith(f"{parent_prefix}_")
+                )
+                if not has_prefix:
+                    clean_code = tpl_code.lstrip("-_ ")
+                    # Format as parent_prefix-BMxx if needed
+                    if not clean_code.upper().startswith(("BM", "SD", "PL")):
+                        clean_code = f"BM{clean_code}"
+                    tpl_code = f"{parent_prefix}-{clean_code}"
 
             if not tpl_code:
                 continue
@@ -962,6 +1327,12 @@ def save_iso_process(
                 existing_doc.name = tpl_title or existing_doc.name
                 existing_doc.process_id = proc.id
                 existing_doc.file_path = tpl_file or existing_doc.file_path
+                existing_doc.sub_files = sub_files_json
+                if tpl_fname and not bool(re.match(r'^[0-9a-fA-F-]{32,38}(\.[a-zA-Z0-9]+)?$', tpl_fname)):
+                    existing_doc.original_file_name = tpl_fname
+                elif not existing_doc.original_file_name and tpl_title:
+                    ext = os.path.splitext(existing_doc.file_path or tpl_file)[1]
+                    existing_doc.original_file_name = f"{tpl_title}{ext}"
                 existing_doc.notes = tpl_note
                 existing_doc.folder = proc.department_name or proc.code
                 existing_doc.document_level = proc.document_level or "Cấp phòng"
@@ -971,11 +1342,18 @@ def save_iso_process(
                 existing_doc.updated_at = now_str
                 kept_doc_ids.append(existing_doc.id)
             else:
+                ext = os.path.splitext(tpl_file)[1] if tpl_file else ""
+                orig_name = tpl_fname
+                if not orig_name or bool(re.match(r'^[0-9a-fA-F-]{32,38}(\.[a-zA-Z0-9]+)?$', orig_name)):
+                    orig_name = f"{tpl_title}{ext}" if tpl_title else (tpl_fname or "")
+
                 new_doc = ISODocument(
                     code=tpl_code,
                     name=tpl_title or f"Biểu mẫu {tpl_code}",
                     process_id=proc.id,
                     file_path=tpl_file,
+                    original_file_name=orig_name,
+                    sub_files=sub_files_json,
                     notes=tpl_note,
                     version="01",
                     issue_date=proc.issue_date or now_str[:10],
@@ -1006,6 +1384,9 @@ def save_iso_process(
             "id": proc.id,
             "code": proc.code,
             "name": proc.name,
+            "file_path": proc.file_path,
+            "original_file_path": getattr(proc, "original_file_path", "") or proc.file_path or "",
+            "original_file_name": getattr(proc, "original_file_name", "") or "",
             "revision_logs": [
                 {
                     "seq_no": idx + 1,
@@ -1048,9 +1429,39 @@ def get_iso_process_details(id: int, db: Session = Depends(get_db)):
     """
     proc = db.query(ISOProcess).filter(ISOProcess.id == id).first()
     if not proc:
-        raise HTTPException(status_code=404, detail="Không tìm thấy quy trình thực tế")
+        doc = db.query(ISODocument).filter(ISODocument.id == id).first()
+        if doc:
+            return {
+                "id": doc.id,
+                "code": doc.code or "",
+                "new_code": getattr(doc, "new_code", "") or "",
+                "name": doc.name or "",
+                "version": doc.version or "01",
+                "issue_date": str(doc.issue_date) if doc.issue_date else datetime.date.today().isoformat(),
+                "file_path": doc.file_path or "",
+                "status": doc.status or "Hiệu lực",
+                "folder": doc.folder or "",
+                "doc_type": doc.doc_type or "",
+                "document_level": doc.document_level or "Cấp phòng",
+                "sections": {s.section_name: s.content_html for s in doc.sections} if doc.sections else {},
+                "steps": []
+            }
+        return {
+            "id": id,
+            "code": "",
+            "new_code": "",
+            "name": "",
+            "version": "01",
+            "issue_date": datetime.date.today().isoformat(),
+            "status": "Hiệu lực",
+            "document_level": "Cấp phòng",
+            "file_path": "",
+            "sections": {},
+            "steps": [],
+            "is_new": True
+        }
 
-    # Tự động đồng bộ nội dung ăn theo file nếu quy trình chưa có nội dung thực tế hoặc chỉ có placeholder
+    # Tự động đồng bộ nội dung ăn theo file nếu quy trình chưa có nội dung thực tế hoặc chưa có các bước
     has_real_sections = False
     if proc.sections:
         for s in proc.sections:
@@ -1059,7 +1470,9 @@ def get_iso_process_details(id: int, db: Session = Depends(get_db)):
                 has_real_sections = True
                 break
 
-    if not has_real_sections and proc.file_path:
+    has_real_steps = bool(proc.steps and len(proc.steps) > 0)
+
+    if (not has_real_sections or not has_real_steps) and proc.file_path:
         resolved_file = resolve_iso_file_path(proc.file_path)
         if resolved_file and os.path.exists(resolved_file):
             try:
@@ -1067,26 +1480,35 @@ def get_iso_process_details(id: int, db: Session = Depends(get_db)):
                 parsed = parse_iso_docx(resolved_file) if resolved_file.lower().endswith(('.docx', '.doc')) else {}
                 parsed_secs = parsed.get("sections", {})
                 parsed_steps = parsed.get("steps", [])
-                if parsed_secs:
+                if not has_real_sections and parsed_secs:
                     db.query(ISOProcessSection).filter(ISOProcessSection.process_id == proc.id).delete()
                     for s_name, s_html in parsed_secs.items():
                         db.add(ISOProcessSection(process_id=proc.id, section_name=s_name, content_html=s_html))
-                    if parsed_steps:
-                        db.query(ISOProcessStepInstance).filter(ISOProcessStepInstance.process_id == proc.id).delete()
-                        for st in parsed_steps:
-                            st_num = st.get("step_number", 1)
-                            db.add(ISOProcessStepInstance(
-                                process_id=proc.id,
-                                step_number=st_num,
-                                name=st.get("name", ""),
-                                assignee_role=st.get("assignee_role", ""),
-                                instructions=st.get("instructions", ""),
-                                checklist_json=json.dumps(st.get("checklist", [])) if st.get("checklist") else "",
-                                transition_json=json.dumps(st.get("transition", {})) if st.get("transition") else "",
-                                flow_node_id=f"node_{st_num}"
-                            ))
-                    db.commit()
-                    db.refresh(proc)
+                if not has_real_steps and parsed_steps:
+                    db.query(ISOProcessStepInstance).filter(ISOProcessStepInstance.process_id == proc.id).delete()
+                    for st in parsed_steps:
+                        st_num = st.get("step_number", 1)
+                        st_trans = st.get("transition") or {}
+                        if not isinstance(st_trans, dict):
+                            st_trans = {}
+                        if st.get("template_files"):
+                            st_trans["template_files"] = st.get("template_files")
+                        if st.get("standard"):
+                            st_trans["standard"] = st.get("standard")
+                        db.add(ISOProcessStepInstance(
+                            process_id=proc.id,
+                            step_number=st_num,
+                            name=st.get("name", ""),
+                            assignee_role=st.get("assignee_role", ""),
+                            instructions=st.get("instructions", ""),
+                            checklist_json=json.dumps(st.get("checklist", [])) if st.get("checklist") else "",
+                            transition_json=json.dumps(st_trans) if st_trans else "",
+                            flow_node_id=f"node_{st_num}"
+                        ))
+                    if parsed.get("diagram_data") and (not proc.diagram_data or proc.diagram_data in ('{"nodes":[],"links":[]}', '')):
+                        proc.diagram_data = parsed.get("diagram_data")
+                db.commit()
+                db.refresh(proc)
             except Exception as e:
                 db.rollback()
                 print(f"Lỗi tự động parse file cho quy trình {proc.id}: {e}")
@@ -1094,16 +1516,37 @@ def get_iso_process_details(id: int, db: Session = Depends(get_db)):
     # Nhật ký sửa đổi
     revision_logs = []
     logs_to_use = proc.revision_logs if proc.revision_logs else (proc.iso_document.revision_logs if proc.iso_document else [])
-    revision_logs = [
-        {
+    for l in sorted(logs_to_use, key=lambda x: x.seq_no or 0):
+        p_no = str(l.page_no or "Toàn bộ").strip()
+        if p_no.lower() in ("tất cả", "tat ca", "all", ""):
+            p_no = "Toàn bộ"
+        revision_logs.append({
             "seq_no": l.seq_no,
             "rev_date": l.rev_date,
             "content": l.content,
-            "page_no": l.page_no,
+            "page_no": p_no,
             "modifier": l.modifier or "Hệ thống"
-        }
-        for l in sorted(logs_to_use, key=lambda x: x.seq_no or 0)
-    ]
+        })
+
+    if not revision_logs:
+        from modules.inspection.services.iso_file_service import generate_standard_revision_logs
+        code_key = proc.code or proc.new_code or proc.name or proc.id
+        revision_logs = generate_standard_revision_logs(code_key)
+
+    eff_version = "01"
+    latest_rev_date = proc.issue_date
+    if revision_logs:
+        max_seq = max([l.get("seq_no") or 0 for l in revision_logs], default=0)
+        cnt = max_seq if max_seq > 0 else len(revision_logs)
+        if cnt > 0:
+            eff_version = f"{cnt:02d}" if cnt < 10 else str(cnt)
+        for l in reversed(revision_logs):
+            d = str(l.get("rev_date") or "").strip()
+            if d:
+                latest_rev_date = d
+                break
+    elif proc.iso_document and proc.iso_document.version:
+        eff_version = proc.iso_document.version
 
     # Các phần văn bản
     sections = {}
@@ -1140,6 +1583,8 @@ def get_iso_process_details(id: int, db: Session = Depends(get_db)):
 
         node_type = transition.get("node_type") if isinstance(transition, dict) else (st.node_type if hasattr(st, 'node_type') else None)
         fail_path = transition.get("fail_path") if isinstance(transition, dict) else (st.fail_path if hasattr(st, 'fail_path') else [])
+        template_files = transition.get("template_files") if isinstance(transition, dict) else ""
+        standard = transition.get("standard") if isinstance(transition, dict) else ""
 
         steps.append({
             "id": st.id,
@@ -1151,13 +1596,38 @@ def get_iso_process_details(id: int, db: Session = Depends(get_db)):
             "transition": transition,
             "node_type": node_type,
             "fail_path": fail_path,
-            "flow_node_id": st.flow_node_id
+            "flow_node_id": st.flow_node_id,
+            "template_files": template_files or "",
+            "standard": standard or ""
         })
 
     # Danh sách mẫu biểu mẫu liên quan (ISODocument con) thuộc quy trình này
     related_templates = []
     for doc in (proc.documents or []):
-        fname = os.path.basename(doc.file_path) if doc.file_path else ""
+        ext = os.path.splitext(doc.file_path)[1] if doc.file_path else ""
+        raw_fname = doc.original_file_name or (os.path.basename(doc.file_path) if doc.file_path else "")
+        # Nếu tên file là mã UUID ngẫu nhiên (ví dụ 9573ec7f-17eb-4f5d-bc0b-5d9d806bb89e.ppt), lấy theo tên thật doc.name + ext
+        is_uuid = bool(re.match(r'^[0-9a-fA-F-]{32,38}(\.[a-zA-Z0-9]+)?$', raw_fname or ""))
+        if (is_uuid or not raw_fname) and doc.name:
+            fname = f"{doc.name}{ext}" if not doc.name.lower().endswith(ext.lower()) else doc.name
+        else:
+            fname = raw_fname
+
+        # Đảm bảo có đầy đủ tiền tố mã biểu mẫu nếu tên file chưa có
+        doc_code = (doc.code or "").strip()
+        if doc_code and fname and not fname.upper().startswith(doc_code.upper()):
+            display_file_name = f"{doc_code} - {fname}"
+        else:
+            display_file_name = fname or (f"{doc_code}{ext}" if doc_code else "tai_lieu_dinh_kem")
+
+        # Trích xuất danh sách file con đính kèm (nếu có)
+        doc_sub_files = []
+        if getattr(doc, "sub_files", None):
+            try:
+                doc_sub_files = json.loads(doc.sub_files) if isinstance(doc.sub_files, str) else doc.sub_files
+            except Exception:
+                doc_sub_files = []
+
         related_templates.append({
             "id": f"doc_{doc.id}",
             "doc_id": doc.id,
@@ -1165,14 +1635,30 @@ def get_iso_process_details(id: int, db: Session = Depends(get_db)):
             "title": doc.name,
             "scope": "Tất cả",
             "note": doc.notes or "",
-            "file_name": fname,
-            "file_path": doc.file_path or ""
+            "file_name": display_file_name,
+            "original_file_name": doc.original_file_name or display_file_name,
+            "file_path": doc.file_path or "",
+            "sub_files": doc_sub_files or []
         })
 
     if not related_templates and sections.get("__metadata_related_templates__"):
         try:
             sec_tpls = json.loads(sections.get("__metadata_related_templates__"))
             if isinstance(sec_tpls, list):
+                for tpl in sec_tpls:
+                    raw_fn = tpl.get("original_file_name") or tpl.get("file_name") or ""
+                    fp = tpl.get("file_path") or ""
+                    ext = os.path.splitext(fp)[1] if fp else ""
+                    is_uuid = bool(re.match(r'^[0-9a-fA-F-]{32,38}(\.[a-zA-Z0-9]+)?$', raw_fn or ""))
+                    if (is_uuid or not raw_fn) and (tpl.get("title") or tpl.get("name")):
+                        title_fn = tpl.get("title") or tpl.get("name")
+                        raw_fn = f"{title_fn}{ext}" if not title_fn.lower().endswith(ext.lower()) else title_fn
+                    doc_c = (tpl.get("code") or "").strip()
+                    if doc_c and raw_fn and not raw_fn.upper().startswith(doc_c.upper()):
+                        raw_fn = f"{doc_c} - {raw_fn}"
+                    tpl["file_name"] = raw_fn
+                    tpl["original_file_name"] = tpl.get("original_file_name") or raw_fn
+                    tpl["sub_files"] = tpl.get("sub_files") or []
                 related_templates = sec_tpls
         except:
             pass
@@ -1209,7 +1695,7 @@ def get_iso_process_details(id: int, db: Session = Depends(get_db)):
         "company_name": "CÔNG TY CỔ PHẦN VINA G7",
         "name": proc.name,
         "code": proc.code or proc.new_code or "",
-        "version": getattr(proc.iso_document, "version", "01") if proc.iso_document else "01",
+        "version": eff_version,
         "issue_date": proc.issue_date or "",
         "department_name": proc.department_name or "",
         "editor": proc.editor or proc.owner or "",
@@ -1221,7 +1707,11 @@ def get_iso_process_details(id: int, db: Session = Depends(get_db)):
         "id": proc.id,
         "code": proc.code,
         "name": proc.name,
+        "version": eff_version,
+        "effective_version": eff_version,
         "file_path": proc.file_path,
+        "original_file_path": getattr(proc, "original_file_path", "") or proc.file_path or "",
+        "original_file_name": getattr(proc, "original_file_name", "") or (os.path.basename(proc.original_file_path) if getattr(proc, "original_file_path", None) else ""),
         "file_name": os.path.basename(proc.file_path) if proc.file_path else "",
         "iso_document_id": proc.iso_document_id,
         "iso_document_code": proc.iso_document.code if proc.iso_document else "---",
@@ -1235,7 +1725,7 @@ def get_iso_process_details(id: int, db: Session = Depends(get_db)):
         "new_code": getattr(proc, "new_code", "") or "",
         "doc_type_id": getattr(proc, "doc_type_id", None),
         "doc_type_code": getattr(proc, "doc_type_code", "") or "",
-        "issue_date": proc.issue_date,
+        "issue_date": latest_rev_date or proc.issue_date,
         "last_checked_date": proc.last_checked_date,
         "last_result": proc.last_result,
         "status": proc.status,
@@ -1573,8 +2063,17 @@ def download_raw_iso_document(id: int, db: Session = Depends(get_db)):
     # Lấy định dạng đuôi file thực tế (.docx, .pdf, .doc, ...)
     ext = os.path.splitext(resolved_path)[1]
     safe_code = (doc_obj.code or "ISO").replace("/", "_").replace("\\", "_")
-    safe_name = (doc_obj.name or "Tai_lieu").replace("/", "_").replace("\\", "_")
-    download_filename = f"{safe_code}_{safe_name}{ext}"
+    fname = doc_obj.original_file_name or doc_obj.name
+    doc_code = (doc_obj.code or "").strip()
+    if fname:
+        if ext and not fname.lower().endswith(ext.lower()):
+            fname = f"{fname}{ext}"
+        if doc_code and not fname.upper().startswith(doc_code.upper()):
+            download_filename = f"{doc_code} - {fname}"
+        else:
+            download_filename = fname
+    else:
+        download_filename = f"{safe_code}_{safe_name}{ext}"
 
     return FileResponse(
         path=resolved_path,
@@ -1592,10 +2091,11 @@ def download_raw_iso_process(id: int, db: Session = Depends(get_db)):
     from modules.inspection.services.iso_file_service import BASE_ISO_DIR
 
     proc_obj = db.query(ISOProcess).filter(ISOProcess.id == id).first()
-    if not proc_obj or not proc_obj.file_path:
+    target_path = getattr(proc_obj, "original_file_path", None) or (proc_obj.file_path if proc_obj else None)
+    if not proc_obj or not target_path:
         raise HTTPException(status_code=404, detail="Không tìm thấy tệp tin gốc của quy trình này")
 
-    resolved_path = proc_obj.file_path
+    resolved_path = target_path
     if resolved_path and not os.path.exists(resolved_path):
         alt_z = os.path.join(BASE_ISO_DIR, resolved_path)
         if os.path.exists(alt_z):
@@ -1613,9 +2113,11 @@ def download_raw_iso_process(id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Không tìm thấy tệp tin gốc trên hệ thống đĩa máy chủ")
 
     ext = os.path.splitext(resolved_path)[1]
-    safe_code = (proc_obj.code or "QT").replace("/", "_").replace("\\", "_")
-    safe_name = (proc_obj.name or "Quy_trinh").replace("/", "_").replace("\\", "_")
-    download_filename = f"{safe_code}_{safe_name}{ext}"
+    download_filename = getattr(proc_obj, "original_file_name", None)
+    if not download_filename:
+        safe_code = (proc_obj.code or proc_obj.new_code or "QT").replace("/", "_").replace("\\", "_")
+        safe_name = (proc_obj.name or "Quy_trinh").replace("/", "_").replace("\\", "_")
+        download_filename = f"{safe_code}_{safe_name}_GOC{ext}"
 
     return FileResponse(
         path=resolved_path,
@@ -1880,40 +2382,63 @@ def delete_iso_document_type(id: int, db: Session = Depends(get_db)):
 def get_next_process_code(
     department_code: str = "QL",
     doc_type_code: str = "QT",
+    exclude_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
     """
-    [GET] Sinh mã quy trình gợi ý tiếp theo dạng G7.xx.yy.zz
-    xx: 2 ký tự viết tắt của phòng ban
-    yy: 2 ký tự viết tắt của loại hồ sơ
-    zz: số tự tăng 2 chữ số (01, 02...)
+    [GET] Sinh mã quy trình gợi ý tiếp theo dạng G7.xx.yy.zz (DUY NHẤT - KEY KHÔNG TRÙNG)
+    xx: ký tự viết tắt của phòng ban (ví dụ: QLCL, HCNS, KD, SX, ISO...)
+    yy: ký tự viết tắt của loại hồ sơ (ví dụ: QT, HD, CS, QD...)
+    zz: số tự tăng 2 chữ số (01, 02...) đảm bảo chưa từng tồn tại trong CSDL
     """
     import re
-    dept = (department_code or "QL").strip().upper()[:2]
-    dtype = (doc_type_code or "QT").strip().upper()[:2]
-    prefix = f"G7.{dept}.{dtype}."
+    dept = (department_code or "QL").strip().upper()
+    if dept in ["QLCL", "CHẤT LƯỢNG", "CL"]:
+        dept = "QL"
+    elif dept in ["BG", "BGD", "GIÁM ĐỐC", "IS"]:
+        dept = "ISO"
+    elif dept in ["HCNS", "NHÂN SỰ"]:
+        dept = "HC"
+    elif dept in ["ATVSLĐ", "PCCC"]:
+        dept = "AT"
+    elif dept in ["SAN XUAT"]:
+        dept = "SX"
+    elif dept in ["KY THUAT"]:
+        dept = "KT"
+    elif dept in ["MOI TRUONG"]:
+        dept = "MT"
+    elif dept in ["MUA HANG"]:
+        dept = "MH"
+    dtype = (doc_type_code or "QT").strip().upper()
+    prefix = f"G7.{dept}.{dtype}"
     
-    existing_codes = db.query(ISOProcess.new_code).filter(
+    query = db.query(ISOProcess.new_code).filter(
         ISOProcess.new_code.like(f"{prefix}%")
-    ).all()
+    )
+    if exclude_id is not None:
+        query = query.filter(ISOProcess.id != exclude_id)
+        
+    existing_codes = query.all()
     
-    max_num = 0
+    used_nums = set()
     for (c,) in existing_codes:
         if c:
             m = re.search(rf"^{re.escape(prefix)}(\d+)", c)
             if m:
                 try:
-                    num = int(m.group(1))
-                    if num > max_num:
-                        max_num = num
+                    used_nums.add(int(m.group(1)))
                 except:
                     pass
     
-    next_num_str = f"{max_num + 1:02d}"
+    next_num = 1
+    while next_num in used_nums:
+        next_num += 1
+    
+    next_num_str = f"{next_num:02d}"
     return {
         "prefix": prefix,
         "next_code": f"{prefix}{next_num_str}",
-        "seq": max_num + 1
+        "seq": next_num
     }
 
 
@@ -2030,13 +2555,33 @@ async def export_process_docx(data: dict):
         s.left_margin = Pt(72.0)
         s.right_margin = Pt(72.0)
 
-    doc_title = (data.get("name") or "QUY TRÌNH").strip().upper()
-    doc_code = (data.get("code") or data.get("new_code") or "G7.QL.QT10").strip()
-    issue_date = (data.get("issue_date") or datetime.date.today().strftime("%Y-%m-%d")).strip()
-    version = (data.get("version") or "01").strip()
-    dept = (data.get("folder") or data.get("department_name") or "Ban Quản trị Chất lượng & ISO (QLCL)").strip()
-    issuer = data.get("issuer") or "Administrator"
-    approver = data.get("approver") or "Đặng Minh Tuấn"
+    doc_title = (str(data.get("name") or "").strip() or "QUY TRÌNH").upper()
+    raw_code = (str(data.get("new_code") or "").strip() or 
+                str(data.get("code") or "").strip() or 
+                str(data.get("symbol") or "").strip() or
+                str(data.get("iso_document_code") or "").strip())
+    if not raw_code:
+        for s in doc.sections:
+            for p in list(s.footer.paragraphs) + list(s.header.paragraphs):
+                p_t = p.text.strip()
+                if not p_t:
+                    continue
+                m_c = re.search(r'(?:Mã\s*hiệu|Mã\s*quy\s*trình|Mã\s*số)\s*[\:\-]?\s*([A-Z0-9\.\_\s\-]+?)(?:\s{2,}|Ngày|Lần|Trang|$)', p_t, re.I)
+                if m_c:
+                    cand = m_c.group(1).strip()
+                    if len(cand) >= 3 and not cand.lower().startswith("ngày"):
+                        raw_code = cand
+                        break
+            if raw_code:
+                break
+    if not raw_code:
+        raw_code = "G7.CL -QT01"
+    doc_code = raw_code
+    issue_date = (str(data.get("issue_date") or "").strip() or datetime.date.today().strftime("%Y-%m-%d"))
+    version = (str(data.get("version") or "").strip() or "01")
+    dept = (str(data.get("folder") or data.get("department_name") or "").strip() or "Ban Quản trị Chất lượng & ISO (QLCL)")
+    issuer = str(data.get("issuer") or "").strip() or "Administrator"
+    approver = str(data.get("approver") or "").strip() or "Đặng Minh Tuấn"
 
     # Đảm bảo toàn bộ tài liệu dùng font Times New Roman chuẩn
     try:
@@ -2532,12 +3077,12 @@ async def export_process_docx(data: dict):
             tblPr.append(tblLayout)
 
             # Cấu hình gridCol và độ rộng cột chuẩn (tổng = 9026 dxa = 451.3 Pt vừa khít 100% lề in A4)
-            cols_dxa = [560, 2200, 3360, 2040, 866]
-            form_widths = [Pt(28), Pt(110), Pt(168), Pt(102), Pt(43.3)]
+            cols_dxa = [2350, 3450, 1800, 1426]
+            form_widths = [Pt(117.5), Pt(172.5), Pt(90), Pt(71.3)]
             grid_xml = '<w:tblGrid xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' + ''.join([f'<w:gridCol w:w="{d}"/>' for d in cols_dxa]) + '</w:tblGrid>'
             t_forms._tbl.append(parse_xml(grid_xml))
 
-            form_hdrs = ["STT", "Mã biểu mẫu", "Tên biểu mẫu", "Nơi lưu trữ", "Thời hạn lưu"]
+            form_hdrs = ["Mã hiệu biểu mẫu", "Tên biểu mẫu / Hồ sơ kiểm soát", "Nơi lưu trữ", "Thời hạn lưu"]
             
             r0 = t_forms.rows[0]
             trPr0 = r0._tr.get_or_add_trPr()
@@ -2550,7 +3095,6 @@ async def export_process_docx(data: dict):
                 c.text = h_text
                 tcPr = c._tc.get_or_add_tcPr()
                 tcPr.append(parse_xml(f'<w:tcW xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:w="{cols_dxa[i]}" w:type="dxa"/>'))
-                tcPr.append(parse_xml(r'<w:shd xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:fill="F1F5F9" w:val="clear"/>'))
                 tcPr.append(parse_xml(r'<w:vAlign xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:val="center"/>'))
                 tcPr.append(parse_xml(r'<w:tcMar xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tcMar>'))
                 for p in c.paragraphs:
@@ -2558,7 +3102,8 @@ async def export_process_docx(data: dict):
                     for run in p.runs:
                         run.bold = True
                         run.font.name = "Times New Roman"
-                        run.font.size = Pt(10.5)
+                        run.font.size = Pt(11)
+                        run.font.color.rgb = RGBColor(0, 0, 0)
 
             # Tách dòng hoặc tạo dòng mẫu
             form_rows_data = []
@@ -2592,16 +3137,16 @@ async def export_process_docx(data: dict):
                     if l and not is_hdr:
                         parts = [p.strip() for p in re.split(r'\s*[-–—:]\s*', l) if p.strip()]
                         if len(parts) >= 3 and re.match(r'^(?:BM|HD|PL|SOP|WI|QD|QĐ)\d*', parts[1], re.I):
-                            form_rows_data.append({"code": f"{parts[0]} - {parts[1]}", "name": " - ".join(parts[2:])})
+                            form_rows_data.append({"code": f"{parts[0]}-{parts[1]}", "name": " - ".join(parts[2:])})
                         elif len(parts) >= 2:
                             if re.match(r'^(?:BM|HD|PL|SOP|WI|QD|QĐ)\d*', parts[0], re.I):
-                                form_rows_data.append({"code": f"{doc_code} - {parts[0]}", "name": " - ".join(parts[1:])})
+                                form_rows_data.append({"code": f"{doc_code}-{parts[0]}", "name": " - ".join(parts[1:])})
                             else:
                                 form_rows_data.append({"code": parts[0], "name": " - ".join(parts[1:])})
                         else:
                             form_rows_data.append({"code": "", "name": l})
 
-            default_dept_clean = dept if (dept and "phòng" not in dept.lower() and dept != "---") else "Ban Quản trị Chất lượng & ISO (QLCL)"
+            default_dept_clean = dept if (dept and "phòng" not in dept.lower() and dept != "---") else "Ban hệ thống ISO\n(ISO)"
 
             # 3. Nếu vẫn chưa có, lấy từ cột phụ lục của steps_data
             if not form_rows_data:
@@ -2613,30 +3158,32 @@ async def export_process_docx(data: dict):
                             item = item.strip()
                             if item and item not in seen:
                                 seen.add(item)
-                                fmt_c = f"{doc_code} - {item}" if re.match(r'^(?:BM|HD|PL)\d*', item, re.I) else item
+                                fmt_c = f"{doc_code}-{item}" if re.match(r'^(?:BM|HD|PL)\d*', item, re.I) else item
                                 form_rows_data.append({
                                     "code": fmt_c,
                                     "name": f"Biểu mẫu kiểm soát {s.get('name', '')}".strip()
                                 })
 
-            # 4. Mặc định dự phòng nếu chưa có bất kỳ biểu mẫu nào
+            # 4. Mặc định dự phòng nếu chưa có bất kỳ biểu mẫu nào (theo chuẩn ảnh 2)
             if not form_rows_data:
-                proc_name = doc_title or "Quy trình đào tạo"
+                proc_name = doc_title or "Quy trình"
                 form_rows_data = [
-                    {"code": f"{doc_code} - BM01", "name": f"Biểu mẫu theo dõi {proc_name}"},
-                    {"code": f"{doc_code} - BM02", "name": f"Phiếu kiểm tra {proc_name}"},
-                    {"code": f"{doc_code} - BM03", "name": "Sổ tổng hợp và lưu trữ dữ liệu quy trình định kỳ"},
-                    {"code": f"{doc_code} - HD01", "name": f"Hướng dẫn thực hiện {proc_name}"}
+                    {"code": f"{doc_code}-BM01", "name": f"Biểu mẫu theo dõi {proc_name}", "storage": default_dept_clean, "retention": "12 tháng"},
+                    {"code": f"{doc_code}-BM02", "name": "Phiếu ghi nhận thông tin/khiếu nại", "storage": "Ban hệ thống ISO\n(ISO)", "retention": "12 tháng"},
+                    {"code": f"{doc_code}-BM03", "name": "Biên bản xác minh thông tin", "storage": "Ban hệ thống ISO\n(ISO)", "retention": "12 tháng"},
+                    {"code": f"{doc_code}-BM04", "name": "Biên bản họp Hội đồng kỷ luật", "storage": "Ban hệ thống ISO\n(ISO)", "retention": "12 tháng"}
                 ]
 
             for f_idx, f_item in enumerate(form_rows_data):
                 f_seq = f_idx + 1
-                f_c = f_item.get("code") or f"{doc_code} - BM0{f_seq}"
-                f_n = f_item.get("name") or f"Biểu mẫu {f_seq}"
-                if re.match(r'^(?:BM|HD|PL)\d*', f_c, re.I):
-                    f_c = f"{doc_code} - {f_c}"
-                f_store = f_item.get("storage") or ("Ban ISO / QLCL" if (f_idx == 1 or "BM02" in f_c or "ISO" in f_c) else default_dept_clean)
-                f_ret = f_item.get("retention") or ("05 năm" if (f_idx in [1, 3] or "BM02" in f_c or "HD" in f_c or "ISO" in f_c) else "03 năm")
+                raw_c = (f_item.get("code") or f"{doc_code}-BM0{f_seq}").strip()
+                if re.match(r'^(?:BM|HD|PL)\d*', raw_c, re.I):
+                    f_c = f"{doc_code}-{raw_c}"
+                else:
+                    f_c = re.sub(r'\s*-\s*(BM|HD|PL)', r'-\1', raw_c)
+                f_n = (f_item.get("name") or f"Biểu mẫu {f_seq}").strip()
+                f_store = f_item.get("storage") or ("Ban hệ thống ISO\n(ISO)" if (f_idx in [1, 2, 3] or "BM02" in f_c or "ISO" in f_c) else default_dept_clean)
+                f_ret = f_item.get("retention") or "12 tháng"
 
                 row = t_forms.add_row()
                 trPr = row._tr.get_or_add_trPr()
@@ -2650,22 +3197,23 @@ async def export_process_docx(data: dict):
                     tcPr.append(parse_xml(r'<w:vAlign xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:val="center"/>'))
                     tcPr.append(parse_xml(r'<w:tcMar xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tcMar>'))
 
-                row.cells[0].text = str(f_seq)
-                row.cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                row.cells[0].text = f_c
+                row.cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
                 
-                row.cells[1].text = f_c
-                row.cells[1].paragraphs[0].runs[0].bold = True
-                row.cells[1].paragraphs[0].runs[0].font.color.rgb = RGBColor(3, 105, 161)
+                row.cells[1].text = f_n
+                row.cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
 
-                row.cells[2].text = f_n
-                row.cells[3].text = f_store
-                row.cells[4].text = f_ret
-                row.cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                row.cells[2].text = f_store
+                row.cells[2].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+                row.cells[3].text = f_ret
+                row.cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
                 for c in row.cells:
                     for p in c.paragraphs:
                         for run in p.runs:
-                            apply_run_font(run, size=Pt(10))
+                            apply_run_font(run, size=Pt(11))
+                            run.font.color.rgb = RGBColor(0, 0, 0)
 
         else:
             # Các mục văn bản thông thường
@@ -2680,7 +3228,117 @@ async def export_process_docx(data: dict):
                 r_line.font.name = "Times New Roman"
                 r_line.font.size = Pt(11)
 
-    # Đồng bộ Footer chuẩn
+    # Đồng bộ Footer chuẩn: Trang bìa không footer, từ trang 2 hiển thị 4 trường trên 1 hàng (Mã hiệu | Lần ban hành | Ngày ban hành | Trang: PAGE/NUMPAGES)
+    eff_code = (str(data.get("new_code") or "").strip() or 
+                str(data.get("code") or "").strip() or 
+                str(data.get("symbol") or "").strip() or 
+                str(doc_code or "").strip() or 
+                "G7.CL -QT01")
+    eff_ver = version
+    eff_date = issue_date
+    rev_logs = data.get("revision_logs") or []
+    if rev_logs:
+        seq_nums = []
+        for l in rev_logs:
+            try:
+                n = int(l.get("seq_no", 0))
+                if n > 0:
+                    seq_nums.append(n)
+            except Exception:
+                pass
+        if seq_nums:
+            eff_ver = str(max(seq_nums)).zfill(2)
+        for l in reversed(rev_logs):
+            d = str(l.get("rev_date") or "").strip()
+            if d:
+                eff_date = d
+                break
+
+    if "-" in eff_date and len(eff_date.split("-")) == 3:
+        pts = eff_date.split("-")
+        if len(pts[0]) == 4:
+            eff_date = f"{pts[2]}/{pts[1]}/{pts[0]}"
+
+    footer_xml_str = f"""<w:p xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:pPr>
+    <w:pBdr>
+      <w:top w:val="single" w:sz="6" w:space="4" w:color="000000"/>
+    </w:pBdr>
+    <w:tabs>
+      <w:tab w:val="left" w:pos="3100"/>
+      <w:tab w:val="left" w:pos="5900"/>
+      <w:tab w:val="right" w:pos="9360"/>
+    </w:tabs>
+    <w:rPr>
+      <w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/>
+      <w:sz w:val="20"/>
+      <w:szCs w:val="20"/>
+    </w:rPr>
+  </w:pPr>
+  <w:r>
+    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="20"/></w:rPr>
+    <w:t>Mã hiệu: {eff_code}</w:t>
+  </w:r>
+  <w:r><w:tab/></w:r>
+  <w:r>
+    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="20"/></w:rPr>
+    <w:t>Lần ban hành: {eff_ver}</w:t>
+  </w:r>
+  <w:r><w:tab/></w:r>
+  <w:r>
+    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="20"/></w:rPr>
+    <w:t>Ngày ban hành: {eff_date}</w:t>
+  </w:r>
+  <w:r><w:tab/></w:r>
+  <w:r>
+    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="20"/></w:rPr>
+    <w:t xml:space="preserve">Trang: </w:t>
+  </w:r>
+  <w:r>
+    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="20"/></w:rPr>
+    <w:fldChar w:fldCharType="begin"/>
+  </w:r>
+  <w:r>
+    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="20"/></w:rPr>
+    <w:instrText xml:space="preserve"> PAGE </w:instrText>
+  </w:r>
+  <w:r>
+    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="20"/></w:rPr>
+    <w:fldChar w:fldCharType="separate"/>
+  </w:r>
+  <w:r>
+    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="20"/></w:rPr>
+    <w:t>1</w:t>
+  </w:r>
+  <w:r>
+    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="20"/></w:rPr>
+    <w:fldChar w:fldCharType="end"/>
+  </w:r>
+  <w:r>
+    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="20"/></w:rPr>
+    <w:t>/</w:t>
+  </w:r>
+  <w:r>
+    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="20"/></w:rPr>
+    <w:fldChar w:fldCharType="begin"/>
+  </w:r>
+  <w:r>
+    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="20"/></w:rPr>
+    <w:instrText xml:space="preserve"> NUMPAGES </w:instrText>
+  </w:r>
+  <w:r>
+    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="20"/></w:rPr>
+    <w:fldChar w:fldCharType="separate"/>
+  </w:r>
+  <w:r>
+    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="20"/></w:rPr>
+    <w:t>6</w:t>
+  </w:r>
+  <w:r>
+    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="20"/></w:rPr>
+    <w:fldChar w:fldCharType="end"/>
+  </w:r>
+</w:p>"""
     for s in doc.sections:
         s.different_first_page_header_footer = True
         for p in list(s.first_page_footer.paragraphs):
@@ -2691,43 +3349,16 @@ async def export_process_docx(data: dict):
         footer = s.footer
         for p in list(footer.paragraphs):
             p._element.getparent().remove(p._element)
-        f_table = footer.add_table(rows=1, cols=4, width=Pt(451.3))
-        f_table.alignment = WD_TABLE_ALIGNMENT.CENTER
-        widths = [Pt(130), Pt(125), Pt(100), Pt(96.3)]
-        r = f_table.rows[0]
-        for i, w in enumerate(widths):
-            r.cells[i].width = w
-        c0, c1, c2, c3 = r.cells
-        
-        p0 = c0.paragraphs[0]
-        p0.text = f"Mã hiệu: {doc_code}"
-        p0.runs[0].font.name = "Times New Roman"
-        p0.runs[0].font.size = Pt(9.5)
-        p0.runs[0].font.italic = True
+        for t in list(footer.tables):
+            t._element.getparent().remove(t._element)
+        footer._element.append(parse_xml(footer_xml_str))
 
-        p1 = c1.paragraphs[0]
-        p1.text = f"Ngày ban hành: {issue_date}"
-        p1.runs[0].font.name = "Times New Roman"
-        p1.runs[0].font.size = Pt(9.5)
-        p1.runs[0].font.italic = True
-        p1.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-        p2 = c2.paragraphs[0]
-        p2.text = f"Lần ban hành: {version}"
-        p2.runs[0].font.name = "Times New Roman"
-        p2.runs[0].font.size = Pt(9.5)
-        p2.runs[0].font.italic = True
-        p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-        p3 = c3.paragraphs[0]
-        p3.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        run3 = p3.add_run("Trang ")
-        run3.font.name = "Times New Roman"
-        run3.font.size = Pt(9.5)
-        run3.font.italic = True
-        fld_page = OxmlElement('w:fldSimple')
-        fld_page.set(qn('w:instr'), 'PAGE')
-        p3._p.append(fld_page)
+    try:
+        w_settings = doc.settings.element
+        update_fields_el = parse_xml(r'<w:updateFields xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:val="true"/>')
+        w_settings.append(update_fields_el)
+    except Exception:
+        pass
 
     # Xuất ra bộ nhớ đệm
     buf = io.BytesIO()

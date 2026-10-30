@@ -3,8 +3,14 @@ import docx
 import json
 import re
 import unicodedata
+from modules.inspection.services.iso_file_service import get_cell_full_text
 
-def parse_iso_docx(file_path: str) -> dict:
+def is_uuid_str(text: str) -> bool:
+    if not text:
+        return False
+    return bool(re.match(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}', text.strip()))
+
+def parse_iso_docx(file_path: str, original_filename: str = "") -> dict:
     """
     Phân tích file Word (.docx) của tài liệu ISO để tự động bóc tách:
     - Thông tin bìa (Mã hiệu, Lần ban hành, Ngày ban hành, Người soạn thảo, Người duyệt)
@@ -14,6 +20,7 @@ def parse_iso_docx(file_path: str) -> dict:
     """
     result = {
         "code": "",
+        "new_code": "",
         "name": "",
         "version": "01",
         "issue_date": "",
@@ -37,7 +44,8 @@ def parse_iso_docx(file_path: str) -> dict:
         text_val = unicodedata.normalize('NFC', p.text).strip()
         if not text_val:
             return ""
-        is_list_paragraph = p.style.name and ("list" in p.style.name.lower() or "bullet" in p.style.name.lower())
+        style_name = getattr(p.style, 'name', '') if getattr(p, 'style', None) else ''
+        is_list_paragraph = style_name and ("list" in style_name.lower() or "bullet" in style_name.lower())
         if is_list_paragraph:
             if not re.match(r"^[-\*\u2022\u2714\u2713\u2013\u2014\d+\.]", text_val):
                 text_val = "- " + text_val
@@ -50,56 +58,136 @@ def parse_iso_docx(file_path: str) -> dict:
         if t:
             text_lines.append(t)
 
-    # Thử tìm tiêu đề quy trình từ các bảng trước (thường nằm ở hàng đầu/bìa của bảng đầu tiên)
-    for table in doc.tables[:2]:
+    DOC_TITLE_KEYWORDS = [
+        "MỤC TIÊU", "QUY TRÌNH", "QUY ĐỊNH", "HƯỚNG DẪN", "SỔ TAY", 
+        "CHÍNH SÁCH", "TIÊU CHUẨN", "QUYẾT ĐỊNH", "QUY CHẾ", "SƠ ĐỒ", 
+        "BIỂU MẪU", "THÔNG BÁO", "BÁO CÁO", "KẾ HOẠCH", "BẢO HIỂM"
+    ]
+    BOILERPLATE_PHRASES = [
+        "THEO DÕI SỬA ĐỔI", "NHẬT KÝ SỬA ĐỔI", "LỊCH SỬ SỬA ĐỔI", "TRANG BÌA", 
+        "BẢN QUYỀN", "HỌ TÊN", "CHỨC VỤ", "KÝ TÊN", "ĐC:", "ĐỊA CHỈ:", "TAM PHƯỚC", 
+        "513 634", "513 633", "CỘNG HÒA XÃ HỘI", "ĐỘC LẬP", "HẠNH PHÚC",
+        "CÔNG TY CỔ PHẦN VINA G7", "CÔNG TY CỔ PHẦN PHÚ TÀI", "TRÁCH NHIỆM"
+    ]
+    CODE_REGEX = r'(?:Mã\s*hiệu|Mã\s*quy\s*trình|Mã\s*số|Mã\s*tài\s*liệu|Số\s*hiệu|Ký\s*hiệu|Mã)\s*[\:\-]?\s*([A-Za-z0-9\.\_\s\-\/]+?)(?:\s{2,}|\t|\r|\n|Ngày|Lần|Trang|Phiên|Phòng|$)'
+
+    # 1.1 Tìm mã hiệu, phiên bản, ngày ban hành từ Header/Footer của file Word (paragraphs + tables)
+    for s in doc.sections:
+        hf_paragraphs = list(s.footer.paragraphs) + list(s.header.paragraphs)
+        for t in list(s.header.tables) + list(s.footer.tables):
+            for r in t.rows:
+                for c in r.cells:
+                    hf_paragraphs.extend(c.paragraphs)
+
+        for p in hf_paragraphs:
+            txt = p.text.strip()
+            if not txt:
+                continue
+            if not result.get("code"):
+                m_c = re.search(CODE_REGEX, txt, re.I)
+                if m_c:
+                    c_val = m_c.group(1).strip().rstrip('._-')
+                    if len(c_val) >= 2 and not c_val.lower().startswith("ngày") and not is_uuid_str(c_val):
+                        result["code"] = c_val
+            if not result.get("version"):
+                m_v = re.search(r'(?:Lần\s*ban\s*hành|Phiên\s*bản)\s*[\:\-]?\s*(\d+)', txt, re.I)
+                if m_v:
+                    result["version"] = m_v.group(1).strip().zfill(2)
+            if not result.get("issue_date"):
+                m_d = re.search(r'(?:Ngày\s*ban\s*hành|Hiệu\s*lực\s*từ)\s*[\:\-]?\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})', txt, re.I)
+                if m_d:
+                    result["issue_date"] = m_d.group(1).strip()
+
+    # 1.2 Thử tìm tiêu đề quy trình & mã hiệu từ các bảng trước (thường nằm ở hàng đầu/bìa của bảng đầu tiên)
+    for table in doc.tables[:3]:
         for row in table.rows:
             for cell in row.cells:
                 text_clean = cell.text.strip().replace('\n', ' ')
-                if "QUY TRÌNH" in text_clean.upper() and len(text_clean) < 150:
-                    # Loại bỏ khoảng trắng thừa
-                    result["name"] = re.sub(r'\s+', ' ', text_clean)
-                    break
-            if result["name"]:
-                break
-        if result["name"]:
-            break
+                text_upper = text_clean.upper()
+                
+                # Tìm mã hiệu nếu chưa có
+                if not result.get("code"):
+                    m_tc = re.search(CODE_REGEX, text_clean, re.I)
+                    if m_tc:
+                        c_val = m_tc.group(1).strip().rstrip('._-')
+                        if len(c_val) >= 2 and not c_val.lower().startswith("ngày") and not is_uuid_str(c_val):
+                            result["code"] = c_val
 
-    # Nếu không tìm thấy trong bảng, thử tìm từ các đoạn văn bản (paragraphs)
+                # Tìm tiêu đề
+                if not result.get("name") and 5 <= len(text_clean) <= 200:
+                    is_bp = any(b in text_upper for b in BOILERPLATE_PHRASES)
+                    has_kw = any(k in text_upper for k in DOC_TITLE_KEYWORDS)
+                    if not is_bp and has_kw:
+                        result["name"] = re.sub(r'\s+', ' ', text_clean)
+
+    # 1.3 Nếu không tìm thấy tiêu đề trong bảng, thử tìm từ các đoạn văn bản (paragraphs)
     if not result["name"]:
-        for line in text_lines[:15]:
+        for line in text_lines[:25]:
             line_upper = line.upper()
-            if "QUY TRÌNH" in line_upper and len(line) < 150:
+            if len(line) < 5 or len(line) > 200:
+                continue
+            if re.match(r'^(?:[I|V|X]+\.|\d+\.)\s+', line):
+                continue
+            has_kw = any(k in line_upper for k in DOC_TITLE_KEYWORDS)
+            is_bp = any(b in line_upper for b in BOILERPLATE_PHRASES)
+            if has_kw and not is_bp:
+                result["name"] = line
+                break
+            if not result["name"] and (line == line_upper) and not is_bp and not line_upper.startswith("CÔNG TY"):
                 result["name"] = line
                 break
 
-    if not result["name"]:
-        result["name"] = "Quy trình kiểm soát chất lượng mới"
-
-    # Phân tích thông tin cặp Key-Value ở bìa
+    # 1.4 Fallback tìm mã hiệu từ toàn bộ văn bản (paragraphs)
     full_text = "\n".join(text_lines)
-    
-    # Tìm mã hiệu
-    code_match = re.search(r"(?:Mã hiệu|Mã quy trình|Mã số)\s*:\s*([^\n]+)", full_text, re.IGNORECASE)
-    if code_match:
-        result["code"] = code_match.group(1).strip()
-    else:
-        # Thử tìm mã hiệu từ tên tệp (ví dụ: G7.BG.QT02...)
-        base_fn = os.path.basename(file_path)
-        m_code_fn = re.search(r"([A-Z0-9]+(?:\.[A-Z0-9]+)*-[A-Z0-9]+)", base_fn)
-        if not m_code_fn:
-            m_code_fn = re.search(r"(G7\.[A-Z0-9]+(?:\.[A-Z0-9]+)*)", base_fn, re.IGNORECASE)
-        if m_code_fn:
-            result["code"] = m_code_fn.group(1).strip()
-    
+    if not result.get("code"):
+        code_match = re.search(CODE_REGEX, full_text, re.IGNORECASE)
+        if code_match:
+            c_val = code_match.group(1).strip().rstrip('._-')
+            if len(c_val) >= 2 and not c_val.lower().startswith("ngày") and not is_uuid_str(c_val):
+                result["code"] = c_val
+
+    # 1.5 Tìm mã hiệu và tên từ original_filename nếu có
+    clean_fn = ""
+    if original_filename:
+        clean_fn = os.path.splitext(os.path.basename(original_filename))[0].strip()
+    elif not is_uuid_str(os.path.basename(file_path)):
+        clean_fn = os.path.splitext(os.path.basename(file_path))[0].strip()
+
+    if clean_fn:
+        # Pattern 1: "G7.QLCL.QT.01 - QT12 - Tên quy trình"
+        m_dual = re.match(r'^(G7\.[A-Za-z0-9._-]+)\s*[-_]\s*([A-Za-z0-9._-]+)\s*[-_]\s*(.*)$', clean_fn)
+        if m_dual:
+            if not result.get("new_code"):
+                result["new_code"] = m_dual.group(1).strip()
+            if not result.get("code"):
+                result["code"] = m_dual.group(2).strip()
+            if not result.get("name"):
+                result["name"] = m_dual.group(3).strip()
+        else:
+            # Pattern 2: "CODE - Title" hoặc "CODE_Title"
+            m_single = re.match(r'^([A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*(?:\s*[-_]\s*[A-Za-z0-9]+)?)\s*[-_]\s*(.*)$', clean_fn)
+            if m_single:
+                if not result.get("code"):
+                    result["code"] = m_single.group(1).strip()
+                if not result.get("name"):
+                    result["name"] = m_single.group(2).strip()
+            else:
+                if not result.get("code") and re.match(r'^[A-Za-z0-9._-]+$', clean_fn):
+                    result["code"] = clean_fn
+                elif not result.get("name"):
+                    result["name"] = clean_fn
+
     # Tìm lần ban hành
-    ver_match = re.search(r"(?:Lần ban hành|Phiên bản)\s*:\s*([^\n]+)", full_text, re.IGNORECASE)
-    if ver_match:
-        result["version"] = ver_match.group(1).strip()
+    if not result.get("version"):
+        ver_match = re.search(r"(?:Lần ban hành|Phiên bản)\s*:\s*([^\n]+)", full_text, re.IGNORECASE)
+        if ver_match:
+            result["version"] = ver_match.group(1).strip()
         
     # Tìm ngày ban hành
-    date_match = re.search(r"(?:Ngày ban hành|Hiệu lực từ)\s*:\s*([^\n]+)", full_text, re.IGNORECASE)
-    if date_match:
-        result["issue_date"] = date_match.group(1).strip()
+    if not result.get("issue_date"):
+        date_match = re.search(r"(?:Ngày ban hành|Hiệu lực từ)\s*:\s*([^\n]+)", full_text, re.IGNORECASE)
+        if date_match:
+            result["issue_date"] = date_match.group(1).strip()
 
     # Tìm người soạn thảo (Biên soạn) và người phê duyệt từ Table 0 bìa trước (độ chính xác cao hơn)
     for table in doc.tables[:2]:
@@ -145,39 +233,17 @@ def parse_iso_docx(file_path: str) -> dict:
         # Kiểm tra tiêu đề của các cột trong hàng đầu tiên
         headers = [cell.text.strip().lower() for cell in table.rows[0].cells]
         
-        # A. Kiểm tra nếu là Bảng Nhật ký sửa đổi (Revision Log)
-        is_rev_table = any("sửa đổi" in h or "ngày sửa" in h or "nội dung" in h for h in headers)
-        if is_rev_table:
-            for row in table.rows[1:]:
-                cells = [c.text.strip() for c in row.cells]
-                if len(cells) >= 3:
-                    # Map các cột tương ứng: STT, Ngày sửa, Nội dung sửa đổi, Trang số
-                    result["revision_logs"].append({
-                        "seq_no": len(result["revision_logs"]) + 1,
-                        "rev_date": cells[1] if len(cells) > 1 else "",
-                        "content": cells[2] if len(cells) > 2 else "",
-                        "page_no": cells[3] if len(cells) > 3 else ""
-                    })
+        # Bỏ qua bảng ký tên / phê duyệt thủ công ở cuối tài liệu (Ảnh 3)
+        tbl_text = " ".join(c.text.strip().replace("\n", " ") for r in table.rows for c in r.cells).lower()
+        if any(t in tbl_text for t in ["giám đốc", "tổng giám đốc", "p. tổng", "p.tổng"]) and any(d in tbl_text for d in ["đồng nai, ngày", "ngày ", "tháng "]):
             continue
 
-        # B. Kiểm tra nếu là Bảng Danh mục biểu mẫu và hồ sơ lưu trữ (Mục 6)
-        is_forms_table = any("mã hiệu" in h or "thời hạn" in h or "nơi lưu trữ" in h for h in headers) or (any("biểu mẫu" in h or "hồ sơ" in h for h in headers) and not any("lưu đồ" in h or "trách nhiệm" in h for h in headers))
-        if is_forms_table:
-            forms_rows = []
-            for r_idx, row in enumerate(table.rows):
-                cells_text = [re.sub(r'\s+', ' ', c.text.strip()) for c in row.cells]
-                if r_idx == 0:
-                    th_cells = "".join([f'<th style="border:1px solid #000000; padding:6px 8px; font-weight:bold; background:#F1F5F9; text-align:center; font-size:10pt; font-family:\'Times New Roman\', serif;">{c}</th>' for c in cells_text])
-                    forms_rows.append(f'<tr>{th_cells}</tr>')
-                else:
-                    td_cells = "".join([f'<td style="border:1px solid #000000; padding:6px 8px; text-align:{"center" if idx in [0, 2, 3] else "left"}; font-size:10pt; font-family:\'Times New Roman\', serif;">{c}</td>' for idx, c in enumerate(cells_text)])
-                    forms_rows.append(f'<tr>{td_cells}</tr>')
-            forms_table_html = f'<table class="iso-doc-forms-table" style="width:100%; border-collapse:collapse; margin-top:8px; border:1px solid #000000; font-family:\'Times New Roman\', serif;"><tbody>{"".join(forms_rows)}</tbody></table>'
-            result["forms_table_html"] = forms_table_html
-            continue
-
-        # C. Kiểm tra nếu là Bảng các bước lưu đồ (Flowchart/Process table)
-        is_flow_table = any("trách nhiệm" in h or "lưu đồ" in h for h in headers)
+        # A. Kiểm tra nếu là Bảng các bước lưu đồ (Flowchart/Process table)
+        is_flow_table = any("trách nhiệm" in h or "lưu đồ" in h for h in headers) or (
+            any("bước" in h or "stt" in h for h in headers) and 
+            any("nội dung" in h or "quy trình" in h or "tiến trình" in h for h in headers) and 
+            any("biểu mẫu" in h or "tài liệu" in h or "phụ lục" in h for h in headers)
+        )
         if is_flow_table:
             # Xác định chỉ mục các cột
             col_idx = {
@@ -191,18 +257,17 @@ def parse_iso_docx(file_path: str) -> dict:
                     col_idx["step"] = idx
                 elif "trách nhiệm" in h:
                     col_idx["role"] = idx
-                elif "lưu đồ" in h or "tên bước" in h or "nội dung" in h:
+                elif "lưu đồ" in h or "tên bước" in h or "nội dung" in h or "tiến trình" in h or "quy trình" in h:
                     col_idx["flow"] = idx
                 elif "biểu mẫu" in h or "tài liệu" in h or "phụ lục" in h:
                     col_idx["template"] = idx
 
             # Lưu trữ thông tin phân công và biểu mẫu từ bảng để đối chiếu
             for row in table.rows[1:]:
-                cells = [c.text.strip() for c in row.cells]
-                role = cells[col_idx["role"]] if col_idx["role"] >= 0 and col_idx["role"] < len(cells) else ""
-                template = cells[col_idx["template"]] if col_idx["template"] >= 0 and col_idx["template"] < len(cells) else ""
-                flow = cells[col_idx["flow"]] if col_idx["flow"] >= 0 and col_idx["flow"] < len(cells) else ""
-                step_str = cells[col_idx["step"]] if col_idx["step"] >= 0 and col_idx["step"] < len(cells) else ""
+                role = row.cells[col_idx["role"]].text.strip() if col_idx["role"] >= 0 and col_idx["role"] < len(row.cells) else ""
+                template = row.cells[col_idx["template"]].text.strip() if col_idx["template"] >= 0 and col_idx["template"] < len(row.cells) else ""
+                flow = get_cell_full_text(row.cells[col_idx["flow"]]) if col_idx["flow"] >= 0 and col_idx["flow"] < len(row.cells) else ""
+                step_str = row.cells[col_idx["step"]].text.strip() if col_idx["step"] >= 0 and col_idx["step"] < len(row.cells) else ""
                 
                 roles_list.append(role)
                 templates_list.append(template)
@@ -234,6 +299,42 @@ def parse_iso_docx(file_path: str) -> dict:
                         "template_files": template,
                         "node_type": node_type
                     })
+            continue
+
+        # B. Kiểm tra nếu là Bảng Nhật ký sửa đổi (Revision Log)
+        is_rev_table = any("sửa đổi" in h or "ngày sửa" in h for h in headers)
+        if is_rev_table:
+            for row in table.rows[1:]:
+                cells = [c.text.strip() for c in row.cells]
+                if len(cells) >= 3 and any(cells):
+                    # Map các cột tương ứng: STT, Ngày sửa, Nội dung sửa đổi, Trang số
+                    result["revision_logs"].append({
+                        "seq_no": len(result["revision_logs"]) + 1,
+                        "rev_date": cells[1] if len(cells) > 1 else "",
+                        "content": cells[2] if len(cells) > 2 else "",
+                        "page_no": cells[3] if len(cells) > 3 else ""
+                    })
+            if result["revision_logs"]:
+                seq_nums = [int(l["seq_no"]) for l in result["revision_logs"] if str(l.get("seq_no", "")).isdigit()]
+                max_seq = max(seq_nums) if seq_nums else len(result["revision_logs"])
+                if max_seq > 0:
+                    result["version"] = str(max_seq).zfill(2)
+            continue
+
+        # C. Kiểm tra nếu là Bảng Danh mục biểu mẫu và hồ sơ lưu trữ (Mục 6)
+        is_forms_table = any("mã hiệu" in h or "thời hạn" in h or "nơi lưu trữ" in h for h in headers) or (any("biểu mẫu" in h or "hồ sơ" in h for h in headers) and not any("lưu đồ" in h or "trách nhiệm" in h for h in headers))
+        if is_forms_table:
+            forms_rows = []
+            for r_idx, row in enumerate(table.rows):
+                cells_text = [re.sub(r'\s+', ' ', c.text.strip()) for c in row.cells]
+                if r_idx == 0:
+                    th_cells = "".join([f'<th style="border:1px solid #000000; padding:6px 8px; font-weight:bold; background:#F1F5F9; text-align:center; font-size:10pt; font-family:\'Times New Roman\', serif;">{c}</th>' for c in cells_text])
+                    forms_rows.append(f'<tr>{th_cells}</tr>')
+                else:
+                    td_cells = "".join([f'<td style="border:1px solid #000000; padding:6px 8px; text-align:{"center" if idx in [0, 2, 3] else "left"}; font-size:10pt; font-family:\'Times New Roman\', serif;">{c}</td>' for idx, c in enumerate(cells_text)])
+                    forms_rows.append(f'<tr>{td_cells}</tr>')
+            forms_table_html = f'<table class="iso-doc-forms-table" style="width:100%; border-collapse:collapse; margin-top:8px; border:1px solid #000000; font-family:\'Times New Roman\', serif;"><tbody>{"".join(forms_rows)}</tbody></table>'
+            result["forms_table_html"] = forms_table_html
             continue
 
     # 3. Phân tích nội dung văn bản chính (Các phần lớn từ 1 đến 5)
@@ -284,6 +385,13 @@ def parse_iso_docx(file_path: str) -> dict:
             "lưu đồ" in line_lower or
             "(xem trang" in line_lower or 
             "xem trang sau" in line_lower or
+            "tam phước" in line_lower or
+            "513 634" in line_lower or
+            "3513634" in line_lower or
+            "ccn tam" in line_lower or
+            "phu tai" in line_lower or
+            "công ty cổ phần vi na g7" in line_lower or
+            "công ty cổ phần vina g7" in line_lower or
             "[" in line or
             "]" in line or
             "✓" in line
@@ -294,7 +402,7 @@ def parse_iso_docx(file_path: str) -> dict:
             line.startswith(('-', '*', '•')) or 
             (bool(re.match(r'^\s*\d+[\)\.]', line)) and not is_numbered_heading) or
             bool(re.match(r'^\s*[a-z][\)\.]', line)) or
-            any(sig in line_lower for sig in ['tổng giám đốc', 'phó giám đốc', 'ngày ban hành', 'đồng nai, ngày'])
+            any(sig in line_lower for sig in ['tổng giám đốc', 'phó giám đốc', 'p. tổng', 'p.tổng', 'ngày ban hành', 'đồng nai, ngày', 'nguyễn hòa', 'đặng văn nam'])
         )
 
         if not is_step and not is_exclude and not is_subbullet_or_sig and len(line) <= 80:
@@ -321,8 +429,14 @@ def parse_iso_docx(file_path: str) -> dict:
                     c for c in section_content
                     if not (
                         re.search(r'ngày\s+\d+\s+tháng\s+\d+\s+năm', c.lower()) or
+                        'đồng nai, ngày' in c.lower() or
                         re.match(r'^(?:p\.?\s*)?(?:tổng\s+)?giám\s+đốc\b', c.lower()) or
-                        c.lower().strip() in ['nguyễn hòa', 'đặng văn nam']
+                        c.lower().strip() in ['nguyễn hòa', 'đặng văn nam'] or
+                        'tam phước' in c.lower() or
+                        'ccn tam' in c.lower() or
+                        '3513634' in c.lower() or
+                        '513 634' in c.lower() or
+                        '513 633' in c.lower()
                     )
                 ]
                 content_p = "<p style=\"font-family: 'Times New Roman', Times, serif;\">" + "</p><p style=\"font-family: 'Times New Roman', Times, serif;\">".join(filtered_lines) + "</p>" if filtered_lines else ""
@@ -366,8 +480,14 @@ def parse_iso_docx(file_path: str) -> dict:
             c for c in section_content
             if not (
                 re.search(r'ngày\s+\d+\s+tháng\s+\d+\s+năm', c.lower()) or
+                'đồng nai, ngày' in c.lower() or
                 re.match(r'^(?:p\.?\s*)?(?:tổng\s+)?giám\s+đốc\b', c.lower()) or
-                c.lower().strip() in ['nguyễn hòa', 'đặng văn nam']
+                c.lower().strip() in ['nguyễn hòa', 'đặng văn nam'] or
+                'tam phước' in c.lower() or
+                'ccn tam' in c.lower() or
+                '3513634' in c.lower() or
+                '513 634' in c.lower() or
+                '513 633' in c.lower()
             )
         ]
         final_p = "<p>" + "</p><p>".join(filtered_lines) + "</p>" if filtered_lines else ""
@@ -426,6 +546,12 @@ def parse_iso_docx(file_path: str) -> dict:
             step["instructions"] = "<p>" + "</p><p>".join(step["instructions_list"]) + "</p>"
             del step["instructions_list"]
             
+        # Bổ sung các bước có trong Bảng lưu đồ nhưng chưa xuất hiện trong các đoạn văn Diễn giải (ví dụ bước Lưu hồ sơ)
+        existing_step_nums = {s["step_number"] for s in extracted_steps}
+        for t_step in table_steps:
+            if t_step["step_number"] not in existing_step_nums:
+                extracted_steps.append(t_step)
+        extracted_steps.sort(key=lambda x: x["step_number"])
         result["steps"] = extracted_steps
     else:
         result["steps"] = table_steps

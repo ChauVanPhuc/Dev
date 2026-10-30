@@ -29,14 +29,14 @@ class ISOSignatureService:
 
         # Mẫu 1: Trưởng phòng QLCL - Chữ ký ảnh tải lên (SVG path / data base64)
         sig1 = ISOSignature(
-            user_code="TP_QLCL",
-            full_name="Nguyễn Văn An",
-            department="CL",
-            position="Trưởng phòng Quản lý Chất lượng",
+            user_code="nam.dv",
+            full_name="Đặng Văn Nam",
+            department="QLCL",
+            position="Trưởng phòng QLCL",
             approval_level="Cấp phòng",
             signature_type="HANDWRITTEN_IMAGE",
             image_path="",
-            signature_data="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='70' viewBox='0 0 180 70'><path d='M20,45 Q40,15 65,35 T110,30 T150,25 Q130,55 90,52 T35,48' fill='none' stroke='%23003399' stroke-width='2.5' stroke-linecap='round'/><text x='115' y='60' font-family='sans-serif' font-size='10' fill='%23666'>NV An</text></svg>",
+            signature_data="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='70' viewBox='0 0 180 70'><path d='M20,45 Q40,15 65,35 T110,30 T150,25 Q130,55 90,52 T35,48' fill='none' stroke='%23003399' stroke-width='2.5' stroke-linecap='round'/><text x='115' y='60' font-family='sans-serif' font-size='10' fill='%23666'>DV Nam</text></svg>",
             is_default=True,
             is_active=True,
             notes="Chữ ký tay chính thức của Trưởng phòng QLCL phục vụ ký duyệt quy trình và biểu mẫu cấp phòng",
@@ -47,10 +47,10 @@ class ISOSignatureService:
         # Mẫu 2: Ban Giám Đốc - Chữ ký điện tử / Chứng thư số
         hash_bgd = hashlib.sha256("SMARTFLOW_BGD_DIGITAL_SIGNATURE_2026".encode()).hexdigest()
         sig2 = ISOSignature(
-            user_code="BGD_CEO",
-            full_name="Trần Đình Hùng",
+            user_code="Tam",
+            full_name="Lương Thị Thanh Tâm",
             department="BGD",
-            position="Tổng Giám Đốc",
+            position="Giám Đốc",
             approval_level="Cấp công ty",
             signature_type="DIGITAL",
             digital_cert_provider="SmartFlow Corporate PKI (Viettel-CA)",
@@ -65,27 +65,11 @@ class ISOSignatureService:
             updated_at=now_str
         )
 
-        # Mẫu 3: Trưởng phòng Sản xuất - Chữ ký tay vẽ trực tiếp (Canvas)
+        # Mẫu 3: Quản lý Tài liệu ISO - Chữ ký ảnh
         sig3 = ISOSignature(
-            user_code="TP_SX",
-            full_name="Lê Hoàng Long",
-            department="SX",
-            position="Trưởng phòng Sản Xuất",
-            approval_level="Cả hai",
-            signature_type="HANDWRITTEN_DRAW",
-            signature_data="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='70' viewBox='0 0 180 70'><path d='M25,50 Q45,20 70,40 C95,60 120,20 145,35 M80,25 Q110,65 155,50' fill='none' stroke='%231F2937' stroke-width='2.2' stroke-linecap='round'/><text x='110' y='62' font-family='sans-serif' font-size='10' fill='%23666'>LH Long</text></svg>",
-            is_default=True,
-            is_active=True,
-            notes="Chữ ký vẽ trực tiếp bằng bảng ký cảm ứng SmartFlow",
-            created_at=now_str,
-            updated_at=now_str
-        )
-
-        # Mẫu 4: Quản lý Tài liệu ISO (QA Admin) - Chữ ký tay ảnh
-        sig4 = ISOSignature(
-            user_code="QA_ADMIN",
+            user_code="mai.pt",
             full_name="Phạm Thị Mai",
-            department="CL",
+            department="QLCL",
             position="Kiểm soát Tài liệu & Hệ thống ISO",
             approval_level="Cấp phòng",
             signature_type="HANDWRITTEN_IMAGE",
@@ -97,7 +81,7 @@ class ISOSignatureService:
             updated_at=now_str
         )
 
-        db.add_all([sig1, sig2, sig3, sig4])
+        db.add_all([sig1, sig2, sig3])
         db.commit()
 
     @staticmethod

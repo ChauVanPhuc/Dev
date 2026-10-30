@@ -3,7 +3,7 @@ import {
   Search, Filter, Plus, Upload, Download, MoreHorizontal, MoreVertical,
   Trash2, Edit, Eye, X, ChevronLeft, ChevronRight,
   FileSpreadsheet, Folder, Columns, RotateCcw,
-  FileText, Layers, CheckCircle2, ArrowUpDown
+  FileText, Layers, CheckCircle2, ArrowUpDown, LayoutGrid, List
 } from 'lucide-react';
 import { 
   COLUMN_CONFIG, 
@@ -24,6 +24,9 @@ const DEPARTMENT_OPTIONS = [
 
 export const ISOMasterRecordTable = ({
   records = [],
+  onSelectFolder,
+  onOpenEditFolder,
+
   loading = false,
   totalCount = 0,
   totalPages = 1,
@@ -90,6 +93,20 @@ export const ISOMasterRecordTable = ({
 }) => {
   const [isFilterOpen, setIsFilterOpen] = useState(true);
   const [isSortOpen, setIsSortOpen] = useState(false);
+  const [viewMode, setViewMode] = useState(() => {
+    try {
+      return localStorage.getItem('iso_records_view_mode') || 'grid';
+    } catch {
+      return 'grid';
+    }
+  });
+
+  const handleSetViewMode = (mode) => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem('iso_records_view_mode', mode);
+    } catch {}
+  };
   const exportDropdownRef = useRef(null);
   const otherDropdownRef = useRef(null);
   const columnsMenuRef = useRef(null);
@@ -341,6 +358,52 @@ export const ISOMasterRecordTable = ({
                 })}
               </div>
             )}
+          </div>
+
+          {/* View Mode Toggle: Grid vs Table */}
+          <div style={{ display: 'flex', alignItems: 'center', backgroundColor: '#F1F5F9', padding: '2px', borderRadius: '8px', gap: '2px', border: '1px solid #E2E8F0', marginLeft: '4px' }}>
+            <button 
+              type="button" 
+              onClick={() => handleSetViewMode('grid')}
+              title="Chế độ xem Thư mục"
+              style={{
+                width: '32px',
+                height: '32px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '6px',
+                border: 'none',
+                backgroundColor: viewMode === 'grid' ? '#FFFFFF' : 'transparent',
+                color: viewMode === 'grid' ? '#7B5233' : '#64748B',
+                boxShadow: viewMode === 'grid' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <LayoutGrid size={16} />
+            </button>
+            <button 
+              type="button" 
+              onClick={() => handleSetViewMode('table')}
+              title="Chế độ xem Bảng chi tiết"
+              style={{
+                width: '32px',
+                height: '32px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '6px',
+                border: 'none',
+                backgroundColor: viewMode === 'table' ? '#FFFFFF' : 'transparent',
+                color: viewMode === 'table' ? '#7B5233' : '#64748B',
+                boxShadow: viewMode === 'table' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <List size={16} />
+            </button>
           </div>
         </div>
 
@@ -674,10 +737,303 @@ export const ISOMasterRecordTable = ({
         </div>
       )}
 
-      {/* 3. Main Data Table */}
+      {/* 3. Main Data: Folder Grid View or Table View */}
       <div className="iso-table-card">
-        <div className="iso-table-scroll">
-          <table className="iso-table">
+        {viewMode === 'grid' ? (
+          <div className="iso-folder-grid-wrapper" style={{ minHeight: '380px', padding: '24px 20px', backgroundColor: '#FFFFFF' }}>
+            {loading ? (
+              <div className="iso-table-loading" style={{ padding: '60px 0' }}>
+                <div className="iso-spinner-box">
+                  <div className="iso-spinner-large" />
+                  <span>Đang tải danh sách bộ tài liệu...</span>
+                </div>
+              </div>
+            ) : records.length === 0 ? (
+              <div className="iso-folder-empty-state" style={{ textAlign: 'center', padding: '60px 20px', color: '#64748B' }}>
+                <div style={{ marginBottom: '14px', display: 'flex', justifyContent: 'center' }}>
+                  <Folder size={64} color="#CBD5E1" strokeWidth={1.2} />
+                </div>
+                <h4 style={{ margin: '0 0 6px 0', fontSize: '1.05rem', color: '#334155', fontWeight: '700' }}>
+                  Chưa có bộ tài liệu nào
+                </h4>
+                <p style={{ margin: '0 0 18px 0', fontSize: '0.88rem', color: '#64748B' }}>
+                  Bấm nút "Thêm hồ sơ" phía trên để tạo thư mục bộ tài liệu mới.
+                </p>
+                <button
+                  type="button"
+                  className="iso-btn-brown"
+                  onClick={openCreateModal}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <Plus size={16} />
+                  <span>Thêm hồ sơ</span>
+                </button>
+              </div>
+            ) : (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+                gap: '24px 20px',
+                alignItems: 'start'
+              }}>
+                {records.map((rec, idx) => {
+                  const isSelected = selectedIds?.includes(rec.id);
+                  const isActionOpen = actionMenuId === rec.id;
+
+                  return (
+                    <div
+                      key={rec.group_key || rec.id || idx}
+                      className="iso-folder-card"
+                      onClick={() => onSelectFolder ? onSelectFolder(rec) : handleOpenDetailModal(rec)}
+                      onDoubleClick={() => onSelectFolder ? onSelectFolder(rec) : handleOpenDetailModal(rec)}
+                      title={`Bấm để mở bộ tài liệu: ${rec.document_name || 'Hồ sơ'}`}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        padding: '16px 12px 14px 12px',
+                        borderRadius: '12px',
+                        border: isSelected ? '1.5px solid #D97706' : '1px solid #E2E8F0',
+                        backgroundColor: isSelected ? '#FEF3C7' : '#FFFFFF',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+                        cursor: 'pointer',
+                        position: 'relative',
+                        transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
+                        userSelect: 'none'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = '0 8px 20px -4px rgba(123, 82, 51, 0.12)';
+                        e.currentTarget.style.borderColor = '#F59E0B';
+                        e.currentTarget.style.backgroundColor = isSelected ? '#FEF3C7' : '#FFFDF7';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'none';
+                        e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.03)';
+                        e.currentTarget.style.borderColor = isSelected ? '#D97706' : '#E2E8F0';
+                        e.currentTarget.style.backgroundColor = isSelected ? '#FEF3C7' : '#FFFFFF';
+                      }}
+                    >
+                      {/* Checkbox chọn */}
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: '8px',
+                          left: '8px',
+                          zIndex: 2
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (setSelectedIds) {
+                            setSelectedIds(prev => 
+                              prev.includes(rec.id) ? prev.filter(x => x !== rec.id) : [...prev, rec.id]
+                            );
+                          }
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => {}}
+                          style={{
+                            accentColor: '#7B5233',
+                            width: '14px',
+                            height: '14px',
+                            cursor: 'pointer',
+                            opacity: isSelected ? 1 : 0.4
+                          }}
+                          onMouseEnter={(e) => e.target.style.opacity = '1'}
+                          onMouseLeave={(e) => { if (!isSelected) e.target.style.opacity = '0.4'; }}
+                        />
+                      </div>
+
+                      {/* Menu 3 chấm góc phải */}
+                      <div
+                        className="iso-folder-action-wrapper"
+                        style={{
+                          position: 'absolute',
+                          top: '8px',
+                          right: '8px',
+                          zIndex: 3
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        onMouseDown={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          className="iso-action-btn"
+                          onClick={() => setActionMenuId(isActionOpen ? null : rec.id)}
+                          style={{
+                            border: 'none',
+                            backgroundColor: 'transparent',
+                            cursor: 'pointer',
+                            color: '#94A3B8',
+                            padding: '3px',
+                            borderRadius: '4px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#F1F5F9'; e.currentTarget.style.color = '#334155'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#94A3B8'; }}
+                          title="Thao tác"
+                        >
+                          <MoreVertical size={15} />
+                        </button>
+
+                        {isActionOpen && (
+                          <div
+                            className="iso-action-menu iso-dropdown-menu"
+                            style={{
+                              position: 'absolute',
+                              top: '100%',
+                              right: 0,
+                              zIndex: 100,
+                              minWidth: '150px'
+                            }}
+                          >
+                            <button
+                              type="button"
+                              className="iso-dropdown-item"
+                              style={{ fontWeight: '600', color: '#7B5233' }}
+                              onClick={() => {
+                                setActionMenuId(null);
+                                if (onSelectFolder) onSelectFolder(rec);
+                              }}
+                            >
+                              <Folder size={14} color="#7B5233" />
+                              <span>Mở bộ tài liệu</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="iso-dropdown-item"
+                              onClick={() => {
+                                setActionMenuId(null);
+                                handleOpenDetailModal(rec, false);
+                              }}
+                            >
+                              <Eye size={14} />
+                              <span>Xem thông tin bộ</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="iso-dropdown-item"
+                              onClick={() => {
+                                setActionMenuId(null);
+                                if (onOpenEditFolder) {
+                                  onOpenEditFolder(rec);
+                                } else {
+                                  handleOpenDetailModal(rec, true);
+                                }
+                              }}
+                            >
+                              <Edit size={14} />
+                              <span>Chỉnh sửa</span>
+                            </button>
+                            <div style={{ height: '1px', backgroundColor: '#F1F5F9', margin: '4px 0' }}></div>
+                            <button
+                              type="button"
+                              className="iso-dropdown-item"
+                              style={{ color: '#DC2626' }}
+                              onClick={() => {
+                                setActionMenuId(null);
+                                handleSingleDelete(rec);
+                              }}
+                            >
+                              <Trash2 size={14} />
+                              <span>Xóa hồ sơ</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Icon Thư mục màu vàng Windows Explorer */}
+                      <div style={{ marginBottom: '10px', marginTop: '6px', display: 'flex', justifyContent: 'center' }}>
+                        <svg width="68" height="56" viewBox="0 0 68 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M4 10C4 6.68629 6.68629 4 10 4H26.5C28.5 4 30.5 5.2 31.5 7L34.5 11H60C63.3137 11 66 13.6863 66 17V48C66 51.3137 63.3137 54 60 54H10C6.68629 54 4 51.3137 4 48V10Z" fill="#FCD34D" stroke="#F59E0B" strokeWidth="1.5"/>
+                          <rect x="14" y="9" width="38" height="26" rx="2" fill="#FFFFFF" opacity="0.95" stroke="#E2E8F0" strokeWidth="1"/>
+                          <rect x="18" y="14" width="22" height="2.5" rx="1" fill="#3B82F6"/>
+                          <rect x="18" y="19" width="30" height="2" rx="1" fill="#94A3B8"/>
+                          <rect x="18" y="23" width="26" height="2" rx="1" fill="#CBD5E1"/>
+                          <path d="M2 17C2 14.7909 3.79086 13 6 13H62C64.2091 13 66 14.7909 66 17V48C66 51.3137 63.3137 54 60 54H8C4.68629 54 2 51.3137 2 48V17Z" fill="url(#folder_grad_card)" stroke="#D97706" strokeWidth="1.5"/>
+                          <defs>
+                            <linearGradient id="folder_grad_card" x1="34" y1="13" x2="34" y2="54" gradientUnits="userSpaceOnUse">
+                              <stop stopColor="#FDE68A"/>
+                              <stop offset="1" stopColor="#F59E0B"/>
+                            </linearGradient>
+                          </defs>
+                        </svg>
+                      </div>
+
+                      {/* Tên Thư mục / Hồ sơ */}
+                      <div
+                        style={{
+                          fontSize: '0.84rem',
+                          fontWeight: '600',
+                          color: '#1E293B',
+                          textAlign: 'center',
+                          width: '100%',
+                          lineHeight: '1.35',
+                          overflow: 'hidden',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          wordBreak: 'break-word',
+                          minHeight: '2.3em'
+                        }}
+                        title={rec.document_name || 'Hồ sơ'}
+                      >
+                        {rec.document_name || 'Hồ sơ'}
+                      </div>
+
+                      {/* Phân loại & Trạng thái */}
+                      <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', color: '#64748B' }}>
+                        <span style={{
+                          backgroundColor: '#F1F5F9',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          fontWeight: '500',
+                          color: '#475569'
+                        }}>
+                          {rec.department_in_charge || 'Bộ tài liệu'}
+                        </span>
+                        {rec.source_status && (
+                          <span style={{
+                            fontSize: '0.7rem',
+                            color: rec.source_status === 'Hiệu lực' ? '#16A34A' : '#D97706',
+                            fontWeight: '600'
+                          }}>
+                            • {rec.source_status}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Số lượng tài liệu con */}
+                      <div style={{
+                        marginTop: '4px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        backgroundColor: '#EFF6FF',
+                        border: '1px solid #BFDBFE',
+                        fontSize: '0.72rem',
+                        color: '#1E40AF',
+                        fontWeight: '600'
+                      }}>
+                        <Layers size={11} />
+                        <span>{rec.children_count ? `${rec.children_count} tài liệu` : 'Chưa có tài liệu'}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="iso-table-scroll">
+            <table className="iso-table">
             <thead>
               <tr>
                 <th style={{ width: '42px', textAlign: 'center' }}>STT</th>
@@ -722,7 +1078,7 @@ export const ISOMasterRecordTable = ({
                     <tr 
                       key={rec.group_key || rec.id || idx}
                       className="iso-table-row is-clickable"
-                      onClick={() => handleOpenDetailModal(rec)}
+                      onClick={() => onSelectFolder ? onSelectFolder(rec) : handleOpenDetailModal(rec)}
                     >
                       <td style={{ textAlign: 'center', color: '#64748B' }}>{stt}</td>
 
@@ -867,7 +1223,11 @@ export const ISOMasterRecordTable = ({
                                   className="iso-action-menu-item"
                                   onClick={() => {
                                     setActionMenuId(null);
-                                    handleOpenDetailModal(rec, true);
+                                    if (onOpenEditFolder) {
+                                      onOpenEditFolder(rec);
+                                    } else {
+                                      handleOpenDetailModal(rec, true);
+                                    }
                                   }}
                                 >
                                   <Edit size={14} color="#0284C7" />
@@ -896,6 +1256,7 @@ export const ISOMasterRecordTable = ({
             </tbody>
           </table>
         </div>
+        )}
 
         {/* Pagination bar - Khớp module Claim */}
         {(() => {
