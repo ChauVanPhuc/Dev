@@ -7,14 +7,32 @@ import { create } from 'zustand'
 const useUiStore = create((set) => ({
   isSidebarOpen: false,
   isNotificationOpen: false,
-  
-  // Hành động đóng/mở Sidebar Menu (Trái)
-  toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
-  setSidebarOpen: (isOpen) => set({ isSidebarOpen: isOpen }),
 
-  // Hành động đóng/mở Sidebar Thông báo (Phải)
+  // --- Điều khiển Sidebar (Menu trái) & Sidebar Thông báo (phải) ---
+  setSidebarOpen: (open) => set({ isSidebarOpen: !!open }),
+  toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
+  setNotificationOpen: (open) => set({ isNotificationOpen: !!open }),
   toggleNotification: () => set((state) => ({ isNotificationOpen: !state.isNotificationOpen })),
-  setNotificationOpen: (isOpen) => set({ isNotificationOpen: isOpen }),
+  
+  // --- Quản lý Theme Giao diện (Light / Dark Obsidian) ---
+  theme: (typeof window !== 'undefined' && localStorage.getItem('smartflow_theme')) || 'light',
+  toggleTheme: () => set((state) => {
+    const nextTheme = state.theme === 'dark' ? 'light' : 'dark';
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('smartflow_theme', nextTheme);
+      document.documentElement.setAttribute('data-theme', nextTheme);
+      window.dispatchEvent(new CustomEvent('smartflow-theme-changed', { detail: { theme: nextTheme } }));
+    }
+    return { theme: nextTheme };
+  }),
+  setTheme: (theme) => set(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('smartflow_theme', theme);
+      document.documentElement.setAttribute('data-theme', theme);
+      window.dispatchEvent(new CustomEvent('smartflow-theme-changed', { detail: { theme } }));
+    }
+    return { theme };
+  }),
 
   // --- Trạng thái Thông báo Real-time ---
   isNotificationInitialized: false, // Cờ báo hiệu đã chạy initLatestId chưa

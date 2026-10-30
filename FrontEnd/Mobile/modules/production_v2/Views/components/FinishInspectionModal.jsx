@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, ShoppingCart, Loader2 } from 'lucide-react'
+import { formatCabinetSeriesTag } from '../../utils/cabinetSeriesMapper'
 
 const isInvalidSpec = (spec) => {
   if (!spec) return true
@@ -46,21 +47,7 @@ const getEffectiveSpec = (specRaw, partName) => {
 }
 
 const cleanCabinetTag = (tag, fallback = '') => {
-  if (!tag) return fallback
-  const str = String(tag).trim()
-  let cleaned = str.replace(/^[A-Za-z0-9]+-\d+(?:-[A-Za-z0-9]+)?\s*\|\s*/i, '').trim()
-
-  const m = cleaned.match(/^([^(]+?)\s*\(([^)]+)\)$/)
-  if (m) {
-    const namePart = m[1].trim()
-    const skuPart = m[2].trim()
-    const cleanName = namePart.replace(/^APT[-_]?/i, '').trim().toLowerCase()
-    const cleanSku = skuPart.replace(/^APT[-_]?/i, '').trim().toLowerCase()
-    if (cleanName === cleanSku) {
-      cleaned = namePart
-    }
-  }
-  return cleaned || fallback
+  return formatCabinetSeriesTag(tag, fallback)
 }
 
 const FinishInspectionModal = ({ open, summary, palletCode, onConfirm, onClose, onCreatePallet, isReInspect = false }) => {

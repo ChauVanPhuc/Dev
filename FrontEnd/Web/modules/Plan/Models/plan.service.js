@@ -4,11 +4,14 @@ import api from '@webShared/Services/api.service';
 
 export const planService = {
 
-    getPlans: async (page = null, pageSize = 30, search = '', status = 'all', sortDirection = 'desc') => {
-        if (page === null) {
-            return await api.get('/plans/');
-        }
-        return await api.get(`/plans/?page=${page}&pageSize=${pageSize}&search=${encodeURIComponent(search)}&status=${status}&sortDirection=${sortDirection}`);
+    getPlans: async (page = null, pageSize = 30, search = '', status = 'all', sortDirection = 'desc', planId = '', planMonth = '', planYear = '') => {
+        let url = page === null 
+            ? '/plans/' 
+            : `/plans/?page=${page}&pageSize=${pageSize}&search=${encodeURIComponent(search)}&status=${status}&sortDirection=${sortDirection}`;
+        if (planId) url += `${url.includes('?') ? '&' : '?'}plan_id=${planId}`;
+        if (planMonth) url += `${url.includes('?') ? '&' : '?'}plan_month=${planMonth}`;
+        if (planYear) url += `${url.includes('?') ? '&' : '?'}plan_year=${planYear}`;
+        return await api.get(url);
     },
 
 

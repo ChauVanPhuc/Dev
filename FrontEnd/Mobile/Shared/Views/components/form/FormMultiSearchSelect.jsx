@@ -72,30 +72,69 @@ const FormMultiSearchSelect = ({
     }
   }, [isOpen])
 
-  // Lọc danh sách theo từ khóa tìm kiếm (chỉ lọc trên nhãn hiển thị, không lọc mã ID/lô con ẩn)
+  // Lọc danh sách theo từ khóa tìm kiếm (hỗ trợ tìm kiếm thông minh 2 chiều: cả mã series mới và mã số cũ)
   const filteredOptions = useMemo(() => {
     if (!searchTerm) return options
     const s = searchTerm.toLowerCase().trim()
+    const cleanSearch = s.replace(/[-\s_]/g, '')
+
     const matched = options.filter(opt => {
       const label = String(opt.label || '').toLowerCase()
       const rawSpec = String(opt.rawSpec || '').toLowerCase()
       const badge = String(opt.badge || '').toLowerCase()
+      const rawBadge = String(opt.rawBadge || '').toLowerCase()
       const productLabel = String(opt.productLabel || opt.product_label || '').toLowerCase()
+      const rawProductLabel = String(opt.rawProductLabel || '').toLowerCase()
       const valStr = String(opt.value || '').toLowerCase()
-      return label.includes(s) || rawSpec.includes(s) || badge.includes(s) || productLabel.includes(s) || valStr.includes(s)
+
+      // Khớp trực tiếp chuỗi
+      if (
+        label.includes(s) ||
+        rawSpec.includes(s) ||
+        badge.includes(s) ||
+        rawBadge.includes(s) ||
+        productLabel.includes(s) ||
+        rawProductLabel.includes(s) ||
+        valStr.includes(s)
+      ) {
+        return true
+      }
+
+      // Khớp bỏ qua dấu gạch nối và khoảng trắng (cho phép gõ nhanh ví dụ 'A60' hoặc '160')
+      if (cleanSearch) {
+        if (
+          badge.replace(/[-\s_]/g, '').includes(cleanSearch) ||
+          rawBadge.replace(/[-\s_]/g, '').includes(cleanSearch) ||
+          productLabel.replace(/[-\s_]/g, '').includes(cleanSearch) ||
+          rawProductLabel.replace(/[-\s_]/g, '').includes(cleanSearch) ||
+          label.replace(/[-\s_]/g, '').includes(cleanSearch) ||
+          rawSpec.replace(/[-\s_]/g, '').includes(cleanSearch)
+        ) {
+          return true
+        }
+      }
+
+      return false
     })
 
-    // Xếp hạng ưu tiên: bắt đầu bằng s (09xx) -> kết thúc bằng s (xx09) -> vị trí khác
+    // Xếp hạng ưu tiên: bắt đầu bằng từ khóa tìm kiếm -> kết thúc bằng từ khóa -> vị trí khác
     return matched.sort((a, b) => {
-      const aStr = String(a.label || a.rawSpec || a.value || '').toLowerCase()
-      const bStr = String(b.label || b.rawSpec || b.value || '').toLowerCase()
-      const aStarts = aStr.startsWith(s) ? 1 : 0
-      const bStarts = bStr.startsWith(s) ? 1 : 0
+      const aBadge = String(a.badge || '').toLowerCase()
+      const bBadge = String(b.badge || '').toLowerCase()
+      const aRawBadge = String(a.rawBadge || '').toLowerCase()
+      const bRawBadge = String(b.rawBadge || '').toLowerCase()
+      const aLabel = String(a.label || a.rawSpec || a.value || '').toLowerCase()
+      const bLabel = String(b.label || b.rawSpec || b.value || '').toLowerCase()
+
+      const aStarts = (aBadge.startsWith(s) || aRawBadge.startsWith(s) || aLabel.startsWith(s)) ? 1 : 0
+      const bStarts = (bBadge.startsWith(s) || bRawBadge.startsWith(s) || bLabel.startsWith(s)) ? 1 : 0
       if (aStarts !== bStarts) return bStarts - aStarts
-      const aEnds = aStr.endsWith(s) ? 1 : 0
-      const bEnds = bStr.endsWith(s) ? 1 : 0
+
+      const aEnds = (aBadge.endsWith(s) || aRawBadge.endsWith(s) || aLabel.endsWith(s)) ? 1 : 0
+      const bEnds = (bBadge.endsWith(s) || bRawBadge.endsWith(s) || bLabel.endsWith(s)) ? 1 : 0
       if (aEnds !== bEnds) return bEnds - aEnds
-      return aStr.localeCompare(bStr)
+
+      return aBadge.localeCompare(bBadge) || aLabel.localeCompare(bLabel)
     })
   }, [options, searchTerm])
 

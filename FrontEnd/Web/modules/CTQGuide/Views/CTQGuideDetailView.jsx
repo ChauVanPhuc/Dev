@@ -200,8 +200,13 @@ const CTQGuideDetailView = () => {
   };
 
   // Tải ảnh mẫu đối chứng lên CTQ (hỗ trợ file input, kéo thả, paste Ctrl+V)
-  const handleUploadImageFile = async (file) => {
-    if (!file) return;
+  const handleUploadImageFile = async (fileOrFiles) => {
+    if (!fileOrFiles) return;
+    const fileList = Array.isArray(fileOrFiles)
+      ? fileOrFiles
+      : (fileOrFiles instanceof FileList ? Array.from(fileOrFiles) : [fileOrFiles]);
+
+    if (fileList.length === 0) return;
 
     const primaryStep = await ensurePrimaryStep(guide);
     if (!primaryStep) {
@@ -210,25 +215,29 @@ const CTQGuideDetailView = () => {
     }
 
     const currentImages = primaryStep.images || [];
-    if (currentImages.length >= 20) {
-      if (toast) toast('warning', 'Mỗi CTQ chỉ được đính kèm tối đa 20 ảnh mẫu đối chứng.');
+    if (currentImages.length + fileList.length > 20) {
+      if (toast) toast('warning', `Mỗi CTQ chỉ được đính kèm tối đa 20 ảnh mẫu đối chứng (hiện có ${currentImages.length} ảnh).`);
       return;
     }
 
     setUploadingImage(true);
     const formData = new FormData();
-    formData.append('file', file);
+    fileList.forEach(file => {
+      formData.append('files', file);
+    });
 
     try {
-      const newImg = await api.post(`/inspection-guides/${id}/steps/${primaryStep.id}/images`, formData, {
+      const res = await api.post(`/inspection-guides/${id}/steps/${primaryStep.id}/images`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
+
+      const addedList = Array.isArray(res) ? res : (res?.data && Array.isArray(res.data) ? res.data : (res ? [res] : []));
 
       setGuide(prev => {
         const step0 = prev?.steps?.[0] || primaryStep;
         const updatedStep = {
           ...step0,
-          images: [...(step0.images || []), newImg]
+          images: [...(step0.images || []), ...addedList]
         };
         return {
           ...prev,
@@ -236,12 +245,18 @@ const CTQGuideDetailView = () => {
         };
       });
 
-      if (toast) toast('success', 'Đã tải ảnh mẫu đối chứng lên thành công!');
+      await fetchGuideData();
+
+      if (toast) toast('success', `Đã tải ${addedList.length || fileList.length} ảnh mẫu đối chứng lên thành công!`);
     } catch (err) {
       console.error('Lỗi tải ảnh:', err);
-      if (toast) toast('error', 'Lỗi khi tải ảnh đối chứng lên hệ thống.');
+      const detail = err?.response?.data?.detail || err?.message || '';
+      if (toast) toast('error', detail ? `Lỗi khi tải ảnh đối chứng: ${detail}` : 'Lỗi khi tải ảnh đối chứng lên hệ thống.');
     } finally {
       setUploadingImage(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -266,9 +281,9 @@ const CTQGuideDetailView = () => {
     e.preventDefault();
     e.stopPropagation();
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const file = e.dataTransfer.files[0];
-      if (file.type.startsWith('image/')) {
-        handleUploadImageFile(file);
+      const imgFiles = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+      if (imgFiles.length > 0) {
+        handleUploadImageFile(imgFiles);
       }
     }
   };
@@ -672,10 +687,11 @@ const CTQGuideDetailView = () => {
           type="file"
           ref={fileInputRef}
           accept="image/*"
+          multiple
           style={{ display: 'none' }}
           onChange={e => {
-            const file = e.target.files?.[0];
-            if (file) handleUploadImageFile(file);
+            const files = e.target.files;
+            if (files && files.length > 0) handleUploadImageFile(files);
             e.target.value = '';
           }}
         />

@@ -16,6 +16,7 @@ import { orderService } from '../services/orderService'
 import { inspectionService } from '../services/inspectionService'
 import { userActivityService } from '../services/userActivityService'
 import { extractRootPo, deduplicatePoCodes } from '../utils/poHelper'
+import { formatCabinetSeriesTag, cleanCabinetRawTag } from '../utils/cabinetSeriesMapper'
 
 const initErrors = () => [{ id: 1, name: '', qty: 0 }]
 
@@ -140,22 +141,7 @@ const parseDimensionStringFromText = (text) => {
 }
 
 const cleanCabinetTag = (tag, fallback = '') => {
-  if (!tag) return fallback
-  // Bỏ tiền tố mã PO như "APT-0090-38 | ", "APT-0102-01 | ", chỉ giữ tên tủ (SKU)
-  let cleaned = String(tag).replace(/^[A-Za-z0-9]+-\d+(?:-[A-Za-z0-9]+)?\s*\|\s*/i, '').trim()
-
-  // Bỏ phần mã trong ngoặc nếu trùng hoặc chỉ khác tiền tố APT (ví dụ: "2-48-GRY (APT2-48-GRY)" -> "2-48-GRY")
-  const m = cleaned.match(/^([^(]+?)\s*\(([^)]+)\)$/)
-  if (m) {
-    const namePart = m[1].trim()
-    const skuPart = m[2].trim()
-    const cleanName = namePart.replace(/^APT[-_]?/i, '').trim().toLowerCase()
-    const cleanSku = skuPart.replace(/^APT[-_]?/i, '').trim().toLowerCase()
-    if (cleanName === cleanSku) {
-      cleaned = namePart
-    }
-  }
-  return cleaned || fallback
+  return formatCabinetSeriesTag(tag, fallback)
 }
 
 const getEffectiveSpec = (specRaw, partName) => {
@@ -660,14 +646,17 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
           specOpts = matchedPart.specs.map((s, idx) => {
             const val = getEffectiveSpec(s.specification, matchedPart.part_name)
             const rawTag = s.badge || s.product_label || s.product_name || s.product_sku || (matchedPart.sku ? `${matchedPart.part_name} (${matchedPart.sku})` : '')
-            const cabinetTag = cleanCabinetTag(rawTag, matchedPart.label || matchedPart.part_name || 'Chi tiết')
+            const rawCabinetTag = cleanCabinetRawTag(rawTag, matchedPart.label || matchedPart.part_name || 'Chi tiết')
+            const cabinetTag = formatCabinetSeriesTag(rawTag, matchedPart.label || matchedPart.part_name || 'Chi tiết')
             const optKey = s.id || `${matchedPart.part_name}__${val}__${s.order_code || ''}__${s.product_sku || s.product_name || idx}`
             return {
               value: optKey,
               label: val,
               rawSpec: val,
               badge: cabinetTag,
+              rawBadge: rawCabinetTag,
               productLabel: cabinetTag,
+              rawProductLabel: rawCabinetTag,
               partName: matchedPart.part_name,
               orderCode: s.order_code || '',
               qty: Number(s.qty) || 0
@@ -1673,14 +1662,17 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
             let specOpts = matchedPart.specs.map((s, idx) => {
               const val = getEffectiveSpec(s.specification, matchedPart.part_name)
               const rawTag = s.badge || s.product_label || s.product_name || s.product_sku || (matchedPart.sku ? `${matchedPart.part_name} (${matchedPart.sku})` : '')
-              const cabinetTag = cleanCabinetTag(rawTag, matchedPart.label || matchedPart.part_name || 'Chi tiết')
+              const rawCabinetTag = cleanCabinetRawTag(rawTag, matchedPart.label || matchedPart.part_name || 'Chi tiết')
+              const cabinetTag = formatCabinetSeriesTag(rawTag, matchedPart.label || matchedPart.part_name || 'Chi tiết')
               const optKey = s.id || `${matchedPart.part_name}__${val}__${s.order_code || ''}__${s.product_sku || s.product_name || idx}`
               return {
                 value: optKey,
                 label: val,
                 rawSpec: val,
                 badge: cabinetTag,
+                rawBadge: rawCabinetTag,
                 productLabel: cabinetTag,
+                rawProductLabel: rawCabinetTag,
                 partName: matchedPart.part_name,
                 orderCode: s.order_code || '',
                 qty: Number(s.qty) || 0
@@ -1738,14 +1730,17 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
               part.specs.forEach((s, idx) => {
                 const effSpec = getEffectiveSpec(s.specification, part.part_name)
                 const rawTag = s.badge || s.product_label || s.product_name || s.product_sku || (part.sku ? `${part.part_name} (${part.sku})` : '')
-                const cabinetTag = cleanCabinetTag(rawTag, part.label || part.part_name || 'Chi tiết')
+                const rawCabinetTag = cleanCabinetRawTag(rawTag, part.label || part.part_name || 'Chi tiết')
+                const cabinetTag = formatCabinetSeriesTag(rawTag, part.label || part.part_name || 'Chi tiết')
                 const optKey = s.id || `${part.part_name}__${effSpec}__${s.order_code || ''}__${s.product_sku || s.product_name || idx}`
                 specOpts.push({
                   value: optKey,
                   label: effSpec,
                   rawSpec: effSpec,
                   badge: cabinetTag,
+                  rawBadge: rawCabinetTag,
                   productLabel: cabinetTag,
+                  rawProductLabel: rawCabinetTag,
                   partName: part.part_name,
                   orderCode: s.order_code || '',
                   qty: Number(s.qty) || 0
@@ -1966,14 +1961,17 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       let specOpts = firstSpecs.map((s, idx) => {
         const val = getEffectiveSpec(s.specification, partName)
         const rawTag = s.badge || s.product_label || s.product_name || s.product_sku || (part.sku ? `${part.part_name} (${part.sku})` : '')
-        const cabinetTag = cleanCabinetTag(rawTag, part.label || part.part_name || 'Chi tiết')
+        const rawCabinetTag = cleanCabinetRawTag(rawTag, part.label || part.part_name || 'Chi tiết')
+        const cabinetTag = formatCabinetSeriesTag(rawTag, part.label || part.part_name || 'Chi tiết')
         const optKey = s.id || `${partName}__${val}__${s.order_code || ''}__${s.product_sku || s.product_name || idx}`
         return {
           value: optKey,
           label: val,
           rawSpec: val,
           badge: cabinetTag,
+          rawBadge: rawCabinetTag,
           productLabel: cabinetTag,
+          rawProductLabel: rawCabinetTag,
           partName: partName,
           orderCode: s.order_code || '',
           qty: Number(s.qty) || Number(part.total_qty) || 0
@@ -1981,8 +1979,19 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       })
       if (specOpts.length === 0) {
         const effSpec = getEffectiveSpec('', partName)
-        const cabinetTag = part.sku ? `${part.part_name} (${part.sku})` : ''
-        specOpts = [{ value: effSpec, label: effSpec, rawSpec: effSpec, badge: cabinetTag, productLabel: cabinetTag, qty: Number(part.total_qty) || 0 }]
+        const rawTag = part.sku ? `${part.part_name} (${part.sku})` : ''
+        const rawCabinetTag = cleanCabinetRawTag(rawTag, part.label || part.part_name || 'Chi tiết')
+        const cabinetTag = formatCabinetSeriesTag(rawTag, part.label || part.part_name || 'Chi tiết')
+        specOpts = [{
+          value: effSpec,
+          label: effSpec,
+          rawSpec: effSpec,
+          badge: cabinetTag,
+          rawBadge: rawCabinetTag,
+          productLabel: cabinetTag,
+          rawProductLabel: rawCabinetTag,
+          qty: Number(part.total_qty) || 0
+        }]
       }
       // Quy tắc chọn quy cách:
       // - Nếu chi tiết chỉ có duy nhất 1 quy cách thì tự động chọn luôn!
@@ -2043,14 +2052,17 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       partSpecs.forEach((s, idx) => {
         const effSpec = getEffectiveSpec(s.specification, part.part_name)
         const rawTag = s.badge || s.product_label || s.product_name || s.product_sku || (part.sku ? `${part.part_name} (${part.sku})` : '')
-        const cabinetTag = cleanCabinetTag(rawTag, part.label || part.part_name || 'Chi tiết')
+        const rawCabinetTag = cleanCabinetRawTag(rawTag, part.label || part.part_name || 'Chi tiết')
+        const cabinetTag = formatCabinetSeriesTag(rawTag, part.label || part.part_name || 'Chi tiết')
         const optKey = s.id || `${part.part_name}__${effSpec}__${s.order_code || ''}__${s.product_sku || s.product_name || idx}`
         specOpts.push({
           value: optKey,
           label: effSpec,
           rawSpec: effSpec,
           badge: cabinetTag,
+          rawBadge: rawCabinetTag,
           productLabel: cabinetTag,
+          rawProductLabel: rawCabinetTag,
           partName: part.part_name,
           orderCode: s.order_code || '',
           qty: Number(s.qty) || Number(part.total_qty) || 0

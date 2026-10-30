@@ -26,8 +26,11 @@ const ProductionOrdersView = () => {
   const [filterPriority, setFilterPriority] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
+  const [filterPlanId, setFilterPlanId] = useState('');
+  const [filterProductCode, setFilterProductCode] = useState('');
+  const [availablePlans, setAvailablePlans] = useState([]);
 
-  const activeFiltersCount = [filterStatus, filterPriority, filterDateFrom, filterDateTo].filter(Boolean).length;
+  const activeFiltersCount = [filterStatus, filterPriority, filterDateFrom, filterDateTo, filterPlanId, filterProductCode].filter(Boolean).length;
 
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/production-orders');
 
@@ -52,7 +55,7 @@ const ProductionOrdersView = () => {
 
   useEffect(() => {
     setPage(1);
-  }, [filterStatus, filterPriority, filterDateFrom, filterDateTo]);
+  }, [filterStatus, filterPriority, filterDateFrom, filterDateTo, filterPlanId, filterProductCode]);
 
   const toISODate = (val) => {
     if (!val) return '';
@@ -85,7 +88,19 @@ const ProductionOrdersView = () => {
     try {
       setLoading(true);
       
-      const res = await planService.getPlans(1, 100, searchTerm, 'all', sortValue === 'time_asc' ? 'asc' : 'desc').catch(() => null);
+      const res = await planService.getPlans(
+        1, 
+        100, 
+        searchTerm, 
+        'all', 
+        sortValue === 'time_asc' ? 'asc' : 'desc',
+        filterPlanId
+      ).catch(() => null);
+
+      if (res && res.available_plans && res.available_plans.length > 0) {
+        setAvailablePlans(res.available_plans);
+      }
+
       let allOrders = [];
 
       if (res && res.items && res.items.length > 0) {
@@ -114,6 +129,9 @@ const ProductionOrdersView = () => {
               allOrders.push({
                 id: ord.id || `${plan.id}-${oIdx}`,
                 planId: plan.id,
+                planName: plan.name,
+                planMonth: plan.month,
+                planYear: plan.year,
                 code: cleanCode,
                 orderNo: orderCode,
                 customer: ord.customer || plan.customer || 'Khách hàng hệ thống',
@@ -138,7 +156,12 @@ const ProductionOrdersView = () => {
           item.code.toLowerCase().includes(term) ||
           item.orderNo.toLowerCase().includes(term) ||
           item.customer.toLowerCase().includes(term) ||
-          item.status.toLowerCase().includes(term)
+          item.status.toLowerCase().includes(term) ||
+          (item.products || []).some(p => 
+            (p.sku && p.sku.toLowerCase().includes(term)) ||
+            (p.name && p.name.toLowerCase().includes(term)) ||
+            (p.specification && p.specification.toLowerCase().includes(term))
+          )
         );
       }
 
@@ -153,7 +176,7 @@ const ProductionOrdersView = () => {
 
   useEffect(() => {
     fetchProductionOrders();
-  }, [page, pageSize, searchTerm, sortValue]);
+  }, [page, pageSize, searchTerm, sortValue, filterPlanId]);
 
   const handleOpenOrderDetail = (item) => {
     navigate(`/admin/production-orders/edit/${item.id}`, { state: { item } });
@@ -192,8 +215,19 @@ const ProductionOrdersView = () => {
     if (filterPriority) res = res.filter(o => o.priority === filterPriority);
     if (filterDateFrom) res = res.filter(o => o.startDate >= filterDateFrom);
     if (filterDateTo) res = res.filter(o => o.endDate <= filterDateTo);
+    if (filterPlanId) res = res.filter(o => String(o.planId) === String(filterPlanId));
+    if (filterProductCode.trim()) {
+      const pTerm = filterProductCode.toLowerCase().trim();
+      res = res.filter(o =>
+        (o.products || []).some(p =>
+          (p.sku && p.sku.toLowerCase().includes(pTerm)) ||
+          (p.name && p.name.toLowerCase().includes(pTerm)) ||
+          (p.specification && p.specification.toLowerCase().includes(pTerm))
+        )
+      );
+    }
     return res;
-  }, [ordersList, filterStatus, filterPriority, filterDateFrom, filterDateTo]);
+  }, [ordersList, filterStatus, filterPriority, filterDateFrom, filterDateTo, filterPlanId, filterProductCode]);
 
   const sortedOrders = useMemo(() => {
     const res = [...filteredOrders];
@@ -242,9 +276,11 @@ const ProductionOrdersView = () => {
     try {
       const exportData = sortedOrders.map((item, idx) => ({
         'STT': idx + 1,
+        'Kế hoạch tháng': item.planName || (item.planMonth ? `Tháng ${item.planMonth}/${item.planYear}` : ''),
         'Mã lệnh': item.code,
         'Đơn hàng': item.orderNo,
         'Khách hàng': item.customer,
+        'Mã tủ / Sản phẩm trong PO': (item.products || []).map(p => `${p.name || p.sku}${p.quantity ? ` (${p.quantity} cái)` : ''}`).join('; '),
         'Tổng số sản phẩm': item.totalProducts,
         'Số lượng kế hoạch': item.planQty,
         'Thời gian bắt đầu': toDisplayDate(item.startDate),
@@ -342,8 +378,35 @@ const ProductionOrdersView = () => {
 
         {isFilterBarOpen && (
           <div className="filter-bar" style={{ margin: '0 0 20px 0', padding: '16px 20px', backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1.5px solid #EADCC9', boxShadow: '0 2px 8px rgba(45,26,18,0.04)' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: '12px', flexWrap: 'nowrap' }}>
-              <div style={{ flex: '1 1 0', minWidth: '130px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: '12px', flexWrap: 'wrap' }}>
+              <div style={{ flex: '1 1 160px', minWidth: '150px' }}>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#4B5563', marginBottom: '5px' }}>Kế hoạch tháng</label>
+                <select
+                  value={filterPlanId}
+                  onChange={(e) => setFilterPlanId(e.target.value)}
+                  style={{ width: '100%', padding: '8px 12px', border: '1.5px solid #D1D5DB', borderRadius: '8px', fontSize: '0.88rem', color: '#1F2937', outline: 'none', backgroundColor: '#FFFFFF' }}
+                >
+                  <option value="">Tất cả tháng</option>
+                  {availablePlans.map((pl) => (
+                    <option key={pl.id} value={pl.id}>
+                      {pl.name || `KHSX T${pl.month} - ${pl.year}`} {pl.month ? `(Tháng ${pl.month}/${pl.year})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ flex: '1 1 180px', minWidth: '160px' }}>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#4B5563', marginBottom: '5px' }}>Mã tủ / Sản phẩm</label>
+                <input
+                  type="text"
+                  value={filterProductCode}
+                  onChange={(e) => setFilterProductCode(e.target.value)}
+                  placeholder="VD: 2-36L, 2-42, VGN..."
+                  style={{ width: '100%', padding: '8px 12px', border: '1.5px solid #D1D5DB', borderRadius: '8px', fontSize: '0.88rem', color: '#1F2937', outline: 'none', backgroundColor: '#FFFFFF' }}
+                />
+              </div>
+
+              <div style={{ flex: '1 1 130px', minWidth: '120px' }}>
                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#4B5563', marginBottom: '5px' }}>Trạng thái</label>
                 <select
                   value={filterStatus}
@@ -356,7 +419,8 @@ const ProductionOrdersView = () => {
                   <option value="Chờ sản xuất">Chờ sản xuất</option>
                 </select>
               </div>
-              <div style={{ flex: '1 1 0', minWidth: '130px' }}>
+
+              <div style={{ flex: '1 1 130px', minWidth: '120px' }}>
                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#4B5563', marginBottom: '5px' }}>Mức độ ưu tiên</label>
                 <select
                   value={filterPriority}
@@ -368,7 +432,8 @@ const ProductionOrdersView = () => {
                   <option value="Bình thường">Bình thường</option>
                 </select>
               </div>
-              <div style={{ flex: '1 1 0', minWidth: '130px' }}>
+
+              <div style={{ flex: '1 1 130px', minWidth: '120px' }}>
                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#4B5563', marginBottom: '5px' }}>Từ ngày</label>
                 <input
                   type="date"
@@ -377,7 +442,8 @@ const ProductionOrdersView = () => {
                   style={{ width: '100%', padding: '8px 12px', border: '1.5px solid #D1D5DB', borderRadius: '8px', fontSize: '0.88rem', color: '#1F2937', outline: 'none', backgroundColor: '#FFFFFF' }}
                 />
               </div>
-              <div style={{ flex: '1 1 0', minWidth: '130px' }}>
+
+              <div style={{ flex: '1 1 130px', minWidth: '120px' }}>
                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#4B5563', marginBottom: '5px' }}>Đến ngày</label>
                 <input
                   type="date"
@@ -386,8 +452,9 @@ const ProductionOrdersView = () => {
                   style={{ width: '100%', padding: '8px 12px', border: '1.5px solid #D1D5DB', borderRadius: '8px', fontSize: '0.88rem', color: '#1F2937', outline: 'none', backgroundColor: '#FFFFFF' }}
                 />
               </div>
-              <div style={{ flex: '1 1 0', minWidth: '100px' }}>
-                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#4B5563', marginBottom: '5px' }}>Số lượng dòng</label>
+
+              <div style={{ flex: '1 1 90px', minWidth: '90px' }}>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#4B5563', marginBottom: '5px' }}>Số dòng</label>
                 <select
                   value={pageSize}
                   onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
@@ -399,10 +466,18 @@ const ProductionOrdersView = () => {
                   <option value={100}>100</option>
                 </select>
               </div>
+
               <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
                 <button
                   type="button"
-                  onClick={() => { setFilterStatus(''); setFilterPriority(''); setFilterDateFrom(''); setFilterDateTo(''); }}
+                  onClick={() => {
+                    setFilterStatus('');
+                    setFilterPriority('');
+                    setFilterDateFrom('');
+                    setFilterDateTo('');
+                    setFilterPlanId('');
+                    setFilterProductCode('');
+                  }}
                   style={{ padding: '8px 16px', border: '1.5px solid #D1D5DB', borderRadius: '8px', backgroundColor: '#FFFFFF', color: '#5D3B32', fontWeight: '700', fontSize: '0.85rem', cursor: 'pointer' }}
                 >
                   Đặt lại
@@ -422,25 +497,26 @@ const ProductionOrdersView = () => {
                     <th style={{ textAlign: 'center', width: '50px', backgroundColor: '#6D4C3D', color: '#FFFFFF', fontWeight: '700' }}>STT</th>
                     <th style={{ backgroundColor: '#6D4C3D', color: '#FFFFFF', fontWeight: '700' }}>Mã lệnh</th>
                     <th style={{ backgroundColor: '#6D4C3D', color: '#FFFFFF', fontWeight: '700' }}>Đơn hàng</th>
-                    <th style={{ textAlign: 'center', backgroundColor: '#6D4C3D', color: '#FFFFFF', fontWeight: '700' }}>Tổng số sản phẩm</th>
-                    <th style={{ textAlign: 'center', backgroundColor: '#6D4C3D', color: '#FFFFFF', fontWeight: '700' }}>Số lượng kế hoạch</th>
-                    <th style={{ textAlign: 'center', backgroundColor: '#6D4C3D', color: '#FFFFFF', fontWeight: '700' }}>Thời gian bắt đầu</th>
-                    <th style={{ textAlign: 'center', backgroundColor: '#6D4C3D', color: '#FFFFFF', fontWeight: '700' }}>Thời gian kết thúc</th>
-                    <th style={{ textAlign: 'center', backgroundColor: '#6D4C3D', color: '#FFFFFF', fontWeight: '700' }}>Mức độ ưu tiên</th>
+                    <th style={{ backgroundColor: '#6D4C3D', color: '#FFFFFF', fontWeight: '700', minWidth: '220px' }}>Mã tủ / Sản phẩm trong PO</th>
+                    <th style={{ textAlign: 'center', backgroundColor: '#6D4C3D', color: '#FFFFFF', fontWeight: '700' }}>Tổng số SP</th>
+                    <th style={{ textAlign: 'center', backgroundColor: '#6D4C3D', color: '#FFFFFF', fontWeight: '700' }}>Số lượng KH</th>
+                    <th style={{ textAlign: 'center', backgroundColor: '#6D4C3D', color: '#FFFFFF', fontWeight: '700' }}>Bắt đầu</th>
+                    <th style={{ textAlign: 'center', backgroundColor: '#6D4C3D', color: '#FFFFFF', fontWeight: '700' }}>Kết thúc</th>
+                    <th style={{ textAlign: 'center', backgroundColor: '#6D4C3D', color: '#FFFFFF', fontWeight: '700' }}>Ưu tiên</th>
                     <th style={{ textAlign: 'center', backgroundColor: '#6D4C3D', color: '#FFFFFF', fontWeight: '700' }}>Trạng thái</th>
-                    <th style={{ textAlign: 'center', width: '100px', backgroundColor: '#6D4C3D', color: '#FFFFFF', fontWeight: '700' }}>Thao tác</th>
+                    <th style={{ textAlign: 'center', width: '90px', backgroundColor: '#6D4C3D', color: '#FFFFFF', fontWeight: '700' }}>Thao tác</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading && currentItems.length === 0 ? (
                     <tr>
-                      <td colSpan={10} style={{ textAlign: 'center', padding: '3rem', color: '#94A3B8' }}>
+                      <td colSpan={11} style={{ textAlign: 'center', padding: '3rem', color: '#94A3B8' }}>
                         Đang tải dữ liệu lệnh sản xuất...
                       </td>
                     </tr>
                   ) : currentItems.length === 0 ? (
                     <tr>
-                      <td colSpan={10} style={{ textAlign: 'center', padding: '3rem', color: '#94A3B8' }}>
+                      <td colSpan={11} style={{ textAlign: 'center', padding: '3rem', color: '#94A3B8' }}>
                         Chưa có dữ liệu lệnh sản xuất phù hợp
                       </td>
                     </tr>
@@ -458,6 +534,65 @@ const ProductionOrdersView = () => {
                             {item.code}
                           </td>
                           <td style={{ color: '#475569', fontWeight: '600' }}>{item.orderNo}</td>
+                          <td style={{ maxWidth: '280px' }}>
+                            {item.products && item.products.length > 0 ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                {item.products.slice(0, 3).map((p, pIdx) => {
+                                  const searchLower = (searchTerm || '').toLowerCase().trim();
+                                  const pTermLower = (filterProductCode || '').toLowerCase().trim();
+                                  const isMatched = (pTermLower && (
+                                    (p.sku && p.sku.toLowerCase().includes(pTermLower)) ||
+                                    (p.name && p.name.toLowerCase().includes(pTermLower)) ||
+                                    (p.specification && p.specification.toLowerCase().includes(pTermLower))
+                                  )) || (searchLower && (
+                                    (p.sku && p.sku.toLowerCase().includes(searchLower)) ||
+                                    (p.name && p.name.toLowerCase().includes(searchLower)) ||
+                                    (p.specification && p.specification.toLowerCase().includes(searchLower))
+                                  ));
+
+                                  return (
+                                    <div
+                                      key={p.id || pIdx}
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        gap: '6px',
+                                        padding: '2px 8px',
+                                        borderRadius: '6px',
+                                        backgroundColor: isMatched ? '#FEF3C7' : '#F8FAFC',
+                                        border: isMatched ? '1.5px solid #F59E0B' : '1px solid #E2E8F0',
+                                        fontSize: '0.8rem'
+                                      }}
+                                    >
+                                      <span
+                                        style={{
+                                          fontWeight: isMatched ? '800' : '600',
+                                          color: isMatched ? '#92400E' : '#334155',
+                                          overflow: 'hidden',
+                                          textOverflow: 'ellipsis',
+                                          whiteSpace: 'nowrap'
+                                        }}
+                                        title={`${p.name || p.sku} ${p.specification ? `(${p.specification})` : ''}`}
+                                      >
+                                        {isMatched ? '★ ' : ''}{p.name || p.sku}
+                                      </span>
+                                      <span style={{ fontWeight: '700', color: isMatched ? '#B45309' : '#64748B', fontSize: '0.75rem', flexShrink: 0 }}>
+                                        {p.quantity ? `${p.quantity} cái` : ''}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                                {item.products.length > 3 && (
+                                  <span style={{ fontSize: '0.72rem', color: '#8D6E63', fontWeight: '700', paddingLeft: '4px' }}>
+                                    +{item.products.length - 3} mã tủ khác...
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span style={{ color: '#94A3B8', fontSize: '0.8rem', fontStyle: 'italic' }}>Không có SP</span>
+                            )}
+                          </td>
                           <td style={{ textAlign: 'center', fontWeight: '700', color: '#334155' }}>{item.totalProducts}</td>
                           <td style={{ textAlign: 'center', fontWeight: '800', color: '#2D1A12' }}>{item.planQty}</td>
                           <td style={{ textAlign: 'center', color: '#64748B' }}>{toDisplayDate(item.startDate)}</td>
@@ -656,6 +791,53 @@ const ProductionOrdersView = () => {
                             {item.priority}
                           </span>
                         </div>
+
+                        {item.products && item.products.length > 0 && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingTop: '2px' }}>
+                            {item.products.slice(0, 3).map((p, pIdx) => {
+                              const searchLower = (searchTerm || '').toLowerCase().trim();
+                              const pTermLower = (filterProductCode || '').toLowerCase().trim();
+                              const isMatched = (pTermLower && (
+                                (p.sku && p.sku.toLowerCase().includes(pTermLower)) ||
+                                (p.name && p.name.toLowerCase().includes(pTermLower)) ||
+                                (p.specification && p.specification.toLowerCase().includes(pTermLower))
+                              )) || (searchLower && (
+                                (p.sku && p.sku.toLowerCase().includes(searchLower)) ||
+                                (p.name && p.name.toLowerCase().includes(searchLower)) ||
+                                (p.specification && p.specification.toLowerCase().includes(searchLower))
+                              ));
+
+                              return (
+                                <div
+                                  key={p.id || pIdx}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    gap: '6px',
+                                    padding: '2px 8px',
+                                    borderRadius: '6px',
+                                    backgroundColor: isMatched ? '#FEF3C7' : '#F8FAFC',
+                                    border: isMatched ? '1.5px solid #F59E0B' : '1px solid #E2E8F0',
+                                    fontSize: '0.78rem'
+                                  }}
+                                >
+                                  <span style={{ fontWeight: isMatched ? '800' : '600', color: isMatched ? '#92400E' : '#334155' }}>
+                                    {isMatched ? '★ ' : ''}{p.name || p.sku}
+                                  </span>
+                                  <span style={{ fontWeight: '700', color: isMatched ? '#B45309' : '#64748B', fontSize: '0.72rem' }}>
+                                    {p.quantity ? `${p.quantity} cái` : ''}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                            {item.products.length > 3 && (
+                              <span style={{ fontSize: '0.72rem', color: '#8D6E63', fontWeight: '700' }}>
+                                +{item.products.length - 3} mã tủ khác...
+                              </span>
+                            )}
+                          </div>
+                        )}
 
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '0.82rem', color: '#64748B', paddingTop: '6px', borderTop: '1px dashed #E2E8F0' }}>
                           <div>Số SP: <strong style={{ color: '#1E293B' }}>{item.totalProducts}</strong></div>

@@ -195,10 +195,18 @@ def reorder_guide_sub_steps(guide_id: int, step_id: int, payload: ReorderPayload
 async def upload_step_images(
     guide_id: int,
     step_id: int,
-    files: List[UploadFile] = File(...),
+    files: Optional[List[UploadFile]] = File(None),
+    file: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db)
 ):
-    return upload_images(db, guide_id, step_id, files)
+    upload_list = []
+    if files:
+        upload_list.extend([f for f in files if f and f.filename])
+    if file and file.filename:
+        upload_list.append(file)
+    if not upload_list:
+        raise HTTPException(status_code=400, detail="Không có file ảnh nào được gửi lên.")
+    return upload_images(db, guide_id, step_id, upload_list)
 
 
 @router.delete("/{guide_id}/steps/{step_id}/images/{image_id}")

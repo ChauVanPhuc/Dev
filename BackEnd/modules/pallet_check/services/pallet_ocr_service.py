@@ -217,7 +217,7 @@ class PalletOcrService:
                     res["input_img_w"] = img_w
                 return idx, res
 
-            max_workers = min(len(target_inputs), 4) if len(target_inputs) > 1 else 1
+            max_workers = min(len(target_inputs), 2) if len(target_inputs) > 1 else 1
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 parallel_results = list(executor.map(process_single, enumerate(target_inputs)))
 

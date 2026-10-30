@@ -174,6 +174,9 @@ def get_plans(
     user_stage: Optional[str] = None,
     sortDirection: Optional[str] = 'desc',
     include_boms: bool = False,
+    plan_id: Optional[int] = None,
+    plan_month: Optional[int] = None,
+    plan_year: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
     from sqlalchemy.orm import selectinload
@@ -206,7 +209,15 @@ def get_plans(
     if factory:
         query = query.join(Order).filter(Order.id.in_(allowed_order_ids))
 
-    # Nếu có tham số search (áp dụng khi tìm kiếm kế hoạch hoặc đơn hàng)
+    # Lọc theo Kế hoạch / Tháng / Năm
+    if plan_id:
+        query = query.filter(ProductPlan.id == plan_id)
+    if plan_month is not None:
+        query = query.filter(ProductPlan.month == plan_month)
+    if plan_year is not None:
+        query = query.filter(ProductPlan.year == plan_year)
+
+    # Nếu có tham số search (áp dụng khi tìm kiếm kế hoạch, đơn hàng, hoặc mã tủ/sản phẩm)
     if search:
         search_like = f"%{search}%"
         query = query.filter(
@@ -216,7 +227,8 @@ def get_plans(
                 ProductPlan.orders.any(Order.order_code.ilike(search_like)),
                 ProductPlan.orders.any(Order.production_code.ilike(search_like)),
                 ProductPlan.orders.any(Order.customer.ilike(search_like)),
-                ProductPlan.orders.any(Order.partner_po.ilike(search_like))
+                ProductPlan.orders.any(Order.partner_po.ilike(search_like)),
+                ProductPlan.orders.any(Order.products.any(or_(Product.name.ilike(search_like), Product.sku.ilike(search_like))))
             )
         )
 
@@ -274,6 +286,7 @@ def get_plans(
                         "id": product.id,
                         "sku": product.sku,
                         "name": product.name,
+                        "specification": getattr(product, 'specification', '') or '',
                         "factory": prod_factory,
                         "quantity": int(product.total_qty or product.quantity or 0),
                         "bom_details": boms
@@ -381,6 +394,7 @@ def get_plans(
                     "id": product.id,
                     "sku": product.sku,
                     "name": product.name,
+                    "specification": getattr(product, 'specification', '') or '',
                     "factory": prod_factory,
                     "quantity": int(product.total_qty or product.quantity or 0),
                     "bom_details": boms
@@ -403,10 +417,15 @@ def get_plans(
             "orders": order_list
         })
 
+    # Lấy danh sách các kế hoạch / tháng có sẵn trong hệ thống để phục vụ bộ lọc
+    available_plans_rows = db.execute(text("SELECT id, name, code, month, year FROM product_plans WITH (NOLOCK) ORDER BY year DESC, month DESC, id DESC")).fetchall()
+    available_plans = [{"id": r[0], "name": r[1], "code": r[2], "month": r[3], "year": r[4]} for r in available_plans_rows]
+
     return {
         "items": result,
         "total_count": total_count,
-        "stats": stats
+        "stats": stats,
+        "available_plans": available_plans
     }
 
 @router.post("/swap-order-priority")
