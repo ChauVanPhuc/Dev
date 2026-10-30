@@ -15,6 +15,7 @@ class Role(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(NVARCHAR(50), nullable=False, unique=True) # Tên vai trò
     description = Column(NVARCHAR(255))                     # Mô tả vai trò
+    code = Column(NVARCHAR(50), nullable=True)              # Mã viết tắt vai trò / phòng ban (QLCL, BGD, IT, SX...)
     is_active = Column(Boolean, default=True)               # Trạng thái hoạt động
     default_permissions = Column(NVARCHAR(None), nullable=True) # Quyền mặc định của bộ phận dạng JSON string
     created_at = Column(DateTime, default=datetime.utcnow)  # Ngày tạo bộ phận

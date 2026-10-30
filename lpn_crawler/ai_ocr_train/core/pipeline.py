@@ -118,7 +118,7 @@ class AiOcrPipeline:
         # 2. Phát hiện TẤT CẢ các vùng nhãn dán trên kiện hàng (Multi-Label Detection)
         t_det_start = time.time()
         if auto_crop:
-            det_res = self.label_detector.detect_label_roi(orig_img, max_labels=22)
+            det_res = self.label_detector.detect_label_roi(orig_img, max_labels=min(int(cfg.get("max_labels", 5)), 6))
             roi_img = det_res["roi_image"] # Ảnh tổng hợp / ghép tất cả các nhãn
             all_rois = det_res.get("all_rois", [{"roi_image": roi_img, "bbox": det_res["bbox"], "label_id": 1}])
             det_bbox = det_res["bbox"]

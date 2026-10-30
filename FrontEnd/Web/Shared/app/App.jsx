@@ -741,6 +741,7 @@ function App() {
                 <Route path="iso-documents" element={<ProtectedRoute permissionKey="iso-documents"><ISODocumentList mode="documents" /></ProtectedRoute>} />
                 <Route path="iso-processes" element={<ProtectedRoute permissionKey="iso-processes"><ISODocumentList mode="processes" /></ProtectedRoute>} />
                 <Route path="iso-records" element={<ProtectedRoute permissionKey={["iso-documents", "iso-records"]}><ISOMasterRecordList /></ProtectedRoute>} />
+                <Route path="iso-records/:id" element={<ProtectedRoute permissionKey={["iso-documents", "iso-records"]}><ISOMasterRecordList /></ProtectedRoute>} />
                 <Route path="iso-master-records" element={<Navigate to="/admin/iso-records" replace />} />
                 <Route path="iso-documents/edit/:id" element={<ProtectedRoute permissionKey={["iso-documents", "iso-processes"]}><ISOFormEditor /></ProtectedRoute>} />
                 <Route path="iso-processes/edit/:id" element={<ProtectedRoute permissionKey="iso-processes"><ISOProcessEditor /></ProtectedRoute>} />

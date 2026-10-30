@@ -1174,8 +1174,9 @@ export const ROUTE_SUGGESTIONS = {
     { title: 'Quản lý phòng ban', path: '/admin/users/departments' }
   ],
   'Hồ sơ ISO': [
-    { title: 'Quản lý mẫu tài liệu', path: '/admin/iso-documents' },
-    { title: 'Quy trình nghiệp vụ', path: '/admin/iso-processes' }
+    { title: 'Mẫu tài liệu', path: '/admin/iso-documents' },
+    { title: 'Tài liệu nghiệp vụ', path: '/admin/iso-processes' },
+    { title: 'Quản lý bộ tài liệu', path: '/admin/iso-records' }
   ],
   'Quản lý sản xuất': [
     { title: 'Kế hoạch sản xuất', path: '/admin/plan' },

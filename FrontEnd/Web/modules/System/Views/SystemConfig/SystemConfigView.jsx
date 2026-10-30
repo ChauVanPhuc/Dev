@@ -1355,6 +1355,83 @@ export default function SystemConfigView() {
           overflow-y: visible !important;
           flex: none !important;
         }
+        .system-config-action-menu {
+          position: absolute;
+          right: 0;
+          background: #FFFFFF;
+          border: 1.5px solid #EADCC9;
+          border-radius: 10px;
+          box-shadow: 0 10px 25px -5px rgba(123, 82, 51, 0.18), 0 4px 10px rgba(0, 0, 0, 0.08);
+          min-width: 155px;
+          padding: 6px;
+          z-index: 1000;
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+        .system-config-action-menu.drop-up {
+          bottom: calc(100% + 8px);
+          top: auto;
+          transform-origin: bottom right;
+          animation: dropupFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        .system-config-action-menu.drop-down {
+          top: calc(100% + 6px);
+          bottom: auto;
+          transform-origin: top right;
+          animation: dropdownFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        .system-config-action-menu.drop-up::after {
+          content: '';
+          position: absolute;
+          bottom: -6px;
+          right: 12px;
+          width: 10px;
+          height: 10px;
+          background: #FFFFFF;
+          border-right: 1.5px solid #EADCC9;
+          border-bottom: 1.5px solid #EADCC9;
+          transform: rotate(45deg);
+        }
+        .system-config-action-menu.drop-down::after {
+          content: '';
+          position: absolute;
+          top: -6px;
+          right: 12px;
+          width: 10px;
+          height: 10px;
+          background: #FFFFFF;
+          border-left: 1.5px solid #EADCC9;
+          border-top: 1.5px solid #EADCC9;
+          transform: rotate(45deg);
+        }
+        .system-config-action-btn-item {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          width: 100%;
+          padding: 8px 12px;
+          font-size: 0.85rem;
+          font-weight: 600;
+          color: #4B5563;
+          border: none;
+          background: transparent;
+          border-radius: 6px;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          text-align: left;
+        }
+        .system-config-action-btn-item:hover {
+          background-color: #FAF6F0;
+          color: #7B5233;
+        }
+        .system-config-action-btn-item.danger {
+          color: #DC2626;
+        }
+        .system-config-action-btn-item.danger:hover {
+          background-color: #FEE2E2;
+          color: #B91C1C;
+        }
       `}} />
       
       {/* 2-Pane Master-Detail Flex Layout */}
@@ -1363,6 +1440,7 @@ export default function SystemConfigView() {
         {/* Left Pane (Master Navigation Menu) */}
         <div style={{
           width: '280px',
+          flexShrink: 0,
           backgroundColor: '#FFFFFF',
           borderRadius: '16px',
           border: '1px solid #E5E7EB',
@@ -1724,7 +1802,7 @@ export default function SystemConfigView() {
               </div>
             ) : (
               // DEFAULT LIST TABLE (FACTORY, DEPT, POSITION, ROLE)
-              <div style={{ overflowX: 'auto', maxHeight: 'calc(100vh - 360px)', overflowY: 'auto' }}>
+              <div style={{ overflowX: 'auto', maxHeight: 'calc(100vh - 360px)', overflowY: 'auto', minHeight: '320px', paddingBottom: '30px' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                   <thead>
                     <tr style={{ backgroundColor: '#7B5233', color: '#FFFFFF' }}>
@@ -1851,7 +1929,7 @@ export default function SystemConfigView() {
                           style={{ 
                             borderBottom: '1px solid #F3F4F6', 
                             position: 'relative', 
-                            zIndex: actionMenuId === item.id ? 30 : 1,
+                            zIndex: actionMenuId === item.id ? 60 : 1,
                             backgroundColor: selectedRow?.id === item.id ? '#FAF6F0' : 'transparent',
                             cursor: 'pointer',
                             transition: 'background-color 0.2s'
@@ -2204,22 +2282,47 @@ export default function SystemConfigView() {
                           <td style={{ padding: '12px 16px', fontSize: '0.85rem', color: '#6B7280' }}>
                             {formatDate(item.created_at)}
                           </td>
-                          <td style={{ padding: '12px 16px', textAlign: 'center', position: 'relative', zIndex: actionMenuId === item.id ? 40 : 1 }}>
-                            <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                          <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                            <div style={{ position: 'relative', display: 'inline-block' }}>
                               <button
+                                type="button"
                                 className="action-btn"
-                                onClick={() => setActionMenuId(actionMenuId === item.id ? null : item.id)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActionMenuId(actionMenuId === item.id ? null : item.id);
+                                }}
+                                title="Thao tác"
                               >
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
                               </button>
-                              {actionMenuId === item.id && (
-                                <div className="action-menu">
-                                  <button className="action-menu-item" onClick={() => { setActionMenuId(null); handleOpenEditModal(item); }}>Chỉnh sửa</button>
-                                  {!(activeTab === 'factory' && item.id === null) && (
-                                    <button className="action-menu-item danger" onClick={() => { setActionMenuId(null); handleOpenDeleteModal(item); }}>Xóa bản ghi</button>
-                                  )}
-                                </div>
-                              )}
+                              {actionMenuId === item.id && (() => {
+                                const isDropUp = idx >= filteredData.length - 2 && filteredData.length > 2;
+                                return (
+                                  <div 
+                                    className={`action-menu system-config-action-menu ${isDropUp ? 'drop-up' : 'drop-down'}`}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <button 
+                                      type="button" 
+                                      className="action-menu-item system-config-action-btn-item" 
+                                      onClick={() => { setActionMenuId(null); handleOpenEditModal(item); }}
+                                    >
+                                      <Edit2 size={14} style={{ color: '#7B5233' }} />
+                                      <span>Chỉnh sửa</span>
+                                    </button>
+                                    {!(activeTab === 'factory' && item.id === null) && (
+                                      <button 
+                                        type="button" 
+                                        className="action-menu-item danger system-config-action-btn-item danger" 
+                                        onClick={() => { setActionMenuId(null); handleOpenDeleteModal(item); }}
+                                      >
+                                        <Trash2 size={14} style={{ color: '#DC2626' }} />
+                                        <span>Xóa bản ghi</span>
+                                      </button>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </div>
                           </td>
                         </tr>

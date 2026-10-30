@@ -68,6 +68,11 @@ from .schemas import AnalyzeImageRequest, BenchmarkRequest, PreprocessConfigSche
 
 router = APIRouter(prefix="/ai-ocr", tags=["AI OCR & Training Lab"])
 
+import threading
+# Semaphore giới hạn tối đa 1 tác vụ OCR nặng chạy đồng thời trong Web Server process
+# Ngăn chặn hiện tượng nghẽn luồng / CPU starvation cho các request ERP khác
+_AI_OCR_SEMAPHORE = threading.Semaphore(1)
+
 # Bộ nhớ cache tạm thời trong RAM cho phiên làm việc hiện tại (KHÔNG ghi ra disk để tránh phình dung lượng)
 _PIPELINE_ANALYSIS_CACHE: Dict[str, Dict[str, Any]] = {}
 
@@ -727,16 +732,17 @@ def analyze_image(
 
     try:
         pos_key = payload.package_position or meta_info.get("suffix_key") or meta_info.get("package_position")
-        result = pipeline.process_image(
-            image_input=image_input,
-            preprocess_config=cfg_dict,
-            return_images_base64=True,
-            model_id=payload.model_id or pipeline.ocr_engine.get_best_model_id(),
-            inference_mode=payload.inference_mode or "hybrid",
-            expected_skus=exp_skus,
-            expected_lpn=exp_lpn,
-            package_position=pos_key
-        )
+        with _AI_OCR_SEMAPHORE:
+            result = pipeline.process_image(
+                image_input=image_input,
+                preprocess_config=cfg_dict,
+                return_images_base64=True,
+                model_id=payload.model_id or pipeline.ocr_engine.get_best_model_id(),
+                inference_mode=payload.inference_mode or "hybrid",
+                expected_skus=exp_skus,
+                expected_lpn=exp_lpn,
+                package_position=pos_key
+            )
         result["meta_info"] = meta_info
         sanitize_analysis_extracted(result, exp_lpn=exp_lpn, exp_sku=exp_sku)
         save_to_pipeline_cache(cache_keys, result)
@@ -963,147 +969,146 @@ def run_batch_scan(
             "model_id": payload.model_id
         })
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-        batch_futures = [executor.submit(_batch_worker_task, t) for t in tasks_to_run]
-        for f in concurrent.futures.as_completed(batch_futures):
-            out = f.result()
-            t_info = out["task"]
-            img = t_info["img"]
-            item = t_info["item"]
-            container = t_info["container"]
-            pipeline_res = out["pipeline_res"]
-            duration_ms = out["duration_ms"]
-            proc_err = out["error"]
+    for t in tasks_to_run:
+        out = _batch_worker_task(t)
+        time.sleep(0.03)  # Nhịp thở 30ms nhường CPU cho Uvicorn Event Loop và SQL Server
+        t_info = out["task"]
+        img = t_info["img"]
+        item = t_info["item"]
+        container = t_info["container"]
+        pipeline_res = out["pipeline_res"]
+        duration_ms = out["duration_ms"]
+        proc_err = out["error"]
 
-            if proc_err:
-                det_lpn, det_sku, det_barcodes, conf = None, None, [], 0.0
-                status_val = "failed"
-                error_reason = f"Lỗi xử lý OCR: {proc_err}"
-                is_lpn_match = False
-                is_sku_match = False
-            elif not pipeline_res:
-                det_lpn, det_sku, det_barcodes, conf = None, None, [], 0.0
-                status_val = "failed"
-                error_reason = "Không tìm thấy file ảnh cục bộ hoặc URL nguồn"
-                is_lpn_match = False
-                is_sku_match = False
+        if proc_err:
+            det_lpn, det_sku, det_barcodes, conf = None, None, [], 0.0
+            status_val = "failed"
+            error_reason = f"Lỗi xử lý OCR: {proc_err}"
+            is_lpn_match = False
+            is_sku_match = False
+        elif not pipeline_res:
+            det_lpn, det_sku, det_barcodes, conf = None, None, [], 0.0
+            status_val = "failed"
+            error_reason = "Không tìm thấy file ảnh cục bộ hoặc URL nguồn"
+            is_lpn_match = False
+            is_sku_match = False
+        else:
+            det_lpn = pipeline_res.get("lpn")
+            det_sku = pipeline_res.get("sku")
+            det_barcodes = pipeline_res.get("barcodes", [])
+            conf = pipeline_res.get("confidence", 0.0)
+
+            extracted = pipeline_res.get("extracted", {})
+            sku_is_pred = extracted.get("sku_is_predicted", False)
+            sku_is_val = extracted.get("sku_is_validated", False)
+            overall_c = extracted.get("overall_confidence", conf)
+
+            is_lpn_match = (det_lpn.strip().upper() == item.lpn.strip().upper()) if (det_lpn and item.lpn) else False
+            is_sku_match = (det_sku.strip().upper() == item.sku.strip().upper()) if (det_sku and item.sku) else False
+
+            # 3-tier Status Triage:
+            # 1. SUCCESS: Khớp cả LPN và SKU với CSDL chuẩn, hoặc đủ cả 2 trường hợp lệ (confidence >= 0.60)
+            if is_lpn_match and is_sku_match:
+                status_val = "success"
+                error_reason = None
+            elif det_lpn and det_sku and (is_lpn_match or is_sku_match or overall_c >= 0.60) and (not sku_is_pred or sku_is_val):
+                status_val = "success"
+                error_reason = None
+            # 2. REVIEW: Đọc được tem nhưng thiếu 1 trường hoặc lệch mã so với CSDL
+            elif det_lpn or det_sku or (det_barcodes and len(det_barcodes) > 0):
+                status_val = "review"
+                reasons = []
+                if not det_lpn:
+                    reasons.append("Thiếu mã LPN")
+                elif item and item.lpn and not is_lpn_match:
+                    reasons.append(f"LPN đọc '{det_lpn}' khác CSDL '{item.lpn}'")
+                if not det_sku:
+                    reasons.append("Thiếu mã SKU")
+                elif item and item.sku and not is_sku_match:
+                    reasons.append(f"SKU đọc '{det_sku}' khác CSDL '{item.sku}'")
+                if sku_is_pred and not sku_is_val:
+                    reasons.append("SKU suy luận từ mô tả tem (chưa kiểm chứng SKU Master)")
+                elif overall_c < 0.50 and not is_lpn_match and not is_sku_match:
+                    reasons.append(f"Độ tin cậy thấp ({round(overall_c*100, 1)}%)")
+                error_reason = "; ".join(reasons) if reasons else "Cần kiểm tra đối chiếu"
             else:
-                det_lpn = pipeline_res.get("lpn")
-                det_sku = pipeline_res.get("sku")
-                det_barcodes = pipeline_res.get("barcodes", [])
-                conf = pipeline_res.get("confidence", 0.0)
+                status_val = "failed"
+                error_reason = "Không tìm thấy tem nhãn hoặc chữ/mã vạch không đọc được"
 
-                extracted = pipeline_res.get("extracted", {})
-                sku_is_pred = extracted.get("sku_is_predicted", False)
-                sku_is_val = extracted.get("sku_is_validated", False)
-                overall_c = extracted.get("overall_confidence", conf)
+        if status_val == "success":
+            success_count += 1
+        elif status_val == "review":
+            review_count += 1
+        else:
+            failed_count += 1
 
-                is_lpn_match = (det_lpn.strip().upper() == item.lpn.strip().upper()) if (det_lpn and item.lpn) else False
-                is_sku_match = (det_sku.strip().upper() == item.sku.strip().upper()) if (det_sku and item.sku) else False
+        # Lưu hoặc cập nhật vào CSDL
+        try:
+            existing = db.query(LpnAiOcrResult).filter(
+                LpnAiOcrResult.item_id == item.id,
+                LpnAiOcrResult.image_id == img.id
+            ).first()
 
-                # 3-tier Status Triage:
-                # 1. SUCCESS: Khớp cả LPN và SKU với CSDL chuẩn, hoặc đủ cả 2 trường hợp lệ (confidence >= 0.60)
-                if is_lpn_match and is_sku_match:
-                    status_val = "success"
-                    error_reason = None
-                elif det_lpn and det_sku and (is_lpn_match or is_sku_match or overall_c >= 0.60) and (not sku_is_pred or sku_is_val):
-                    status_val = "success"
-                    error_reason = None
-                # 2. REVIEW: Đọc được tem nhưng thiếu 1 trường hoặc lệch mã so với CSDL
-                elif det_lpn or det_sku or (det_barcodes and len(det_barcodes) > 0):
-                    status_val = "review"
-                    reasons = []
-                    if not det_lpn:
-                        reasons.append("Thiếu mã LPN")
-                    elif item and item.lpn and not is_lpn_match:
-                        reasons.append(f"LPN đọc '{det_lpn}' khác CSDL '{item.lpn}'")
-                    if not det_sku:
-                        reasons.append("Thiếu mã SKU")
-                    elif item and item.sku and not is_sku_match:
-                        reasons.append(f"SKU đọc '{det_sku}' khác CSDL '{item.sku}'")
-                    if sku_is_pred and not sku_is_val:
-                        reasons.append("SKU suy luận từ mô tả tem (chưa kiểm chứng SKU Master)")
-                    elif overall_c < 0.50 and not is_lpn_match and not is_sku_match:
-                        reasons.append(f"Độ tin cậy thấp ({round(overall_c*100, 1)}%)")
-                    error_reason = "; ".join(reasons) if reasons else "Cần kiểm tra đối chiếu"
-                else:
-                    status_val = "failed"
-                    error_reason = "Không tìm thấy tem nhãn hoặc chữ/mã vạch không đọc được"
-
-            if status_val == "success":
-                success_count += 1
-            elif status_val == "review":
-                review_count += 1
+            if not existing:
+                existing = LpnAiOcrResult(
+                    item_id=item.id,
+                    image_id=img.id,
+                    container_number=container.container_number,
+                    suffix_key=item.suffix_key,
+                    model_id=payload.model_id or "hybrid_epoch15",
+                    detected_lpn=det_lpn,
+                    detected_sku=det_sku,
+                    detected_barcodes=json.dumps(det_barcodes, ensure_ascii=False),
+                    confidence=conf,
+                    is_lpn_match=is_lpn_match,
+                    is_sku_match=is_sku_match,
+                    status=status_val,
+                    error_reason=error_reason,
+                    processing_time_ms=duration_ms,
+                    scanned_at=datetime.utcnow()
+                )
+                db.add(existing)
             else:
-                failed_count += 1
+                existing.model_id = payload.model_id or "hybrid_epoch15"
+                existing.detected_lpn = det_lpn
+                existing.detected_sku = det_sku
+                existing.detected_barcodes = json.dumps(det_barcodes, ensure_ascii=False)
+                existing.confidence = conf
+                existing.is_lpn_match = is_lpn_match
+                existing.is_sku_match = is_sku_match
+                existing.status = status_val
+                existing.error_reason = error_reason
+                existing.processing_time_ms = duration_ms
+                existing.scanned_at = datetime.utcnow()
+            
+            db.commit()
+        except Exception:
+            db.rollback()
 
-            # Lưu hoặc cập nhật vào CSDL
-            try:
-                existing = db.query(LpnAiOcrResult).filter(
-                    LpnAiOcrResult.item_id == item.id,
-                    LpnAiOcrResult.image_id == img.id
-                ).first()
+        # Thumbnail URL
+        img_url = f"/api/v1/lpn-crawler/images/{img.id}/file" if img.id else (img.source_url or "")
 
-                if not existing:
-                    existing = LpnAiOcrResult(
-                        item_id=item.id,
-                        image_id=img.id,
-                        container_number=container.container_number,
-                        suffix_key=item.suffix_key,
-                        model_id=payload.model_id or "hybrid_epoch15",
-                        detected_lpn=det_lpn,
-                        detected_sku=det_sku,
-                        detected_barcodes=json.dumps(det_barcodes, ensure_ascii=False),
-                        confidence=conf,
-                        is_lpn_match=is_lpn_match,
-                        is_sku_match=is_sku_match,
-                        status=status_val,
-                        error_reason=error_reason,
-                        processing_time_ms=duration_ms,
-                        scanned_at=datetime.utcnow()
-                    )
-                    db.add(existing)
-                else:
-                    existing.model_id = payload.model_id or "hybrid_epoch15"
-                    existing.detected_lpn = det_lpn
-                    existing.detected_sku = det_sku
-                    existing.detected_barcodes = json.dumps(det_barcodes, ensure_ascii=False)
-                    existing.confidence = conf
-                    existing.is_lpn_match = is_lpn_match
-                    existing.is_sku_match = is_sku_match
-                    existing.status = status_val
-                    existing.error_reason = error_reason
-                    existing.processing_time_ms = duration_ms
-                    existing.scanned_at = datetime.utcnow()
-                
-                db.commit()
-            except Exception:
-                db.rollback()
-
-            # Thumbnail URL
-            img_url = f"/api/v1/lpn-crawler/images/{img.id}/file" if img.id else (img.source_url or "")
-
-            c_date = container.date_loading.strftime("%Y-%m-%d") if container.date_loading else (container.date_loading_raw or (container.created_at.strftime("%Y-%m-%d") if container.created_at else None))
-            scan_results.append({
-                "image_id": img.id,
-                "item_id": item.id,
-                "container_number": container.container_number,
-                "date_loading": c_date,
-                "factory": container.factory or "VINA G7",
-                "suffix_key": item.suffix_key,
-                "image_url": img_url,
-                "expected_lpn": item.lpn,
-                "detected_lpn": det_lpn,
-                "is_lpn_match": is_lpn_match,
-                "expected_sku": item.sku,
-                "detected_sku": det_sku,
-                "is_sku_match": is_sku_match,
-                "detected_barcodes": det_barcodes,
-                "confidence": conf,
-                "status": status_val,
-                "error_reason": error_reason,
-                "processing_time_ms": duration_ms
-            })
+        c_date = container.date_loading.strftime("%Y-%m-%d") if container.date_loading else (container.date_loading_raw or (container.created_at.strftime("%Y-%m-%d") if container.created_at else None))
+        scan_results.append({
+            "image_id": img.id,
+            "item_id": item.id,
+            "container_number": container.container_number,
+            "date_loading": c_date,
+            "factory": container.factory or "VINA G7",
+            "suffix_key": item.suffix_key,
+            "image_url": img_url,
+            "expected_lpn": item.lpn,
+            "detected_lpn": det_lpn,
+            "is_lpn_match": is_lpn_match,
+            "expected_sku": item.sku,
+            "detected_sku": det_sku,
+            "is_sku_match": is_sku_match,
+            "detected_barcodes": det_barcodes,
+            "confidence": conf,
+            "status": status_val,
+            "error_reason": error_reason,
+            "processing_time_ms": duration_ms
+        })
 
     total_scanned = len(scan_results)
     rate = round((success_count / total_scanned * 100), 1) if total_scanned > 0 else 0.0
@@ -1231,195 +1236,171 @@ def run_batch_scan_stream(
                 "model_id": payload.model_id
             })
 
-        processed_idx = 0
-        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-            future_to_task = {}
-            task_iter = iter(task_list)
+        for processed_idx, t_item in enumerate(task_list, 1):
+            out = _worker_process_img(t_item)
+            idx = processed_idx
+            t_info = out["task"]
+            img = t_info["img"]
+            item = t_info["item"]
+            container = t_info["container"]
+            pipeline_res = out["pipeline_res"]
+            duration_ms = out["duration_ms"]
+            proc_err = out["error"]
 
-            # Khởi tạo trước 8 tasks (4 tasks chạy song song trên GPU, 4 tasks chờ sẵn trong queue)
-            for _ in range(8):
-                try:
-                    t_item = next(task_iter)
-                    f = executor.submit(_worker_process_img, t_item)
-                    future_to_task[f] = t_item
-                except StopIteration:
-                    break
+            if proc_err:
+                det_lpn, det_sku, det_barcodes, conf = None, None, [], 0.0
+                status_val = "failed"
+                error_reason = f"Lỗi OCR: {proc_err}"
+                is_lpn_match = False
+                is_sku_match = False
+            elif not pipeline_res:
+                det_lpn, det_sku, det_barcodes, conf = None, None, [], 0.0
+                status_val = "failed"
+                error_reason = "Không tìm thấy file ảnh cục bộ hoặc URL nguồn"
+                is_lpn_match = False
+                is_sku_match = False
+            else:
+                det_lpn = pipeline_res.get("lpn")
+                det_sku = pipeline_res.get("sku")
+                det_barcodes = pipeline_res.get("barcodes", [])
+                conf = pipeline_res.get("confidence", 0.0)
 
-            while future_to_task:
-                done, _ = concurrent.futures.wait(future_to_task.keys(), return_when=concurrent.futures.FIRST_COMPLETED)
-                for f in done:
-                    del future_to_task[f]
-                    try:
-                        next_t = next(task_iter)
-                        next_f = executor.submit(_worker_process_img, next_t)
-                        future_to_task[next_f] = next_t
-                    except StopIteration:
-                        pass
+                extracted = pipeline_res.get("extracted", {})
+                sku_is_pred = extracted.get("sku_is_predicted", False)
+                sku_is_val = extracted.get("sku_is_validated", False)
+                overall_c = extracted.get("overall_confidence", conf)
 
-                    out = f.result()
-                    processed_idx += 1
-                    idx = processed_idx
-                    t_info = out["task"]
-                    img = t_info["img"]
-                    item = t_info["item"]
-                    container = t_info["container"]
-                    pipeline_res = out["pipeline_res"]
-                    duration_ms = out["duration_ms"]
-                    proc_err = out["error"]
+                is_lpn_match = (det_lpn.strip().upper() == item.lpn.strip().upper()) if (det_lpn and item.lpn) else False
+                is_sku_match = (det_sku.strip().upper() == item.sku.strip().upper()) if (det_sku and item.sku) else False
 
-                    if proc_err:
-                        det_lpn, det_sku, det_barcodes, conf = None, None, [], 0.0
-                        status_val = "failed"
-                        error_reason = f"Lỗi OCR: {proc_err}"
-                        is_lpn_match = False
-                        is_sku_match = False
-                    elif not pipeline_res:
-                        det_lpn, det_sku, det_barcodes, conf = None, None, [], 0.0
-                        status_val = "failed"
-                        error_reason = "Không tìm thấy file ảnh cục bộ hoặc URL nguồn"
-                        is_lpn_match = False
-                        is_sku_match = False
-                    else:
-                        det_lpn = pipeline_res.get("lpn")
-                        det_sku = pipeline_res.get("sku")
-                        det_barcodes = pipeline_res.get("barcodes", [])
-                        conf = pipeline_res.get("confidence", 0.0)
+                # 3-tier Status Triage:
+                # 1. SUCCESS: Khớp cả LPN và SKU với CSDL chuẩn, hoặc đủ cả 2 trường hợp lệ (confidence >= 0.60)
+                if is_lpn_match and is_sku_match:
+                    status_val = "success"
+                    error_reason = None
+                elif det_lpn and det_sku and (is_lpn_match or is_sku_match or overall_c >= 0.60) and (not sku_is_pred or sku_is_val):
+                    status_val = "success"
+                    error_reason = None
+                # 2. REVIEW: Đọc được tem nhưng thiếu 1 trường hoặc lệch mã so với CSDL
+                elif det_lpn or det_sku or (det_barcodes and len(det_barcodes) > 0):
+                    status_val = "review"
+                    reasons = []
+                    if not det_lpn:
+                        reasons.append("Thiếu mã LPN")
+                    elif item and item.lpn and not is_lpn_match:
+                        reasons.append(f"LPN đọc '{det_lpn}' khác CSDL '{item.lpn}'")
+                    if not det_sku:
+                        reasons.append("Thiếu mã SKU")
+                    elif item and item.sku and not is_sku_match:
+                        reasons.append(f"SKU đọc '{det_sku}' khác CSDL '{item.sku}'")
+                    if sku_is_pred and not sku_is_val:
+                        reasons.append("SKU suy luận từ mô tả tem (chưa kiểm chứng SKU Master)")
+                    elif overall_c < 0.50 and not is_lpn_match and not is_sku_match:
+                        reasons.append(f"Độ tin cậy thấp ({round(overall_c*100, 1)}%)")
+                    error_reason = "; ".join(reasons) if reasons else "Cần kiểm tra đối chiếu"
+                else:
+                    status_val = "failed"
+                    error_reason = "Không tìm thấy tem nhãn hoặc chữ/mã vạch không đọc được"
 
-                        extracted = pipeline_res.get("extracted", {})
-                        sku_is_pred = extracted.get("sku_is_predicted", False)
-                        sku_is_val = extracted.get("sku_is_validated", False)
-                        overall_c = extracted.get("overall_confidence", conf)
+            if status_val == "success":
+                success_count += 1
+            elif status_val == "review":
+                review_count += 1
+            else:
+                failed_count += 1
 
-                        is_lpn_match = (det_lpn.strip().upper() == item.lpn.strip().upper()) if (det_lpn and item.lpn) else False
-                        is_sku_match = (det_sku.strip().upper() == item.sku.strip().upper()) if (det_sku and item.sku) else False
+            # Lưu vào CSDL
+            try:
+                existing = db.query(LpnAiOcrResult).filter(
+                    LpnAiOcrResult.item_id == item.id,
+                    LpnAiOcrResult.image_id == img.id
+                ).first()
 
-                        # 3-tier Status Triage:
-                        # 1. SUCCESS: Khớp cả LPN và SKU với CSDL chuẩn, hoặc đủ cả 2 trường hợp lệ (confidence >= 0.60)
-                        if is_lpn_match and is_sku_match:
-                            status_val = "success"
-                            error_reason = None
-                        elif det_lpn and det_sku and (is_lpn_match or is_sku_match or overall_c >= 0.60) and (not sku_is_pred or sku_is_val):
-                            status_val = "success"
-                            error_reason = None
-                        # 2. REVIEW: Đọc được tem nhưng thiếu 1 trường hoặc lệch mã so với CSDL
-                        elif det_lpn or det_sku or (det_barcodes and len(det_barcodes) > 0):
-                            status_val = "review"
-                            reasons = []
-                            if not det_lpn:
-                                reasons.append("Thiếu mã LPN")
-                            elif item and item.lpn and not is_lpn_match:
-                                reasons.append(f"LPN đọc '{det_lpn}' khác CSDL '{item.lpn}'")
-                            if not det_sku:
-                                reasons.append("Thiếu mã SKU")
-                            elif item and item.sku and not is_sku_match:
-                                reasons.append(f"SKU đọc '{det_sku}' khác CSDL '{item.sku}'")
-                            if sku_is_pred and not sku_is_val:
-                                reasons.append("SKU suy luận từ mô tả tem (chưa kiểm chứng SKU Master)")
-                            elif overall_c < 0.50 and not is_lpn_match and not is_sku_match:
-                                reasons.append(f"Độ tin cậy thấp ({round(overall_c*100, 1)}%)")
-                            error_reason = "; ".join(reasons) if reasons else "Cần kiểm tra đối chiếu"
-                        else:
-                            status_val = "failed"
-                            error_reason = "Không tìm thấy tem nhãn hoặc chữ/mã vạch không đọc được"
+                now = datetime.utcnow()
+                if not existing:
+                    existing = LpnAiOcrResult(
+                        item_id=item.id,
+                        image_id=img.id,
+                        container_number=container.container_number,
+                        suffix_key=item.suffix_key,
+                        model_id=payload.model_id or "hybrid_epoch15",
+                        detected_lpn=det_lpn,
+                        detected_sku=det_sku,
+                        detected_barcodes=json.dumps(det_barcodes, ensure_ascii=False),
+                        confidence=conf,
+                        is_lpn_match=is_lpn_match,
+                        is_sku_match=is_sku_match,
+                        status=status_val,
+                        error_reason=error_reason,
+                        processing_time_ms=duration_ms,
+                        scanned_at=now
+                    )
+                    db.add(existing)
+                else:
+                    existing.model_id = payload.model_id or "hybrid_epoch15"
+                    existing.detected_lpn = det_lpn
+                    existing.detected_sku = det_sku
+                    existing.detected_barcodes = json.dumps(det_barcodes, ensure_ascii=False)
+                    existing.confidence = conf
+                    existing.is_lpn_match = is_lpn_match
+                    existing.is_sku_match = is_sku_match
+                    existing.status = status_val
+                    existing.error_reason = error_reason
+                    existing.processing_time_ms = duration_ms
+                    existing.scanned_at = now
+                db.commit()
+            except Exception:
+                db.rollback()
 
-                    if status_val == "success":
-                        success_count += 1
-                    elif status_val == "review":
-                        review_count += 1
-                    else:
-                        failed_count += 1
+            img_url = f"/api/v1/lpn-crawler/images/{img.id}/file" if img.id else (img.source_url or "")
 
-                    # Lưu vào CSDL
-                    try:
-                        existing = db.query(LpnAiOcrResult).filter(
-                            LpnAiOcrResult.item_id == item.id,
-                            LpnAiOcrResult.image_id == img.id
-                        ).first()
+            c_date = container.date_loading.strftime("%Y-%m-%d") if container.date_loading else (container.date_loading_raw or (container.created_at.strftime("%Y-%m-%d") if container.created_at else None))
+            item_res = {
+                "image_id": img.id,
+                "item_id": item.id,
+                "container_number": container.container_number,
+                "date_loading": c_date,
+                "factory": container.factory or "VINA G7",
+                "suffix_key": item.suffix_key,
+                "image_url": img_url,
+                "expected_lpn": item.lpn,
+                "detected_lpn": det_lpn,
+                "is_lpn_match": is_lpn_match,
+                "expected_sku": item.sku,
+                "detected_sku": det_sku,
+                "is_sku_match": is_sku_match,
+                "detected_barcodes": det_barcodes,
+                "confidence": conf,
+                "status": status_val,
+                "error_reason": error_reason,
+                "processing_time_ms": duration_ms
+            }
+            scan_results.append(item_res)
 
-                        now = datetime.utcnow()
-                        if not existing:
-                            existing = LpnAiOcrResult(
-                                item_id=item.id,
-                                image_id=img.id,
-                                container_number=container.container_number,
-                                suffix_key=item.suffix_key,
-                                model_id=payload.model_id or "hybrid_epoch15",
-                                detected_lpn=det_lpn,
-                                detected_sku=det_sku,
-                                detected_barcodes=json.dumps(det_barcodes, ensure_ascii=False),
-                                confidence=conf,
-                                is_lpn_match=is_lpn_match,
-                                is_sku_match=is_sku_match,
-                                status=status_val,
-                                error_reason=error_reason,
-                                processing_time_ms=duration_ms,
-                                scanned_at=now
-                            )
-                            db.add(existing)
-                        else:
-                            existing.model_id = payload.model_id or "hybrid_epoch15"
-                            existing.detected_lpn = det_lpn
-                            existing.detected_sku = det_sku
-                            existing.detected_barcodes = json.dumps(det_barcodes, ensure_ascii=False)
-                            existing.confidence = conf
-                            existing.is_lpn_match = is_lpn_match
-                            existing.is_sku_match = is_sku_match
-                            existing.status = status_val
-                            existing.error_reason = error_reason
-                            existing.processing_time_ms = duration_ms
-                            existing.scanned_at = now
-                        db.commit()
-                    except Exception:
-                        db.rollback()
+            dur_str = format_duration(duration_ms)
+            c_tag = f"{container.container_number} ({item.suffix_key or ''})"
+            if status_val == "success":
+                match_tag = "[Khớp]" if (is_lpn_match and is_sku_match) else "[OK]"
+                log_line = f"[{idx}/{total}] {c_tag}: {match_tag} LPN={det_lpn or '—'} | SKU={det_sku or '—'} ({dur_str})"
+            elif status_val == "review":
+                log_line = f"[{idx}/{total}] {c_tag}: [Review] LPN={det_lpn or '—'} | SKU={det_sku or '—'} ({error_reason}) ({dur_str})"
+            else:
+                log_line = f"[{idx}/{total}] {c_tag}: [Lỗi] {error_reason} ({dur_str})"
 
-                    img_url = f"/api/v1/lpn-crawler/images/{img.id}/file" if img.id else (img.source_url or "")
-
-                    c_date = container.date_loading.strftime("%Y-%m-%d") if container.date_loading else (container.date_loading_raw or (container.created_at.strftime("%Y-%m-%d") if container.created_at else None))
-                    item_res = {
-                        "image_id": img.id,
-                        "item_id": item.id,
-                        "container_number": container.container_number,
-                        "date_loading": c_date,
-                        "factory": container.factory or "VINA G7",
-                        "suffix_key": item.suffix_key,
-                        "image_url": img_url,
-                        "expected_lpn": item.lpn,
-                        "detected_lpn": det_lpn,
-                        "is_lpn_match": is_lpn_match,
-                        "expected_sku": item.sku,
-                        "detected_sku": det_sku,
-                        "is_sku_match": is_sku_match,
-                        "detected_barcodes": det_barcodes,
-                        "confidence": conf,
-                        "status": status_val,
-                        "error_reason": error_reason,
-                        "processing_time_ms": duration_ms
-                    }
-                    scan_results.append(item_res)
-
-                    dur_str = format_duration(duration_ms)
-                    c_tag = f"{container.container_number} ({item.suffix_key or ''})"
-                    if status_val == "success":
-                        match_tag = "[Khớp]" if (is_lpn_match and is_sku_match) else "[OK]"
-                        log_line = f"[{idx}/{total}] {c_tag}: {match_tag} LPN={det_lpn or '—'} | SKU={det_sku or '—'} ({dur_str})"
-                    elif status_val == "review":
-                        log_line = f"[{idx}/{total}] {c_tag}: [Review] LPN={det_lpn or '—'} | SKU={det_sku or '—'} ({error_reason}) ({dur_str})"
-                    else:
-                        log_line = f"[{idx}/{total}] {c_tag}: [Lỗi] {error_reason} ({dur_str})"
-
-                    step_data = json.dumps({
-                        "type": "progress",
-                        "index": idx,
-                        "total": total,
-                        "percent": round(idx / total * 100, 1),
-                        "success_count": success_count,
-                        "review_count": review_count,
-                        "failed_count": failed_count,
-                        "duration_ms": duration_ms,
-                        "log": log_line,
-                        "item": item_res
-                    }, ensure_ascii=False)
-                    yield f"data: {step_data}\n\n"
+            step_data = json.dumps({
+                "type": "progress",
+                "index": idx,
+                "total": total,
+                "percent": round(idx / total * 100, 1),
+                "success_count": success_count,
+                "review_count": review_count,
+                "failed_count": failed_count,
+                "duration_ms": duration_ms,
+                "log": log_line,
+                "item": item_res
+            }, ensure_ascii=False)
+            yield f"data: {step_data}\n\n"
+            time.sleep(0.04)  # Nhịp thở 40ms nhường CPU cho Uvicorn Event Loop và SQL Server
 
         rate = round((success_count / total * 100), 1) if total > 0 else 0.0
         final_data = json.dumps({
@@ -1814,17 +1795,18 @@ def scan_single_item(
     pipeline = get_default_pipeline()
     t0 = time.time()
     try:
-        pipeline_res = pipeline.process(
-            image_input=img_target,
-            model_id=payload.model_id,
-            auto_crop=True,
-            auto_rotate=True,
-            apply_super_res=True,
-            return_images_base64=True,
-            expected_skus=[item.sku] if item.sku else None,
-            expected_lpn=item.lpn,
-            package_position=pos_key
-        )
+        with _AI_OCR_SEMAPHORE:
+            pipeline_res = pipeline.process(
+                image_input=img_target,
+                model_id=payload.model_id,
+                auto_crop=True,
+                auto_rotate=True,
+                apply_super_res=True,
+                return_images_base64=True,
+                expected_skus=[item.sku] if item.sku else None,
+                expected_lpn=item.lpn,
+                package_position=pos_key
+            )
         # Thời gian xử lý thuật toán thực tế của ảnh (bảo đảm chính xác, không bị tính oan thời gian nạp model cold-start)
         pipeline_total_ms = pipeline_res.get("time_metrics", {}).get("total_ms")
         duration_ms = float(pipeline_total_ms) if pipeline_total_ms else round((time.time() - t0) * 1000, 1)

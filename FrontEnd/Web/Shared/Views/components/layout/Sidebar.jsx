@@ -391,7 +391,20 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
       ];
     }
     if (group.title === 'Hồ sơ ISO' || group.title === 'Hồ sơ chuẩn ISO' || group.title === 'Quản lý ISO') {
-      // Dữ liệu 5 mục con hoàn toàn lấy động từ CSDL (system_sidebars)
+      const isoTitleMap = {
+        '/admin/iso-documents': 'Mẫu tài liệu',
+        '/admin/iso-processes': 'Tài liệu nghiệp vụ',
+        '/admin/iso-records': 'Quản lý bộ tài liệu'
+      };
+      list = list.map(item => {
+        if (item.route_path && isoTitleMap[item.route_path]) {
+          return { ...item, title: isoTitleMap[item.route_path] };
+        }
+        if (item.title === 'Quản lý mẫu tài liệu') return { ...item, title: 'Mẫu tài liệu' };
+        if (item.title === 'Quy trình nghiệp vụ') return { ...item, title: 'Tài liệu nghiệp vụ' };
+        if (item.title === 'Quản lý hồ sơ') return { ...item, title: 'Quản lý bộ tài liệu' };
+        return item;
+      });
       list = [...list].sort((a, b) => (a.sort_order ?? 99) - (b.sort_order ?? 99));
     }
     // Đảm bảo không có Quản Lý Góp Ý nằm bên trong bất kỳ group nào (vì đã chuyển lên cấp cao nhất)

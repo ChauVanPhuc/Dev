@@ -6,6 +6,13 @@ import { DEFAULT_SCREENS_REGISTRY } from '@shared/context/ScreenContext';
  * Custom hook để lấy metadata của màn hình từ database
  */
 const screenMetadataCache = new Map();
+let globalScreensPromise = null;
+const fetchAllScreensCached = () => {
+  if (!globalScreensPromise) {
+    globalScreensPromise = screenService.getScreens().catch(() => []);
+  }
+  return globalScreensPromise;
+};
 
 if (typeof window !== 'undefined') {
   window.screenMetadataCache = screenMetadataCache;
@@ -168,7 +175,7 @@ export const useScreenMetadataCached = (routePath, initialDefaults) => {
       try {
         setMetadata(prev => ({ ...prev, loading: true, error: null }));
         
-        const res = await screenService.getScreens().catch(() => []);
+        const res = await fetchAllScreensCached();
         const screens = Array.isArray(res) ? res : (res?.data && Array.isArray(res.data) ? res.data : []);
         
         const screen = findMatchingScreen(screens, routePath);
@@ -213,6 +220,7 @@ export const useScreenMetadataCached = (routePath, initialDefaults) => {
 };
 
 export const clearScreenMetadataCache = (routePath = null) => {
+  globalScreensPromise = null;
   if (routePath) {
     screenMetadataCache.delete(routePath);
   } else {

@@ -362,7 +362,7 @@ export const SCREEN_GROUPS = [
   {
     title: 'Nhân sự',
     screens: [
-      { key: 'iso-documents', name: 'Quản lý mẫu tài liệu', desc: 'Xem danh sách, chỉnh sửa cấu trúc và tải lên tệp quy trình ISO mẫu.' },
+      { key: 'iso-documents', name: 'Mẫu tài liệu', desc: 'Xem danh sách, chỉnh sửa cấu trúc và tải lên tệp quy trình ISO mẫu.' },
       { key: 'iso-processes', name: 'Quản lý quy trình', desc: 'Cấu hình chi tiết lưu đồ, quy trình thực tế và QC checklist.' }
     ]
   },

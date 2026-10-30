@@ -103,3 +103,9 @@ Report/output/
 
 
 
+
+patch_canvas_*.py
+search_corrupt.py
+scan_all_docx.py
+*.zip
+

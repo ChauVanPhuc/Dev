@@ -8,11 +8,24 @@ Tận dụng EasyOCR chạy trên GPU NVIDIA CUDA để nhận diện toàn bộ
 """
 
 import os
+# Cap thread count for CPU-bound operations in OCR Engine
+os.environ.setdefault("OMP_NUM_THREADS", "2")
+os.environ.setdefault("MKL_NUM_THREADS", "2")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "2")
+os.environ.setdefault("NUMEXPR_NUM_THREADS", "2")
+
 import re
 import cv2
+try:
+    cv2.setNumThreads(2)
+except Exception:
+    pass
+
 import numpy as np
 try:
     import torch
+    if torch is not None:
+        torch.set_num_threads(2)
     _ModuleBase = torch.nn.Module
 except ImportError:
     torch = None
@@ -49,7 +62,10 @@ class OnnxDirectMlCrnnRecognizer:
         from ..training.model import IDX2CHAR
         self.onnx_path = onnx_path
         providers = ['DmlExecutionProvider', 'CPUExecutionProvider']
-        self.session = ort.InferenceSession(onnx_path, providers=providers)
+        so = ort.SessionOptions()
+        so.intra_op_num_threads = 2
+        so.inter_op_num_threads = 1
+        self.session = ort.InferenceSession(onnx_path, sess_options=so, providers=providers)
         self.device = torch.device("cpu")
         self.idx2char = IDX2CHAR
 
@@ -112,7 +128,10 @@ class OcrEngine:
                             import onnxruntime as ort
                             if 'DmlExecutionProvider' in ort.get_available_providers():
                                 providers = ['DmlExecutionProvider', 'CPUExecutionProvider']
-                                craft_session = ort.InferenceSession(craft_onnx, providers=providers)
+                                so = ort.SessionOptions()
+                                so.intra_op_num_threads = 2
+                                so.inter_op_num_threads = 1
+                                craft_session = ort.InferenceSession(craft_onnx, sess_options=so, providers=providers)
                                 cls._reader_instance.detector = CraftDirectMLWrapper(craft_session)
                                 print("[OcrEngine] CRAFT Detector hooked with AMD Radeon DirectML GPU successfully!")
                         except Exception as dml_err:
@@ -504,8 +523,8 @@ class OcrEngine:
         else:
             rgb_image = image
 
-        # Độ phân giải tối ưu cho EasyOCR CRAFT detector trên ROI (1280px đảm bảo độ nét tách biệt rõ U/0 và 8/B)
-        max_dim = 1280
+        # Độ phân giải tối ưu cho EasyOCR CRAFT detector trên ROI (960px tối ưu tốc độ CPU, vẫn sắc nét tách biệt rõ U/0 và 8/B)
+        max_dim = 960
         orig_h, orig_w = rgb_image.shape[:2]
         scale_ratio = 1.0
         if max(orig_h, orig_w) > max_dim:
@@ -643,9 +662,17 @@ class OcrEngine:
                 if this_roi_sku_matching:
                     break
 
-        # Nếu tem đã có đủ cả LPN chuẩn kho và SKU hợp lệ thì không cần xoay
+        # Nếu tem đã có đủ cả LPN chuẩn kho và SKU hợp lệ HOẶC ảnh đã có sẵn cả LPN và SKU từ barcode -> không cần xoay
         this_roi_done = bool((this_roi_sku_matching or this_roi_any_sku) and this_roi_lpn)
-        if this_roi_done:
+        if this_roi_done or (already_has_lpn and already_has_sku):
+            needs_rotation = False
+        elif (already_has_lpn and (this_roi_sku_matching or this_roi_any_sku)) or (already_has_sku and this_roi_lpn):
+            needs_rotation = False
+        elif not raw_results:
+            # Nếu CRAFT không phát hiện bất kỳ chữ nào ở góc 0°, vùng ảnh không có ký tự -> không xoay
+            needs_rotation = False
+        elif not is_target_vertical and (orig_w >= orig_h * 1.4) and (this_roi_lpn or this_roi_any_sku):
+            # Tem nằm ngang rõ rệt và đã đọc được ít nhất 1 mã hợp lệ -> không xoay
             needs_rotation = False
         else:
             needs_rotation = allow_rotation

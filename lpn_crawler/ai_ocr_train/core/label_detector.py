@@ -39,7 +39,7 @@ class LabelDetector:
     def detect_label_roi(
         self,
         image: np.ndarray,
-        max_labels: int = 22,
+        max_labels: int = 5,
         min_area_ratio: float = 0.0010,
         max_area_ratio: float = 0.35
     ) -> Dict[str, Any]:

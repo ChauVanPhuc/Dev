@@ -3484,3 +3484,433 @@ tbody tr:nth-child(10) { animation-delay: 0.3s !important; }
   background: #94A3B8;
 }
 
+/* =========================================================================
+   DARK OBSIDIAN LUXURY DESIGN SYSTEM (THEME MÀU TỐI)
+   ========================================================================= */
+[data-theme="dark"] {
+  --sf-bg-page: #242220;
+  --sf-bg-surface: #302D2A;
+  --sf-bg-elevated: #383431;
+  --sf-border: #4D4742;
+  --sf-border-subtle: #3F3935;
+  --sf-text-main: #F7F3EF;
+  --sf-text-muted: #BDB0A4;
+  --sf-primary: #D8B282;
+  --sf-primary-hover: #E5C398;
+  --sf-input-bg: #282523;
+  --sf-input-border: #544E49;
+}
+
+[data-theme="dark"] body {
+  background-color: #242220 !important;
+  color: #F7F3EF !important;
+}
+
+[data-theme="dark"] .portal-layout,
+[data-theme="dark"] .dashboard-content,
+[data-theme="dark"] .mgmt-container,
+[data-theme="dark"] .mgmt-main {
+  background-color: #242220 !important;
+  color: #F7F3EF !important;
+}
+
+/* Top Header */
+[data-theme="dark"] .portal-header,
+[data-theme="dark"] .header-container,
+[data-theme="dark"] header.header {
+  background-color: #302D2A !important;
+  border-bottom: 1px solid #4D4742 !important;
+  color: #F7F3EF !important;
+}
+
+[data-theme="dark"] .header-title,
+[data-theme="dark"] .screen-title {
+  color: #F7F3EF !important;
+}
+
+[data-theme="dark"] .header-subtitle,
+[data-theme="dark"] .screen-subtitle {
+  color: #D8B282 !important;
+}
+
+[data-theme="dark"] .header-notification-bell {
+  background-color: #383431 !important;
+  border-color: #544E49 !important;
+  color: #D8B282 !important;
+}
+
+[data-theme="dark"] .header-notifications-dropdown {
+  background-color: #302D2A !important;
+  border: 1px solid #4D4742 !important;
+  color: #F7F3EF !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Sidebar Navigation */
+[data-theme="dark"] .portal-sidebar,
+[data-theme="dark"] .sidebar-container,
+[data-theme="dark"] aside.sidebar {
+  background-color: #2B2826 !important;
+  border-right: 1px solid #4D4742 !important;
+}
+
+[data-theme="dark"] .sidebar-nav-item {
+  color: #DBD0C7 !important;
+}
+
+[data-theme="dark"] .sidebar-nav-item:hover {
+  background-color: #383431 !important;
+  color: #F7F3EF !important;
+}
+
+[data-theme="dark"] .sidebar-nav-item.active {
+  background-color: #403A36 !important;
+  color: #D8B282 !important;
+  border-left-color: #D8B282 !important;
+}
+
+/* Cards & Toolbars */
+[data-theme="dark"] .mgmt-toolbar,
+[data-theme="dark"] .toolbar-container,
+[data-theme="dark"] .filter-bar {
+  background-color: #302D2A !important;
+  border: 1px solid #4D4742 !important;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15) !important;
+}
+
+[data-theme="dark"] .mgmt-card,
+[data-theme="dark"] .admin-table-card,
+[data-theme="dark"] .card,
+[data-theme="dark"] .info-card {
+  background-color: #302D2A !important;
+  border: 1px solid #4D4742 !important;
+  color: #F7F3EF !important;
+}
+
+/* Inputs, Selects & Forms */
+[data-theme="dark"] input[type="text"],
+[data-theme="dark"] input[type="search"],
+[data-theme="dark"] input[type="number"],
+[data-theme="dark"] input[type="date"],
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  background-color: #282523 !important;
+  border: 1px solid #544E49 !important;
+  color: #F7F3EF !important;
+}
+
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+  color: #9E9187 !important;
+}
+
+[data-theme="dark"] input:focus,
+[data-theme="dark"] select:focus,
+[data-theme="dark"] textarea:focus {
+  border-color: #D8B282 !important;
+  box-shadow: 0 0 0 2px rgba(216, 178, 130, 0.25) !important;
+}
+
+/* Data Tables */
+[data-theme="dark"] .data-table th,
+[data-theme="dark"] .modern-table th,
+[data-theme="dark"] .screens-table th,
+[data-theme="dark"] .manufacture-table th,
+[data-theme="dark"] .mock-data-table th,
+[data-theme="dark"] .real-table-data th {
+  background-color: #241C18 !important;
+  border-bottom: 2px solid #3A2B21 !important;
+  color: #C49A6C !important;
+}
+
+[data-theme="dark"] .data-table tbody tr,
+[data-theme="dark"] .modern-table tbody tr,
+[data-theme="dark"] .screens-table tbody tr,
+[data-theme="dark"] .manufacture-table tbody tr,
+[data-theme="dark"] .mock-data-table tbody tr,
+[data-theme="dark"] .real-table-data tbody tr {
+  background-color: #1A1411 !important;
+  color: #F5EDE6 !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25) !important;
+}
+
+[data-theme="dark"] .data-table tbody tr:hover,
+[data-theme="dark"] .modern-table tbody tr:hover,
+[data-theme="dark"] .screens-table tbody tr:hover,
+[data-theme="dark"] .manufacture-table tbody tr:hover,
+[data-theme="dark"] .mock-data-table tbody tr:hover,
+[data-theme="dark"] .real-table-data tbody tr:hover {
+  background-color: #261E19 !important;
+}
+
+[data-theme="dark"] .data-table td,
+[data-theme="dark"] .modern-table td {
+  border-bottom-color: #2E221A !important;
+  color: #E6DCD3 !important;
+}
+
+/* Modals & Dropdowns */
+[data-theme="dark"] .filter-modal,
+[data-theme="dark"] .modal-content,
+[data-theme="dark"] .action-dropdown-menu,
+[data-theme="dark"] .dropdown-menu {
+  background-color: #1E1815 !important;
+  border: 1px solid #3A2B21 !important;
+  color: #F5EDE6 !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6) !important;
+}
+
+[data-theme="dark"] .filter-modal-header,
+[data-theme="dark"] .filter-modal-footer,
+[data-theme="dark"] .modal-header,
+[data-theme="dark"] .modal-footer {
+  background-color: #241C18 !important;
+  border-color: #3A2B21 !important;
+}
+
+/* Buttons */
+[data-theme="dark"] .btn-secondary,
+[data-theme="dark"] .btn-filter,
+[data-theme="dark"] .btn-back {
+  background-color: #241C18 !important;
+  border-color: #4A382C !important;
+  color: #F5EDE6 !important;
+}
+
+[data-theme="dark"] .btn-secondary:hover,
+[data-theme="dark"] .btn-filter:hover,
+[data-theme="dark"] .btn-back:hover {
+  background-color: #2E231E !important;
+  border-color: #C49A6C !important;
+  color: #C49A6C !important;
+}
+
+/* =========================================================================
+   CHẾ ĐỘ TỐI CHO PHÂN HỆ QUY TRÌNH ISO (/admin/iso-processes/edit/:id)
+   ========================================================================= */
+[data-theme="dark"] .iso-process-editor-view,
+[data-theme="dark"] [data-screen="AD55"],
+[data-theme="dark"] [data-screen="AD18"] {
+  background-color: #120E0C !important;
+  color: #F5EDE6 !important;
+}
+
+/* Accordion cards & thông tin quy trình */
+[data-theme="dark"] .iso-card-container,
+[data-theme="dark"] .iso-accordion-card {
+  background-color: #1A1411 !important;
+  border-color: #3A2B21 !important;
+  color: #F5EDE6 !important;
+}
+
+[data-theme="dark"] .iso-card-header,
+[data-theme="dark"] .iso-accordion-header {
+  background-color: #241C18 !important;
+  border-bottom: 1px solid #3A2B21 !important;
+  color: #F5EDE6 !important;
+}
+
+[data-theme="dark"] .iso-card-header span,
+[data-theme="dark"] .iso-accordion-header span {
+  color: #F5EDE6 !important;
+}
+
+/* Tabs quy trình */
+[data-theme="dark"] .iso-tabs-nav,
+[data-theme="dark"] .iso-tab-item {
+  background-color: #1A1411 !important;
+  border-color: #3A2B21 !important;
+  color: #A69285 !important;
+}
+
+[data-theme="dark"] .iso-tab-item.active {
+  background-color: #261E19 !important;
+  color: #C49A6C !important;
+  border-bottom: 2px solid #C49A6C !important;
+}
+
+/* Bàn làm việc Soạn thảo Văn bản (Desk Workbench) */
+[data-theme="dark"] .iso-doc-workbench,
+[data-theme="dark"] .iso-sheet-editor-workbench,
+[data-theme="dark"] .iso-editor-desk {
+  background-color: #22201E !important;
+  background-image: radial-gradient(#3D3834 1px, transparent 1px) !important;
+  background-size: 20px 20px !important;
+}
+
+/* TỜ GIẤY A4: Chuyển nền xám than ấm dịu mắt */
+[data-theme="dark"] .iso-a4-sheet,
+[data-theme="dark"] .a4-page,
+[data-theme="dark"] .iso-sheet-inner {
+  background-color: #2A2724 !important;
+  color: #F7F3EF !important;
+  border-color: #4D4742 !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 0 1px #4D4742 !important;
+}
+
+[data-theme="dark"] .iso-a4-sheet *,
+[data-theme="dark"] .a4-page * {
+  color: #F7F3EF !important;
+}
+
+/* Bảng bìa và bảng nội dung trong trang A4 */
+[data-theme="dark"] .iso-a4-sheet table,
+[data-theme="dark"] .a4-page table,
+[data-theme="dark"] .cover-border-box-table {
+  border-color: #635850 !important;
+  background-color: #2A2724 !important;
+}
+
+[data-theme="dark"] .iso-a4-sheet td,
+[data-theme="dark"] .iso-a4-sheet th,
+[data-theme="dark"] .a4-page td,
+[data-theme="dark"] .a4-page th,
+[data-theme="dark"] .cover-border-box-table td {
+  border-color: #635850 !important;
+  background-color: #2A2724 !important;
+  color: #F7F3EF !important;
+}
+
+[data-theme="dark"] .dashed-table,
+[data-theme="dark"] .dashed-table td {
+  border-color: #635850 !important;
+  background-color: transparent !important;
+  color: #F7F3EF !important;
+}
+
+[data-theme="dark"] .iso-sheet-footer,
+[data-theme="dark"] .word-doc-footer-table,
+[data-theme="dark"] .iso-a4-sheet-footer {
+  border-top-color: #635850 !important;
+  color: #BDB0A4 !important;
+}
+
+/* Sidebar Mục lục bên trái trong Editor */
+[data-theme="dark"] .iso-editor-sidebar,
+[data-theme="dark"] .iso-sections-toc {
+  background-color: #2B2826 !important;
+  border-color: #4D4742 !important;
+}
+
+[data-theme="dark"] .iso-toc-item {
+  color: #DBD0C7 !important;
+}
+
+[data-theme="dark"] .iso-toc-item:hover {
+  background-color: #383431 !important;
+  color: #F7F3EF !important;
+}
+
+[data-theme="dark"] .iso-toc-item.active {
+  background-color: #403A36 !important;
+  color: #D8B282 !important;
+  border-left-color: #D8B282 !important;
+}
+
+/* KHẮC PHỤC KHI IN ẤN VÀ XUẤT FILE: Luôn giữ nguyên màu trắng giấy in chuẩn */
+@media print {
+  [data-theme="dark"] body,
+  [data-theme="dark"] .iso-a4-sheet,
+  [data-theme="dark"] .a4-page,
+  [data-theme="dark"] .iso-sheet-inner {
+    background-color: #FFFFFF !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+  }
+
+  [data-theme="dark"] .iso-a4-sheet *,
+  [data-theme="dark"] .a4-page * {
+    color: #000000 !important;
+    border-color: #000000 !important;
+    background-color: transparent !important;
+  }
+}
+
+/* ── TOÀN BỘ OVERRIDES CỦA PORTAL LAYOUT & MÀN HÌNH QUẢN TRỊ KHI Ở DARK THEME ── */
+[data-theme="dark"] .admin-layout {
+  background-color: #242220 !important;
+}
+
+[data-theme="dark"] .admin-main {
+  background-color: #242220 !important;
+}
+
+[data-theme="dark"] .admin-header {
+  background: #302D2A !important;
+  background-color: #302D2A !important;
+  border-bottom: 1px solid #4D4742 !important;
+  color: #F7F3EF !important;
+}
+
+[data-theme="dark"] .admin-header .header-page-title,
+[data-theme="dark"] .header-page-title {
+  color: #F7F3EF !important;
+}
+
+[data-theme="dark"] .admin-header .header-page-subtitle,
+[data-theme="dark"] .header-page-subtitle {
+  color: #D8B282 !important;
+}
+
+[data-theme="dark"] .toggle-sidebar-btn {
+  background: #383431 !important;
+  border: 1px solid #4D4742 !important;
+  color: #D8B282 !important;
+}
+
+[data-theme="dark"] .header-layout-toggle-btn {
+  background: #383431 !important;
+  border: 1px solid #4D4742 !important;
+  color: #F7F3EF !important;
+}
+
+[data-theme="dark"] .admin-header button {
+  border-color: #4D4742 !important;
+}
+
+[data-theme="dark"] .dashboard-content {
+  background-color: #242220 !important;
+  color: #F7F3EF !important;
+}
+
+/* Ghi đè toàn bộ form label để hiển thị chữ trắng sáng rõ ràng */
+[data-theme="dark"] label {
+  color: #DBD0C7 !important;
+}
+
+/* Ghi đè các ô input, select, textarea */
+[data-theme="dark"] input[readonly],
+[data-theme="dark"] input:disabled,
+[data-theme="dark"] select:disabled,
+[data-theme="dark"] textarea:disabled {
+  background-color: #252220 !important;
+  border-color: #453F3A !important;
+  color: #B0A297 !important;
+}
+
+[data-theme="dark"] input[type="text"],
+[data-theme="dark"] input[type="search"],
+[data-theme="dark"] input[type="number"],
+[data-theme="dark"] input[type="date"],
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  background-color: #282523 !important;
+  border: 1px solid #544E49 !important;
+  color: #F7F3EF !important;
+}
+
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+  color: #9E9187 !important;
+}
+
+/* Thẻ form card và các container bên trong ISO Editor */
+[data-theme="dark"] .iso-form-card,
+[data-theme="dark"] .iso-panel-body {
+  background-color: #302D2A !important;
+  color: #F7F3EF !important;
+  border-color: #4D4742 !important;
+}
+
+
+

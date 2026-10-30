@@ -116,11 +116,17 @@ class BarcodeEngine:
                             elif clean_text not in seen_texts:
                                 seen_texts.add(clean_text)
                                 results.append(res_item)
+                                # Early-stop: nếu đã nhận diện được mã LPN chuẩn kho (8-12 chữ số hoặc tiền tố LPN)
+                                clean_upper = clean_text.upper()
+                                if (clean_text.isdigit() and 8 <= len(clean_text) <= 12) or clean_upper.startswith("LPN"):
+                                    target_found = True
+                                    break
 
                         if target_found:
                             break
-                        # Nếu không có target_clean nhưng đã đọc được barcode ở scale 1.0x, dừng sớm để tối ưu tốc độ
+                        # Nếu không có target_clean nhưng đã đọc được barcode hợp lệ ở scale 1.0x, dừng sớm để tối ưu CPU
                         if not target_clean and results and sc == 1.0:
+                            target_found = True
                             break
 
                 if results:

@@ -109,6 +109,13 @@ class AppSheetCrawlerEngine(
         active_model_meta = pipeline.ocr_engine.get_model_metadata(best_model_id)
         active_model_name = active_model_meta.get("model_name", "Dual-Engine: Epoch 19 - Acc 99.1%")
         active_model_id = active_model_meta.get("model_id", best_model_id)
+        # Giảm mức ưu tiên thread trên Windows để nhường CPU cho FastAPI Uvicorn
+        try:
+            import ctypes
+            ctypes.windll.kernel32.SetThreadPriority(ctypes.windll.kernel32.GetCurrentThread(), -1)
+        except Exception:
+            pass
+
         print(f"[Live OCR Engine] Khởi động với mô hình độ chính xác cao nhất: {active_model_name}")
 
         if self.sse_callback:
@@ -417,6 +424,7 @@ class AppSheetCrawlerEngine(
                             pass
                 finally:
                     self.ocr_queue.task_done()
+                    time.sleep(0.08)  # Nhịp thở 80ms nhường CPU cho Uvicorn và các phân hệ ERP khác
 
         finally:
             try:

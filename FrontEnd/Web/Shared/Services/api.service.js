@@ -12,7 +12,8 @@ export const getBaseURL = () => {
   }
 
   if (port === '5173' || port === '5174' || port === '5175' || port === '3000' || port === '1222' || port === '1333') {
-    return `http://${hostname}:8000`;
+    const resolvedHost = (hostname === 'localhost' || hostname === '::1') ? '127.0.0.1' : hostname;
+    return `http://${resolvedHost}:8000`;
   }
   
   // Nếu đang chạy Production (đã build) hoặc qua Ngrok, dùng đường dẫn tương đối

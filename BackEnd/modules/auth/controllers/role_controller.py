@@ -33,6 +33,7 @@ def create_role(db: Session, role_data: RoleCreate):
     db_role = Role(
         name=role_data.name,
         description=role_data.description,
+        code=getattr(role_data, 'code', None),
         is_active=role_data.is_active,
         default_permissions=role_data.default_permissions
     )
@@ -57,6 +58,8 @@ def update_role(db: Session, role_id: int, role_data: RoleUpdate):
         db_role.name = role_data.name
     if role_data.description is not None:
         db_role.description = role_data.description
+    if role_data.code is not None:
+        db_role.code = role_data.code
     if role_data.is_active is not None:
         db_role.is_active = role_data.is_active
     if role_data.default_permissions is not None:

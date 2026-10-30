@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Menu, ArrowLeft, Bell, Sparkles, Plus, Trash2, MessageSquare, Send, X, History, RotateCcw, Monitor } from 'lucide-react';
+import { Menu, ArrowLeft, Bell, Sparkles, Plus, Trash2, MessageSquare, Send, X, History, RotateCcw, Monitor, Sun, Moon } from 'lucide-react';
 import {
   ResponsiveContainer, ComposedChart, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend
@@ -373,6 +373,13 @@ const PortalLayout = () => {
   const { getScreenInfo } = useScreen();
   const isAdmin = location.pathname.startsWith('/admin');
   const [sidebarActive, setSidebarActive] = useState(false);
+  const { theme, toggleTheme } = useUiStore();
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      document.documentElement.setAttribute('data-theme', theme);
+    }
+  }, [theme]);
 
   const handleBackClick = () => {
     if (typeof window.hasUnsavedChangesScreenDetail === 'function' && window.hasUnsavedChangesScreenDetail()) {
@@ -380,6 +387,14 @@ const PortalLayout = () => {
         window.triggerScreenDetailUnsavedChangesModal();
         return;
       }
+    }
+    if (location.pathname.startsWith('/admin/iso-processes/')) {
+      navigate('/admin/iso-processes');
+      return;
+    }
+    if (location.pathname.startsWith('/admin/iso-documents/')) {
+      navigate('/admin/iso-documents');
+      return;
     }
     navigate(-1);
   };
@@ -1565,6 +1580,45 @@ const PortalLayout = () => {
                 <span className="layout-mode-text" style={{ display: 'inline' }}>
                   {layoutMode === 'responsive' ? 'Tự co giãn' : 'Vừa màn hình'}
                 </span>
+              </button>
+
+              {/* Nút chuyển đổi Theme Sáng / Tối */}
+              <button
+                type="button"
+                className="portal-theme-toggle-btn"
+                onClick={toggleTheme}
+                title={theme === 'dark' ? 'Chuyển sang Giao diện Sáng (Light)' : 'Chuyển sang Giao diện Tối (Dark Obsidian)'}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '7px 12px',
+                  borderRadius: '8px',
+                  border: theme === 'dark' ? '1px solid #4A382C' : '1px solid #EADCC9',
+                  backgroundColor: theme === 'dark' ? '#241C18' : '#FAF6F0',
+                  color: theme === 'dark' ? '#F5EDE6' : '#7B5233',
+                  cursor: 'pointer',
+                  fontSize: '0.85rem',
+                  fontWeight: '600',
+                  transition: 'all 0.2s ease',
+                  boxShadow: '0 2px 4px rgba(123, 82, 51, 0.05)'
+                }}
+              >
+                {theme === 'dark' ? (
+                  <>
+                    <Sun size={16} style={{ color: '#F59E0B' }} />
+                    <span className="layout-mode-text" style={{ display: 'inline', color: '#F5EDE6' }}>
+                      Chế độ sáng
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Moon size={16} style={{ color: '#7B5233' }} />
+                    <span className="layout-mode-text" style={{ display: 'inline', color: '#7B5233' }}>
+                      Chế độ tối
+                    </span>
+                  </>
+                )}
               </button>
 
               {/* Notification dropdown (Only for Admin dashboard/pages) */}
