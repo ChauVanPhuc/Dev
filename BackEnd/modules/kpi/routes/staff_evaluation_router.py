@@ -86,9 +86,6 @@ def get_staff_evaluations(db: Session = Depends(get_db)):
     """
     ensure_staff_evaluations_columns(db)
     records = db.query(StaffEvaluation).order_by(StaffEvaluation.id.desc()).all()
-    if not records:
-        seed_staff_evaluations(db)
-        records = db.query(StaffEvaluation).order_by(StaffEvaluation.id.desc()).all()
         
     return [
         {

@@ -21,21 +21,6 @@ from modules.chatbot.services.local_gemini_chatbot_service import local_gemini_c
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Tự động đồng bộ cột audio_url vào bảng quick_reports nếu chưa tồn tại
-try:
-    with engine.begin() as conn:
-        conn.execute(text("""
-            IF NOT EXISTS (
-                SELECT 1 FROM sys.columns 
-                WHERE object_id = OBJECT_ID(N'quick_reports') AND name = 'audio_url'
-            )
-            BEGIN
-                ALTER TABLE quick_reports ADD audio_url NVARCHAR(1000) NULL;
-            END
-        """))
-except Exception as _m_err:
-    logger.warning(f"QuickReport auto migration warning: {_m_err}")
-
 def generate_next_code(db: Session) -> str:
     import re
     reports = db.query(QuickReport.code).all()

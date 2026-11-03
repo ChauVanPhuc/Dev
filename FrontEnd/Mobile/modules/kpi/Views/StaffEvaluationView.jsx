@@ -66,6 +66,7 @@ const StaffEvaluation = () => {
   })
 
   const [kpiDetails, setKpiDetails] = useState([])
+  const [kpiLoading, setKpiLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
@@ -86,6 +87,53 @@ const StaffEvaluation = () => {
     if (text.includes('NM3') || text.includes('NHÀ MÁY 3') || text.includes('008') || text.includes('009') || text.includes('010') || text.includes('018') || text.includes('019') || text.includes('024') || text.includes('025')) return 'Nhà máy 3'
     if (text.includes('NM2') || text.includes('NHÀ MÁY 2') || text.includes('005') || text.includes('006') || text.includes('007') || text.includes('013') || text.includes('015') || text.includes('017') || text.includes('022') || text.includes('023')) return 'Nhà máy 2'
     return 'Nhà máy 1'
+  }
+
+  // Lấy chỉ số KPI động từ /admin/kpi/quality-employees (kpi_employee_items & calculate-score)
+  const fetchEmployeeKpis = async (empCode) => {
+    if (!empCode) {
+      setKpiDetails([])
+      return
+    }
+    setKpiLoading(true)
+    try {
+      // 1. Ưu tiên lấy các mục tiêu KPI được gán riêng cho nhân sự từ /kpi-management/employee-items (cấu hình từ /admin/kpi/quality-employees)
+      const empItemsRes = await apiClient.get(`/kpi-management/employee-items?employee_id=${encodeURIComponent(empCode)}`).catch(() => null)
+      const empItems = Array.isArray(empItemsRes?.data) ? empItemsRes.data : (empItemsRes?.data?.items || [])
+      
+      if (empItems.length > 0) {
+        setKpiDetails(empItems.map((item, idx) => ({
+          id: item.id || idx + 1,
+          content: item.content || 'Chỉ số KPI',
+          goal: item.target || item.threshold || '100%',
+          actual: (item.actual !== undefined && item.actual !== null && item.actual !== '') ? String(item.actual) : (item.score ? `${item.score} điểm` : 'Đang theo dõi')
+        })))
+        return
+      }
+
+      // 2. Nếu nhân sự chưa có danh sách riêng, lấy kết quả tính toán động theo Pool của hệ thống
+      const monthNow = new Date().getMonth() + 1
+      const yearNow = new Date().getFullYear()
+      const calcRes = await apiClient.get(`/kpi-management/calculate-score?employee_id=${encodeURIComponent(empCode)}&month=${monthNow}&year=${yearNow}`).catch(() => null)
+      const details = calcRes?.data?.details
+      if (Array.isArray(details) && details.length > 0) {
+        setKpiDetails(details.map((item, idx) => ({
+          id: item.id || idx + 1,
+          content: item.content || 'Chỉ số KPI',
+          goal: item.target || '100%',
+          actual: (item.actual !== undefined && item.actual !== null && item.actual !== '') ? String(item.actual) : 'Đang theo dõi'
+        })))
+        return
+      }
+
+      // 3. Nếu chưa có mục tiêu KPI nào trên hệ thống
+      setKpiDetails([])
+    } catch (e) {
+      console.warn('Lỗi lấy chỉ số KPI nhân sự:', e)
+      setKpiDetails([])
+    } finally {
+      setKpiLoading(false)
+    }
   }
 
   // 1. Fetch toàn bộ danh sách nhân sự từ Backend Quality Database (/quality-employees/?size=100)
@@ -121,6 +169,9 @@ const StaffEvaluation = () => {
                   stage: targetEmp.stage,
                   factory: targetEmp.factory
                 }));
+                if (!id || id === 'new') {
+                  fetchEmployeeKpis(targetEmp.code || targetEmp.id);
+                }
               }
             }
           }
@@ -135,7 +186,6 @@ const StaffEvaluation = () => {
   // 2. Load dữ liệu đánh giá nếu sửa (id !== 'new')
   useEffect(() => {
     if (!id || id === 'new') {
-      setKpiDetails(fallbackKpis)
       setLoading(false)
       return
     }
@@ -208,9 +258,10 @@ const StaffEvaluation = () => {
     )
 
     if (found) {
+      const code = found.code || found.id
       setFormData(prev => ({
         ...prev,
-        employeeId: found.code || found.id,
+        employeeId: code,
         staffName: found.name,
         stage: found.stage || 'QLCL',
         factory: found.factory || resolveFactory(found.department, found.stage, found.code),
@@ -222,8 +273,14 @@ const StaffEvaluation = () => {
         managerNote: '',
         proposedAction: ''
       }))
+      if (!id || id === 'new') {
+        fetchEmployeeKpis(code)
+      }
     } else {
       setFormData(prev => ({ ...prev, staffName: selectedCode }))
+      if (!id || id === 'new') {
+        fetchEmployeeKpis(selectedCode)
+      }
     }
   }
 
@@ -422,7 +479,17 @@ const StaffEvaluation = () => {
               <BarChart3 size={18} color="#32251E" />
               <h3 style={{ fontSize: '1rem', fontWeight: '800', color: '#32251E', margin: 0 }}>Chỉ Số KPI Kết Quả Đạt Được</h3>
             </div>
-            <DataTable columns={kpiColumns} data={kpiDetails} />
+            {kpiLoading ? (
+              <div style={{ padding: '24px', textAlign: 'center', color: '#8c7e6e', fontSize: '0.9rem', fontWeight: '600' }}>
+                Đang nạp chỉ số KPI từ hệ thống...
+              </div>
+            ) : kpiDetails.length === 0 ? (
+              <div style={{ padding: '24px', textAlign: 'center', color: '#8c7e6e', fontSize: '0.9rem', fontWeight: '500' }}>
+                {formData.staffName ? 'Chưa có mục tiêu KPI ghi nhận cho nhân sự này trên hệ thống.' : 'Vui lòng chọn nhân sự để hiển thị chỉ số KPI.'}
+              </div>
+            ) : (
+              <DataTable columns={kpiColumns} data={kpiDetails} />
+            )}
           </div>
  
           {/* 4. Xếp loại tháng */}
