@@ -549,6 +549,11 @@ async def check_write_permissions(request: Request, call_next):
                                     candidate_keys = [
                                         "/admin/exception-deliveries", "exception-deliveries", "/delivery-info"
                                     ]
+                                elif path.startswith("/api/v1/pallet-check"):
+                                    candidate_keys = [
+                                        "/pallet-check-v1", "pallet-check-v1", "/pallet-check", "pallet-check",
+                                        "mobile_pallet-check-v1", "mobile_pallet-check"
+                                    ]
                                     
                                 # 3. Production & Plans
                                 elif path.startswith("/api/v1/plans") or path.startswith("/api/v1/production-plans"):

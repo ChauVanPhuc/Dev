@@ -2,7 +2,8 @@ import sys
 import os
 import codecs
 import json
-sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from config.database import SessionLocal

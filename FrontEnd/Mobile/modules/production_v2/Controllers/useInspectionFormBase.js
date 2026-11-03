@@ -612,7 +612,19 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
           setProductOptions((prev) => {
             const next = [...prev]
             prodArr.forEach((p) => {
-              if (!next.some((o) => o.value === p)) next.push({ value: p, label: p })
+              const formatted = formatCabinetSeriesTag(p, p)
+              if (!next.some((o) => o.value === p)) {
+                next.push({
+                  value: p,
+                  label: formatted,
+                  rawLabel: p,
+                  rawName: p,
+                  badge: null,
+                  rawBadge: null,
+                  productLabel: formatted,
+                  rawProductLabel: p
+                })
+              }
             })
             return next
           })
@@ -1484,9 +1496,22 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
 
       const displayProd = effectiveProd || prodVal
       if (displayProd) {
+        const formatted = formatCabinetSeriesTag(displayProd, displayProd)
         setProductOptions((prev) => {
           if (!prev.some((opt) => opt.value === displayProd)) {
-            return [...prev, { value: displayProd, label: displayProd }]
+            return [
+              ...prev,
+              {
+                value: displayProd,
+                label: formatted,
+                rawLabel: displayProd,
+                rawName: displayProd,
+                badge: null,
+                rawBadge: null,
+                productLabel: formatted,
+                rawProductLabel: displayProd
+              }
+            ]
           }
           return prev
         })
@@ -1636,11 +1661,48 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       return
     }
 
-    const applyBomData = (data) => {
+    const applyBomData = (data, isMultiPo = false) => {
       const bomList = data || []
       setBomData(bomList)
-      const opts = bomList.map((p) => ({ value: p.part_name, label: p.label || p.part_name }))
+      const opts = bomList.map((p) => {
+        const rawName = p.part_name || ''
+        const rawLabel = p.label || p.part_name || ''
+        const cabinetLabel = formatCabinetSeriesTag(rawLabel, rawLabel)
+
+        let badge = null
+        if (isMultiPo) {
+          const poList = (Array.isArray(p.pos) && p.pos.length > 0)
+            ? p.pos
+            : (p.po ? [p.po] : (p.order_code ? [p.order_code] : []))
+          if (poList.length > 0) {
+            const str = poList.join(', ')
+            badge = /^po\b/i.test(str) || /^po[-_:]/i.test(str) ? str : `PO: ${str}`
+          }
+        }
+
+        return {
+          value: rawName,
+          label: cabinetLabel,
+          rawLabel: rawLabel,
+          rawName: rawName,
+          badge: badge,
+          rawBadge: badge,
+          productLabel: cabinetLabel,
+          rawProductLabel: rawLabel
+        }
+      })
       
+      // Sắp xếp danh sách chi tiết (tủ) tăng dần tự nhiên (A-Z, 0-9)
+      opts.sort((a, b) => {
+        const aLabel = a.label || a.rawLabel || a.value || ''
+        const bLabel = b.label || b.rawLabel || b.value || ''
+        const cmp = aLabel.localeCompare(bLabel, undefined, { numeric: true, sensitivity: 'base' })
+        if (cmp !== 0) return cmp
+        const aBadge = a.badge || ''
+        const bBadge = b.badge || ''
+        return aBadge.localeCompare(bBadge, undefined, { numeric: true, sensitivity: 'base' })
+      })
+
       if (bomList.length === 0) {
         setProductOptions([{ value: '', label: 'Không có chi tiết cho công đoạn này' }])
         setSpecOptions([{ value: '', label: 'Không có quy cách' }])
@@ -1677,6 +1739,11 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
                 orderCode: s.order_code || '',
                 qty: Number(s.qty) || 0
               }
+            })
+            specOpts.sort((a, b) => {
+              const aLabel = a.label || a.rawSpec || a.value || ''
+              const bLabel = b.label || b.rawSpec || b.value || ''
+              return aLabel.localeCompare(bLabel, undefined, { numeric: true, sensitivity: 'base' })
             })
             setSpecOptions(specOpts)
             if (spec) {
@@ -1754,6 +1821,11 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
             }
           })
           
+          specOpts.sort((a, b) => {
+            const aLabel = a.label || a.rawSpec || a.value || ''
+            const bLabel = b.label || b.rawSpec || b.value || ''
+            return aLabel.localeCompare(bLabel, undefined, { numeric: true, sensitivity: 'base' })
+          })
           setSpecOptions([{ value: '', label: 'Chọn quy cách' }, ...specOpts])
           // Quy tắc chọn quy cách:
           // - Nếu chọn 1 Chi tiết mà chỉ có đúng 1 quy cách (specOpts.length === 1) thì chọn luôn quy cách đó.
@@ -1812,15 +1884,15 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       const singlePo = posList[0] || activePo
       const cacheKey = `${singlePo}_${activeStage}`
       if (bomCacheRef.current[cacheKey]) {
-        applyBomData(bomCacheRef.current[cacheKey])
+        applyBomData(bomCacheRef.current[cacheKey], false)
       } else {
         orderService.getBom(singlePo, activeStage)
           .then((data) => {
             bomCacheRef.current[cacheKey] = data || []
-            applyBomData(data)
+            applyBomData(data, false)
           })
           .catch(() => {
-            applyBomData([])
+            applyBomData([], false)
           })
       }
     } else {
@@ -1828,25 +1900,28 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       Promise.all(posList.map((p) => orderService.getBom(p, activeStage).catch(() => [])))
         .then((bomArrays) => {
           const mergedMap = new Map()
-          bomArrays.forEach((bomList) => {
+          bomArrays.forEach((bomList, idx) => {
+            const currentPo = posList[idx]
             if (Array.isArray(bomList)) {
               bomList.forEach((item) => {
                 const key = item.part_name || item.sku || item.id
                 if (key && !mergedMap.has(key)) {
-                  mergedMap.set(key, { ...item })
+                  mergedMap.set(key, { ...item, pos: currentPo ? [currentPo] : [] })
                 } else if (key && mergedMap.has(key)) {
                   const existing = mergedMap.get(key)
                   const newQty = (Number(existing.total_qty) || 0) + (Number(item.total_qty) || 0)
                   const combinedSpecs = [...(existing.specs || []), ...(item.specs || [])]
-                  mergedMap.set(key, { ...existing, total_qty: newQty, specs: combinedSpecs })
+                  const prevPos = existing.pos || []
+                  const combinedPos = (currentPo && !prevPos.includes(currentPo)) ? [...prevPos, currentPo] : prevPos
+                  mergedMap.set(key, { ...existing, total_qty: newQty, specs: combinedSpecs, pos: combinedPos })
                 }
               })
             }
           })
-          applyBomData(Array.from(mergedMap.values()))
+          applyBomData(Array.from(mergedMap.values()), true)
         })
         .catch(() => {
-          applyBomData([])
+          applyBomData([], true)
         })
     }
   }, [po, paramPo, stage, paramStage, isNew, selectedPos])

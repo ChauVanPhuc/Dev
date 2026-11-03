@@ -49,10 +49,13 @@ export const cleanCabinetRawTag = (rawTag, fallback = '') => {
   // 2. Bỏ phần trong ngoặc nếu lặp (ví dụ: "1-60-BRO (APT1-60-BRO)" -> "1-60-BRO")
   const mParen = cleaned.match(/^([^(]+?)\s*\(([^)]+)\)$/)
   if (mParen) {
-    const c1 = mParen[1].replace(/^APT[-_]?/i, '').trim().toLowerCase()
-    const c2 = mParen[2].replace(/^APT[-_]?/i, '').trim().toLowerCase()
-    if (c1 === c2) {
-      cleaned = mParen[1].trim()
+    const c1 = mParen[1].replace(/^APT[-_]?/i, '').trim()
+    const c2 = mParen[2].replace(/^APT[-_]?/i, '').trim()
+    if (c1.toLowerCase() === c2.toLowerCase()) {
+      cleaned = c1
+    } else if (c2.length >= 2 && /[A-Za-z]/.test(c2) && !/[A-Za-z]/.test(c1.split(/[-_\s]/)[0])) {
+      // Trường hợp ngoặc đã chứa mã chữ (ví dụ "8-66-WHT (B-66-WHT)" -> "B-66-WHT")
+      cleaned = c2
     }
   }
 

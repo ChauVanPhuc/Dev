@@ -1,3 +1,4 @@
+import { formatCabinetSeriesTag } from '@modules/production_v2/utils/cabinetSeriesMapper'
 import React, { useState, useRef, useEffect, useMemo } from 'react'
 import { Search, ChevronDown, X, Lock } from 'lucide-react'
 
@@ -134,7 +135,7 @@ const FormMultiSearchSelect = ({
       const bEnds = (bBadge.endsWith(s) || bRawBadge.endsWith(s) || bLabel.endsWith(s)) ? 1 : 0
       if (aEnds !== bEnds) return bEnds - aEnds
 
-      return aBadge.localeCompare(bBadge) || aLabel.localeCompare(bLabel)
+      return aLabel.localeCompare(bLabel, undefined, { numeric: true, sensitivity: 'base' }) || aBadge.localeCompare(bBadge, undefined, { numeric: true, sensitivity: 'base' })
     })
   }, [options, searchTerm])
 
@@ -155,7 +156,8 @@ const FormMultiSearchSelect = ({
       }
       return base
     }
-    return values[0] || placeholder
+    const fallbackVal = values[0] || placeholder
+    return formatCabinetSeriesTag(fallbackVal, fallbackVal)
   }, [options, values, placeholder, itemType])
 
   const handleToggleOption = (val) => {

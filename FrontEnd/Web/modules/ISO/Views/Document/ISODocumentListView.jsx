@@ -9,6 +9,7 @@ import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import { formatVietnameseDateTime, formatVietnameseDate } from '../../utils/isoDateUtils';
 import ISOProcessPreviewModal from '../../components/ISOProcessPreviewModal';
 import ISOAttachedDocsTree from '../../components/ISOAttachedDocsTree';
+import ISOExportModal from '../../components/ISOExportModal';
 
 const getDepartmentAbbreviation = (templateSymbol, user) => {
   if (templateSymbol) {
@@ -40,21 +41,53 @@ const getTemplateAbbreviation = (templateSymbol) => {
   return 'QT';
 };
 
-// Hàm sinh mã tài liệu tự động theo định dạng chuẩn G7.{Mã_PB}.{Mã_Loại}{Số_TT} (G7.AA.BBCC)
+// Hàm chuẩn hóa mã viết tắt phòng ban (QL, ISO, HC, AT, SX, KT, MH, KH, MT, KD, IT)
+const normalizeDeptAcronym = (deptCodeOrName) => {
+  if (!deptCodeOrName) return 'QL';
+  const raw = String(deptCodeOrName).trim().toUpperCase();
+  const exactMap = {
+    QL: 'QL',
+    ISO: 'ISO', BGD: 'BGD', BG: 'BGD',
+    HC: 'HC', HCNS: 'HC', NS: 'NS',
+    AT: 'AT', ATVSLD: 'AT', PCCC: 'AT',
+    SX: 'SX',
+    KT: 'KT',
+    MH: 'MH', NLVT: 'MH',
+    KH: 'KH',
+    KD: 'KD',
+    IT: 'IT', CNTT: 'IT',
+    MT: 'MT'
+  };
+  if (exactMap[raw]) return exactMap[raw];
+  if (raw.includes('CHẤT LƯỢNG') || raw.includes('CHAT LUONG')) return 'QL';
+  if (raw.includes('GIÁM ĐỐC') || raw.includes('GIAM DOC') || raw.includes('BGD')) return 'BGD';
+  if (raw.includes('HÀNH CHÍNH') || raw.includes('NHÂN SỰ') || raw.includes('HANH CHINH') || raw.includes('NHAN SU') || raw.includes('HCNS')) return 'NS';
+  if (raw.includes('AN TOÀN') || raw.includes('AN TOAN') || raw.includes('PCCC') || raw.includes('ATVSLĐ')) return 'AT';
+  if (raw.includes('SẢN XUẤT') || raw.includes('SAN XUAT')) return 'SX';
+  if (raw.includes('MUA HÀNG') || raw.includes('MUA HANG') || raw.includes('VẬT TƯ')) return 'MH';
+  if (raw.includes('KỸ THUẬT') || raw.includes('CƠ ĐIỆN') || raw.includes('KY THUAT')) return 'KT';
+  if (raw.includes('KHO') || raw.includes('KẾ HOẠCH')) return 'KH';
+  if (raw.includes('KINH DOANH') || raw.includes('BÁN HÀNG')) return 'KD';
+  if (raw.includes('IT') || raw.includes('CNTT')) return 'IT';
+  return raw;
+};
+
+// Hàm sinh mã tài liệu tự động theo định dạng chuẩn G7.{Mã_PB}.{Mã_Loại}{Số_TT} (Tăng dần theo Phòng ban)
 const generateProcessCode = (deptCode, docTypeCode, processesList = []) => {
-  let dCode = (deptCode || 'QL').trim().toUpperCase();
-  if (dCode === 'QLCL' || dCode === 'CL') dCode = 'QL';
-  if (dCode === 'BGD' || dCode === 'BG') dCode = 'ISO';
+  const dCode = normalizeDeptAcronym(deptCode);
   const tCode = (docTypeCode || 'QT').trim().toUpperCase();
-  const prefix = `G7.${dCode}.${tCode}`;
+  const deptPrefix = `G7.${dCode}.`;
+  const deptSeqRegex = new RegExp(`^G7\\.${dCode}\\.[A-Z]+(\\d+)$`, 'i');
   let maxZz = 0;
   (processesList || []).forEach(p => {
-    const pCode = (p.new_code || p.code || '').toUpperCase();
-    if (pCode.startsWith(prefix)) {
-      const suffix = pCode.slice(prefix.length);
-      const num = parseInt(suffix, 10);
-      if (!isNaN(num) && num > maxZz) {
-        maxZz = num;
+    const pCode = (p.new_code || p.code || '').trim().toUpperCase();
+    if (pCode.startsWith(deptPrefix)) {
+      const m = pCode.match(deptSeqRegex);
+      if (m) {
+        const num = parseInt(m[1], 10);
+        if (!isNaN(num) && num > maxZz) {
+          maxZz = num;
+        }
       }
     }
   });
@@ -267,7 +300,8 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
   const [editorFilter, setEditorFilter] = useState('');
   const [approverFilter, setApproverFilter] = useState('');
   const [hasAttachmentFilter, setHasAttachmentFilter] = useState('');
-  const [sortBy, setSortBy] = useState('updated_desc');
+  const defaultSortBy = mode === 'processes' ? 'code_asc' : 'updated_desc';
+  const [sortBy, setSortBy] = useState(defaultSortBy);
   const [uploadLoading, setUploadLoading] = useState(false);
   const { toast } = useToast();
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -311,6 +345,8 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
   const [previewDoc, setPreviewDoc] = useState(null);
   const [previewIndex, setPreviewIndex] = useState(0);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [selectedDocIds, setSelectedDocIds] = useState(new Set());
 
   // Xử lý mở Modal xem trước khi click vào dòng bảng
   const handleOpenRowPreview = (doc, index) => {
@@ -949,17 +985,35 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
       return true;
     });
 
-    // 10. Sắp xếp danh sách
+    // 10. Sắp xếp danh sách (tăng dần theo Phòng ban & Số thứ tự của Mã mới khi chọn code_asc)
+    const parseG7Code = (rawCode) => {
+      const clean = (rawCode || '').trim().toUpperCase();
+      const m = clean.match(/^G7\.([A-Z]+)\.([A-Z]+)(\d+)$/);
+      if (m) {
+        return { valid: true, dept: m[1], type: m[2], seq: parseInt(m[3], 10), raw: clean };
+      }
+      return { valid: false, dept: clean, type: '', seq: 999999, raw: clean };
+    };
+
+    const compareByDeptAndSeq = (a, b) => {
+      const pa = parseG7Code(a.new_code || a.code || '');
+      const pb = parseG7Code(b.new_code || b.code || '');
+      if (pa.valid && pb.valid) {
+        const deptCmp = pa.dept.localeCompare(pb.dept);
+        if (deptCmp !== 0) return deptCmp;
+        if (pa.seq !== pb.seq) return pa.seq - pb.seq;
+        return pa.type.localeCompare(pb.type);
+      }
+      if (pa.valid !== pb.valid) return pa.valid ? -1 : 1;
+      return pa.raw.localeCompare(pb.raw);
+    };
+
     return filtered.sort((a, b) => {
       if (sortBy === 'code_asc') {
-        const ca = a.new_code || a.code || '';
-        const cb = b.new_code || b.code || '';
-        return ca.localeCompare(cb);
+        return compareByDeptAndSeq(a, b);
       }
       if (sortBy === 'code_desc') {
-        const ca = a.new_code || a.code || '';
-        const cb = b.new_code || b.code || '';
-        return cb.localeCompare(ca);
+        return compareByDeptAndSeq(b, a);
       }
       if (sortBy === 'name_asc') {
         return (a.name || '').localeCompare(b.name || '', 'vi');
@@ -969,7 +1023,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
         const db = new Date(b.updated_at || b.created_at || b.issue_date || 0);
         return da - db;
       }
-      // Mặc định: updated_desc (Mới nhất trước)
+      // Mới cập nhật nhất (updated_desc)
       const da = new Date(a.updated_at || a.created_at || a.issue_date || 0);
       const db = new Date(b.updated_at || b.created_at || b.issue_date || 0);
       return db - da;
@@ -990,11 +1044,11 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
     if (editorFilter) count++;
     if (approverFilter) count++;
     if (hasAttachmentFilter) count++;
-    if (sortBy !== 'updated_desc') count++;
+    if (sortBy !== defaultSortBy) count++;
     if (filterFolder) count++;
     if (filterOwner) count++;
     return count;
-  }, [docTypeFilter, departmentFilter, levelFilter, statusFilter, editorFilter, approverFilter, hasAttachmentFilter, sortBy, filterFolder, filterOwner]);
+  }, [docTypeFilter, departmentFilter, levelFilter, statusFilter, editorFilter, approverFilter, hasAttachmentFilter, sortBy, defaultSortBy, filterFolder, filterOwner]);
 
   // Hàm đặt lại toàn bộ bộ lọc
   const handleResetFilters = () => {
@@ -1006,7 +1060,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
     setEditorFilter('');
     setApproverFilter('');
     setHasAttachmentFilter('');
-    setSortBy('updated_desc');
+    setSortBy(defaultSortBy);
     setFilterFolder('');
     setFilterOwner('');
     setPage(1);
@@ -1015,6 +1069,49 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
   const paginatedDocs = useMemo(() => {
     return filteredDocs.slice((page - 1) * pageSize, page * pageSize);
   }, [filteredDocs, page, pageSize]);
+
+  // Quản lý chọn tài liệu checkbox (để xuất theo mục đã chọn)
+  const isAllPageSelected = useMemo(() => {
+    return paginatedDocs.length > 0 && paginatedDocs.every(d => selectedDocIds.has(d.id));
+  }, [paginatedDocs, selectedDocIds]);
+
+  const isSomePageSelected = useMemo(() => {
+    return !isAllPageSelected && paginatedDocs.some(d => selectedDocIds.has(d.id));
+  }, [paginatedDocs, selectedDocIds, isAllPageSelected]);
+
+  const selectedDocsList = useMemo(() => {
+    return documents.filter(d => selectedDocIds.has(d.id));
+  }, [documents, selectedDocIds]);
+
+  const handleToggleSelectDoc = (docId, e) => {
+    if (e) e.stopPropagation();
+    setSelectedDocIds(prev => {
+      const next = new Set(prev);
+      if (next.has(docId)) {
+        next.delete(docId);
+      } else {
+        next.add(docId);
+      }
+      return next;
+    });
+  };
+
+  const handleToggleSelectAllPage = (e) => {
+    if (e) e.stopPropagation();
+    setSelectedDocIds(prev => {
+      const next = new Set(prev);
+      if (isAllPageSelected) {
+        paginatedDocs.forEach(d => next.delete(d.id));
+      } else {
+        paginatedDocs.forEach(d => next.add(d.id));
+      }
+      return next;
+    });
+  };
+
+  const handleClearSelection = () => {
+    setSelectedDocIds(new Set());
+  };
 
   // Hiển thị cấp duyệt (chữ thường, không khung bo màu)
   const renderDocumentLevelBadge = (level) => {
@@ -1103,9 +1200,80 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
         activeFiltersCount={activeFiltersCount}
         onCreate={mode === 'processes' ? openCreateModal : undefined}
         createLabel={mode === 'processes' ? 'Thêm mới' : undefined}
+        onExport={mode === 'processes' ? () => setIsExportModalOpen(true) : undefined}
+        exportLabel={mode === 'processes' ? (selectedDocIds.size > 0 ? `Xuất (${selectedDocIds.size} đã chọn)` : 'Xuất dữ liệu') : undefined}
         createActions={[]}
         hasWritePermission={true}
       />
+
+      {/* 1.05 Thanh thông báo các tài liệu đã chọn 1-Click xuất */}
+      {mode === 'processes' && selectedDocIds.size > 0 && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '6px 14px',
+          backgroundColor: '#FAF5EE',
+          border: '1.5px solid #EADCC9',
+          borderRadius: '8px',
+          margin: '0 4px',
+          boxShadow: '0 1px 3px rgba(123,82,51,0.08)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.82rem', color: '#543821' }}>
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: '#7B5233',
+              color: '#FFFFFF',
+              borderRadius: '50%',
+              width: '18px',
+              height: '18px',
+              fontSize: '0.72rem',
+              fontWeight: 700
+            }}>✓</span>
+            <span>Đã chọn <strong>{selectedDocIds.size}</strong> tài liệu</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button
+              type="button"
+              onClick={() => setIsExportModalOpen(true)}
+              style={{
+                padding: '4px 12px',
+                borderRadius: '6px',
+                backgroundColor: '#7B5233',
+                color: '#FFFFFF',
+                border: 'none',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                boxShadow: '0 2px 4px rgba(123,82,51,0.2)'
+              }}
+            >
+              <Download size={14} />
+              <span>Xuất {selectedDocIds.size} tài liệu</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleClearSelection}
+              style={{
+                padding: '4px 10px',
+                borderRadius: '6px',
+                backgroundColor: '#FFFFFF',
+                color: '#64748B',
+                border: '1px solid #CBD5E1',
+                fontSize: '0.78rem',
+                cursor: 'pointer'
+              }}
+            >
+              Bỏ chọn
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 1.1 Thanh lọc nhanh theo Loại tài liệu 1-Click (Quick Filter Pills) */}
       {mode === 'processes' && (
@@ -1344,7 +1512,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
             </span>
           )}
 
-          {sortBy !== 'updated_desc' && (
+          {sortBy !== defaultSortBy && (
             <span style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -1356,8 +1524,8 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
               fontWeight: 500,
               border: '1px solid #EADCC9'
             }}>
-              Sắp xếp: <strong>{sortBy === 'code_asc' ? 'Mã A-Z' : sortBy === 'code_desc' ? 'Mã Z-A' : sortBy === 'name_asc' ? 'Tên A-Z' : 'Cũ nhất'}</strong>
-              <X size={12} style={{ cursor: 'pointer', marginLeft: 2 }} onClick={() => { setSortBy('updated_desc'); setPage(1); }} />
+              Sắp xếp: <strong>{sortBy === 'code_asc' ? 'Mã theo PB (Tăng dần)' : sortBy === 'code_desc' ? 'Mã theo PB (Giảm dần)' : sortBy === 'name_asc' ? 'Tên A-Z' : sortBy === 'updated_desc' ? 'Mới cập nhật' : 'Cũ nhất'}</strong>
+              <X size={12} style={{ cursor: 'pointer', marginLeft: 2 }} onClick={() => { setSortBy(defaultSortBy); setPage(1); }} />
             </span>
           )}
 
@@ -1722,6 +1890,18 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
             <table className="data-table" style={{ width: '100%', minWidth: '100%', tableLayout: 'auto' }}>
               <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#FAF6F0' }}>
                 <tr style={{ backgroundColor: '#FAF6F0', borderBottom: '1px solid #EADCC9' }}>
+                  {mode === 'processes' && (
+                    <th style={{ padding: '7px 4px', width: '36px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                      <input
+                        type="checkbox"
+                        checked={isAllPageSelected}
+                        ref={el => { if (el) el.indeterminate = isSomePageSelected; }}
+                        onChange={handleToggleSelectAllPage}
+                        style={{ cursor: 'pointer', accentColor: '#7B5233', width: '15px', height: '15px' }}
+                        title={isAllPageSelected ? 'Bỏ chọn cả trang' : 'Chọn tất cả tài liệu trên trang này'}
+                      />
+                    </th>
+                  )}
                   <th style={{ padding: '7px 4px', fontSize: '0.72rem', fontWeight: 'bold', color: '#7B5233', width: '38px', textAlign: 'center', whiteSpace: 'nowrap' }}>STT</th>
                   {mode === 'processes' ? (
                     <>
@@ -1759,21 +1939,37 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
               <tbody>
                 {paginatedDocs.map((doc, index) => {
                   const isDropUp = index >= paginatedDocs.length - 3 && paginatedDocs.length > 3;
+                  const isSelected = selectedDocIds.has(doc.id);
                   return (
                     <tr
                       key={doc.id}
                       style={{
                         borderBottom: '1px solid #f1f5f9',
-                        transition: 'background-color 0.2s',
-                        backgroundColor: index % 2 === 1 ? '#fdfcfb' : 'white',
+                        transition: 'background-color 0.15s',
+                        backgroundColor: isSelected
+                          ? '#FAF4EB'
+                          : (index % 2 === 1 ? '#fdfcfb' : 'white'),
                         position: 'relative',
                         zIndex: actionMenuId === doc.id ? 90 : 1,
                         cursor: mode === 'processes' ? 'pointer' : 'default'
                       }}
                       onClick={() => handleOpenRowPreview(doc, index)}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FAF6F0'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = index % 2 === 1 ? '#fdfcfb' : 'white'}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = isSelected ? '#F5EBE1' : '#FAF6F0'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = isSelected ? '#FAF4EB' : (index % 2 === 1 ? '#fdfcfb' : 'white')}
                     >
+                    {mode === 'processes' && (
+                      <td
+                        style={{ padding: '6px 4px', textAlign: 'center', width: '36px', whiteSpace: 'nowrap' }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(e) => handleToggleSelectDoc(doc.id, e)}
+                          style={{ cursor: 'pointer', accentColor: '#7B5233', width: '15px', height: '15px' }}
+                        />
+                      </td>
+                    )}
                     <td style={{ padding: '6px 4px', fontSize: '0.8rem', color: '#64748b', fontWeight: 500, textAlign: 'center', whiteSpace: 'nowrap' }}>{index + 1}</td>
                     
                     {mode === 'processes' ? (
@@ -2378,7 +2574,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                   <div>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.84rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
                       <ShieldCheck size={13} color="#7B5233" />
-                      <span>{newProcessData.document_level === 'Cấp công ty' ? 'Người xem xét (cấp Trưởng phòng)' : 'Người phê duyệt (Trưởng phòng QLCL)'}</span>
+                      <span>{newProcessData.document_level === 'Cấp công ty' ? 'Người xem xét (cấp Trưởng phòng)' : 'Người phê duyệt (Cấp phòng)'}</span>
                       <span style={{ color: '#EF4444' }}>*</span>
                     </label>
                     <select
@@ -2405,7 +2601,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                       <option value="" disabled>-- Chọn Trưởng phòng xem xét --</option>
                       {departmentHeads.map(acc => (
                         <option key={acc.id} value={acc.full_name}>
-                          {acc.display_name || `${acc.full_name} (Trưởng phòng QLCL)`}
+                          {acc.display_name || acc.full_name}
                         </option>
                       ))}
                       {newProcessData.approver && !departmentHeads.some(a => a.full_name === newProcessData.approver) && (
@@ -2634,6 +2830,24 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
             setPreviewDoc(null);
           }}
           onEdit={(d) => navigate(`/admin/iso-processes/edit/${d.id}`)}
+        />
+      )}
+
+      {/* Modal Tùy chọn Xuất dữ liệu: Excel 3 cấp hoặc Thư mục ZIP Hồ Sơ G7 */}
+      {isExportModalOpen && (
+        <ISOExportModal
+          isOpen={isExportModalOpen}
+          onClose={() => setIsExportModalOpen(false)}
+          currentPageProcesses={paginatedDocs}
+          totalProcessesCount={filteredDocs.length}
+          selectedProcesses={selectedDocsList}
+          activeFilters={{
+            search: searchTerm,
+            docType: docTypeFilter,
+            department: departmentFilter,
+            level: levelFilter,
+            status: statusFilter
+          }}
         />
       )}
     </div>
