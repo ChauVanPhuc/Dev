@@ -70,6 +70,7 @@ class KPIEmployeeItem(Base):
     unit             = Column(NVARCHAR(50), nullable=True, default="%")
     operator         = Column(NVARCHAR(10), nullable=True, default=">=")
     target_val       = Column(NVARCHAR(50), nullable=True, default="95")
+    target_role      = Column(NVARCHAR(100), nullable=True, default="ALL")
 
 class KPIViolation(Base):
     """
@@ -151,6 +152,7 @@ class KPIItemPool(Base):
     unit             = Column(NVARCHAR(50), nullable=True, default="%")
     operator         = Column(NVARCHAR(10), nullable=True, default=">=")
     target_val       = Column(NVARCHAR(50), nullable=True, default="95")
+    target_role      = Column(NVARCHAR(100), nullable=True, default="ALL")
 
 class KPITrainingPlan(Base):
     """

@@ -45,8 +45,36 @@ import KPIViolationFormModal from '../components/KPIViolationFormModal';
 import BeautifulConfirmModal from '@webShared/Views/components/feedback/BeautifulConfirmModal';
 import QualityOverviewDashboard from '../../../Inspection/Views_v2/QualityOverview/QualityOverviewDashboard';
 
-// Map technical calculation method codes into human-readable Vietnamese descriptions
+// Map technical calculation method codes into human-readable Vietnamese descriptions (Sơ đồ Draw.io)
 const CALC_METHOD_MAP = {
+  'claim_penalty_rate': 'Tiền phạt Claim / Doanh thu (< 0.5%)',
+  'overdue_capa_ratio': 'CAPA bị trễ / Tổng CAPA (< 10%)',
+  'team_average_score': 'TB điểm KPI các thành viên trực thuộc (> 95%)',
+  'training_attendance_rate': '100% nhân sự tham gia đào tạo (= 100%)',
+  'final_cont_pass_rate': 'Số cont đạt / Tổng cont final (> 95%)',
+  'capa_completion_rate': 'CAPA xử lý đúng hạn / CAPA đã lập (= 100%)',
+  'report_on_time_ratio': 'Báo cáo đúng hạn / Tổng báo cáo (> 95%)',
+  'continuous_improvement_rate': 'Hiệu suất TB giải pháp cải tiến (> 95%)',
+  'audit_average_score': 'Trung bình điểm audit (> 95%)',
+  'manager_score': 'Điểm đánh giá từ Trưởng phòng / Quản lý (> 95%)',
+  'capa_support_rate': 'Hỗ trợ CAPA & Cấp thông tin đạt yêu cầu (= 100%)',
+  'risk_detection_ratio': 'Rủi ro phát hiện / Vụ lỗi hàng loạt (> 95%)',
+  'iqc_fqc_defect_escape': 'CAPA công đoạn / Tổng CAPA (< 10%)',
+  'incident_response_time': 'Thời gian tiếp nhận đến phản hồi (< 24h)',
+  'drawing_management_rate': 'Bản vẽ cấp phát & thu hồi đúng hạn (= 100%)',
+  'admin_delay_penalty': 'Mỗi vụ hành chính chậm trễ -2%',
+  'software_digitization_rate': 'Hiệu suất nhập liệu phần mềm (> 95%)',
+  'repeat_capa_penalty': 'Mỗi CAPA lặp lại -3%',
+  'missing_doc_penalty': 'Mỗi HSCL thiếu phiếu KT -1%',
+  'material_quality_penalty': 'Mỗi vụ CAPA lỗi do NVL -2%',
+  'inspection_delay_24h_penalty': 'Mỗi vụ kiểm tra sau 24h nhập kho -2%',
+  'po_missing_ticket_penalty': 'Mỗi PO thiếu phiếu kiểm tra -1% hoặc -2%',
+  'vendor_issue_delay_penalty': 'Mỗi vụ giải quyết sự cố NCC sau 48h -2%',
+  'stage_return_rate': 'Số phiếu trả hàng / Số bàn giao (< 0.5%)',
+  'repair_delay_24h_penalty': 'Mỗi vụ sửa hàng sau 24h -2%',
+  'claim_defect_escape_rate': 'Lỗi từ Claim / Tổng lỗi (< 10%)',
+  'stage_rejection_penalty': 'Mỗi phiếu fail (trả hàng) -1%',
+  'capa_delay_penalty': 'Mỗi CAPA hoàn thành không đúng hạn -2%',
   'avg_ticket_rate': 'TB cộng % Đạt từng phiếu (Mẫu - Lỗi)',
   'completion_ratio': 'Tỷ lệ hoàn thành đúng hạn (%)',
   'count_penalty': 'Trừ điểm theo lượt vi phạm (100% - N × phạt)',
@@ -56,21 +84,34 @@ const CALC_METHOD_MAP = {
 
 const qlclDepartmentsList = [
   { code: 'ALL', name: 'Tất cả Bộ phận QLCL' },
-  { code: 'MANAGER', name: 'Trưởng phòng QLCL' },
-  { code: 'QA', name: 'Control QA' },
-  { code: 'CQA', name: 'Customer QA' },
-  { code: 'QSE', name: 'Quality System Eng (QSE)' },
+  { code: 'TP_QLCL', name: 'Trưởng phòng QLCL' },
+  { code: 'QA_LEAD', name: 'QA Lead (Trưởng nhóm kiểm soát)' },
+  { code: 'QC_LEAD', name: 'QC Lead (Trưởng nhóm QC)' },
   { code: 'QA_ADMIN', name: 'QA Admin (Tài liệu & Th.bị)' },
-  { code: 'PQA', name: 'Process QA (PQA)' },
-  { code: 'QC_LEAD', name: 'Tổ trưởng QC (QC Lead)' },
+  { code: 'QA_PROCESS', name: 'QA Process (Kiểm soát quy trình)' },
   { code: 'IQC', name: 'IQC (Kiểm tra nhập kho)' },
-  { code: 'PQC1', name: 'PQC1 (QC Định hình - Lắp ráp)' },
-  { code: 'PQC2', name: 'PQC2 (QC Sơn - Đóng gói)' },
-  { code: 'FQC', name: 'FQC (QC Final thành phẩm)' }
+  { code: 'QC_SUPERVISOR', name: 'QC Supervisor (Điều phối hiện trường)' },
+  { code: 'QC_GIACONG', name: 'QC Gia Công' },
+  { code: 'QC_DINHHINH', name: 'QC Định Hình' },
+  { code: 'QC_LAPRAP', name: 'QC Lắp Ráp' },
+  { code: 'QC_SON', name: 'QC Sơn' },
+  { code: 'QC_DONGGOI', name: 'QC Đóng Gói' }
 ];
 
 const targetRolesList = [
   { code: 'ALL', name: 'Tất cả vị trí' },
+  { code: 'TP_QLCL', name: 'Trưởng Phòng QLCL' },
+  { code: 'QA_LEAD', name: 'QA Lead' },
+  { code: 'QC_LEAD', name: 'QC Lead' },
+  { code: 'QA_ADMIN', name: 'QA Admin' },
+  { code: 'QA_PROCESS', name: 'QA Process' },
+  { code: 'IQC', name: 'IQC Đầu vào' },
+  { code: 'QC_SUPERVISOR', name: 'QC Supervisor' },
+  { code: 'QC_GIACONG', name: 'QC Gia Công' },
+  { code: 'QC_DINHHINH', name: 'QC Định Hình' },
+  { code: 'QC_LAPRAP', name: 'QC Lắp Ráp' },
+  { code: 'QC_SON', name: 'QC Sơn' },
+  { code: 'QC_DONGGOI', name: 'QC Đóng Gói' },
   { code: 'INSPECTOR', name: 'Nhân viên kiểm tra' },
   { code: 'LEADER', name: 'Tổ trưởng / Lead' },
   { code: 'MANAGER', name: 'Trưởng phòng / Quản lý' }
@@ -78,14 +119,28 @@ const targetRolesList = [
 
 const getRoleBadge = (roleCode) => {
   switch (roleCode) {
+    case 'TP_QLCL':
     case 'MANAGER':
-      return { label: 'Quản lý', bg: '#EDE9FE', color: '#6D28D9', border: '#DDD6FE' };
+      return { label: 'Trưởng Phòng', bg: '#EDE9FE', color: '#6D28D9', border: '#DDD6FE' };
+    case 'QA_LEAD':
+    case 'QC_LEAD':
     case 'LEADER':
-      return { label: 'Tổ trưởng', bg: '#FEF3C7', color: '#B45309', border: '#FDE68A' };
-    case 'INSPECTOR':
-      return { label: 'Nhân viên', bg: '#E0F2FE', color: '#0369A1', border: '#BAE6FD' };
+      return { label: 'Lead / Trưởng nhóm', bg: '#FEF3C7', color: '#B45309', border: '#FDE68A' };
+    case 'QC_SUPERVISOR':
+      return { label: 'Supervisor', bg: '#FFF7ED', color: '#C2410C', border: '#FFEDD5' };
+    case 'QA_ADMIN':
+    case 'QA_PROCESS':
+      return { label: 'QA Chuyên môn', bg: '#F0FDF4', color: '#15803D', border: '#BBF7D0' };
+    case 'IQC':
+      return { label: 'IQC Đầu vào', bg: '#FDF2F8', color: '#BE185D', border: '#FCE7F3' };
+    case 'QC_GIACONG':
+    case 'QC_DINHHINH':
+    case 'QC_LAPRAP':
+    case 'QC_SON':
+    case 'QC_DONGGOI':
+      return { label: roleCode.replace('QC_', 'QC '), bg: '#E0F2FE', color: '#0369A1', border: '#BAE6FD' };
     default:
-      return { label: 'Tất cả', bg: '#F1F5F9', color: '#475569', border: '#CBD5E1' };
+      return { label: roleCode || 'Tất cả', bg: '#F1F5F9', color: '#475569', border: '#CBD5E1' };
   }
 };
 

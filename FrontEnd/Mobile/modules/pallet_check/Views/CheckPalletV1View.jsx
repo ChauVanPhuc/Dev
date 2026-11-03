@@ -1,13 +1,13 @@
+import apiClient from '@shared/services/api';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Layout from '@mobile/Shared/Views/components/layout/MobileLayout';
 import PageHeader from '@mobile/Shared/Views/components/layout/MobilePageHeader';
 import MessageModal from '@mobile/Shared/Views/components/feedback/MessageModal';
 import ConfirmModal from '@mobile/Shared/Views/components/feedback/ConfirmModal';
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { QRCodeCanvas } from 'qrcode.react';
 import { PRODUCT_SKU_SET, matchCatalogSku, OPTICAL_COLOR_MAP } from '../constants/productCatalog';
+import { formatCabinetSeriesTag } from '@modules/production_v2/utils/cabinetSeriesMapper';
 import { 
-  Camera, 
   RotateCcw, 
   CheckCircle2, 
   History, 
@@ -29,13 +29,32 @@ import {
   Clock,
   User,
   Printer,
-  QrCode
+  QrCode,
+  Edit3,
+  ChevronRight,
+  ChevronDown,
+  FolderPlus,
+  ArrowRight,
+  CheckCheck,
+  Boxes,
+  Database,
+  RefreshCw,
+  Play
 } from 'lucide-react';
 
 /**
  * Tạo mã phiếu duy nhất cho từng tab khi lưu
  * Ví dụ: PLD-260925-1045 (Pallet đứng), PLN-260925-1046 (Pallet nóc)
  */
+const generateContainerId = () => {
+  const now = new Date();
+  const yy = String(now.getFullYear()).slice(-2);
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const rand = Math.floor(100 + Math.random() * 900);
+  return `CONT-${yy}${mm}${dd}-${rand}`;
+};
+
 const generateRecordId = (prefix = 'PLD') => {
   const now = new Date();
   const yy = String(now.getFullYear()).slice(-2);
@@ -43,6 +62,150 @@ const generateRecordId = (prefix = 'PLD') => {
   const dd = String(now.getDate()).padStart(2, '0');
   const rand = Math.floor(1000 + Math.random() * 9000);
   return `${prefix}-${yy}${mm}${dd}-${rand}`;
+};
+
+const DIGIT_WORDS_VI = {
+  '0': 'không',
+  '1': 'một',
+  '2': 'hai',
+  '3': 'ba',
+  '4': 'bốn',
+  '5': 'năm',
+  '6': 'sáu',
+  '7': 'bảy',
+  '8': 'tám',
+  '9': 'chín'
+};
+
+// Bảng phát âm chữ cái Series đầu tiên theo chuẩn Việt Nam
+export const VIETNAMESE_SERIES_SPEECH = {
+  'A': 'A',
+  'B': 'bê',
+  'C': 'xê',
+  'D': 'đê',
+  'K': 'ca',
+  'L': 'e lờ',
+  'P': 'pê',
+  'R': 'e rờ',
+  'S': 'ét',
+  'T': 'tê',
+  'T1': 'tê một',
+  'T2': 'tê hai',
+  'P1': 'pê một',
+  'U': 'u',
+  'V': 'vê',
+  'X': 'ích',
+  'Z': 'dét',
+  'FILLER': 'phin lơ',
+  'MIRROR': 'mi rơ'
+};
+
+// Bảng phát âm từng chữ cái tiếng Anh cho mã màu và LPN
+export const ENGLISH_LETTERS_SPEECH = {
+  'A': 'Ei',
+  'B': 'Bi',
+  'C': 'Si',
+  'D': 'Đi',
+  'E': 'I',
+  'F': 'Ép',
+  'G': 'Di',
+  'H': 'Éch',
+  'I': 'Ai',
+  'J': 'Dê',
+  'K': 'Kei',
+  'L': 'EO',
+  'M': 'Em',
+  'N': 'End',
+  'O': 'Ôu',
+  'P': 'Pi',
+  'Q': 'Kiu',
+  'R': 'A',
+  'S': 'Éts',
+  'T': 'Ti',
+  'U': 'Iu',
+  'V': 'Vi',
+  'W': 'Đắp liu',
+  'X': 'Ech',
+  'Y': 'Quai',
+  'Z': 'Dét'
+};
+
+/**
+ * Đọc từng chữ cái tiếng Anh (áp dụng cho mã màu, ký tự tiếng Anh, LPN)
+ * Ví dụ: "WHT" -> "Đắp liu Éch Ti", "BLK" -> "Bi EO Kei"
+ */
+export const spellEnglishLetters = (str) => {
+  if (!str) return '';
+  return String(str)
+    .toUpperCase()
+    .split('')
+    .map(c => ENGLISH_LETTERS_SPEECH[c] || c)
+    .join(' ');
+};
+
+/**
+ * Định dạng câu phát âm LPN:
+ * "EO Pi End" + 4 số cuối đọc từng số
+ * Ví dụ: "EO Pi End ba ba sáu năm"
+ */
+export const formatLpnForSpeech = (lpnCode) => {
+  if (!lpnCode) return 'EO Pi End';
+  const clean = String(lpnCode).replace(/\D/g, '');
+  const last4 = clean.length >= 4 ? clean.slice(-4) : clean;
+  const spelled = spellDigitsVietnamese(last4);
+  return `EO Pi End ${spelled}`.trim();
+};
+
+/**
+ * Định dạng câu phát âm SKU:
+ * - Chữ cái đầu (Series): chuẩn tiếng Việt (Tê, Bê, Ca...)
+ * - Kích thước ở giữa: giữ nguyên số (54, 60...)
+ * - Mã màu ở đuôi: đọc từng chữ cái tiếng Anh (WHT -> Đắp liu Éch Ti, BLK -> Bi EO Kei...)
+ * Ví dụ: "2-54-BLK" -> "Tê 54 Bi EO Kei"
+ */
+export const formatSkuForSpeech = (rawCode) => {
+  if (!rawCode) return '';
+  const str = String(rawCode).trim();
+  if (str === '2') return 'tê';
+  if (str === '1') return 'A';
+
+  const mapped = formatCabinetSeriesTag(str) || str;
+  const parts = mapped.split('-').map(p => p.trim()).filter(Boolean);
+  if (parts.length === 0) return mapped;
+
+  // 1. Chữ cái đầu Series (chuẩn Việt Nam, ví dụ T -> tê)
+  const prefix = parts[0].toUpperCase();
+  const seriesSpeech = VIETNAMESE_SERIES_SPEECH[prefix] || prefix;
+
+  if (parts.length === 1) {
+    return seriesSpeech;
+  }
+
+  // 2. Mã màu ở cuối (chỉ khi có >= 3 phần và phần cuối là chữ cái 2-5 ký tự như WHT, BLK, BRO...)
+  const lastPart = parts[parts.length - 1].toUpperCase();
+  const isColor = parts.length >= 3 && /^[A-Z]{2,5}$/.test(lastPart);
+  const colorSpeech = isColor ? spellEnglishLetters(lastPart) : '';
+
+  // 3. Phần giữa (kích thước hoặc cánh L/R/BF)
+  const middleParts = parts.slice(1, isColor ? parts.length - 1 : parts.length);
+  const middleSpeech = middleParts.map(part => {
+    const m = part.match(/^(\d+)([A-Z]+)$/i);
+    if (m) {
+      return `${m[1]} ${spellEnglishLetters(m[2])}`;
+    }
+    return part;
+  }).join(' ');
+
+  return [seriesSpeech, middleSpeech, colorSpeech].filter(Boolean).join(', ');
+};
+
+export const spellDigitsVietnamese = (digitsStr) => {
+  if (!digitsStr) return '';
+  return String(digitsStr)
+    .replace(/\D/g, '')
+    .split('')
+    .map(d => DIGIT_WORDS_VI[d] || d)
+    .join(' ');
 };
 
 // Chuẩn hóa mã quét về tiếng Anh ASCII không dấu
@@ -161,7 +324,7 @@ export const normalizeToEnglishBarcode = (raw) => {
 // - Mã PALLET: Bắt đầu bằng PLD- hoặc PLN-
 // - Mã LPN (Mã vận chuyển): Dãy số 8-14 chữ số liền (chuẩn kho hàng G7)
 // - Mã SKU (Mã sản phẩm): Có trong Catalog, hoặc có 1-4 dấu '-', hoặc chuỗi mã sản phẩm
-const classifyCode = (rawCode, standardSku = '') => {
+const classifyCode = (rawCode) => {
   if (!rawCode) return null;
   const code = normalizeToEnglishBarcode(rawCode);
   if (!code) return null;
@@ -177,7 +340,7 @@ const classifyCode = (rawCode, standardSku = '') => {
   }
 
   // 2. Tra cứu đối soát Danh mục sản phẩm chuẩn của công ty:
-  const matchedSku = matchCatalogSku(code, standardSku);
+  const matchedSku = matchCatalogSku(code);
   if (matchedSku) {
     return { type: 'SKU', code: matchedSku };
   }
@@ -206,17 +369,30 @@ const isOpticalVariantOfSku = (scanned, standard) => {
   const stdUpper = standard.toUpperCase().trim();
   if (sUpper === stdUpper) return true;
 
-  // Đối soát qua danh mục Master Data và bảng sửa quang học
-  const matchedScanned = matchCatalogSku(sUpper, stdUpper);
-  if (matchedScanned && (matchedScanned === stdUpper || matchCatalogSku(stdUpper, sUpper) === matchedScanned)) {
+  // Khớp nếu cả hai cùng quy đổi về một mã Series (ví dụ 2-54-BLK và T-54-BLK)
+  const mappedS = formatCabinetSeriesTag(sUpper);
+  const mappedStd = formatCabinetSeriesTag(stdUpper);
+  if (mappedS && mappedStd && mappedS === mappedStd) {
     return true;
+  }
+
+  // Nếu cả 2 đều là mã hợp lệ độc lập trong danh mục sản phẩm (ví dụ 1-36L-WHT và 1-36R-WHT):
+  // Chắc chắn là 2 sản phẩm khác nhau, không bao giờ là biến thể quang học của nhau!
+  if (PRODUCT_SKU_SET.has(sUpper) && PRODUCT_SKU_SET.has(stdUpper)) {
+    return false;
   }
 
   // Khớp bỏ qua tiền tố APT- (ví dụ: APT-17-2621-WHT khớp 17-2621-WHT)
   const stripApt = (s) => s.replace(/^APT-?/i, '');
   if (stripApt(sUpper) === stripApt(stdUpper)) return true;
 
-  // So khớp sau khi chuẩn hóa gạch nối
+  // Đối soát qua danh mục Master Data và bảng sửa quang học (không ép standardSku)
+  const matchedScanned = matchCatalogSku(sUpper);
+  if (matchedScanned && matchedScanned === stdUpper) {
+    return true;
+  }
+
+  // So khớp sau khi chuẩn hóa gạch nối (chỉ khi 1 trong 2 không phải là mã danh mục khác)
   const sNorm = sUpper.replace(/[^A-Z0-9]/g, '');
   const stdNorm = stdUpper.replace(/[^A-Z0-9]/g, '');
   if (sNorm && sNorm === stdNorm) return true;
@@ -239,6 +415,118 @@ const isOpticalVariantOfLpn = (scanned, standard) => {
 const isValidBarcodeCandidate = (code, standardSku = '') => {
   if (!code) return false;
   return classifyCode(code, standardSku) !== null;
+};
+
+// ─── QUY CHUẨN ĐÓNG GÓI PALLET THỰC TẾ (4 KIỆN ĐỨNG + 1 KIỆN TOP NÓC) ───
+export const MAX_STANDING_KITS = 4; // Tối đa 4 kiện đứng
+export const MAX_STANDING_SKU_PER_TYPE = 4; // Mỗi loại SKU đứng tối đa 4 cái
+export const MAX_STANDING_SKUS_TOTAL = 8; // Tổng 8 SKU cho pallet đứng (2 loại x 4 cái)
+export const MAX_STANDING_LPNS = 4; // 1 LPN quét lặp lại 4 lần
+
+export const MAX_ROOF_KITS = 1; // Tối đa 1 kiện top nóc
+export const MAX_ROOF_SKUS_TOTAL = 2; // Tối đa 2 cái SKU cho top nóc (1 kiện)
+export const MAX_ROOF_LPNS = 1; // 1 mã LPN riêng cho top nóc
+
+/**
+ * Kiểm định tiêu chuẩn Container:
+ * 1. Tất cả kiện top nóc phải là số chẵn theo từng mã LPN (2, 4, 6... kiện). Không được số lẻ (báo đỏ nếu lẻ).
+ * 2. Mỗi Pallet phải đủ SKU và LPN:
+ *    - Pallet 5 kiện (4 đứng + 1 nóc): Phải đủ 10 SKU (8 đứng + 2 nóc) và 5 LPN (4 đứng + 1 nóc).
+ *    - Pallet 4 kiện (4 đứng, không nóc): Phải đủ 8 SKU và 4 LPN.
+ *    - Thiếu bất kỳ mã nào -> Báo đỏ.
+ */
+export const validateContainerRules = (pallets = []) => {
+  const palletErrors = [];
+  const topLpnGroup = {}; // { [lpnCode]: { count: number, palletIndices: number[] } }
+
+  (pallets || []).forEach((pallet) => {
+    const pIdx = pallet.palletIndex;
+    const standingSkus = pallet.standing?.skus?.length || 0;
+    const standingLpns = pallet.standing?.lpns?.length || 0;
+    const roofSkus = pallet.roof?.skus?.length || 0;
+    const roofLpns = pallet.roof?.lpns?.length || 0;
+    const hasRoof = Boolean(pallet.roof?.hasRoof) || (roofSkus > 0 || roofLpns > 0);
+
+    const isStandingOk = standingSkus === 8 && standingLpns === 4;
+    let isRoofOk = true;
+    let isPalletComplete = false;
+    let errorReasons = [];
+
+    if (hasRoof) {
+      // Pallet 5 kiện: Cần 8 + 2 = 10 SKU và 4 + 1 = 5 LPN
+      isRoofOk = roofSkus === 2 && roofLpns === 1;
+      isPalletComplete = isStandingOk && isRoofOk;
+
+      if (!isStandingOk) {
+        if (standingSkus < 8) errorReasons.push(`Thiếu SKU đứng (${standingSkus}/8)`);
+        if (standingLpns < 4) errorReasons.push(`Thiếu LPN đứng (${standingLpns}/4)`);
+      }
+      if (!isRoofOk) {
+        if (roofSkus < 2) errorReasons.push(`Thiếu SKU nóc (${roofSkus}/2)`);
+        if (roofLpns < 1) errorReasons.push(`Thiếu LPN nóc (${roofLpns}/1)`);
+      }
+
+      // Gom nhóm kiện top nóc theo LPN để kiểm tra chẵn/lẻ
+      const topLpnCode = pallet.roof?.standardLpn || pallet.roof?.lpns?.[0]?.code || 'CHƯA_CÓ_LPN';
+      if (!topLpnGroup[topLpnCode]) {
+        topLpnGroup[topLpnCode] = { count: 0, palletIndices: [] };
+      }
+      topLpnGroup[topLpnCode].count += 1;
+      topLpnGroup[topLpnCode].palletIndices.push(pIdx);
+    } else {
+      // Pallet 4 kiện: Cần 8 SKU và 4 LPN
+      isPalletComplete = isStandingOk;
+      if (!isStandingOk) {
+        if (standingSkus < 8) errorReasons.push(`Thiếu SKU đứng (${standingSkus}/8)`);
+        if (standingLpns < 4) errorReasons.push(`Thiếu LPN đứng (${standingLpns}/4)`);
+      }
+    }
+
+    if (!isPalletComplete) {
+      palletErrors.push({
+        palletIndex: pIdx,
+        palletId: pallet.palletId,
+        hasRoof,
+        currentSkus: standingSkus + roofSkus,
+        expectedSkus: hasRoof ? 10 : 8,
+        currentLpns: standingLpns + roofLpns,
+        expectedLpns: hasRoof ? 5 : 4,
+        details: errorReasons.join(', ') || 'Chưa đủ số lượng mã'
+      });
+    }
+  });
+
+  // Kiểm tra số chẵn / lẻ của Kiện Top Nóc theo từng mã LPN
+  const oddTopLpnErrors = [];
+  const validTopLpns = [];
+
+  Object.entries(topLpnGroup).forEach(([lpnCode, info]) => {
+    const isEven = info.count % 2 === 0;
+    if (!isEven) {
+      oddTopLpnErrors.push({
+        lpnCode,
+        count: info.count,
+        palletIndices: info.palletIndices
+      });
+    } else {
+      validTopLpns.push({
+        lpnCode,
+        count: info.count,
+        palletIndices: info.palletIndices
+      });
+    }
+  });
+
+  const isValid = palletErrors.length === 0 && oddTopLpnErrors.length === 0;
+
+  return {
+    isValid,
+    totalPallets: (pallets || []).length,
+    palletErrors,
+    oddTopLpnErrors,
+    validTopLpns,
+    topLpnGroup
+  };
 };
 
 const CheckPalletV1View = () => {
@@ -294,7 +582,101 @@ const CheckPalletV1View = () => {
   const lastProcessedCodeRef = useRef('');
   const lastProcessedTimeRef = useRef(0);
 
-  // Lịch sử các lần lưu
+  // ─── PHÂN HỆ QUẢN LÝ CONTAINER & PALLET ───
+  const [activeContainer, setActiveContainer] = useState(() => {
+    try {
+      const saved = localStorage.getItem('g7_pallet_v1_active_container');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  // Modal bắt buộc nhập tên Container khi mở trang hoặc tạo mới
+  const [isStartContainerModalOpen, setIsStartContainerModalOpen] = useState(false);
+  const [containerNameInput, setContainerNameInput] = useState('');
+  const containerInputRef = useRef(null);
+
+  // Modal chỉnh sửa tên Container hiện tại
+  const [isEditContainerModalOpen, setIsEditContainerModalOpen] = useState(false);
+  const [editContainerNameInput, setEditContainerNameInput] = useState('');
+
+  // Trạng thái tải từ Database
+  const [isLoadingDb, setIsLoadingDb] = useState(false);
+
+  // Tải danh sách Container từ Database SQL Server
+  const fetchContainersFromDb = useCallback(async () => {
+    try {
+      setIsLoadingDb(true);
+      const res = await apiClient.get('/pallet-check/containers');
+      if (res.data?.success && Array.isArray(res.data.data)) {
+        setHistoryContainers(res.data.data);
+        try {
+          localStorage.setItem('g7_pallet_v1_containers', JSON.stringify(res.data.data));
+        } catch (_) {}
+      }
+    } catch (err) {
+      console.warn('Không thể tải containers từ API, dùng dữ liệu lưu cục bộ:', err);
+    } finally {
+      setIsLoadingDb(false);
+    }
+  }, []);
+
+  // Tự động tải từ CSDL khi khởi động
+  useEffect(() => {
+    fetchContainersFromDb();
+  }, [fetchContainersFromDb]);
+
+  // Tự động đồng bộ từ CSDL khi chuyển sang tab Lịch Sử
+  useEffect(() => {
+    if (activeTab === 'history') {
+      fetchContainersFromDb();
+    }
+  }, [activeTab, fetchContainersFromDb]);
+
+  // Lịch sử danh sách Container đã hoàn thành (Cấp 1)
+  const [historyContainers, setHistoryContainers] = useState(() => {
+    try {
+      const saved = localStorage.getItem('g7_pallet_v1_containers');
+      if (saved) return JSON.parse(saved);
+      // Hỗ trợ tự động chuyển đổi từ dữ liệu cũ nếu có
+      const legacy = localStorage.getItem('g7_pallet_v1_history');
+      if (legacy) {
+        const parsed = JSON.parse(legacy);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return [{
+            id: 'CONT-LEGACY-01',
+            name: 'Container (Dữ liệu trước)',
+            createdAt: parsed[0]?.timestamp || new Date().toLocaleString('vi-VN'),
+            updatedAt: parsed[0]?.timestamp || new Date().toLocaleString('vi-VN'),
+            inspector: parsed[0]?.inspector || 'Nguyễn A',
+            status: 'completed',
+            pallets: parsed.map((p, idx) => ({
+              palletIndex: idx + 1,
+              palletId: p.id,
+              status: p.status || 'pass',
+              timestamp: p.timestamp,
+              standing: p.tabType === 'standing' ? { skus: p.skus || [], lpns: p.lpns || [], standardLpn: p.standardLpn, standardSku: p.standardSku } : { skus: [], lpns: [], standardLpn: null, standardSku: null },
+              roof: p.tabType === 'roof' ? { skus: p.skus || [], lpns: p.lpns || [], standardLpn: p.standardLpn, standardSku: p.standardSku } : { skus: [], lpns: [], standardLpn: null, standardSku: null },
+              totalScans: p.totalScans || 0
+            }))
+          }];
+        }
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Container đang được chọn để xem chi tiết trong Lịch sử (Cấp 2)
+  const [selectedHistoryContainer, setSelectedHistoryContainer] = useState(null);
+  // Pallet đang xem chi tiết (Cấp 3)
+  const [selectedHistoryPallet, setSelectedHistoryPallet] = useState(null);
+  // Pallet đang được mở rộng Accordion trong Container chi tiết
+  const [expandedPalletIndex, setExpandedPalletIndex] = useState(null);
+
+  // Lịch sử pallet đơn lẻ (legacy)
   const [historyList, setHistoryList] = useState(() => {
     try {
       const saved = localStorage.getItem('g7_pallet_v1_history');
@@ -318,35 +700,14 @@ const CheckPalletV1View = () => {
     isOpen: false,
     title: '',
     message: '',
-    onConfirm: () => {}
+    confirmText: 'Xác nhận',
+    cancelText: 'Hủy',
+    onConfirm: () => {},
+    onCancel: () => {}
   });
 
-  // ─── CAMERA SCANNER HOOK (Native BarcodeDetector GPU + Html5Qrcode Fallback) ───
-  const [isCameraActive, setIsCameraActive] = useState(false);
-  const [cameraError, setCameraError] = useState(null);
-  const [torchOn, setTorchOn] = useState(false);
-  const [cameraEngine, setCameraEngine] = useState('');
-  const [lastDetectedRaw, setLastDetectedRaw] = useState('');
-  const [isCapturingSnapshot, setIsCapturingSnapshot] = useState(false);
-  const [isFlashAnimation, setIsFlashAnimation] = useState(false);
-  const html5QrCodeRef = useRef(null);
-  const isStartingCameraRef = useRef(false);
-  const lastCameraScannedCodeRef = useRef('');
-  const lastCameraScannedTimeRef = useRef(0);
-  // Bộ lọc đồng thuận đa khung hình (Candidate Consensus Filter) - Chống 100% rác rung mờ
-  const candidateScanCodeRef = useRef('');
-  const candidateScanCountRef = useRef(0);
-  const candidateScanTimeRef = useRef(0);
-  // Bộ đệm xác nhận 2 khung hình liên tiếp trước khi báo động sai mã (chống giật/rung quang học)
-  const mismatchConfirmRef = useRef(null);
-
-  // Native GPU/NPU BarcodeDetector Refs (Siêu tốc độ phần cứng, 60 FPS, < 10ms)
-  const nativeStreamRef = useRef(null);
-  const nativeDetectorRef = useRef(null);
-  const videoElementRef = useRef(null);
-  const onScanSuccessRef = useRef(null);
-  const animationFrameIdRef = useRef(null);
-  const isCameraRunningRef = useRef(false);
+  // ─── THÔNG TIN MÃ VỪA QUÉT CHO HUD MÁY QUÉT SA 8972 ───
+  const [lastScannedDetail, setLastScannedDetail] = useState(null);
   const audioCtxRef = useRef(null);
 
   // Refs đồng bộ trạng thái tươi mới nhất cho vòng lặp camera (triệt tiêu 100% stale closures)
@@ -362,7 +723,55 @@ const CheckPalletV1View = () => {
   useEffect(() => { messageModalRef.current = messageModal; }, [messageModal]);
   useEffect(() => { confirmModalRef.current = confirmModal; }, [confirmModal]);
 
-  // Tự động lưu lịch sử vào localStorage khi có thay đổi
+  // Tự động mở Popup nhập Container nếu chưa có Container nào đang active
+  useEffect(() => {
+    if (!activeContainer && activeTab === 'scan') {
+      setContainerNameInput('');
+      setIsStartContainerModalOpen(true);
+    }
+  }, [activeContainer, activeTab]);
+
+  // Kích hoạt tiêu điểm và yêu cầu hiện bàn phím ảo hệ thống khi mở Modal Container
+  useEffect(() => {
+    if (isStartContainerModalOpen) {
+      const timer = setTimeout(() => {
+        if (containerInputRef.current) {
+          containerInputRef.current.focus();
+          if (typeof navigator !== 'undefined' && 'virtualKeyboard' in navigator) {
+            try {
+              navigator.virtualKeyboard.overlaysContent = true;
+              navigator.virtualKeyboard.show();
+            } catch (_) {}
+          }
+        }
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [isStartContainerModalOpen]);
+
+  // Tự động lưu activeContainer vào localStorage khi có thay đổi
+  useEffect(() => {
+    try {
+      if (activeContainer) {
+        localStorage.setItem('g7_pallet_v1_active_container', JSON.stringify(activeContainer));
+      } else {
+        localStorage.removeItem('g7_pallet_v1_active_container');
+      }
+    } catch (e) {
+      console.warn('Không thể lưu activeContainer vào localStorage:', e);
+    }
+  }, [activeContainer]);
+
+  // Tự động lưu danh sách Container lịch sử vào localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('g7_pallet_v1_containers', JSON.stringify(historyContainers));
+    } catch (e) {
+      console.warn('Không thể lưu historyContainers vào localStorage:', e);
+    }
+  }, [historyContainers]);
+
+  // Tự động lưu lịch sử pallet đơn lẻ (legacy)
   useEffect(() => {
     try {
       localStorage.setItem('g7_pallet_v1_history', JSON.stringify(historyList));
@@ -386,6 +795,21 @@ const CheckPalletV1View = () => {
   const scanPopupRef = useRef(null);
   useEffect(() => {
     scanPopupRef.current = scanPopup;
+  }, [scanPopup]);
+
+  // Cap nhat thong tin ma quet gan nhat de hien thi tren HUD May quet SA 8972
+  useEffect(() => {
+    if (scanPopup && scanPopup.code) {
+      setLastScannedDetail({
+        code: scanPopup.code,
+        time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        status: scanPopup.type === 'accepted' ? 'success' : 'error',
+        category: scanPopup.category || 'UNKNOWN',
+        title: scanPopup.title || '',
+        count: scanPopup.count || null,
+        standardCode: scanPopup.standardCode || null
+      });
+    }
   }, [scanPopup]);
 
   // Kích hoạt nhận mã quét
@@ -514,6 +938,7 @@ const CheckPalletV1View = () => {
     if (!soundEnabled || typeof window === 'undefined' || !window.speechSynthesis) return;
     try {
       window.speechSynthesis.cancel();
+      console.log('[TTS Đang phát]:', text);
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'vi-VN';
       utterance.rate = 0.92; // Tốc độ chuẩn vừa phải, phát âm tròn vành rõ chữ, không bị vội
@@ -531,6 +956,16 @@ const CheckPalletV1View = () => {
       console.warn('Không thể phát giọng nói:', err);
     }
   }, [soundEnabled]);
+
+  // ─── QUY CHUẨN ĐÓNG GÓI PALLET THỰC TẾ (4 KIỆN ĐỨNG + 1 KIỆN TOP NÓC) ───
+  const MAX_STANDING_KITS = 4; // Tối đa 4 kiện đứng
+  const MAX_STANDING_SKU_PER_TYPE = 4; // Mỗi loại SKU đứng tối đa 4 cái
+  const MAX_STANDING_SKUS_TOTAL = 8; // Tổng 8 SKU cho pallet đứng (2 loại x 4 cái)
+  const MAX_STANDING_LPNS = 4; // 1 LPN quét lặp lại 4 lần
+
+  const MAX_ROOF_KITS = 1; // Tối đa 1 kiện top nóc
+  const MAX_ROOF_SKUS_TOTAL = 2; // Tối đa 2 cái SKU cho top nóc (1 kiện)
+  const MAX_ROOF_LPNS = 1; // 1 mã LPN riêng cho top nóc
 
   // ─── LOGIC QUÉT VÀ KIỂM TRA TỰ ĐỘNG THÔNG MINH ───
   const handleProcessScannedCode = useCallback((rawText) => {
@@ -581,15 +1016,13 @@ const CheckPalletV1View = () => {
       return;
     }
 
-    const currentTab = palletTab; // 'standing' | 'roof'
-    const tabLabel = currentTab === 'standing' ? 'Pallet đứng' : 'Top nóc';
-    const targetState = currentTab === 'standing' ? standingData : roofData;
-    const setTargetState = currentTab === 'standing' ? setStandingData : setRoofData;
+    const currentTab = palletTabRef.current || palletTab;
+    const standing = standingDataRef.current || standingData;
+    const roof = roofDataRef.current || roofData;
     const nowStr = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-    const classified = classifyCode(cleanRaw, targetState.standardSku);
+    const classified = classifyCode(cleanRaw);
     if (!classified) {
-      // ⛔ BÁO ĐỘNG LIỀN: Không nhận diện được định dạng LPN hoặc SKU hợp lệ
       playAlertSound(3);
       speakText('Cảnh báo! Mã không hợp lệ');
       setScanPopup({
@@ -603,194 +1036,694 @@ const CheckPalletV1View = () => {
 
     const { type, code } = classified;
 
-    // ─── 1. XỬ LÝ NẾU LÀ MÃ LPN (MÃ VẬN CHUYỂN) ───
+    // ═════════════════════════════════════════════════════════════════════════
+    // 1. XỬ LÝ NẾU LÀ MÃ LPN (MÃ VẬN CHUYỂN: MỖI LẦN QUÉT LIST XUỐNG 1 DÒNG)
+    // Quy chuẩn: Pallet Đứng = 1 mã duy nhất x4 | Top Nóc = 1 mã duy nhất x1
+    // ═════════════════════════════════════════════════════════════════════════
     if (type === 'LPN') {
-      const last3Digits = code && code.length >= 3 ? code.slice(-3) : code;
+      const lpnVoiceText = formatLpnForSpeech(code);
 
-      if (!targetState.standardLpn) {
-        setTargetState(prev => ({
-          ...prev,
+      // ───────────────────────────────────────────────────────────
+      // TRƯỜNG HỢP A: ĐANG Ở TAB PALLET ĐỨNG
+      // ───────────────────────────────────────────────────────────
+      if (currentTab === 'standing') {
+        const standingLpns = standing.lpns || [];
+
+        // A1: Pallet Đứng chưa có LPN nào
+        if (!standing.standardLpn || standingLpns.length === 0) {
+          const newStanding = {
+            ...standing,
+            isSaved: false,
+            standardLpn: code,
+            totalScans: standing.totalScans + 1,
+            lpns: [{
+              id: Date.now() + Math.random(),
+              code: code,
+              time: nowStr
+            }]
+          };
+          standingDataRef.current = newStanding;
+          setStandingData(newStanding);
+
+          playSuccessBeep();
+          speakText(lpnVoiceText);
+          setScanPopup({
+            type: 'accepted',
+            code: code,
+            category: 'LPN',
+            count: 1,
+            title: 'ĐÃ NHẬN MÃ VẬN CHUYỂN (PALLET ĐỨNG: 1/4 LPN)'
+          });
+          return;
+        }
+
+        // A2: Quét đúng mã LPN chuẩn của Pallet Đứng
+        if (code === standing.standardLpn || isOpticalVariantOfLpn(code, standing.standardLpn)) {
+          if (standingLpns.length >= 4) {
+            playAlertSound(3);
+            speakText('Cảnh báo! Pallet đứng đã đủ 4 kiện vận chuyển');
+            setScanPopup({
+              type: 'rejected',
+              code: standing.standardLpn,
+              category: 'LPN',
+              title: 'BÁO ĐỘNG — ĐÃ ĐỦ 4 LPN PALLET ĐỨNG'
+            });
+            return;
+          }
+
+          const newCount = standingLpns.length + 1;
+          const updatedLpns = [
+            ...standingLpns,
+            {
+              id: Date.now() + Math.random(),
+              code: standing.standardLpn,
+              time: nowStr
+            }
+          ];
+
+          const newStanding = {
+            ...standing,
+            isSaved: false,
+            totalScans: standing.totalScans + 1,
+            lpns: updatedLpns
+          };
+          standingDataRef.current = newStanding;
+          setStandingData(newStanding);
+
+          playSuccessBeep();
+          speakText(lpnVoiceText);
+          setScanPopup({
+            type: 'accepted',
+            code: standing.standardLpn,
+            category: 'LPN',
+            count: newCount,
+            title: newCount === 4
+              ? '✓ ĐÃ ĐỦ 4 LPN PALLET ĐỨNG (4/4 KIỆN)'
+              : `ĐÃ GHI NHẬN MÃ VẬN CHUYỂN (${newCount}/4 KIỆN)`
+          });
+          return;
+        }
+
+        // A3: Trong lúc quét ra mã LPN KHÁC ➔ ⚡ MẶC ĐỊNH CHO QUA TOP NÓC, SAU ĐÓ TIẾP TỤC!
+        const roofLpns = roof.lpns || [];
+        if (roofLpns.length >= 1) {
+          if (code === roof.standardLpn || isOpticalVariantOfLpn(code, roof.standardLpn)) {
+            setPalletTab('roof');
+            palletTabRef.current = 'roof';
+            playAlertSound(3);
+            speakText('Cảnh báo! Top nóc đã có mã vận chuyển');
+            setScanPopup({
+              type: 'rejected',
+              code: code,
+              category: 'LPN',
+              title: 'BÁO ĐỘNG — TOP NÓC ĐÃ CÓ 1 LPN'
+            });
+            return;
+          } else {
+            playAlertSound(3);
+            speakText('Cảnh báo! Top nóc chỉ có đúng 1 mã vận chuyển');
+            setScanPopup({
+              type: 'rejected',
+              code: code,
+              standardCode: roof.standardLpn,
+              category: 'LPN',
+              title: 'BÁO ĐỘNG — SAI MÃ VẬN CHUYỂN'
+            });
+            return;
+          }
+        }
+
+        // Top Nóc chưa có LPN ➔ Tự động gán mã này làm LPN của Top Nóc!
+        setPalletTab('roof');
+        palletTabRef.current = 'roof';
+
+        const newRoof = {
+          ...roof,
           isSaved: false,
           standardLpn: code,
-          totalScans: prev.totalScans + 1,
+          totalScans: roof.totalScans + 1,
           lpns: [{
-            id: Date.now(),
+            id: Date.now() + Math.random(),
             code: code,
-            count: 1,
-            firstSeen: nowStr,
-            lastSeen: nowStr
+            time: nowStr
           }]
-        }));
+        };
+        roofDataRef.current = newRoof;
+        setRoofData(newRoof);
 
         playSuccessBeep();
-        speakText(`Đã quét mã vận chuyển, ${last3Digits}`);
+        speakText(`${lpnVoiceText}, top nóc`);
         setScanPopup({
           type: 'accepted',
           code: code,
           category: 'LPN',
           count: 1,
-          title: 'ĐÃ NHẬN MÃ VẬN CHUYỂN'
+          title: '⚡ TỰ ĐỘNG CHUYỂN TOP NÓC (LPN: 1/1)'
         });
         return;
       }
 
-      if (code === targetState.standardLpn) {
-        let currentCount = 1;
-        setTargetState(prev => {
-          const existingIdx = prev.lpns.findIndex(it => it.code === code);
-          let updatedLpns = [...prev.lpns];
+      // ───────────────────────────────────────────────────────────
+      // TRƯỜNG HỢP B: ĐANG Ở TAB TOP NÓC
+      // ───────────────────────────────────────────────────────────
+      if (currentTab === 'roof') {
+        const standingLpns = standing.lpns || [];
 
-          if (existingIdx >= 0) {
-            currentCount = updatedLpns[existingIdx].count + 1;
-            updatedLpns[existingIdx] = {
-              ...updatedLpns[existingIdx],
-              count: currentCount,
-              lastSeen: nowStr
+        // B1: Quét lại trúng mã LPN cũ (của Pallet Đứng) ➔ ↩️ TỰ ĐỘNG VỀ KIỆN ĐỨNG!
+        if (standing.standardLpn && (code === standing.standardLpn || isOpticalVariantOfLpn(code, standing.standardLpn))) {
+          if (standingLpns.length < 4) {
+            setPalletTab('standing');
+            palletTabRef.current = 'standing';
+
+            const newCount = standingLpns.length + 1;
+            const updatedLpns = [
+              ...standingLpns,
+              {
+                id: Date.now() + Math.random(),
+                code: standing.standardLpn,
+                time: nowStr
+              }
+            ];
+
+            const newStanding = {
+              ...standing,
+              isSaved: false,
+              totalScans: standing.totalScans + 1,
+              lpns: updatedLpns
             };
-          } else {
-            updatedLpns.push({
-              id: Date.now(),
-              code: code,
-              count: 1,
-              firstSeen: nowStr,
-              lastSeen: nowStr
+            standingDataRef.current = newStanding;
+            setStandingData(newStanding);
+
+            playSuccessBeep();
+            speakText(`Tự chuyển về Pallet Đứng, ${lpnVoiceText}`);
+            setScanPopup({
+              type: 'accepted',
+              code: standing.standardLpn,
+              category: 'LPN',
+              count: newCount,
+              title: `↩️ TỰ ĐỘNG VỀ PALLET ĐỨNG (${newCount}/4 KIỆN)`
             });
+            return;
           }
 
-          return {
-            ...prev,
-            isSaved: false,
-            totalScans: prev.totalScans + 1,
-            lpns: updatedLpns
-          };
-        });
+          // Pallet Đứng đã đủ 4 lần LPN
+          playAlertSound(3);
+          speakText('Cảnh báo! Pallet đứng đã đủ 4 kiện vận chuyển');
+          setScanPopup({
+            type: 'rejected',
+            code: standing.standardLpn,
+            category: 'LPN',
+            title: 'BÁO ĐỘNG — ĐÃ ĐỦ 4 LPN PALLET ĐỨNG'
+          });
+          return;
+        }
 
-        playSuccessBeep();
-        speakText(`Đã quét mã vận chuyển, ${last3Digits}`);
-        setScanPopup({
-          type: 'accepted',
-          code: code,
-          category: 'LPN',
-          count: currentCount,
-          title: 'ĐÃ GHI NHẬN MÃ VẬN CHUYỂN'
-        });
-      } else {
-        // ⛔ BÁO ĐỘNG LIỀN: SAI MÃ VẬN CHUYỂN
+        // B2: Quét mã LPN của Top Nóc
+        const roofLpns = roof.lpns || [];
+        if (roofLpns.length === 0) {
+          const newRoof = {
+            ...roof,
+            isSaved: false,
+            standardLpn: code,
+            totalScans: roof.totalScans + 1,
+            lpns: [{
+              id: Date.now() + Math.random(),
+              code: code,
+              time: nowStr
+            }]
+          };
+          roofDataRef.current = newRoof;
+          setRoofData(newRoof);
+
+          playSuccessBeep();
+          speakText(`${lpnVoiceText}, top nóc`);
+          setScanPopup({
+            type: 'accepted',
+            code: code,
+            category: 'LPN',
+            count: 1,
+            title: 'ĐÃ GHI NHẬN MÃ VẬN CHUYỂN TOP NÓC (1/1)'
+          });
+          return;
+        }
+
+        if (code === roof.standardLpn || isOpticalVariantOfLpn(code, roof.standardLpn)) {
+          playAlertSound(3);
+          speakText('Cảnh báo! Top nóc đã có mã vận chuyển');
+          setScanPopup({
+            type: 'rejected',
+            code: code,
+            category: 'LPN',
+            title: 'BÁO ĐỘNG — TOP NÓC ĐÃ CÓ 1 LPN'
+          });
+          return;
+        }
+
+        // B3: Báo động sai mã nếu xuất hiện mã LPN thứ 3 lạ
         playAlertSound(3);
-        speakText('Đã sai mã vận chuyển');
+        speakText('Cảnh báo! Top nóc chỉ có đúng 1 mã vận chuyển');
         setScanPopup({
           type: 'rejected',
           code: code,
-          standardCode: targetState.standardLpn,
+          standardCode: roof.standardLpn,
           category: 'LPN',
           title: 'BÁO ĐỘNG — SAI MÃ VẬN CHUYỂN'
         });
+        return;
       }
-      return;
     }
 
-    // ─── 2. XỬ LÝ NẾU LÀ MÃ SKU (MÃ SẢN PHẨM) ───
+    // ═════════════════════════════════════════════════════════════════════════
+    // 2. XỬ LÝ NẾU LÀ MÃ SKU (MÃ SẢN PHẨM: MỖI LẦN QUÉT LIST XUỐNG 1 DÒNG)
+    // Quy chuẩn: Pallet Đứng = 1 mã duy nhất x8 | Top Nóc = 1 mã duy nhất x2
+    // ═════════════════════════════════════════════════════════════════════════
     if (type === 'SKU') {
-      if (!targetState.standardSku) {
-        setTargetState(prev => ({
-          ...prev,
-          isSaved: false,
-          standardSku: code,
-          totalScans: prev.totalScans + 1,
-          skus: [{
-            id: Date.now(),
-            code: code,
-            count: 1,
-            firstSeen: nowStr,
-            lastSeen: nowStr
-          }]
-        }));
+      const mappedSku = formatCabinetSeriesTag(code);
+      const speechSku = formatSkuForSpeech(code);
 
-        const speechCode = code.replace(/-/g, ' ');
-        playSuccessBeep();
-        speakText(`Đã quét mã, ${speechCode}`);
+      // ───────────────────────────────────────────────────────────
+      // TRƯỜNG HỢP A: ĐANG Ở TAB PALLET ĐỨNG
+      // ───────────────────────────────────────────────────────────
+      if (currentTab === 'standing') {
+        const standingSkus = standing.skus || [];
+
+        // A1: Pallet Đứng chưa có mã SKU nào
+        if (!standing.standardSku || standingSkus.length === 0) {
+          const newStanding = {
+            ...standing,
+            isSaved: false,
+            standardSku: code,
+            totalScans: standing.totalScans + 1,
+            skus: [{
+              id: Date.now() + Math.random(),
+              code: code,
+              time: nowStr
+            }]
+          };
+          standingDataRef.current = newStanding;
+          setStandingData(newStanding);
+
+          playSuccessBeep();
+          speakText(`Sản phẩm, ${speechSku}`);
+          setScanPopup({
+            type: 'accepted',
+            code: code,
+            category: 'SKU',
+            count: 1,
+            title: mappedSku && mappedSku !== code
+              ? `ĐÃ NHẬN SKU: ${mappedSku} (1/8 cái)`
+              : 'ĐÃ NHẬN SKU PALLET ĐỨNG (1/8 cái)'
+          });
+          return;
+        }
+
+        // A2: Quét đúng mã SKU chuẩn của Pallet Đứng (hoặc biến thể quang học)
+        if (code === standing.standardSku || isOpticalVariantOfSku(code, standing.standardSku)) {
+          // Nếu chưa đủ 8 cái ➔ Thêm 1 dòng mới vào Pallet Đứng (list xuống: 1..8)
+          if (standingSkus.length < 8) {
+            const newCount = standingSkus.length + 1;
+            const updatedSkus = [
+              ...standingSkus,
+              {
+                id: Date.now() + Math.random(),
+                code: standing.standardSku,
+                time: nowStr
+              }
+            ];
+
+            const newStanding = {
+              ...standing,
+              isSaved: false,
+              totalScans: standing.totalScans + 1,
+              skus: updatedSkus
+            };
+            standingDataRef.current = newStanding;
+            setStandingData(newStanding);
+
+            playSuccessBeep();
+            speakText(`Sản phẩm, ${speechSku}`);
+            setScanPopup({
+              type: 'accepted',
+              code: standing.standardSku,
+              category: 'SKU',
+              count: newCount,
+              title: newCount === 8
+                ? '✓ ĐÃ ĐỦ 8 SKU PALLET ĐỨNG (4 KIỆN)'
+                : (mappedSku && mappedSku !== standing.standardSku
+                    ? `ĐÃ GHI NHẬN SKU: ${mappedSku} (${newCount}/8 cái)`
+                    : `ĐÃ GHI NHẬN SKU (${newCount}/8 cái)`)
+            });
+            return;
+          }
+
+          // ⚡ NẾU PALLET ĐỨNG ĐÃ ĐỦ 8 CÁI ➔ TỰ ĐỘNG TRÀN SANG TOP NÓC (ROOF OVERFLOW)!
+          // (Kiện top nóc có thể trùng SKU luôn, nếu 4 kiện = 8 SKU rồi mà quét tiếp thì mặc định nằm ở top nóc)
+          const roofSkus = roof.skus || [];
+
+          if (!roof.standardSku || roofSkus.length === 0) {
+            setPalletTab('roof');
+            palletTabRef.current = 'roof';
+
+            const newRoof = {
+              ...roof,
+              isSaved: false,
+              standardSku: code,
+              totalScans: roof.totalScans + 1,
+              skus: [{
+                id: Date.now() + Math.random(),
+                code: code,
+                time: nowStr
+              }]
+            };
+            roofDataRef.current = newRoof;
+            setRoofData(newRoof);
+
+            playSuccessBeep();
+            speakText(`Sản phẩm top nóc, ${speechSku}`);
+            setScanPopup({
+              type: 'accepted',
+              code: code,
+              category: 'SKU',
+              count: 1,
+              title: '⚡ TỰ CHUYỂN TOP NÓC (1/2 CÁI)'
+            });
+            return;
+          }
+
+          // Top Nóc đã có standardSku:
+          if (code === roof.standardSku || isOpticalVariantOfSku(code, roof.standardSku)) {
+            if (roofSkus.length < 2) {
+              setPalletTab('roof');
+              palletTabRef.current = 'roof';
+
+              const newRoof = {
+                ...roof,
+                isSaved: false,
+                totalScans: roof.totalScans + 1,
+                skus: [
+                  ...roofSkus,
+                  {
+                    id: Date.now() + Math.random(),
+                    code: roof.standardSku,
+                    time: nowStr
+                  }
+                ]
+              };
+              roofDataRef.current = newRoof;
+              setRoofData(newRoof);
+
+              playSuccessBeep();
+              speakText(`Sản phẩm top nóc, ${speechSku}`);
+              setScanPopup({
+                type: 'accepted',
+                code: code,
+                category: 'SKU',
+                count: 2,
+                title: '⚡ ĐỦ SỐ LƯỢNG TOP NÓC (2/2 CÁI)'
+              });
+              return;
+            } else {
+              playAlertSound(3);
+              speakText('Cảnh báo! Pallet đã đầy, top nóc chỉ có tối đa 2 cái');
+              setScanPopup({
+                type: 'rejected',
+                code: code,
+                category: 'SKU',
+                title: 'BÁO ĐỘNG — PALLET ĐÃ ĐẦY (TOP NÓC ĐỦ 2 CÁI)'
+              });
+              return;
+            }
+          } else {
+            playAlertSound(3);
+            speakText('Cảnh báo! Top nóc chỉ có một mã sản phẩm duy nhất');
+            setScanPopup({
+              type: 'rejected',
+              code: code,
+              standardCode: roof.standardSku,
+              category: 'SKU',
+              title: 'BÁO ĐỘNG — TOP NÓC CHỈ CÓ 1 MÃ SKU (x2)'
+            });
+            return;
+          }
+        }
+
+        // A3: TRONG LÚC QUÉT MÃ RA MÃ KHÁC (khác mã standardSku của Pallet Đứng)
+        // ➔ ⚡ MẶC ĐỊNH CHO QUA TOP NÓC, SAU ĐÓ TIẾP TỤC!
+        const roofSkus = roof.skus || [];
+
+        if (!roof.standardSku || roofSkus.length === 0) {
+          setPalletTab('roof');
+          palletTabRef.current = 'roof';
+
+          const newRoof = {
+            ...roof,
+            isSaved: false,
+            standardSku: code,
+            totalScans: roof.totalScans + 1,
+            skus: [{
+              id: Date.now() + Math.random(),
+              code: code,
+              time: nowStr
+            }]
+          };
+          roofDataRef.current = newRoof;
+          setRoofData(newRoof);
+
+          playSuccessBeep();
+          speakText(`Sản phẩm top nóc, ${speechSku}`);
+          setScanPopup({
+            type: 'accepted',
+            code: code,
+            category: 'SKU',
+            count: 1,
+            title: mappedSku && mappedSku !== code
+              ? `⚡ TỰ CHUYỂN TOP NÓC: ${mappedSku} (1/2 CÁI)`
+              : '⚡ TỰ CHUYỂN TOP NÓC (1/2 CÁI)'
+          });
+          return;
+        }
+
+        if (code === roof.standardSku || isOpticalVariantOfSku(code, roof.standardSku)) {
+          if (roofSkus.length < 2) {
+            setPalletTab('roof');
+            palletTabRef.current = 'roof';
+
+            const newRoof = {
+              ...roof,
+              isSaved: false,
+              totalScans: roof.totalScans + 1,
+              skus: [
+                ...roofSkus,
+                {
+                  id: Date.now() + Math.random(),
+                  code: roof.standardSku,
+                  time: nowStr
+                }
+              ]
+            };
+            roofDataRef.current = newRoof;
+            setRoofData(newRoof);
+
+            playSuccessBeep();
+            speakText(`Sản phẩm top nóc, ${speechSku}`);
+            setScanPopup({
+              type: 'accepted',
+              code: code,
+              category: 'SKU',
+              count: 2,
+              title: '⚡ ĐỦ SỐ LƯỢNG TOP NÓC (2/2 CÁI)'
+            });
+            return;
+          } else {
+            playAlertSound(3);
+            speakText('Cảnh báo! Pallet đã đầy, top nóc chỉ có tối đa 2 cái');
+            setScanPopup({
+              type: 'rejected',
+              code: code,
+              category: 'SKU',
+              title: 'BÁO ĐỘNG — PALLET ĐÃ ĐẦY (TOP NÓC ĐỦ 2 CÁI)'
+            });
+            return;
+          }
+        }
+
+        // Mã lạ thứ 3
+        playAlertSound(3);
+        speakText('Cảnh báo! Top nóc chỉ có một mã sản phẩm duy nhất');
         setScanPopup({
-          type: 'accepted',
+          type: 'rejected',
           code: code,
+          standardCode: roof.standardSku,
           category: 'SKU',
-          count: 1,
-          title: 'ĐÃ NHẬN MÃ SẢN PHẨM'
+          title: 'BÁO ĐỘNG — TOP NÓC CHỈ CÓ 1 MÃ SKU (x2)'
         });
         return;
       }
 
-      // Tự động nhận diện nếu trùng khớp hoặc là biến thể quang học do rung mờ Code 39 (như 174621-WHT -> 17-2621-WHT)
-      const isSkuMatch = (code === targetState.standardSku) || isOpticalVariantOfSku(code, targetState.standardSku);
-      const effectiveSku = isSkuMatch ? targetState.standardSku : code;
-      const speechCode = effectiveSku.replace(/-/g, ' ');
+      // ───────────────────────────────────────────────────────────
+      // TRƯỜNG HỢP B: ĐANG Ở TAB TOP NÓC
+      // ───────────────────────────────────────────────────────────
+      if (currentTab === 'roof') {
+        const standingSkus = standing.skus || [];
 
-      if (isSkuMatch) {
-        let currentCount = 1;
-        setTargetState(prev => {
-          const existingIdx = prev.skus.findIndex(it => it.code === effectiveSku);
-          let updatedSkus = [...prev.skus];
+        // B1: QUÉT LẠI MÃ CŨ (MÃ CỦA KIỆN ĐỨNG) ➔ ↩️ TỰ ĐỘNG VÀO KIỆN ĐỨNG!
+        if (standing.standardSku && (code === standing.standardSku || isOpticalVariantOfSku(code, standing.standardSku))) {
+          if (standingSkus.length < 8) {
+            setPalletTab('standing');
+            palletTabRef.current = 'standing';
 
-          if (existingIdx >= 0) {
-            currentCount = updatedSkus[existingIdx].count + 1;
-            updatedSkus[existingIdx] = {
-              ...updatedSkus[existingIdx],
-              count: currentCount,
-              lastSeen: nowStr
+            const newCount = standingSkus.length + 1;
+            const updatedSkus = [
+              ...standingSkus,
+              {
+                id: Date.now() + Math.random(),
+                code: standing.standardSku,
+                time: nowStr
+              }
+            ];
+
+            const newStanding = {
+              ...standing,
+              isSaved: false,
+              totalScans: standing.totalScans + 1,
+              skus: updatedSkus
             };
-          } else {
-            updatedSkus.push({
-              id: Date.now(),
-              code: effectiveSku,
-              count: 1,
-              firstSeen: nowStr,
-              lastSeen: nowStr
+            standingDataRef.current = newStanding;
+            setStandingData(newStanding);
+
+            playSuccessBeep();
+            speakText(`Tự chuyển về Pallet Đứng, sản phẩm, ${speechSku}`);
+            setScanPopup({
+              type: 'accepted',
+              code: standing.standardSku,
+              category: 'SKU',
+              count: newCount,
+              title: newCount === 8
+                ? '✓ ĐÃ ĐỦ 8 SKU PALLET ĐỨNG (4 KIỆN)'
+                : (mappedSku && mappedSku !== standing.standardSku
+                    ? `↩️ VỀ PALLET ĐỨNG: ${mappedSku} (${newCount}/8 cái)`
+                    : `↩️ TỰ ĐỘNG VỀ PALLET ĐỨNG (${newCount}/8 cái)`)
             });
+            return;
           }
+        }
 
-          return {
-            ...prev,
+        // B2: Xử lý cho Top Nóc (Quy chuẩn: 1 mã duy nhất x2)
+        const roofSkus = roof.skus || [];
+
+        if (!roof.standardSku || roofSkus.length === 0) {
+          const newRoof = {
+            ...roof,
             isSaved: false,
-            totalScans: prev.totalScans + 1,
-            skus: updatedSkus
+            standardSku: code,
+            totalScans: roof.totalScans + 1,
+            skus: [{
+              id: Date.now() + Math.random(),
+              code: code,
+              time: nowStr
+            }]
           };
-        });
+          roofDataRef.current = newRoof;
+          setRoofData(newRoof);
 
-        playSuccessBeep();
-        speakText(`Đã quét mã, ${speechCode}`);
-        setScanPopup({
-          type: 'accepted',
-          code: effectiveSku,
-          category: 'SKU',
-          count: currentCount,
-          title: 'ĐÃ GHI NHẬN MÃ SẢN PHẨM'
-        });
-      } else {
-        // ⛔ BÁO ĐỘNG LIỀN: SAI MÃ SẢN PHẨM
+          playSuccessBeep();
+          speakText(`Sản phẩm top nóc, ${speechSku}`);
+          setScanPopup({
+            type: 'accepted',
+            code: code,
+            category: 'SKU',
+            count: 1,
+            title: mappedSku && mappedSku !== code
+              ? `ĐÃ NHẬN SKU TOP NÓC: ${mappedSku} (1/2 CÁI)`
+              : 'ĐÃ GHI NHẬN SKU TOP NÓC (1/2 CÁI)'
+          });
+          return;
+        }
+
+        if (code === roof.standardSku || isOpticalVariantOfSku(code, roof.standardSku)) {
+          if (roofSkus.length < 2) {
+            const newRoof = {
+              ...roof,
+              isSaved: false,
+              totalScans: roof.totalScans + 1,
+              skus: [
+                ...roofSkus,
+                {
+                  id: Date.now() + Math.random(),
+                  code: roof.standardSku,
+                  time: nowStr
+                }
+              ]
+            };
+            roofDataRef.current = newRoof;
+            setRoofData(newRoof);
+
+            playSuccessBeep();
+            speakText(`Sản phẩm top nóc, ${speechSku}`);
+            setScanPopup({
+              type: 'accepted',
+              code: code,
+              category: 'SKU',
+              count: 2,
+              title: '✓ ĐỦ SỐ LƯỢNG TOP NÓC (2/2 CÁI)'
+            });
+            return;
+          } else {
+            playAlertSound(3);
+            speakText('Cảnh báo! Pallet đã đầy, top nóc chỉ có tối đa 2 cái');
+            setScanPopup({
+              type: 'rejected',
+              code: code,
+              category: 'SKU',
+              title: 'BÁO ĐỘNG — PALLET ĐÃ ĐẦY (TOP NÓC ĐỦ 2 CÁI)'
+            });
+            return;
+          }
+        }
+
+        // Top Nóc đã có standardSku và mã này là mã lạ thứ 3
         playAlertSound(3);
-        speakText('Đã quét sai mã sản phẩm');
+        speakText('Cảnh báo! Top nóc chỉ có một mã sản phẩm duy nhất');
         setScanPopup({
           type: 'rejected',
           code: code,
-          standardCode: targetState.standardSku,
+          standardCode: roof.standardSku,
           category: 'SKU',
-          title: 'BÁO ĐỘNG — SAI MÃ SẢN PHẨM'
+          title: 'BÁO ĐỘNG — TOP NÓC CHỈ CÓ 1 MÃ SKU (x2)'
         });
+        return;
       }
-      return;
     }
-  }, [palletTab, standingData, roofData, playSuccessBeep, playAlertSound, speakText, historyList]);
+  }, [palletTab, standingData, roofData, playSuccessBeep, playAlertSound, speakText, historyList])
 
   // Đồng bộ handler xử lý quét mã luôn là phiên bản mới nhất
   useEffect(() => {
     processHandlerRef.current = handleProcessScannedCode;
   });
 
-  // Lắng nghe máy quét phần cứng
+  // Kiểm tra xem người dùng có đang gõ tay vào bất kỳ ô input/textarea nào không
+  const isUserTypingInField = useCallback(() => {
+    const active = document.activeElement;
+    if (!active) return false;
+    if (active === hiddenScannerInputRef.current) return false;
+    const tag = active.tagName?.toLowerCase();
+    return tag === 'input' || tag === 'textarea' || active.isContentEditable;
+  }, []);
+
+  const isAnyModalActive = Boolean(
+    isStartContainerModalOpen || 
+    isEditContainerModalOpen || 
+    messageModal?.isOpen || 
+    confirmModal?.isOpen || 
+    selectedHistoryContainer || 
+    selectedHistoryPallet
+  );
+
+  // Lắng nghe máy quét phần cứng (SA 8972)
   useEffect(() => {
     const handleGlobalKeyDown = (e) => {
-      if (messageModal.isOpen || confirmModal.isOpen) return;
-      // Nếu đang chủ động gõ tay vào ô text thì để sự kiện gõ tự nhiên
-      if (document.activeElement === scanInputRef.current) return;
+      // Nếu có bất kỳ modal nào đang mở hoặc người dùng đang gõ vào input (tên container, ô tìm kiếm...), để gõ tự nhiên 100%!
+      if (isAnyModalActive || isUserTypingInField()) return;
 
       const key = e.key;
       const keyCode = e.keyCode || e.which;
@@ -868,287 +1801,37 @@ const CheckPalletV1View = () => {
       window.removeEventListener('keydown', handleGlobalKeyDown, true);
       if (scannerTimerRef.current) clearTimeout(scannerTimerRef.current);
     };
-  }, [executeScannedCode, messageModal.isOpen, confirmModal.isOpen]);
+  }, [executeScannedCode, isAnyModalActive, isUserTypingInField]);
 
   // ─── GIỮ FOCUS NGẦM CHO SÚNG BẮT MÃ / MÁY QUÉT POS TRÊN TAB QUÉT ───
   useEffect(() => {
-    if (activeTab === 'scan') {
-      const focusScanner = () => {
-        if (document.activeElement === scanInputRef.current) return;
+    if (activeTab === 'scan' && !isAnyModalActive) {
+      const focusScanner = (e) => {
+        // Tuyệt đối không cướp focus nếu người dùng đang thao tác trên bất kỳ ô nhập văn bản nào hoặc đang mở modal
+        if (isAnyModalActive || isUserTypingInField()) return;
+        if (e && e.target) {
+          const tag = e.target.tagName?.toLowerCase();
+          if (tag === 'input' || tag === 'textarea' || tag === 'button' || e.target.closest?.('input, textarea, button, [role="dialog"]')) {
+            return;
+          }
+        }
         if (hiddenScannerInputRef.current && document.activeElement !== hiddenScannerInputRef.current) {
           try {
             hiddenScannerInputRef.current.focus({ preventScroll: true });
           } catch (_) {}
         }
       };
-      focusScanner();
-      const interval = setInterval(focusScanner, 1500);
+
+      const timer = setTimeout(focusScanner, 200);
+      const interval = setInterval(focusScanner, 2000);
       window.addEventListener('click', focusScanner);
       return () => {
+        clearTimeout(timer);
         clearInterval(interval);
         window.removeEventListener('click', focusScanner);
       };
     }
-  }, [activeTab]);
-
-  // ─── ĐIỀU KHIỂN CAMERA SCANNER CHUẨN HTML5-QRCODE (ĐA ĐỊNH DẠNG CODE 128, CODE 39, QR, EAN) ───
-  const stopCamera = async () => {
-    isCameraRunningRef.current = false;
-    if (html5QrCodeRef.current) {
-      try {
-        if (html5QrCodeRef.current.isScanning) {
-          await html5QrCodeRef.current.stop();
-        }
-      } catch (err) {
-        console.warn('Lỗi khi dừng camera:', err);
-      }
-      try {
-        await html5QrCodeRef.current.clear();
-      } catch (_) {}
-      html5QrCodeRef.current = null;
-    }
-    const container = document.getElementById('v1-camera-reader');
-    if (container) {
-      container.innerHTML = '';
-    }
-    setIsCameraActive(false);
-    setTorchOn(false);
-  };
-
-  const startCamera = async () => {
-    if (isStartingCameraRef.current) return;
-    isStartingCameraRef.current = true;
-    try {
-      setCameraError(null);
-
-      // Dọn dẹp camera cũ trước khi khởi động instance mới
-      await stopCamera();
-
-      const container = document.getElementById('v1-camera-reader');
-      if (!container) throw new Error('Không tìm thấy container camera #v1-camera-reader');
-      container.innerHTML = '';
-
-      // Callback xử lý khi phát hiện mã vạch từ luồng camera
-      const onScanSuccess = (decodedText) => {
-        if (!decodedText) return;
-        if (confirmModalRef.current?.isOpen) return;
-
-        const now = Date.now();
-        const currentTab = palletTabRef.current;
-        const currentData = (currentTab === 'standing' ? standingDataRef.current : roofDataRef.current);
-        const currentStdSku = currentData?.standardSku || '';
-        const currentStdLpn = currentData?.standardLpn || '';
-
-        const cleanText = normalizeToEnglishBarcode(decodedText);
-        if (!cleanText) return;
-
-        // Tự động đóng modal cảnh báo ảnh tĩnh nếu camera đã bắt được mã
-        if (messageModalRef.current?.isOpen && messageModalRef.current?.title?.includes('mã')) {
-          setMessageModal(prev => ({ ...prev, isOpen: false }));
-        }
-
-        const catalogMatched = matchCatalogSku(cleanText, currentStdSku);
-        const resolvedText = catalogMatched || cleanText;
-
-        setLastDetectedRaw(resolvedText);
-
-        if (!isValidBarcodeCandidate(resolvedText, currentStdSku)) {
-          return;
-        }
-
-        const classified = classifyCode(resolvedText, currentStdSku);
-        if (!classified) return;
-
-        const { type, code: normalizedCode } = classified;
-
-        // A. MÃ PALLET QR (PLD-..., PLN-...)
-        if (type === 'PALLET' || normalizedCode.startsWith('PLD-') || normalizedCode.startsWith('PLN-')) {
-          if (lastCameraScannedCodeRef.current === normalizedCode && (now - lastCameraScannedTimeRef.current < 1000)) {
-            return;
-          }
-          lastCameraScannedCodeRef.current = normalizedCode;
-          lastCameraScannedTimeRef.current = now;
-          executeScannedCode(normalizedCode);
-          return;
-        }
-
-        // B. MÃ LPN (MÃ VẬN CHUYỂN)
-        if (type === 'LPN') {
-          const isLpnMatch = !currentStdLpn || normalizedCode === currentStdLpn || isOpticalVariantOfLpn(normalizedCode, currentStdLpn);
-          const finalLpn = isLpnMatch ? (currentStdLpn || normalizedCode) : normalizedCode;
-          // Throttling camera 600ms giữa 2 lần quét cùng mã trên camera
-          if (lastCameraScannedCodeRef.current === finalLpn && (now - lastCameraScannedTimeRef.current < 600)) {
-            return;
-          }
-          lastCameraScannedCodeRef.current = finalLpn;
-          lastCameraScannedTimeRef.current = now;
-          executeScannedCode(finalLpn);
-          return;
-        }
-
-        // C. MÃ SKU (MÃ SẢN PHẨM)
-        if (type === 'SKU') {
-          const isSkuMatch = !currentStdSku ||
-            normalizedCode === currentStdSku ||
-            isOpticalVariantOfSku(normalizedCode, currentStdSku) ||
-            (matchCatalogSku(normalizedCode, currentStdSku) === currentStdSku);
-
-          const finalCode = isSkuMatch ? (currentStdSku || normalizedCode) : normalizedCode;
-          // Throttling camera 600ms giữa 2 lần quét cùng mã trên camera
-          if (lastCameraScannedCodeRef.current === finalCode && (now - lastCameraScannedTimeRef.current < 600)) {
-            return;
-          }
-          lastCameraScannedCodeRef.current = finalCode;
-          lastCameraScannedTimeRef.current = now;
-          executeScannedCode(finalCode);
-          return;
-        }
-      };
-
-      const scanner = new Html5Qrcode('v1-camera-reader', {
-        formatsToSupport: [
-          Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.CODE_39,
-          Html5QrcodeSupportedFormats.QR_CODE,
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.ITF,
-          Html5QrcodeSupportedFormats.UPC_A
-        ],
-        experimentalFeatures: {
-          useBarCodeDetectorIfSupported: true
-        },
-        verbose: false
-      });
-      html5QrCodeRef.current = scanner;
-
-      const config = {
-        fps: 20,
-        qrbox: (viewfinderWidth, viewfinderHeight) => {
-          const width = Math.min(viewfinderWidth, Math.floor(viewfinderWidth * 0.90));
-          const height = Math.min(viewfinderHeight, Math.floor(viewfinderHeight * 0.65));
-          return { width: Math.max(width, 220), height: Math.max(height, 120) };
-        },
-        aspectRatio: 1.777778
-      };
-
-      await scanner.start(
-        { facingMode: 'environment' },
-        config,
-        (decodedText) => {
-          onScanSuccess(decodedText);
-        },
-        () => {} // Bỏ qua per-frame decode miss
-      );
-
-      isCameraRunningRef.current = true;
-      setIsCameraActive(true);
-      setCameraEngine('⚡ Html5Qrcode Hardware-Accelerated Engine');
-    } catch (err) {
-      console.error('Lỗi khởi động camera:', err);
-      const isPermissionErr = err?.name === 'NotAllowedError' || err?.message?.toLowerCase?.()?.includes('permission');
-      setCameraError(
-        isPermissionErr
-          ? 'Trình duyệt chưa được cấp quyền Camera. Vui lòng cho phép quyền Camera trong cài đặt trình duyệt.'
-          : (err?.message || 'Không thể mở Camera. Vui lòng bấm "Thử Lại Mở Camera" bên dưới.')
-      );
-      setIsCameraActive(false);
-    } finally {
-      isStartingCameraRef.current = false;
-    }
-  };
-
-  // Tự động khởi động camera khi mở tab quét để sẵn sàng nhận mã tức thì
-  useEffect(() => {
-    let timer;
-    if (activeTab === 'scan') {
-      timer = setTimeout(() => {
-        startCamera();
-      }, 300);
-    } else {
-      stopCamera();
-    }
-    return () => {
-      if (timer) clearTimeout(timer);
-      stopCamera();
-    };
-  }, [activeTab]);
-
-  const toggleTorch = async () => {
-    if (!isCameraActive || !html5QrCodeRef.current) return;
-    try {
-      const nextTorchState = !torchOn;
-      await html5QrCodeRef.current.applyVideoConstraints({
-        advanced: [{ torch: nextTorchState }]
-      });
-      setTorchOn(nextTorchState);
-    } catch (err) {
-      console.warn('Không thể thay đổi đèn flash:', err);
-      setMessageModal({
-        isOpen: true,
-        type: 'info',
-        title: 'Thông báo đèn Flash',
-        message: 'Thiết bị hoặc camera hiện tại không hỗ trợ bật/tắt đèn Flash.'
-      });
-    }
-  };
-
-  // ─── HÀM CHỤP ẢNH TĨNH VÀ PHÂN TÍCH MÃ TỪ FRAME VIDEO ───
-  const handleSnapshotScan = async () => {
-    if (!isCameraActive || isCapturingSnapshot || !html5QrCodeRef.current) return;
-    setIsCapturingSnapshot(true);
-    setIsFlashAnimation(true);
-    setTimeout(() => setIsFlashAnimation(false), 200);
-
-    try {
-      const video = document.querySelector('#v1-camera-reader video');
-      if (!video || video.readyState < 2 || video.videoWidth === 0) {
-        setMessageModal({
-          isOpen: true,
-          type: 'warning',
-          title: 'Camera chưa sẵn sàng',
-          message: 'Chưa nhận được hình ảnh từ camera. Vui lòng đợi 1 giây rồi thử lại.'
-        });
-        return;
-      }
-
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.95));
-      if (!blob) throw new Error('Không thể tạo file ảnh từ camera');
-      const file = new File([blob], 'snapshot.jpg', { type: 'image/jpeg' });
-
-      try {
-        const result = await html5QrCodeRef.current.scanFile(file, false);
-        if (result) {
-          executeScannedCode(result);
-          return;
-        }
-      } catch (scanErr) {
-        console.warn('scanFile không đọc được:', scanErr);
-      }
-
-      setMessageModal({
-        isOpen: true,
-        type: 'warning',
-        title: 'Chưa đọc được mã vạch',
-        message: 'Không tìm thấy mã vạch trong ảnh chụp. Vui lòng giữ camera cách thùng 20-30cm, đủ ánh sáng và vuông góc với mã rồi thử lại.'
-      });
-    } catch (err) {
-      console.error('Lỗi khi chụp ảnh tĩnh và phân tích mã:', err);
-      setMessageModal({
-        isOpen: true,
-        type: 'warning',
-        title: 'Lỗi chụp ảnh',
-        message: 'Đã xảy ra lỗi khi phân tích ảnh: ' + (err.message || 'Lỗi không xác định')
-      });
-    } finally {
-      setIsCapturingSnapshot(false);
-    }
-  };
+  }, [activeTab, isAnyModalActive, isUserTypingInField]);
 
   // ─── HÀM IN THẺ KIỂM TRA PALLET KHỔ 56MM ───
   const handlePrintThermalTicket = useCallback((record) => {
@@ -1350,6 +2033,538 @@ const CheckPalletV1View = () => {
     }, 250);
   }, []);
 
+  const currentPalletIndex = (activeContainer?.pallets?.length || 0) + 1;
+
+  // Bắt đầu Container mới
+  const handleStartNewContainer = (name) => {
+    const finalName = (name || '').trim() || `CONT-${new Date().toLocaleDateString('vi-VN').replace(/\//g, '')}-01`;
+    const newCont = {
+      id: generateContainerId(),
+      name: finalName,
+      createdAt: new Date().toLocaleString('vi-VN'),
+      updatedAt: new Date().toLocaleString('vi-VN'),
+      inspector: 'Nguyễn A',
+      status: 'in_progress',
+      pallets: []
+    };
+    setActiveContainer(newCont);
+    setIsStartContainerModalOpen(false);
+    playSuccessBeep();
+    speakText(`Đã tạo Container ${finalName}`);
+  };
+
+  // Cập nhật tên Container
+  const handleUpdateContainerName = (newName) => {
+    if (!newName || !newName.trim()) return;
+    setActiveContainer(prev => ({
+      ...(prev || { id: generateContainerId(), pallets: [] }),
+      name: newName.trim(),
+      updatedAt: new Date().toLocaleString('vi-VN')
+    }));
+    setIsEditContainerModalOpen(false);
+    playSuccessBeep();
+  };
+
+  // Xóa toàn bộ dữ liệu Top Nóc khi người dùng xác nhận pallet không có tủ nóc
+  const handleClearRoofData = () => {
+    setRoofData({
+      skus: [],
+      lpns: [],
+      standardLpn: null,
+      standardSku: null,
+      isSaved: false,
+      savedKey: null,
+      totalScans: 0
+    });
+    roofDataRef.current = {
+      skus: [],
+      lpns: [],
+      standardLpn: null,
+      standardSku: null,
+      isSaved: false,
+      savedKey: null,
+      totalScans: 0
+    };
+    setPalletTab('standing');
+    palletTabRef.current = 'standing';
+    playSuccessBeep();
+    speakText('Đã xóa dữ liệu Top Nóc, chuyển về Pallet Đứng');
+  };
+
+  // Chuyển sang Pallet Tiếp Theo (Next Pallet)
+  // Chuyển sang Pallet Tiếp Theo trong cùng Container
+  const handleNextPallet = () => {
+    const standingTotal = (standingData.skus?.length || 0) + (standingData.lpns?.length || 0);
+    const roofTotal = (roofData.skus?.length || 0) + (roofData.lpns?.length || 0);
+
+    if (standingTotal === 0 && roofTotal === 0) {
+      setMessageModal({
+        isOpen: true,
+        type: 'warning',
+        title: 'Chưa có dữ liệu Pallet',
+        message: `Pallet #${currentPalletIndex} chưa có mã quét nào. Vui lòng quét ít nhất 1 mã trước khi chuyển Pallet!`
+      });
+      return;
+    }
+
+    // Pallet Đứng bắt buộc phải có ít nhất 1 mã SKU và 1 mã LPN
+    if ((standingData.skus?.length || 0) === 0 || (standingData.lpns?.length || 0) === 0) {
+      playAlertSound(3);
+      speakText('Pallet đứng cần có ít nhất mã SKU và mã vận chuyển');
+      setMessageModal({
+        isOpen: true,
+        type: 'warning',
+        title: 'PALLET ĐỨNG CHƯA ĐỦ MÃ',
+        message: `Pallet #${currentPalletIndex} cần có ít nhất 1 mã SKU và 1 mã LPN ở Pallet Đứng trước khi chuyển Pallet!`
+      });
+      return;
+    }
+
+    const standingTotalSkus = (standingData.skus || []).reduce((sum, s) => sum + (s.count || 1), 0);
+    const standingSkuTypesCount = (standingData.skus || []).length;
+    const standingTotalLpns = (standingData.lpns || []).reduce((sum, l) => sum + (l.count || 1), 0);
+    const isStandingComplete = ((standingData.skus?.length || 0) === 8) && ((standingData.lpns?.length || 0) === 4);
+
+    const roofTotalSkus = (roofData.skus || []).reduce((sum, s) => sum + (s.count || 1), 0);
+    const roofTotalLpns = (roofData.lpns || []).reduce((sum, l) => sum + (l.count || 1), 0);
+    const hasRoofData = roofTotalSkus > 0 || roofTotalLpns > 0;
+    const isRoofComplete = ((roofData.skus?.length || 0) === 2) && ((roofData.lpns?.length || 0) === 1);
+
+    const performSaveAndNext = (overrideNoRoof = false) => {
+      const isRoofSkipped = overrideNoRoof || (!hasRoofData);
+      const activeRoofData = isRoofSkipped ? {
+        skus: [],
+        lpns: [],
+        standardSku: null,
+        standardLpn: null,
+        totalScans: 0
+      } : roofData;
+
+      const palletRecord = {
+        palletIndex: currentPalletIndex,
+        palletId: `PL-${(activeContainer?.name || 'CONT').replace(/[^A-Za-z0-9_-]/g, '')}-P${String(currentPalletIndex).padStart(2, '0')}`,
+        status: 'pass',
+        timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        standing: {
+          skus: [...standingData.skus],
+          lpns: [...standingData.lpns],
+          standardSku: standingData.standardSku,
+          standardLpn: standingData.standardLpn
+        },
+        roof: isRoofSkipped ? {
+          hasRoof: false,
+          skus: [],
+          lpns: [],
+          standardSku: null,
+          standardLpn: null
+        } : {
+          hasRoof: true,
+          skus: [...activeRoofData.skus],
+          lpns: [...activeRoofData.lpns],
+          standardSku: activeRoofData.standardSku,
+          standardLpn: activeRoofData.standardLpn
+        },
+        totalScans: standingData.totalScans + (isRoofSkipped ? 0 : activeRoofData.totalScans)
+      };
+
+      const updatedPallets = [...(activeContainer?.pallets || []), palletRecord];
+      const updatedContainer = {
+        ...(activeContainer || { id: generateContainerId(), name: 'Container' }),
+        updatedAt: new Date().toLocaleString('vi-VN'),
+        pallets: updatedPallets
+      };
+
+      setActiveContainer(updatedContainer);
+
+      // Reset form để quét pallet tiếp theo
+      setStandingData({
+        skus: [],
+        lpns: [],
+        standardLpn: null,
+        standardSku: null,
+        isSaved: false,
+        savedKey: null,
+        totalScans: 0
+      });
+      standingDataRef.current = {
+        skus: [],
+        lpns: [],
+        standardLpn: null,
+        standardSku: null,
+        isSaved: false,
+        savedKey: null,
+        totalScans: 0
+      };
+      setRoofData({
+        skus: [],
+        lpns: [],
+        standardLpn: null,
+        standardSku: null,
+        isSaved: false,
+        savedKey: null,
+        totalScans: 0
+      });
+      roofDataRef.current = {
+        skus: [],
+        lpns: [],
+        standardLpn: null,
+        standardSku: null,
+        isSaved: false,
+        savedKey: null,
+        totalScans: 0
+      };
+      setPalletTab('standing');
+      palletTabRef.current = 'standing';
+
+      // Xóa bộ đệm máy quét
+      lastProcessedCodeRef.current = '';
+      lastProcessedTimeRef.current = 0;
+      scannerBufferRef.current = '';
+      if (hiddenScannerInputRef.current) hiddenScannerInputRef.current.value = '';
+
+      playSuccessBeep();
+      speakText(`Đã lưu Pallet ${currentPalletIndex}, chuyển sang Pallet ${currentPalletIndex + 1}`);
+
+      setMessageModal({
+        isOpen: true,
+        type: 'success',
+        title: `ĐÃ LƯU PALLET #${currentPalletIndex}`,
+        message: `Pallet #${currentPalletIndex} đã lưu thành công vào Container [${activeContainer?.name}]. Bạn đang ở Pallet #${currentPalletIndex + 1}.`
+      });
+    };
+
+    // Kiểm tra nếu có dữ liệu Top Nóc dở dang
+    if (hasRoofData && !isRoofComplete) {
+      playAlertSound(3);
+      speakText('Top nóc chưa đủ điều kiện, cần 2 mã sản phẩm và 1 mã vận chuyển');
+      setConfirmModal({
+        isOpen: true,
+        title: 'TOP NÓC CHƯA ĐỦ ĐIỀU KIỆN (1 KIỆN)',
+        message: `Pallet #${currentPalletIndex} đang có dữ liệu Top Nóc dở dang: Mới có ${roofTotalSkus}/2 SKU và ${roofTotalLpns}/1 LPN.\n\nQuy chuẩn 1 kiện Top Nóc gồm đúng 2 SKU và 1 LPN.\nNếu Pallet này KHÔNG CÓ Tủ Nóc, bạn có thể xóa Top Nóc và chuyển Pallet ngay!`,
+        confirmText: '✕ Xóa Nóc & Chuyển Pallet',
+        cancelText: 'Quay lại quét tiếp',
+        onConfirm: () => {
+          setRoofData({
+            skus: [],
+            lpns: [],
+            standardLpn: null,
+            standardSku: null,
+            isSaved: false,
+            savedKey: null,
+            totalScans: 0
+          });
+          roofDataRef.current = {
+            skus: [],
+            lpns: [],
+            standardLpn: null,
+            standardSku: null,
+            isSaved: false,
+            savedKey: null,
+            totalScans: 0
+          };
+          performSaveAndNext(true);
+        }
+      });
+      return;
+    }
+
+    // Kiểm tra nếu Pallet Đứng chưa đủ 4 kiện
+    if (!isStandingComplete) {
+      setConfirmModal({
+        isOpen: true,
+        title: `PALLET ĐỨNG CHƯA ĐỦ 4 KIỆN`,
+        message: `Pallet #${currentPalletIndex} mới có ${standingTotalSkus}/8 mã SKU và ${standingTotalLpns}/4 mã LPN.\n\nQuy chuẩn đóng gói xuất khẩu yêu cầu đủ 4 kiện đứng (8 mã SKU và 4 lần LPN).\nBạn có chắc chắn muốn lưu và chuyển sang Pallet #${currentPalletIndex + 1} không?`,
+        confirmText: 'Vẫn lưu & Chuyển Pallet',
+        cancelText: 'Quay lại quét tiếp',
+        onConfirm: () => performSaveAndNext(false)
+      });
+      return;
+    }
+
+    performSaveAndNext(false);
+  };
+
+  // Hoàn thành Container & Lưu vào Lịch Sử với Kiểm Định Quy Chuẩn Toàn Diện
+  const handleFinishContainer = () => {
+    if (!activeContainer) return;
+    const standingTotal = (standingData.skus?.length || 0) + (standingData.lpns?.length || 0);
+    const roofTotal = (roofData.skus?.length || 0) + (roofData.lpns?.length || 0);
+    const hasPendingPallet = (standingTotal > 0 || roofTotal > 0);
+
+    const totalPalletsCount = (activeContainer.pallets?.length || 0) + (hasPendingPallet ? 1 : 0);
+
+    if (totalPalletsCount === 0) {
+      setMessageModal({
+        isOpen: true,
+        type: 'warning',
+        title: 'Container chưa có Pallet',
+        message: 'Container hiện tại chưa có Pallet nào được ghi nhận. Vui lòng quét ít nhất 1 Pallet trước khi hoàn thành!'
+      });
+      return;
+    }
+
+    // Xây dựng candidate pallets bao gồm cả pallet đang quét dở (nếu có)
+    let candidatePallets = [...(activeContainer.pallets || [])];
+    if (hasPendingPallet) {
+      candidatePallets.push({
+        palletIndex: currentPalletIndex,
+        palletId: `PL-${(activeContainer.name || 'CONT').replace(/[^A-Za-z0-9_-]/g, '')}-P${String(currentPalletIndex).padStart(2, '0')}`,
+        status: 'pass',
+        timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        standing: {
+          skus: [...standingData.skus],
+          lpns: [...standingData.lpns],
+          standardSku: standingData.standardSku,
+          standardLpn: standingData.standardLpn
+        },
+        roof: (roofData.skus?.length > 0 || roofData.lpns?.length > 0) ? {
+          hasRoof: true,
+          skus: [...roofData.skus],
+          lpns: [...roofData.lpns],
+          standardSku: roofData.standardSku,
+          standardLpn: roofData.standardLpn
+        } : {
+          hasRoof: false,
+          skus: [],
+          lpns: [],
+          standardSku: null,
+          standardLpn: null
+        },
+        totalScans: standingData.totalScans + roofData.totalScans
+      });
+    }
+
+    const validation = validateContainerRules(candidatePallets);
+
+    const performCompleteContainer = (overrideNoRoof = false) => {
+      let finalPallets = [...(activeContainer.pallets || [])];
+      if (hasPendingPallet) {
+        const isRoofSkipped = overrideNoRoof || (!roofData.skus?.length && !roofData.lpns?.length);
+        const activeRoofData = isRoofSkipped ? {
+          skus: [],
+          lpns: [],
+          standardSku: null,
+          standardLpn: null,
+          totalScans: 0
+        } : roofData;
+
+        finalPallets.push({
+          palletIndex: currentPalletIndex,
+          palletId: `PL-${(activeContainer.name || 'CONT').replace(/[^A-Za-z0-9_-]/g, '')}-P${String(currentPalletIndex).padStart(2, '0')}`,
+          status: 'pass',
+          timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+          standing: {
+            skus: [...standingData.skus],
+            lpns: [...standingData.lpns],
+            standardSku: standingData.standardSku,
+            standardLpn: standingData.standardLpn
+          },
+          roof: isRoofSkipped ? {
+            hasRoof: false,
+            skus: [],
+            lpns: [],
+            standardSku: null,
+            standardLpn: null
+          } : {
+            hasRoof: true,
+            skus: [...activeRoofData.skus],
+            lpns: [...activeRoofData.lpns],
+            standardSku: activeRoofData.standardSku,
+            standardLpn: activeRoofData.standardLpn
+          },
+          totalScans: standingData.totalScans + (isRoofSkipped ? 0 : activeRoofData.totalScans)
+        });
+      }
+
+      const finalAudit = validateContainerRules(finalPallets);
+
+      const completedCont = {
+        ...activeContainer,
+        status: finalAudit.isValid ? 'completed' : 'warning',
+        auditResult: finalAudit,
+        completedAt: new Date().toLocaleString('vi-VN'),
+        pallets: finalPallets
+      };
+
+      const updatedHistory = [completedCont, ...historyContainers];
+      setHistoryContainers(updatedHistory);
+      try {
+        localStorage.setItem('g7_pallet_v1_containers', JSON.stringify(updatedHistory));
+        localStorage.removeItem('g7_pallet_v1_active_container');
+      } catch (e) {
+        console.warn('Lỗi lưu history containers:', e);
+      }
+
+      // ─── ĐỒNG BỘ TRỰC TIẾP VÀO CƠ SỞ DỮ LIỆU SQL SERVER ───
+      try {
+        apiClient.post('/pallet-check/containers', completedCont)
+          .then(res => {
+            console.log('✓ Đã lưu Container vào SQL Server Database:', res.data);
+            fetchContainersFromDb();
+          })
+          .catch(err => {
+            console.warn('⚠️ Lỗi gửi Container lên Database máy chủ (đã lưu an toàn trên máy):', err);
+          });
+      } catch (e) {
+        console.warn('Exception khi gọi API lưu container:', e);
+      }
+
+      setActiveContainer(null);
+      setStandingData({ skus: [], lpns: [], standardLpn: null, standardSku: null, isSaved: false, savedKey: null, totalScans: 0 });
+      standingDataRef.current = { skus: [], lpns: [], standardLpn: null, standardSku: null, isSaved: false, savedKey: null, totalScans: 0 };
+      setRoofData({ skus: [], lpns: [], standardLpn: null, standardSku: null, isSaved: false, savedKey: null, totalScans: 0 });
+      roofDataRef.current = { skus: [], lpns: [], standardLpn: null, standardSku: null, isSaved: false, savedKey: null, totalScans: 0 };
+      setPalletTab('standing');
+      palletTabRef.current = 'standing';
+
+      if (finalAudit.isValid) {
+        playSuccessBeep();
+        speakText(`Đã hoàn thành Container ${activeContainer.name}`);
+      } else {
+        playAlertSound(2);
+        speakText(`Đã lưu Container ${activeContainer.name} nhưng có cảnh báo vi phạm`);
+      }
+
+      setActiveTab('history');
+      setSelectedHistoryContainer(completedCont);
+
+      setMessageModal({
+        isOpen: true,
+        type: finalAudit.isValid ? 'success' : 'warning',
+        title: finalAudit.isValid ? 'HOÀN THÀNH CONTAINER' : 'ĐÃ ĐÓNG CONTAINER (CÓ CẢNH BÁO)',
+        message: finalAudit.isValid
+          ? `Container [${activeContainer.name}] gồm ${finalPallets.length} Pallet đạt chuẩn 100% đã được lưu vào Lịch Sử!`
+          : `Container [${activeContainer.name}] đã lưu vào Lịch Sử nhưng còn vi phạm tiêu chuẩn (có pallet thiếu mã hoặc top nóc số lẻ)!`
+      });
+    };
+
+    // ─── KIỂM ĐỊNH NẾU PHÁT HIỆN LỖI VI PHẠM CONTAINER ───
+    if (!validation.isValid) {
+      playAlertSound(3);
+      speakText('Cảnh báo! Container chưa đạt tiêu chuẩn');
+
+      const errorMessages = [];
+      if (validation.oddTopLpnErrors.length > 0) {
+        errorMessages.push('• LỖI KIỆN TOP NÓC SỐ LẺ (Bắt buộc là số chẵn 2, 4, 6... kiện):');
+        validation.oddTopLpnErrors.forEach(e => {
+          errorMessages.push(`  - Mã LPN [${e.lpnCode}]: có ${e.count} kiện (Số lẻ) trên Pallet #${e.palletIndices.join(', #')}`);
+        });
+      }
+      if (validation.palletErrors.length > 0) {
+        errorMessages.push('\n• LỖI PALLET THIẾU MÃ:');
+        validation.palletErrors.forEach(e => {
+          errorMessages.push(`  - Pallet #${e.palletIndex}: ${e.hasRoof ? 'Pallet 5 kiện' : 'Pallet 4 kiện'} (${e.details})`);
+        });
+      }
+
+      setConfirmModal({
+        isOpen: true,
+        title: '⚠️ CONTAINER CHƯA ĐẠT TIÊU CHUẨN XUẤT HÀNG',
+        message: `Container [${activeContainer.name}] phát hiện các lỗi vi phạm sau:\n\n${errorMessages.join('\n')}\n\nBạn có muốn quay lại để quét bổ sung cho đủ tiêu chuẩn không?`,
+        confirmText: 'Vẫn hoàn thành (Bỏ qua lỗi)',
+        cancelText: 'Quay lại quét tiếp',
+        onConfirm: () => performCompleteContainer(false)
+      });
+      return;
+    }
+
+    // Nếu Container hợp lệ 100%:
+    setConfirmModal({
+      isOpen: true,
+      title: 'Hoàn Thành Container?',
+      message: `Xác nhận hoàn thành Container [${activeContainer.name}] với tổng cộng ${totalPalletsCount} Pallet? Container đã ĐẠT CHUẨN 100% và sẽ được chuyển vào mục Lịch Sử.`,
+      confirmText: 'Hoàn thành Container',
+      cancelText: 'Quay lại',
+      onConfirm: () => performCompleteContainer(false)
+    });
+  };
+
+  // In Phiếu Tổng Hợp Container
+  const handlePrintContainerSummary = useCallback((container) => {
+    if (!container) return;
+    const pallets = container.pallets || [];
+    const totalPallets = pallets.length;
+
+    const palletRows = pallets.map(p => {
+      const standingSkus = (p.standing?.skus || []).map(s => `${s.code} (x${s.count})`).join(', ') || '-';
+      const standingLpns = (p.standing?.lpns || []).map(l => l.code).join(', ') || '-';
+      const hasRoof = Boolean(p.roof?.hasRoof) || ((p.roof?.skus?.length || 0) > 0 || (p.roof?.lpns?.length || 0) > 0);
+      const roofSkus = (p.roof?.skus || []).map(s => `${s.code} (x${s.count})`).join(', ') || 'Không có';
+      const roofLpns = (p.roof?.lpns || []).map(l => l.code).join(', ') || 'Không có';
+      return `
+        <div style="border-bottom: 1px dashed #777; padding: 4px 0; font-size: 10px;">
+          <div style="display:flex; justify-content:space-between; font-weight:800;">
+            <span>PALLET #${p.palletIndex} (${p.palletId})</span>
+            <span style="color:#15803d;">ĐẠT</span>
+          </div>
+          <div style="font-size:9.5px; color:#333; margin-top:2px;">
+            <div>• Đứng: SKU: ${standingSkus} | LPN: ${standingLpns}</div>
+            <div>• Nóc: ${hasRoof ? `SKU: ${roofSkus} | LPN: ${roofLpns}` : 'Không có Tủ Nóc (0 SKU • 0 LPN)'}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    const printHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Container ${container.name}</title>
+        <style>
+          @page { size: 56mm auto; margin: 0; }
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          body { width: 56mm; margin: 0 auto; padding: 6px 4px; font-family: -apple-system, sans-serif; font-size: 11px; line-height: 1.3; }
+          .tag-title { text-align: center; font-size: 15px; font-weight: 900; color: #7b5233; text-transform: uppercase; }
+          .cont-name { text-align: center; font-size: 13px; font-weight: 800; color: #111; margin-bottom: 4px; }
+          .dash-line { border-top: 1px dashed #666; margin: 4px 0; }
+        </style>
+      </head>
+      <body>
+        <div class="tag-title">PHIẾU CONTAINER</div>
+        <div class="cont-name">${container.name}</div>
+        <div style="font-size:9.5px; color:#444; text-align:center;">Mã: ${container.id}</div>
+        <div class="dash-line"></div>
+        <div style="display:flex; justify-content:space-between; font-size:9.5px;">
+          <span>Thời gian:</span><strong>${container.createdAt || ''}</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:9.5px;">
+          <span>Tổng Pallet:</span><strong>${totalPallets} Pallet</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:9.5px;">
+          <span>Người kiểm:</span><strong>${container.inspector || 'Nguyễn A'}</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:9.5px;">
+          <span>Kiểm định:</span><strong style="color:${(container.auditResult?.isValid ?? true) ? '#15803d' : '#dc2626'};">${(container.auditResult?.isValid ?? true) ? '✓ ĐẠT TIÊU CHUẨN' : '⚠️ CÓ CẢNH BÁO'}</strong>
+        </div>
+        <div class="dash-line"></div>
+        <div style="font-weight:800; font-size:10px; margin-bottom:3px;">DANH SÁCH PALLET:</div>
+        ${palletRows}
+        <div class="dash-line"></div>
+        <div style="text-align:center; font-size:8.5px; color:#777; margin-top:4px;">G7 SmartFlow • Kiểm Tra Container</div>
+      </body>
+      </html>
+    `;
+
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+    const doc = iframe.contentWindow.document;
+    doc.open();
+    doc.write(printHtml);
+    doc.close();
+    iframe.contentWindow.focus();
+    setTimeout(() => {
+      try { iframe.contentWindow.print(); } catch (e) {}
+      setTimeout(() => { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); }, 1500);
+    }, 250);
+  }, []);
+
   // ─── THAO TÁC LƯU ĐỘC LẬP TỪNG TAB ───
   const handleSaveActiveTab = () => {
     const isStanding = palletTab === 'standing';
@@ -1457,20 +2672,125 @@ const CheckPalletV1View = () => {
     });
   };
 
-  const handleDeleteCodeItem = (type, code) => {
-    const setTarget = palletTab === 'standing' ? setStandingData : setRoofData;
+  const handleDeleteCodeItem = (type, itemId) => {
+    const isStanding = palletTab === 'standing';
+    const setTarget = isStanding ? setStandingData : setRoofData;
+    const targetRef = isStanding ? standingDataRef : roofDataRef;
+
     setTarget(prev => {
       const listKey = type === 'LPN' ? 'lpns' : 'skus';
-      const updatedList = prev[listKey].filter(it => it.code !== code);
-      return {
+      const updatedList = (prev[listKey] || []).filter(it => it.id !== itemId);
+      const nextState = {
         ...prev,
         [listKey]: updatedList,
         [type === 'LPN' ? 'standardLpn' : 'standardSku']: updatedList.length > 0 ? prev[type === 'LPN' ? 'standardLpn' : 'standardSku'] : null
       };
+      targetRef.current = nextState;
+      return nextState;
     });
   };
 
   const currentTabState = palletTab === 'standing' ? standingData : roofData;
+
+  const standingTotalSkus = (standingData.skus || []).reduce((sum, s) => sum + (s.count || 1), 0);
+  const standingSkuTypesCount = (standingData.skus || []).length;
+  const standingTotalLpns = (standingData.lpns || []).reduce((sum, l) => sum + (l.count || 1), 0);
+  const isStandingComplete = ((standingData.skus?.length || 0) === 8) && ((standingData.lpns?.length || 0) === 4);
+
+  const roofTotalSkus = (roofData.skus || []).reduce((sum, s) => sum + (s.count || 1), 0);
+  const roofTotalLpns = (roofData.lpns || []).reduce((sum, l) => sum + (l.count || 1), 0);
+  const hasRoofData = roofTotalSkus > 0 || roofTotalLpns > 0;
+  const isRoofComplete = ((roofData.skus?.length || 0) === 2) && ((roofData.lpns?.length || 0) === 1);
+
+  // Xóa Container khỏi Database và State
+  const handleDeleteContainer = (containerId, containerName) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'XÓA CONTAINER?',
+      message: `Bạn có chắc chắn muốn xóa Container [${containerName || containerId}] và toàn bộ Pallet liên quan khỏi Database không?`,
+      confirmText: 'Xác nhận xóa',
+      cancelText: 'Hủy',
+      onConfirm: async () => {
+        try {
+          await apiClient.delete(`/pallet-check/containers/${containerId}`);
+        } catch (err) {
+          console.warn('Lỗi khi xóa Container trên Database:', err);
+        }
+        setHistoryContainers(prev => {
+          const next = prev.filter(c => c.id !== containerId);
+          try {
+            localStorage.setItem('g7_pallet_v1_containers', JSON.stringify(next));
+          } catch (_) {}
+          return next;
+        });
+        if (selectedHistoryContainer?.id === containerId) {
+          setSelectedHistoryContainer(null);
+        }
+        setMessageModal({
+          isOpen: true,
+          type: 'success',
+          title: 'ĐÃ XÓA CONTAINER',
+          message: `Container [${containerName || containerId}] đã được xóa khỏi hệ thống.`
+        });
+      }
+    });
+  };
+
+  // Tiếp tục quét một Container đã lưu từ Lịch Sử
+  const handleResumeContainer = (containerToResume) => {
+    if (!containerToResume) return;
+
+    const performResume = () => {
+      // 1. Gán Container làm activeContainer
+      setActiveContainer(containerToResume);
+      try {
+        localStorage.setItem('g7_pallet_v1_active_container', JSON.stringify(containerToResume));
+      } catch (_) {}
+
+      // 2. Làm sạch dữ liệu Pallet mới chuẩn bị quét (để đón Pallet tiếp theo N+1)
+      const emptyPallet = { skus: [], lpns: [], standardLpn: null, standardSku: null, isSaved: false, savedKey: null, totalScans: 0 };
+      setStandingData(emptyPallet);
+      standingDataRef.current = emptyPallet;
+      setRoofData(emptyPallet);
+      roofDataRef.current = emptyPallet;
+      setPalletTab('standing');
+      palletTabRef.current = 'standing';
+
+      // 3. Đóng popup chi tiết và chuyển tab sang quét mới
+      setSelectedHistoryContainer(null);
+      setActiveTab('scan');
+
+      const nextPalletNum = (containerToResume.pallets?.length || 0) + 1;
+      playSuccessBeep();
+      speakText(`Tiếp tục quét Container ${containerToResume.name}, bắt đầu Pallet số ${nextPalletNum}`);
+
+      setMessageModal({
+        isOpen: true,
+        type: 'success',
+        title: 'TIẾP TỤC QUÉT CONTAINER',
+        message: `Đã mở lại Container [${containerToResume.name}].\nHiện có ${containerToResume.pallets?.length || 0} Pallet đã lưu trong hệ thống.\nBạn đang ở Pallet #${nextPalletNum} sẵn sàng quét mã!`
+      });
+    };
+
+    // Nếu đang có một Container khác đang quét dở và có dữ liệu
+    const standingTotal = (standingData.skus?.length || 0) + (standingData.lpns?.length || 0);
+    const roofTotal = (roofData.skus?.length || 0) + (roofData.lpns?.length || 0);
+    const isDifferentCont = activeContainer && activeContainer.id !== containerToResume.id;
+
+    if (isDifferentCont && (standingTotal > 0 || roofTotal > 0 || (activeContainer.pallets?.length || 0) > 0)) {
+      setConfirmModal({
+        isOpen: true,
+        title: 'ĐỔI CONTAINER ĐANG QUÉT?',
+        message: `Bạn đang có Container [${activeContainer.name}] chưa đóng hoàn tất. Bạn có chắc chắn muốn chuyển sang tiếp tục quét Container [${containerToResume.name}] không?`,
+        confirmText: 'Chuyển sang Cont này',
+        cancelText: 'Hủy / Giữ nguyên',
+        onConfirm: performResume
+      });
+      return;
+    }
+
+    performResume();
+  };
 
   return (
     <Layout>
@@ -1557,7 +2877,123 @@ const CheckPalletV1View = () => {
         ═══════════════════════════════════════════════════════════════ */}
         {activeTab === 'scan' && (
           <>
-            {/* ─── CARD 1: THÔNG TIN ẢNH CHỤP / NGUỒN QUÉT ─── */}
+            {/* ─── THANH THÔNG TIN CONTAINER & ĐIỀU HƯỚNG PALLET ─── */}
+            <div style={{
+              backgroundColor: '#ffffff',
+              borderRadius: '14px',
+              padding: '12px 14px',
+              border: '1.5px solid #eadcc9',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.03)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
+                    backgroundColor: '#7b5233',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#ffffff'
+                  }}>
+                    <Boxes size={18} />
+                  </div>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: '900', color: '#3a2113' }}>
+                        {activeContainer?.name || 'Chưa đặt tên Container'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditContainerNameInput(activeContainer?.name || '');
+                          setIsEditContainerModalOpen(true);
+                        }}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: '#7b5233',
+                          cursor: 'pointer',
+                          padding: '2px',
+                          display: 'flex',
+                          alignItems: 'center'
+                        }}
+                        title="Đổi tên Container"
+                      >
+                        <Edit3 size={13} />
+                      </button>
+                    </div>
+                    <div style={{ fontSize: '10.5px', color: '#786556' }}>
+                      Mã: {activeContainer?.id || 'CONT-NEW'} • Đã đóng: <strong>{activeContainer?.pallets?.length || 0}</strong> Pallet
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <button
+                    type="button"
+                    onClick={handleFinishContainer}
+                    style={{
+                      border: 'none',
+                      backgroundColor: '#15803d',
+                      color: '#ffffff',
+                      padding: '6px 12px',
+                      borderRadius: '8px',
+                      fontSize: '11px',
+                      fontWeight: '800',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      boxShadow: '0 2px 6px rgba(21, 128, 61, 0.25)'
+                    }}
+                    title="Hoàn thành và chốt toàn bộ Container này"
+                  >
+                    <CheckCheck size={13} />
+                    <span>Hoàn thành Cont</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Thanh hiển thị tiến độ Pallet hiện tại */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                backgroundColor: '#faf7f2',
+                padding: '7px 10px',
+                borderRadius: '8px',
+                border: '1px solid #ede3d6',
+                fontSize: '11px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{
+                    padding: '2px 8px',
+                    borderRadius: '5px',
+                    backgroundColor: '#7b5233',
+                    color: '#ffffff',
+                    fontWeight: '900',
+                    fontSize: '11px',
+                    letterSpacing: '0.3px'
+                  }}>
+                    PALLET #{currentPalletIndex}
+                  </span>
+                  <span style={{ fontWeight: '700', color: '#5c3a21' }}>
+                    (Đang quét)
+                  </span>
+                </div>
+
+                <div style={{ color: '#786556', fontSize: '11px' }}>
+                  Đứng: <strong>{(standingData.skus || []).reduce((sum, s) => sum + (s.count || 1), 0)} SKU</strong> • Nóc: <strong>{(roofData.skus || []).reduce((sum, s) => sum + (s.count || 1), 0)} SKU</strong>
+                </div>
+              </div>
+            </div>
+
+            {/* ─── CARD 1: THÔNG TIN MÁY QUÉT SA 8972 ─── */}
             <div style={{
               backgroundColor: '#ffffff',
               borderRadius: '14px',
@@ -1583,8 +3019,8 @@ const CheckPalletV1View = () => {
                   alignItems: 'center',
                   gap: '6px'
                 }}>
-                  <Camera size={16} color="#7b5233" />
-                  <span>THÔNG TIN ĐỌC MÃ / MÁY ẢNH</span>
+                  <Barcode size={16} color="#7b5233" />
+                  <span>MÁY QUÉT SA 8972 • TTS v1.5.8</span>
                 </div>
 
                 <button
@@ -1663,274 +3099,205 @@ const CheckPalletV1View = () => {
                 }}
               />
 
-              {/* ── MÁY ẢNH QUÉT TRỰC TIẾP (ĐỒNG BỘ TÔNG MÀU BE/NÂU G7) ── */}
+              {/* ── BẢNG ĐIỀU KHIỂN & HUD MÁY QUÉT MÃ CODE SA 8972 (CHUYÊN BIỆT CHO SÚNG BẮN MÃ) ── */}
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+                backgroundColor: '#faf7f2',
+                padding: '12px',
+                borderRadius: '10px',
+                border: '1px solid #eadcc9'
+              }}>
+                <style>{`
+                  @keyframes saPulseGlow {
+                    0% { transform: scale(0.92); opacity: 0.8; box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.7); }
+                    70% { transform: scale(1.15); opacity: 1; box-shadow: 0 0 0 6px rgba(22, 163, 74, 0); }
+                    100% { transform: scale(0.92); opacity: 0.8; box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
+                  }
+                `}</style>
+
+                {/* Header trạng thái máy quét SA 8972 */}
                 <div style={{
                   display: 'flex',
-                  flexDirection: 'column',
-                  gap: '8px',
-                  backgroundColor: '#faf7f2',
-                  padding: '10px',
-                  borderRadius: '10px',
-                  border: '1px solid #eadcc9'
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '6px'
                 }}>
-                  {/* Thanh điều khiển Camera đồng bộ tone */}
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    fontSize: '11px'
-                  }}>
-                    <span style={{ fontWeight: '800', color: '#4e3629', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                      <Camera size={14} color="#7b5233" />
-                      Camera quét trực tiếp
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{
+                      display: 'inline-block',
+                      width: '10px',
+                      height: '10px',
+                      borderRadius: '50%',
+                      backgroundColor: '#16a34a',
+                      animation: 'saPulseGlow 1.8s infinite ease-in-out'
+                    }} />
+                    <span style={{
+                      fontSize: '12px',
+                      fontWeight: '800',
+                      color: '#15803d',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.3px'
+                    }}>
+                      MÁY QUÉT SA 8972: SẴN SÀNG NHẬN MÃ
                     </span>
-
-                    <div style={{ display: 'flex', gap: '6px' }}>
-                      {isCameraActive && (
-                        <button
-                          type="button"
-                          onClick={toggleTorch}
-                          style={{
-                            border: 'none',
-                            background: torchOn ? '#fef08a' : '#ede1cf',
-                            color: torchOn ? '#854d0e' : '#5c3a21',
-                            padding: '4px 8px',
-                            borderRadius: '6px',
-                            fontSize: '11px',
-                            fontWeight: '700',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          <Zap size={12} />
-                          <span>{torchOn ? 'Tắt Flash' : 'Bật Flash'}</span>
-                        </button>
-                      )}
-
-                      {!isCameraActive ? (
-                        <button
-                          type="button"
-                          onClick={startCamera}
-                          style={{
-                            backgroundColor: '#7b5233',
-                            color: '#ffffff',
-                            border: 'none',
-                            borderRadius: '6px',
-                            padding: '5px 12px',
-                            fontSize: '11px',
-                            fontWeight: '700',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          Mở Camera
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={stopCamera}
-                          style={{
-                            backgroundColor: '#dc2626',
-                            color: '#ffffff',
-                            border: 'none',
-                            borderRadius: '6px',
-                            padding: '5px 12px',
-                            fontSize: '11px',
-                            fontWeight: '700',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          Tắt Camera
-                        </button>
-                      )}
-                    </div>
                   </div>
 
-                  {/* Vùng Viewfinder hiển thị Camera */}
                   <div style={{
-                    position: 'relative',
-                    width: '100%',
-                    minHeight: isCameraActive ? '200px' : '84px',
-                    backgroundColor: '#26201a',
-                    borderRadius: '8px',
-                    overflow: 'hidden',
-                    display: 'flex',
-                    flexDirection: 'column',
+                    display: 'inline-flex',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    marginTop: '4px'
+                    gap: '4px',
+                    backgroundColor: '#ede7de',
+                    padding: '3px 8px',
+                    borderRadius: '5px',
+                    fontSize: '10px',
+                    fontWeight: '700',
+                    color: '#634735'
                   }}>
-                    <div 
-                      id="v1-camera-reader" 
-                      style={{ 
-                        width: '100%', 
-                        height: '100%', 
-                        display: isCameraActive ? 'block' : 'none' 
-                      }} 
-                    />
-                    <style>{`
-                      #v1-camera-reader {
-                        border: none !important;
-                      }
-                      #v1-camera-reader video {
-                        width: 100% !important;
-                        height: 100% !important;
-                        max-height: 280px !important;
-                        object-fit: cover !important;
-                        border-radius: 8px !important;
-                      }
-                      #v1-camera-reader img {
-                        display: none !important;
-                      }
-                    `}</style>
+                    <Zap size={11} color="#7b5233" />
+                    <span>Tự động nhận Enter</span>
+                  </div>
+                </div>
 
-                    {isCameraActive && (
+                {/* Thẻ hiển thị kết quả quét gần nhất (Live Scanned Display Card) */}
+                <div style={{
+                  backgroundColor: lastScannedDetail 
+                    ? (lastScannedDetail.status === 'success' ? '#f0fdf4' : '#fef2f2') 
+                    : '#ffffff',
+                  border: lastScannedDetail 
+                    ? (lastScannedDetail.status === 'success' ? '1.5px solid #86efac' : '1.5px solid #fca5a5') 
+                    : '1.5px dashed #d5c7b7',
+                  borderRadius: '9px',
+                  padding: '12px 14px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px',
+                  transition: 'all 0.2s ease',
+                  boxShadow: lastScannedDetail ? '0 3px 10px rgba(0,0,0,0.04)' : 'none'
+                }}>
+                  {lastScannedDetail ? (
+                    <>
                       <div style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        pointerEvents: 'none',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'center'
+                        justifyContent: 'space-between',
+                        borderBottom: '1px solid rgba(0,0,0,0.06)',
+                        paddingBottom: '5px'
                       }}>
-                        {/* Khung ngắm định vị mã vạch và tia quét laser */}
-                        <div style={{
-                          width: '84%',
-                          height: '58%',
-                          maxHeight: '135px',
-                          border: '2px solid rgba(255, 255, 255, 0.45)',
-                          borderRadius: '8px',
-                          position: 'relative',
-                          boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.28)'
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          fontSize: '11px',
+                          fontWeight: '800',
+                          color: lastScannedDetail.status === 'success' ? '#15803d' : '#b91c1c'
                         }}>
-                          {/* 4 góc viền vàng Gold Design System */}
-                          <div style={{ position: 'absolute', top: -2, left: -2, width: 14, height: 14, borderTop: '3px solid #d4af37', borderLeft: '3px solid #d4af37' }} />
-                          <div style={{ position: 'absolute', top: -2, right: -2, width: 14, height: 14, borderTop: '3px solid #d4af37', borderRight: '3px solid #d4af37' }} />
-                          <div style={{ position: 'absolute', bottom: -2, left: -2, width: 14, height: 14, borderBottom: '3px solid #d4af37', borderLeft: '3px solid #d4af37' }} />
-                          <div style={{ position: 'absolute', bottom: -2, right: -2, width: 14, height: 14, borderBottom: '3px solid #d4af37', borderRight: '3px solid #d4af37' }} />
-                          {/* Tia quét laser đỏ */}
-                          <div style={{
-                            position: 'absolute',
-                            left: 0,
-                            right: 0,
-                            top: '50%',
-                            height: '2px',
-                            background: 'linear-gradient(90deg, transparent, #ef4444, #f87171, #ef4444, transparent)',
-                            boxShadow: '0 0 6px #ef4444'
-                          }} />
+                          {lastScannedDetail.status === 'success' ? (
+                            <CheckCircle2 size={13} color="#15803d" />
+                          ) : (
+                            <XCircle size={13} color="#b91c1c" />
+                          )}
+                          {lastScannedDetail.title}
+                        </span>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '3px',
+                            fontSize: '10px',
+                            color: '#64748b',
+                            fontWeight: '600'
+                          }}>
+                            <Clock size={11} />
+                            {lastScannedDetail.time}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setLastScannedDetail(null)}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: '#94a3b8',
+                              cursor: 'pointer',
+                              padding: '2px',
+                              display: 'flex',
+                              alignItems: 'center'
+                            }}
+                            title="Xóa hiển thị mã này"
+                          >
+                            <X size={13} />
+                          </button>
                         </div>
                       </div>
-                    )}
 
-                    {/* Hiệu ứng chớp màn trập khi chụp ảnh tĩnh */}
-                    {isFlashAnimation && (
+                      {/* Mã lớn nổi bật */}
                       <div style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        backgroundColor: '#ffffff',
-                        opacity: 0.8,
-                        zIndex: 35,
-                        pointerEvents: 'none',
-                        transition: 'opacity 0.2s ease-out'
-                      }} />
-                    )}
+                        fontFamily: 'monospace',
+                        fontSize: '18px',
+                        fontWeight: '900',
+                        color: '#1e293b',
+                        letterSpacing: '0.8px',
+                        padding: '3px 0'
+                      }}>
+                        {lastScannedDetail.code}
+                      </div>
 
-                    {!isCameraActive && !cameraError && (
+                      {/* Phân loại & số lần quét */}
                       <div style={{
-                        color: '#c4b5a5',
-                        fontSize: '11px',
-                        textAlign: 'center',
-                        padding: '16px 12px',
                         display: 'flex',
-                        flexDirection: 'column',
                         alignItems: 'center',
-                        justifyContent: 'center',
                         gap: '6px',
-                        width: '100%'
-                      }}>
-                        <Camera size={26} color="#9c8777" />
-                        <span style={{ fontWeight: '600' }}>Camera đang tắt. Nhấn "Mở Camera" để quét mã</span>
-                      </div>
-                    )}
-
-                    {cameraError && (
-                      <div style={{
-                        color: '#f87171',
+                        flexWrap: 'wrap',
                         fontSize: '11px',
-                        textAlign: 'center',
-                        padding: '12px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: '8px'
+                        color: '#475569'
                       }}>
-                        <span>{cameraError}</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCameraError(null);
-                            startCamera();
-                          }}
-                          style={{
-                            backgroundColor: '#7b5233',
-                            color: '#ffffff',
-                            border: 'none',
-                            borderRadius: '6px',
-                            padding: '5px 14px',
-                            fontSize: '11px',
-                            fontWeight: '700',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          Thử Lại Mở Camera
-                        </button>
+                        <span style={{
+                          padding: '2px 7px',
+                          borderRadius: '4px',
+                          backgroundColor: lastScannedDetail.status === 'success' ? '#dcfce7' : '#fee2e2',
+                          color: lastScannedDetail.status === 'success' ? '#166534' : '#991b1b',
+                          fontWeight: '700',
+                          fontSize: '10px'
+                        }}>
+                          {lastScannedDetail.category === 'SKU' ? 'MÃ SẢN PHẨM' : lastScannedDetail.category === 'LPN' ? 'MÃ VẬN CHUYỂN' : 'TEM PALLET'}
+                        </span>
+                        {lastScannedDetail.count && (
+                          <span style={{ fontWeight: '700', color: '#7b5233' }}>
+                            • Đã ghi nhận: {lastScannedDetail.count} lần
+                          </span>
+                        )}
+                        {lastScannedDetail.standardCode && (
+                          <span style={{ color: '#b91c1c', fontWeight: '600' }}>
+                            (Mã chuẩn: {lastScannedDetail.standardCode})
+                          </span>
+                        )}
                       </div>
-                    )}
-                  </div>
-
-                  {/* Nút chụp ảnh tĩnh đặt bên ngoài khung ngắm (to tròn, chỉ icon Camera) */}
-                  {isCameraActive && (
+                    </>
+                  ) : (
                     <div style={{
                       display: 'flex',
-                      justifyContent: 'center',
+                      flexDirection: 'column',
                       alignItems: 'center',
-                      padding: '8px 0 2px 0'
+                      justifyContent: 'center',
+                      gap: '6px',
+                      padding: '10px 0',
+                      color: '#8c786a',
+                      textAlign: 'center'
                     }}>
-                      <button
-                        type="button"
-                        onClick={handleSnapshotScan}
-                        disabled={isCapturingSnapshot}
-                        title="Chụp ảnh quét mã"
-                        style={{
-                          width: '56px',
-                          height: '56px',
-                          borderRadius: '50%',
-                          backgroundColor: isCapturingSnapshot ? '#0369a1' : '#0284c7',
-                          border: '3.5px solid #bae6fd',
-                          color: '#ffffff',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          boxShadow: '0 4px 14px rgba(2, 132, 199, 0.45)',
-                          cursor: 'pointer',
-                          transition: 'all 0.15s ease',
-                          transform: isCapturingSnapshot ? 'scale(0.92)' : 'scale(1)',
-                          outline: 'none',
-                          padding: 0
-                        }}
-                      >
-                        <Camera size={28} color="#ffffff" strokeWidth={2.2} />
-                      </button>
+                      <ScanLine size={28} color="#7b5233" strokeWidth={1.8} />
+                      <span style={{ fontSize: '12px', fontWeight: '800', color: '#4a240e' }}>
+                        Sẵn sàng quét mã từ súng SA 8972
+                      </span>
+                      <span style={{ fontSize: '11px', color: '#8c786a', maxWidth: '280px' }}>
+                        Chĩa máy quét SA 8972 vào tem thùng/pallet và bấm cò. Mã sẽ được xử lý tức thì.
+                      </span>
                     </div>
                   )}
                 </div>
+              </div>
 
                 {/* Ô NHẬP MÃ THỦ CÔNG: Chỉ mở bàn phím ảo khi người dùng chủ động chạm vào ô text này */}
                 <div style={{
@@ -2097,7 +3464,7 @@ const CheckPalletV1View = () => {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: '6px',
+                    gap: '5px',
                     cursor: 'pointer',
                     backgroundColor: palletTab === 'roof' ? '#ffffff' : 'transparent',
                     color: palletTab === 'roof' ? '#4b301e' : '#7c6d5e',
@@ -2107,7 +3474,18 @@ const CheckPalletV1View = () => {
                 >
                   <Layers size={15} color={palletTab === 'roof' ? '#4b301e' : '#7c6d5e'} />
                   <span>Top nóc</span>
-                  {roofData.isSaved && (
+                  {roofData.skus.length === 0 && roofData.lpns.length === 0 ? (
+                    <span style={{
+                      fontSize: '9px',
+                      fontWeight: '700',
+                      backgroundColor: '#f1f5f9',
+                      color: '#64748b',
+                      padding: '1px 5px',
+                      borderRadius: '4px'
+                    }}>
+                      Không có (0 SKU • 0 LPN)
+                    </span>
+                  ) : (roofData.skus.length === 1 && (roofData.skus[0]?.count || 1) === 2 && roofData.lpns.length === 1) ? (
                     <span style={{
                       fontSize: '9px',
                       fontWeight: '800',
@@ -2116,7 +3494,18 @@ const CheckPalletV1View = () => {
                       padding: '1px 5px',
                       borderRadius: '4px'
                     }}>
-                      ✓ ĐÃ LƯU (ĐẠT)
+                      ✓ Đạt (1 SKU x2 • 1 LPN)
+                    </span>
+                  ) : (
+                    <span style={{
+                      fontSize: '9px',
+                      fontWeight: '800',
+                      backgroundColor: '#f59e0b',
+                      color: '#ffffff',
+                      padding: '1px 5px',
+                      borderRadius: '4px'
+                    }}>
+                      ⚠️ {roofData.skus.length === 1 ? `${roofData.skus[0]?.count || 1}/2 cái` : `${roofData.skus.length}/1 SKU`} • {roofData.lpns.length}/1 LPN
                     </span>
                   )}
                 </button>
@@ -2147,11 +3536,11 @@ const CheckPalletV1View = () => {
                     justifyContent: 'space-between',
                     flexShrink: 0
                   }}>
-                    <span style={{ fontSize: '0.73rem', fontWeight: '800', color: '#4E3629', textTransform: 'uppercase' }}>
-                      MÃ LPN
+                    <span style={{ fontSize: '0.73rem', fontWeight: '800', color: '#4E3629', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                      MÃ LPN {palletTab === 'roof' ? <span style={{ fontSize: '0.64rem', color: '#b45309', fontWeight: '900' }}>(1 MÃ x1)</span> : <span style={{ fontSize: '0.64rem', color: '#b45309', fontWeight: '900' }}>(1 MÃ x4)</span>}
                     </span>
                     <span style={{ fontSize: '0.67rem', color: '#7B5233', fontWeight: '700', backgroundColor: '#F4ECE1', padding: '1px 5px', borderRadius: '3px' }}>
-                      {currentTabState.lpns.length} mã
+                      {palletTab === 'roof' ? `${roofData.lpns?.length || 0}/1 LPN` : `${standingData.lpns?.length || 0}/4 LPN`}
                     </span>
                   </div>
 
@@ -2163,7 +3552,7 @@ const CheckPalletV1View = () => {
                     ) : (
                       currentTabState.lpns.map((itemLpn, idx) => (
                         <div
-                          key={idx}
+                          key={itemLpn.id || idx}
                           style={{
                             padding: '5px 8px',
                             borderRadius: '6px',
@@ -2176,36 +3565,40 @@ const CheckPalletV1View = () => {
                             minWidth: 0
                           }}
                         >
-                          <span style={{
-                            fontFamily: 'Consolas, monospace',
-                            fontSize: '0.82rem',
-                            fontWeight: '800',
-                            color: '#1F2937',
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis'
-                          }}>
-                            {itemLpn.code}
-                          </span>
-
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, overflow: 'hidden' }}>
                             <span style={{
-                              fontSize: '0.66rem',
-                              color: '#4B5563',
-                              fontWeight: '700',
-                              backgroundColor: '#FAF8F5',
-                              padding: '1px 6px',
-                              borderRadius: '4px',
-                              border: '1px solid #E5E7EB',
-                              whiteSpace: 'nowrap',
+                              fontSize: '0.65rem',
+                              fontWeight: '800',
+                              backgroundColor: '#7B5233',
+                              color: '#FFFFFF',
+                              padding: '1px 5px',
+                              borderRadius: '3px',
                               flexShrink: 0
                             }}>
-                              {itemLpn.count || 1} cái
+                              #{idx + 1}
                             </span>
+                            <span style={{
+                              fontFamily: 'Consolas, monospace',
+                              fontSize: '0.80rem',
+                              fontWeight: '800',
+                              color: '#1F2937',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis'
+                            }}>
+                              {itemLpn.code}
+                            </span>
+                          </div>
 
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            {itemLpn.time && (
+                              <span style={{ fontSize: '0.62rem', color: '#9CA3AF', whiteSpace: 'nowrap' }}>
+                                {itemLpn.time}
+                              </span>
+                            )}
                             <button
                               type="button"
-                              onClick={() => handleDeleteCodeItem('LPN', itemLpn.code)}
+                              onClick={() => handleDeleteCodeItem('LPN', itemLpn.id)}
                               style={{
                                 border: 'none',
                                 background: 'transparent',
@@ -2213,7 +3606,7 @@ const CheckPalletV1View = () => {
                                 padding: '1px',
                                 cursor: 'pointer'
                               }}
-                              title="Xóa mã này"
+                              title="Xóa lần quét này"
                             >
                               <X size={12} />
                             </button>
@@ -2243,11 +3636,11 @@ const CheckPalletV1View = () => {
                     justifyContent: 'space-between',
                     flexShrink: 0
                   }}>
-                    <span style={{ fontSize: '0.73rem', fontWeight: '800', color: '#4E3629', textTransform: 'uppercase' }}>
-                      MÃ SKU
+                    <span style={{ fontSize: '0.73rem', fontWeight: '800', color: '#4E3629', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                      MÃ SKU {palletTab === 'roof' ? <span style={{ fontSize: '0.64rem', color: '#b45309', fontWeight: '900' }}>(1 MÃ x2)</span> : <span style={{ fontSize: '0.64rem', color: '#b45309', fontWeight: '900' }}>(1 MÃ x8)</span>}
                     </span>
                     <span style={{ fontSize: '0.67rem', color: '#7B5233', fontWeight: '700', backgroundColor: '#F4ECE1', padding: '1px 5px', borderRadius: '3px' }}>
-                      {currentTabState.skus.length} mã
+                      {palletTab === 'roof' ? `${roofData.skus?.length || 0}/2 cái` : `${standingData.skus?.length || 0}/8 cái`}
                     </span>
                   </div>
 
@@ -2259,7 +3652,7 @@ const CheckPalletV1View = () => {
                     ) : (
                       currentTabState.skus.map((itemSku, idx) => (
                         <div
-                          key={idx}
+                          key={itemSku.id || idx}
                           style={{
                             padding: '5px 8px',
                             borderRadius: '6px',
@@ -2272,36 +3665,50 @@ const CheckPalletV1View = () => {
                             minWidth: 0
                           }}
                         >
-                          <span style={{
-                            fontFamily: 'Consolas, monospace',
-                            fontSize: '0.82rem',
-                            fontWeight: '800',
-                            color: '#1F2937',
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis'
-                          }}>
-                            {itemSku.code}
-                          </span>
-
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', minWidth: 0, overflow: 'hidden' }}>
                             <span style={{
-                              fontSize: '0.66rem',
-                              color: '#4B5563',
-                              fontWeight: '700',
-                              backgroundColor: '#FAF8F5',
-                              padding: '1px 6px',
-                              borderRadius: '4px',
-                              border: '1px solid #E5E7EB',
-                              whiteSpace: 'nowrap',
+                              fontSize: '0.65rem',
+                              fontWeight: '800',
+                              backgroundColor: '#7B5233',
+                              color: '#FFFFFF',
+                              padding: '1px 5px',
+                              borderRadius: '3px',
                               flexShrink: 0
                             }}>
-                              {itemSku.count || 1} cái
+                              #{idx + 1}
                             </span>
+                            <span style={{
+                              fontFamily: 'Consolas, monospace',
+                              fontSize: '0.80rem',
+                              fontWeight: '800',
+                              color: '#1F2937',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis'
+                            }}>
+                              {formatCabinetSeriesTag(itemSku.code) || itemSku.code}
+                            </span>
+                            {formatCabinetSeriesTag(itemSku.code) !== itemSku.code && (
+                              <span style={{
+                                fontSize: '0.65rem',
+                                color: '#6B7280',
+                                fontFamily: 'Consolas, monospace',
+                                whiteSpace: 'nowrap'
+                              }}>
+                                ({itemSku.code})
+                              </span>
+                            )}
+                          </div>
 
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            {itemSku.time && (
+                              <span style={{ fontSize: '0.62rem', color: '#9CA3AF', whiteSpace: 'nowrap' }}>
+                                {itemSku.time}
+                              </span>
+                            )}
                             <button
                               type="button"
-                              onClick={() => handleDeleteCodeItem('SKU', itemSku.code)}
+                              onClick={() => handleDeleteCodeItem('SKU', itemSku.id)}
                               style={{
                                 border: 'none',
                                 background: 'transparent',
@@ -2309,7 +3716,7 @@ const CheckPalletV1View = () => {
                                 padding: '1px',
                                 cursor: 'pointer'
                               }}
-                              title="Xóa mã này"
+                              title="Xóa lần quét này"
                             >
                               <X size={12} />
                             </button>
@@ -2320,6 +3727,72 @@ const CheckPalletV1View = () => {
                   </div>
                 </div>
               </div>
+
+              {/* THANH THAO TÁC & TRẠNG THÁI TOP NÓC KHI ĐANG XEM TAB TOP NÓC */}
+              {palletTab === 'roof' && (
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px',
+                  padding: '8px 10px',
+                  backgroundColor: '#fef7ee',
+                  borderRadius: '9px',
+                  border: '1px solid #eadcc9',
+                  marginTop: '2px'
+                }}>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}>
+                    <span style={{ fontSize: '11px', color: '#7b5233', fontWeight: '800' }}>
+                      QUY CHUẨN TOP NÓC:
+                    </span>
+                    {(roofData.skus.length > 0 || roofData.lpns.length > 0) && (
+                      <button
+                        type="button"
+                        onClick={handleClearRoofData}
+                        style={{
+                          border: '1px solid #fca5a5',
+                          background: '#fee2e2',
+                          color: '#b91c1c',
+                          borderRadius: '6px',
+                          padding: '3px 8px',
+                          fontSize: '11px',
+                          fontWeight: '800',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '3px'
+                        }}
+                      >
+                        <Trash2 size={11} />
+                        <span>Xóa Top Nóc (Không có nóc)</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div style={{
+                    fontSize: '11px',
+                    color: '#634735',
+                    lineHeight: '1.4'
+                  }}>
+                    {roofData.skus.length === 0 && roofData.lpns.length === 0 ? (
+                      <span style={{ color: '#64748b' }}>
+                        • Pallet này hiện <strong>không có Tủ Nóc</strong> (0 SKU • 0 LPN). Cả SKU và LPN đều không có là hoàn toàn hợp lệ, bạn có thể bấm <strong>"Pallet Tiếp Theo"</strong> luôn.
+                      </span>
+                    ) : (roofData.skus.length === 1 && (roofData.skus[0]?.count || 1) === 2 && roofData.lpns.length === 1) ? (
+                      <span style={{ color: '#15803d', fontWeight: '700' }}>
+                        ✓ Top Nóc ĐẠT CHUẨN: Đã đủ 1 mã SKU ({roofData.skus[0]?.code} x2 cái) và 1 LPN ({roofData.lpns[0]?.code}).
+                      </span>
+                    ) : (
+                      <span style={{ color: '#b45309', fontWeight: '700' }}>
+                        ⚠️ Đang quét dở: Cần đúng <strong>1 mã SKU (số lượng x2 cái)</strong> và <strong>1 mã LPN</strong> (Hiện có: {roofData.skus.length === 1 ? `${roofData.skus[0]?.count || 1}/2 cái` : `${roofData.skus.length}/1 SKU`}, {roofData.lpns.length}/1 LPN).
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
           </>
@@ -2343,78 +3816,61 @@ const CheckPalletV1View = () => {
             zIndex: 990,
             boxSizing: 'border-box'
           }}>
-            {/* Nút HỦY (đồng bộ giao diện, chiều cao, kiểu chữ với nút Lưu) */}
+            {/* Nút HỦY dữ liệu Pallet hiện tại */}
             <button
               type="button"
               onClick={handleResetActiveTab}
-              disabled={currentTabState.lpns.length === 0 && currentTabState.skus.length === 0}
+              disabled={(standingData.skus?.length === 0 && standingData.lpns?.length === 0) && (roofData.skus?.length === 0 && roofData.lpns?.length === 0)}
               style={{
-                flex: 1,
-                height: '44px',
+                width: '46px',
+                height: '46px',
                 backgroundColor: '#FAF5EE',
-                color: (currentTabState.lpns.length === 0 && currentTabState.skus.length === 0) ? '#B5A698' : '#5C3A21',
-                border: (currentTabState.lpns.length === 0 && currentTabState.skus.length === 0) ? '1.5px solid #EADCC9' : '1.5px solid #D5C7B7',
+                color: '#5C3A21',
+                border: '1.5px solid #D5C7B7',
                 borderRadius: '12px',
-                padding: '0 12px',
-                fontSize: '0.88rem',
-                fontWeight: '700',
+                cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: '6px',
-                cursor: (currentTabState.lpns.length === 0 && currentTabState.skus.length === 0) ? 'not-allowed' : 'pointer',
-                opacity: (currentTabState.lpns.length === 0 && currentTabState.skus.length === 0) ? 0.6 : 1,
+                boxShadow: '0 2px 6px rgba(0,0,0,0.03)',
+                flexShrink: 0
+              }}
+              title="Hủy dữ liệu quét của Pallet này"
+            >
+              <RotateCcw size={17} color="#7B5233" />
+            </button>
+
+            {/* Nút PALLET TIẾP THEO (NEXT PALLET) */}
+            <button
+              type="button"
+              onClick={handleNextPallet}
+              style={{
+                flex: 1,
+                height: '46px',
+                background: 'linear-gradient(135deg, #4A2C1D 0%, #7B5233 100%)',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '12px',
+                padding: '0 16px',
+                fontSize: '0.92rem',
+                fontWeight: '900',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                cursor: 'pointer',
+                boxShadow: '0 4px 14px rgba(75, 48, 30, 0.3)',
                 transition: 'all 0.15s ease'
               }}
             >
-              <XCircle size={16} color={(currentTabState.lpns.length === 0 && currentTabState.skus.length === 0) ? '#B5A698' : '#7B5233'} />
-              <span>Hủy</span>
-            </button>
-
-            {/* Nút LƯU PALLET ĐỨNG / LƯU TOP NÓC (đồng bộ giao diện, chiều cao, kiểu chữ) */}
-            <button
-              type="button"
-              onClick={handleSaveActiveTab}
-              disabled={currentTabState.lpns.length === 0 && currentTabState.skus.length === 0}
-              style={{
-                flex: 1.8,
-                height: '44px',
-                background: (currentTabState.lpns.length === 0 && currentTabState.skus.length === 0) 
-                  ? '#E5DDD3' 
-                  : (currentTabState.isSaved
-                    ? 'linear-gradient(135deg, #15803d 0%, #16a34a 100%)'
-                    : 'linear-gradient(135deg, #4A2C1D 0%, #7B5233 100%)'),
-                color: (currentTabState.lpns.length === 0 && currentTabState.skus.length === 0) ? '#A39282' : '#ffffff',
-                border: 'none',
-                borderRadius: '12px',
-                padding: '0 14px',
-                fontSize: '0.88rem',
-                fontWeight: '800',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '7px',
-                cursor: (currentTabState.lpns.length === 0 && currentTabState.skus.length === 0) ? 'not-allowed' : 'pointer',
-                boxShadow: (currentTabState.lpns.length === 0 && currentTabState.skus.length === 0) 
-                  ? 'none' 
-                  : (currentTabState.isSaved 
-                    ? '0 4px 12px rgba(22, 163, 74, 0.28)' 
-                    : '0 4px 12px rgba(75, 48, 30, 0.25)'),
-                transition: 'all 0.2s ease'
-              }}
-            >
-              {currentTabState.isSaved ? <CheckCircle2 size={16} /> : <Save size={16} />}
-              <span>
-                {currentTabState.isSaved
-                  ? (palletTab === 'standing' ? '✓ Đã Lưu Đạt Chuẩn (Pallet Đứng)' : '✓ Đã Lưu Đạt Chuẩn (Top Nóc)')
-                  : (palletTab === 'standing' ? 'Lưu Pallet Đứng' : 'Lưu Top Nóc')}
-              </span>
+              <span>Pallet Tiếp Theo #{currentPalletIndex + 1}</span>
+              <ChevronRight size={18} strokeWidth={2.5} />
             </button>
           </div>
         )}
 
         {/* ═══════════════════════════════════════════════════════════════
-            MÀN HÌNH 2: LỊCH SỬ (HISTORY)
+            MÀN HÌNH 2: LỊCH SỬ CONTAINER & PALLET (3-TIER HIERARCHY)
         ═══════════════════════════════════════════════════════════════ */}
         {activeTab === 'history' && (
           <div style={{
@@ -2425,147 +3881,295 @@ const CheckPalletV1View = () => {
             <div style={{
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'space-between'
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '6px'
             }}>
-              <span style={{ fontSize: '12px', fontWeight: '800', color: '#5c3a21', textTransform: 'uppercase' }}>
-                Lịch sử kiểm tra ({historyList.length} lượt)
+              <span style={{ fontSize: '13px', fontWeight: '900', color: '#4a240e', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Boxes size={16} color="#7b5233" />
+                <span>Lịch sử Container ({historyContainers.length})</span>
+                <span style={{
+                  fontSize: '9.5px',
+                  fontWeight: '800',
+                  color: '#15803d',
+                  backgroundColor: '#dcfce7',
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '3px'
+                }}>
+                  <Database size={10} />
+                  SQL Server
+                </span>
               </span>
 
-              {historyList.length > 0 && (
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={fetchContainersFromDb}
+                  disabled={isLoadingDb}
+                  style={{
+                    border: '1px solid #ebdccb',
+                    backgroundColor: '#FAF5EE',
+                    color: '#7b5233',
+                    padding: '5px 8px',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontWeight: '800',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    cursor: 'pointer'
+                  }}
+                  title="Tải lại từ Database"
+                >
+                  <RefreshCw size={12} className={isLoadingDb ? 'spin' : ''} />
+                  <span>{isLoadingDb ? 'Đang nạp...' : 'Đồng bộ'}</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => {
-                    setConfirmModal({
-                      isOpen: true,
-                      title: 'Xóa toàn bộ lịch sử?',
-                      message: 'Toàn bộ danh sách lịch sử kiểm tra Pallet v1 trên thiết bị này sẽ bị xóa. Bạn có chắc chắn không?',
-                      onConfirm: () => {
-                        setHistoryList([]);
-                        localStorage.removeItem('g7_pallet_v1_history');
-                      }
-                    });
+                    setContainerNameInput('');
+                    setIsStartContainerModalOpen(true);
                   }}
                   style={{
                     border: 'none',
-                    background: '#fee2e2',
-                    color: '#b91c1c',
-                    padding: '4px 8px',
+                    background: '#7b5233',
+                    color: '#ffffff',
+                    padding: '5px 10px',
                     borderRadius: '6px',
                     fontSize: '11px',
-                    fontWeight: '700',
+                    fontWeight: '800',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '4px',
                     cursor: 'pointer'
                   }}
                 >
-                  <Trash2 size={12} />
-                  <span>Xóa lịch sử</span>
+                  <Plus size={13} />
+                  <span>Tạo Cont mới</span>
                 </button>
-              )}
+
+                {historyContainers.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConfirmModal({
+                        isOpen: true,
+                        title: 'Xóa toàn bộ lịch sử?',
+                        message: 'Toàn bộ danh sách lịch sử Container và Pallet trên thiết bị này sẽ bị xóa. Bạn có chắc chắn không?',
+                        onConfirm: () => {
+                          setHistoryContainers([]);
+                          localStorage.removeItem('g7_pallet_v1_containers');
+                        }
+                      });
+                    }}
+                    style={{
+                      border: 'none',
+                      background: '#fee2e2',
+                      color: '#b91c1c',
+                      padding: '5px 8px',
+                      borderRadius: '6px',
+                      fontSize: '11px',
+                      fontWeight: '700',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                )}
+              </div>
             </div>
 
-            {historyList.length === 0 ? (
+            {historyContainers.length === 0 ? (
               <div style={{
                 backgroundColor: '#ffffff',
-                borderRadius: '12px',
+                borderRadius: '14px',
                 padding: '40px 20px',
                 textAlign: 'center',
                 color: '#94a3b8',
-                border: '1px dashed #d1c7bd',
+                border: '1.5px dashed #d5c7b7',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
                 gap: '8px'
               }}>
-                <History size={32} color="#cbd5e1" />
-                <span style={{ fontSize: '13px', fontWeight: '700', color: '#64748b' }}>
-                  Chưa có lượt lưu nào
+                <Boxes size={36} color="#cbd5e1" />
+                <span style={{ fontSize: '13.5px', fontWeight: '800', color: '#5c3a21' }}>
+                  Chưa có Container nào trong Lịch sử
                 </span>
-                <span style={{ fontSize: '11px' }}>
-                  Khi quét mã ở tab Pallet đứng hoặc Top nóc và bấm "Lưu", phiếu kiểm tra sẽ hiển thị tại đây.
+                <span style={{ fontSize: '11.5px', color: '#8c786a', maxWidth: '320px' }}>
+                  Khi quét các Pallet và bấm "Hoàn thành Container", hồ sơ Container kèm đầy đủ các Pallet, mã SKU và LPN sẽ hiển thị tại đây.
                 </span>
               </div>
             ) : (
-              historyList.map((item, idx) => (
-                <div
-                  key={item.id || idx}
-                  onClick={() => setSelectedHistoryItem(item)}
-                  style={{
-                    backgroundColor: '#ffffff',
-                    borderRadius: '12px',
-                    padding: '12px',
-                    border: '1px solid #e5dcce',
-                    boxShadow: '0 2px 6px rgba(0,0,0,0.03)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '8px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ fontSize: '13px', fontWeight: '800', color: '#2d1810', fontFamily: 'Consolas, monospace' }}>
-                        {item.id}
-                      </span>
-                      <span style={{ fontSize: '12px', fontWeight: '700', color: '#5c3a21' }}>
-                        - {item.tabTitle || (item.tabType === 'standing' ? 'Pallet đứng' : 'Top nóc')}
-                      </span>
-                    </div>
+              historyContainers.map((cont, cIdx) => {
+                const pallets = cont.pallets || [];
+                const validation = cont.auditResult || validateContainerRules(pallets);
+                let totalBoxes = 0;
+                let totalScans = 0;
+                pallets.forEach(p => {
+                  totalScans += (p.totalScans || 0);
+                  const stCount = (p.standing?.skus || []).length;
+                  const rfCount = (p.roof?.skus || []).length;
+                  totalBoxes += Math.round((stCount + rfCount) / 2) || (p.standing?.lpns?.length + p.roof?.lpns?.length) || 5;
+                });
 
-                    <span style={{
-                      fontSize: '10px',
-                      fontWeight: '800',
-                      color: '#059669',
-                      backgroundColor: '#d1fae5',
-                      padding: '2px 6px',
-                      borderRadius: '4px'
+                return (
+                  <div
+                    key={cont.id || cIdx}
+                    onClick={() => {
+                      setSelectedHistoryContainer(cont);
+                      setExpandedPalletIndex(null);
+                    }}
+                    style={{
+                      backgroundColor: validation.isValid ? '#ffffff' : '#fffbfa',
+                      borderRadius: '14px',
+                      padding: '14px',
+                      border: validation.isValid ? '1.5px solid #eadcc9' : '2px solid #ef4444',
+                      boxShadow: validation.isValid ? '0 3px 10px rgba(0,0,0,0.03)' : '0 3px 12px rgba(239, 68, 68, 0.15)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '10px',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    {/* Header Container */}
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      borderBottom: '1px solid #f3ece2',
+                      paddingBottom: '8px'
                     }}>
-                      ĐẠT CHUẨN
-                    </span>
-                  </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '8px',
+                          backgroundColor: validation.isValid ? '#7b5233' : '#dc2626',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#ffffff'
+                        }}>
+                          <Boxes size={18} />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '14px', fontWeight: '900', color: '#2d1810' }}>
+                            {cont.name}
+                          </div>
+                          <div style={{ fontSize: '10.5px', color: '#786556', fontFamily: 'Consolas, monospace' }}>
+                            {cont.id}
+                          </div>
+                        </div>
+                      </div>
 
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: '6px',
-                    fontSize: '11px',
-                    backgroundColor: '#f9f6f0',
-                    padding: '8px',
-                    borderRadius: '8px'
-                  }}>
-                    <div>
-                      <span style={{ color: '#64748b' }}>LPN ({item.lpns?.length || 0}): </span>
-                      <strong style={{ color: '#1e3a8a' }}>{item.standardLpn || 'Không có'}</strong>
+                      {validation.isValid ? (
+                        <span style={{
+                          fontSize: '10px',
+                          fontWeight: '800',
+                          color: '#15803d',
+                          backgroundColor: '#dcfce7',
+                          padding: '3px 8px',
+                          borderRadius: '5px'
+                        }}>
+                          ✓ ĐẠT CHUẨN CONTAINER
+                        </span>
+                      ) : (
+                        <span style={{
+                          fontSize: '10px',
+                          fontWeight: '800',
+                          color: '#b91c1c',
+                          backgroundColor: '#fee2e2',
+                          border: '1px solid #fca5a5',
+                          padding: '3px 8px',
+                          borderRadius: '5px'
+                        }}>
+                          ❌ VI PHẠM ({[
+                            validation.palletErrors?.length > 0 ? `${validation.palletErrors.length} Pallet thiếu` : '',
+                            validation.oddTopLpnErrors?.length > 0 ? `${validation.oddTopLpnErrors.length} LPN nóc lẻ` : ''
+                          ].filter(Boolean).join(' • ')})
+                        </span>
+                      )}
                     </div>
-                    <div>
-                      <span style={{ color: '#64748b' }}>SKU ({item.skus?.length || 0}): </span>
-                      <strong style={{ color: '#9a3412' }}>{item.standardSku || 'Không có'}</strong>
-                    </div>
-                  </div>
 
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    fontSize: '10px',
-                    color: '#8c7664'
-                  }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Clock size={12} />
-                      {item.timestamp}
-                    </span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <User size={12} />
-                      {item.inspector || 'Nguyễn A'}
-                    </span>
+                    {/* Thống kê Container */}
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr 1fr',
+                      gap: '6px',
+                      backgroundColor: '#faf7f2',
+                      padding: '8px 10px',
+                      borderRadius: '9px',
+                      fontSize: '11px',
+                      textAlign: 'center'
+                    }}>
+                      <div>
+                        <div style={{ color: '#8c786a', fontSize: '10px' }}>Tổng Pallet</div>
+                        <strong style={{ color: '#7b5233', fontSize: '13px' }}>{pallets.length}</strong>
+                      </div>
+                      <div style={{ borderLeft: '1px solid #eadcc9', borderRight: '1px solid #eadcc9' }}>
+                        <div style={{ color: '#8c786a', fontSize: '10px' }}>Ước tính Kiện</div>
+                        <strong style={{ color: '#15803d', fontSize: '13px' }}>{totalBoxes}</strong>
+                      </div>
+                      <div>
+                        <div style={{ color: '#8c786a', fontSize: '10px' }}>Lần Quét Mã</div>
+                        <strong style={{ color: '#2563eb', fontSize: '13px' }}>{totalScans}</strong>
+                      </div>
+                    </div>
+
+                    {/* Footer info: Thời gian & Người kiểm tra */}
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      fontSize: '10.5px',
+                      color: '#8c7664'
+                    }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Clock size={12} />
+                        {cont.completedAt || cont.createdAt}
+                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleResumeContainer(cont);
+                          }}
+                          style={{
+                            border: '1px solid #ebdccb',
+                            backgroundColor: '#FAF5EE',
+                            color: '#7b5233',
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            fontSize: '11px',
+                            fontWeight: '800',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            cursor: 'pointer'
+                          }}
+                          title="Tiếp tục quét Container này"
+                        >
+                          <Play size={10} fill="#7b5233" />
+                          <span>Quét tiếp</span>
+                        </button>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '2px', fontWeight: '700', color: '#7b5233' }}>
+                          <span>Xem {pallets.length} Pallet</span>
+                          <ChevronRight size={14} />
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         )}
@@ -3363,6 +4967,972 @@ const CheckPalletV1View = () => {
         );
       })()}
 
+      {/* ═══════════════════════════════════════════════════════════════
+          MODAL 1: BẮT BUỘC NHẬP TÊN CONTAINER KHI BẮT ĐẦU PHIÊN QUÉT
+      ═══════════════════════════════════════════════════════════════ */}
+      {isStartContainerModalOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(3px)',
+          WebkitBackdropFilter: 'blur(3px)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '16px'
+        }}>
+          <div style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '18px',
+            maxWidth: '380px',
+            width: '100%',
+            padding: '20px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '14px',
+            boxShadow: '0 25px 45px -12px rgba(0,0,0,0.35)',
+            border: '1.5px solid #eadcc9'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '8px',
+                backgroundColor: '#7b5233',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#ffffff'
+              }}>
+                <Boxes size={18} />
+              </div>
+              <div>
+                <div style={{ fontSize: '15px', fontWeight: '900', color: '#2d1810' }}>
+                  BẮT ĐẦU CONTAINER MỚI
+                </div>
+                <div style={{ fontSize: '11px', color: '#786556' }}>
+                  Nhập mã hoặc tên Container để gom Pallet
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '12px', fontWeight: '800', color: '#4a240e' }}>
+                TÊN CONTAINER <span style={{ color: '#ef4444' }}>*</span>
+              </label>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <input
+                  ref={containerInputRef}
+                  type="text"
+                  value={containerNameInput}
+                  onChange={(e) => setContainerNameInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleStartNewContainer(containerNameInput);
+                    }
+                  }}
+                  autoFocus
+                  placeholder="Ví dụ: CONT-01, CONT-02..."
+                  style={{
+                    flex: 1,
+                    padding: '12px 14px',
+                    borderRadius: '10px',
+                    border: '2px solid #7b5233',
+                    fontSize: '15px',
+                    fontWeight: '800',
+                    color: '#2d1810',
+                    backgroundColor: '#ffffff',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                    boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.06)'
+                  }}
+                />
+                {containerNameInput && (
+                  <button
+                    type="button"
+                    onClick={() => setContainerNameInput('')}
+                    style={{
+                      border: '1px solid #e2e8f0',
+                      backgroundColor: '#f1f5f9',
+                      color: '#64748b',
+                      borderRadius: '8px',
+                      padding: '0 12px',
+                      fontSize: '12px',
+                      fontWeight: '800',
+                      cursor: 'pointer'
+                    }}
+                    title="Xóa nhanh"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+              <span style={{ fontSize: '11px', color: '#8c786a' }}>
+                Gợi ý: CONT-01, CONT-02, hoặc số seal/vận đơn thực tế
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+              {activeContainer && (
+                <button
+                  type="button"
+                  onClick={() => setIsStartContainerModalOpen(false)}
+                  style={{
+                    flex: 1,
+                    height: '42px',
+                    border: '1.5px solid #d5c7b7',
+                    backgroundColor: '#ffffff',
+                    color: '#786556',
+                    borderRadius: '10px',
+                    fontWeight: '700',
+                    fontSize: '12px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Quay lại
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => handleStartNewContainer(containerNameInput)}
+                style={{
+                  flex: 2,
+                  height: '42px',
+                  border: 'none',
+                  backgroundColor: '#7b5233',
+                  color: '#ffffff',
+                  borderRadius: '10px',
+                  fontWeight: '900',
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(123, 82, 51, 0.3)'
+                }}
+              >
+                Bắt đầu quét Container ➔
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════
+          MODAL 2: ĐỔI TÊN CONTAINER ĐANG QUÉT
+      ═══════════════════════════════════════════════════════════════ */}
+      {isEditContainerModalOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(3px)',
+          WebkitBackdropFilter: 'blur(3px)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '16px'
+        }}>
+          <div style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '18px',
+            maxWidth: '380px',
+            width: '100%',
+            padding: '20px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '14px',
+            boxShadow: '0 25px 45px -12px rgba(0,0,0,0.35)',
+            border: '1.5px solid #eadcc9'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '8px',
+                  backgroundColor: '#7b5233',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#ffffff'
+                }}>
+                  <Edit3 size={16} />
+                </div>
+                <div style={{ fontSize: '15px', fontWeight: '900', color: '#2d1810' }}>
+                  ĐỔI TÊN CONTAINER
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsEditContainerModalOpen(false)}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  color: '#94a3b8',
+                  padding: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <input
+                  type="text"
+                  value={editContainerNameInput}
+                  onChange={(e) => setEditContainerNameInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleUpdateContainerName(editContainerNameInput);
+                    }
+                  }}
+                  autoFocus
+                  placeholder="Nhập tên mới..."
+                  style={{
+                    flex: 1,
+                    padding: '12px 14px',
+                    borderRadius: '10px',
+                    border: '2px solid #7b5233',
+                    fontSize: '15px',
+                    fontWeight: '800',
+                    color: '#2d1810',
+                    backgroundColor: '#ffffff',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                    boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.06)'
+                  }}
+                />
+                {editContainerNameInput && (
+                  <button
+                    type="button"
+                    onClick={() => setEditContainerNameInput('')}
+                    style={{
+                      border: '1px solid #e2e8f0',
+                      backgroundColor: '#f1f5f9',
+                      color: '#64748b',
+                      borderRadius: '8px',
+                      padding: '0 12px',
+                      fontSize: '12px',
+                      fontWeight: '800',
+                      cursor: 'pointer'
+                    }}
+                    title="Xóa nhanh"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '6px' }}>
+              <button
+                type="button"
+                onClick={() => setIsEditContainerModalOpen(false)}
+                style={{
+                  padding: '9px 16px',
+                  borderRadius: '8px',
+                  border: '1px solid #d5c7b7',
+                  backgroundColor: '#ffffff',
+                  color: '#64748b',
+                  fontSize: '13px',
+                  fontWeight: '700',
+                  cursor: 'pointer'
+                }}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={() => handleUpdateContainerName(editContainerNameInput)}
+                style={{
+                  padding: '9px 20px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  backgroundColor: '#7b5233',
+                  color: '#ffffff',
+                  fontSize: '13px',
+                  fontWeight: '800',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 6px rgba(123, 82, 51, 0.25)'
+                }}
+              >
+                Lưu tên
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════
+          MODAL 3: XEM CHI TIẾT CONTAINER TRONG LỊCH SỬ (CẤP 2 & 3)
+      ═══════════════════════════════════════════════════════════════ */}
+      {selectedHistoryContainer && (
+        <div
+          onClick={() => setSelectedHistoryContainer(null)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.6)',
+            backdropFilter: 'blur(3px)',
+            WebkitBackdropFilter: 'blur(3px)',
+            zIndex: 9998,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: '#ffffff',
+              borderRadius: '18px',
+              maxWidth: '460px',
+              width: '100%',
+              maxHeight: '88vh',
+              overflowY: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 20px 35px -10px rgba(0,0,0,0.3)',
+              border: '1.5px solid #ebdccb'
+            }}
+          >
+            {/* Header Modal Container */}
+            <div style={{
+              padding: '14px 18px',
+              borderBottom: '1px solid #ebdccb',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              backgroundColor: '#faf7f2',
+              position: 'sticky',
+              top: 0,
+              zIndex: 10
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '8px',
+                  backgroundColor: '#7b5233',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#ffffff'
+                }}>
+                  <Boxes size={18} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '15px', fontWeight: '900', color: '#2d1810' }}>
+                    {selectedHistoryContainer.name}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#786556', fontFamily: 'Consolas, monospace' }}>
+                    {selectedHistoryContainer.id} • {selectedHistoryContainer.pallets?.length || 0} Pallet
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => handleResumeContainer(selectedHistoryContainer)}
+                  style={{
+                    border: 'none',
+                    backgroundColor: '#7b5233',
+                    color: '#ffffff',
+                    cursor: 'pointer',
+                    padding: '5px 11px',
+                    borderRadius: '7px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    fontSize: '11px',
+                    fontWeight: '800',
+                    boxShadow: '0 2px 6px rgba(123, 82, 51, 0.25)'
+                  }}
+                  title="Tiếp tục quét thêm Pallet cho Container này"
+                >
+                  <Play size={12} fill="#ffffff" />
+                  <span>Tiếp tục quét</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handlePrintContainerSummary(selectedHistoryContainer)}
+                  style={{
+                    border: '1px solid #ebdccb',
+                    backgroundColor: '#ffffff',
+                    color: '#15803d',
+                    cursor: 'pointer',
+                    padding: '5px 9px',
+                    borderRadius: '7px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    fontSize: '11px',
+                    fontWeight: '800'
+                  }}
+                  title="In phiếu tổng hợp Container khổ 56mm"
+                >
+                  <Printer size={13} color="#15803d" />
+                  <span>In Cont</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleDeleteContainer(selectedHistoryContainer.id, selectedHistoryContainer.name)}
+                  style={{
+                    border: '1px solid #fecaca',
+                    backgroundColor: '#fee2e2',
+                    color: '#b91c1c',
+                    cursor: 'pointer',
+                    padding: '5px 8px',
+                    borderRadius: '7px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '3px',
+                    fontSize: '11px',
+                    fontWeight: '800'
+                  }}
+                  title="Xóa Container này khỏi Database"
+                >
+                  <Trash2 size={13} />
+                  <span>Xóa</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedHistoryContainer(null)}
+                  style={{
+                    border: 'none',
+                    backgroundColor: 'transparent',
+                    color: '#64748b',
+                    cursor: 'pointer',
+                    padding: '4px',
+                    display: 'flex',
+                    alignItems: 'center'
+                  }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Body: Danh sách tất cả Pallet trong Container (Cấp 2 & 3) */}
+            <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {(() => {
+                const validation = selectedHistoryContainer.auditResult || validateContainerRules(selectedHistoryContainer.pallets || []);
+                return (
+                  <>
+                    {/* KHỐI BÁO CÁO KIỂM ĐỊNH TIÊU CHUẨN CONTAINER */}
+                    <div style={{
+                      backgroundColor: validation.isValid ? '#f0fdf4' : '#fef2f2',
+                      borderRadius: '12px',
+                      border: validation.isValid ? '1.5px solid #86efac' : '1.5px solid #f87171',
+                      padding: '12px 14px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                          {validation.isValid ? (
+                            <CheckCircle2 size={18} color="#15803d" />
+                          ) : (
+                            <AlertTriangle size={18} color="#dc2626" />
+                          )}
+                          <span style={{
+                            fontSize: '12.5px',
+                            fontWeight: '900',
+                            color: validation.isValid ? '#166534' : '#991b1b',
+                            textTransform: 'uppercase'
+                          }}>
+                            {validation.isValid
+                              ? '✓ CONTAINER ĐẠT TIÊU CHUẨN XUẤT KHẨU'
+                              : '❌ PHÁT HIỆN LỖI VI PHẠM TIÊU CHUẨN CONTAINER'}
+                          </span>
+                        </div>
+                        <span style={{
+                          fontSize: '10.5px',
+                          fontWeight: '800',
+                          color: validation.isValid ? '#15803d' : '#b91c1c',
+                          backgroundColor: validation.isValid ? '#dcfce7' : '#fee2e2',
+                          padding: '2px 7px',
+                          borderRadius: '5px'
+                        }}>
+                          {validation.isValid ? '100% HỢP LỆ' : 'BÁO ĐỎ'}
+                        </span>
+                      </div>
+
+                      {!validation.isValid && (
+                        <div style={{
+                          fontSize: '11px',
+                          color: '#7f1d1d',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '5px',
+                          paddingTop: '6px',
+                          borderTop: '1px dashed #fca5a5'
+                        }}>
+                          {validation.oddTopLpnErrors.length > 0 && (
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '5px' }}>
+                              <span style={{ fontWeight: '800', color: '#dc2626' }}>• Lỗi Top Nóc số lẻ:</span>
+                              <span>
+                                {validation.oddTopLpnErrors.map(e => `Mã [${e.lpnCode}] có ${e.count} kiện lẻ trên Pallet #${e.palletIndices.join(', #')}`).join('; ')}
+                              </span>
+                            </div>
+                          )}
+                          {validation.palletErrors.length > 0 && (
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '5px' }}>
+                              <span style={{ fontWeight: '800', color: '#dc2626' }}>• Lỗi Pallet thiếu mã:</span>
+                              <span>
+                                {validation.palletErrors.map(e => `Pallet #${e.palletIndex} (${e.details})`).join('; ')}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* BẢNG KIỂM TRA KIỆN TOP NÓC TOÀN CONTAINER (QUY CHUẨN SỐ CHẴN) */}
+                    <div style={{
+                      backgroundColor: '#faf7f2',
+                      borderRadius: '12px',
+                      border: '1px solid #eadcc9',
+                      padding: '12px 14px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={{ fontSize: '11.5px', fontWeight: '800', color: '#4a240e', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          <Layers size={14} color="#7b5233" />
+                          KIỂM TRA KIỆN TOP NÓC TOÀN CONT (SỐ CHẴN)
+                        </span>
+                        <span style={{ fontSize: '10.5px', color: '#786556' }}>
+                          Tổng mã nóc: <strong>{Object.keys(validation.topLpnGroup || {}).length}</strong>
+                        </span>
+                      </div>
+
+                      {Object.keys(validation.topLpnGroup || {}).length === 0 ? (
+                        <div style={{
+                          fontSize: '11px',
+                          color: '#64748b',
+                          fontStyle: 'italic',
+                          backgroundColor: '#f8fafc',
+                          padding: '7px 10px',
+                          borderRadius: '6px',
+                          border: '1px dashed #cbd5e1'
+                        }}>
+                          Container không có Kiện Top Nóc nào (100% là Pallet 4 kiện đứng)
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          {Object.entries(validation.topLpnGroup || {}).map(([lpnCode, info], idx) => {
+                            const isEven = info.count % 2 === 0;
+                            return (
+                              <div
+                                key={idx}
+                                style={{
+                                  backgroundColor: isEven ? '#ffffff' : '#fef2f2',
+                                  borderRadius: '8px',
+                                  border: isEven ? '1px solid #e2e8f0' : '1.5px solid #f87171',
+                                  padding: '7px 10px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  gap: '8px',
+                                  fontSize: '11px'
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <span style={{
+                                    fontFamily: 'Consolas, monospace',
+                                    fontWeight: '800',
+                                    color: isEven ? '#1e40af' : '#b91c1c'
+                                  }}>
+                                    {lpnCode}
+                                  </span>
+                                  <span style={{ color: '#64748b', fontSize: '10px' }}>
+                                    (Pallet #{info.palletIndices.join(', #')})
+                                  </span>
+                                </div>
+
+                                <span style={{
+                                  fontSize: '10px',
+                                  fontWeight: '800',
+                                  padding: '2px 7px',
+                                  borderRadius: '4px',
+                                  backgroundColor: isEven ? '#dcfce7' : '#fee2e2',
+                                  color: isEven ? '#15803d' : '#dc2626',
+                                  border: isEven ? '1px solid #86efac' : '1px solid #fca5a5'
+                                }}>
+                                  {isEven ? `✓ ${info.count} kiện (Chẵn - Hợp lệ)` : `❌ ${info.count} kiện (LẺ - BÁO ĐỎ)`}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
+
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                fontSize: '11.5px',
+                color: '#5c3a21',
+                fontWeight: '700'
+              }}>
+                <span>DANH SÁCH PALLET ({selectedHistoryContainer.pallets?.length || 0})</span>
+                <span style={{ color: '#8c786a' }}>Chạm vào pallet để xem chi tiết mã</span>
+              </div>
+
+              {(selectedHistoryContainer.pallets || []).map((pallet, pIdx) => {
+                const isExpanded = expandedPalletIndex === pIdx;
+                const standingSkus = pallet.standing?.skus || [];
+                const standingLpns = pallet.standing?.lpns || [];
+                const roofSkus = pallet.roof?.skus || [];
+                const roofLpns = pallet.roof?.lpns || [];
+                const hasRoof = Boolean(pallet.roof?.hasRoof) || (roofSkus.length > 0 || roofLpns.length > 0);
+
+                const currentAudit = selectedHistoryContainer.auditResult || validateContainerRules(selectedHistoryContainer.pallets || []);
+                const palletErr = (currentAudit.palletErrors || []).find(e => e.palletIndex === pallet.palletIndex);
+
+                return (
+                  <div
+                    key={pallet.palletId || pIdx}
+                    style={{
+                      backgroundColor: palletErr ? '#fef2f2' : '#faf7f2',
+                      borderRadius: '12px',
+                      border: palletErr
+                        ? '1.5px solid #ef4444'
+                        : (isExpanded ? '1.5px solid #7b5233' : '1px solid #eadcc9'),
+                      overflow: 'hidden',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    {/* Header Pallet (Click to Expand / Collapse) */}
+                    <div
+                      onClick={() => setExpandedPalletIndex(isExpanded ? null : pIdx)}
+                      style={{
+                        padding: '12px 14px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        cursor: 'pointer',
+                        backgroundColor: palletErr
+                          ? (isExpanded ? '#fee2e2' : '#fff5f5')
+                          : (isExpanded ? '#f3ece2' : 'transparent')
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{
+                          padding: '3px 8px',
+                          borderRadius: '5px',
+                          backgroundColor: palletErr ? '#dc2626' : '#7b5233',
+                          color: '#ffffff',
+                          fontWeight: '900',
+                          fontSize: '11px'
+                        }}>
+                          PALLET #{pallet.palletIndex}
+                        </span>
+                        <span style={{ fontSize: '12px', fontWeight: '800', color: palletErr ? '#991b1b' : '#2d1810', fontFamily: 'Consolas, monospace' }}>
+                          {pallet.palletId}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {palletErr ? (
+                          <span style={{
+                            fontSize: '10px',
+                            fontWeight: '800',
+                            backgroundColor: '#fee2e2',
+                            color: '#b91c1c',
+                            border: '1px solid #fca5a5',
+                            padding: '2px 6px',
+                            borderRadius: '4px'
+                          }}>
+                            ❌ THIẾU: {palletErr.currentSkus}/{palletErr.expectedSkus} SKU • {palletErr.currentLpns}/{palletErr.expectedLpns} LPN
+                          </span>
+                        ) : (
+                          <span style={{
+                            fontSize: '10px',
+                            fontWeight: '800',
+                            backgroundColor: '#dcfce7',
+                            color: '#15803d',
+                            padding: '2px 6px',
+                            borderRadius: '4px'
+                          }}>
+                            ✓ ĐỦ: {hasRoof ? '10 SKU • 5 LPN' : '8 SKU • 4 LPN'}
+                          </span>
+                        )}
+                        <span style={{ fontSize: '10px', color: '#8c786a' }}>
+                          ({standingSkus.length + roofSkus.length} SKU)
+                        </span>
+                        {isExpanded ? <ChevronDown size={16} color="#7b5233" /> : <ChevronRight size={16} color="#7b5233" />}
+                      </div>
+                    </div>
+
+                    {/* Nội dung chi tiết Pallet khi mở rộng (Cấp 3: SKU & LPN) */}
+                    {isExpanded && (
+                      <div style={{
+                        padding: '12px 14px',
+                        borderTop: '1px solid #eadcc9',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px',
+                        backgroundColor: '#ffffff'
+                      }}>
+                        {/* Chi tiết Pallet Đứng */}
+                        <div>
+                          <div style={{
+                            fontSize: '11px',
+                            fontWeight: '800',
+                            color: '#5c3a21',
+                            marginBottom: '4px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}>
+                            <Package size={13} color="#7b5233" />
+                            <span>PALLET ĐỨNG</span>
+                          </div>
+
+                          <div style={{
+                            backgroundColor: '#faf7f2',
+                            borderRadius: '8px',
+                            padding: '8px',
+                            fontSize: '11px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '4px'
+                          }}>
+                            <div>
+                              <span style={{ color: '#64748b' }}>Mã SKU ({standingSkus.length}): </span>
+                              {standingSkus.length > 0 ? (
+                                standingSkus.map((s, idx) => (
+                                  <span key={idx} style={{
+                                    fontFamily: 'Consolas, monospace',
+                                    fontWeight: '700',
+                                    color: '#9a3412',
+                                    backgroundColor: '#ffedd5',
+                                    padding: '2px 5px',
+                                    borderRadius: '4px',
+                                    marginRight: '4px',
+                                    display: 'inline-block'
+                                  }}>
+                                    {s.code} (x{s.count})
+                                  </span>
+                                ))
+                              ) : (
+                                <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Chưa có SKU</span>
+                              )}
+                            </div>
+
+                            <div>
+                              <span style={{ color: '#64748b' }}>Mã LPN ({standingLpns.length}): </span>
+                              {standingLpns.length > 0 ? (
+                                standingLpns.map((l, idx) => (
+                                  <span key={idx} style={{
+                                    fontFamily: 'Consolas, monospace',
+                                    fontWeight: '700',
+                                    color: '#1e40af',
+                                    backgroundColor: '#dbeafe',
+                                    padding: '2px 5px',
+                                    borderRadius: '4px',
+                                    marginRight: '4px',
+                                    display: 'inline-block'
+                                  }}>
+                                    {l.code} (x{l.count})
+                                  </span>
+                                ))
+                              ) : (
+                                <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Chưa có LPN</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Chi tiết Top Nóc */}
+                        <div>
+                          <div style={{
+                            fontSize: '11px',
+                            fontWeight: '800',
+                            color: '#5c3a21',
+                            marginBottom: '4px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <Layers size={13} color="#7b5233" />
+                              <span>TỦ TOP NÓC</span>
+                            </div>
+                            {(roofSkus.length === 0 && roofLpns.length === 0) ? (
+                              <span style={{ fontSize: '9.5px', fontWeight: '700', backgroundColor: '#f1f5f9', color: '#64748b', padding: '1px 6px', borderRadius: '4px' }}>
+                                Không có Tủ Nóc (0 SKU • 0 LPN)
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: '9.5px', fontWeight: '800', backgroundColor: '#dcfce7', color: '#15803d', padding: '1px 6px', borderRadius: '4px' }}>
+                                ✓ Đạt (1 SKU x2 • 1 LPN)
+                              </span>
+                            )}
+                          </div>
+
+                          {(roofSkus.length === 0 && roofLpns.length === 0) ? (
+                            <div style={{
+                              backgroundColor: '#f8fafc',
+                              borderRadius: '8px',
+                              padding: '7px 10px',
+                              border: '1px dashed #cbd5e1',
+                              fontSize: '10.5px',
+                              color: '#64748b',
+                              fontStyle: 'italic',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px'
+                            }}>
+                              <CheckCircle2 size={13} color="#16a34a" />
+                              <span>Pallet này không có Tủ Nóc — Cả SKU và LPN đều không có (Hợp lệ)</span>
+                            </div>
+                          ) : (
+                            <div style={{
+                              backgroundColor: '#faf7f2',
+                              borderRadius: '8px',
+                              padding: '8px',
+                              fontSize: '11px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '4px'
+                            }}>
+                              <div>
+                                <span style={{ color: '#64748b' }}>Mã SKU ({roofSkus.length === 1 ? `${roofSkus[0]?.count || 1}/2 cái` : `${roofSkus.length} SKU`}): </span>
+                                {roofSkus.map((s, idx) => (
+                                  <span key={idx} style={{
+                                    fontFamily: 'Consolas, monospace',
+                                    fontWeight: '700',
+                                    color: '#15803d',
+                                    backgroundColor: '#dcfce7',
+                                    padding: '2px 5px',
+                                    borderRadius: '4px',
+                                    marginRight: '4px',
+                                    display: 'inline-block'
+                                  }}>
+                                    {s.code} (x{s.count})
+                                  </span>
+                                ))}
+                              </div>
+
+                              <div>
+                                <span style={{ color: '#64748b' }}>Mã LPN ({roofLpns.length}/1): </span>
+                                {roofLpns.map((l, idx) => (
+                                  <span key={idx} style={{
+                                    fontFamily: 'Consolas, monospace',
+                                    fontWeight: '700',
+                                    color: '#1e40af',
+                                    backgroundColor: '#dbeafe',
+                                    padding: '2px 5px',
+                                    borderRadius: '4px',
+                                    marginRight: '4px',
+                                    display: 'inline-block'
+                                  }}>
+                                    {l.code} (x{l.count})
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Nút In thẻ kiểm tra cho Pallet này */}
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '4px' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const palletPrintRecord = {
+                                id: pallet.palletId,
+                                tabTitle: `Pallet #${pallet.palletIndex}`,
+                                timestamp: pallet.timestamp,
+                                inspector: selectedHistoryContainer.inspector || 'Nguyễn A',
+                                skus: [...standingSkus, ...roofSkus],
+                                lpns: [...standingLpns, ...roofLpns]
+                              };
+                              handlePrintThermalTicket(palletPrintRecord);
+                            }}
+                            style={{
+                              border: '1px solid #ebdccb',
+                              backgroundColor: '#FAF5EE',
+                              color: '#7b5233',
+                              padding: '5px 10px',
+                              borderRadius: '7px',
+                              fontSize: '11px',
+                              fontWeight: '800',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                          >
+                            <Printer size={13} color="#7b5233" />
+                            <span>In thẻ Pallet 56mm</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Nút Tiếp Tục Quét Cont Này ở cuối danh sách Pallet */}
+              <div style={{ marginTop: '8px', paddingTop: '10px', borderTop: '1px solid #eadcc9' }}>
+                <button
+                  type="button"
+                  onClick={() => handleResumeContainer(selectedHistoryContainer)}
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    borderRadius: '10px',
+                    border: 'none',
+                    backgroundColor: '#7b5233',
+                    color: '#ffffff',
+                    fontWeight: '900',
+                    fontSize: '13px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 12px rgba(123, 82, 51, 0.25)'
+                  }}
+                >
+                  <Play size={15} fill="#ffffff" />
+                  <span>TIẾP TỤC QUÉT PALLET #{(selectedHistoryContainer.pallets?.length || 0) + 1} CHO CONT NÀY ➔</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Message Modal & Confirm Modal */}
       <MessageModal
         isOpen={messageModal.isOpen}
@@ -3381,11 +5951,16 @@ const CheckPalletV1View = () => {
         isOpen={confirmModal.isOpen}
         title={confirmModal.title}
         message={confirmModal.message}
+        confirmText={confirmModal.confirmText || 'Xác nhận'}
+        cancelText={confirmModal.cancelText || 'Hủy'}
         onConfirm={() => {
-          confirmModal.onConfirm();
-          setConfirmModal({ ...confirmModal, isOpen: false });
+          if (confirmModal.onConfirm) confirmModal.onConfirm();
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
         }}
-        onCancel={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+        onCancel={() => {
+          if (confirmModal.onCancel) confirmModal.onCancel();
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        }}
       />
     </Layout>
   );
