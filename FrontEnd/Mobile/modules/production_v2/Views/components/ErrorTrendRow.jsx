@@ -198,6 +198,7 @@ const ErrorTrendRow = ({
   const displayName = currentSelectedOpt?.name || row.name || row.note || ''
   const isCTQ = Boolean(currentSelectedOpt?.isCTQ || row.isCTQ)
   const isQA = Boolean(currentSelectedOpt?.isQA || row.isQA || displayCode || (row.id && String(row.id).startsWith('auto_tracked')))
+  const isMissingDefectName = !disabled && Number(row.qty) > 0 && !row.defectId && !row.code && !String(row.name || '').trim()
 
   return (
     <div
@@ -368,7 +369,7 @@ const ErrorTrendRow = ({
             style={{
               height: 36,
               backgroundColor: '#ffffff',
-              border: `1px solid ${isOpen ? '#b45309' : '#cbd5e1'}`,
+              border: isMissingDefectName ? '1.5px solid #dc2626' : `1px solid ${isOpen ? '#b45309' : '#cbd5e1'}`,
               borderRadius: 8,
               padding: '0 8px 0 10px',
               display: 'flex',
@@ -376,7 +377,7 @@ const ErrorTrendRow = ({
               justifyContent: 'space-between',
               gap: 4,
               cursor: 'pointer',
-              boxShadow: isOpen ? '0 0 0 2px rgba(180, 83, 9, 0.12)' : '0 1px 2px rgba(0, 0, 0, 0.02)',
+              boxShadow: isMissingDefectName ? '0 0 0 2px rgba(220, 38, 38, 0.15)' : (isOpen ? '0 0 0 2px rgba(180, 83, 9, 0.12)' : '0 1px 2px rgba(0, 0, 0, 0.02)'),
               transition: 'all 0.15s ease',
             }}
           >
@@ -397,7 +398,11 @@ const ErrorTrendRow = ({
                   {displayName}
                 </span>
               ) : (
-                <span style={{ fontSize: 12, color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Chọn lỗi</span>
+                isMissingDefectName ? (
+                  <span style={{ fontSize: 12, color: '#dc2626', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>⚠ Chọn tên lỗi *</span>
+                ) : (
+                  <span style={{ fontSize: 12, color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Chọn lỗi</span>
+                )
               )}
             </div>
 

@@ -2454,6 +2454,21 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       }
     }
 
+    // Kiểm tra tính hợp lệ của danh sách lỗi: Nếu có số lượng > 0 thì bắt buộc phải có tên lỗi hoặc mã lỗi
+    const invalidErrorIdx = (errors || []).findIndex((e) => {
+      const q = Number(e.qty) || 0
+      const hasNameOrCode = Boolean((e.name && String(e.name).trim()) || (e.code && String(e.code).trim()) || e.defectId)
+      return q > 0 && !hasNameOrCode
+    })
+    if (invalidErrorIdx !== -1) {
+      showMessage(
+        'Thiếu tên lỗi',
+        `Dòng lỗi số ${invalidErrorIdx + 1} có số lượng ghi nhận (${errors[invalidErrorIdx].qty}) nhưng chưa chọn tên lỗi. Vui lòng chọn từ danh mục hoặc tự nhập tên lỗi trước khi lưu phiếu.`,
+        'warning'
+      )
+      return
+    }
+
     showConfirm({
       title: 'Xác nhận tạo phiếu',
       message: 'Bạn có chắc chắn muốn xác nhận lưu phiếu kiểm tra này?',
@@ -2521,7 +2536,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
           if (qtyNum > 0 && !nameStr && !codeStr && !e.defectId) {
             return {
               ...e,
-              name: (finalNote || '').trim() || 'Lỗi ghi nhận',
+              name: (finalNote || '').trim() || 'Lỗi chưa phân loại',
               is_custom: true
             }
           }

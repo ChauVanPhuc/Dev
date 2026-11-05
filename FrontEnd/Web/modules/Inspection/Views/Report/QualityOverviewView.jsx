@@ -5367,7 +5367,24 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
                                     </span>
                                   </td>
                                   <td style={{ padding: '9px 14px', color: '#1E293B', fontWeight: 700, verticalAlign: 'middle' }}>
-                                    {err.name || err.defect_name || err.code || 'Lỗi'}
+                                    {(err.name === 'Lỗi ghi nhận' || err.name === 'Lỗi chưa phân loại' || (!err.name && !err.defect_name && !err.code)) ? (
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <span style={{ color: '#DC2626' }}>{err.name || 'Lỗi phát hiện'}</span>
+                                        <span style={{
+                                          fontSize: '0.68rem',
+                                          fontWeight: 800,
+                                          backgroundColor: '#FEF3C7',
+                                          color: '#B45309',
+                                          border: '1px solid #FDE68A',
+                                          borderRadius: '4px',
+                                          padding: '1px 6px'
+                                        }}>
+                                          Chưa chọn mã lỗi
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      err.name || err.defect_name || err.code || 'Lỗi'
+                                    )}
                                     {err.note && (
                                       <div style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 400, marginTop: '2px' }}>
                                         {err.note}
