@@ -9,6 +9,7 @@ import InspectionStepsTable from './components/InspectionStepsTable'
 import ErrorTrendRow from './components/ErrorTrendRow'
 import InspectionResultBanner from './components/InspectionResultBanner'
 import { INSPECT_MODES } from '../constants'
+import { groupSpecOptionsByColor } from '../utils/cabinetSeriesMapper'
 
 const CL09C_ParameterView = () => {
   const formState = useInspectionFormBase(INSPECT_MODES.PARAMETER)
@@ -60,6 +61,7 @@ const CL09C_ParameterView = () => {
     selectedProducts,
     handleMultiProductChange,
     spec,
+    isPaintThickness,
     setSpec,
     specOptions,
     selectedSpecs,
@@ -123,6 +125,20 @@ const CL09C_ParameterView = () => {
     }
     return opts
   }, [specOptions, spec])
+  // Gom quy cách theo màu (đoạn cuối mã tủ). selectedSpecs vẫn là key các dòng gốc.
+  const colorGroupOptions = useMemo(() => (isPaintThickness ? groupSpecOptionsByColor(safeSpecOptions) : []), [safeSpecOptions, isPaintThickness])
+  const colorGroupValues = useMemo(() => {
+    const selected = new Set((selectedSpecs || []).map(String))
+    return colorGroupOptions
+      .filter((g) => g.memberValues.length > 0 && g.memberValues.every((v) => selected.has(v)))
+      .map((g) => g.value)
+  }, [colorGroupOptions, selectedSpecs])
+  const handleColorGroupChange = (groupVals) => {
+    const keys = colorGroupOptions
+      .filter((g) => groupVals.includes(g.value))
+      .flatMap((g) => g.memberValues)
+    handleMultiSpecChange(keys)
+  }
   const safeErrors = Array.isArray(errors) ? errors : []
   const safeSelectedDefectIds = safeErrors.map((e) => e?.defectId || e?.defect_id || (e?.code ? e?.code : null)).filter(Boolean)
   const totalDefects = useMemo(() => safeErrors.reduce((sum, item) => sum + (Number(item.qty) || 0), 0), [safeErrors])
@@ -261,16 +277,28 @@ const CL09C_ParameterView = () => {
             </div>
             <div className="pv2-field">
               <label>Quy cách <span className="pv2-req">*</span></label>
-              <FormMultiSearchSelect
-                values={selectedSpecs?.length > 0 ? selectedSpecs : (spec ? [spec] : [])}
-                options={safeSpecOptions}
-                onChange={handleMultiSpecChange}
-                placeholder={specPlaceholder}
-                itemType="quy cách"
-                required
-                disabled={isSpecDisabled}
-                allowCustomInput={true}
-              />
+              {isPaintThickness ? (
+                <FormMultiSearchSelect
+                  values={colorGroupValues}
+                  options={colorGroupOptions}
+                  onChange={handleColorGroupChange}
+                  placeholder={specPlaceholder}
+                  itemType="màu"
+                  required
+                  disabled={isSpecDisabled}
+                />
+              ) : (
+                <FormMultiSearchSelect
+                  values={selectedSpecs?.length > 0 ? selectedSpecs : (spec ? [spec] : [])}
+                  options={safeSpecOptions}
+                  onChange={handleMultiSpecChange}
+                  placeholder={specPlaceholder}
+                  itemType="quy cách"
+                  required
+                  disabled={isSpecDisabled}
+                  allowCustomInput={true}
+                />
+              )}
             </div>
           </div>
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Plus, MoreHorizontal, Edit2, Trash2, AlertTriangle, CheckCircle2, Image as ImageIcon, FileText, Search } from 'lucide-react';
+import { X, Plus, MoreHorizontal, Edit2, Trash2, AlertTriangle, CheckCircle2, Image as ImageIcon, FileText, Search, RotateCcw, Sliders } from 'lucide-react';
 import api, { getFullImageUrl } from '@webShared/Services/api.service';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import '@styles/components.css';
@@ -67,6 +67,17 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
   const [checklistPool, setChecklistPool] = useState([]);
   const [employeeOptions, setEmployeeOptions] = useState([]);
 
+  // Custom Result Sub-modal States & Handlers
+  const [customResultModalOpen, setCustomResultModalOpen] = useState(false);
+  const [selectedKpiForCustom, setSelectedKpiForCustom] = useState(null);
+  const [customForm, setCustomForm] = useState({
+    custom_value: '100',
+    custom_actual: '100.0%',
+    custom_score: 100,
+    reason: ''
+  });
+  const [customSaving, setCustomSaving] = useState(false);
+
   // KPI Score Evidence Sub-modal States & Handler
   const [evidenceModalOpen, setEvidenceModalOpen] = useState(false);
   const [evidenceData, setEvidenceData] = useState(null);
@@ -74,10 +85,10 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
 
   // Helper kiểm tra Đạt / Chưa đạt giữa Kết quả hiện tại và Ngưỡng chấp nhận
   // Helper làm sạch giá trị Kết quả hiện tại thành 100% định dạng % thuần túy
-    const cleanActual = (val) => {
-    if (!val) return 'Chưa có dữ liệu';
+    const cleanActual = (val, thresholdVal) => {
+    const isLess = thresholdVal && String(thresholdVal).includes('<');
+    if (!val || String(val).includes('Chưa')) return isLess ? '0.0%' : '100.0%';
     const str = String(val).trim();
-    if (str.includes('Chưa')) return str;
     const pctMatch = str.match(/-?\d+(\.\d+)?%/);
     if (pctMatch) return pctMatch[0];
     const numMatch = str.match(/-?\d+(\.\d+)?/);
@@ -86,21 +97,19 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
   };
 
   const checkKpiStatus = (actualVal, thresholdVal) => {
-    if (!actualVal || String(actualVal).includes('Chưa')) {
-      return { isPass: null, isNoData: true, label: 'Chưa có dữ liệu', color: '#64748B', bg: '#F1F5F9', border: '#CBD5E1' };
-    }
-    
-    const actStr = String(actualVal).trim();
+    const isLess = thresholdVal && String(thresholdVal).includes('<');
+    const actRaw = (!actualVal || String(actualVal).includes('Chưa')) ? (isLess ? '0.0%' : '100.0%') : actualVal;
+    const actStr = String(actRaw).trim();
     const threshStr = String(thresholdVal || '').trim();
 
     const actMatch = actStr.match(/-?\d+(\.\d+)?/);
-    const actNum = actMatch ? parseFloat(actMatch[0]) : null;
+    const actNum = actMatch ? parseFloat(actMatch[0]) : (isLess ? 0.0 : 100.0);
 
     const threshMatch = threshStr.match(/-?\d+(\.\d+)?/);
     const threshNum = threshMatch ? parseFloat(threshMatch[0]) : null;
 
-    if (actNum === null || threshNum === null) {
-      return { isPass: null, isNoData: true, label: 'Chưa có dữ liệu', color: '#64748B', bg: '#F1F5F9', border: '#CBD5E1' };
+    if (threshNum === null) {
+      return { isPass: true, isNoData: false, label: 'Đạt', color: '#15803D', bg: '#F0FDF4', border: '#BBF7D0' };
     }
 
     let isPass = true;
@@ -388,7 +397,7 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
   }, []);
 
   // Fetch employee-specific data from Database
-  const fetchEmployeeData = (empId, empName) => {
+  const fetchEmployeeData = (empId, empName, targetMonth) => {
     if (!empId) {
       setKpiList([]);
       setChecklist([]);
@@ -396,8 +405,8 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
     }
 
     // 1. Fetch Calculated KPI items and real-time scores from Backend Engine
-    const selectedMonthStr = formData.selected_month || 'Tháng 9';
-    const monthNum = parseInt(selectedMonthStr.replace(/\D/g, '') || '9', 10);
+    const targetMonthStr = targetMonth || formData.selected_month || 'Tháng 9';
+    const monthNum = parseInt(String(targetMonthStr).replace(/\D/g, '') || '9', 10);
     api.get(`/kpi-management/calculate-score?employee_id=${empId}&month=${monthNum}&year=2026`)
       .then(scoreRes => {
         if (scoreRes && scoreRes.details) {
@@ -407,10 +416,13 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
             kpi_code: k.kpi_code,
             target: k.content || k.target || 'Mục tiêu KPI',
             threshold: k.target || '>= 95%',
-            actual: k.actual || '95%',
+            actual: k.actual || '100.0%',
             weight: k.score ? `${k.score}%` : '20%',
             category: k.category || 'D',
-            earned_percentage: k.earned_percentage
+            earned_percentage: k.earned_percentage,
+            is_custom: k.is_custom || false,
+            custom_reason: k.custom_reason || null,
+            modified_by: k.modified_by || null
           })));
 
           setFormData(prev => ({
@@ -418,7 +430,9 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
             score_current: scoreRes.total_score || 0,
             score_kpi: scoreRes.kpi_score || 0,
             score_violation: scoreRes.violation_score || 0,
-            score_manager: scoreRes.manager_score || 0
+            score_manager: scoreRes.manager_score || 0,
+            score_rating: scoreRes.rating || (scoreRes.total_score >= 100 ? 'A' : scoreRes.total_score >= 90 ? 'B' : scoreRes.total_score >= 80 ? 'C' : 'D'),
+            rating: scoreRes.rating || (scoreRes.total_score >= 100 ? 'A' : scoreRes.total_score >= 90 ? 'B' : scoreRes.total_score >= 80 ? 'C' : 'D')
           }));
         }
       })
@@ -717,6 +731,14 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
       curLevel = 'Cấp 2';
     }
 
+    // Bảo vệ logic: Cấp 1 hoặc nếu parent trùng chính mình thì cấp trên mặc định là Ban Giám Đốc (QMR)
+    if (curLevel === 'Cấp 1' || savedParentLevel === empName || String(savedParentId) === String(empId) || !savedParentLevel) {
+      if (curLevel === 'Cấp 1') {
+        savedParentLevel = 'Ban Giám Đốc (QMR)';
+        savedParentId = null;
+      }
+    }
+
     setFormData(prev => ({
       ...prev,
       employee_name: empName,
@@ -737,6 +759,141 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+    if (field === 'selected_month') {
+      const empId = formData.employee_id || taskData?.employee_id;
+      const empName = formData.employee_name || taskData?.employee_name;
+      if (empId) {
+        fetchEmployeeData(empId, empName, value);
+      }
+    }
+  };
+
+  const handleOpenCustomResultModal = (item) => {
+    setSelectedKpiForCustom(item);
+    const clean = cleanActual(item.actual, item.threshold);
+    const numMatch = clean.match(/-?\d+(\.\d+)?/);
+    const scoreVal = numMatch ? parseFloat(numMatch[0]) : 100;
+    setCustomForm({
+      custom_value: String(scoreVal),
+      custom_actual: `${scoreVal}%`,
+      custom_score: scoreVal,
+      reason: item.custom_reason || ''
+    });
+    setCustomResultModalOpen(true);
+  };
+
+  const handleSaveCustomResult = async (e) => {
+    if (e) e.preventDefault();
+    if (!selectedKpiForCustom) return;
+
+    const empId = formData.employee_id || taskData?.employee_id;
+    if (!empId) return;
+
+    setCustomSaving(true);
+    try {
+      const selectedMonthStr = formData.selected_month || 'Tháng 9';
+      const monthNum = parseInt(selectedMonthStr.replace(/\D/g, '') || '9', 10);
+      const num = parseFloat(customForm.custom_value);
+      const scoreVal = !isNaN(num) ? num : (parseFloat(customForm.custom_score) || 100);
+      const actVal = `${scoreVal}%`;
+
+      const res = await api.post('/kpi-management/custom-results', {
+        employee_id: empId,
+        kpi_code: selectedKpiForCustom.kpi_code,
+        kpi_item_id: selectedKpiForCustom.db_id || selectedKpiForCustom.id,
+        month: monthNum,
+        year: 2026,
+        custom_actual: actVal,
+        custom_score: scoreVal,
+        reason: customForm.reason,
+        modified_by: 'Quản lý QC'
+      });
+
+      if (res?.scores?.details) {
+        const scoreRes = res.scores;
+        setKpiList(scoreRes.details.map((k, idx) => ({
+          id: k.id || idx + 1,
+          db_id: k.id,
+          kpi_code: k.kpi_code,
+          target: k.content || k.target || 'Mục tiêu KPI',
+          threshold: k.target || '>= 95%',
+          actual: k.actual || '100.0%',
+          weight: k.score ? `${k.score}%` : '20%',
+          category: k.category || 'D',
+          earned_percentage: k.earned_percentage,
+          is_custom: k.is_custom || false,
+          custom_reason: k.custom_reason || null,
+          modified_by: k.modified_by || null
+        })));
+
+        setFormData(prev => ({
+          ...prev,
+          score_current: scoreRes.total_score || 0,
+          score_kpi: scoreRes.kpi_score || 0,
+          score_violation: scoreRes.violation_score || 0,
+          score_manager: scoreRes.manager_score || 0,
+          score_rating: scoreRes.rating || (scoreRes.total_score >= 100 ? 'A' : scoreRes.total_score >= 90 ? 'B' : scoreRes.total_score >= 80 ? 'C' : 'D'),
+          rating: scoreRes.rating || (scoreRes.total_score >= 100 ? 'A' : scoreRes.total_score >= 90 ? 'B' : scoreRes.total_score >= 80 ? 'C' : 'D')
+        }));
+        if (onSave) onSave(scoreRes);
+      } else {
+        fetchEmployeeData(empId, formData.employee_name, selectedMonthStr);
+      }
+      setCustomResultModalOpen(false);
+    } catch (err) {
+      console.error("Lỗi khi lưu kết quả tùy chỉnh:", err);
+    } finally {
+      setCustomSaving(false);
+    }
+  };
+
+  const handleResetCustomResult = async () => {
+    if (!selectedKpiForCustom) return;
+    const empId = formData.employee_id || taskData?.employee_id;
+    if (!empId) return;
+
+    setCustomSaving(true);
+    try {
+      const selectedMonthStr = formData.selected_month || 'Tháng 9';
+      const monthNum = parseInt(selectedMonthStr.replace(/\D/g, '') || '9', 10);
+      const res = await api.delete(`/kpi-management/custom-results?employee_id=${empId}&kpi_code=${encodeURIComponent(selectedKpiForCustom.kpi_code)}&month=${monthNum}&year=2026`);
+
+      if (res?.scores?.details) {
+        const scoreRes = res.scores;
+        setKpiList(scoreRes.details.map((k, idx) => ({
+          id: k.id || idx + 1,
+          db_id: k.id,
+          kpi_code: k.kpi_code,
+          target: k.content || k.target || 'Mục tiêu KPI',
+          threshold: k.target || '>= 95%',
+          actual: k.actual || '100.0%',
+          weight: k.score ? `${k.score}%` : '20%',
+          category: k.category || 'D',
+          earned_percentage: k.earned_percentage,
+          is_custom: k.is_custom || false,
+          custom_reason: k.custom_reason || null,
+          modified_by: k.modified_by || null
+        })));
+
+        setFormData(prev => ({
+          ...prev,
+          score_current: scoreRes.total_score || 0,
+          score_kpi: scoreRes.kpi_score || 0,
+          score_violation: scoreRes.violation_score || 0,
+          score_manager: scoreRes.manager_score || 0,
+          score_rating: scoreRes.rating || (scoreRes.total_score >= 100 ? 'A' : scoreRes.total_score >= 90 ? 'B' : scoreRes.total_score >= 80 ? 'C' : 'D'),
+          rating: scoreRes.rating || (scoreRes.total_score >= 100 ? 'A' : scoreRes.total_score >= 90 ? 'B' : scoreRes.total_score >= 80 ? 'C' : 'D')
+        }));
+        if (onSave) onSave(scoreRes);
+      } else {
+        fetchEmployeeData(empId, formData.employee_name, selectedMonthStr);
+      }
+      setCustomResultModalOpen(false);
+    } catch (err) {
+      console.error("Lỗi khi khôi phục kết quả tự động:", err);
+    } finally {
+      setCustomSaving(false);
+    }
   };
 
   const handleOpenAddKpiModal = () => {
@@ -1026,6 +1183,7 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
 
     try {
       // 1. Lưu/Cập nhật nhân sự vào cơ sở dữ liệu backend
+      const dynamicRating = formData.rating || formData.score_rating || (Number(formData.score_current || 0) >= 100 ? 'A' : Number(formData.score_current || 0) >= 90 ? 'B' : Number(formData.score_current || 0) >= 80 ? 'C' : 'D');
       await api.post('/quality-employees/', {
         employee_id: empId,
         full_name: empName,
@@ -1033,7 +1191,7 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
         stage: pos,
         factory: fac,
         note: notePayload,
-        latest_rating: 'A'
+        latest_rating: dynamicRating
       }).catch(async () => {
         // Nếu mã nhân sự đã tồn tại, tìm ID và gọi PUT để cập nhật
         const res = await api.get('/quality-employees/?size=1000').catch(() => null);
@@ -1045,7 +1203,8 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
             department: dept,
             stage: pos,
             factory: fac,
-            note: notePayload
+            note: notePayload,
+            latest_rating: dynamicRating
           }).catch(() => null);
         }
       });
@@ -1185,7 +1344,25 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
               </label>
               <select
                 value={formData.current_level}
-                onChange={(e) => handleInputChange('current_level', e.target.value)}
+                onChange={(e) => {
+                  const newLvl = e.target.value;
+                  handleInputChange('current_level', newLvl);
+                  if (newLvl === 'Cấp 1') {
+                    setFormData(prev => ({
+                      ...prev,
+                      current_level: newLvl,
+                      parent_level: 'Ban Giám Đốc (QMR)',
+                      parent_id: null
+                    }));
+                  } else if (newLvl === 'Cấp 2' && (!formData.parent_level || formData.parent_level.includes('Ban Giám Đốc') || formData.parent_level === formData.employee_name)) {
+                    setFormData(prev => ({
+                      ...prev,
+                      current_level: newLvl,
+                      parent_level: 'Đặng Văn Nam',
+                      parent_id: '3973'
+                    }));
+                  }
+                }}
                 style={{ width: '100%', padding: '5px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
               >
                 <option value="Cấp 1">Cấp 1</option>
@@ -1425,9 +1602,12 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
               filteredKpiByMonth.forEach(k => {
                 const actStr = String(k.actual || '');
                 if (!actStr.includes('Chưa')) {
-                  const act = parseFloat(actStr.replace('%', '')) || 0;
+                  // Ưu tiên dùng earned_percentage do backend tính toán chính xác
+                  const earned = (k.earned_percentage !== undefined && k.earned_percentage !== null)
+                    ? Number(k.earned_percentage)
+                    : (parseFloat(actStr.replace('%', '')) || 0);
                   const w = parseFloat(String(k.weight || k.calc_method).replace('%', '')) || (100 / filteredKpiByMonth.length);
-                  weightedSum += (act * w);
+                  weightedSum += (earned * w);
                   totalWeight += w;
                   hasValidData = true;
                 }
@@ -1441,15 +1621,23 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
 
             // 5. Điểm Tổng = (30% Checklist + 70% KPI) + QLĐG - Vi phạm
             const basePerformanceScore = (0.3 * calculatedChecklistScore) + (0.7 * calculatedKpiScore);
-            const calculatedTotalScore = Math.max(0, Math.round(basePerformanceScore + calculatedQldgScore - calculatedViolationScore));
+            let calculatedTotalScore = Math.max(0, Math.round((basePerformanceScore + calculatedQldgScore - calculatedViolationScore) * 10) / 10);
+            
+            // Đồng bộ với điểm thực tế từ Backend Engine (/calculate-score) nếu có
+            if (formData.score_current !== undefined && formData.score_current !== null && Number(formData.score_current) > 0) {
+              calculatedTotalScore = Number(formData.score_current);
+            }
 
-            // 6. Ma trận Xếp loại (Rating Matrix)
-            let ratingBadge = { label: 'A (Tốt)', color: '#16A34A', bg: '#F0FDF4' };
-            if (calculatedTotalScore >= 105) ratingBadge = { label: 'A+ (Xuất sắc)', color: '#15803D', bg: '#DCFCE7' };
-            else if (calculatedTotalScore >= 90) ratingBadge = { label: 'A (Tốt)', color: '#16A34A', bg: '#F0FDF4' };
-            else if (calculatedTotalScore >= 75) ratingBadge = { label: 'B (Khá)', color: '#2563EB', bg: '#EFF6FF' };
-            else if (calculatedTotalScore >= 60) ratingBadge = { label: 'C (Cần cải thiện)', color: '#D97706', bg: '#FEF3C7' };
-            else ratingBadge = { label: 'D (Không đạt)', color: '#DC2626', bg: '#FEE2E2' };
+            // 6. Ma trận Xếp loại (Rating Matrix) theo chuẩn công ty:
+            // - Loại A: >= 100 điểm
+            // - Loại B: >= 90 điểm và < 100 điểm
+            // - Loại C: >= 80 điểm và < 90 điểm
+            // - Loại D: < 80 điểm (hoặc 50 điểm)
+            let ratingBadge = { label: 'B (Khá)', color: '#2563EB', bg: '#EFF6FF' };
+            if (calculatedTotalScore >= 100) ratingBadge = { label: 'A (Xuất sắc)', color: '#15803D', bg: '#DCFCE7' };
+            else if (calculatedTotalScore >= 90) ratingBadge = { label: 'B (Khá)', color: '#2563EB', bg: '#EFF6FF' };
+            else if (calculatedTotalScore >= 80) ratingBadge = { label: 'C (Trung bình)', color: '#D97706', bg: '#FEF3C7' };
+            else ratingBadge = { label: 'D (Cần cải thiện)', color: '#DC2626', bg: '#FEE2E2' };
 
             return (
               <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1fr 1fr 1.2fr', gap: '8px', alignItems: 'flex-end' }}>
@@ -1486,7 +1674,7 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                   </label>
                   <input
                     type="text"
-                    value={`${calculatedKpiScore}%`}
+                    value={`${formData.score_kpi !== undefined && formData.score_kpi > 0 ? formData.score_kpi : calculatedKpiScore}%`}
                     readOnly
                     style={{ width: '100%', padding: '5px 10px', borderRadius: '6px', border: '1px solid #E2E8F0', backgroundColor: '#EFEFEF', fontSize: '0.8rem', color: '#1E293B', fontWeight: '700', outline: 'none', boxSizing: 'border-box', textAlign: 'center' }}
                   />
@@ -1647,24 +1835,49 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                               {(() => {
                                 const status = checkKpiStatus(item.actual, item.threshold);
                                 return (
-                                  <span style={{
-                                    color: status.color,
-                                    fontWeight: '800',
-                                    fontSize: '0.82rem',
-                                    padding: '3px 8px',
-                                    borderRadius: '4px',
-                                    backgroundColor: status.bg,
-                                    border: `1px solid ${status.border}`,
-                                    display: 'inline-block'
-                                  }}>
-                                    {cleanActual(item.actual)}
-                                  </span>
+                                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                    <span
+                                      onClick={() => handleOpenCustomResultModal(item)}
+                                      title="Bấm để điều chỉnh kết quả"
+                                      style={{
+                                        color: status.color,
+                                        fontWeight: '800',
+                                        fontSize: '0.82rem',
+                                        padding: '3px 8px',
+                                        borderRadius: '4px',
+                                        backgroundColor: status.bg,
+                                        border: `1px solid ${status.border}`,
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        cursor: 'pointer'
+                                      }}
+                                    >
+                                      {cleanActual(item.actual, item.threshold)}
+                                    </span>
+                                  </div>
                                 );
                               })()}
                             </td>
                             <td style={{ padding: '6px 10px', textAlign: 'center', fontWeight: '700', color: '#5D3B32' }}>{item.weight}</td>
                             <td style={{ padding: '6px 10px', textAlign: 'center' }}>
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
+                                <button
+                                  type="button"
+                                  title="Chỉnh sửa kết quả hiện tại"
+                                  onClick={() => handleOpenCustomResultModal(item)}
+                                  style={{
+                                    border: 'none',
+                                    background: '#F8FAFC',
+                                    cursor: 'pointer',
+                                    padding: '4px 6px',
+                                    borderRadius: '4px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    color: '#475569'
+                                  }}
+                                >
+                                  <Sliders size={13} />
+                                </button>
                                 <button
                                   type="button"
                                   title="Xem lịch sử & Bằng chứng xác thực điểm số"
@@ -1675,7 +1888,7 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                                 </button>
                                 <button
                                   type="button"
-                                  title="Chỉnh sửa"
+                                  title="Chỉnh sửa mục tiêu & trọng số"
                                   onClick={() => handleEditKpi(item)}
                                   style={{ border: 'none', background: '#EFF6FF', cursor: 'pointer', padding: '4px 6px', borderRadius: '4px', display: 'flex', alignItems: 'center', color: '#2563EB' }}
                                 >
@@ -2087,37 +2300,59 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                 <div style={{ maxHeight: '300px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '14px' }}>
                   {(() => {
                     const currentLevel = String(formData.current_level || 'Cấp 2').toLowerCase();
-                    const filtered = employeeOptions.filter(e => {
-                      const pos = String(e.position_name || e.position || e.stage || '').toLowerCase();
-                      const noteVal = typeof e.note === 'string' && e.note.includes('Cấp') ? e.note : '';
-                      const lvl = String(e.current_level || noteVal).toLowerCase();
+                    const currentEmpId = String(formData.employee_id || '').toLowerCase();
+                    const currentEmpName = String(formData.employee_name || '').toLowerCase();
 
-                      if (currentLevel.includes('cấp 1')) {
-                        // Chọn Cấp 1 -> Cấp trên gồm Ban Giám Đốc / Ban Quản Trị (Cấp 1)
-                        return pos.includes('giám đốc') || lvl.includes('cấp 1');
-                      } else if (currentLevel.includes('cấp 2')) {
-                        // Chọn Cấp 2 -> Cấp trên hiển thị nhân sự Cấp 1
-                        return lvl.includes('cấp 1') || pos.includes('giám đốc');
-                      } else if (currentLevel.includes('cấp 3')) {
-                        // Chọn Cấp 3 -> Cấp trên hiển thị nhân sự Cấp 2 (hoặc Cấp 1)
-                        return lvl.includes('cấp 2') || lvl.includes('cấp 1') || pos.includes('trưởng');
-                      } else if (currentLevel.includes('cấp 4')) {
-                        // Chọn Cấp 4 -> Cấp trên hiển thị nhân sự Cấp 3 (hoặc Cấp 2)
-                        return lvl.includes('cấp 3') || lvl.includes('cấp 2') || pos.includes('phó');
-                      } else {
-                        // Chọn Cấp 5 -> Cấp trên hiển thị nhân sự Cấp 4 (hoặc Cấp 3/2)
-                        return lvl.includes('cấp 4') || lvl.includes('cấp 3') || pos.includes('tổ') || pos.includes('giám sát') || pos.includes('lead');
-                      }
+                    // Luôn loại trừ chính nhân sự đang sửa khỏi danh sách cấp trên
+                    const otherEmployees = employeeOptions.filter(e => {
+                      const eid = String(e.employee_id || e.id || '').toLowerCase();
+                      const ename = String(e.full_name || '').toLowerCase();
+                      return eid !== currentEmpId && ename !== currentEmpName;
                     });
-                    const listToDisplay = filtered.length > 0 ? filtered : employeeOptions;
-                    return listToDisplay.map(e => ({
-                      id: e.id,
-                      employee_id: e.employee_id || `NV_${e.id}`,
-                      name: e.full_name,
-                      title: `${e.full_name} - ${e.position_name || 'Cấp Quản lý'}`,
-                      desc: `Mã NV: ${e.employee_id || e.id} | ${e.department_name || e.section_name || 'Phòng QLCL'}`,
-                      badge: e.current_level ? e.current_level.toUpperCase() : (e.position_name || 'Cấp 1')
-                    }));
+
+                    let displayItems = [];
+                    if (currentLevel.includes('cấp 1')) {
+                      // Cấp 1 (Trưởng phòng) trực thuộc Ban Giám Đốc
+                      displayItems = [
+                        {
+                          id: 'bgd_qmr',
+                          employee_id: 'BGD',
+                          name: 'Ban Giám Đốc (QMR)',
+                          title: 'Ban Giám Đốc (QMR) - Ban Lãnh Đạo',
+                          desc: 'Cấp Quản lý Trực tiếp của Trưởng Phòng',
+                          badge: 'BAN GIÁM ĐỐC'
+                        }
+                      ];
+                    } else {
+                      const filtered = otherEmployees.filter(e => {
+                        const pos = String(e.position_name || e.position || e.stage || '').toLowerCase();
+                        const noteVal = typeof e.note === 'string' && e.note.includes('Cấp') ? e.note : '';
+                        const lvl = String(e.current_level || noteVal).toLowerCase();
+
+                        if (currentLevel.includes('cấp 2')) {
+                          // Cấp 2 báo cáo cho Cấp 1 hoặc Trưởng phòng
+                          return lvl.includes('cấp 1') || pos.includes('trưởng') || pos.includes('giám đốc');
+                        } else if (currentLevel.includes('cấp 3')) {
+                          // Cấp 3 báo cáo cho Cấp 2 hoặc Cấp 1
+                          return lvl.includes('cấp 2') || lvl.includes('cấp 1') || pos.includes('lead') || pos.includes('qa') || pos.includes('trưởng');
+                        } else if (currentLevel.includes('cấp 4')) {
+                          return lvl.includes('cấp 3') || lvl.includes('cấp 2') || pos.includes('phó');
+                        } else {
+                          return lvl.includes('cấp 4') || lvl.includes('cấp 3') || pos.includes('tổ') || pos.includes('giám sát') || pos.includes('lead');
+                        }
+                      });
+
+                      const listToDisplay = filtered.length > 0 ? filtered : otherEmployees;
+                      displayItems = listToDisplay.map(e => ({
+                        id: e.id,
+                        employee_id: e.employee_id || `NV_${e.id}`,
+                        name: e.full_name,
+                        title: `${e.full_name} - ${e.position_name || 'Cấp Quản lý'}`,
+                        desc: `Mã NV: ${e.employee_id || e.id} | ${e.department_name || e.section_name || 'Phòng QLCL'}`,
+                        badge: e.current_level ? e.current_level.toUpperCase() : (e.position_name || 'Cấp 1')
+                      }));
+                    }
+                    return displayItems;
                   })().map((item, idx) => (
                     <div
                       key={idx}
@@ -2646,6 +2881,180 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
         </div>
       )}
 
+            {/* Sub-modal Điều Chỉnh Kết Quả KPI (Custom Result Sub-modal) */}
+      {customResultModalOpen && selectedKpiForCustom && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(3px)',
+            zIndex: 3600,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px'
+          }}
+          onClick={() => setCustomResultModalOpen(false)}
+        >
+          <div
+            style={{
+              position: 'relative',
+              width: '380px',
+              maxWidth: '95vw',
+              backgroundColor: '#FFFFFF',
+              borderRadius: '10px',
+              padding: '18px 20px',
+              boxShadow: '0 25px 50px -12px rgba(0,0,0,0.3)',
+              border: '1px solid #E2E8F0'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #EADCC9', paddingBottom: '10px', marginBottom: '14px' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '0.96rem', fontWeight: '800', color: '#7B5233' }}>
+                  Điều chỉnh Kết quả KPI
+                </h3>
+                <div style={{ fontSize: '0.8rem', fontWeight: '700', color: '#1E293B', marginTop: '3px' }}>
+                  {selectedKpiForCustom.target}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCustomResultModalOpen(false)}
+                style={{ border: 'none', background: '#F1F5F9', borderRadius: '50%', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748B' }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Form - Chỉ cần ô nhận thay đổi với % cố định */}
+            <form onSubmit={handleSaveCustomResult}>
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#475569', marginBottom: '6px' }}>
+                  Kết quả hiện tại:
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="100"
+                    value={customForm.custom_value}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const num = parseFloat(val);
+                      setCustomForm(prev => ({
+                        ...prev,
+                        custom_value: val,
+                        custom_actual: val ? `${val}%` : '',
+                        custom_score: !isNaN(num) ? num : 0
+                      }));
+                    }}
+                    placeholder="Nhập số (VD: 95 hoặc 100)"
+                    autoFocus
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      border: '1.5px solid #7B5233',
+                      borderRight: 'none',
+                      borderTopLeftRadius: '6px',
+                      borderBottomLeftRadius: '6px',
+                      fontSize: '1rem',
+                      fontWeight: '800',
+                      color: '#1E293B',
+                      outline: 'none'
+                    }}
+                    required
+                  />
+                  <div style={{
+                    padding: '8px 14px',
+                    backgroundColor: '#FAF7F2',
+                    border: '1.5px solid #7B5233',
+                    borderLeft: '1px solid #EADCC9',
+                    borderTopRightRadius: '6px',
+                    borderBottomRightRadius: '6px',
+                    fontSize: '1rem',
+                    fontWeight: '800',
+                    color: '#7B5233',
+                    userSelect: 'none'
+                  }}>
+                    %
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '12px', borderTop: '1px solid #E2E8F0' }}>
+                <div>
+                  {selectedKpiForCustom.is_custom && (
+                    <button
+                      type="button"
+                      onClick={handleResetCustomResult}
+                      disabled={customSaving}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '6px 10px',
+                        backgroundColor: '#FEF2F2',
+                        border: '1px solid #FECACA',
+                        color: '#DC2626',
+                        borderRadius: '6px',
+                        fontSize: '0.75rem',
+                        fontWeight: '700',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <RotateCcw size={12} /> Khôi phục
+                    </button>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto' }}>
+                  <button
+                    type="button"
+                    onClick={() => setCustomResultModalOpen(false)}
+                    disabled={customSaving}
+                    style={{
+                      padding: '6px 14px',
+                      border: '1px solid #CBD5E1',
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: '6px',
+                      fontSize: '0.8rem',
+                      fontWeight: '600',
+                      color: '#475569',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Hủy bỏ
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={customSaving}
+                    style={{
+                      padding: '6px 18px',
+                      border: 'none',
+                      backgroundColor: '#7B5233',
+                      borderRadius: '6px',
+                      fontSize: '0.8rem',
+                      fontWeight: '700',
+                      color: '#FFFFFF',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {customSaving ? 'Đang lưu...' : 'Lưu kết quả'}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Sub-modal Bằng Chứng Xác Thực KPI (Audit Trail Evidence Sub-modal) */}
       {evidenceModalOpen && (
         <div
@@ -2748,21 +3157,24 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                               {(() => {
                                 const resStr = String(rec.result || '');
                                 let rateVal = null;
-                                if (resStr.endsWith('%')) {
-                                  rateVal = parseFloat(resStr.replace('%', ''));
+                                const mNum = resStr.match(/(\d+(?:\.\d+)?)/);
+                                if (mNum) {
+                                  rateVal = parseFloat(mNum[1]);
                                 }
 
                                 let bgColor = '#FEF2F2';
                                 let textColor = '#DC2626';
                                 let borderColor = '#FECACA';
 
+                                const isPassSignal = resStr.includes('PASS') || resStr.includes('Đạt') || resStr.includes('đúng hạn') || resStr.includes('Loại A') || resStr.includes('Loại B') || resStr.includes('Hoàn thành') || resStr.includes('tuân thủ');
+
                                 if (rateVal !== null && !isNaN(rateVal)) {
-                                  if (rateVal >= 95) {
+                                  if (rateVal >= 90 || isPassSignal) {
                                     bgColor = '#F0FDF4'; textColor = '#15803D'; borderColor = '#BBF7D0';
-                                  } else if (rateVal >= 80) {
+                                  } else if (rateVal >= 80 || resStr.includes('Loại C')) {
                                     bgColor = '#FFFBEB'; textColor = '#D97706'; borderColor = '#FDE68A';
                                   }
-                                } else if (resStr.includes('PASS') || resStr.includes('Đạt') || resStr.includes('đúng hạn')) {
+                                } else if (isPassSignal) {
                                   bgColor = '#F0FDF4'; textColor = '#15803D'; borderColor = '#BBF7D0';
                                 }
 

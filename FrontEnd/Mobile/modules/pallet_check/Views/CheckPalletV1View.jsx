@@ -4971,54 +4971,92 @@ const CheckPalletV1View = () => {
           MODAL 1: BẮT BUỘC NHẬP TÊN CONTAINER KHI BẮT ĐẦU PHIÊN QUÉT
       ═══════════════════════════════════════════════════════════════ */}
       {isStartContainerModalOpen && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(15, 23, 42, 0.65)',
-          backdropFilter: 'blur(3px)',
-          WebkitBackdropFilter: 'blur(3px)',
-          zIndex: 9999,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '16px'
-        }}>
-          <div style={{
-            backgroundColor: '#ffffff',
-            borderRadius: '18px',
-            maxWidth: '380px',
-            width: '100%',
-            padding: '20px',
+        <div 
+          onClick={() => {
+            setIsStartContainerModalOpen(false);
+            if (!activeContainer) {
+              setActiveTab('history');
+            }
+          }}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(3px)',
+            WebkitBackdropFilter: 'blur(3px)',
+            zIndex: 9999,
             display: 'flex',
-            flexDirection: 'column',
-            gap: '14px',
-            boxShadow: '0 25px 45px -12px rgba(0,0,0,0.35)',
-            border: '1.5px solid #eadcc9'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '8px',
-                backgroundColor: '#7b5233',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#ffffff'
-              }}>
-                <Boxes size={18} />
-              </div>
-              <div>
-                <div style={{ fontSize: '15px', fontWeight: '900', color: '#2d1810' }}>
-                  BẮT ĐẦU CONTAINER MỚI
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px'
+          }}
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: '#ffffff',
+              borderRadius: '18px',
+              maxWidth: '380px',
+              width: '100%',
+              padding: '20px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '14px',
+              boxShadow: '0 25px 45px -12px rgba(0,0,0,0.35)',
+              border: '1.5px solid #eadcc9'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '8px',
+                  backgroundColor: '#7b5233',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#ffffff',
+                  flexShrink: 0
+                }}>
+                  <Boxes size={18} />
                 </div>
-                <div style={{ fontSize: '11px', color: '#786556' }}>
-                  Nhập mã hoặc tên Container để gom Pallet
+                <div>
+                  <div style={{ fontSize: '15px', fontWeight: '900', color: '#2d1810' }}>
+                    BẮT ĐẦU CONTAINER MỚI
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#786556' }}>
+                    Nhập mã hoặc tên Container để gom Pallet
+                  </div>
                 </div>
               </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsStartContainerModalOpen(false);
+                  if (!activeContainer) {
+                    setActiveTab('history');
+                  }
+                }}
+                style={{
+                  border: 'none',
+                  background: 'none',
+                  color: '#9c8a7d',
+                  padding: '6px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '6px'
+                }}
+                title="Bỏ qua (Xem lịch sử)"
+              >
+                <X size={18} />
+              </button>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -5079,25 +5117,28 @@ const CheckPalletV1View = () => {
             </div>
 
             <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
-              {activeContainer && (
-                <button
-                  type="button"
-                  onClick={() => setIsStartContainerModalOpen(false)}
-                  style={{
-                    flex: 1,
-                    height: '42px',
-                    border: '1.5px solid #d5c7b7',
-                    backgroundColor: '#ffffff',
-                    color: '#786556',
-                    borderRadius: '10px',
-                    fontWeight: '700',
-                    fontSize: '12px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Quay lại
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsStartContainerModalOpen(false);
+                  if (!activeContainer) {
+                    setActiveTab('history');
+                  }
+                }}
+                style={{
+                  flex: 1,
+                  height: '42px',
+                  border: '1.5px solid #d5c7b7',
+                  backgroundColor: '#ffffff',
+                  color: '#786556',
+                  borderRadius: '10px',
+                  fontWeight: '700',
+                  fontSize: '13px',
+                  cursor: 'pointer'
+                }}
+              >
+                {activeContainer ? 'Quay lại' : 'Bỏ qua'}
+              </button>
               <button
                 type="button"
                 onClick={() => handleStartNewContainer(containerNameInput)}

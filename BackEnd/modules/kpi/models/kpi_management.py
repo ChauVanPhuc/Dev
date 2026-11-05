@@ -206,4 +206,26 @@ class KPIAuditLog(Base):
     reason      = Column(NVARCHAR(500), nullable=True) # Ghi chú/Lý do
 
 
+class KPIEmployeeCustomResult(Base):
+    """
+    Model lưu trữ kết quả thực tế (actual) tùy chỉnh thủ công cho từng nhân viên theo từng tháng.
+    Khi có bản ghi trong bảng này, hệ thống sẽ ưu tiên hiển thị và tính điểm theo giá trị này.
+    """
+    __tablename__ = "kpi_employee_custom_results"
+
+    id            = Column(Integer, primary_key=True, index=True)
+    employee_id   = Column(NVARCHAR(50), nullable=False, index=True) # Mã nhân viên
+    kpi_code      = Column(NVARCHAR(50), nullable=False, index=True) # Mã mục tiêu KPI
+    kpi_item_id   = Column(Integer, nullable=True) # Liên kết với kpi_employee_items.id nếu có
+    month         = Column(Integer, nullable=False) # Tháng (1 - 12)
+    year          = Column(Integer, nullable=False, default=2026) # Năm
+    custom_actual = Column(NVARCHAR(100), nullable=False) # Chuỗi hiển thị kết quả (e.g. "95.0%", "100.0%")
+    custom_score  = Column(Float, nullable=False) # Điểm số % dùng tính trọng số (e.g. 95.0)
+    reason        = Column(NVARCHAR(500), nullable=True) # Lý do điều chỉnh
+    modified_by   = Column(NVARCHAR(100), nullable=True) # Người điều chỉnh
+    created_at    = Column(DateTime, default=datetime.utcnow)
+    updated_at    = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+
 

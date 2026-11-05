@@ -165,3 +165,43 @@ export const matchesCabinetOption = (opt, searchStr) => {
 
   return false
 }
+
+
+/**
+ * Tách mã màu (đoạn cuối) từ mã tủ. Ví dụ: "B-60D-ROA" -> "ROA"
+ */
+export const extractCabinetColor = (badge) => {
+  if (!badge) return ''
+  const first = String(badge).split(',')[0].trim()
+  if (!first.includes('-')) return ''
+  const last = first.split('-').pop().trim().toUpperCase()
+  return /^[A-Z]{2,6}$/.test(last) ? last : ''
+}
+
+/**
+ * Gom các option quy cách theo màu. Mỗi nhóm có memberValues là key các dòng gốc.
+ */
+export const groupSpecOptionsByColor = (options = []) => {
+  const map = new Map()
+  ;(options || []).forEach((opt) => {
+    if (!opt || !opt.value) return
+    const color = extractCabinetColor(opt.rawBadge || opt.badge || opt.productLabel)
+    if (!color) return // Bỏ quy cách không có màu (không hiện nhóm KHÁC)
+    if (!map.has(color)) {
+      map.set(color, { value: `color::${color}`, label: color, color, memberValues: [], subItems: [], qty: 0, isColorGroup: true })
+    }
+    const g = map.get(color)
+    g.memberValues.push(String(opt.value))
+    g.subItems.push({ spec: opt.label || opt.rawSpec || '', badge: opt.badge || '' })
+    g.qty += Number(opt.qty) || 0
+  })
+  return Array.from(map.values())
+    .map((g) => ({
+      ...g,
+      count: g.memberValues.length,
+      rawSpec: g.subItems.map((s) => s.spec).join(' '),
+      badge: '',
+      rawBadge: g.subItems.map((s) => s.badge).join(' '),
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' }))
+}

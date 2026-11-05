@@ -1968,9 +1968,96 @@ export const useInspectionReports = () => {
       parsed = typeof item.data_json === 'string' ? JSON.parse(item.data_json || '{}') : (item.data_json || {});
     } catch (e) {}
 
-    const isDaily = tabType === 'daily';
-    const isInput = tabType === 'input';
-    const typeLabel = isDaily ? 'Ghi Nhận Lỗi Hàng Ngày' : isInput ? 'Kiểm Tra Đầu Vào (IQC)' : getInspectionTypeLabel(item.inspection_type);
+    const isDaily = tabType === 'daily' || item.type === 'daily' || item.is_daily;
+    const isInput = tabType === 'input' || item.type === 'input' || item.inspection_type === 'input' || item.inspection_type === 'dau-vao' || item.inspection_type === 'nhap-kho';
+    const typeLabel = isDaily 
+      ? 'Ghi nhận lỗi hàng ngày' 
+      : (item.category || extractDetailedCategory(item));
+
+    // Trích xuất thông tin chung cho tất cả các loại phiếu
+    const inspectorDisplay = item.inspector_name || parsed.inspector_name || 'QC Thực Hiện';
+    const poDisplay = item.batch_no || item.po || item.po_code || item.production_order_code || parsed.batch_no || parsed.po || (isInput ? (item.cont_name || 'N/A') : 'N/A');
+
+    let stageDisplay = item.stage_name || item.stage || parsed.stage_name || parsed.stage || '';
+    if (!stageDisplay) {
+      if (isInput) stageDisplay = 'Đầu vào / Nhập kho';
+      else if (item.inspection_type === 'mau-dau-tien' || item.inspection_type === 'first_sample') stageDisplay = 'Mẫu đầu tiên (FQC)';
+      else if (item.inspection_type === 'quy-trinh' || item.inspection_type === 'process') stageDisplay = 'Kiểm tra quy trình';
+      else if (item.inspection_type === 'sau-dong-goi' || item.inspection_type === 'oqc') stageDisplay = 'Sau đóng gói (OQC)';
+      else if (item.inspection_type === 'do-am') stageDisplay = 'Đo độ ẩm phôi/gỗ';
+      else if (item.inspection_type === 'bam-dinh') stageDisplay = 'Thử độ bám dính';
+      else if (item.inspection_type === 're_inspect' || item.inspection_type === 'kiem-tra-lai') stageDisplay = 'Tái kiểm tra';
+      else stageDisplay = 'Công đoạn sản xuất';
+    }
+
+    let productDisplay = item.product_sku || item.part_name || parsed.product_name || parsed.product_sku || parsed.part_name || 'N/A';
+    if (item.product_sku && item.part_name && item.product_sku !== item.part_name) {
+      productDisplay = `${item.product_sku} - ${item.part_name}`;
+    }
+
+    // Tính toán số lượng SP, tổng lỗi, tỷ lệ lỗi cho tất cả các loại phiếu
+    let totalProducts = 0;
+    if (isDaily) {
+      totalProducts = Number(item.total_products || 0);
+    } else {
+      totalProducts = Number(
+        item.total_products ||
+        item.sample_qty ||
+        item.required_qty ||
+        parsed.sample_qty ||
+        parsed.total_products ||
+        parsed.requiredQty ||
+        (Array.isArray(parsed.detailsList) && parsed.detailsList.length > 0 ? parsed.detailsList.length : null) ||
+        (Array.isArray(parsed.samples) && parsed.samples.length > 0 ? parsed.samples.length : null) ||
+        1
+      );
+    }
+
+    let totalDefects = 0;
+    if (isDaily) {
+      totalDefects = Number(item.total_defects || 0);
+    } else {
+      totalDefects = Number(
+        item.total_defects ??
+        item.error_qty ??
+        parsed.total_defects ??
+        parsed.error_qty ??
+        (Array.isArray(item.defects) ? item.defects.reduce((acc, d) => acc + (Number(d.quantity) || 0), 0) : null) ??
+        (Array.isArray(parsed.detailsList) ? parsed.detailsList.filter(d => d.conclusion === 'fail' || d.conclusion === 'ng' || d.conclusion === 'LỖI').length : null) ??
+        (Array.isArray(parsed.samples) ? parsed.samples.filter(s => s.result === 'fail' || s.result === 'ng' || s.result === 'LỖI').length : null) ??
+        (item.conclusion === 'fail' || item.result === 'Không đạt' || item.result === 'fail' ? 1 : 0)
+      );
+    }
+
+    let defectRateDisplay = '0.00%';
+    if (typeof item.defect_rate === 'number') {
+      defectRateDisplay = item.defect_rate.toFixed(2) + '%';
+    } else if (totalProducts > 0) {
+      defectRateDisplay = ((totalDefects / totalProducts) * 100).toFixed(2) + '%';
+    } else if (totalDefects > 0) {
+      defectRateDisplay = '100.00%';
+    }
+
+    const isPass = item.conclusion === 'pass' || 
+                   item.result === 'Đạt' || 
+                   item.result === 'pass' || 
+                   item.result === 'ĐẠT' ||
+                   (isDaily ? (totalDefects === 0) : true);
+
+    const actionRaw = item.action || parsed.action || (!isPass ? 'cach-ly' : 'chap-nhan');
+    let actionDisplay = 'Chấp nhận';
+    let actionColor = '#15803d';
+    let actionBg = '#dcfce7';
+
+    if (actionRaw === 'tra-ve') {
+      actionDisplay = 'Trả hàng';
+      actionColor = '#dc2626';
+      actionBg = '#fee2e2';
+    } else if (actionRaw === 'cach-ly' || !isPass) {
+      actionDisplay = 'Cách ly / Sửa chữa';
+      actionColor = '#b45309';
+      actionBg = '#fef3c7';
+    }
 
     let detailsHtml = '';
     if (isDaily) {
@@ -2123,9 +2210,9 @@ export const useInspectionReports = () => {
           .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #7B5233; padding-bottom: 12px; margin-bottom: 20px; }
           .title { font-size: 20px; font-weight: bold; color: #7B5233; text-transform: uppercase; }
           .sub { font-size: 13px; color: #64748b; }
-          .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; background: #faf6f0; padding: 15px; border-radius: 8px; border: 1px solid #eadcc9; margin-bottom: 20px; }
-          .info-item { font-size: 14px; }
-          .info-item label { color: #78350f; font-weight: bold; }
+          .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 24px; background: #faf6f0; padding: 14px 18px; border-radius: 8px; border: 1px solid #eadcc9; margin-bottom: 20px; }
+          .info-item { font-size: 13.5px; display: flex; align-items: center; gap: 8px; }
+          .info-item label { color: #78350f; font-weight: bold; white-space: nowrap; min-width: 130px; }
           .signatures { display: flex; justify-content: space-between; margin-top: 25px; text-align: center; }
           .sig-box { width: 45%; }
           .sig-title { font-weight: bold; font-size: 14px; margin-bottom: 8px; }
@@ -2148,29 +2235,30 @@ export const useInspectionReports = () => {
             <div class="sub">HỆ THỐNG QUẢN LÝ CHẤT LƯỢNG SẢN XUẤT</div>
           </div>
           <div style="text-align: right;">
-            <div style="font-size: 16px; font-weight: bold; color: #7B5233;">PHIẾU KIỂM TRA CHẤT LƯỢNG</div>
-            <div style="font-size: 12px; color: #64748b;">Mã phiếu: QC-${item.id} | Ngày: ${formatDisplayDate(item.inspection_date || item.inspected_at)}</div>
+            <div style="font-size: 16px; font-weight: bold; color: #7B5233; text-transform: uppercase;">PHIẾU KIỂM TRA CHẤT LƯỢNG</div>
+            <div style="font-size: 12px; color: #64748b; margin-top: 2px;">Mã phiếu: QC-${item.id} | Ngày: ${formatDisplayDate(item.inspection_date || item.inspected_at || item.created_at)}</div>
+            <div style="font-size: 11px; color: #7B5233; font-weight: 700; margin-top: 3px; letter-spacing: 0.5px;">BM: G7.CL.JHKS001-BM01</div>
           </div>
         </div>
 
         <div class="info-grid">
-          <div class="info-item"><label>Loại kiểm tra:</label> ${typeLabel}</div>
-          <div class="info-item"><label>QC Thực Hiện:</label> ${item.inspector_name || 'N/A'}</div>
-          ${isDaily ? `
-            <div class="info-item"><label>Công đoạn:</label> ${item.stage_name || 'N/A'}</div>
-            <div class="info-item"><label>Tổng SP kiểm:</label> ${item.total_products || 0}</div>
-            <div class="info-item"><label>Tổng lỗi:</label> ${item.total_defects || 0}</div>
-            <div class="info-item"><label>Tỉ lệ lỗi:</label> ${(item.defect_rate || 0).toFixed(2)}%</div>
-          ` : isInput ? `
-            <div class="info-item"><label>Tên linh kiện:</label> ${item.part_name || 'N/A'}</div>
-            <div class="info-item"><label>Quy cách:</label> ${item.specification || 'N/A'}</div>
-            <div class="info-item"><label>Container/PO:</label> ${item.cont_name || 'N/A'}</div>
-            <div class="info-item"><label>Kết luận:</label> <span style="font-weight:bold; color:${item.result === 'Đạt' ? '#16a34a':'#dc2626'}">${item.result || 'N/A'}</span></div>
-          ` : `
-            <div class="info-item"><label>Mã PO (Lệnh SX):</label> ${item.batch_no || 'N/A'}</div>
-            <div class="info-item"><label>Mã Sản Phẩm:</label> ${item.product_sku || 'N/A'}</div>
-            <div class="info-item"><label>Kết Luận:</label> <span style="font-weight:bold; color:${item.conclusion === 'pass' ? '#16a34a':'#dc2626'}">${item.conclusion === 'pass' ? 'ĐẠT' : 'LỖI'}</span></div>
-          `}
+          <div class="info-item"><label>Loại kiểm tra:</label> <span>${typeLabel}</span></div>
+          <div class="info-item"><label>QC Thực Hiện:</label> <span>${inspectorDisplay}</span></div>
+
+          <div class="info-item"><label>Mã PO (Lệnh SX):</label> <span>${poDisplay}</span></div>
+          <div class="info-item"><label>Công đoạn:</label> <span>${stageDisplay}</span></div>
+
+          <div class="info-item"><label>Sản phẩm:</label> <span>${productDisplay}</span></div>
+          <div class="info-item"><label>Tổng sản phẩm:</label> <span>${totalProducts.toLocaleString()}</span></div>
+
+          <div class="info-item"><label>Tổng lỗi:</label> <span style="font-weight:bold; color:${totalDefects > 0 ? '#dc2626' : '#15803d'}">${totalDefects.toLocaleString()}</span></div>
+          <div class="info-item"><label>Tỉ lệ lỗi:</label> <span style="font-weight:bold; color:${totalDefects > 0 ? '#dc2626' : '#15803d'}">${defectRateDisplay}</span></div>
+
+          <div class="info-item"><label>Kết Luận:</label> <span style="font-weight:800; color:${isPass ? '#15803d' : '#dc2626'}; background:${isPass ? '#dcfce7' : '#fee2e2'}; padding:2px 8px; border-radius:4px; border:1px solid ${isPass ? '#bbf7d0' : '#fecaca'}">${isPass ? 'ĐẠT' : 'LỖI'}</span></div>
+          <div class="info-item"><label>Hành động xử lý:</label> <span style="font-weight:bold; color:${actionColor}; background:${actionBg}; padding:2px 8px; border-radius:4px;">${actionDisplay}</span></div>
+
+          ${item.specification ? `<div class="info-item"><label>Quy cách:</label> <span>${item.specification}</span></div>` : ''}
+          ${item.cont_name && item.cont_name !== poDisplay ? `<div class="info-item"><label>Container:</label> <span>${item.cont_name}</span></div>` : ''}
         </div>
 
         ${item.notes || item.note ? `<div style="background:#fffbeb; padding:10px; border-radius:6px; border:1px solid #fef3c7; margin-bottom:15px; font-size:13px; color:#92400e;"><b>Ghi chú:</b> ${item.notes || item.note}</div>` : ''}
@@ -2184,8 +2272,8 @@ export const useInspectionReports = () => {
             <div class="sig-title">NGƯỜI LẬP PHIẾU (QC)</div>
             <div style="margin-top: 4px; border: 1.5px dashed #0284c7; background: #f0f9ff; padding: 8px 14px; border-radius: 8px; display: inline-block;">
               <div style="font-weight: 800; color: #0284c7; font-size: 13px; letter-spacing: 0.5px;">✓ ĐÃ KÝ SỐ (QC)</div>
-              <div style="font-weight: 700; color: #0369a1; font-size: 12px; margin-top: 2px;">${item.inspector_name || 'QC Thực Hiện'}</div>
-              <div style="font-size: 10px; color: #075985; margin-top: 1px;">Thời gian: ${formatDisplayDate(item.inspection_date || item.inspected_at)}</div>
+              <div style="font-weight: 700; color: #0369a1; font-size: 12px; margin-top: 2px;">${inspectorDisplay}</div>
+              <div style="font-size: 10px; color: #075985; margin-top: 1px;">Thời gian: ${formatDisplayDate(item.inspection_date || item.inspected_at || item.created_at)}</div>
             </div>
           </div>
           <div class="sig-box">
@@ -2193,7 +2281,7 @@ export const useInspectionReports = () => {
             ${item.is_confirmed ? `
               <div style="margin-top: 4px; border: 1.5px dashed #059669; background: #f0fdf4; padding: 8px 14px; border-radius: 8px; display: inline-block;">
                 <div style="font-weight: 800; color: #059669; font-size: 13px; letter-spacing: 0.5px;">✓ ĐÃ KÝ SỐ & PHÊ DUYỆT</div>
-                <div style="font-weight: 700; color: #047857; font-size: 12px; margin-top: 2px;">Trưởng Phòng QLCL</div>
+                <div style="font-weight: 700; color: #047857; font-size: 12px; margin-top: 2px;">${item.confirmed_by_name || 'Trưởng Phòng QLCL'}</div>
                 <div style="font-size: 10px; color: #065f46; margin-top: 1px;">Thời gian: ${new Date(item.confirmed_at || Date.now()).toLocaleString('vi-VN')}</div>
               </div>
             ` : `

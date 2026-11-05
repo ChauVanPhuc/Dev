@@ -62,7 +62,7 @@ from config.database import engine, SessionLocal
 from config.database import Base
 
 from app import models  # Đảm bảo tất cả Model được import để tránh lỗi Mapper
-from modules.kpi.models.kpi_management import KPIChecklist, KPIEmployeeItem, KPIViolation, KPIFeedback, KPIPointRule, KPIChecklistPool, KPIItemPool
+from modules.kpi.models.kpi_management import KPIChecklist, KPIEmployeeItem, KPIViolation, KPIFeedback, KPIPointRule, KPIChecklistPool, KPIItemPool, KPIEmployeeCustomResult
 from modules.quick_report.models.quick_report import QuickReport
 from modules.system.models.data_package import DataPackage
 
@@ -706,6 +706,8 @@ async def serve_ui(request: Request, full_path: str):
         "/admin" in referer
     )
 
+    STATIC_EXTS = ('.js', '.css', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico', '.woff', '.woff2', '.ttf', '.json', '.map')
+
     # Nếu được xác định là Dashboard
     if is_dashboard:
         # Xử lý đường dẫn cho Dashboard
@@ -714,24 +716,50 @@ async def serve_ui(request: Request, full_path: str):
         
         target_file = os.path.join(DASHBOARD_DIST, clean_path)
         if os.path.isfile(target_file):
+            if clean_path.startswith("assets/"):
+                return FileResponse(target_file, headers={"Cache-Control": "public, max-age=31536000, immutable"})
             return FileResponse(target_file)
+
+        # Nếu là request asset (js, css, hình ảnh...) nhưng file không tồn tại: trả về 404
+        # Tuyệt đối không fallback về index.html tránh làm trình duyệt hiểu nhầm file HTML là JS module
+        if clean_path.startswith("assets/") or clean_path.endswith(STATIC_EXTS):
+            raise HTTPException(status_code=404, detail="Asset not found")
         
-        # Fallback về index.html của Dashboard
+        # Fallback về index.html của Dashboard cho các route SPA
         index_dashboard = os.path.join(DASHBOARD_DIST, "index.html")
         if os.path.exists(index_dashboard):
-            return FileResponse(index_dashboard, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+            return FileResponse(index_dashboard, headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            })
     
     # Mặc định là Mobile
     target_file = os.path.join(MOBILE_DIST, full_path_clean)
     if os.path.isfile(target_file):
         if full_path_clean.endswith("index.html"):
-            return FileResponse(target_file, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+            return FileResponse(target_file, headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            })
+        if full_path_clean.startswith("assets/"):
+            return FileResponse(target_file, headers={"Cache-Control": "public, max-age=31536000, immutable"})
         return FileResponse(target_file)
+
+    # Nếu là request asset (js, css, hình ảnh...) nhưng file không tồn tại: trả về 404
+    # Tuyệt đối không fallback về index.html tránh lỗi MIME type & undefined e._result.default
+    if full_path_clean.startswith("assets/") or full_path_clean.endswith(STATIC_EXTS):
+        raise HTTPException(status_code=404, detail="Asset not found")
         
-    # Fallback về index.html của Mobile
+    # Fallback về index.html của Mobile cho các route SPA
     index_mobile = os.path.join(MOBILE_DIST, "index.html")
     if os.path.exists(index_mobile):
-        return FileResponse(index_mobile, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+        return FileResponse(index_mobile, headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0"
+        })
         
     return {"message": "ERP_G7 API is running. UI builds not found."}
 

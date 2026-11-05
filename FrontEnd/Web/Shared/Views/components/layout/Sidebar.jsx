@@ -69,6 +69,9 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
         const data = await api.get('/system/sidebar?platform=Web');
         let list = Array.isArray(data) ? [...data] : [];
         
+        // Loại bỏ nhóm "Quản lý KPI" trên Sidebar vì đã chuyển về "Mục tiêu Chất Lượng" (/admin/kpi/dashboard) và "Danh sách nhân sự" (/admin/kpi/quality-employees) trong Module chất lượng
+        list = list.filter(item => item.title !== 'Quản lý KPI' && item.title !== 'KPI' && item.id !== 52);
+        
         // Đảm bảo "Quản Lý Góp Ý" luôn xuất hiện ở cấp cao nhất (ngang cấp Quản lý hệ thống)
         const hasFeedbackRoot = list.some(item => (!item.parent_id || item.parent_id === null) && (item.route_path === '/admin/feedback' || item.title === 'Quản Lý Góp Ý'));
         if (!hasFeedbackRoot) {
@@ -115,6 +118,29 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
               } else {
                 qualityGroup.children.unshift(infographicMenuItem);
               }
+            }
+
+            // Đảm bảo "Đánh giá từ nhân viên" luôn xuất hiện ngay sau "Danh sách nhân sự"
+            let staffEvalItem = qualityGroup.children.find(c => c.route_path === '/admin/kpi/staff-evaluations' || c.title === 'Đánh giá từ nhân viên');
+            if (staffEvalItem) {
+              qualityGroup.children = qualityGroup.children.filter(c => c !== staffEvalItem);
+            } else {
+              staffEvalItem = {
+                id: 'sub-quality-staff-evaluations',
+                parent_id: qualityGroup.id,
+                title: 'Đánh giá từ nhân viên',
+                route_path: '/admin/kpi/staff-evaluations',
+                icon: 'Award',
+                sort_order: 5,
+                is_active: true,
+                permission_key: 'kpi'
+              };
+            }
+            const empIdx = qualityGroup.children.findIndex(c => c.route_path === '/admin/kpi/quality-employees' || c.title?.includes('nhân sự'));
+            if (empIdx !== -1) {
+              qualityGroup.children.splice(empIdx + 1, 0, staffEvalItem);
+            } else {
+              qualityGroup.children.push(staffEvalItem);
             }
           }
         }
@@ -329,18 +355,7 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
         { id: 25, parent_id: 19, title: 'Danh sách bàn giao', route_path: '/admin/delivery-tracking', icon: 'Handshake' }
       ];
     }
-    if (group.title === 'Quản lý KPI' || group.title === 'KPI') {
-      if (group.children && group.children.length > 0) {
-        return group.children;
-      }
-      return [
-        { id: 102, parent_id: group.id, title: 'Danh sách & Sơ đồ nhân sự', route_path: '/admin/kpi/personnel', icon: 'Users' },
-        { id: 103, parent_id: group.id, title: 'Hồ sơ chất lượng', route_path: '/admin/kpi/quality-profiles', icon: 'ShieldCheck' },
-        { id: 104, parent_id: group.id, title: 'Danh sách vi phạm', route_path: '/admin/violations', icon: 'AlertTriangle' },
-        { id: 105, parent_id: group.id, title: 'Danh mục mẫu Checklist', route_path: '/admin/kpi/checklist', icon: 'CheckSquare' },
-        { id: 106, parent_id: group.id, title: 'Quy tắc cộng trừ điểm', route_path: '/admin/kpi/rules', icon: 'FileText' }
-      ];
-    }
+// Nhóm Quản lý KPI đã được loại bỏ khỏi sidebar
     let list = group.children || [];
     if (group.title === 'Module chất lượng' || group.title === 'Quản lý chất lượng' || group.title === 'Quản lý Chất Lượng') {
       list = list.filter(item => item.route_path !== '/admin/quality-targets');
@@ -457,12 +472,7 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
     )) {
       return true;
     }
-    if ((group.title === 'Quản lý KPI' || group.title === 'KPI') && (
-      (location.pathname.startsWith('/admin/kpi') && location.pathname !== '/admin/kpi/dashboard') ||
-      location.pathname.startsWith('/admin/violations')
-    )) {
-      return true;
-    }
+// Nhóm Quản lý KPI đã được loại bỏ khỏi sidebar
     const children = getGroupChildren(group);
     return children.some(child => {
       if (child.children && child.children.length > 0) {

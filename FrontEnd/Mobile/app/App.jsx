@@ -6,65 +6,90 @@ import ProtectedRoute from '@mobile/Shared/Views/components/layout/ProtectedRout
 import AppUpdateModal from '@mobile/Shared/Views/components/feedback/AppUpdateModal'
 import ErrorBoundary from '@mobile/Shared/Views/components/feedback/ErrorBoundary'
 
-// Lazy loading các màn hình để tối ưu hóa thời gian tải ứng dụng di động
-const DeliveryInfo = lazy(() => import('@modules/delivery/Views/DeliveryInfoView'))
-const DeliveryCreate = lazy(() => import('@modules/delivery/Views/DeliveryCreateView'))
-const DeliveryReceive = lazy(() => import('@modules/delivery/Views/DeliveryReceiveView'))
-const DeliveryHistory = lazy(() => import('@modules/delivery/Views/DeliveryHistoryView'))
-const DeliveryDetail = lazy(() => import('@modules/delivery/Views/DeliveryDetailView'))
-const PlanTracking = lazy(() => import('@modules/production/Views/PlanTrackingView'))
-const DailyInspection = lazy(() => import('@modules/inspection/Views/DailyInspectionView'))
-const StageInspection = lazy(() => import('@modules/inspection/Views/StageInspectionView'))
-const FirstArticleInspection = lazy(() => import('@modules/inspection/Views/FirstArticleInspectionView'))
-const InspectionLogs = lazy(() => import('@modules/inspection/Views/InspectionLogsView'))
-const ThermalPrint = lazy(() => import('@modules/delivery/Views/components/ThermalPrint'))
-const AwardDiscipline = lazy(() => import('@modules/kpi/Views/AwardDisciplineView'))
-const KPITracking = lazy(() => import('@modules/kpi/Views/KPITrackingView'))
-const StaffEvaluation = lazy(() => import('@modules/kpi/Views/StaffEvaluationView'))
-const QualityInspectionDetail = lazy(() => import('@modules/inspection/Views/QualityInspectionDetailView'))
-const InputInspection = lazy(() => import('@modules/inspection/Views/InputInspectionView'))
-const EquipmentList = lazy(() => import('@modules/equipment/Views/EquipmentListView'))
-const KPIStaffList = lazy(() => import('@modules/kpi/Views/KPIStaffListView'))
-const QualityEmployeeListMobileView = lazy(() => import('@modules/kpi/Views/QualityEmployeeListMobileView'))
-const QualityKPIDashboardMobileView = lazy(() => import('@modules/kpi/Views/QualityKPIDashboardMobileView'))
-const QualityOverviewMobileView = lazy(() => import('@modules/inspection/Views/QualityOverviewMobileView'))
-const CAPAList = lazy(() => import('@modules/capa/Views/CAPAListView'))
-const CAPAReport = lazy(() => import('@modules/capa/Views/CAPAReportView'))
-const CAPADetail = lazy(() => import('@modules/capa/Views/CAPADetailView'))
-const QuickReportCreate = lazy(() => import('@modules/quick_report/Views/QuickReportCreateView'))
-const QuickReportList = lazy(() => import('@modules/quick_report/Views/QuickReportListView'))
-const DashboardView = lazy(() => import('@modules/production/Views/DashboardView'))
-const ProductionDashboard = lazy(() => import('@modules/production/Views/ProductionDashboardView'))
-const ProductionOrders = lazy(() => import('@modules/production/Views/ProductionOrdersView'))
-const ProductionOrderDetail = lazy(() => import('@modules/production/Views/ProductionOrderDetailView'))
-const ProductionPlanSchedule = lazy(() => import('@modules/production/Views/ProductionPlanScheduleView'))
-const ProductionTransferHistory = lazy(() => import('@modules/production/Views/ProductionTransferHistoryView'))
-const FeedbackView = lazy(() => import('@modules/inspection/Views/FeedbackView'))
-const CtqSosView = lazy(() => import('@modules/inspection/Views/CtqSosView'))
-const WarningsView = lazy(() => import('@modules/inspection/Views/WarningsView'))
-const StageAdhesionView = lazy(() => import('@modules/inspection/Views/StageAdhesionView'))
-const StagePackagingView = lazy(() => import('@modules/inspection/Views/StagePackagingView'))
-const StageMoistureView = lazy(() => import('@modules/inspection/Views/StageMoistureView'))
-const StageProcessView = lazy(() => import('@modules/inspection/Views/StageProcessView'))
-const ShapingInspectionView = lazy(() => import('@modules/inspection/Views/ShapingInspectionView'))
-const AssemblyInspectionView = lazy(() => import('@modules/inspection/Views/AssemblyInspectionView'))
-const PaintingInspectionView = lazy(() => import('@modules/inspection/Views/PaintingInspectionView'))
-const PackagingInspectionView = lazy(() => import('@modules/inspection/Views/PackagingInspectionView'))
+function safeLazy(importFn) {
+  return lazy(async () => {
+    try {
+      return await importFn();
+    } catch (err1) {
+      console.warn('[safeLazy] Lần nạp module 1 thất bại, thử lại sau 300ms...', err1);
+      await new Promise(res => setTimeout(res, 300));
+      try {
+        return await importFn();
+      } catch (err2) {
+        console.warn('[safeLazy] Lần nạp module 2 thất bại, kiểm tra phiên bản mới...', err2);
+        const reloadKey = 'sf_mobile_lazy_auto_reload';
+        const last = parseInt(sessionStorage.getItem(reloadKey) || '0', 10);
+        const now = Date.now();
+        if (now - last > 6000) {
+          sessionStorage.setItem(reloadKey, now.toString());
+          const targetUrl = window.location.origin + window.location.pathname + '?_v=' + now;
+          window.location.href = targetUrl;
+          return new Promise(() => {}); // Giữ Suspense trong khi trình duyệt đang điều hướng
+        }
+        throw err2;
+      }
+    }
+  });
+}
+// Lazy loading các màn hình an toàn với tự động thử lại
+const DeliveryInfo = safeLazy(() => import('@modules/delivery/Views/DeliveryInfoView'))
+const DeliveryCreate = safeLazy(() => import('@modules/delivery/Views/DeliveryCreateView'))
+const DeliveryReceive = safeLazy(() => import('@modules/delivery/Views/DeliveryReceiveView'))
+const DeliveryHistory = safeLazy(() => import('@modules/delivery/Views/DeliveryHistoryView'))
+const DeliveryDetail = safeLazy(() => import('@modules/delivery/Views/DeliveryDetailView'))
+const PlanTracking = safeLazy(() => import('@modules/production/Views/PlanTrackingView'))
+const DailyInspection = safeLazy(() => import('@modules/inspection/Views/DailyInspectionView'))
+const StageInspection = safeLazy(() => import('@modules/inspection/Views/StageInspectionView'))
+const FirstArticleInspection = safeLazy(() => import('@modules/inspection/Views/FirstArticleInspectionView'))
+const InspectionLogs = safeLazy(() => import('@modules/inspection/Views/InspectionLogsView'))
+const ThermalPrint = safeLazy(() => import('@modules/delivery/Views/components/ThermalPrint'))
+const AwardDiscipline = safeLazy(() => import('@modules/kpi/Views/AwardDisciplineView'))
+const KPITracking = safeLazy(() => import('@modules/kpi/Views/KPITrackingView'))
+const StaffEvaluation = safeLazy(() => import('@modules/kpi/Views/StaffEvaluationView'))
+const QualityInspectionDetail = safeLazy(() => import('@modules/inspection/Views/QualityInspectionDetailView'))
+const InputInspection = safeLazy(() => import('@modules/inspection/Views/InputInspectionView'))
+const EquipmentList = safeLazy(() => import('@modules/equipment/Views/EquipmentListView'))
+const KPIStaffList = safeLazy(() => import('@modules/kpi/Views/KPIStaffListView'))
+const QualityEmployeeListMobileView = safeLazy(() => import('@modules/kpi/Views/QualityEmployeeListMobileView'))
+const QualityKPIDashboardMobileView = safeLazy(() => import('@modules/kpi/Views/QualityKPIDashboardMobileView'))
+const QualityOverviewMobileView = safeLazy(() => import('@modules/inspection/Views/QualityOverviewMobileView'))
+const CAPAList = safeLazy(() => import('@modules/capa/Views/CAPAListView'))
+const CAPAReport = safeLazy(() => import('@modules/capa/Views/CAPAReportView'))
+const CAPADetail = safeLazy(() => import('@modules/capa/Views/CAPADetailView'))
+const QuickReportCreate = safeLazy(() => import('@modules/quick_report/Views/QuickReportCreateView'))
+const QuickReportList = safeLazy(() => import('@modules/quick_report/Views/QuickReportListView'))
+const DashboardView = safeLazy(() => import('@modules/production/Views/DashboardView'))
+const ProductionDashboard = safeLazy(() => import('@modules/production/Views/ProductionDashboardView'))
+const ProductionOrders = safeLazy(() => import('@modules/production/Views/ProductionOrdersView'))
+const ProductionOrderDetail = safeLazy(() => import('@modules/production/Views/ProductionOrderDetailView'))
+const ProductionPlanSchedule = safeLazy(() => import('@modules/production/Views/ProductionPlanScheduleView'))
+const ProductionTransferHistory = safeLazy(() => import('@modules/production/Views/ProductionTransferHistoryView'))
+const FeedbackView = safeLazy(() => import('@modules/inspection/Views/FeedbackView'))
+const CtqSosView = safeLazy(() => import('@modules/inspection/Views/CtqSosView'))
+const WarningsView = safeLazy(() => import('@modules/inspection/Views/WarningsView'))
+const StageAdhesionView = safeLazy(() => import('@modules/inspection/Views/StageAdhesionView'))
+const StagePackagingView = safeLazy(() => import('@modules/inspection/Views/StagePackagingView'))
+const StageMoistureView = safeLazy(() => import('@modules/inspection/Views/StageMoistureView'))
+const StageProcessView = safeLazy(() => import('@modules/inspection/Views/StageProcessView'))
+const ShapingInspectionView = safeLazy(() => import('@modules/inspection/Views/ShapingInspectionView'))
+const AssemblyInspectionView = safeLazy(() => import('@modules/inspection/Views/AssemblyInspectionView'))
+const PaintingInspectionView = safeLazy(() => import('@modules/inspection/Views/PaintingInspectionView'))
+const PackagingInspectionView = safeLazy(() => import('@modules/inspection/Views/PackagingInspectionView'))
 
 // Module Production V2 (CL06, CL07, CL08, CL09)
-const CL06_TransferListView = lazy(() => import('@modules/production_v2/Views/CL06_TransferListView'))
-const CL07_TransferCreateView = lazy(() => import('@modules/production_v2/Views/CL07_TransferCreateView'))
-const CL07_BackupQRTicketView = lazy(() => import('@modules/production_v2/Views/CL07_BackupQRTicketView'))
-const CL08_InspectionListView = lazy(() => import('@modules/production_v2/Views/CL08_InspectionListView'))
-const CL09A_FirstSampleView = lazy(() => import('@modules/production_v2/Views/CL09A_FirstSampleView'))
-const CL09B_ReInspectView = lazy(() => import('@modules/production_v2/Views/CL09B_ReInspectView'))
-const CL09C_ParameterView = lazy(() => import('@modules/production_v2/Views/CL09C_ParameterView'))
-const CL09D_ProcessView = lazy(() => import('@modules/production_v2/Views/CL09D_ProcessView'))
-const CL09E_QAView = lazy(() => import('@modules/production_v2/Views/CL09E_QAView'))
-const CL09F_DailyInspectionView = lazy(() => import('@modules/production_v2/Views/CL09F_DailyInspectionView'))
-const CheckPalletView = lazy(() => import('@modules/pallet_check/Views/CheckPalletView'))
-const CheckPalletV1View = lazy(() => import('@modules/pallet_check/Views/CheckPalletV1View'))
-const CheckCabinetBoxView = lazy(() => import('@modules/cabinet_box_check/Views/CheckCabinetBoxView'))
+const CL06_TransferListView = safeLazy(() => import('@modules/production_v2/Views/CL06_TransferListView'))
+const CL07_TransferCreateView = safeLazy(() => import('@modules/production_v2/Views/CL07_TransferCreateView'))
+const CL07_BackupQRTicketView = safeLazy(() => import('@modules/production_v2/Views/CL07_BackupQRTicketView'))
+const CL08_InspectionListView = safeLazy(() => import('@modules/production_v2/Views/CL08_InspectionListView'))
+const CL09A_FirstSampleView = safeLazy(() => import('@modules/production_v2/Views/CL09A_FirstSampleView'))
+const CL09B_ReInspectView = safeLazy(() => import('@modules/production_v2/Views/CL09B_ReInspectView'))
+const CL09C_ParameterView = safeLazy(() => import('@modules/production_v2/Views/CL09C_ParameterView'))
+const CL09D_ProcessView = safeLazy(() => import('@modules/production_v2/Views/CL09D_ProcessView'))
+const CL09E_QAView = safeLazy(() => import('@modules/production_v2/Views/CL09E_QAView'))
+const CL09F_DailyInspectionView = safeLazy(() => import('@modules/production_v2/Views/CL09F_DailyInspectionView'))
+const CheckPalletView = safeLazy(() => import('@modules/pallet_check/Views/CheckPalletView'))
+const CheckPalletV1View = safeLazy(() => import('@modules/pallet_check/Views/CheckPalletV1View'))
+const CheckCabinetBoxView = safeLazy(() => import('@modules/cabinet_box_check/Views/CheckCabinetBoxView'))
 
 /**
  * Hiệu ứng tải trang nhẹ cho Mobile

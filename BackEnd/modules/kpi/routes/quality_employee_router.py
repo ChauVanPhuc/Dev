@@ -9,6 +9,8 @@ import math
 from config.database import get_db, engine, Base
 from modules.kpi.models.quality_employee import QualityEmployee
 from modules.hr.models.hr_models import HREmployee
+from fastapi.responses import StreamingResponse
+from modules.kpi.services.kpi_excel_exporter import generate_monthly_kpi_excel
 
 # Khởi tạo bảng nếu chưa có
 QualityEmployee.__table__.create(bind=engine, checkfirst=True)
@@ -97,16 +99,19 @@ def seed_initial_quality_employees(db: Session = Depends(get_db)):
     db.commit()
     return {"message": f"Khởi tạo thành công {count} nhân sự Quản lý Chất lượng vào Database!", "count": count}
 
+@router.get("", include_in_schema=False)
 @router.get("/")
 def get_quality_employees(
     page: int = 1,
-    size: int = 50,
+    size: Optional[int] = None,
+    limit: Optional[int] = None,
     search: Optional[str] = None,
     factory: Optional[str] = None,
     stage: Optional[str] = None,
     department: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
+    actual_size = size or limit or 50
     query = db.query(QualityEmployee)
 
     if search:
@@ -126,16 +131,69 @@ def get_quality_employees(
         query = query.filter(QualityEmployee.department == department)
 
     total = query.count()
-    pages = math.ceil(total / size) if size > 0 else 1
-    items = query.order_by(QualityEmployee.id.asc()).offset((page - 1) * size).limit(size).all()
+    pages = math.ceil(total / actual_size) if actual_size > 0 else 1
+    items = query.order_by(QualityEmployee.id.asc()).offset((page - 1) * actual_size).limit(actual_size).all()
 
     return {
         "items": [QualityEmployeeResponse.model_validate(i) for i in items],
         "total": total,
         "page": page,
-        "size": size,
+        "size": actual_size,
         "pages": pages
     }
+
+class ExportKPIExcelRequest(BaseModel):
+    month: int = 9
+    year: int = 2026
+    scope: str = "ALL"  # ALL, QLCL_ONLY, QCSX_ONLY
+    factory: Optional[str] = None
+
+
+@router.post("/kpi/export-excel")
+def export_kpi_excel_post(payload: ExportKPIExcelRequest, db: Session = Depends(get_db)):
+    """
+    Xuất báo cáo kết quả thực hiện KPI theo tháng ra file Excel chuẩn format 'CL_KPI tháng 9.xlsx'
+    """
+    output = generate_monthly_kpi_excel(
+        db=db,
+        month=payload.month,
+        year=payload.year,
+        scope=payload.scope,
+        factory=payload.factory
+    )
+    filename = f"CL_KPI_Thang_{payload.month:02d}_{payload.year}.xlsx"
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+@router.get("/kpi/export-excel")
+def export_kpi_excel_get(
+    month: int = Query(9, ge=1, le=12),
+    year: int = Query(2026, ge=2020),
+    scope: str = Query("ALL"),
+    factory: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Hỗ trợ tải trực tiếp báo cáo KPI tháng qua URL
+    """
+    output = generate_monthly_kpi_excel(
+        db=db,
+        month=month,
+        year=year,
+        scope=scope,
+        factory=factory
+    )
+    filename = f"CL_KPI_Thang_{month:02d}_{year}.xlsx"
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
 
 @router.get("/{id}", response_model=QualityEmployeeResponse)
 def get_quality_employee_detail(id: int, db: Session = Depends(get_db)):

@@ -7,16 +7,15 @@ import '../assets/common.css'
 import '../styles/index.css'
 
 // Tự động xử lý khi chunk lazy-loaded bị lỗi do server vừa deploy phiên bản mới
-window.addEventListener('vite:preloadError', (event) => {
-  event.preventDefault()
+window.addEventListener('vite:preloadError', () => {
+  // KHÔNG gọi event.preventDefault() để tránh Vite nuốt lỗi trả về undefined khiến React.lazy crash
   const reloadKey = 'sf_mobile_preload_auto_reload'
   const last = parseInt(sessionStorage.getItem(reloadKey) || '0', 10)
   const now = Date.now()
-  if (now - last > 8000) {
+  if (now - last > 6000) {
     sessionStorage.setItem(reloadKey, now.toString())
-    const url = new URL(window.location.href)
-    url.searchParams.set('_v', now.toString())
-    window.location.replace(url.toString())
+    const targetUrl = window.location.origin + window.location.pathname + '?_v=' + now
+    window.location.href = targetUrl
   }
 })
 

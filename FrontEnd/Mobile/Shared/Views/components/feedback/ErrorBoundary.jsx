@@ -1,5 +1,5 @@
 import React from 'react'
-import { AlertTriangle, RotateCcw, Home, RefreshCw } from 'lucide-react'
+import { AlertTriangle, RotateCcw, Home } from 'lucide-react'
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -14,39 +14,37 @@ class ErrorBoundary extends React.Component {
   componentDidCatch(error, errorInfo) {
     console.error('[ErrorBoundary caught an error]:', error, errorInfo)
     this.setState({ errorInfo })
-
-    // Tự động nhận diện lỗi chunk/module import thất bại do phiên bản mới được deploy
-    const msg = error?.message || ''
-    const isChunkError = /import.*module.*script.*failed|failed.*dynamically.*imported.*module|loading.*chunk/i.test(msg)
-    
-    if (isChunkError) {
-      const reloadKey = 'sf_mobile_chunk_auto_reload'
-      const last = parseInt(sessionStorage.getItem(reloadKey) || '0', 10)
-      const now = Date.now()
-      // Nếu chưa tự động reload trong 10 giây qua, tự kích hoạt tải lại với cache-busting
-      if (now - last > 10000) {
-        sessionStorage.setItem(reloadKey, now.toString())
-        this.setState({ isReloading: true })
-        setTimeout(() => {
-          this.handleHardReload()
-        }, 300)
-      }
-    }
   }
 
   handleHardReload = () => {
     try {
-      if ('caches' in window) {
-        caches.keys().then(keys => keys.forEach(key => caches.delete(key)))
-      }
+      this.setState({ isReloading: true })
+      // Dọn dẹp cờ cooldown để trang mới không bị chặn
+      sessionStorage.clear()
       localStorage.removeItem('vite_cache_timestamp')
+
+      // Dọn cache chạy ngầm (fire-and-forget), tuyệt đối KHÔNG await để tránh treo trên iOS Safari
+      if ('caches' in window) {
+        caches.keys().then(keys => keys.forEach(k => caches.delete(k))).catch(() => {})
+      }
     } catch (e) {
-      console.warn('Cache clear error:', e)
+      console.warn('Storage clear error:', e)
     }
 
-    const url = new URL(window.location.href)
-    url.searchParams.set('_v', Date.now().toString())
-    window.location.replace(url.toString())
+    // Điều hướng cứng ngay lập tức bằng window.location.href kèm tham số thời gian mới
+    const targetUrl = window.location.origin + window.location.pathname + '?_v=' + Date.now()
+    window.location.href = targetUrl
+  }
+
+  handleGoToPallet = () => {
+    try {
+      sessionStorage.clear()
+      if ('caches' in window) {
+        caches.keys().then(keys => keys.forEach(k => caches.delete(k))).catch(() => {})
+      }
+    } catch (e) {}
+
+    window.location.href = window.location.origin + '/pallet-check?_v=' + Date.now()
   }
 
   render() {
@@ -55,8 +53,8 @@ class ErrorBoundary extends React.Component {
         return this.props.fallback
       }
 
-      const msg = this.state.error?.message || ''
-      const isChunkError = /import.*module.*script.*failed|failed.*dynamically.*imported.*module|loading.*chunk/i.test(msg)
+      const msg = this.state.error?.message || String(this.state.error || '')
+      const isChunkError = /import.*module.*script.*failed|failed.*dynamically.*imported.*module|loading.*chunk|_result\.default|reading ['"]default['"]|evaluating '.*\.default'/i.test(msg)
 
       return (
         <div style={{
@@ -89,11 +87,32 @@ class ErrorBoundary extends React.Component {
             {isChunkError ? 'Hệ thống vừa cập nhật phiên bản mới' : 'Đã xảy ra lỗi khi tải giao diện'}
           </h2>
 
-          <p style={{ fontSize: '13px', color: '#7B5233', margin: '0 0 20px 0', maxWidth: '340px', lineHeight: 1.5 }}>
+          <p style={{ fontSize: '13px', color: '#7B5233', margin: '0 0 14px 0', maxWidth: '340px', lineHeight: 1.5 }}>
             {isChunkError
-              ? 'Ứng dụng đã có phiên bản cập nhật trên máy chủ hoặc đường truyền 4G bị gián đoạn khi tải tài nguyên. Vui lòng bấm nút bên dưới để đồng bộ bản mới nhất.'
-              : (msg || 'Hệ thống gặp sự cố không mong muốn. Vui lòng tải lại trang hoặc kiểm tra kết nối mạng.')}
+              ? 'Ứng dụng đã có phiên bản cập nhật mới trên hệ thống. Vui lòng bấm nút bên dưới để đồng bộ dữ liệu mới nhất.'
+              : 'Hệ thống gặp sự cố khi tải trang. Vui lòng bấm nút bên dưới để tải lại.'}
           </p>
+
+          {/* Hiển thị chi tiết lỗi kỹ thuật để chẩn đoán nhanh */}
+          {msg && (
+            <div style={{
+              margin: '0 0 16px 0',
+              padding: '8px 12px',
+              backgroundColor: '#FEF2F2',
+              border: '1px solid #FECACA',
+              borderRadius: '8px',
+              fontSize: '11px',
+              color: '#991B1B',
+              fontFamily: 'monospace',
+              textAlign: 'left',
+              maxWidth: '300px',
+              wordBreak: 'break-all',
+              maxHeight: '60px',
+              overflowY: 'auto'
+            }}>
+              {msg}
+            </div>
+          )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', maxWidth: '280px' }}>
             <button
@@ -116,16 +135,12 @@ class ErrorBoundary extends React.Component {
               }}
             >
               <RotateCcw size={16} />
-              <span>{this.state.isReloading ? 'Đang cập nhật...' : 'Cập nhật bản mới & Tải lại'}</span>
+              <span>{this.state.isReloading ? 'Đang chuyển trang...' : 'Cập nhật bản mới & Tải lại'}</span>
             </button>
 
             <button
               type="button"
-              onClick={() => {
-                const url = new URL(window.location.origin + '/pallet-check')
-                url.searchParams.set('_v', Date.now().toString())
-                window.location.replace(url.toString())
-              }}
+              onClick={this.handleGoToPallet}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -146,11 +161,9 @@ class ErrorBoundary extends React.Component {
             </button>
           </div>
 
-          {isChunkError && (
-            <p style={{ marginTop: '20px', fontSize: '11px', color: '#94A3B8', maxWidth: '300px', lineHeight: 1.4 }}>
-              Mẹo: Nếu bạn đang mở từ ứng dụng Màn hình chính (PWA), hãy vuốt tắt hẳn ứng dụng từ màn hình đa nhiệm rồi mở lại.
-            </p>
-          )}
+          <p style={{ marginTop: '20px', fontSize: '11px', color: '#94A3B8', maxWidth: '300px', lineHeight: 1.4 }}>
+            Mẹo: Nếu mở từ Màn hình chính (PWA), bạn cũng có thể vuốt tắt hẳn ứng dụng từ màn hình đa nhiệm rồi mở lại.
+          </p>
         </div>
       )
     }

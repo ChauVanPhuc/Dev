@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useLocation, useOutletContext } from 'react-router-dom';
-import { Search, Filter, Edit, Edit3, FileText, ChevronLeft, ChevronRight, CheckCircle2, X, Eye, RotateCcw, XCircle, Layers, Package, CheckCheck, MoreVertical, Info, Image as ImageIcon, ClipboardList, AlertTriangle, Keyboard, HelpCircle, Loader2, Save, UploadCloud, Plus, PlusCircle, History, Clock, ArrowRight, User, Scan, Sparkles } from 'lucide-react';
+import { Search, Filter, Edit, Edit3, FileText, ChevronLeft, ChevronRight, CheckCircle2, X, Eye, RotateCcw, XCircle, Layers, Package, CheckCheck, MoreVertical, Info, Image as ImageIcon, ClipboardList, AlertTriangle, Keyboard, HelpCircle, Loader2, Save, UploadCloud, Plus, PlusCircle, History, Clock, ArrowRight, User, Scan, Sparkles, Trash2 } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import * as XLSX from 'xlsx';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
@@ -296,7 +296,17 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
   const [confirming, setConfirming] = useState(false);
   const [cancelingId, setCancelingId] = useState(null);
   const [cancelingTask, setCancelingTask] = useState(false);
-  const [isCancelInspectionModalOpen, setIsCancelInspectionModalOpen] = useState(false);
+  const [cancelInspectionModal, setCancelInspectionModal] = useState({
+    isOpen: false,
+    task: null
+  });
+  const isCancelInspectionModalOpen = cancelInspectionModal.isOpen;
+  const setIsCancelInspectionModalOpen = (isOpen) => {
+    setCancelInspectionModal(prev => ({
+      isOpen,
+      task: isOpen ? (prev.task || selectedTask) : null
+    }));
+  };
   const [cancelConfirmModal, setCancelConfirmModal] = useState({
     isOpen: false,
     task: null
@@ -1586,30 +1596,53 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
     }
   };
 
+  // Mở popup xác nhận hủy hồ sơ kiểm tra
+  const handleOpenCancelInspectionModal = (task = null) => {
+    const target = task || selectedTask || (focusedRowIndex >= 0 ? paginatedTasks[focusedRowIndex] : null);
+    if (!target) {
+      toast('warning', 'Vui lòng chọn một phiếu kiểm tra để hủy.');
+      return;
+    }
+    setCancelInspectionModal({
+      isOpen: true,
+      task: target
+    });
+  };
+
   // Xác nhận hủy hồ sơ kiểm tra và tự động chuyển sang đơn tiếp theo
   const handleExecuteCancelInspection = async () => {
-    if (!selectedTask) return;
+    const targetTask = cancelInspectionModal.task || selectedTask;
+    if (!targetTask) {
+      toast('warning', 'Không tìm thấy thông tin phiếu kiểm tra cần hủy.');
+      setCancelInspectionModal({ isOpen: false, task: null });
+      return;
+    }
     setCancelingTask(true);
     try {
-      const taskType = selectedTask.type || 'input';
-      await api.post(`/inspections/cancel-inspection/${taskType}/${selectedTask.id}`, {
+      const taskType = targetTask.type || 'input';
+      const ticketCode = getTicketCode(targetTask) || targetTask.id;
+      await api.post(`/inspections/cancel-inspection/${taskType}/${targetTask.id}`, {
         handling_info: handlingInfo,
         reason: 'Quản lý chất lượng hủy hồ sơ',
         updated_by: currentEditorName,
         cancelled_by_name: currentEditorName,
         user_role: currentEditorRole
       });
-      toast('success', `Đã hủy hồ sơ #${selectedTask.ticket_code || selectedTask.id} thành công!`);
-      setIsCancelInspectionModalOpen(false);
+      toast('success', `Đã hủy hồ sơ #${ticketCode} thành công!`);
+      setCancelInspectionModal({ isOpen: false, task: null });
 
-      // Tự động chuyển sang phiếu tiếp theo
-      const remaining = filteredTasks.filter(t => t.id !== selectedTask.id);
-      setPendingTasks(prev => prev.filter(t => t.id !== selectedTask.id));
-      if (remaining.length > 0) {
-        const nextIdx = Math.min(Math.max(currentTaskIndex, 0), remaining.length - 1);
-        setSelectedTask(remaining[nextIdx]);
-      } else {
-        setSelectedTask(null);
+      // Cập nhật danh sách tồn đọng
+      setPendingTasks(prev => prev.filter(t => t.id !== targetTask.id));
+
+      // Nếu đang mở xem chi tiết chính phiếu này, tự động chuyển sang phiếu tiếp theo
+      if (selectedTask && selectedTask.id === targetTask.id) {
+        const remaining = filteredTasks.filter(t => t.id !== targetTask.id);
+        if (remaining.length > 0) {
+          const nextIdx = Math.min(Math.max(currentTaskIndex, 0), remaining.length - 1);
+          setSelectedTask(remaining[nextIdx]);
+        } else {
+          setSelectedTask(null);
+        }
       }
       fetchPendingTasks();
     } catch (error) {
@@ -1895,10 +1928,10 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
       }
 
       // TRƯỜNG HỢP B: ĐANG MỞ POPUP XÁC NHẬN HỦY HỒ SƠ
-      if (isCancelInspectionModalOpen) {
+      if (cancelInspectionModal.isOpen || isCancelInspectionModalOpen) {
         if (e.key === 'Escape') {
           e.preventDefault();
-          setIsCancelInspectionModalOpen(false);
+          setCancelInspectionModal({ isOpen: false, task: null });
         } else if (e.key === 'Enter' || e.key === 'F1') {
           e.preventDefault();
           if (!cancelingTask) {
@@ -1965,7 +1998,7 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
         if (e.key === 'F2') {
           e.preventDefault();
           if (!confirming && !cancelingTask) {
-            setIsCancelInspectionModalOpen(true);
+            handleOpenCancelInspectionModal(selectedTask);
           }
           return;
         }
@@ -2008,8 +2041,8 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
             setShowUnsavedConfirmModal(false);
             return;
           }
-          if (isCancelInspectionModalOpen) {
-            setIsCancelInspectionModalOpen(false);
+          if (cancelInspectionModal.isOpen || isCancelInspectionModalOpen) {
+            setCancelInspectionModal({ isOpen: false, task: null });
             return;
           }
           if (!confirming && !cancelingTask) {
@@ -2054,8 +2087,17 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
         return;
       }
 
-      // F2 hoặc /: Focus nhanh vào ô tìm kiếm
-      if (e.key === 'F2' || (e.key === '/' && !isInputFocused)) {
+      // F2: Hủy hồ sơ dòng đang chọn trên bảng
+      if (e.key === 'F2') {
+        e.preventDefault();
+        if (focusedRowIndex >= 0 && focusedRowIndex < paginatedTasks.length) {
+          handleOpenCancelInspectionModal(paginatedTasks[focusedRowIndex]);
+          return;
+        }
+      }
+
+      // /: Focus nhanh vào ô tìm kiếm
+      if (e.key === '/' && !isInputFocused) {
         e.preventDefault();
         const searchInput = document.querySelector('.page-toolbar__search-input');
         if (searchInput) {
@@ -2114,7 +2156,7 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [
     selectedTask, savingTask, confirming, cancelingTask, cancelingId, modalResult, modalAction,
-    previewImgUrl, isCancelInspectionModalOpen, cancelConfirmModal, isBatchQuickModalOpen,
+    previewImgUrl, cancelInspectionModal, isCancelInspectionModalOpen, cancelConfirmModal, isBatchQuickModalOpen,
     batchConfirming, showShortcutsModal, currentTaskIndex, filteredTasks, selectedBatchIds,
     focusedRowIndex, paginatedTasks
   ]);
@@ -2420,6 +2462,7 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
 
   // Trích xuất mã phiếu từ ticket_code hoặc parse từ task_name
   const getTicketCode = (t) => {
+    if (!t) return '';
     if (t.ticket_code) return t.ticket_code;
     const rawTaskName = (t.task_name || '').trim();
     const tcMatch = rawTaskName.match(/#([A-Za-z0-9_\-]+)/);
@@ -2428,6 +2471,7 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
 
   // Tối ưu hiển thị Nội dung gọn gàng: "Xác nhận phiếu kiểm tra" + chi tiết thực tế
   const renderCleanBatchTaskName = (t) => {
+    if (!t) return null;
     const rawTaskName = (t.task_name || '').trim();
     const rawPartName = (t.part_name || '').trim();
 
@@ -3440,6 +3484,32 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
                                     <span>Hủy trả hàng</span>
                                   </button>
                                 )}
+
+                                <button
+                                  type="button"
+                                  className="action-menu-item danger"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActionMenuId(null);
+                                    handleOpenCancelInspectionModal(task);
+                                  }}
+                                  disabled={cancelingTask}
+                                  style={{ 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    gap: '8px', 
+                                    padding: '7px 12px',
+                                    fontSize: '0.8rem',
+                                    fontWeight: '600',
+                                    color: '#DC2626',
+                                    borderRadius: '6px',
+                                    whiteSpace: 'nowrap',
+                                    width: '100%'
+                                  }}
+                                >
+                                  <Trash2 size={14} color="#DC2626" />
+                                  <span>Hủy hồ sơ</span>
+                                </button>
                               </div>
                             )}
                           </td>
@@ -5737,7 +5807,7 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
                   <div className="quality-modal-footer-left">
                     <button
                       type="button"
-                      onClick={() => setIsCancelInspectionModalOpen(true)}
+                      onClick={() => handleOpenCancelInspectionModal(selectedTask)}
                       disabled={confirming || cancelingTask}
                       style={{
                         display: 'inline-flex',
@@ -5874,7 +5944,7 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
                     <button
                       type="button"
                       className="btn-modal-mobile-cancel"
-                      onClick={() => setIsCancelInspectionModalOpen(true)}
+                      onClick={() => handleOpenCancelInspectionModal(selectedTask)}
                       disabled={confirming || cancelingTask}
                       title="Hủy hồ sơ này khỏi danh sách quản lý chất lượng"
                     >
@@ -6147,11 +6217,12 @@ const QualityOverviewView = ({ isParameterMode: isParameterModeProp }) => {
 
       {/* POPUP XÁC NHẬN HỦY HỒ SƠ KIỂM TRA */}
       <BeautifulConfirmModal
-        isOpen={isCancelInspectionModalOpen}
-        onClose={() => setIsCancelInspectionModalOpen(false)}
+        isOpen={cancelInspectionModal.isOpen}
+        zIndex={11000}
+        onClose={() => setCancelInspectionModal({ isOpen: false, task: null })}
         onConfirm={handleExecuteCancelInspection}
         title="Xác nhận hủy hồ sơ kiểm tra"
-        message={`Bạn có chắc chắn muốn hủy hồ sơ kiểm tra #${selectedTask?.ticket_code || selectedTask?.id} không?\n\n• Phiếu này sẽ bị ẩn khỏi danh sách hồ sơ chất lượng (/admin/quality-records).\n• Thông tin vẫn được lưu trữ trong hệ thống với trạng thái đã hủy.`}
+        message={cancelInspectionModal.isOpen ? `Bạn có chắc chắn muốn hủy hồ sơ kiểm tra #${getTicketCode(cancelInspectionModal.task || selectedTask) || (cancelInspectionModal.task || selectedTask)?.id || ''} không?\n\n• Phiếu này sẽ bị ẩn khỏi danh sách hồ sơ chất lượng (/admin/quality-records).\n• Thông tin vẫn được lưu trữ trong hệ thống với trạng thái đã hủy.` : ''}
         confirmText={cancelingTask ? 'Đang hủy...' : 'Đồng ý hủy hồ sơ'}
         cancelText="Không hủy"
         type="danger"

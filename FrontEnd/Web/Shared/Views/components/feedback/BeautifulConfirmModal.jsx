@@ -1,7 +1,7 @@
 import React from 'react';
 import { X, AlertTriangle, CheckCircle, Info, AlertCircle } from 'lucide-react';
 
-const BeautifulConfirmModal = ({ visible, isOpen, onCancel, onClose, onConfirm, title, message, type = 'warning', confirmText = 'Xác nhận', cancelText = 'Hủy' }) => {
+const BeautifulConfirmModal = ({ visible, isOpen, onCancel, onClose, onConfirm, title, message, type = 'warning', confirmText = 'Xác nhận', cancelText = 'Hủy', zIndex = 11000 }) => {
   const isVisible = visible ?? isOpen;
   const handleCancel = onCancel || onClose;
   const resolvedType = type === 'danger' ? 'error' : type;
@@ -34,7 +34,7 @@ const BeautifulConfirmModal = ({ visible, isOpen, onCancel, onClose, onConfirm, 
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      zIndex: 9999,
+      zIndex: zIndex || 11000,
       animation: 'fadeIn 0.3s ease-out',
       overflowY: 'auto',
       padding: '16px'

@@ -4949,6 +4949,12 @@ def confirm_inspection(
     """
     record = db.query(InputInspection).filter(InputInspection.id == id).first()
     if not record:
+        try:
+            from modules.inspection.models.daily_inspection import DailyInspection
+            record = db.query(DailyInspection).filter(DailyInspection.id == id).first()
+        except Exception:
+            pass
+    if not record:
         raise HTTPException(status_code=404, detail=f"Không tìm thấy phiếu kiểm tra có ID {id}")
         
     now = datetime.datetime.now()

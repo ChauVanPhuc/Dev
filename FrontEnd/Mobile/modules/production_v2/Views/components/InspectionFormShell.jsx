@@ -78,6 +78,14 @@ const InspectionFormShell = ({ title, subTitle, formState, children, showLastRes
       : (hasPoSelected && hasProductSelected && hasQtySelected)
   )
 
+  const isImageRequired = formState.mode === INSPECT_MODES.PARAMETER && Boolean(formState.isPaintThickness) && !readOnly
+  const hasValidImage = (images || []).some((img) => {
+    if (!img) return false
+    if (typeof img === 'string') return !img.startsWith('blob:')
+    return img.status !== 'error' && Boolean(img.file || img.serverUrl || img.url)
+  })
+  const isImageMissing = isImageRequired && !hasValidImage
+
   const renderImageUploadArea = () => (
     <div style={{
       marginTop: 14,
@@ -85,13 +93,13 @@ const InspectionFormShell = ({ title, subTitle, formState, children, showLastRes
       padding: '12px 14px',
       backgroundColor: '#FAF7F2',
       borderRadius: '12px',
-      border: '1px solid #EADBCE'
+      border: isImageMissing ? '1.5px solid #DC2626' : '1px solid #EADBCE'
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: images.length > 0 ? 10 : 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <Camera size={16} color="#7B5233" />
           <span style={{ fontSize: 13, fontWeight: 700, color: '#4A240E' }}>
-            Hình ảnh kiểm tra {!readOnly && <span style={{ color: '#94a3b8', fontWeight: 500, fontSize: 11 }}>(tùy chọn)</span>}
+            Hình ảnh kiểm tra {isImageRequired ? <span className="pv2-req" style={{ color: '#DC2626' }}>* <span style={{ fontWeight: 500, fontSize: 11 }}>(bắt buộc chụp ít nhất 1 ảnh)</span></span> : (!readOnly && <span style={{ color: '#94a3b8', fontWeight: 500, fontSize: 11 }}>(tùy chọn)</span>)}
           </span>
         </div>
         {images.length > 0 && (
@@ -643,10 +651,10 @@ const InspectionFormShell = ({ title, subTitle, formState, children, showLastRes
                 type="button"
                 className="pv2-btn-submit"
                 onClick={handleSubmit}
-                disabled={submitting || !isFormFilled}
+                disabled={submitting || !isFormFilled || isImageMissing}
                 style={{
-                  opacity: !isFormFilled ? 0.65 : 1,
-                  cursor: !isFormFilled ? 'not-allowed' : 'pointer'
+                  opacity: (!isFormFilled || isImageMissing) ? 0.65 : 1,
+                  cursor: (!isFormFilled || isImageMissing) ? 'not-allowed' : 'pointer'
                 }}
               >
                 <CheckCircle2 size={17} />

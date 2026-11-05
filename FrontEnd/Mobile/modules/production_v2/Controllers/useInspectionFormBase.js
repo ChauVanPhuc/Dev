@@ -2370,6 +2370,14 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     }
   }
 
+  // Chỉ thông số "Độ dày màng sơn" mới áp dụng gom quy cách theo màu + bắt buộc chụp ảnh
+  const isPaintThickness = useMemo(() => {
+    if (mode !== INSPECT_MODES.PARAMETER) return false
+    const norm = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase()
+    const opt = (parameterOptions || []).find((o) => o.value === parameter)
+    return norm(parameter).includes('do day mang son') || norm(opt?.label).includes('do day mang son')
+  }, [mode, parameter, parameterOptions])
+
   const handleSubmit = async () => {
     if (readOnly) return
 
@@ -2405,6 +2413,19 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       }
       if (!paramSample || Number(paramSample) <= 0) {
         showMessage('Thiếu thông tin', 'Vui lòng nhập Số lượng cần kiểm tra hợp lệ.', 'warning')
+        return
+      }
+      if (isPaintThickness && (!selectedSpecs || selectedSpecs.length === 0) && !spec) {
+        showMessage('Thiếu thông tin', 'Vui lòng chọn Quy cách (màu) trước khi tiếp tục.', 'warning')
+        return
+      }
+      const hasParamImage = (images || []).some((img) => {
+        if (!img) return false
+        if (typeof img === 'string') return !img.startsWith('blob:')
+        return img.status !== 'error' && Boolean(img.file || img.serverUrl || img.url)
+      })
+      if (isPaintThickness && !hasParamImage) {
+        showMessage('Thiếu hình ảnh', 'Phiếu kiểm tra thông số bắt buộc chụp ít nhất 1 ảnh.', 'warning')
         return
       }
     } else if (mode === INSPECT_MODES.PROCESS) {
@@ -2539,6 +2560,13 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
         } else if (item.url && !String(item.url).startsWith('blob:')) {
           finalImages.push(item.url)
         }
+      }
+
+      if (isPaintThickness && finalImages.length === 0) {
+        console.error('[useInspectionFormBase] Phiếu thông số thiếu ảnh hợp lệ sau khi upload')
+        setSubmitting(false)
+        showMessage('Thiếu hình ảnh', 'Không có ảnh hợp lệ (ảnh có thể tải lỗi). Vui lòng chụp lại ít nhất 1 ảnh.', 'error')
+        return
       }
 
       const isDaily = mode === INSPECT_MODES.DAILY
@@ -3153,6 +3181,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
     parameter,
     setParameter: setParameterWithDirty,
     parameterOptions,
+    isPaintThickness,
     setParameterOptions,
     paramStage,
     setParamStage: handleStageChange,

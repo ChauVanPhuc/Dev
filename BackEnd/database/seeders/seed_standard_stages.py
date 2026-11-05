@@ -62,8 +62,19 @@ def seed_stages():
     db = SessionLocal()
     try:
         print("Seeding 7 standard production stages...")
+        std_codes = [s["code"] for s in STAGES_DATA]
+        
+        # Xóa các công đoạn thừa ngoài CD01 - CD07
+        extra_stages = db.query(Stage).filter(~Stage.code.in_(std_codes)).all()
+        for es in extra_stages:
+            db.delete(es)
+        db.flush()
+
         for item in STAGES_DATA:
-            existing = db.query(Stage).filter(Stage.name == item["name"]).first()
+            existing = db.query(Stage).filter(Stage.code == item["code"]).first()
+            if not existing:
+                existing = db.query(Stage).filter(Stage.name == item["name"]).first()
+
             if not existing:
                 stage = Stage(
                     code=item["code"],
@@ -76,6 +87,7 @@ def seed_stages():
                 print(f"  + Added stage: [{item['code']}] {item['name']}".encode('utf-8', errors='ignore').decode('utf-8'))
             else:
                 existing.code = item["code"]
+                existing.name = item["name"]
                 existing.sequence = item["sequence"]
                 existing.description = item["description"]
                 existing.is_active = item["is_active"]

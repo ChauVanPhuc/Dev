@@ -35,6 +35,7 @@ const QualityKPIDashboard = lazy(() => import('@modules/KPI/Views/Report/Quality
 const KPIPersonnel = lazy(() => import('@modules/KPI/Views/Personnel/KPIPersonnelView'));
 const QualityProfiles = lazy(() => import('@modules/KPI/Views/QualityProfiles/QualityProfilesView'));
 const QualityEmployeeListView = lazy(() => import('@modules/KPI/Views/QualityEmployeeListView'));
+const StaffEvaluationListView = lazy(() => import('@modules/KPI/Views/StaffEvaluationListView'));
 const KPIChecklist = lazy(() => import('@modules/KPI/Views/Checklist/KPIChecklistView'));
 const KPIItems = lazy(() => import('@modules/KPI/Views/Item/KPIItemsView'));
 const KPIRules = lazy(() => import('@modules/KPI/Views/Rule/KPIRulesView'));
@@ -752,6 +753,8 @@ function App() {
                 <Route path="kpi/personnel" element={<ProtectedRoute permissionKey="kpi"><KPIPersonnel /></ProtectedRoute>} />
                 <Route path="kpi/quality-profiles" element={<ProtectedRoute permissionKey="kpi"><QualityProfiles /></ProtectedRoute>} />
                 <Route path="kpi/quality-employees" element={<ProtectedRoute permissionKey="kpi"><QualityEmployeeListView /></ProtectedRoute>} />
+                <Route path="kpi/staff-evaluations" element={<ProtectedRoute permissionKey={["kpi", "staff-evaluations"]}><StaffEvaluationListView /></ProtectedRoute>} />
+                <Route path="kpi/staff-evaluation" element={<Navigate to="/admin/kpi/staff-evaluations" replace />} />
                 <Route path="kpi/checklist" element={<ProtectedRoute permissionKey="kpi"><KPIChecklist /></ProtectedRoute>} />
                 <Route path="kpi/list" element={<ProtectedRoute permissionKey="kpi"><KPIItems /></ProtectedRoute>} />
                 <Route path="kpi/rules" element={<ProtectedRoute permissionKey="kpi"><KPIRules /></ProtectedRoute>} />

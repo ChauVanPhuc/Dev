@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import Layout from '@mobile/Shared/Views/components/layout/MobileLayout'
 import PageHeader from '@mobile/Shared/Views/components/layout/MobilePageHeader'
@@ -9,6 +9,7 @@ import MessageModal from '@mobile/Shared/Views/components/feedback/MessageModal'
 import ConfirmModal from '@mobile/Shared/Views/components/feedback/ConfirmModal'
 import { Check, RotateCcw, User, FileText, BarChart3, Award } from 'lucide-react'
 import apiClient from '@shared/services/api'
+import useAuthStore from '@modules/auth/Models/authModel'
 
 /**
  * StaffEvaluation Screen
@@ -47,6 +48,18 @@ const StaffEvaluation = () => {
   ]
 
   const [employees, setEmployees] = useState(defaultEmployees)
+
+  // Lấy tài khoản đang đăng nhập từ Auth Store hoặc localStorage
+  const authUser = useAuthStore(state => state.user) || {}
+  const savedUser = useMemo(() => {
+    if (authUser && (authUser.username || authUser.employee_id)) return authUser
+    try {
+      const raw = localStorage.getItem('smartflow_user')
+      return raw ? JSON.parse(raw) : {}
+    } catch {
+      return {}
+    }
+  }, [authUser])
 
   // State dữ liệu Đánh giá
   const [formData, setFormData] = useState({
@@ -89,6 +102,35 @@ const StaffEvaluation = () => {
     return 'Nhà máy 1'
   }
 
+  // Hàm kiểm tra và bỏ qua mục Đánh giá từ Trưởng phòng / Quản lý trực tiếp (vì đây chính là form đánh giá đang làm)
+  const isManagerEvalItem = (item) => {
+    const text = `${item?.content || ''} ${item?.name || ''} ${item?.title || ''} ${item?.calc_method || ''}`.toLowerCase()
+    if (text.includes('manager_score')) return true
+    if (text.includes('đánh giá') && (
+      text.includes('trưởng phòng') || 
+      text.includes('quản lý') || 
+      text.includes('trực tiếp') || 
+      text.includes('qltt') || 
+      text.includes('cấp trên') ||
+      text.includes('supervisor') ||
+      text.includes('lead')
+    )) {
+      return true
+    }
+    return false
+  }
+
+  // Quy đổi xếp loại sang điểm số chuẩn: A=100, B=90, C=80, D=50
+  const getRatingScore = (rating) => {
+    switch (rating) {
+      case 'A': return 100.0
+      case 'B': return 90.0
+      case 'C': return 80.0
+      case 'D': return 50.0
+      default: return 90.0
+    }
+  }
+
   // Lấy chỉ số KPI động từ /admin/kpi/quality-employees (kpi_employee_items & calculate-score)
   const fetchEmployeeKpis = async (empCode) => {
     if (!empCode) {
@@ -102,12 +144,15 @@ const StaffEvaluation = () => {
       const empItems = Array.isArray(empItemsRes?.data) ? empItemsRes.data : (empItemsRes?.data?.items || [])
       
       if (empItems.length > 0) {
-        setKpiDetails(empItems.map((item, idx) => ({
-          id: item.id || idx + 1,
-          content: item.content || 'Chỉ số KPI',
-          goal: item.target || item.threshold || '100%',
-          actual: (item.actual !== undefined && item.actual !== null && item.actual !== '') ? String(item.actual) : (item.score ? `${item.score} điểm` : 'Đang theo dõi')
-        })))
+        setKpiDetails(empItems
+          .filter(item => !isManagerEvalItem(item))
+          .map((item, idx) => ({
+            id: item.id || idx + 1,
+            content: item.content || 'Chỉ số KPI',
+            goal: item.target || item.threshold || '100%',
+            actual: (item.actual !== undefined && item.actual !== null && item.actual !== '') ? String(item.actual) : (item.score ? `${item.score} điểm` : 'Đang theo dõi')
+          }))
+        )
         return
       }
 
@@ -117,12 +162,15 @@ const StaffEvaluation = () => {
       const calcRes = await apiClient.get(`/kpi-management/calculate-score?employee_id=${encodeURIComponent(empCode)}&month=${monthNow}&year=${yearNow}`).catch(() => null)
       const details = calcRes?.data?.details
       if (Array.isArray(details) && details.length > 0) {
-        setKpiDetails(details.map((item, idx) => ({
-          id: item.id || idx + 1,
-          content: item.content || 'Chỉ số KPI',
-          goal: item.target || '100%',
-          actual: (item.actual !== undefined && item.actual !== null && item.actual !== '') ? String(item.actual) : 'Đang theo dõi'
-        })))
+        setKpiDetails(details
+          .filter(item => !isManagerEvalItem(item))
+          .map((item, idx) => ({
+            id: item.id || idx + 1,
+            content: item.content || 'Chỉ số KPI',
+            goal: item.target || '100%',
+            actual: (item.actual !== undefined && item.actual !== null && item.actual !== '') ? String(item.actual) : 'Đang theo dõi'
+          }))
+        )
         return
       }
 
@@ -146,14 +194,49 @@ const StaffEvaluation = () => {
           const items = Array.isArray(resp.data) ? resp.data : (resp.data.items || [])
           if (items.length > 0) {
             const list = items.map(emp => {
-              const code = emp.employee_id || emp.code || emp.username || `NV_${emp.id}`
+              const code = String(emp.employee_id || emp.code || emp.username || `NV_${emp.id}`)
               const name = emp.full_name || emp.name || emp.username
               const department = emp.department_name || emp.department || 'Phòng QLCL'
               const stage = emp.position_name || emp.position || emp.stage || 'QLCL'
               const factory = emp.factory || resolveFactory(department, stage, code)
-              return { id: code, code, name, department, stage, factory }
-            })
-            setEmployees(list)
+
+              let level = 'Cấp 4';
+              let parent_id = null;
+              let parent_level = null;
+              let isOutOfStructure = false;
+
+              if (emp.note) {
+                try {
+                  const parsed = typeof emp.note === 'string' ? JSON.parse(emp.note) : emp.note;
+                  if (parsed.level) level = parsed.level;
+                  if (parsed.parent_id) parent_id = String(parsed.parent_id);
+                  if (parsed.parent_level) parent_level = parsed.parent_level;
+                  if (parsed.is_out_of_structure) isOutOfStructure = true;
+                } catch (_) {}
+              }
+
+              // Khớp chuẩn cấp bậc theo chức danh thực tế
+              const posLower = stage.toLowerCase();
+              if (posLower.includes('trưởng phòng') || code === '3973') level = 'Cấp 1';
+              else if (posLower.includes('lead') || ['5981', '6086'].includes(code)) level = 'Cấp 2';
+              else if (posLower.includes('supervisor') || posLower.includes('admin') || posLower.includes('process') || posLower.includes('iqc') || ['139', '0556', '3396', '5100', '6289', '0027'].includes(code)) level = 'Cấp 3';
+
+              return {
+                id: code,
+                code,
+                name,
+                department,
+                stage,
+                factory,
+                level,
+                parent_id,
+                parent_level,
+                isOutOfStructure: isOutOfStructure || emp.status === 'Đã nghỉ việc'
+              };
+            }).filter(e => !e.isOutOfStructure);
+            setEmployees(list);
+
+// Đã cấu hình tự động nhận diện tài khoản đăng nhập qua useMemo
 
             // Kiểm tra nếu có query string ?employee_id=... thì tự động điền
             const urlParams = new URLSearchParams(window.location.search);
@@ -215,12 +298,13 @@ const StaffEvaluation = () => {
               const parsed = typeof resp.data.kpi_details === 'string' 
                 ? JSON.parse(resp.data.kpi_details) 
                 : resp.data.kpi_details
-              setKpiDetails(parsed)
+              const arr = Array.isArray(parsed) ? parsed : fallbackKpis
+              setKpiDetails(arr.filter(item => !isManagerEvalItem(item)))
             } catch (e) {
-              setKpiDetails(fallbackKpis)
+              setKpiDetails(fallbackKpis.filter(item => !isManagerEvalItem(item)))
             }
           } else {
-            setKpiDetails(fallbackKpis)
+            setKpiDetails(fallbackKpis.filter(item => !isManagerEvalItem(item)))
           }
         }
       } catch (err) {
@@ -291,15 +375,68 @@ const StaffEvaluation = () => {
   ]
 
   const ratingOptions = [
-    { type: 'A', label: 'Loại A', desc: 'Xuất sắc' },
-    { type: 'B', label: 'Loại B', desc: 'Khá' },
-    { type: 'C', label: 'Loại C', desc: 'Trung bình' },
-    { type: 'D', label: 'Loại D', desc: 'Cần cải thiện' }
+    { type: 'A', label: 'Loại A', desc: 'Xuất sắc (100 điểm)', score: 100 },
+    { type: 'B', label: 'Loại B', desc: 'Khá (90 điểm)', score: 90 },
+    { type: 'C', label: 'Loại C', desc: 'Trung bình (80 điểm)', score: 80 },
+    { type: 'D', label: 'Loại D', desc: 'Cần cải thiện (50 điểm)', score: 50 }
   ]
 
   const handleRatingChange = (type) => {
     setFormData(prev => ({ ...prev, rating: type }))
   }
+
+  // Xác định người thực hiện đánh giá từ tài khoản đang đăng nhập
+  const currentEvaluator = useMemo(() => {
+    const userCode = String(savedUser.employee_id || savedUser.username || '')
+    const userName = (savedUser.full_name || '').trim().toLowerCase()
+
+    const matched = employees.find(e => 
+      String(e.code) === userCode || 
+      String(e.id) === userCode ||
+      (userName && e.name.toLowerCase() === userName)
+    )
+
+    if (matched) return matched
+    // Mặc định Cấp 1 Trưởng phòng (Đặng Văn Nam 3973) nếu là tài khoản admin hoặc quản trị
+    return employees.find(e => e.code === '3973') || {
+      name: 'Đặng Văn Nam',
+      code: '3973',
+      level: 'Cấp 1',
+      stage: 'Trưởng Phòng QLCL'
+    }
+  }, [employees, savedUser])
+
+  // Lọc danh sách nhân sự cần đánh giá theo đúng cấp bậc thẩm quyền:
+  // Cấp 1 (Trưởng phòng) -> Đánh giá Cấp 2 (Lead) & Cấp 3 (Supervisor)
+  // Cấp 2 (QA/QC Lead)   -> Đánh giá Cấp 3 trực thuộc (Uyên, Lịch, Hải...)
+  // Cấp 3 (QC Supervisor)-> Đánh giá Cấp 4 trực thuộc (QC công đoạn)
+  const filteredEvaluatees = useMemo(() => {
+    const evCode = String(currentEvaluator.code || '')
+    const evLevel = currentEvaluator.level
+
+    return employees.filter(emp => {
+      // 1. Tuyệt đối không tự đánh giá chính mình
+      if (String(emp.code) === evCode) return false
+
+      if (evLevel === 'Cấp 1') {
+        // Cấp 1 -> Cấp 2 (Lead) & Cấp 3 (Supervisor) trực thuộc
+        if (emp.level === 'Cấp 2') return true
+        if (emp.level === 'Cấp 3' && (!emp.parent_id || String(emp.parent_id) === evCode || ['139', '0556', '3396'].includes(String(emp.code)))) {
+          return true
+        }
+        return false
+      } else if (evLevel === 'Cấp 2') {
+        // Cấp 2 -> Cấp 3 trực thuộc theo parent_id
+        return emp.level === 'Cấp 3' && String(emp.parent_id) === evCode
+      } else if (evLevel === 'Cấp 3') {
+        // Cấp 3 -> Cấp 4 trực thuộc theo parent_id
+        return emp.level === 'Cấp 4' && String(emp.parent_id) === evCode
+      }
+
+      // Mặc định tài khoản quản trị hệ thống
+      return emp.level === 'Cấp 2' || emp.level === 'Cấp 3'
+    })
+  }, [employees, currentEvaluator])
 
   const handleConfirm = () => {
     if (!formData.staffName) {
@@ -326,7 +463,7 @@ const StaffEvaluation = () => {
       department: formData.department,
       eval_date: formData.evalDate,
       rating: formData.rating,
-      actual_score: formData.rating === 'A' ? 95.0 : (formData.rating === 'B' ? 85.0 : 75.0),
+      actual_score: getRatingScore(formData.rating),
       achievements: formData.achievements,
       limitations: formData.limitations,
       improvement_plan: formData.improvementPlan,
@@ -379,13 +516,17 @@ const StaffEvaluation = () => {
             </div>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {/* CHỌN NHÂN SỰ CẦN ĐÁNH GIÁ (ĐÃ TỰ ĐỘNG LỌC THEO CẤP BẬC TÀI KHOẢN ĐĂNG NHẬP) */}
               <div>
                 <FormSelect 
                   label="Chọn nhân sự cần đánh giá *" 
                   value={formData.employeeId} 
                   options={[
                     { label: '-- Chọn nhân sự --', value: '' }, 
-                    ...employees.map(e => ({ label: `${e.name} (${e.code})`, value: e.code }))
+                    ...filteredEvaluatees.map(e => ({ 
+                      label: `${e.name} (${e.code}) - ${e.stage}`, 
+                      value: e.code 
+                    }))
                   ]} 
                   onChange={(e) => handleSelectStaff(e.target.value)}
                 />
@@ -488,7 +629,7 @@ const StaffEvaluation = () => {
                 {formData.staffName ? 'Chưa có mục tiêu KPI ghi nhận cho nhân sự này trên hệ thống.' : 'Vui lòng chọn nhân sự để hiển thị chỉ số KPI.'}
               </div>
             ) : (
-              <DataTable columns={kpiColumns} data={kpiDetails} />
+              <DataTable columns={kpiColumns} data={kpiDetails.filter(item => !isManagerEvalItem(item))} />
             )}
           </div>
  

@@ -49,7 +49,7 @@ def init_db():
     safe_log("Step 3: Seeding Production Stages")
     safe_log("==================================================")
     try:
-        from database.seeders.seed_stages import seed_stages
+        from database.seeders.seed_standard_stages import seed_stages
         seed_stages()
         safe_log("[SUCCESS] Production stages seeded.")
     except Exception as e:
