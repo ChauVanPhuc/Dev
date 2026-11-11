@@ -30,6 +30,7 @@ from database.migrations.update_reports_inspectors_to_qlcl import run as run_rep
 from database.migrations.fix_reports_stages_and_inspectors_migration import run as run_fix_reports_stages_migration
 from database.migrations.update_roles_ql_departments import run as run_roles_ql_departments_migration
 from database.migrations.create_pallet_check_tables import run as run_pallet_check_tables_migration
+from database.migrations.create_lpn_ocr_jobs_table import run as run_lpn_ocr_jobs_table_migration
 from database.migrations.legacy_startup_migrations import run_startup_migrations
 
 def run_allocation_method_migration():
@@ -215,6 +216,7 @@ if __name__ == "__main__":
         run_fix_reports_stages_migration()
         run_roles_ql_departments_migration()
         run_pallet_check_tables_migration()
+        run_lpn_ocr_jobs_table_migration()
         run_startup_migrations()
         print("-" * 50)
         print("[SUCCESS] All migrations completed successfully!")

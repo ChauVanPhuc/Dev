@@ -2603,35 +2603,38 @@ const ISOMasterRecordListView = () => {
         </div>
       )}
       {/* 8. Modal chọn tài liệu vào bộ (Checkbox checklist) */}
-      <ISOMasterRecordDocSelectorModal
-        isOpen={isDocSelectorOpen}
-        onClose={() => setIsDocSelectorOpen(false)}
-        folder={currentFolder || { id: routeFolderId }}
-        currentAssignedIds={childDocs.map(c => c.id)}
-        onSaved={() => {
-          const activeId = routeFolderId || currentFolder?.id;
-          if (activeId) {
-            fetchChildren(activeId);
-          }
-          fetchRecords();
-        }}
-      />
+      {isDocSelectorOpen && (
+        <ISOMasterRecordDocSelectorModal
+          isOpen={isDocSelectorOpen}
+          onClose={() => setIsDocSelectorOpen(false)}
+          folder={currentFolder || { id: routeFolderId }}
+          currentAssignedIds={(childDocs || []).map(c => c?.id).filter(Boolean)}
+          onSaved={() => {
+            const activeId = routeFolderId || currentFolder?.id;
+            if (activeId) {
+              fetchChildren(activeId);
+            }
+            fetchRecords();
+          }}
+        />
+      )}
 
-      {/* 9. Modal xem trước tài liệu / quy trình */}
-      <ISOProcessPreviewModal
-        isOpen={isPreviewModalOpen}
-        doc={previewDoc}
-        docList={childDocs}
-        currentIndex={previewIndex}
-        onSelectIndex={(idx) => {
-          setPreviewIndex(idx);
-          setPreviewDoc(childDocs[idx]);
-        }}
-        onClose={() => {
-          setIsPreviewModalOpen(false);
-          setPreviewDoc(null);
-        }}
-      />
+      {isPreviewModalOpen && previewDoc && (
+        <ISOProcessPreviewModal
+          isOpen={isPreviewModalOpen}
+          doc={previewDoc}
+          docList={childDocs || []}
+          currentIndex={previewIndex}
+          onSelectIndex={(idx) => {
+            setPreviewIndex(idx);
+            setPreviewDoc((childDocs || [])[idx]);
+          }}
+          onClose={() => {
+            setIsPreviewModalOpen(false);
+            setPreviewDoc(null);
+          }}
+        />
+      )}
     </>
   );
 };

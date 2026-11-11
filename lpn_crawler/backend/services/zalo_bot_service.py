@@ -65,6 +65,7 @@ from lpn_crawler.backend.config.settings import settings  # noqa: E402
 _PHONE_UID_CACHE: Dict[str, Dict[str, Any]] = {}
 _CLIENT_INSTANCE: Optional[Any] = None
 _CLIENT_CONFIG_HASH: Optional[str] = None
+_LAST_INIT_ERROR: Optional[str] = None
 
 
 def normalize_vietnam_phone(phone_str: Optional[str]) -> str:
@@ -102,6 +103,7 @@ class ZaloBotService:
 
     @classmethod
     def get_client(cls, db, force_reload: bool = False):
+        global _CLIENT_INSTANCE, _CLIENT_CONFIG_HASH, _LAST_INIT_ERROR
         """Khởi tạo và trả về client ZaloAPI dựa trên cấu hình trong CSDL"""
         global _CLIENT_INSTANCE, _CLIENT_CONFIG_HASH
 
@@ -152,7 +154,16 @@ class ZaloBotService:
             logger.info("Khoi tao client ZaloAPI thanh cong.")
             return client
         except Exception as e:
+            _LAST_INIT_ERROR = str(e)
+            _CLIENT_INSTANCE = None
             logger.error(f"Khong the khoi tao ZaloAPI client: {e}")
+            try:
+                cfg = cls.get_or_create_config(db)
+                cfg.is_connected = False
+                cfg.last_checked_at = datetime.utcnow()
+                db.commit()
+            except Exception:
+                pass
             return None
 
     @classmethod
@@ -166,10 +177,11 @@ class ZaloBotService:
             cfg.is_connected = False
             cfg.last_checked_at = now
             db.commit()
+            err_detail = _LAST_INIT_ERROR or "Ch?a th? kh?i t?o k?t n?i Zalo. Vui l?ng ki?m tra l?i Cookies v? IMEI."
             return {
                 "success": False,
                 "is_connected": False,
-                "message": "Chưa thể khởi tạo kết nối Zalo. Vui lòng kiểm tra lại Cookies và IMEI.",
+                "message": f"Ch?a th? k?t n?i Zalo Bot: {err_detail}",
                 "bot_name": cfg.bot_name,
                 "bot_phone": cfg.bot_phone
             }
@@ -435,7 +447,8 @@ class ZaloBotService:
         container_id: int,
         target_phone: Optional[str] = None,
         target_phones: Optional[List[str]] = None,
-        send_image: bool = True
+        send_image: bool = True,
+        force_send: bool = False
     ) -> Dict[str, Any]:
         """
         Tổng hợp toàn bộ kết quả quét của 1 Container và tự động gửi tin nhắn Zalo
@@ -448,7 +461,7 @@ class ZaloBotService:
                 return {"success": False, "message": f"Không tìm thấy Container ID {container_id}"}
 
             cfg = cls.get_or_create_config(db)
-            if not cfg.is_auto_send_enabled:
+            if not cfg.is_auto_send_enabled and not force_send:
                 logger.info(f"Tinh nang tu dong gui Zalo dang tat. Bo qua Container {cont.container_number}")
                 return {"success": False, "message": "Tính năng tự động gửi Zalo đang tắt trong cấu hình"}
 

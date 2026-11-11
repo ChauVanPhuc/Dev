@@ -41,15 +41,17 @@ const getTemplateAbbreviation = (templateSymbol) => {
   return 'QT';
 };
 
-// Hàm chuẩn hóa mã viết tắt phòng ban (QL, ISO, HC, AT, SX, KT, MH, KH, MT, KD, IT)
+// Hàm chuẩn hóa mã viết tắt phòng ban (QL, ISO, HC, NS, AT, BT, SX, KT, MH, KH, MT, KD, IT)
 const normalizeDeptAcronym = (deptCodeOrName) => {
   if (!deptCodeOrName) return 'QL';
   const raw = String(deptCodeOrName).trim().toUpperCase();
   const exactMap = {
-    QL: 'QL',
-    ISO: 'ISO', BGD: 'BGD', BG: 'BGD',
-    HC: 'HC', HCNS: 'HC', NS: 'NS',
+    QL: 'QL', CL: 'QL', QLCL: 'QL',
+    ISO: 'ISO', BGD: 'ISO', BG: 'ISO',
+    HC: 'HC',
+    HCNS: 'NS', NS: 'NS',
     AT: 'AT', ATVSLD: 'AT', PCCC: 'AT',
+    BT: 'BT',
     SX: 'SX',
     KT: 'KT',
     MH: 'MH', NLVT: 'MH',
@@ -60,29 +62,45 @@ const normalizeDeptAcronym = (deptCodeOrName) => {
   };
   if (exactMap[raw]) return exactMap[raw];
   if (raw.includes('CHẤT LƯỢNG') || raw.includes('CHAT LUONG')) return 'QL';
-  if (raw.includes('GIÁM ĐỐC') || raw.includes('GIAM DOC') || raw.includes('BGD')) return 'BGD';
-  if (raw.includes('HÀNH CHÍNH') || raw.includes('NHÂN SỰ') || raw.includes('HANH CHINH') || raw.includes('NHAN SU') || raw.includes('HCNS')) return 'NS';
+  if (raw.includes('GIÁM ĐỐC') || raw.includes('GIAM DOC') || raw.includes('BGD') || raw.includes('ISO')) return 'ISO';
+  if (raw.includes('NHÂN SỰ') || raw.includes('NHAN SU') || raw.includes('HCNS')) return 'NS';
+  if (raw.includes('HÀNH CHÍNH') || raw.includes('HANH CHINH')) return 'HC';
   if (raw.includes('AN TOÀN') || raw.includes('AN TOAN') || raw.includes('PCCC') || raw.includes('ATVSLĐ')) return 'AT';
+  if (raw.includes('BẢO TRÌ') || raw.includes('BAO TRI') || raw.includes('CƠ ĐIỆN')) return 'BT';
   if (raw.includes('SẢN XUẤT') || raw.includes('SAN XUAT')) return 'SX';
   if (raw.includes('MUA HÀNG') || raw.includes('MUA HANG') || raw.includes('VẬT TƯ')) return 'MH';
-  if (raw.includes('KỸ THUẬT') || raw.includes('CƠ ĐIỆN') || raw.includes('KY THUAT')) return 'KT';
+  if (raw.includes('KẾ TOÁN') || raw.includes('KE TOAN') || raw.includes('KỸ THUẬT') || raw.includes('KY THUAT')) return 'KT';
+  if (raw.includes('MÔI TRƯỜNG') || raw.includes('MOI TRUONG')) return 'MT';
   if (raw.includes('KHO') || raw.includes('KẾ HOẠCH')) return 'KH';
   if (raw.includes('KINH DOANH') || raw.includes('BÁN HÀNG')) return 'KD';
   if (raw.includes('IT') || raw.includes('CNTT')) return 'IT';
   return raw;
 };
 
-// Hàm sinh mã tài liệu tự động theo định dạng chuẩn G7.{Mã_PB}.{Mã_Loại}{Số_TT} (Tăng dần theo Phòng ban)
-const generateProcessCode = (deptCode, docTypeCode, processesList = []) => {
-  const dCode = normalizeDeptAcronym(deptCode);
+// Hàm sinh mã tài liệu tự động theo định dạng chuẩn G7.{Mã_PB}.{Mã_Loại}{Số_TT} (Tăng dần theo Phòng ban + Loại tài liệu từ CSDL)
+const generateProcessCode = (deptCode, docTypeCode, processesList = [], deptsList = []) => {
+  let dCode = '';
+  if (deptsList && deptsList.length > 0) {
+    const found = deptsList.find(d => 
+      String(d.id) === String(deptCode) ||
+      (d.code && d.code.toUpperCase() === String(deptCode).toUpperCase()) ||
+      (d.name && d.name.toUpperCase() === String(deptCode).toUpperCase())
+    );
+    if (found && found.code) {
+      dCode = found.code.toUpperCase();
+    }
+  }
+  if (!dCode) {
+    dCode = normalizeDeptAcronym(deptCode);
+  }
   const tCode = (docTypeCode || 'QT').trim().toUpperCase();
-  const deptPrefix = `G7.${dCode}.`;
-  const deptSeqRegex = new RegExp(`^G7\\.${dCode}\\.[A-Z]+(\\d+)$`, 'i');
+  const typePrefix = `G7.${dCode}.${tCode}`;
+  const typeSeqRegex = new RegExp(`^G7\\.${dCode}\\.${tCode}(\\d+)$`, 'i');
   let maxZz = 0;
   (processesList || []).forEach(p => {
     const pCode = (p.new_code || p.code || '').trim().toUpperCase();
-    if (pCode.startsWith(deptPrefix)) {
-      const m = pCode.match(deptSeqRegex);
+    if (pCode.startsWith(typePrefix)) {
+      const m = pCode.match(typeSeqRegex);
       if (m) {
         const num = parseInt(m[1], 10);
         if (!isNaN(num) && num > maxZz) {
@@ -406,6 +424,14 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
     fetchDocuments(!hasCache);
 
     if (mode === 'processes') {
+      api.get('/iso-documents/meta/departments')
+        .then(res => {
+          if (Array.isArray(res) && res.length > 0) {
+            setDepartmentsList(res);
+          }
+        })
+        .catch(err => console.error('Lỗi khi tải danh mục phòng ban:', err));
+
       if (_isoDocTypesCache) {
         setDocTypesList(_isoDocTypesCache);
       } else {
@@ -484,10 +510,10 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
       const docTypeCode = selectedDocType.code || 'QT';
 
       const loggedInUser = JSON.parse(localStorage.getItem('smartflow_user') || '{}');
-      const editorName = loggedInUser.full_name || loggedInUser.username || 'Administrator';
+      const editorName = loggedInUser.full_name || loggedInUser.username || 'Ngô Diễm My';
 
       // Sinh mã tài liệu tự động theo phòng ban & loại tài liệu
-      const generatedCode = generateProcessCode(deptCode, docTypeCode, procs);
+      const generatedCode = generateProcessCode(deptCode, docTypeCode, procs, depts);
 
       // Người xem xét (Trưởng phòng) đã chọn trước đó
       let selectedApprover = tps.length > 0 ? tps[0].full_name : 'Đặng Văn Nam';
@@ -630,11 +656,11 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
       const docTypeCode = matchedType ? matchedType.code : 'QT';
 
       // 3. Tự động sinh mã tài liệu kế tiếp theo phòng ban & loại tài liệu
-      const generatedCode = generateProcessCode(deptCode, docTypeCode, procs);
+      const generatedCode = generateProcessCode(deptCode, docTypeCode, procs, depts);
 
       // 4. Lấy thông tin người biên soạn, Người xem xét (Trưởng phòng) và Người phê duyệt (BGD)
       const loggedInUser = JSON.parse(localStorage.getItem('smartflow_user') || '{}');
-      const editorName = loggedInUser.full_name || loggedInUser.username || 'Administrator';
+      const editorName = loggedInUser.full_name || loggedInUser.username || 'Ngô Diễm My';
       
       const savedPrefs = getSavedCreatePrefs();
       let defaultApprover = tps.length > 0 ? tps[0].full_name : 'Đặng Văn Nam';
@@ -833,12 +859,16 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
     return [...new Set(list)];
   }, [documents]);
 
-  // Danh mục phòng ban duy nhất từ dữ liệu thực tế (mode processes)
+  // Danh mục phòng ban duy nhất từ CSDL và dữ liệu thực tế (mode processes)
   const uniqueDepartments = useMemo(() => {
     if (mode !== 'processes') return [];
+    if (departmentsList && departmentsList.length > 0) {
+      const names = departmentsList.map(d => (d.name || '').trim()).filter(Boolean);
+      return [...new Set(names)].sort((a, b) => a.localeCompare(b, 'vi'));
+    }
     const depts = documents.map(d => (d.department_name || '').trim()).filter(Boolean);
     return [...new Set(depts)].sort((a, b) => a.localeCompare(b, 'vi'));
-  }, [documents, mode]);
+  }, [documents, mode, departmentsList]);
 
   // Danh mục người biên soạn duy nhất
   const uniqueEditors = useMemo(() => {
@@ -870,7 +900,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
     const standardTypes = [
       { code: 'QT', name: 'Quy trình' },
       { code: 'HD', name: 'Hướng dẫn' },
-      { code: 'QD', name: 'Quyết định' },
+      { code: 'QD', name: 'Quy định' },
       { code: 'CS', name: 'Chính sách' },
       { code: 'SD', name: 'Sơ đồ' },
       { code: 'BM', name: 'Biểu mẫu' },
@@ -1001,8 +1031,9 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
       if (pa.valid && pb.valid) {
         const deptCmp = pa.dept.localeCompare(pb.dept);
         if (deptCmp !== 0) return deptCmp;
-        if (pa.seq !== pb.seq) return pa.seq - pb.seq;
-        return pa.type.localeCompare(pb.type);
+        const typeCmp = pa.type.localeCompare(pb.type);
+        if (typeCmp !== 0) return typeCmp;
+        return pa.seq - pb.seq;
       }
       if (pa.valid !== pb.valid) return pa.valid ? -1 : 1;
       return pa.raw.localeCompare(pb.raw);
@@ -1582,7 +1613,7 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                   <option value="">Tất cả loại tài liệu</option>
                   <option value="QT">Quy trình (QT)</option>
                   <option value="HD">Hướng dẫn công việc (HD)</option>
-                  <option value="QD">Quyết định (QD)</option>
+                  <option value="QD">Quy định (QD)</option>
                   <option value="CS">Chính sách / Cam kết (CS)</option>
                   <option value="SD">Sơ đồ tổ chức (SD)</option>
                   <option value="BM">Biểu mẫu hồ sơ (BM)</option>
@@ -1981,26 +2012,33 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                           {doc.code || ''}
                         </td>
                         <td style={{ padding: '6px 6px', fontSize: '0.8rem', color: '#1e293b', fontWeight: 500, maxWidth: '140px', whiteSpace: 'nowrap' }}>
-                          <span 
-                            title={doc.department_name || doc.symbol || '---'}
-                            style={{ 
-                              display: 'inline-block',
-                              maxWidth: '125px',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                              verticalAlign: 'middle',
-                              backgroundColor: '#FAF6F0', 
-                              padding: '2px 6px', 
-                              borderRadius: '4px', 
-                              border: '1px solid #EADCC9', 
-                              fontSize: '0.78rem', 
-                              fontWeight: 600, 
-                              color: '#7B5233' 
-                            }}
-                          >
-                            {doc.department_name || doc.symbol || '---'}
-                          </span>
+                          {(() => {
+                            const matchedDept = (departmentsList || []).find(d => d.id === doc.department_id);
+                            const deptTitle = doc.department_name || (matchedDept ? matchedDept.name : '') || doc.symbol || '';
+                            if (!deptTitle) return null;
+                            return (
+                              <span 
+                                title={deptTitle}
+                                style={{ 
+                                  display: 'inline-block',
+                                  maxWidth: '125px',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                  verticalAlign: 'middle',
+                                  backgroundColor: '#FAF6F0', 
+                                  padding: '2px 6px', 
+                                  borderRadius: '4px', 
+                                  border: '1px solid #EADCC9', 
+                                  fontSize: '0.78rem', 
+                                  fontWeight: 600, 
+                                  color: '#7B5233' 
+                                }}
+                              >
+                                {deptTitle}
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td style={{ padding: '6px 8px', fontSize: '0.8rem', color: '#1e293b', fontWeight: 500, wordBreak: 'break-word', minWidth: '280px' }}>
                           <div style={{ fontWeight: 600, color: '#1e293b' }}>
@@ -2016,13 +2054,13 @@ const ISODocumentListView = ({ mode = 'documents' }) => {
                           {renderDocumentLevelBadge(doc.document_level)}
                         </td>
                         <td style={{ padding: '6px 6px', fontSize: '0.8rem', color: '#1e293b', fontWeight: 500, textAlign: 'center', whiteSpace: 'nowrap' }}>
-                          {doc.editor || '---'}
+                          {doc.editor || doc.owner || ''}
                         </td>
                         <td style={{ padding: '6px 6px', fontSize: '0.8rem', color: '#1e293b', fontWeight: 500, textAlign: 'center', whiteSpace: 'nowrap' }}>
-                          {doc.approver || '---'}
+                          {doc.approver || ''}
                         </td>
                         <td style={{ padding: '6px 6px', fontSize: '0.8rem', color: '#1e293b', fontWeight: 500, textAlign: 'center', whiteSpace: 'nowrap' }}>
-                          {doc.approver_bgd || '---'}
+                          {doc.approver_bgd || ''}
                         </td>
                         <td style={{ padding: '6px 4px', fontSize: '0.8rem', color: '#1e293b', fontWeight: 500, textAlign: 'center', whiteSpace: 'nowrap' }}>
                           {formatVietnameseDate(doc.updated_at || doc.issue_date || doc.created_at)}

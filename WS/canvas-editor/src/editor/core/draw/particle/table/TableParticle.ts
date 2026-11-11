@@ -705,7 +705,7 @@ export class TableParticle {
               // 重置单元格起始位置坐标
               let preColWidth = 0
               for (let preC = 0; preC < c; preC++) {
-                preColWidth += colgroup[preC].width
+                preColWidth += colgroup[preC]?.width || 0
               }
               preX = preColWidth
               break
@@ -718,9 +718,12 @@ export class TableParticle {
           }
         }
         // 计算格宽高
+        if (colgroup.length > 0 && colIndex + td.colspan > colgroup.length) {
+          td.colspan = Math.max(1, colgroup.length - colIndex)
+        }
         let width = 0
         for (let col = 0; col < td.colspan; col++) {
-          width += colgroup[col + colIndex].width
+          width += colgroup[col + colIndex]?.width || 0
         }
         let height = 0
         for (let row = 0; row < td.rowspan; row++) {

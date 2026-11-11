@@ -3,7 +3,23 @@ import { screenService } from '@modules/System/Models/screen.service';
 
 const ScreenContext = createContext(null);
 
-export const DEFAULT_SCREENS_REGISTRY = {};
+export const DEFAULT_SCREENS_REGISTRY = {
+  '/admin/lpn-crawler': {
+    code: 'CW01',
+    title: 'Crawl dữ liệu LPN',
+    subtitle: 'Công cụ crawler dữ liệu LPN'
+  },
+  '/admin/ai-ocr-train': {
+    code: 'CW02',
+    title: 'Train Hình ảnh',
+    subtitle: 'Huấn luyện & kiểm thử mô hình AI OCR đọc nhãn'
+  },
+  '/admin/pallet-check': {
+    code: 'CW03',
+    title: 'Quét Cont',
+    subtitle: 'Công cụ quản lý & kiểm định dữ liệu quét Container'
+  }
+};
 
 export const ScreenProvider = ({ children }) => {
   const [screensMap, setScreensMap] = useState({});
@@ -73,6 +89,21 @@ export const ScreenProvider = ({ children }) => {
         title: matchedScreen.title || '',
         subtitle: matchedScreen.subtitle || '',
         isActive: matchedScreen.is_active !== false
+      };
+    }
+
+    // 3. FALLBACK: Check DEFAULT_SCREENS_REGISTRY
+    const defaultRegistryMatch = Object.entries(DEFAULT_SCREENS_REGISTRY).find(([regPath]) => {
+      return normalizePathForMatching(regPath) === lookupPathNormalized;
+    });
+
+    if (defaultRegistryMatch) {
+      const [, defInfo] = defaultRegistryMatch;
+      return {
+        screenCode: defInfo.code || '',
+        title: defInfo.title || '',
+        subtitle: defInfo.subtitle || '',
+        isActive: true
       };
     }
 

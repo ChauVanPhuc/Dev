@@ -286,19 +286,99 @@ def read_order_by_code(
 ):
     """
     [GET] Lấy thông tin chi tiết của một đơn hàng theo mã hiệu (order_code).
+    Hỗ trợ gôm nhóm đa đợt lệnh (Root PO aggregation) khi truy vấn mã gốc (ví dụ APT-0126)
+    hoặc khi mã đơn con thuộc về một Root PO lớn.
     """
+    from datetime import datetime
+    from sqlalchemy.orm import selectinload
+    from modules.production.models.product import Product
+    from modules.production.models.bom_detail import BOMDetail
+    from modules.production.routes.product_plan_router import extract_root_po
+
     target_code = (order_code or code or "").strip()
-    db_order = db.query(Order).filter(
+    if not target_code:
+        raise HTTPException(status_code=400, detail="Mã đơn hàng không hợp lệ")
+
+    root_po = extract_root_po(target_code)
+
+    # 1. Truy vấn tất cả các đơn hàng con khớp root_po hoặc target_code
+    matching_orders = db.query(Order).options(
+        selectinload(Order.products)
+    ).filter(
         or_(
+            Order.order_code == root_po,
+            Order.order_code.ilike(f"{root_po}-%"),
+            Order.partner_po == root_po,
+            Order.partner_po.ilike(f"{root_po}-%"),
+            Order.production_code == root_po,
+            Order.production_code.ilike(f"{root_po}-%"),
             Order.order_code == target_code,
             Order.order_code.ilike(f"%{target_code}%")
         )
-    ).first()
-    if not db_order and target_code.isdigit():
-        db_order = db.query(Order).filter(Order.id == int(target_code)).first()
-    if not db_order:
-        raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng")
-    return db_order
+    ).order_by(Order.id.asc()).all()
+
+    if not matching_orders and target_code.isdigit():
+        single = db.query(Order).options(
+            selectinload(Order.products)
+        ).filter(Order.id == int(target_code)).first()
+        if single:
+            matching_orders = [single]
+
+    if not matching_orders:
+        raise HTTPException(status_code=404, detail=f"Không tìm thấy đơn hàng cho mã '{target_code}'")
+
+    base_order = matching_orders[0]
+
+    # Nếu chỉ có 1 đơn và mã khớp chính xác
+    if len(matching_orders) == 1 and matching_orders[0].order_code == target_code:
+        return base_order
+
+    # Gom nhóm toàn bộ sản phẩm của các đơn con
+    prod_map = {}
+    for ord_item in matching_orders:
+        for p in ord_item.products:
+            key = (p.sku or p.name or str(p.id)).strip().lower()
+            p_qty = float(p.quantity or getattr(p, 'order_qty', 0) or 0.0)
+            if key not in prod_map:
+                prod_map[key] = {
+                    "id": p.id,
+                    "sku": p.sku or "---",
+                    "name": p.name or "---",
+                    "category_id": p.category_id,
+                    "price": float(p.price or 0.0),
+                    "material": p.material,
+                    "color": p.color,
+                    "length": float(p.length or 0.0),
+                    "width": float(p.width or 0.0),
+                    "height": float(p.height or 0.0),
+                    "weight": float(p.weight or 0.0),
+                    "status": p.status or "Active",
+                    "quantity": p_qty,
+                    "description": p.description,
+                    "created_at": p.created_at or datetime.now(),
+                    "factory": p.factory,
+                    "bom_details": []
+                }
+            else:
+                prod_map[key]["quantity"] += p_qty
+
+    aggregated_products = list(prod_map.values())
+    sub_codes = [o.order_code for o in matching_orders if o.order_code]
+    note_info = f"Gồm {len(matching_orders)} đợt lệnh sản xuất ({sub_codes[0]} ~ {sub_codes[-1]})" if len(matching_orders) > 1 else (base_order.note or "")
+
+    return {
+        "id": base_order.id,
+        "order_code": root_po or target_code,
+        "customer": base_order.customer,
+        "order_status": base_order.order_status,
+        "create_date": base_order.create_date,
+        "estimated_date": base_order.estimated_date,
+        "note": note_info,
+        "is_priority": base_order.is_priority,
+        "plan_id": base_order.plan_id,
+        "items": base_order.items or [],
+        "products": aggregated_products
+    }
 
 @router.get("/{order_id}", response_model=OrderResponse)
 def read_order(order_id: int, db: Session = Depends(get_db)):

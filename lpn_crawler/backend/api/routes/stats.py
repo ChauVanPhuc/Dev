@@ -74,7 +74,7 @@ def get_lpn_kpi_stats(force_refresh: bool = False, db: Session = Depends(get_db)
         all_missing_sql = text(f"""
             SELECT COUNT(*) FROM lpn_items i WITH (NOLOCK)
             JOIN lpn_containers c WITH (NOLOCK) ON i.container_id = c.id
-            WHERE (i.resolution_status IS NULL OR i.resolution_status = '')
+            WHERE (i.resolution_status IS NULL OR i.resolution_status = '' OR i.resolution_status = 'unresolved')
               AND (
                  c.container_number IS NULL OR LTRIM(RTRIM(c.container_number)) = ''
                  OR (c.date_loading IS NULL AND (c.date_loading_raw IS NULL OR LTRIM(RTRIM(c.date_loading_raw)) = ''))
@@ -142,7 +142,7 @@ def get_lpn_kpi_stats(force_refresh: bool = False, db: Session = Depends(get_db)
             SELECT COUNT(*) FROM lpn_items i WITH (NOLOCK)
             JOIN lpn_containers c WITH (NOLOCK) ON i.container_id = c.id
             WHERE {date_cond_c}
-              AND (i.resolution_status IS NULL OR i.resolution_status = '')
+              AND (i.resolution_status IS NULL OR i.resolution_status = '' OR i.resolution_status = 'unresolved')
               AND (
                  c.container_number IS NULL OR LTRIM(RTRIM(c.container_number)) = ''
                  OR (c.date_loading IS NULL AND (c.date_loading_raw IS NULL OR LTRIM(RTRIM(c.date_loading_raw)) = ''))

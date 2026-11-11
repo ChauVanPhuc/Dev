@@ -42,7 +42,12 @@ def parse_target_numeric_value(raw_val) -> float:
     if raw_val is None:
         return 0.95
     if isinstance(raw_val, (int, float)):
-        return float(raw_val) if float(raw_val) <= 1.5 else float(raw_val) / 100.0
+        val = float(raw_val)
+        if val == 0:
+            return 0.0
+        if 0 < val <= 0.015:
+            return val
+        return round(val / 100.0, 5)
     s = str(raw_val).strip()
     m = re.search(r"(-?\d+(?:\.\d+)?)%", s)
     if m:
@@ -54,7 +59,11 @@ def parse_target_numeric_value(raw_val) -> float:
     if m2:
         try:
             val = float(m2.group(1))
-            return round(val / 100.0 if val > 1.5 else val, 5)
+            if val == 0:
+                return 0.0
+            if 0 < val <= 0.015:
+                return round(val, 5)
+            return round(val / 100.0, 5)
         except Exception:
             pass
     return 0.95
@@ -92,6 +101,37 @@ def parse_actual_numeric_value(raw_val, operator=">") -> float:
 
 
 def get_employee_sort_key(emp: QualityEmployee) -> int:
+    code = str(emp.employee_id or "").strip()
+    exact_order = {
+        '3973': 10,  # 1. Đặng Văn Nam (Trưởng phòng QLCL)
+        '5981': 20,  # 2. Ngô Diễm My (QA Lead)
+        '5100': 30,  # 3. Dương Thị Lệ Uyên (QA Admin)
+        '6289': 40,  # 4. Hồ Sỹ Lịch (QA Process)
+        '6086': 50,  # 5. Đặng Minh Tuấn (QC Lead 1)
+        '139':  60,  # 6. Hà Đình Thành (QC Supervisor 1)
+        '0556': 70,  # 7. Phan Thị Lương (QC Supervisor 2)
+        '3396': 80,  # 8. Đỗ Hữu Phúc (QC Supervisor 3)
+        '0027': 90,  # 9-10. Đặng Quý Hải (IQC)
+        '0165': 110, # 11. Hà Minh Xuân (QC gia công)
+        '0418': 120, # 12. Huỳnh Hoàng Sơn (QC định hình)
+        '0428': 130, # 13. Hồ Sỹ Khẩn (QC định hình)
+        '5014': 140, # 14. Nguyễn Văn Tiển (QC định hình)
+        '0288': 150, # 15. Đậu Thị Tâm (QC định hình)
+        '6327': 160, # 16. Dương Văn Toàn (QC định hình)
+        '6137': 170, # 17. Bùi Công Sự (QC Lắp ráp)
+        '5267': 180, # 18. Trần Trung Đức (QC Lắp ráp)
+        '5977': 190, # 19. Lê Thị Hồng Nhung (QC sơn)
+        '5024': 200, # 20. Nguyễn Thị Hồng (QC sơn)
+        '6102': 210, # 21. Trần Thị Ánh (QC đóng gói)
+        '6231': 220, # 22. Đào Thị Huỳnh Như (QC đóng gói)
+        '0899': 230, # 23. Phạm Thị Mai (QC đóng gói)
+        '3670': 240, # 24. Thị Cẩm (QC đóng gói)
+        '3904': 250, # 25. Nguyễn Thị Mỷ Kim (QC đóng gói)
+        '3455': 260, # Nguyễn Thị Phương (QC đóng gói)
+    }
+    if code in exact_order:
+        return exact_order[code]
+
     name = (emp.full_name or "").strip().lower()
     stage = (emp.stage or "").strip().lower()
     dept = (emp.department or "").strip().upper()
@@ -105,12 +145,13 @@ def get_employee_sort_key(emp: QualityEmployee) -> int:
     if "lương" in name: return 70
     if "phúc" in name: return 80
     if "hải" in name or "iqc" in stage: return 90
-    if "định hình" in stage: return 100
-    if "lắp ráp" in stage: return 200
-    if "sơn" in stage: return 300
-    if "đóng gói" in stage: return 400
+    if "gia công" in stage: return 115
+    if "định hình" in stage: return 165
+    if "lắp ráp" in stage: return 185
+    if "sơn" in stage and "đóng gói" not in stage: return 205
+    if "đóng gói" in stage: return 255
     if dept == 'SX' or 'nvsx' in stage or 'qcsx' in dept: return 500
-    return 250
+    return 350
 
 
 def get_employee_actual_metrics(db: Session, employee_name: str, employee_code: str, month: int, year: int) -> Dict[str, Any]:
@@ -213,6 +254,216 @@ def get_employee_actual_metrics(db: Session, employee_name: str, employee_code: 
     return results
 
 
+def format_ratio_percent(val: float) -> str:
+    if val == 0:
+        return "0.0%"
+    pct = round(val * 100.0, 4)
+    if abs(pct - round(pct, 1)) > 1e-4:
+        return f"{pct:.2f}".rstrip("0").rstrip(".") + "%"
+    return f"{pct:.1f}%"
+
+
+def compute_excel_kpi_row_metrics(pts: float, comp: str, target_num: float, actual_num: float):
+    """
+    Tính toán chính xác theo công thức Excel trên Sheet 1:
+    - Trọng số H = pts / 100
+    - Tỷ lệ hoàn thành M = IF(OR(J="<", J="<="), IF(L<=0, 1, MIN(2, K/L)), L/K)
+    - Điểm số N = H * M * 100
+    - Kết quả P = IF(N >= I*1.04, "Vượt", IF(N >= I*0.95, "Đạt", "Không đạt"))
+    """
+    weight = round(float(pts) / 100.0, 4)
+    is_less = "<" in str(comp)
+    if is_less:
+        if actual_num <= 0:
+            m_ratio = 1.0
+        else:
+            m_ratio = min(2.0, target_num / actual_num) if target_num > 0 else 1.0
+    else:
+        m_ratio = (actual_num / target_num) if target_num > 0 else 1.0
+
+    comp_rate_pct = round(m_ratio * 100.0, 1)
+    point_score = round(weight * m_ratio * 100.0, 2)
+    if point_score >= float(pts) * 1.04 - 1e-6:
+        res_label = "Vượt"
+    elif point_score >= float(pts) * 0.95 - 1e-6:
+        res_label = "Đạt"
+    else:
+        res_label = "Không đạt"
+
+    return weight, comp_rate_pct, point_score, res_label
+
+    point_score = round(weight * m_ratio * 100.0, 2)
+    if point_score >= float(pts) * 1.04 - 1e-6:
+        res_label = "Vượt"
+    elif point_score >= float(pts) * 0.95 - 1e-6:
+        res_label = "Đạt"
+    else:
+        res_label = "Không đạt"
+
+    return weight, round(m_ratio * 100.0, 1), point_score, res_label
+
+
+def build_monthly_kpi_master_sheet_data(
+    db: Session,
+    month: int = 9,
+    year: int = 2026,
+    scope: str = "ALL",
+    factory: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Trả về dữ liệu Bảng Tổng Hợp KPI (giống 100% cấu trúc file Xuất Excel 'Bảng đánh giá KPI nhân viên CL')
+    kết hợp trực tiếp dữ liệu gốc CSDL và bảng tạm tùy chỉnh kpi_employee_custom_results.
+    """
+    q_query = db.query(QualityEmployee).filter(QualityEmployee.status != "Đã nghỉ việc")
+    if factory and factory not in ["ALL", "Toàn nhà máy", ""]:
+        q_query = q_query.filter(QualityEmployee.factory.ilike(f"%{factory}%"))
+    all_db_emps = q_query.all()
+
+    filtered_emps = []
+    for emp in all_db_emps:
+        dept = (emp.department or "").strip().upper()
+        stage = (emp.stage or "").strip().lower()
+        is_qcsx = (dept == "SX" or "nvsx" in stage or "qcsx" in dept.lower())
+        if scope == "QLCL_ONLY" and is_qcsx:
+            continue
+        if scope == "QCSX_ONLY" and not is_qcsx:
+            continue
+        filtered_emps.append(emp)
+
+    filtered_emps.sort(key=get_employee_sort_key)
+
+    employees_data = []
+    custom_rows_count = 0
+
+    for emp_idx, emp in enumerate(filtered_emps, start=1):
+        emp_name = (emp.full_name or "").strip()
+        emp_code = emp.employee_id
+        stage_desc = emp.stage or emp.factory or "QLCL"
+
+        score_res = calculate_employee_kpi_score(db, emp_code, month, year, commit=False)
+        kpis = score_res.get("details", [])
+        if not kpis:
+            kpis = [{
+                "id": 0,
+                "kpi_code": f"KPI1-{emp_code}",
+                "content": "Chuyên cần & Hoàn thành nhiệm vụ",
+                "score": 100,
+                "operator": ">=",
+                "target": ">= 95%",
+                "target_val": "95",
+                "actual": "100.0%",
+                "calc_method": "attendance_days",
+                "is_custom": False
+            }]
+
+        dept_str = (emp.department or "").strip().upper()
+        stage_lower = stage_desc.lower()
+        if emp_code == '3973':
+            group_name = "Quản lý"
+        elif any(k in stage_lower for k in ['qa', 'admin', 'process']):
+            group_name = "Nhóm QA2"
+        elif any(k in stage_lower for k in ['supervisor', 'lead']):
+            group_name = "Nhóm QC lead"
+        elif 'iqc' in stage_lower or 'nguyên liệu' in stage_lower:
+            group_name = "Nhóm QC1"
+        elif 'định hình' in stage_lower:
+            group_name = "Nhóm QC2"
+        elif 'lắp ráp' in stage_lower:
+            group_name = "Nhóm QC3"
+        elif 'sơn' in stage_lower:
+            group_name = "Nhóm QC4"
+        elif 'đóng gói' in stage_lower:
+            group_name = "Nhóm QC5"
+        elif dept_str == 'SX' or 'nvsx' in stage_lower:
+            group_name = "Nhóm QCSX"
+        else:
+            group_name = "Nhóm QC6"
+
+        emp_rows = []
+        emp_total_score = 0.0
+
+        for k_idx, kpi in enumerate(kpis):
+            code = kpi.get("kpi_code", f"KPI{k_idx+1}-{group_name}")
+            raw_name = kpi.get("content") or kpi.get("name", "")
+            clean_name = re.sub(r"^\d+\.\s*", "", str(raw_name)).strip()
+            pts = round(float(kpi.get("score") or 20), 1)
+            if pts.is_integer():
+                pts = int(pts)
+            comp = kpi.get("operator") or ("<" if "<" in str(kpi.get("target", "")) else (">" if ">" in str(kpi.get("target", "")) else "="))
+            target_num = parse_target_numeric_value(kpi.get("target") or kpi.get("target_val"))
+            actual_num = parse_actual_numeric_value(kpi.get("actual"), operator=comp)
+
+            weight, comp_rate_pct, point_score, res_label = compute_excel_kpi_row_metrics(
+                pts=pts, comp=comp, target_num=target_num, actual_num=actual_num
+            )
+            emp_total_score += point_score
+            is_custom = bool(kpi.get("is_custom", False))
+            if is_custom:
+                custom_rows_count += 1
+
+            emp_rows.append({
+                "kpi_item_id": kpi.get("id", 0),
+                "kpi_code": code,
+                "index_no": k_idx + 1,
+                "content": clean_name,
+                "weight": round(weight, 2),
+                "pts": pts,
+                "operator": comp,
+                "target_num": target_num,
+                "target_display": format_ratio_percent(target_num),
+                "actual_num": actual_num,
+                "actual_display": format_ratio_percent(actual_num),
+                "completion_rate": comp_rate_pct,
+                "point_score": point_score,
+                "result_label": res_label,
+                "achievement": kpi.get("achievement") or "",
+                "difficulty": kpi.get("difficulty") or "",
+                "action_plan": kpi.get("action_plan") or "",
+                "proposal": kpi.get("proposal") or "",
+                "note": kpi.get("note") or "",
+                "is_custom": is_custom,
+                "modified_by": kpi.get("modified_by") or ""
+            })
+
+        emp_achievement = score_res.get("achievement") or (emp_rows[0]["achievement"] if emp_rows else "")
+        emp_difficulty = score_res.get("difficulty") or (emp_rows[0]["difficulty"] if emp_rows else "")
+        emp_action_plan = score_res.get("action_plan") or (emp_rows[0]["action_plan"] if emp_rows else "")
+        emp_proposal = score_res.get("proposal") or (emp_rows[0]["proposal"] if emp_rows else "")
+        emp_note = score_res.get("note") or (emp_rows[0]["note"] if emp_rows else "")
+
+        employees_data.append({
+            "stt": emp_idx,
+            "employee_id": emp_code,
+            "full_name": emp_name,
+            "group_name": group_name,
+            "stage_desc": stage_desc,
+            "factory": emp.factory or "",
+            "department": emp.department or "QLCL",
+            "total_score": round(emp_total_score, 2),
+            "achievement": emp_achievement,
+            "difficulty": emp_difficulty,
+            "action_plan": emp_action_plan,
+            "proposal": emp_proposal,
+            "note": emp_note,
+            "kpis": emp_rows
+        })
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+
+    return {
+        "month": month,
+        "year": year,
+        "scope": scope,
+        "factory": factory or "ALL",
+        "total_employees": len(employees_data),
+        "custom_rows_count": custom_rows_count,
+        "employees": employees_data
+    }
+
+
 def generate_monthly_kpi_excel(
     db: Session,
     month: int = 9,
@@ -234,9 +485,34 @@ def generate_monthly_kpi_excel(
     font_sub_title = Font(name="Times New Roman", size=12, bold=True, italic=True, color="333333")
     font_score_bold = Font(name="Times New Roman", size=12, bold=True, color="000000")
 
+    # Màu sắc giữ nguyên như lúc đang xem trên web:
+    # Điểm tổng cột B & O (xanh lá >= 95, nâu/cam < 95)
+    font_total_pass = Font(name="Times New Roman", size=12, bold=True, color="047857")
+    font_total_warn = Font(name="Times New Roman", size=12, bold=True, color="B45309")
+
+    # Cột P (Kết quả): Vượt (xanh lá nền xanh nhạt), Đạt (chữ màu đen), Không đạt (chữ đỏ nền đỏ nhạt)
+    font_res_vuot = Font(name="Times New Roman", size=12, bold=True, color="047857")
+    fill_res_vuot = PatternFill(start_color="ECFDF5", end_color="ECFDF5", fill_type="solid")
+
+    font_res_dat = Font(name="Times New Roman", size=12, bold=True, color="000000") # Chữ màu đen theo yêu cầu
+    
+    font_res_fail = Font(name="Times New Roman", size=12, bold=True, color="DC2626")
+    fill_res_fail = PatternFill(start_color="FEF2F2", end_color="FEF2F2", fill_type="solid")
+
+    # Nền cột L (Kết quả thực hiện) màu vàng kem dịu mắt giống web
+    fill_actual_default = PatternFill(start_color="FFFBEB", end_color="FFFBEB", fill_type="solid")
+    fill_actual_custom = PatternFill(start_color="FEF3C7", end_color="FEF3C7", fill_type="solid")
+
+    # Nền và căn lề cột Phản hồi & Ghi chú (P..T)
+    fill_feedback = PatternFill(start_color="FFFCF5", end_color="FFFCF5", fill_type="solid")
+    align_feedback = Alignment(horizontal="left", vertical="top", wrap_text=True)
+
     fill_header = PatternFill(start_color="B3E1CB", end_color="B3E1CB", fill_type="solid")
     fill_white = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
-    fill_zebra = PatternFill(start_color="F9FAF8", end_color="F9FAF8", fill_type="solid")
+    fill_zebra = PatternFill(start_color="FAF7F2", end_color="FAF7F2", fill_type="solid")
+    # Khi tổng điểm vượt trên 105%: Cả hàng chuyển sang màu xanh đậm hơn xíu theo yêu cầu
+    fill_exceed_105 = PatternFill(start_color="D1FAE5", end_color="D1FAE5", fill_type="solid")
+    fill_exceed_105_alt = PatternFill(start_color="C6F6D5", end_color="C6F6D5", fill_type="solid")
 
     thin_border_side = Side(style='thin', color='A0A0A0')
     cell_border = Border(left=thin_border_side, right=thin_border_side, top=thin_border_side, bottom=thin_border_side)
@@ -254,29 +530,28 @@ def generate_monthly_kpi_excel(
     ws1.title = "Bảng đánh giá KPI nhân viên CL"
     ws1.views.sheetView[0].showGridLines = True
 
-    # Column Widths
+    # Column Widths (Đã xóa cột Điểm tổng bên trái bị dư, chuẩn 20 cột từ A đến T)
     col_widths = {
         'A': 6.5,   # STT
-        'B': 14.0,  # Điểm tổng (Summary)
-        'C': 22.0,  # Họ và Tên
-        'D': 18.0,  # Nhóm
-        'E': 14.0,  # Phân tổ
-        'F': 18.0,  # Mã KPI
-        'G': 46.0,  # Chỉ số đánh giá
-        'H': 10.0,  # Trọng số
-        'I': 9.0,   # Điểm
-        'J': 9.0,   # Phép đối chiếu
-        'K': 12.0,  # Mục tiêu tháng
-        'L': 14.0,  # Kết quả thực hiện
-        'M': 13.0,  # Tỷ lệ hoàn thành
-        'N': 11.0,  # Điểm số
-        'O': 12.0,  # Tổng điểm
-        'P': 11.0,  # Kết quả
-        'Q': 36.0,  # Thành tích
-        'R': 34.0,  # Khó khăn
-        'S': 32.0,  # Kế hoạch cải tiến
-        'T': 26.0,  # Kiến nghị
-        'U': 12.0   # Ghi chú
+        'B': 22.0,  # Họ và Tên
+        'C': 18.0,  # Nhóm
+        'D': 14.0,  # Phân tổ
+        'E': 18.0,  # Mã KPI
+        'F': 46.0,  # Chỉ số đánh giá
+        'G': 10.0,  # Trọng số
+        'H': 9.0,   # Điểm
+        'I': 9.0,   # Phép đối chiếu
+        'J': 12.0,  # Mục tiêu tháng
+        'K': 14.0,  # Kết quả thực hiện
+        'L': 13.0,  # Tỷ lệ hoàn thành
+        'M': 11.0,  # Điểm số
+        'N': 12.0,  # Tổng điểm
+        'O': 11.0,  # Kết quả
+        'P': 36.0,  # Thành tích
+        'Q': 34.0,  # Khó khăn
+        'R': 32.0,  # Kế hoạch cải tiến
+        'S': 26.0,  # Kiến nghị
+        'T': 12.0   # Ghi chú
     }
     for col_letter, width in col_widths.items():
         ws1.column_dimensions[col_letter].width = width
@@ -287,7 +562,7 @@ def generate_monthly_kpi_excel(
     ws1['A2'] = "PHÒNG QUẢN LÝ CHẤT LƯỢNG"
     ws1['A2'].font = font_sub_title
 
-    ws1.merge_cells("A3:U3")
+    ws1.merge_cells("A3:T3")
     ws1['A3'] = f"BÁO CÁO KẾT QUẢ THỰC HIỆN KPI THÁNG {month:02d}/{year}"
     ws1['A3'].font = font_title_top
     ws1['A3'].alignment = align_center
@@ -296,35 +571,34 @@ def generate_monthly_kpi_excel(
     ws1['A4'] = "CÔNG TY CỔ PHẦN VI NA G7"
     ws1['A4'].font = font_title_top
 
-    ws1.merge_cells("A5:U5")
+    ws1.merge_cells("A5:T5")
     ws1['A5'] = "BẢNG TỔNG HỢP KPI'S"
     ws1['A5'].font = font_title_main
     ws1['A5'].alignment = align_center
     ws1.row_dimensions[5].height = 34
 
-    ws1.merge_cells("A6:G6")
+    ws1.merge_cells("A6:F6")
     ws1['A6'] = "Bộ phận: Quản lý chất lượng"
     ws1['A6'].font = font_main_bold
 
-    ws1.merge_cells("T6:U6")
-    ws1['T6'] = "Mã: G7.QLCL-KPI"
-    ws1['T6'].font = font_main_bold
-    ws1['T6'].alignment = align_right
+    ws1.merge_cells("S6:T6")
+    ws1['S6'] = "Mã: G7.QLCL-KPI"
+    ws1['S6'].font = font_main_bold
+    ws1['S6'].alignment = align_right
 
-    # Rows 7 & 8: Table Header
+    # Rows 7 & 8: Table Header (20 cột chuẩn)
     ws1.row_dimensions[7].height = 24
     ws1.row_dimensions[8].height = 28
 
     headers_r7 = [
         ("A7", "A8", "STT"),
-        ("B7", "B8", ""),
-        ("C7", "C8", "Họ và Tên"),
-        ("D7", "D8", "Nhóm"),
-        ("E7", "E8", "Nhóm"),
-        ("F7", "F8", "Mã KPI"),
-        ("G7", "P7", f"Nhóm A: KPI chiến lược (100%)\nKPI's tháng {month:02d}/{year}"),
-        ("Q7", "T7", "Phản hồi"),
-        ("U7", "U8", "Ghi chú")
+        ("B7", "B8", "Họ và Tên"),
+        ("C7", "C8", "Nhóm"),
+        ("D7", "D8", "Nhóm / Vị trí"),
+        ("E7", "E8", "Mã KPI"),
+        ("F7", "O7", f"Nhóm A: KPI chiến lược (100%)\nKPI's tháng {month:02d}/{year}"),
+        ("P7", "S7", "Phản hồi"),
+        ("T7", "T8", "Ghi chú")
     ]
 
     for start_c, end_c, title in headers_r7:
@@ -333,27 +607,27 @@ def generate_monthly_kpi_excel(
         ws1[start_c] = title
 
     headers_r8 = [
-        ("G8", "Chỉ số đánh giá"),
-        ("H8", "Trọng số"),
-        ("I8", "Điểm"),
-        ("J8", "Phép đối chiếu"),
-        ("K8", "Mục tiêu tháng"),
-        ("L8", "Kết quả thực hiện"),
-        ("M8", "Tỷ lệ hoàn thành"),
-        ("N8", "Điểm số"),
-        ("O8", "Tổng điểm"),
-        ("P8", "Kết quả"),
-        ("Q8", "Thành tích nổi bật trong tháng"),
-        ("R8", "Những tồn tại/Khó khăn chưa hoàn thành"),
-        ("S8", "Kế hoạch hành động cải tiến tháng tiếp theo"),
-        ("T8", "Đề xuất/Kiến nghị với Ban Giám đốc")
+        ("F8", "Chỉ số đánh giá"),
+        ("G8", "Trọng số"),
+        ("H8", "Điểm"),
+        ("I8", "Phép đối chiếu"),
+        ("J8", "Mục tiêu tháng"),
+        ("K8", "Kết quả thực hiện"),
+        ("L8", "Tỷ lệ hoàn thành"),
+        ("M8", "Điểm số"),
+        ("N8", "Tổng điểm"),
+        ("O8", "Kết quả"),
+        ("P8", "Thành tích nổi bật trong tháng"),
+        ("Q8", "Những tồn tại/Khó khăn chưa hoàn thành"),
+        ("R8", "Kế hoạch hành động cải tiến tháng tiếp theo"),
+        ("S8", "Đề xuất/Kiến nghị với Ban Giám đốc")
     ]
 
     for cell_id, title in headers_r8:
         ws1[cell_id] = title
 
     for r in range(7, 9):
-        for c in range(1, 22):
+        for c in range(1, 21):
             cell = ws1.cell(r, c)
             cell.font = font_main_bold
             cell.fill = fill_header
@@ -390,7 +664,7 @@ def generate_monthly_kpi_excel(
         stage_desc = emp.stage or emp.factory or "QLCL"
 
         # Tính toán điểm KPI trực tiếp từ CSDL (chính xác từng tiêu chí, trọng số, kết quả đạt)
-        score_res = calculate_employee_kpi_score(db, emp_code, month, year)
+        score_res = calculate_employee_kpi_score(db, emp_code, month, year, commit=False)
         kpis = score_res.get("details", [])
         if not kpis:
             kpis = [{
@@ -403,6 +677,16 @@ def generate_monthly_kpi_excel(
                 "actual": "100.0%",
                 "calc_method": "attendance_days"
             }]
+
+        # Tính tổng điểm chuẩn theo đúng từng tiêu chí để kiểm tra điều kiện vượt 105%
+        emp_total_score = 0.0
+        for k_idx, kpi in enumerate(kpis):
+            pts_val = float(kpi.get("score") or 20)
+            comp_sym = kpi.get("operator") or ("<" if "<" in str(kpi.get("target", "")) else (">" if ">" in str(kpi.get("target", "")) else "="))
+            t_num = parse_target_numeric_value(kpi.get("target") or kpi.get("target_val"))
+            a_num = parse_actual_numeric_value(kpi.get("actual"), operator=comp_sym)
+            _, _, p_score, _ = compute_excel_kpi_row_metrics(pts=pts_val, comp=comp_sym, target_num=t_num, actual_num=a_num)
+            emp_total_score += p_score
 
         num_kpis = len(kpis)
         emp_start_row = current_row
@@ -432,21 +716,38 @@ def generate_monthly_kpi_excel(
         else:
             group_name = "Nhóm QC6"
 
-        # Merge các cột thông tin nhân viên theo số dòng KPI thực tế
+        # Merge các cột thông tin nhân viên theo số dòng KPI thực tế (20 cột chuẩn)
         ws1.merge_cells(start_row=emp_start_row, start_column=1, end_row=emp_end_row, end_column=1)
+        ws1.merge_cells(start_row=emp_start_row, start_column=2, end_row=emp_end_row, end_column=2)
         ws1.merge_cells(start_row=emp_start_row, start_column=3, end_row=emp_end_row, end_column=3)
         ws1.merge_cells(start_row=emp_start_row, start_column=4, end_row=emp_end_row, end_column=4)
-        ws1.merge_cells(start_row=emp_start_row, start_column=5, end_row=emp_end_row, end_column=5)
 
         ws1.cell(emp_start_row, 1, emp_idx)
-        ws1.cell(emp_start_row, 2, f"=O{emp_start_row}") # Col B tham chiếu tổng điểm cột O
-        ws1.cell(emp_start_row, 3, emp_name)
-        ws1.cell(emp_start_row, 4, group_name)
-        ws1.cell(emp_start_row, 5, stage_desc)
+        ws1.cell(emp_start_row, 2, emp_name)
+        ws1.cell(emp_start_row, 3, group_name)
+        ws1.cell(emp_start_row, 4, stage_desc)
 
-        # Merge Tổng điểm cột O theo số dòng thực tế
-        ws1.merge_cells(start_row=emp_start_row, start_column=15, end_row=emp_end_row, end_column=15)
-        ws1.cell(emp_start_row, 15, f"=SUM(N{emp_start_row}:N{emp_end_row})")
+        # Merge Tổng điểm cột N (cột 14) theo số dòng thực tế
+        ws1.merge_cells(start_row=emp_start_row, start_column=14, end_row=emp_end_row, end_column=14)
+        ws1.cell(emp_start_row, 14, f"=SUM(M{emp_start_row}:M{emp_end_row})")
+
+        # Merge và gán 5 cột Phản hồi & Ghi chú (P, Q, R, S, T: 16..20) theo nhân sự
+        emp_ach = score_res.get("achievement") or (kpis[0].get("achievement") if kpis else "") or ""
+        emp_dif = score_res.get("difficulty") or (kpis[0].get("difficulty") if kpis else "") or ""
+        emp_act = score_res.get("action_plan") or (kpis[0].get("action_plan") if kpis else "") or ""
+        emp_pro = score_res.get("proposal") or (kpis[0].get("proposal") if kpis else "") or ""
+        emp_not = score_res.get("note") or (kpis[0].get("note") if kpis else "") or ""
+
+        for col_fb, val_fb in [
+            (16, emp_ach),
+            (17, emp_dif),
+            (18, emp_act),
+            (19, emp_pro),
+            (20, emp_not)
+        ]:
+            if emp_end_row > emp_start_row:
+                ws1.merge_cells(start_row=emp_start_row, start_column=col_fb, end_row=emp_end_row, end_column=col_fb)
+            ws1.cell(emp_start_row, col_fb, val_fb)
 
         # Ghi từng tiêu chí KPI thực tế của nhân sự
         for k_idx, kpi in enumerate(kpis):
@@ -454,80 +755,123 @@ def generate_monthly_kpi_excel(
             ws1.row_dimensions[r_idx].height = 22
 
             code = kpi.get("kpi_code", f"KPI{k_idx+1}-{group_name}")
-            name = kpi.get("content") or kpi.get("name", "")
+            raw_name = kpi.get("content") or kpi.get("name", "")
+            clean_name = re.sub(r"^\d+\.\s*", "", str(raw_name)).strip()
             pts = int(float(kpi.get("score") or 20))
             weight = round(pts / 100.0, 2)
             comp = kpi.get("operator") or ("<" if "<" in str(kpi.get("target", "")) else (">" if ">" in str(kpi.get("target", "")) else "="))
-            target_num = parse_target_numeric_value(kpi.get("target_val") or kpi.get("target"))
+            target_num = parse_target_numeric_value(kpi.get("target") or kpi.get("target_val"))
             actual_num = parse_actual_numeric_value(kpi.get("actual"), operator=comp)
 
-            # Ưu tiên công thức đặc thù cho Trưởng phòng nếu tháng 9
+            # Ưu tiên công thức đặc thù cho Trưởng phòng nếu tháng 9 và chưa chỉnh sửa thủ công
             actual_cell_val = actual_num
-            if emp_idx == 1 and k_idx == 2 and month == 9 and year == 2026:
-                actual_cell_val = "=(SUM(N14:N133)/24)%"
-            elif emp_idx == 1 and k_idx == 0 and month == 9 and year == 2026:
-                actual_cell_val = "=10764/3853003"
+            if not kpi.get("is_custom"):
+                if emp_idx == 1 and k_idx == 2 and month == 9 and year == 2026:
+                    actual_cell_val = "=(SUM(M14:M133)/24)%"
+                elif emp_idx == 1 and k_idx == 0 and month == 9 and year == 2026:
+                    actual_cell_val = "=10764/3853003"
 
-            ws1.cell(r_idx, 6, code)
-            ws1.cell(r_idx, 7, f"{k_idx+1}. {name}")
-            ws1.cell(r_idx, 8, weight)
-            ws1.cell(r_idx, 9, pts)
-            ws1.cell(r_idx, 10, comp)
-            ws1.cell(r_idx, 11, target_num)
-            ws1.cell(r_idx, 12, actual_cell_val)
+            ws1.cell(r_idx, 5, code)
+            ws1.cell(r_idx, 6, f"{k_idx+1}. {clean_name}")
+            ws1.cell(r_idx, 7, weight)
+            ws1.cell(r_idx, 8, pts)
+            ws1.cell(r_idx, 9, comp)
+            ws1.cell(r_idx, 10, target_num)
+            ws1.cell(r_idx, 11, actual_cell_val)
 
-            # Công thức động M (Tỷ lệ hoàn thành): An toàn không lỗi DIV/0
-            ws1.cell(r_idx, 13, f'=IF(J{r_idx}="<", IF(L{r_idx}<=0, 1, IF(L{r_idx}<=K{r_idx}, 1, K{r_idx}/L{r_idx})), L{r_idx}/K{r_idx})')
-            # Công thức động N (Điểm số)
-            ws1.cell(r_idx, 14, f'=H{r_idx}*M{r_idx}*100')
-            # Kết quả P (Vượt / Đạt / Không đạt)
-            ws1.cell(r_idx, 16, f'=IF(N{r_idx}>=I{r_idx}*1.04, "Vượt", IF(N{r_idx}>=I{r_idx}*0.95, "Đạt", "Không đạt"))')
+            # Công thức động L (Tỷ lệ hoàn thành): An toàn không lỗi DIV/0, cho phép vượt khi K < J
+            ws1.cell(r_idx, 12, f'=IF(OR(I{r_idx}="<",I{r_idx}="<="), IF(K{r_idx}<=0, 1, MIN(2, J{r_idx}/K{r_idx})), K{r_idx}/J{r_idx})')
+            # Công thức động M (Điểm số)
+            ws1.cell(r_idx, 13, f'=G{r_idx}*L{r_idx}*100')
+            # Kết quả O (Vượt / Đạt / Không đạt)
+            ws1.cell(r_idx, 15, f'=IF(M{r_idx}>=H{r_idx}*1.04, "Vượt", IF(M{r_idx}>=H{r_idx}*0.95, "Đạt", "Không đạt"))')
 
             # Formatting
-            ws1.cell(r_idx, 6).alignment = align_center
-            ws1.cell(r_idx, 7).alignment = align_left
+            ws1.cell(r_idx, 5).alignment = align_center
+            ws1.cell(r_idx, 6).alignment = align_left
+            ws1.cell(r_idx, 7).alignment = align_center
             ws1.cell(r_idx, 8).alignment = align_center
             ws1.cell(r_idx, 9).alignment = align_center
-            ws1.cell(r_idx, 10).alignment = align_center
+            ws1.cell(r_idx, 10).alignment = align_right
             ws1.cell(r_idx, 11).alignment = align_right
             ws1.cell(r_idx, 12).alignment = align_right
             ws1.cell(r_idx, 13).alignment = align_right
-            ws1.cell(r_idx, 14).alignment = align_right
-            ws1.cell(r_idx, 16).alignment = align_center
+            ws1.cell(r_idx, 15).alignment = align_center
+            for col_fb_idx in range(16, 21):
+                ws1.cell(r_idx, col_fb_idx).alignment = align_left
 
             # Format số
-            ws1.cell(r_idx, 8).number_format = '0.00'
-            ws1.cell(r_idx, 9).number_format = '0'
+            ws1.cell(r_idx, 7).number_format = '0.00'
+            ws1.cell(r_idx, 8).number_format = '0'
             if isinstance(target_num, (int, float)) and target_num <= 1.0:
-                ws1.cell(r_idx, 11).number_format = '0.0%' if target_num >= 0.01 else '0.000%'
+                ws1.cell(r_idx, 10).number_format = '0.0%' if target_num >= 0.01 else '0.000%'
             if isinstance(actual_cell_val, (int, float)):
                 if actual_cell_val == 0:
-                    ws1.cell(r_idx, 12).number_format = '0.0%'
+                    ws1.cell(r_idx, 11).number_format = '0.0%'
                 elif actual_cell_val <= 1.5:
-                    ws1.cell(r_idx, 12).number_format = '0.0%' if actual_cell_val >= 0.01 else '0.000%'
-            ws1.cell(r_idx, 13).number_format = '0.0%'
-            ws1.cell(r_idx, 14).number_format = '0.00'
+                    ws1.cell(r_idx, 11).number_format = '0.0%' if actual_cell_val >= 0.01 else '0.000%'
+            ws1.cell(r_idx, 12).number_format = '0.0%'
+            ws1.cell(r_idx, 13).number_format = '0.00'
 
-        # Style cụm dòng của nhân viên
-        row_fill = fill_white if emp_idx % 2 != 0 else fill_zebra
+        # Style cụm dòng của nhân viên: Nếu điểm tổng > 105% mới có màu, còn lại toàn bộ màu trắng
+        if emp_total_score > 105.0:
+            row_fill = fill_exceed_105 if emp_idx % 2 != 0 else fill_exceed_105_alt
+        else:
+            row_fill = fill_white
+
         for r in range(emp_start_row, emp_end_row + 1):
-            for c in range(1, 22):
+            for c in range(1, 21):
                 cell = ws1.cell(r, c)
                 cell.font = font_main
                 cell.border = cell_border
-                if not cell.fill or cell.fill.fill_type is None:
-                    cell.fill = row_fill
+                cell.fill = row_fill
 
-        # Điểm nhấn font đậm cho Tên, STT và Tổng điểm
+        # Điểm nhấn font đậm cho Tên, STT và Tổng điểm cột N (khớp màu sắc web: xanh lá >= 95, cam < 95)
         ws1.cell(emp_start_row, 1).font = font_main_bold
         ws1.cell(emp_start_row, 1).alignment = align_center
-        ws1.cell(emp_start_row, 3).font = font_main_bold
-        ws1.cell(emp_start_row, 3).alignment = align_left
+        ws1.cell(emp_start_row, 2).font = font_main_bold
+        ws1.cell(emp_start_row, 2).alignment = align_left
+        ws1.cell(emp_start_row, 3).alignment = align_center
         ws1.cell(emp_start_row, 4).alignment = align_center
-        ws1.cell(emp_start_row, 5).alignment = align_center
-        ws1.cell(emp_start_row, 15).font = font_score_bold
-        ws1.cell(emp_start_row, 15).alignment = align_center
-        ws1.cell(emp_start_row, 15).number_format = '0.00'
+
+        tot_font = font_total_pass if emp_total_score >= 95.0 else font_total_warn
+        ws1.cell(emp_start_row, 14).font = tot_font
+        ws1.cell(emp_start_row, 14).alignment = align_center
+        ws1.cell(emp_start_row, 14).number_format = '0.00'
+
+        # Định dạng màu sắc và căn lề các ô Phản hồi & Ghi chú (P..T: 16..20) -> chỉ người vượt 105% mới có màu, còn lại trắng
+        fb_fill = (fill_exceed_105 if emp_idx % 2 != 0 else fill_exceed_105_alt) if emp_total_score > 105.0 else fill_white
+        for col_fb in range(16, 21):
+            for r in range(emp_start_row, emp_end_row + 1):
+                fb_c = ws1.cell(r, col_fb)
+                fb_c.fill = fb_fill
+                fb_c.alignment = align_feedback
+
+        # Áp dụng màu sắc cho từng dòng tiêu chí KPI (Cột K và Cột O) giống hệt như trên web
+        for k_idx, kpi in enumerate(kpis):
+            r_idx = emp_start_row + k_idx
+            # Cột K (Kết quả thực hiện) -> nền vàng kem nếu custom, xanh nếu vượt 105%, còn lại trắng
+            k_cell = ws1.cell(r_idx, 11)
+            k_cell.fill = fill_actual_custom if kpi.get("is_custom") else ((fill_exceed_105 if emp_idx % 2 != 0 else fill_exceed_105_alt) if emp_total_score > 105.0 else fill_white)
+
+            # Cột O (Kết quả) -> Vượt (xanh lá nền xanh nhạt), Đạt (chữ màu đen), Không đạt (chữ đỏ nền đỏ nhạt)
+            o_cell = ws1.cell(r_idx, 15)
+            pts_val = float(kpi.get("score") or 20)
+            comp_sym = kpi.get("operator") or ("<" if "<" in str(kpi.get("target", "")) else (">" if ">" in str(kpi.get("target", "")) else "="))
+            t_num = parse_target_numeric_value(kpi.get("target") or kpi.get("target_val"))
+            a_num = parse_actual_numeric_value(kpi.get("actual"), operator=comp_sym)
+            _, _, _, res_val = compute_excel_kpi_row_metrics(pts=pts_val, comp=comp_sym, target_num=t_num, actual_num=a_num)
+
+            if res_val == "Vượt":
+                o_cell.font = font_res_vuot
+                o_cell.fill = fill_res_vuot
+            elif res_val == "Không đạt":
+                o_cell.font = font_res_fail
+                o_cell.fill = fill_res_fail
+            else: # "Đạt"
+                o_cell.font = font_res_dat # Chữ màu đen!
+                o_cell.fill = row_fill
+            o_cell.alignment = align_center
 
         current_row = emp_end_row + 1
 
@@ -562,6 +906,11 @@ def generate_monthly_kpi_excel(
                 cell.font = font_main_bold
                 cell.fill = fill_header
                 cell.alignment = align_center
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
 
     output = io.BytesIO()
     wb.save(output)

@@ -22,26 +22,40 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
   const [modalAlert, setModalAlert] = useState({ show: false, title: '', text: '', type: 'warning' });
   const [modalConfirm, setModalConfirm] = useState({ show: false, title: '', text: '', onConfirm: null });
 
-  // Form Fields State
+  const currentRealMonthNum = new Date().getMonth() + 1;
+  const currentRealMonthStr = `Tháng ${currentRealMonthNum}`;
+
+  const deriveLevelCode = (lvlStr) => {
+    const s = String(lvlStr || '');
+    const m = s.match(/(\d+)/);
+    return m ? `LV-0${m[1]}` : 'LV-01';
+  };
+
+  // Form Fields State (100% dynamic from CSDL, zero hardcoded mockup scores)
   const [formData, setFormData] = useState({
     schema_name: data.schema_name || 'Sơ đồ chốt chặn',
     current_level: data.current_level || 'Cấp 1',
     parent_level: data.parent_level || 'Ban Giám Đốc (QMR)',
     factory: data.factory || 'Nhà máy 1 (NM1)',
-    employee_name: data.employee_name || data.full_name || 'Ngô Diễm My',
-    employee_id: data.employee_id || 'NV_IT_002',
-    position: data.position || data.position_name || 'Trưởng nhóm PQC',
-    department: data.department || data.section_name || data.department_name || 'Phòng QA/QC',
-    selected_month: data.selected_month || `Tháng ${new Date().getMonth() + 1}`,
-    score_prev_month: data.score_prev_month || 120,
-    score_current: data.score_current || 40,
-    level_code: data.level_code || 'LV-02',
+    employee_name: data.employee_name || data.full_name || '',
+    employee_id: data.employee_id || '',
+    position: data.position || data.position_name || data.stage || '',
+    department: data.department || data.section_name || data.department_name || '',
+    selected_month: data.selected_month || currentRealMonthStr,
+    score_prev_month: data.score_prev_month ?? 0,
+    score_current: data.score_current ?? 0,
+    score_kpi: data.score_kpi ?? 100,
+    score_checklist: data.score_checklist ?? 100,
+    score_violation: data.score_violation ?? 0,
+    score_reward: data.score_reward ?? 0,
+    score_manager: data.score_manager ?? 0,
+    level_code: data.level_code || deriveLevelCode(data.current_level || 'Cấp 1'),
     note: typeof data.note === 'string' && data.note.trim().startsWith('{') ? '' : (data.note || ''),
-    display_month: data.display_month || 'Tháng 1',
-    total_score: data.total_score || '160',
-    kpi_score: data.kpi_score || '95',
-    qldg_score: data.qldg_score || '40',
-    violation_score: data.violation_score || '-5'
+    display_month: data.display_month || currentRealMonthStr,
+    total_score: data.total_score ?? 0,
+    kpi_score: data.kpi_score ?? 100,
+    qldg_score: data.qldg_score ?? 0,
+    violation_score: data.violation_score ?? '0'
   });
 
   // Active Tab: 'kpi' | 'checklist' | 'manager_evaluation' | 'violations'
@@ -138,8 +152,8 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
     setEvidenceData(null);
 
     const empId = formData.employee_id || taskData?.employee_id || '';
-    const selectedMonthStr = formData.selected_month || 'Tháng 9';
-    const monthNum = parseInt(String(selectedMonthStr).replace(/\D/g, '') || '9', 10);
+    const selectedMonthStr = formData.selected_month || currentRealMonthStr;
+    const monthNum = parseInt(String(selectedMonthStr).replace(/\D/g, '') || String(currentRealMonthNum), 10);
     const kpiCode = kpiItem?.kpi_code || kpiItem?.code || 'KPI07';
 
     try {
@@ -246,9 +260,15 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
 
 
 
-  // Tự động quét và tổng hợp danh sách các Tháng có dữ liệu thực tế từ tất cả các nguồn (Vi phạm, Đánh giá, KPI, Checklist)
+  // Tự động quét và tổng hợp danh sách các Tháng từ đầu năm đến tháng hiện tại + các tháng có dữ liệu thực tế
   const availableMonths = useMemo(() => {
     const monthsSet = new Set();
+
+    // Bổ sung đầy đủ các tháng từ Tháng 1 đến tháng hiện tại để luôn tra cứu được Tháng trước & Hiện tại
+    const currentMonthNum = new Date().getMonth() + 1;
+    for (let m = 1; m <= currentMonthNum; m++) {
+      monthsSet.add(`Tháng ${m}`);
+    }
 
     (violations || []).forEach(v => {
       const m = extractMonthNumber(v.raw_date || v.time);
@@ -270,10 +290,6 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
       if (mon) monthsSet.add(`Tháng ${mon}`);
     });
 
-    // Luôn bổ sung Tháng hiện tại (VD: Tháng 9)
-    const currentMonthNum = new Date().getMonth() + 1;
-    monthsSet.add(`Tháng ${currentMonthNum}`);
-
     return Array.from(monthsSet).sort((a, b) => {
       const mA = parseInt(a.replace('Tháng ', ''), 10) || 0;
       const mB = parseInt(b.replace('Tháng ', ''), 10) || 0;
@@ -283,9 +299,9 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
 
   // Xác định số tháng đang được chọn
   const selectedMonthNum = useMemo(() => {
-    const str = formData.selected_month || availableMonths[0] || 'Tháng 9';
+    const str = formData.selected_month || availableMonths[0] || currentRealMonthStr;
     return parseInt(str.replace('Tháng ', ''), 10) || (new Date().getMonth() + 1);
-  }, [formData.selected_month, availableMonths]);
+  }, [formData.selected_month, availableMonths, currentRealMonthStr]);
 
   // Lọc dữ liệu vi phạm của riêng tháng đang chọn
   const filteredViolationsByMonth = useMemo(() => {
@@ -405,8 +421,8 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
     }
 
     // 1. Fetch Calculated KPI items and real-time scores from Backend Engine
-    const targetMonthStr = targetMonth || formData.selected_month || 'Tháng 9';
-    const monthNum = parseInt(String(targetMonthStr).replace(/\D/g, '') || '9', 10);
+    const targetMonthStr = targetMonth || formData.selected_month || currentRealMonthStr;
+    const monthNum = parseInt(String(targetMonthStr).replace(/\D/g, '') || String(currentRealMonthNum), 10);
     api.get(`/kpi-management/calculate-score?employee_id=${empId}&month=${monthNum}&year=2026`)
       .then(scoreRes => {
         if (scoreRes && scoreRes.details) {
@@ -425,14 +441,18 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
             modified_by: k.modified_by || null
           })));
 
+          const tScore = scoreRes.total_score !== undefined && scoreRes.total_score !== null ? Number(scoreRes.total_score) : 0;
           setFormData(prev => ({
             ...prev,
-            score_current: scoreRes.total_score || 0,
-            score_kpi: scoreRes.kpi_score || 0,
-            score_violation: scoreRes.violation_score || 0,
-            score_manager: scoreRes.manager_score || 0,
-            score_rating: scoreRes.rating || (scoreRes.total_score >= 100 ? 'A' : scoreRes.total_score >= 90 ? 'B' : scoreRes.total_score >= 80 ? 'C' : 'D'),
-            rating: scoreRes.rating || (scoreRes.total_score >= 100 ? 'A' : scoreRes.total_score >= 90 ? 'B' : scoreRes.total_score >= 80 ? 'C' : 'D')
+            score_current: tScore,
+            total_score: tScore,
+            score_kpi: scoreRes.kpi_score !== undefined && scoreRes.kpi_score !== null ? Number(scoreRes.kpi_score) : 100,
+            score_checklist: scoreRes.checklist_score !== undefined && scoreRes.checklist_score !== null ? Number(scoreRes.checklist_score) : 100,
+            score_violation: scoreRes.violation_score !== undefined && scoreRes.violation_score !== null ? Number(scoreRes.violation_score) : 0,
+            score_reward: scoreRes.reward_score !== undefined && scoreRes.reward_score !== null ? Number(scoreRes.reward_score) : 0,
+            score_manager: scoreRes.manager_score !== undefined && scoreRes.manager_score !== null ? Number(scoreRes.manager_score) : 0,
+            score_rating: scoreRes.rating || (tScore >= 100 ? 'A' : tScore >= 90 ? 'B' : tScore >= 80 ? 'C' : 'D'),
+            rating: scoreRes.rating || (tScore >= 100 ? 'A' : tScore >= 90 ? 'B' : tScore >= 80 ? 'C' : 'D')
           }));
         }
       })
@@ -440,19 +460,24 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
         setKpiList([]);
       });
 
-    // Fetch previous month score for comparison
+    // Fetch previous month score for comparison (Tháng liền kề trước của tháng đang chọn)
     const prevMonth = monthNum > 1 ? monthNum - 1 : 12;
     const prevYear = monthNum > 1 ? 2026 : 2025;
     api.get(`/kpi-management/monthly-score?employee_id=${empId}&month=${prevMonth}&year=${prevYear}`)
       .then(prevRes => {
-        if (prevRes && prevRes.total_score !== undefined) {
+        if (prevRes && prevRes.total_score !== undefined && prevRes.total_score !== null) {
           setFormData(prev => ({
             ...prev,
-            score_prev_month: prevRes.total_score
+            score_prev_month: Number(prevRes.total_score)
           }));
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        setFormData(prev => ({
+          ...prev,
+          score_prev_month: 0
+        }));
+      });
 
     // 2. Fetch Checklist items for this employee
     api.get(`/kpi-management/checklists?employee_id=${empId}`)
@@ -518,12 +543,12 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
           if (filtered.length > 0) {
             setManagerEvaluations(filtered.map((e, idx) => ({
               id: e.id || idx + 1,
-              time: e.eval_date || e.time || (e.created_at ? new Date(e.created_at).toLocaleDateString('vi-VN') : '31/08/2026'),
+              time: e.eval_date || e.time || (e.created_at ? new Date(e.created_at).toLocaleDateString('vi-VN') : '-'),
               achievement: e.achievements || e.manager_note || e.note || 'Hoàn thành nhiệm vụ',
               difficulty: e.limitations || 'Không có',
               plan: e.improvement_plan || e.proposed_action || 'Duy trì hiệu suất',
               proposal: e.proposals || 'Khen thưởng',
-              total_point: e.rating ? `Loại ${e.rating}` : (e.actual_score ? `${e.actual_score} điểm` : '+5')
+              total_point: e.actual_score !== undefined && e.actual_score !== null ? `${e.actual_score} điểm${e.rating ? ` (Loại ${e.rating})` : ''}` : (e.rating ? `Loại ${e.rating}` : '-')
             })));
           } else {
             setManagerEvaluations([]);
@@ -584,7 +609,7 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
 
               return {
                 id: v.id || idx + 1,
-                time: v.violation_time || v.date || (v.created_at ? new Date(v.created_at).toLocaleString('vi-VN') : '25/08/2026 09:30'),
+                time: v.violation_time || v.date || (v.created_at ? new Date(v.created_at).toLocaleString('vi-VN') : '-'),
                 type: v.rule_name || v.issue || v.content || 'Vi phạm quy trình QC',
                 description: v.note || v.description || v.rule_code || 'Ghi nhận từ ứng dụng Mobile',
                 imagesList: imagesList,
@@ -594,25 +619,15 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                 raw_date: v.date || v.created_at || v.violation_time
               };
             }));
-
-            // Tính tổng số điểm vi phạm để tự động hiển thị lên ô "Vi phạm" trên header modal
-            const totalViolationPoints = filtered.reduce((acc, curr) => acc + Math.abs(curr.points || 0), 0);
-            setFormData(prev => ({
-              ...prev,
-              violation_score: totalViolationPoints > 0 ? `-${totalViolationPoints}` : '0'
-            }));
           } else {
             setViolations([]);
-            setFormData(prev => ({ ...prev, violation_score: '0' }));
           }
         } else {
           setViolations([]);
-          setFormData(prev => ({ ...prev, violation_score: '0' }));
         }
       })
       .catch(() => {
         setViolations([]);
-        setFormData(prev => ({ ...prev, violation_score: '0' }));
       });
   };
 
@@ -739,6 +754,7 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
       }
     }
 
+    const activeMonth = formData.selected_month || currentRealMonthStr;
     setFormData(prev => ({
       ...prev,
       employee_name: empName,
@@ -747,12 +763,16 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
       department: dept,
       factory: fac,
       current_level: curLevel,
+      level_code: deriveLevelCode(curLevel),
       parent_level: savedParentLevel,
       parent_id: savedParentId,
-      note: userNote
+      note: userNote,
+      selected_month: activeMonth,
+      score_prev_month: 0,
+      score_current: 0
     }));
 
-    fetchEmployeeData(empId, empName);
+    fetchEmployeeData(empId, empName, activeMonth);
   }, [isOpen, taskData]);
 
   if (!isOpen) return null;
@@ -791,8 +811,8 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
 
     setCustomSaving(true);
     try {
-      const selectedMonthStr = formData.selected_month || 'Tháng 9';
-      const monthNum = parseInt(selectedMonthStr.replace(/\D/g, '') || '9', 10);
+      const selectedMonthStr = formData.selected_month || currentRealMonthStr;
+      const monthNum = parseInt(selectedMonthStr.replace(/\D/g, '') || String(currentRealMonthNum), 10);
       const num = parseFloat(customForm.custom_value);
       const scoreVal = !isNaN(num) ? num : (parseFloat(customForm.custom_score) || 100);
       const actVal = `${scoreVal}%`;
@@ -826,14 +846,18 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
           modified_by: k.modified_by || null
         })));
 
+        const tScore = scoreRes.total_score !== undefined && scoreRes.total_score !== null ? Number(scoreRes.total_score) : 0;
         setFormData(prev => ({
           ...prev,
-          score_current: scoreRes.total_score || 0,
-          score_kpi: scoreRes.kpi_score || 0,
-          score_violation: scoreRes.violation_score || 0,
-          score_manager: scoreRes.manager_score || 0,
-          score_rating: scoreRes.rating || (scoreRes.total_score >= 100 ? 'A' : scoreRes.total_score >= 90 ? 'B' : scoreRes.total_score >= 80 ? 'C' : 'D'),
-          rating: scoreRes.rating || (scoreRes.total_score >= 100 ? 'A' : scoreRes.total_score >= 90 ? 'B' : scoreRes.total_score >= 80 ? 'C' : 'D')
+          score_current: tScore,
+          total_score: tScore,
+          score_kpi: scoreRes.kpi_score !== undefined && scoreRes.kpi_score !== null ? Number(scoreRes.kpi_score) : 100,
+          score_checklist: scoreRes.checklist_score !== undefined && scoreRes.checklist_score !== null ? Number(scoreRes.checklist_score) : 100,
+          score_violation: scoreRes.violation_score !== undefined && scoreRes.violation_score !== null ? Number(scoreRes.violation_score) : 0,
+          score_reward: scoreRes.reward_score !== undefined && scoreRes.reward_score !== null ? Number(scoreRes.reward_score) : 0,
+          score_manager: scoreRes.manager_score !== undefined && scoreRes.manager_score !== null ? Number(scoreRes.manager_score) : 0,
+          score_rating: scoreRes.rating || (tScore >= 100 ? 'A' : tScore >= 90 ? 'B' : tScore >= 80 ? 'C' : 'D'),
+          rating: scoreRes.rating || (tScore >= 100 ? 'A' : tScore >= 90 ? 'B' : tScore >= 80 ? 'C' : 'D')
         }));
         if (onSave) onSave(scoreRes);
       } else {
@@ -854,8 +878,8 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
 
     setCustomSaving(true);
     try {
-      const selectedMonthStr = formData.selected_month || 'Tháng 9';
-      const monthNum = parseInt(selectedMonthStr.replace(/\D/g, '') || '9', 10);
+      const selectedMonthStr = formData.selected_month || currentRealMonthStr;
+      const monthNum = parseInt(selectedMonthStr.replace(/\D/g, '') || String(currentRealMonthNum), 10);
       const res = await api.delete(`/kpi-management/custom-results?employee_id=${empId}&kpi_code=${encodeURIComponent(selectedKpiForCustom.kpi_code)}&month=${monthNum}&year=2026`);
 
       if (res?.scores?.details) {
@@ -875,14 +899,18 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
           modified_by: k.modified_by || null
         })));
 
+        const tScore = scoreRes.total_score !== undefined && scoreRes.total_score !== null ? Number(scoreRes.total_score) : 0;
         setFormData(prev => ({
           ...prev,
-          score_current: scoreRes.total_score || 0,
-          score_kpi: scoreRes.kpi_score || 0,
-          score_violation: scoreRes.violation_score || 0,
-          score_manager: scoreRes.manager_score || 0,
-          score_rating: scoreRes.rating || (scoreRes.total_score >= 100 ? 'A' : scoreRes.total_score >= 90 ? 'B' : scoreRes.total_score >= 80 ? 'C' : 'D'),
-          rating: scoreRes.rating || (scoreRes.total_score >= 100 ? 'A' : scoreRes.total_score >= 90 ? 'B' : scoreRes.total_score >= 80 ? 'C' : 'D')
+          score_current: tScore,
+          total_score: tScore,
+          score_kpi: scoreRes.kpi_score !== undefined && scoreRes.kpi_score !== null ? Number(scoreRes.kpi_score) : 100,
+          score_checklist: scoreRes.checklist_score !== undefined && scoreRes.checklist_score !== null ? Number(scoreRes.checklist_score) : 100,
+          score_violation: scoreRes.violation_score !== undefined && scoreRes.violation_score !== null ? Number(scoreRes.violation_score) : 0,
+          score_reward: scoreRes.reward_score !== undefined && scoreRes.reward_score !== null ? Number(scoreRes.reward_score) : 0,
+          score_manager: scoreRes.manager_score !== undefined && scoreRes.manager_score !== null ? Number(scoreRes.manager_score) : 0,
+          score_rating: scoreRes.rating || (tScore >= 100 ? 'A' : tScore >= 90 ? 'B' : tScore >= 80 ? 'C' : 'D'),
+          rating: scoreRes.rating || (tScore >= 100 ? 'A' : tScore >= 90 ? 'B' : tScore >= 80 ? 'C' : 'D')
         }));
         if (onSave) onSave(scoreRes);
       } else {
@@ -1346,22 +1374,17 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                 value={formData.current_level}
                 onChange={(e) => {
                   const newLvl = e.target.value;
-                  handleInputChange('current_level', newLvl);
-                  if (newLvl === 'Cấp 1') {
-                    setFormData(prev => ({
-                      ...prev,
-                      current_level: newLvl,
-                      parent_level: 'Ban Giám Đốc (QMR)',
-                      parent_id: null
-                    }));
-                  } else if (newLvl === 'Cấp 2' && (!formData.parent_level || formData.parent_level.includes('Ban Giám Đốc') || formData.parent_level === formData.employee_name)) {
-                    setFormData(prev => ({
-                      ...prev,
-                      current_level: newLvl,
-                      parent_level: 'Đặng Văn Nam',
-                      parent_id: '3973'
-                    }));
-                  }
+                  const newLvlCode = deriveLevelCode(newLvl);
+                  setFormData(prev => ({
+                    ...prev,
+                    current_level: newLvl,
+                    level_code: newLvlCode,
+                    ...(newLvl === 'Cấp 1'
+                      ? { parent_level: 'Ban Giám Đốc (QMR)', parent_id: null }
+                      : (newLvl === 'Cấp 2' && (!prev.parent_level || prev.parent_level.includes('Ban Giám Đốc') || prev.parent_level === prev.employee_name))
+                        ? { parent_level: 'Đặng Văn Nam', parent_id: '3973' }
+                        : {})
+                  }));
                 }}
                 style={{ width: '100%', padding: '5px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
               >
@@ -1430,15 +1453,20 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                     const pos = found.stage || found.position_name || found.position || 'Nhân viên QC';
                     const dept = found.department || found.section_name || found.department_name || 'Phòng QA/QC';
                     const fac = found.factory || found.factory_name || 'Nhà máy 1 (NM1)';
+                    const lvl = found.current_level || formData.current_level || 'Cấp 2';
                     setFormData(prev => ({
                       ...prev,
                       employee_name: selectedName,
                       employee_id: empId,
                       position: pos,
                       department: dept,
-                      factory: fac
+                      factory: fac,
+                      current_level: lvl,
+                      level_code: deriveLevelCode(lvl),
+                      score_prev_month: 0,
+                      score_current: 0
                     }));
-                    fetchEmployeeData(empId, selectedName);
+                    fetchEmployeeData(empId, selectedName, formData.selected_month);
                   }
                 }}
                 style={{ width: '100%', padding: '5px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
@@ -1486,7 +1514,7 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                   Chọn tháng <span style={{ color: '#DC2626' }}>*</span>
                 </label>
                 <select
-                  value={formData.selected_month || availableMonths[0] || 'Tháng 9'}
+                  value={formData.selected_month || availableMonths[0] || currentRealMonthStr}
                   onChange={(e) => handleInputChange('selected_month', e.target.value)}
                   style={{ width: '100%', padding: '5px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
                 >
@@ -1566,22 +1594,24 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
             />
           </div>
 
-          {/* Row 6: Dynamic Calculated Scores (Tháng hiển thị * | Điểm tổng | KPI (70%) | Checklist (30%) | QLĐG | Vi phạm | Xếp loại) */}
+          {/* Row 6: Dynamic Calculated Scores (Tháng hiển thị * | Điểm tổng | KPI (70%) | Checklist (30%) | Vi phạm | Xếp loại) */}
           {(() => {
-            // 1. Điểm trừ Vi phạm
-            const calculatedViolationScore = filteredViolationsByMonth.reduce((sum, item) => {
-              const pt = parseInt(String(item.point).replace('+', '')) || 0;
+            // 1. Điểm trừ Vi phạm của đúng tháng đang chọn (ưu tiên kết quả chuẩn từ Backend)
+            const clientViolationScore = filteredViolationsByMonth.reduce((sum, item) => {
+              const pt = parseFloat(String(item.point).replace('+', '')) || 0;
               return sum + Math.abs(pt);
             }, 0);
+            const calculatedViolationScore = (formData.score_violation !== undefined && formData.score_violation !== null)
+              ? Number(formData.score_violation)
+              : clientViolationScore;
 
-            // 2. Điểm thưởng/cộng Quản lý
-            const calculatedQldgScore = filteredManagerEvalsByMonth.reduce((sum, item) => {
-              const pt = parseInt(String(item.total_point).replace('+', '')) || 0;
-              return sum + pt;
-            }, 0);
+            // 2. Điểm thưởng (nếu có phát sinh trong tháng từ AwardDiscipline)
+            const calculatedRewardScore = Number(formData.score_reward || 0);
 
             // 3. Điểm Checklist (30% Trọng số)
-            let calculatedChecklistScore = 100;
+            let calculatedChecklistScore = (formData.score_checklist !== undefined && formData.score_checklist !== null)
+              ? Number(formData.score_checklist)
+              : 100;
             if (filteredChecklistByMonth && filteredChecklistByMonth.length > 0) {
               let earned = 0;
               filteredChecklistByMonth.forEach(c => {
@@ -1590,19 +1620,20 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                 else if (st.includes('trễ') || st.includes('đang thực hiện') || st.includes('cần làm')) earned += 50;
                 else earned += 0;
               });
-              calculatedChecklistScore = Math.round(earned / filteredChecklistByMonth.length);
+              calculatedChecklistScore = Math.round((earned / filteredChecklistByMonth.length) * 10) / 10;
             }
 
             // 4. Điểm KPI Trọng Số (70% Trọng số)
-            let calculatedKpiScore = 100;
-            if (filteredKpiByMonth && filteredKpiByMonth.length > 0) {
+            let calculatedKpiScore = (formData.score_kpi !== undefined && formData.score_kpi !== null)
+              ? Number(formData.score_kpi)
+              : 100;
+            if ((formData.score_kpi === undefined || formData.score_kpi === null) && filteredKpiByMonth && filteredKpiByMonth.length > 0) {
               let weightedSum = 0;
               let totalWeight = 0;
               let hasValidData = false;
               filteredKpiByMonth.forEach(k => {
                 const actStr = String(k.actual || '');
                 if (!actStr.includes('Chưa')) {
-                  // Ưu tiên dùng earned_percentage do backend tính toán chính xác
                   const earned = (k.earned_percentage !== undefined && k.earned_percentage !== null)
                     ? Number(k.earned_percentage)
                     : (parseFloat(actStr.replace('%', '')) || 0);
@@ -1613,18 +1644,18 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                 }
               });
               if (hasValidData && totalWeight > 0) {
-                calculatedKpiScore = Math.min(120, Math.round(weightedSum / totalWeight));
+                calculatedKpiScore = Math.min(120, Math.round((weightedSum / totalWeight) * 10) / 10);
               } else {
                 calculatedKpiScore = 100;
               }
             }
 
-            // 5. Điểm Tổng = (30% Checklist + 70% KPI) + QLĐG - Vi phạm
-            const basePerformanceScore = (0.3 * calculatedChecklistScore) + (0.7 * calculatedKpiScore);
-            let calculatedTotalScore = Math.max(0, Math.round((basePerformanceScore + calculatedQldgScore - calculatedViolationScore) * 10) / 10);
-            
-            // Đồng bộ với điểm thực tế từ Backend Engine (/calculate-score) nếu có
-            if (formData.score_current !== undefined && formData.score_current !== null && Number(formData.score_current) > 0) {
+            // 5. Điểm Tổng = (70% KPI + 30% Checklist) + Thưởng - Vi phạm
+            // KHÔNG cộng trùng điểm Đánh giá Quản lý (thang 100) vì đã nằm trong 70% KPI
+            const basePerformanceScore = (0.7 * calculatedKpiScore) + (0.3 * calculatedChecklistScore);
+            let calculatedTotalScore = Math.max(0, Math.min(120, Math.round((basePerformanceScore + calculatedRewardScore - calculatedViolationScore) * 10) / 10));
+
+            if (formData.score_current !== undefined && formData.score_current !== null) {
               calculatedTotalScore = Number(formData.score_current);
             }
 
@@ -1646,7 +1677,7 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                     Tháng hiển thị <span style={{ color: '#DC2626' }}>*</span>
                   </label>
                   <select
-                    value={formData.selected_month || availableMonths[0] || 'Tháng 9'}
+                    value={formData.selected_month || availableMonths[0] || currentRealMonthStr}
                     onChange={(e) => handleInputChange('selected_month', e.target.value)}
                     style={{ width: '100%', padding: '5px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
                   >
@@ -1674,7 +1705,7 @@ const KPITaskDetailModal = ({ isOpen, onClose, taskData, onSave }) => {
                   </label>
                   <input
                     type="text"
-                    value={`${formData.score_kpi !== undefined && formData.score_kpi > 0 ? formData.score_kpi : calculatedKpiScore}%`}
+                    value={`${calculatedKpiScore}%`}
                     readOnly
                     style={{ width: '100%', padding: '5px 10px', borderRadius: '6px', border: '1px solid #E2E8F0', backgroundColor: '#EFEFEF', fontSize: '0.8rem', color: '#1E293B', fontWeight: '700', outline: 'none', boxSizing: 'border-box', textAlign: 'center' }}
                   />

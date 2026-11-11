@@ -182,3 +182,8 @@ class ReorderPayload(BaseModel):
 
 class GuideAssignmentPayload(BaseModel):
     assignments: List[InspectionGuideAssignmentCreate]
+
+
+class ExportDocxBatchPayload(BaseModel):
+    guide_ids: List[int]
+

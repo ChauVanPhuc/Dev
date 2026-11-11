@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { X, BookOpen, CheckSquare, Image as ImageIcon, Layers, ExternalLink } from 'lucide-react';
-import { getFullImageUrl } from '@webShared/Services/api.service';
+import { X, BookOpen, CheckSquare, Image as ImageIcon, Layers, ExternalLink, FileDown } from 'lucide-react';
+import api, { getFullImageUrl } from '@webShared/Services/api.service';
 import { FormattedTextView } from '@shared/utils/textFormatter';
 
 const stripHtml = (html) => {
@@ -12,6 +12,34 @@ const stripHtml = (html) => {
 
 const GuideQuickPreviewModal = ({ isOpen = true, onClose, guide, onEdit }) => {
   const [activeImage, setActiveImage] = useState(null);
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportWord = async () => {
+    if (!guide) return;
+    setExporting(true);
+    try {
+      const res = await api.get(`/inspection-guides/${guide.id}/export-docx`, { responseType: 'blob' });
+      const safeCode = (guide.code || `HD_${guide.id}`).replace(/[\\/*?:"<>|]/g, '_').trim();
+      const safeName = (guide.name || 'Tai_lieu').replace(/[\\/*?:"<>|]/g, '_').trim().slice(0, 80);
+      const filename = `${safeCode}_${safeName}.docx`;
+
+      const blob = new Blob([res], {
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      });
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (err) {
+      console.error('Lỗi tải file Word:', err);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   if (!isOpen || !guide) return null;
 
@@ -118,6 +146,31 @@ const GuideQuickPreviewModal = ({ isOpen = true, onClose, guide, onEdit }) => {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              onClick={handleExportWord}
+              disabled={exporting}
+              style={{
+                padding: '8px 14px',
+                borderRadius: 8,
+                backgroundColor: '#FFFFFF',
+                color: themeColor,
+                border: `1px solid ${themeBorder}`,
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: exporting ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                transition: 'all 0.2s',
+                opacity: exporting ? 0.7 : 1,
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+              }}
+              title="Xuất tài liệu này ra file Word (.docx) chuẩn ISO"
+              onMouseEnter={e => e.currentTarget.style.backgroundColor = themeBg}
+              onMouseLeave={e => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+            >
+              <FileDown size={15} /> {exporting ? 'Đang xuất...' : 'Xuất file Word'}
+            </button>
             {onEdit && (
               <button
                 onClick={() => {

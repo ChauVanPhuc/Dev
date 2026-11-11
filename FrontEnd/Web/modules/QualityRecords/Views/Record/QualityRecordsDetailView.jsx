@@ -50,6 +50,9 @@ import { API_ROOT } from '@webShared/Services/api.service';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import ExcelJS from 'exceljs';
 
+// Cache trong bộ nhớ để chuyển trang và xem lại PO tức thì (0ms)
+const PO_DETAIL_CACHE = new Map();
+
 const QualityRecordsDetailView = () => {
     const { id } = useParams(); // poCode
     const navigate = useNavigate();
@@ -61,6 +64,7 @@ const QualityRecordsDetailView = () => {
     // 2 TABS SETUP: 'products' (Mặc định - gom 5 phần) & 'others' (Dashboard tổng hợp)
     const [activeTab, setActiveTab] = useState('products');
     const [loading, setLoading] = useState(true);
+    const [isSyncingMetrics, setIsSyncingMetrics] = useState(false);
     
     // Data States
     const [orderInfo, setOrderInfo] = useState(null);
@@ -163,31 +167,69 @@ const QualityRecordsDetailView = () => {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [inspectionModalData.isOpen]);
 
-    // Fetch Data
+    // Fetch Data với Progressive Loading & In-Memory Cache
     useEffect(() => {
+        let isMounted = true;
         const loadData = async () => {
             if (!id) return;
-            setLoading(true);
+
+            // 1. Kiểm tra cache trong bộ nhớ để hiển thị tức thì (0ms)
+            if (PO_DETAIL_CACHE.has(id)) {
+                const cached = PO_DETAIL_CACHE.get(id);
+                setOrderInfo(cached.order);
+                setHandoverData(cached.handover || []);
+                setAllInspectionsData(cached.allInspections || []);
+                setBomData(cached.bom || []);
+                setLoading(false);
+            } else {
+                setLoading(true);
+            }
+
+            setIsSyncingMetrics(true);
             try {
+                // 2. Tải OrderInfo trước để render giao diện và bảng sản phẩm ngay tức thì (< 100ms)
+                const orderPromise = qualityService.getOrderDetail(id).then(order => {
+                    if (!isMounted) return order;
+                    if (order) {
+                        setOrderInfo(order);
+                        setLoading(false);
+                    }
+                    return order;
+                }).catch(() => null);
+
+                // 3. Tải song song các dữ liệu liên quan (BOM, QC, Bàn giao)
                 const [order, handover, allInspections, bom] = await Promise.all([
-                    qualityService.getOrderDetail(id).catch(() => null),
+                    orderPromise,
                     qualityService.getHandoverHistory(id).catch(() => []),
                     qualityService.getAllPOInspections(id).catch(() => []),
                     qualityService.getPOBOM(id).catch(() => [])
                 ]);
 
-                setOrderInfo(order);
+                if (!isMounted) return;
+
                 setHandoverData(handover || []);
                 setAllInspectionsData(allInspections || []);
                 setBomData(bom || []);
+                
+                // Lưu vào cache
+                PO_DETAIL_CACHE.set(id, {
+                    order,
+                    handover: handover || [],
+                    allInspections: allInspections || [],
+                    bom: bom || []
+                });
             } catch (error) {
                 console.error("Lỗi khi tải dữ liệu chi tiết hồ sơ:", error);
             } finally {
-                setLoading(false);
+                if (isMounted) {
+                    setLoading(false);
+                    setIsSyncingMetrics(false);
+                }
             }
         };
         
         loadData();
+        return () => { isMounted = false; };
     }, [id]);
 
     // Helper functions
@@ -1268,7 +1310,23 @@ const QualityRecordsDetailView = () => {
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', alignItems: 'center' }}>
                         <div>
                             <div style={{ fontSize: '0.75rem', color: '#8D6E63', fontWeight: '800' }}>MÃ ĐƠN HÀNG / PO</div>
-                            <div style={{ fontSize: '1.35rem', fontWeight: '900', color: '#7B5233' }}>#{orderInfo?.order_code || id}</div>
+                            <div style={{ fontSize: '1.35rem', fontWeight: '900', color: '#7B5233', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                <span>#{orderInfo?.order_code || id}</span>
+                                {orderInfo?.note && orderInfo.note.includes('đợt lệnh') && (
+                                    <span style={{
+                                        display: 'inline-block',
+                                        padding: '2px 8px',
+                                        borderRadius: '6px',
+                                        fontSize: '0.72rem',
+                                        fontWeight: '700',
+                                        backgroundColor: '#FAF6F0',
+                                        color: '#7B5233',
+                                        border: '1px solid #EADCC9'
+                                    }}>
+                                        {orderInfo.note}
+                                    </span>
+                                )}
+                            </div>
                         </div>
                         <div>
                             <div style={{ fontSize: '0.75rem', color: '#8D6E63', fontWeight: '800' }}>KHÁCH HÀNG</div>
@@ -1310,17 +1368,42 @@ const QualityRecordsDetailView = () => {
             </div>
 
             {/* 2 Tabs Bar */}
-            <div className="tab-container">
-                {tabs.map(tab => (
-                    <button 
-                        key={tab.id}
-                        className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
-                        onClick={() => setActiveTab(tab.id)}
-                    >
-                        {tab.icon}
-                        {tab.label}
-                    </button>
-                ))}
+            <div className="tab-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    {tabs.map(tab => (
+                        <button 
+                            key={tab.id}
+                            className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
+                            onClick={() => setActiveTab(tab.id)}
+                        >
+                            {tab.icon}
+                            {tab.label}
+                        </button>
+                    ))}
+                </div>
+                {isSyncingMetrics && (
+                    <div style={{ 
+                        fontSize: '0.75rem', 
+                        color: '#B45309', 
+                        fontWeight: '700', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '6px',
+                        padding: '4px 10px',
+                        backgroundColor: '#FEF3C7',
+                        borderRadius: '6px',
+                        border: '1px solid #FDE68A'
+                    }}>
+                        <span style={{ 
+                            display: 'inline-block', 
+                            width: '7px', 
+                            height: '7px', 
+                            borderRadius: '50%', 
+                            backgroundColor: '#D97706'
+                        }}></span>
+                        Đang đồng bộ phiếu QC & bàn giao...
+                    </div>
+                )}
             </div>
 
             {/* Tab Contents */}

@@ -145,7 +145,7 @@ const ISOProcessEditorView = () => {
   const [showFaithfulViewer, setShowFaithfulViewer] = useState(false);
   const [showOnlyOfficeModal, setShowOnlyOfficeModal] = useState(false);
   const [faithfulPages, setFaithfulPages] = useState([]);
-  const [applyIsoTemplate, setApplyIsoTemplate] = useState(false);
+  const [applyIsoTemplate, setApplyIsoTemplate] = useState(true);
 
   // Form State
   const [formData, setFormData] = useState({

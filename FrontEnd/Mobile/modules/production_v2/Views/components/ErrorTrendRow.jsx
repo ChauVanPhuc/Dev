@@ -179,7 +179,7 @@ const ErrorTrendRow = ({
           ...row,
           defectId: opt.id || opt.value,
           code: opt.code || '',
-          name: opt.name,
+          name: stripDefectCodePrefix(opt.name, opt.code),
           is_custom: false,
           qty: row.qty && row.qty > 0 ? row.qty : 0,
         })
@@ -194,8 +194,23 @@ const ErrorTrendRow = ({
     onChange && onChange({ ...row, defectId: null, code: '', name: newName, is_custom: true })
   }
 
+  const stripDefectCodePrefix = (rawName, rawCode = '') => {
+    if (!rawName) return ''
+    let str = String(rawName).trim()
+    if (!str) return ''
+    str = str.replace(/^(?:\[[^\]]+\]\s*(?:[-–—:]\s*)?)+/, '').trim()
+    const codeStr = String(rawCode || '').trim()
+    if (codeStr) {
+      const escaped = codeStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const codeRegex = new RegExp(`^(?:\\[?\\s*${escaped}\\s*\\]?\\s*(?:[-–—:]\\s*|\\s+))+`, 'i')
+      str = str.replace(codeRegex, '').trim()
+    }
+    str = str.replace(/^[A-Za-z]{2,8}[-_]\d{1,6}\s*[-–—:]\s*/, '').trim()
+    return str || String(rawName).trim()
+  }
+
   const displayCode = currentSelectedOpt?.code || row.code || ''
-  const displayName = currentSelectedOpt?.name || row.name || row.note || ''
+  const displayName = stripDefectCodePrefix(currentSelectedOpt?.name || row.name || row.note || '', displayCode)
   const isCTQ = Boolean(currentSelectedOpt?.isCTQ || row.isCTQ)
   const isQA = Boolean(currentSelectedOpt?.isQA || row.isQA || displayCode || (row.id && String(row.id).startsWith('auto_tracked')))
   const isMissingDefectName = !disabled && Number(row.qty) > 0 && !row.defectId && !row.code && !String(row.name || '').trim()
@@ -233,7 +248,7 @@ const ErrorTrendRow = ({
           }}
         >
           <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {displayCode ? `[${displayCode}] ${displayName}` : displayName || (Number(row.qty) > 0 ? 'Lỗi ghi nhận' : '—')}
+            {displayName || (Number(row.qty) > 0 ? 'Lỗi ghi nhận' : '—')}
           </span>
           {isCustomMode ? (
             <span
@@ -572,7 +587,7 @@ const ErrorTrendRow = ({
                               textOverflow: 'ellipsis',
                             }}
                           >
-                            {opt.name}
+                            {stripDefectCodePrefix(opt.name, opt.code)}
                           </span>
                         </div>
 

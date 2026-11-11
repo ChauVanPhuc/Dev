@@ -212,6 +212,16 @@ class KPIEmployeeCustomResult(Base):
     Khi có bản ghi trong bảng này, hệ thống sẽ ưu tiên hiển thị và tính điểm theo giá trị này.
     """
     __tablename__ = "kpi_employee_custom_results"
+    custom_weight   = Column(Float, nullable=True) # Điểm / Trọng số tùy chỉnh (e.g. 20.0 -> 0.20)
+    custom_operator = Column(NVARCHAR(20), nullable=True) # Phép đối chiếu tùy chỉnh (>, >=, <, <=, =)
+    custom_target   = Column(NVARCHAR(50), nullable=True) # Mục tiêu tháng tùy chỉnh (e.g. "95.0%")
+    custom_unit     = Column(NVARCHAR(20), nullable=True) # Đơn vị tính (%, h, lần...)
+    custom_content  = Column(NVARCHAR(500), nullable=True) # Chỉ số đánh giá (tên mục tiêu KPI tùy chỉnh)
+    achievement     = Column(NVARCHAR(500), nullable=True) # Cột Q: Thành tích nổi bật trong tháng
+    difficulty      = Column(NVARCHAR(500), nullable=True) # Cột R: Những tồn tại/Khó khăn chưa hoàn thành
+    action_plan     = Column(NVARCHAR(500), nullable=True) # Cột S: Kế hoạch hành động cải tiến tháng tiếp theo
+    proposal        = Column(NVARCHAR(500), nullable=True) # Cột T: Đề xuất/Kiến nghị với Ban Giám đốc
+    note            = Column(NVARCHAR(500), nullable=True) # Cột U: Ghi chú
 
     id            = Column(Integer, primary_key=True, index=True)
     employee_id   = Column(NVARCHAR(50), nullable=False, index=True) # Mã nhân viên

@@ -139,7 +139,10 @@ const RecentResultsModal = ({
                   {/* Error Breakdown if any */}
                   {Array.isArray(t.errors) && t.errors.length > 0 && (
                     <div style={{ background: '#fff1f2', border: '1px solid #ffe4e6', borderRadius: '6px', padding: '6px 8px', fontSize: '11.5px', color: '#9f1239' }}>
-                      <strong>Danh sách lỗi:</strong> {t.errors.map((e) => `${e.name || e.label || 'Lỗi'}: ${e.qty || 1}`).join(', ')}
+                      <strong>Danh sách lỗi:</strong> {t.errors.map((e) => {
+                        const rawName = String(e.name || e.label || 'Lỗi').replace(/^(?:\[[^\]]+\]\s*(?:[-–—:]\s*)?)+/, '').replace(/^[A-Za-z]{2,8}[-_]\d{1,6}\s*[-–—:]\s*/, '').trim() || 'Lỗi'
+                        return `${rawName}: ${e.qty || 1}`
+                      }).join(', ')}
                     </div>
                   )}
 

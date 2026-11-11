@@ -3,7 +3,7 @@ import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
 import {
   ArrowLeft, BookOpen, Save, Trash2, Plus, Upload, X, ChevronUp, ChevronDown,
   Layers, Image as ImageIcon, Smartphone, ShieldCheck,
-  CheckSquare, ListChecks, Edit3, Check, AlertCircle
+  CheckSquare, ListChecks, Edit3, Check, AlertCircle, FileDown
 } from 'lucide-react';
 import api, { getFullImageUrl } from '@webShared/Services/api.service';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
@@ -61,6 +61,36 @@ const InspectionGuideDetailView = () => {
   const [confirmDeleteImage, setConfirmDeleteImage] = useState(null);
   const [uploadingImages, setUploadingImages] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [exportingDocx, setExportingDocx] = useState(false);
+
+  const handleExportWord = async () => {
+    if (!guide) return;
+    setExportingDocx(true);
+    try {
+      const res = await api.get(`/inspection-guides/${guide.id}/export-docx`, { responseType: 'blob' });
+      const safeCode = (guide.code || `HD_${guide.id}`).replace(/[\\/*?:"<>|]/g, '_').trim();
+      const safeName = (guide.name || 'Tai_lieu').replace(/[\\/*?:"<>|]/g, '_').trim().slice(0, 80);
+      const filename = `${safeCode}_${safeName}.docx`;
+
+      const blob = new Blob([res], {
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      });
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+      if (toast) toast('success', `Đã xuất file "${filename}" thành công!`);
+    } catch (err) {
+      console.error('Lỗi tải file Word:', err);
+      if (toast) toast('error', 'Lỗi khi tải file Word');
+    } finally {
+      setExportingDocx(false);
+    }
+  };
 
   // Derived state
   const selectedStep = (guide?.steps || []).find(s => s.id === selectedStepId) || null;
@@ -614,6 +644,33 @@ const InspectionGuideDetailView = () => {
             />
             {metaForm.is_active ? 'Đang hoạt động' : 'Tạm ngưng'}
           </label>
+
+          {/* Export Word Button */}
+          <button
+            type="button"
+            onClick={handleExportWord}
+            disabled={exportingDocx}
+            style={{
+              padding: '8px 14px',
+              borderRadius: 8,
+              border: `1px solid ${themeBorder}`,
+              backgroundColor: '#FFFFFF',
+              color: themeColor,
+              fontWeight: 700,
+              fontSize: 13,
+              cursor: exportingDocx ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              opacity: exportingDocx ? 0.7 : 1,
+              transition: 'all 0.15s'
+            }}
+            title="Xuất tài liệu này ra file Word (.docx) chuẩn ISO"
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = themeBg}
+            onMouseLeave={e => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+          >
+            <FileDown size={16} /> {exportingDocx ? 'Đang xuất...' : 'Xuất file Word'}
+          </button>
 
           {/* Delete Guide Button */}
           <button

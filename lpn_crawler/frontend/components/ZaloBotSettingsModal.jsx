@@ -291,11 +291,7 @@ export function ZaloBotSettingsModal({ isOpen, onClose, onShowToast }) {
                     Dùng Extension hỗ trợ Zalo (hoặc F12 ➔ Tab <em>Application / Storage</em> ➔ <em>Cookies</em> ➔ copy toàn bộ).
                   </li>
                   <li>
-                    Hoặc bật F12 ➔ Tab <em>Console</em> ➔ gõ lệnh:{' '}
-                    <code className="px-1.5 py-0.5 bg-blue-100 rounded text-blue-900 font-mono select-all">
-                      document.cookie
-                    </code>{' '}
-                    rồi copy dán vào ô bên dưới.
+                    Khuyên dùng <strong>Tiện ích Chrome Extension</strong> để đồng bộ 1-Click hoặc copy dự liệu tự động (vì có đầy đủ cookie bảo mật <code>zpw_sek</code>).
                   </li>
                   <li>Dán chuỗi Cookie và IMEI vào form dưới đây rồi bấm <strong>Lưu & Kiểm tra kết nối</strong>.</li>
                 </ol>

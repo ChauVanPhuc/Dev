@@ -10,6 +10,7 @@ import QualityOvertimeReportModal from './components/QualityOvertimeReportModal'
 import DailyHeadcountSummaryModal from './components/DailyHeadcountSummaryModal';
 import ProcessGateChartView from './components/ProcessGateChartView';
 import ExportKPIModal from './components/ExportKPIModal';
+import KPIMasterSheetModal from './components/KPIMasterSheetModal';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import '@styles/components.css';
 
@@ -68,6 +69,7 @@ const QualityEmployeeListView = () => {
   const [otModalOpen, setOtModalOpen] = useState(false);
   const [summaryModalOpen, setSummaryModalOpen] = useState(false);
   const [kpiExportModalOpen, setKpiExportModalOpen] = useState(false);
+  const [kpiMasterSheetOpen, setKpiMasterSheetOpen] = useState(false);
 
   useEffect(() => {
     if (typeof setCustomTitle === 'function') setCustomTitle(title || 'Danh sách nhân sự');
@@ -804,6 +806,32 @@ const QualityEmployeeListView = () => {
 
           {/* Phải: Nhóm các nút bấm đẩy sát góc phải (marginLeft: 'auto') */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginLeft: 'auto' }}>
+            {/* Nút KPI (Mở Popup Bảng Tổng Hợp KPI trực tiếp & Chỉnh sửa trên Bảng tạm) */}
+            <button
+              type="button"
+              onClick={() => setKpiMasterSheetOpen(true)}
+              style={{
+                height: '38px',
+                padding: '0 16px',
+                borderRadius: '8px',
+                backgroundColor: '#B45309',
+                color: '#ffffff',
+                border: 'none',
+                fontWeight: '800',
+                fontSize: '0.85rem',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                cursor: 'pointer',
+                boxShadow: '0 2px 4px rgba(180,83,9,0.25)',
+                whiteSpace: 'nowrap'
+              }}
+              title="Mở Bảng Tổng Hợp KPI (Xem & Chỉnh sửa trực tiếp như file Excel)"
+            >
+              <Award size={16} />
+              <span>KPI</span>
+            </button>
+
             {/* Nút Xuất KPI Tháng (Mẫu chuẩn Master G7.QLCL-KPI) */}
             <button
               type="button"
@@ -1580,8 +1608,17 @@ const QualityEmployeeListView = () => {
       <ExportKPIModal
         isOpen={kpiExportModalOpen}
         onClose={() => setKpiExportModalOpen(false)}
-        defaultMonth="2026-09"
+        defaultMonth="2026-11"
         defaultFactory={selectedFactory}
+      />
+
+      {/* Modal Bảng Tổng Hợp KPI (Chỉnh sửa trực tiếp & Đồng bộ chung bảng kpi_employee_custom_results) */}
+      <KPIMasterSheetModal
+        isOpen={kpiMasterSheetOpen}
+        onClose={() => setKpiMasterSheetOpen(false)}
+        defaultMonth="2026-11"
+        defaultFactory={selectedFactory}
+        onSaved={loadData}
       />
     </div>
   );

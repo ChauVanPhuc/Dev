@@ -158,42 +158,72 @@ def generate_standard_revision_logs(seed_key: Any = None) -> List[Dict[str, Any]
     return logs
 
 def get_department_acronym(dept_name: Optional[str] = None, db: Any = None) -> str:
-    """Trả về ký tự viết tắt 2 ký tự chuẩn của phòng ban (QL, ISO, HC, AT, SX, KT, MH, KH, MT, KD, IT)."""
+    """Trả về ký tự viết tắt chuẩn của phòng ban (QL, ISO, HC, NS, AT, BT, SX, KT, MH, KH, MT, KD, IT).
+    Ưu tiên lấy chính xác từ bảng roles trong CSDL nếu có db session.
+    """
     if not dept_name:
         return "QL"
     d_clean = str(dept_name).strip()
     upper = d_clean.upper()
-    # 1. Quản lý Môi trường
+
+    if db is not None:
+        try:
+            from modules.auth.models.role import Role
+            from sqlalchemy import func
+            role = db.query(Role).filter(
+                (func.upper(Role.code) == upper) |
+                (func.upper(Role.name) == upper) |
+                (func.upper(Role.description) == upper)
+            ).first()
+            if role:
+                code_val = (role.code or role.name or "").strip().upper()
+                if code_val in ("BGD", "BG"):
+                    return "ISO"
+                return code_val
+        except Exception:
+            pass
+
+    exact_map = {
+        "QL": "QL", "CL": "QL", "QLCL": "QL",
+        "ISO": "ISO", "BGD": "ISO", "BG": "ISO",
+        "HC": "HC",
+        "NS": "NS", "HCNS": "NS",
+        "AT": "AT", "ATVSLD": "AT", "HSE": "AT",
+        "BT": "BT",
+        "SX": "SX",
+        "KT": "KT",
+        "MH": "MH", "NLVT": "MH",
+        "KH": "KH",
+        "MT": "MT",
+        "KD": "KD",
+        "IT": "IT", "CNTT": "IT",
+    }
+    if upper in exact_map:
+        return exact_map[upper]
     if "MÔI TRƯỜNG" in upper or "MOI TRUONG" in upper:
         return "MT"
-    # 2. Ban QLCL
     if "QLCL" in upper or "CHẤT LƯỢNG" in upper or "CHAT LUONG" in upper:
         return "QL"
-    # 3. Ban Giám Đốc hoặc Ban ISO (user quy ước BG thành ISO luôn)
     if "GIÁM ĐỐC" in upper or "GIAM DOC" in upper or "BGD" in upper or "BG" in upper or "ISO" in upper:
         return "ISO"
-    # 4. Hành chính - Nhân sự
-    if "HÀNH CHÍNH" in upper or "NHÂN SỰ" in upper or "HANH CHINH" in upper or "NHAN SU" in upper or "HCNS" in upper:
+    if "NHÂN SỰ" in upper or "NHAN SU" in upper or "HCNS" in upper:
+        return "NS"
+    if "HÀNH CHÍNH" in upper or "HANH CHINH" in upper:
         return "HC"
-    # 5. ATVSLĐ & PCCC
+    if "BẢO TRÌ" in upper or "BAO TRI" in upper or "CƠ ĐIỆN" in upper:
+        return "BT"
     if "AN TOÀN" in upper or "PCCC" in upper or "ATVSLĐ" in upper or "AT" in upper:
         return "AT"
-    # 6. Sản xuất
     if "SẢN XUẤT" in upper or "SAN XUAT" in upper or "SX" in upper:
         return "SX"
-    # 7. Kỹ thuật / Cơ điện
-    if "KỸ THUẬT" in upper or "CƠ ĐIỆN" in upper or "KY THUAT" in upper:
+    if "KẾ TOÁN" in upper or "KE TOAN" in upper or "KỸ THUẬT" in upper or "KY THUAT" in upper:
         return "KT"
-    # 8. Mua hàng / Vật tư
     if "MUA HÀNG" in upper or "MUA HANG" in upper or "NLVT" in upper or "VẬT TƯ" in upper or "MH" in upper:
         return "MH"
-    # 9. Kho
     if "KHO" in upper:
         return "KH"
-    # 10. Kinh doanh / Bán hàng
     if "KINH DOANH" in upper or "BÁN HÀNG" in upper or "BAN HANG" in upper:
         return "KD"
-    # 11. IT
     if "IT" in upper:
         return "IT"
     return "QL"
@@ -1488,7 +1518,7 @@ def _post_process_parsed_html(full_html: str) -> str:
                     raw_code = item["code"].strip()
                     code_str = re.sub(r'\s*-\s*', '-', raw_code)
                     name_str = item["name"].strip()
-                    storage = "Ban hệ thống ISO\n(ISO)" if any(k in code_str.upper() for k in ["BM02", "BM03", "BM04", "ISO", "QLCL"]) else "Ban hệ thống ISO"
+                    storage = "ISO"
                     retention = "12 tháng"
                     rows_html += f"""
                     <tr style="height: 30pt; background: #ffffff;">
@@ -4674,7 +4704,7 @@ def find_muc_dich_start_element(doc: docx.Document) -> Tuple[int, Optional[str]]
     Ưu tiên 1: Đề mục bắt đầu bằng số 1 (ví dụ: '1. Mục đích', '1. Tổng quan', 'I. Quy định chung', 'Điều 1'...)
     Ưu tiên 2: Tiêu đề 'Mục đích' độc lập (không đi kèm số thứ tự >= 2)
     """
-    sec1_pattern = re.compile(r'^\s*(?:1\s*[\.\:\-]|I\s*[\.\:\-]|Điều\s*1\b|Phần\s*(?:1|I)\b|Chương\s*(?:1|I)\b)', re.IGNORECASE)
+    sec1_pattern = re.compile(r'^\s*(?:1\s*[\.\:\-]|I\s*[\.\:\-]|Mục\s*(?:1|I)\b|Điều\s*1\b|Phần\s*(?:1|I)\b|Chương\s*(?:1|I)\b)', re.IGNORECASE)
     muc_dich_pattern = re.compile(r'^\s*(?:(?:1|I)[\.\:\s]+)?\s*mục\s*đích', re.IGNORECASE)
 
     for idx, child in enumerate(doc.element.body):
@@ -5828,7 +5858,7 @@ def standardize_iso_docx_document(doc: docx.Document, metadata: Optional[Dict[st
                 raw_code = item["code"].strip()
                 code_str = re.sub(r'\s*-\s*', '-', raw_code)
                 name_str = item["name"].strip()
-                storage_str = "Ban hệ thống ISO\n(ISO)" if any(k in code_str.upper() for k in ["BM02", "BM03", "BM04", "ISO", "QLCL"]) else "Ban hệ thống ISO"
+                storage_str = "ISO"
                 retention_str = "12 tháng"
                 
                 row_cells[0].text = code_str

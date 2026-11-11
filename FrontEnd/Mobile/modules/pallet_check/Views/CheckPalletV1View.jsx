@@ -1,4 +1,5 @@
 import apiClient from '@shared/services/api';
+import useAuthStore from '@modules/auth/Models/authModel';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Layout from '@mobile/Shared/Views/components/layout/MobileLayout';
 import PageHeader from '@mobile/Shared/Views/components/layout/MobilePageHeader';
@@ -439,6 +440,23 @@ export const validateContainerRules = (pallets = []) => {
   const palletErrors = [];
   const topLpnGroup = {}; // { [lpnCode]: { count: number, palletIndices: number[] } }
 
+  // 1. Quét tìm tất cả các Pallet 2 kiện (4 SKU đứng, 2 LPN đứng, không kiện nóc)
+  const twoBoxPalletIndices = [];
+  (pallets || []).forEach((pallet) => {
+    const standingSkus = pallet.standing?.skus?.length || 0;
+    const standingLpns = pallet.standing?.lpns?.length || 0;
+    const roofSkus = pallet.roof?.skus?.length || 0;
+    const roofLpns = pallet.roof?.lpns?.length || 0;
+    const hasRoof = Boolean(pallet.roof?.hasRoof) || (roofSkus > 0 || roofLpns > 0);
+
+    if (!hasRoof && standingSkus === 4 && standingLpns === 2) {
+      twoBoxPalletIndices.push(pallet.palletIndex);
+    }
+  });
+
+  // Trong 1 Container chỉ cho phép DUY NHẤT 1 Pallet 2 kiện
+  const allowedTwoBoxIndex = twoBoxPalletIndices.length > 0 ? twoBoxPalletIndices[0] : null;
+
   (pallets || []).forEach((pallet) => {
     const pIdx = pallet.palletIndex;
     const standingSkus = pallet.standing?.skus?.length || 0;
@@ -450,9 +468,21 @@ export const validateContainerRules = (pallets = []) => {
     const isStandingOk = standingSkus === 8 && standingLpns === 4;
     let isRoofOk = true;
     let isPalletComplete = false;
+    let isTwoBoxPallet = false;
     let errorReasons = [];
 
-    if (hasRoof) {
+    // NGOẠI LỆ ĐẶC BIỆT: Pallet 2 kiện (4 SKU đứng + 2 LPN đứng, không nóc)
+    if (!hasRoof && standingSkus === 4 && standingLpns === 2) {
+      if (pIdx === allowedTwoBoxIndex) {
+        // Hợp lệ: Duy nhất 1 Pallet 2 kiện trong container
+        isPalletComplete = true;
+        isTwoBoxPallet = true;
+      } else {
+        // Vượt quá số lượng: Container đã có 1 pallet 2 kiện khác
+        isPalletComplete = false;
+        errorReasons.push(`Chỉ được phép tối đa duy nhất 1 Pallet 2 kiện trong container (Đã có Pallet #${allowedTwoBoxIndex})`);
+      }
+    } else if (hasRoof) {
       // Pallet 5 kiện: Cần 8 + 2 = 10 SKU và 4 + 1 = 5 LPN
       isRoofOk = roofSkus === 2 && roofLpns === 1;
       isPalletComplete = isStandingOk && isRoofOk;
@@ -474,7 +504,7 @@ export const validateContainerRules = (pallets = []) => {
       topLpnGroup[topLpnCode].count += 1;
       topLpnGroup[topLpnCode].palletIndices.push(pIdx);
     } else {
-      // Pallet 4 kiện: Cần 8 SKU và 4 LPN
+      // Pallet 4 kiện tiêu chuẩn: Cần 8 SKU và 4 LPN
       isPalletComplete = isStandingOk;
       if (!isStandingOk) {
         if (standingSkus < 8) errorReasons.push(`Thiếu SKU đứng (${standingSkus}/8)`);
@@ -487,35 +517,43 @@ export const validateContainerRules = (pallets = []) => {
         palletIndex: pIdx,
         palletId: pallet.palletId,
         hasRoof,
+        isTwoBoxPallet,
         currentSkus: standingSkus + roofSkus,
-        expectedSkus: hasRoof ? 10 : 8,
+        expectedSkus: hasRoof ? 10 : (isTwoBoxPallet ? 4 : 8),
         currentLpns: standingLpns + roofLpns,
-        expectedLpns: hasRoof ? 5 : 4,
+        expectedLpns: hasRoof ? 5 : (isTwoBoxPallet ? 2 : 4),
         details: errorReasons.join(', ') || 'Chưa đủ số lượng mã'
       });
     }
   });
 
   // Kiểm tra số chẵn / lẻ của Kiện Top Nóc theo từng mã LPN
-  const oddTopLpnErrors = [];
-  const validTopLpns = [];
+  const oddEntries = [];
+  const evenEntries = [];
 
   Object.entries(topLpnGroup).forEach(([lpnCode, info]) => {
-    const isEven = info.count % 2 === 0;
-    if (!isEven) {
-      oddTopLpnErrors.push({
+    if (info.count % 2 === 0) {
+      evenEntries.push({
         lpnCode,
         count: info.count,
         palletIndices: info.palletIndices
       });
     } else {
-      validTopLpns.push({
+      oddEntries.push({
         lpnCode,
         count: info.count,
         palletIndices: info.palletIndices
       });
     }
   });
+
+  // Quy chuẩn ghép kiện nóc: Nếu có các mã lẻ (ví dụ 1 kiện lẻ + 3 kiện lẻ = 4 kiện chẵn)
+  // mà tổng số kiện lẻ gộp lại là số CHẴN, thì vẫn đủ cặp ghép trên container, KHÔNG BÁO LỖI!
+  const totalOddBoxes = oddEntries.reduce((sum, item) => sum + item.count, 0);
+  const isOddCombinedEven = (oddEntries.length > 0) && (totalOddBoxes % 2 === 0);
+
+  const oddTopLpnErrors = isOddCombinedEven ? [] : oddEntries;
+  const pairedOddLpns = isOddCombinedEven ? oddEntries : [];
 
   const isValid = palletErrors.length === 0 && oddTopLpnErrors.length === 0;
 
@@ -524,14 +562,43 @@ export const validateContainerRules = (pallets = []) => {
     totalPallets: (pallets || []).length,
     palletErrors,
     oddTopLpnErrors,
-    validTopLpns,
-    topLpnGroup
+    validTopLpns: evenEntries,
+    pairedOddLpns,
+    isOddCombinedEven,
+    totalOddBoxes,
+    topLpnGroup,
+    twoBoxPalletIndices,
+    hasTwoBoxPallet: twoBoxPalletIndices.length > 0
   };
 };
 
 const CheckPalletV1View = () => {
   // ─── TAB CHÍNH: 'scan' (Kiểm tra mới) | 'history' (Lịch sử) ───
   const [activeTab, setActiveTab] = useState('scan');
+
+  // ─── PHÂN QUYỀN VÀ THÔNG TIN NGƯỜI DÙNG (ADMIN CHỈNH SỬA LỊCH SỬ) ───
+  const { user } = useAuthStore();
+  const operatorName = (user?.full_name || user?.username || '').trim() || 'Chưa xác định';
+  const isAdmin = Boolean(
+    user?.username === 'admin' ||
+    user?.role_name === 'IT' ||
+    user?.role_name === 'BGD' ||
+    ['Quản lý', 'Admin', 'Trưởng phòng', 'Ban Giám Đốc', 'Tổ trưởng'].includes(user?.permission_level) ||
+    (user?.screen_permissions && user.screen_permissions['/pallet-check-v1']?.includes('edit'))
+  );
+
+  // Modal chỉnh sửa thông tin Container trong Lịch sử (Admin)
+  const [isEditHistoryContainerModalOpen, setIsEditHistoryContainerModalOpen] = useState(false);
+  const [editHistoryContName, setEditHistoryContName] = useState('');
+  const [editHistoryContInspector, setEditHistoryContInspector] = useState('');
+  const [editHistoryContStatus, setEditHistoryContStatus] = useState('completed');
+
+  // Modal chỉnh sửa Pallet chi tiết trong Lịch sử (Admin)
+  const [isEditPalletModalOpen, setIsEditPalletModalOpen] = useState(false);
+  const [editingPalletIndex, setEditingPalletIndex] = useState(null);
+  const [editingPalletData, setEditingPalletData] = useState(null);
+  const [editingPalletActiveTab, setEditingPalletActiveTab] = useState('standing'); // 'standing' | 'roof'
+
 
 
   // ─── TAB PHỤ: 'standing' (Pallet đứng) | 'roof' (Top nóc) ───
@@ -604,16 +671,26 @@ const CheckPalletV1View = () => {
   // Trạng thái tải từ Database
   const [isLoadingDb, setIsLoadingDb] = useState(false);
 
-  // Tải danh sách Container từ Database SQL Server
+  // Tải danh sách Container từ Database SQL Server (kèm bảo toàn Container dở dang)
   const fetchContainersFromDb = useCallback(async () => {
     try {
       setIsLoadingDb(true);
-      const res = await apiClient.get('/pallet-check/containers');
+      const res = await apiClient.get('/pallet-check/containers?limit=500');
       if (res.data?.success && Array.isArray(res.data.data)) {
-        setHistoryContainers(res.data.data);
-        try {
-          localStorage.setItem('g7_pallet_v1_containers', JSON.stringify(res.data.data));
-        } catch (_) {}
+        const dbContainers = res.data.data;
+        setHistoryContainers(prev => {
+          const merged = [...dbContainers];
+          // Bảo toàn các Container đang quét dở trên thiết bị nếu chưa có trên DB
+          (prev || []).forEach(localCont => {
+            if (localCont.status === 'in_progress' && !merged.some(c => c.id === localCont.id)) {
+              merged.unshift(localCont);
+            }
+          });
+          try {
+            localStorage.setItem('g7_pallet_v1_containers', JSON.stringify(merged));
+          } catch (_) {}
+          return merged;
+        });
       }
     } catch (err) {
       console.warn('Không thể tải containers từ API, dùng dữ liệu lưu cục bộ:', err);
@@ -634,6 +711,10 @@ const CheckPalletV1View = () => {
     }
   }, [activeTab, fetchContainersFromDb]);
 
+  // Phân trang danh sách lịch sử Container (Mỗi trang 10 Container)
+  const [historyPage, setHistoryPage] = useState(1);
+  const HISTORY_PAGE_SIZE = 10;
+
   // Lịch sử danh sách Container đã hoàn thành (Cấp 1)
   const [historyContainers, setHistoryContainers] = useState(() => {
     try {
@@ -649,7 +730,7 @@ const CheckPalletV1View = () => {
             name: 'Container (Dữ liệu trước)',
             createdAt: parsed[0]?.timestamp || new Date().toLocaleString('vi-VN'),
             updatedAt: parsed[0]?.timestamp || new Date().toLocaleString('vi-VN'),
-            inspector: parsed[0]?.inspector || 'Nguyễn A',
+            inspector: parsed[0]?.inspector || operatorName,
             status: 'completed',
             pallets: parsed.map((p, idx) => ({
               palletIndex: idx + 1,
@@ -1713,6 +1794,8 @@ const CheckPalletV1View = () => {
   const isAnyModalActive = Boolean(
     isStartContainerModalOpen || 
     isEditContainerModalOpen || 
+    isEditHistoryContainerModalOpen || 
+    isEditPalletModalOpen || 
     messageModal?.isOpen || 
     confirmModal?.isOpen || 
     selectedHistoryContainer || 
@@ -1970,7 +2053,7 @@ const CheckPalletV1View = () => {
         </div>
         <div class="meta-row">
           <span>Người kiểm:</span>
-          <strong>${record.inspector || 'Nguyễn A'}</strong>
+          <strong>${record.inspector || operatorName}</strong>
         </div>
 
         <div class="dash-line"></div>
@@ -2035,7 +2118,7 @@ const CheckPalletV1View = () => {
 
   const currentPalletIndex = (activeContainer?.pallets?.length || 0) + 1;
 
-  // Bắt đầu Container mới
+  // Bắt đầu Container mới (Lưu ngay vào Lịch Sử & SQL Server ở trạng thái in_progress)
   const handleStartNewContainer = (name) => {
     const finalName = (name || '').trim() || `CONT-${new Date().toLocaleDateString('vi-VN').replace(/\//g, '')}-01`;
     const newCont = {
@@ -2043,12 +2126,32 @@ const CheckPalletV1View = () => {
       name: finalName,
       createdAt: new Date().toLocaleString('vi-VN'),
       updatedAt: new Date().toLocaleString('vi-VN'),
-      inspector: 'Nguyễn A',
+      inspector: operatorName,
       status: 'in_progress',
       pallets: []
     };
     setActiveContainer(newCont);
     setIsStartContainerModalOpen(false);
+
+    // Cập nhật ngay vào danh sách Lịch Sử
+    setHistoryContainers(prev => {
+      const filtered = (prev || []).filter(c => c.id !== newCont.id);
+      const updated = [newCont, ...filtered];
+      try {
+        localStorage.setItem('g7_pallet_v1_containers', JSON.stringify(updated));
+      } catch (_) {}
+      return updated;
+    });
+
+    // Đồng bộ tức thì lên Database SQL Server
+    try {
+      apiClient.post('/pallet-check/containers', newCont)
+        .then(() => console.log(`✓ Đã lưu khởi tạo Container [${finalName}] vào CSDL SQL Server`))
+        .catch(err => console.warn('Lưu Container lên SQL Server thất bại (đã lưu tạm cục bộ):', err));
+    } catch (e) {
+      console.warn('Exception khi gọi API lưu Container:', e);
+    }
+
     playSuccessBeep();
     speakText(`Đã tạo Container ${finalName}`);
   };
@@ -2168,13 +2271,33 @@ const CheckPalletV1View = () => {
       };
 
       const updatedPallets = [...(activeContainer?.pallets || []), palletRecord];
+      const currentInspector = (activeContainer?.inspector && activeContainer.inspector !== 'Nguyễn A')
+        ? activeContainer.inspector
+        : operatorName;
       const updatedContainer = {
         ...(activeContainer || { id: generateContainerId(), name: 'Container' }),
+        inspector: currentInspector,
         updatedAt: new Date().toLocaleString('vi-VN'),
         pallets: updatedPallets
       };
 
       setActiveContainer(updatedContainer);
+
+      // Cập nhật ngay vào danh sách Lịch Sử
+      setHistoryContainers(prev => {
+        const filtered = (prev || []).filter(c => c.id !== updatedContainer.id);
+        const updated = [updatedContainer, ...filtered];
+        try {
+          localStorage.setItem('g7_pallet_v1_containers', JSON.stringify(updated));
+        } catch (_) {}
+        return updated;
+      });
+
+      // Tự động đồng bộ tiến độ Pallet lên Database SQL Server
+      try {
+        apiClient.post('/pallet-check/containers', updatedContainer)
+          .catch(e => console.warn('Lưu tiến độ Pallet lên server thất bại:', e));
+      } catch (_) {}
 
       // Reset form để quét pallet tiếp theo
       setStandingData({
@@ -2270,6 +2393,19 @@ const CheckPalletV1View = () => {
 
     // Kiểm tra nếu Pallet Đứng chưa đủ 4 kiện
     if (!isStandingComplete) {
+      const isTwoBoxCandidate = (!hasRoofData && standingTotalSkus === 4 && standingTotalLpns === 2);
+      if (isTwoBoxCandidate) {
+        setConfirmModal({
+          isOpen: true,
+          title: `XÁC NHẬN LƯU PALLET 2 KIỆN (NGOẠI LỆ)`,
+          message: `Pallet #${currentPalletIndex} có đúng 2 kiện (4 mã SKU và 2 mã LPN).\n\nQuy chuẩn cho phép DUY NHẤT 1 Pallet 2 kiện trong container.\nBạn có muốn lưu thành Pallet 2 kiện và chuyển sang Pallet #${currentPalletIndex + 1} không?`,
+          confirmText: '✓ Lưu Pallet 2 Kiện & Tiếp tục',
+          cancelText: 'Quay lại quét tiếp',
+          onConfirm: () => performSaveAndNext(false)
+        });
+        return;
+      }
+
       setConfirmModal({
         isOpen: true,
         title: `PALLET ĐỨNG CHƯA ĐỦ 4 KIỆN`,
@@ -2377,9 +2513,13 @@ const CheckPalletV1View = () => {
       }
 
       const finalAudit = validateContainerRules(finalPallets);
+      const finalInspector = (activeContainer.inspector && activeContainer.inspector !== 'Nguyễn A')
+        ? activeContainer.inspector
+        : operatorName;
 
       const completedCont = {
         ...activeContainer,
+        inspector: finalInspector,
         status: finalAudit.isValid ? 'completed' : 'warning',
         auditResult: finalAudit,
         completedAt: new Date().toLocaleString('vi-VN'),
@@ -2532,7 +2672,7 @@ const CheckPalletV1View = () => {
           <span>Tổng Pallet:</span><strong>${totalPallets} Pallet</strong>
         </div>
         <div style="display:flex; justify-content:space-between; font-size:9.5px;">
-          <span>Người kiểm:</span><strong>${container.inspector || 'Nguyễn A'}</strong>
+          <span>Người kiểm:</span><strong>${container.inspector || operatorName}</strong>
         </div>
         <div style="display:flex; justify-content:space-between; font-size:9.5px;">
           <span>Kiểm định:</span><strong style="color:${(container.auditResult?.isValid ?? true) ? '#15803d' : '#dc2626'};">${(container.auditResult?.isValid ?? true) ? '✓ ĐẠT TIÊU CHUẨN' : '⚠️ CÓ CẢNH BÁO'}</strong>
@@ -2596,7 +2736,7 @@ const CheckPalletV1View = () => {
       totalScans: currentData.totalScans,
       timestamp: nowStr,
       source: 'Máy ảnh',
-      inspector: 'Nguyễn A',
+      inspector: operatorName,
       status: 'pass'
     };
 
@@ -2792,6 +2932,331 @@ const CheckPalletV1View = () => {
     performResume();
   };
 
+  // ═════════════════════════════════════════════════════════════════════════
+  // CÁC HÀM XỬ LÝ CHỈNH SỬA DÀNH CHO ADMIN TRONG TAB LỊCH SỬ
+  // ═════════════════════════════════════════════════════════════════════════
+
+  // Mở modal sửa thông tin chung của Container
+  const handleOpenEditHistoryContainerModal = (cont) => {
+    setEditHistoryContName(cont.name || '');
+    setEditHistoryContInspector((cont.inspector && cont.inspector !== 'Nguyễn A') ? cont.inspector : operatorName);
+    setEditHistoryContStatus(cont.status || 'completed');
+    setIsEditHistoryContainerModalOpen(true);
+  };
+
+  // Lưu thông tin Container đã sửa
+  const handleSaveHistoryContainerInfo = async () => {
+    if (!editHistoryContName || !editHistoryContName.trim()) {
+      setMessageModal({
+        isOpen: true,
+        type: 'warning',
+        title: 'TÊN KHÔNG HỢP LỆ',
+        message: 'Vui lòng nhập tên Container.'
+      });
+      return;
+    }
+
+    const updatedContainer = {
+      ...selectedHistoryContainer,
+      name: editHistoryContName.trim(),
+      inspector: editHistoryContInspector.trim() || operatorName,
+      status: editHistoryContStatus,
+      updatedAt: new Date().toLocaleString('vi-VN')
+    };
+
+    setSelectedHistoryContainer(updatedContainer);
+    setHistoryContainers(prev => {
+      const next = prev.map(c => c.id === updatedContainer.id ? updatedContainer : c);
+      try {
+        localStorage.setItem('g7_pallet_v1_containers', JSON.stringify(next));
+      } catch (_) {}
+      return next;
+    });
+
+    setIsEditHistoryContainerModalOpen(false);
+
+    try {
+      await apiClient.put(`/pallet-check/containers/${updatedContainer.id}`, updatedContainer);
+      console.log(`✓ Đã cập nhật Container [${updatedContainer.name}] lên SQL Server`);
+    } catch (err) {
+      console.warn('Lỗi khi đồng bộ cập nhật Container lên SQL Server (đã lưu an toàn trên máy):', err);
+    }
+
+    playSuccessBeep();
+    setMessageModal({
+      isOpen: true,
+      type: 'success',
+      title: 'ĐÃ CẬP NHẬT CONTAINER',
+      message: `Đã cập nhật thông tin Container [${updatedContainer.name}] thành công.`
+    });
+  };
+
+  // Mở modal chỉnh sửa chi tiết Pallet (SKU & LPN)
+  const handleOpenEditPalletModal = (pallet, pIdx) => {
+    setEditingPalletIndex(pIdx);
+    setEditingPalletActiveTab('standing');
+
+    const stSkus = (pallet.standing?.skus || []).map(s => ({
+      id: s.id || Math.random().toString(36).substr(2, 9),
+      code: s.code || '',
+      count: s.count || 1
+    }));
+    const stLpns = (pallet.standing?.lpns || []).map(l => ({
+      id: l.id || Math.random().toString(36).substr(2, 9),
+      code: l.code || '',
+      count: l.count || 1
+    }));
+    const rfSkus = (pallet.roof?.skus || []).map(s => ({
+      id: s.id || Math.random().toString(36).substr(2, 9),
+      code: s.code || '',
+      count: s.count || 1
+    }));
+    const rfLpns = (pallet.roof?.lpns || []).map(l => ({
+      id: l.id || Math.random().toString(36).substr(2, 9),
+      code: l.code || '',
+      count: l.count || 1
+    }));
+
+    const hasRoof = Boolean(pallet.roof?.hasRoof) || (rfSkus.length > 0 || rfLpns.length > 0);
+
+    setEditingPalletData({
+      palletIndex: pallet.palletIndex,
+      palletId: pallet.palletId,
+      status: pallet.status || 'pass',
+      timestamp: pallet.timestamp || new Date().toLocaleTimeString('vi-VN'),
+      standing: {
+        standardSku: pallet.standing?.standardSku || stSkus[0]?.code || '',
+        standardLpn: pallet.standing?.standardLpn || stLpns[0]?.code || '',
+        skus: stSkus,
+        lpns: stLpns
+      },
+      roof: {
+        hasRoof,
+        standardSku: pallet.roof?.standardSku || rfSkus[0]?.code || '',
+        standardLpn: pallet.roof?.standardLpn || rfLpns[0]?.code || '',
+        skus: rfSkus,
+        lpns: rfLpns
+      }
+    });
+
+    setIsEditPalletModalOpen(true);
+  };
+
+  // Lưu Pallet sau khi Admin chỉnh sửa (TỰ ĐỘNG TÁI THẨM ĐỊNH LỖI)
+  const handleSaveEditedPallet = async () => {
+    if (!editingPalletData || editingPalletIndex === null || !selectedHistoryContainer) return;
+
+    // Chuẩn hóa dữ liệu SKU và LPN đứng
+    const cleanStandingSkus = (editingPalletData.standing?.skus || [])
+      .filter(s => s && s.code && s.code.trim())
+      .map(s => ({ ...s, code: s.code.trim(), count: Number(s.count) || 1 }));
+
+    const cleanStandingLpns = (editingPalletData.standing?.lpns || [])
+      .filter(l => l && l.code && l.code.trim())
+      .map(l => ({ ...l, code: l.code.trim(), count: Number(l.count) || 1 }));
+
+    const hasRoof = Boolean(editingPalletData.roof?.hasRoof);
+    let cleanRoofSkus = [];
+    let cleanRoofLpns = [];
+    let roofStdSku = null;
+    let roofStdLpn = null;
+
+    if (hasRoof) {
+      cleanRoofSkus = (editingPalletData.roof?.skus || [])
+        .filter(s => s && s.code && s.code.trim())
+        .map(s => ({ ...s, code: s.code.trim(), count: Number(s.count) || 1 }));
+
+      cleanRoofLpns = (editingPalletData.roof?.lpns || [])
+        .filter(l => l && l.code && l.code.trim())
+        .map(l => ({ ...l, code: l.code.trim(), count: Number(l.count) || 1 }));
+
+      roofStdSku = cleanRoofSkus[0]?.code || editingPalletData.roof?.standardSku || null;
+      roofStdLpn = cleanRoofLpns[0]?.code || editingPalletData.roof?.standardLpn || null;
+    }
+
+    const updatedPallet = {
+      ...((selectedHistoryContainer.pallets || [])[editingPalletIndex] || {}),
+      palletIndex: editingPalletData.palletIndex,
+      palletId: editingPalletData.palletId || `PL-${selectedHistoryContainer.id}-P${String(editingPalletData.palletIndex).padStart(2, '0')}`,
+      status: editingPalletData.status || 'pass',
+      timestamp: editingPalletData.timestamp || new Date().toLocaleTimeString('vi-VN'),
+      totalScans: cleanStandingSkus.length + cleanStandingLpns.length + cleanRoofSkus.length + cleanRoofLpns.length,
+      standing: {
+        standardSku: cleanStandingSkus[0]?.code || editingPalletData.standing?.standardSku || null,
+        standardLpn: cleanStandingLpns[0]?.code || editingPalletData.standing?.standardLpn || null,
+        skus: cleanStandingSkus,
+        lpns: cleanStandingLpns
+      },
+      roof: {
+        hasRoof,
+        standardSku: roofStdSku,
+        standardLpn: roofStdLpn,
+        skus: cleanRoofSkus,
+        lpns: cleanRoofLpns
+      }
+    };
+
+    const isNewPallet = editingPalletIndex >= (selectedHistoryContainer.pallets || []).length;
+    const newPallets = [...(selectedHistoryContainer.pallets || [])];
+    if (isNewPallet) {
+      newPallets.push(updatedPallet);
+    } else {
+      newPallets[editingPalletIndex] = updatedPallet;
+    }
+
+    // TÁI THẨM ĐỊNH TOÀN BỘ CONTAINER (LIVE RE-VALIDATION)
+    const updatedAudit = validateContainerRules(newPallets);
+
+    let newTotalScans = 0;
+    let newTotalBoxes = 0;
+    newPallets.forEach(p => {
+      newTotalScans += (p.totalScans || 0);
+      const stCount = (p.standing?.skus || []).length;
+      const rfCount = (p.roof?.skus || []).length;
+      newTotalBoxes += Math.round((stCount + rfCount) / 2) || (p.standing?.lpns?.length + p.roof?.lpns?.length) || 5;
+    });
+
+    const updatedContainer = {
+      ...selectedHistoryContainer,
+      pallets: newPallets,
+      totalPallets: newPallets.length,
+      totalBoxes: newTotalBoxes,
+      totalScans: newTotalScans,
+      auditResult: updatedAudit,
+      isValid: updatedAudit.isValid,
+      status: updatedAudit.isValid ? 'completed' : 'warning',
+      updatedAt: new Date().toLocaleString('vi-VN')
+    };
+
+    setSelectedHistoryContainer(updatedContainer);
+    setHistoryContainers(prev => {
+      const next = prev.map(c => c.id === updatedContainer.id ? updatedContainer : c);
+      try {
+        localStorage.setItem('g7_pallet_v1_containers', JSON.stringify(next));
+      } catch (_) {}
+      return next;
+    });
+
+    setIsEditPalletModalOpen(false);
+    setEditingPalletData(null);
+    setEditingPalletIndex(null);
+
+    // Gửi API cập nhật lên SQL Server
+    try {
+      await apiClient.put(`/pallet-check/containers/${updatedContainer.id}`, updatedContainer);
+      console.log(`✓ Đã cập nhật Pallet #${updatedPallet.palletIndex} lên SQL Server`);
+    } catch (err) {
+      console.warn('Lỗi khi đồng bộ Pallet cập nhật lên SQL Server (đã lưu an toàn trên máy):', err);
+    }
+
+    playSuccessBeep();
+    setMessageModal({
+      isOpen: true,
+      type: updatedAudit.isValid ? 'success' : 'warning',
+      title: updatedAudit.isValid ? 'CẬP NHẬT THÀNH CÔNG (100% ĐẠT CHUẨN)' : 'ĐÃ CẬP NHẬT PALLET',
+      message: updatedAudit.isValid
+        ? `Pallet #${updatedPallet.palletIndex} đã được lưu. Container [${updatedContainer.name}] hiện đã ĐẠT 100% TIÊU CHUẨN XUẤT KHẨU!`
+        : `Pallet #${updatedPallet.palletIndex} đã được cập nhật. Container vẫn còn điểm chưa hợp lệ, bạn có thể kiểm tra tiếp các Pallet khác.`
+    });
+  };
+
+  // Xóa một Pallet khỏi Container
+  const handleDeletePalletFromHistoryContainer = (palletIdxToDelete) => {
+    const targetPallet = (selectedHistoryContainer?.pallets || [])[palletIdxToDelete];
+    if (!targetPallet) return;
+
+    setConfirmModal({
+      isOpen: true,
+      title: `XÓA PALLET #${targetPallet.palletIndex}?`,
+      message: `Bạn có chắc chắn muốn xóa Pallet #${targetPallet.palletIndex} khỏi Container [${selectedHistoryContainer.name}] không? Số thứ tự các Pallet còn lại sẽ được tự động đánh lại.`,
+      confirmText: 'Xác nhận xóa',
+      cancelText: 'Hủy',
+      onConfirm: async () => {
+        const remaining = (selectedHistoryContainer.pallets || [])
+          .filter((_, idx) => idx !== palletIdxToDelete)
+          .map((p, idx) => ({
+            ...p,
+            palletIndex: idx + 1
+          }));
+
+        const updatedAudit = validateContainerRules(remaining);
+        let newTotalScans = 0;
+        let newTotalBoxes = 0;
+        remaining.forEach(p => {
+          newTotalScans += (p.totalScans || 0);
+          const stCount = (p.standing?.skus || []).length;
+          const rfCount = (p.roof?.skus || []).length;
+          newTotalBoxes += Math.round((stCount + rfCount) / 2) || (p.standing?.lpns?.length + p.roof?.lpns?.length) || 5;
+        });
+
+        const updatedContainer = {
+          ...selectedHistoryContainer,
+          pallets: remaining,
+          totalPallets: remaining.length,
+          totalBoxes: newTotalBoxes,
+          totalScans: newTotalScans,
+          auditResult: updatedAudit,
+          isValid: updatedAudit.isValid,
+          status: updatedAudit.isValid ? 'completed' : 'warning',
+          updatedAt: new Date().toLocaleString('vi-VN')
+        };
+
+        setSelectedHistoryContainer(updatedContainer);
+        setHistoryContainers(prev => {
+          const next = prev.map(c => c.id === updatedContainer.id ? updatedContainer : c);
+          try {
+            localStorage.setItem('g7_pallet_v1_containers', JSON.stringify(next));
+          } catch (_) {}
+          return next;
+        });
+
+        try {
+          await apiClient.put(`/pallet-check/containers/${updatedContainer.id}`, updatedContainer);
+        } catch (err) {
+          console.warn('Lỗi khi đồng bộ xóa Pallet lên SQL Server:', err);
+        }
+
+        playSuccessBeep();
+        setMessageModal({
+          isOpen: true,
+          type: 'success',
+          title: 'ĐÃ XÓA PALLET',
+          message: `Đã xóa Pallet và đánh lại thứ tự ${remaining.length} Pallet cho Container.`
+        });
+      }
+    });
+  };
+
+  // Thêm Pallet mới vào Container
+  const handleAddNewPalletToHistoryContainer = () => {
+    const currentPallets = selectedHistoryContainer?.pallets || [];
+    const nextIndex = currentPallets.length + 1;
+    const newPalletId = `PL-${(selectedHistoryContainer.name || 'CONT').replace(/[^A-Za-z0-9_-]/g, '')}-P${String(nextIndex).padStart(2, '0')}`;
+
+    setEditingPalletIndex(currentPallets.length);
+    setEditingPalletActiveTab('standing');
+    setEditingPalletData({
+      palletIndex: nextIndex,
+      palletId: newPalletId,
+      status: 'pass',
+      timestamp: new Date().toLocaleTimeString('vi-VN'),
+      standing: {
+        standardSku: '',
+        standardLpn: '',
+        skus: [],
+        lpns: []
+      },
+      roof: {
+        hasRoof: false,
+        standardSku: '',
+        standardLpn: '',
+        skus: [],
+        lpns: []
+      }
+    });
+    setIsEditPalletModalOpen(true);
+  };
+
   return (
     <Layout>
       <PageHeader
@@ -2868,7 +3333,7 @@ const CheckPalletV1View = () => {
             }}
           >
             <History size={15} />
-            <span>Lịch Sử ({historyList.length})</span>
+            <span>Lịch Sử ({historyContainers.length})</span>
           </button>
         </div>
 
@@ -3565,7 +4030,7 @@ const CheckPalletV1View = () => {
                             minWidth: 0
                           }}
                         >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, overflow: 'hidden' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, overflow: 'hidden', flex: 1 }}>
                             <span style={{
                               fontSize: '0.65rem',
                               fontWeight: '800',
@@ -3590,12 +4055,7 @@ const CheckPalletV1View = () => {
                             </span>
                           </div>
 
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            {itemLpn.time && (
-                              <span style={{ fontSize: '0.62rem', color: '#9CA3AF', whiteSpace: 'nowrap' }}>
-                                {itemLpn.time}
-                              </span>
-                            )}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
                             <button
                               type="button"
                               onClick={() => handleDeleteCodeItem('LPN', itemLpn.id)}
@@ -3604,7 +4064,9 @@ const CheckPalletV1View = () => {
                                 background: 'transparent',
                                 color: '#9ca3af',
                                 padding: '1px',
-                                cursor: 'pointer'
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center'
                               }}
                               title="Xóa lần quét này"
                             >
@@ -3665,7 +4127,7 @@ const CheckPalletV1View = () => {
                             minWidth: 0
                           }}
                         >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', minWidth: 0, overflow: 'hidden' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', minWidth: 0, overflow: 'hidden', flex: 1 }}>
                             <span style={{
                               fontSize: '0.65rem',
                               fontWeight: '800',
@@ -3693,19 +4155,16 @@ const CheckPalletV1View = () => {
                                 fontSize: '0.65rem',
                                 color: '#6B7280',
                                 fontFamily: 'Consolas, monospace',
-                                whiteSpace: 'nowrap'
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis'
                               }}>
                                 ({itemSku.code})
                               </span>
                             )}
                           </div>
 
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            {itemSku.time && (
-                              <span style={{ fontSize: '0.62rem', color: '#9CA3AF', whiteSpace: 'nowrap' }}>
-                                {itemSku.time}
-                              </span>
-                            )}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
                             <button
                               type="button"
                               onClick={() => handleDeleteCodeItem('SKU', itemSku.id)}
@@ -3714,7 +4173,9 @@ const CheckPalletV1View = () => {
                                 background: 'transparent',
                                 color: '#9ca3af',
                                 padding: '1px',
-                                cursor: 'pointer'
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center'
                               }}
                               title="Xóa lần quét này"
                             >
@@ -3985,192 +4446,299 @@ const CheckPalletV1View = () => {
               </div>
             </div>
 
-            {historyContainers.length === 0 ? (
-              <div style={{
-                backgroundColor: '#ffffff',
-                borderRadius: '14px',
-                padding: '40px 20px',
-                textAlign: 'center',
-                color: '#94a3b8',
-                border: '1.5px dashed #d5c7b7',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '8px'
-              }}>
-                <Boxes size={36} color="#cbd5e1" />
-                <span style={{ fontSize: '13.5px', fontWeight: '800', color: '#5c3a21' }}>
-                  Chưa có Container nào trong Lịch sử
-                </span>
-                <span style={{ fontSize: '11.5px', color: '#8c786a', maxWidth: '320px' }}>
-                  Khi quét các Pallet và bấm "Hoàn thành Container", hồ sơ Container kèm đầy đủ các Pallet, mã SKU và LPN sẽ hiển thị tại đây.
-                </span>
-              </div>
-            ) : (
-              historyContainers.map((cont, cIdx) => {
-                const pallets = cont.pallets || [];
-                const validation = cont.auditResult || validateContainerRules(pallets);
-                let totalBoxes = 0;
-                let totalScans = 0;
-                pallets.forEach(p => {
-                  totalScans += (p.totalScans || 0);
-                  const stCount = (p.standing?.skus || []).length;
-                  const rfCount = (p.roof?.skus || []).length;
-                  totalBoxes += Math.round((stCount + rfCount) / 2) || (p.standing?.lpns?.length + p.roof?.lpns?.length) || 5;
-                });
+            {(() => {
+              const totalHistoryPages = Math.ceil((historyContainers?.length || 0) / HISTORY_PAGE_SIZE) || 1;
+              const safeHistoryPage = Math.min(Math.max(1, historyPage), totalHistoryPages);
+              const startIndex = (safeHistoryPage - 1) * HISTORY_PAGE_SIZE;
+              const paginatedHistoryContainers = (historyContainers || []).slice(startIndex, startIndex + HISTORY_PAGE_SIZE);
 
+              if (historyContainers.length === 0) {
                 return (
-                  <div
-                    key={cont.id || cIdx}
-                    onClick={() => {
-                      setSelectedHistoryContainer(cont);
-                      setExpandedPalletIndex(null);
-                    }}
-                    style={{
-                      backgroundColor: validation.isValid ? '#ffffff' : '#fffbfa',
-                      borderRadius: '14px',
-                      padding: '14px',
-                      border: validation.isValid ? '1.5px solid #eadcc9' : '2px solid #ef4444',
-                      boxShadow: validation.isValid ? '0 3px 10px rgba(0,0,0,0.03)' : '0 3px 12px rgba(239, 68, 68, 0.15)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '10px',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    {/* Header Container */}
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      borderBottom: '1px solid #f3ece2',
-                      paddingBottom: '8px'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div style={{
-                          width: '32px',
-                          height: '32px',
-                          borderRadius: '8px',
-                          backgroundColor: validation.isValid ? '#7b5233' : '#dc2626',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: '#ffffff'
-                        }}>
-                          <Boxes size={18} />
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '14px', fontWeight: '900', color: '#2d1810' }}>
-                            {cont.name}
-                          </div>
-                          <div style={{ fontSize: '10.5px', color: '#786556', fontFamily: 'Consolas, monospace' }}>
-                            {cont.id}
-                          </div>
-                        </div>
-                      </div>
-
-                      {validation.isValid ? (
-                        <span style={{
-                          fontSize: '10px',
-                          fontWeight: '800',
-                          color: '#15803d',
-                          backgroundColor: '#dcfce7',
-                          padding: '3px 8px',
-                          borderRadius: '5px'
-                        }}>
-                          ✓ ĐẠT CHUẨN CONTAINER
-                        </span>
-                      ) : (
-                        <span style={{
-                          fontSize: '10px',
-                          fontWeight: '800',
-                          color: '#b91c1c',
-                          backgroundColor: '#fee2e2',
-                          border: '1px solid #fca5a5',
-                          padding: '3px 8px',
-                          borderRadius: '5px'
-                        }}>
-                          ❌ VI PHẠM ({[
-                            validation.palletErrors?.length > 0 ? `${validation.palletErrors.length} Pallet thiếu` : '',
-                            validation.oddTopLpnErrors?.length > 0 ? `${validation.oddTopLpnErrors.length} LPN nóc lẻ` : ''
-                          ].filter(Boolean).join(' • ')})
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Thống kê Container */}
-                    <div style={{
-                      display: 'grid',
-                      gridTemplateColumns: '1fr 1fr 1fr',
-                      gap: '6px',
-                      backgroundColor: '#faf7f2',
-                      padding: '8px 10px',
-                      borderRadius: '9px',
-                      fontSize: '11px',
-                      textAlign: 'center'
-                    }}>
-                      <div>
-                        <div style={{ color: '#8c786a', fontSize: '10px' }}>Tổng Pallet</div>
-                        <strong style={{ color: '#7b5233', fontSize: '13px' }}>{pallets.length}</strong>
-                      </div>
-                      <div style={{ borderLeft: '1px solid #eadcc9', borderRight: '1px solid #eadcc9' }}>
-                        <div style={{ color: '#8c786a', fontSize: '10px' }}>Ước tính Kiện</div>
-                        <strong style={{ color: '#15803d', fontSize: '13px' }}>{totalBoxes}</strong>
-                      </div>
-                      <div>
-                        <div style={{ color: '#8c786a', fontSize: '10px' }}>Lần Quét Mã</div>
-                        <strong style={{ color: '#2563eb', fontSize: '13px' }}>{totalScans}</strong>
-                      </div>
-                    </div>
-
-                    {/* Footer info: Thời gian & Người kiểm tra */}
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      fontSize: '10.5px',
-                      color: '#8c7664'
-                    }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Clock size={12} />
-                        {cont.completedAt || cont.createdAt}
-                      </span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleResumeContainer(cont);
-                          }}
-                          style={{
-                            border: '1px solid #ebdccb',
-                            backgroundColor: '#FAF5EE',
-                            color: '#7b5233',
-                            padding: '3px 8px',
-                            borderRadius: '6px',
-                            fontSize: '11px',
-                            fontWeight: '800',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            cursor: 'pointer'
-                          }}
-                          title="Tiếp tục quét Container này"
-                        >
-                          <Play size={10} fill="#7b5233" />
-                          <span>Quét tiếp</span>
-                        </button>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '2px', fontWeight: '700', color: '#7b5233' }}>
-                          <span>Xem {pallets.length} Pallet</span>
-                          <ChevronRight size={14} />
-                        </span>
-                      </div>
-                    </div>
+                  <div style={{
+                    backgroundColor: '#ffffff',
+                    borderRadius: '14px',
+                    padding: '40px 20px',
+                    textAlign: 'center',
+                    color: '#94a3b8',
+                    border: '1.5px dashed #d5c7b7',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    <Boxes size={36} color="#cbd5e1" />
+                    <span style={{ fontSize: '13.5px', fontWeight: '800', color: '#5c3a21' }}>
+                      Chưa có Container nào trong Lịch sử
+                    </span>
+                    <span style={{ fontSize: '11.5px', color: '#8c786a', maxWidth: '320px' }}>
+                      Khi quét các Pallet hoặc tạo mới Container, hồ sơ Container kèm đầy đủ các Pallet, mã SKU và LPN sẽ hiển thị tại đây.
+                    </span>
                   </div>
                 );
-              })
-            )}
+              }
+
+              return (
+                <>
+                  {paginatedHistoryContainers.map((cont, cIdx) => {
+                    const pallets = cont.pallets || [];
+                    const isInProgress = cont.status === 'in_progress';
+                    const validation = cont.auditResult || validateContainerRules(pallets);
+                    let totalBoxes = 0;
+                    let totalScans = 0;
+                    pallets.forEach(p => {
+                      totalScans += (p.totalScans || 0);
+                      const stCount = (p.standing?.skus || []).length;
+                      const rfCount = (p.roof?.skus || []).length;
+                      totalBoxes += Math.round((stCount + rfCount) / 2) || (p.standing?.lpns?.length + p.roof?.lpns?.length) || 5;
+                    });
+
+                    return (
+                      <div
+                        key={cont.id || cIdx}
+                        onClick={() => {
+                          setSelectedHistoryContainer(cont);
+                          setExpandedPalletIndex(null);
+                        }}
+                        style={{
+                          backgroundColor: isInProgress ? '#fffdfa' : validation.isValid ? '#ffffff' : '#fffbfa',
+                          borderRadius: '14px',
+                          padding: '14px',
+                          border: isInProgress ? '1.5px solid #f59e0b' : validation.isValid ? '1.5px solid #eadcc9' : '2px solid #ef4444',
+                          boxShadow: isInProgress ? '0 3px 10px rgba(245, 158, 11, 0.12)' : validation.isValid ? '0 3px 10px rgba(0,0,0,0.03)' : '0 3px 12px rgba(239, 68, 68, 0.15)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '10px',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        {/* Header Container */}
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          borderBottom: '1px solid #f3ece2',
+                          paddingBottom: '8px'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '8px',
+                              backgroundColor: isInProgress ? '#d97706' : validation.isValid ? '#7b5233' : '#dc2626',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: '#ffffff'
+                            }}>
+                              <Boxes size={18} />
+                            </div>
+                            <div>
+                              <div style={{ fontSize: '14px', fontWeight: '900', color: '#2d1810' }}>
+                                {cont.name}
+                              </div>
+                              <div style={{ fontSize: '10.5px', color: '#786556', fontFamily: 'Consolas, monospace' }}>
+                                {cont.id}
+                              </div>
+                            </div>
+                          </div>
+
+                          {isInProgress ? (
+                            <span style={{
+                              fontSize: '10px',
+                              fontWeight: '800',
+                              color: '#b45309',
+                              backgroundColor: '#fef3c7',
+                              border: '1px solid #fde68a',
+                              padding: '3px 8px',
+                              borderRadius: '5px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px'
+                            }}>
+                              ⚡ ĐANG KIỂM TRA
+                            </span>
+                          ) : validation.isValid ? (
+                            <span style={{
+                              fontSize: '10px',
+                              fontWeight: '800',
+                              color: '#15803d',
+                              backgroundColor: '#dcfce7',
+                              padding: '3px 8px',
+                              borderRadius: '5px'
+                            }}>
+                              ✓ ĐẠT CHUẨN CONTAINER
+                            </span>
+                          ) : (
+                            <span style={{
+                              fontSize: '10px',
+                              fontWeight: '800',
+                              color: '#b91c1c',
+                              backgroundColor: '#fee2e2',
+                              border: '1px solid #fca5a5',
+                              padding: '3px 8px',
+                              borderRadius: '5px'
+                            }}>
+                              ❌ VI PHẠM ({[
+                                validation.palletErrors?.length > 0 ? `${validation.palletErrors.length} Pallet thiếu` : '',
+                                validation.oddTopLpnErrors?.length > 0 ? `${validation.oddTopLpnErrors.length} LPN nóc lẻ` : ''
+                              ].filter(Boolean).join(' • ')})
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Thống kê Container */}
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1fr 1fr 1fr',
+                          gap: '6px',
+                          backgroundColor: '#faf7f2',
+                          padding: '8px 10px',
+                          borderRadius: '9px',
+                          fontSize: '11px',
+                          textAlign: 'center'
+                        }}>
+                          <div>
+                            <div style={{ color: '#8c786a', fontSize: '10px' }}>Tổng Pallet</div>
+                            <strong style={{ color: '#7b5233', fontSize: '13px' }}>{pallets.length}</strong>
+                          </div>
+                          <div style={{ borderLeft: '1px solid #eadcc9', borderRight: '1px solid #eadcc9' }}>
+                            <div style={{ color: '#8c786a', fontSize: '10px' }}>Ước tính Kiện</div>
+                            <strong style={{ color: '#15803d', fontSize: '13px' }}>{totalBoxes}</strong>
+                          </div>
+                          <div>
+                            <div style={{ color: '#8c786a', fontSize: '10px' }}>Lần Quét Mã</div>
+                            <strong style={{ color: '#2563eb', fontSize: '13px' }}>{totalScans}</strong>
+                          </div>
+                        </div>
+
+                        {/* Footer info: Thời gian & Người kiểm tra */}
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          fontSize: '10.5px',
+                          color: '#8c7664'
+                        }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <Clock size={12} />
+                            {cont.completedAt || cont.createdAt}
+                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleResumeContainer(cont);
+                              }}
+                              style={{
+                                border: isInProgress ? '1px solid #f59e0b' : '1px solid #ebdccb',
+                                backgroundColor: isInProgress ? '#fef3c7' : '#FAF5EE',
+                                color: isInProgress ? '#b45309' : '#7b5233',
+                                padding: '3px 8px',
+                                borderRadius: '6px',
+                                fontSize: '11px',
+                                fontWeight: '800',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                cursor: 'pointer'
+                              }}
+                              title={isInProgress ? "Tiếp tục kiểm tra Container này" : "Tiếp tục quét Container này"}
+                            >
+                              <Play size={10} fill={isInProgress ? "#b45309" : "#7b5233"} />
+                              <span>{isInProgress ? 'Tiếp tục quét' : 'Quét tiếp'}</span>
+                            </button>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '2px', fontWeight: '700', color: '#7b5233' }}>
+                              <span>Xem {pallets.length} Pallet</span>
+                              <ChevronRight size={14} />
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Thanh Phân Trang 10 Mục / Trang (Gold Design System) */}
+                  {historyContainers.length > HISTORY_PAGE_SIZE && (
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '8px',
+                      marginTop: '6px',
+                      padding: '12px 14px',
+                      backgroundColor: '#ffffff',
+                      borderRadius: '12px',
+                      border: '1px solid #ebdccb'
+                    }}>
+                      <div style={{ fontSize: '11.5px', color: '#786556', fontWeight: '600' }}>
+                        Hiển thị <strong>{startIndex + 1}</strong> - <strong>{Math.min(startIndex + HISTORY_PAGE_SIZE, historyContainers.length)}</strong> trong tổng số <strong>{historyContainers.length}</strong> Container
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                        <button
+                          type="button"
+                          disabled={safeHistoryPage === 1}
+                          onClick={() => setHistoryPage(prev => Math.max(1, prev - 1))}
+                          style={{
+                            padding: '5px 10px',
+                            borderRadius: '6px',
+                            border: '1px solid #ebdccb',
+                            backgroundColor: safeHistoryPage === 1 ? '#f5f5f5' : '#FAF5EE',
+                            color: safeHistoryPage === 1 ? '#a8a29e' : '#7b5233',
+                            fontSize: '11.5px',
+                            fontWeight: '700',
+                            cursor: safeHistoryPage === 1 ? 'not-allowed' : 'pointer'
+                          }}
+                        >
+                          Trước
+                        </button>
+
+                        {Array.from({ length: totalHistoryPages }, (_, idx) => idx + 1).map(pNum => (
+                          <button
+                            key={pNum}
+                            type="button"
+                            onClick={() => setHistoryPage(pNum)}
+                            style={{
+                              minWidth: '28px',
+                              height: '28px',
+                              padding: '0 6px',
+                              borderRadius: '6px',
+                              border: pNum === safeHistoryPage ? 'none' : '1px solid #ebdccb',
+                              backgroundColor: pNum === safeHistoryPage ? '#7b5233' : '#ffffff',
+                              color: pNum === safeHistoryPage ? '#ffffff' : '#5c3a21',
+                              fontSize: '11.5px',
+                              fontWeight: '800',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {pNum}
+                          </button>
+                        ))}
+
+                        <button
+                          type="button"
+                          disabled={safeHistoryPage === totalHistoryPages}
+                          onClick={() => setHistoryPage(prev => Math.min(totalHistoryPages, prev + 1))}
+                          style={{
+                            padding: '5px 10px',
+                            borderRadius: '6px',
+                            border: '1px solid #ebdccb',
+                            backgroundColor: safeHistoryPage === totalHistoryPages ? '#f5f5f5' : '#FAF5EE',
+                            color: safeHistoryPage === totalHistoryPages ? '#a8a29e' : '#7b5233',
+                            fontSize: '11.5px',
+                            fontWeight: '700',
+                            cursor: safeHistoryPage === totalHistoryPages ? 'not-allowed' : 'pointer'
+                          }}
+                        >
+                          Sau
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
         )}
       </div>
@@ -4312,7 +4880,7 @@ const CheckPalletV1View = () => {
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: '10px', color: '#8c7664' }}>Người kiểm tra</div>
                     <div style={{ fontSize: '11px', fontWeight: '700', color: '#2d1810', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {selectedHistoryItem.inspector || selectedHistoryItem.checkedBy || 'Nguyễn A'}
+                      {selectedHistoryItem.inspector || selectedHistoryItem.checkedBy || operatorName}
                     </div>
                   </div>
                 </div>
@@ -4608,7 +5176,7 @@ const CheckPalletV1View = () => {
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: '#786555' }}>Người kiểm tra:</span>
-                <strong>{saveSuccessModal.record.inspector || 'Nguyễn A'}</strong>
+                <strong>{saveSuccessModal.record.inspector || operatorName}</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: '#786555' }}>Mã SKU:</span>
@@ -5163,6 +5731,759 @@ const CheckPalletV1View = () => {
       )}
 
       {/* ═══════════════════════════════════════════════════════════════
+          MODAL: ADMIN SỬA THÔNG TIN CONTAINER TRONG LỊCH SỬ
+      ═══════════════════════════════════════════════════════════════ */}
+      {isEditHistoryContainerModalOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(3px)',
+          WebkitBackdropFilter: 'blur(3px)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '16px'
+        }}>
+          <div style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '18px',
+            maxWidth: '390px',
+            width: '100%',
+            padding: '20px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '14px',
+            boxShadow: '0 25px 45px -12px rgba(0,0,0,0.35)',
+            border: '1.5px solid #eadcc9'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '8px',
+                  backgroundColor: '#7b5233',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#ffffff'
+                }}>
+                  <Edit3 size={16} />
+                </div>
+                <div style={{ fontSize: '15px', fontWeight: '900', color: '#2d1810' }}>
+                  SỬA THÔNG TIN CONTAINER
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditHistoryContainerModalOpen(false)}
+                style={{ border: 'none', background: 'transparent', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div>
+                <label style={{ fontSize: '11px', fontWeight: '700', color: '#5c3a21', display: 'block', marginBottom: '4px' }}>
+                  TÊN CONTAINER:
+                </label>
+                <input
+                  type="text"
+                  value={editHistoryContName}
+                  onChange={(e) => setEditHistoryContName(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    borderRadius: '8px',
+                    border: '1.5px solid #d5c7b7',
+                    fontSize: '13px',
+                    fontWeight: '700',
+                    color: '#2d1810',
+                    boxSizing: 'border-box'
+                  }}
+                  placeholder="Ví dụ: CONT-261106-481..."
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '11px', fontWeight: '700', color: '#5c3a21', display: 'block', marginBottom: '4px' }}>
+                  NGƯỜI KIỂM TRA:
+                </label>
+                <input
+                  type="text"
+                  value={editHistoryContInspector}
+                  onChange={(e) => setEditHistoryContInspector(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    borderRadius: '8px',
+                    border: '1.5px solid #d5c7b7',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    color: '#2d1810',
+                    boxSizing: 'border-box'
+                  }}
+                  placeholder="Tên người kiểm tra..."
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '11px', fontWeight: '700', color: '#5c3a21', display: 'block', marginBottom: '4px' }}>
+                  TRẠNG THÁI CONTAINER:
+                </label>
+                <select
+                  value={editHistoryContStatus}
+                  onChange={(e) => setEditHistoryContStatus(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    borderRadius: '8px',
+                    border: '1.5px solid #d5c7b7',
+                    fontSize: '12.5px',
+                    fontWeight: '700',
+                    color: '#2d1810',
+                    backgroundColor: '#FAF5EE',
+                    boxSizing: 'border-box'
+                  }}
+                >
+                  <option value="completed">Đã hoàn thành kiểm tra</option>
+                  <option value="in_progress">Đang kiểm tra dở dang</option>
+                  <option value="warning">Cảnh báo / Có lỗi</option>
+                </select>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '6px' }}>
+              <button
+                type="button"
+                onClick={() => setIsEditHistoryContainerModalOpen(false)}
+                style={{
+                  padding: '9px 16px',
+                  borderRadius: '8px',
+                  border: '1px solid #e2e8f0',
+                  backgroundColor: '#ffffff',
+                  color: '#64748b',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  cursor: 'pointer'
+                }}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveHistoryContainerInfo}
+                style={{
+                  padding: '9px 20px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  backgroundColor: '#7b5233',
+                  color: '#ffffff',
+                  fontSize: '12px',
+                  fontWeight: '800',
+                  cursor: 'pointer'
+                }}
+              >
+                ✓ Lưu Container
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════
+          MODAL: ADMIN SỬA CHI TIẾT PALLET (SKU & LPN)
+      ═══════════════════════════════════════════════════════════════ */}
+      {isEditPalletModalOpen && editingPalletData && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(3px)',
+          WebkitBackdropFilter: 'blur(3px)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '12px'
+        }}>
+          <div style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '18px',
+            maxWidth: '460px',
+            width: '100%',
+            maxHeight: '92vh',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: '0 25px 45px -12px rgba(0,0,0,0.35)',
+            border: '1.5px solid #eadcc9',
+            overflow: 'hidden'
+          }}>
+            {/* Header Modal Pallet */}
+            <div style={{
+              padding: '14px 16px',
+              backgroundColor: '#FAF5EE',
+              borderBottom: '1px solid #ebdccb',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{
+                  padding: '4px 8px',
+                  borderRadius: '6px',
+                  backgroundColor: '#7b5233',
+                  color: '#ffffff',
+                  fontWeight: '900',
+                  fontSize: '12px'
+                }}>
+                  PALLET #{editingPalletData.palletIndex}
+                </span>
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: '800', color: '#2d1810' }}>
+                    Chỉnh sửa Pallet
+                  </div>
+                  <div style={{ fontSize: '10.5px', color: '#786556', fontFamily: 'Consolas, monospace' }}>
+                    Cont: {selectedHistoryContainer?.name}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsEditPalletModalOpen(false)}
+                style={{ border: 'none', background: 'transparent', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Mã Pallet ID */}
+            <div style={{ padding: '10px 16px', backgroundColor: '#faf7f2', borderBottom: '1px solid #ebdccb', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '11px', fontWeight: '700', color: '#5c3a21', whiteSpace: 'nowrap' }}>Mã Pallet ID:</span>
+              <input
+                type="text"
+                value={editingPalletData.palletId}
+                onChange={(e) => setEditingPalletData(prev => ({ ...prev, palletId: e.target.value }))}
+                style={{
+                  flex: 1,
+                  padding: '5px 8px',
+                  borderRadius: '6px',
+                  border: '1px solid #d5c7b7',
+                  fontSize: '11.5px',
+                  fontWeight: '700',
+                  fontFamily: 'Consolas, monospace',
+                  color: '#2d1810'
+                }}
+              />
+            </div>
+
+            {/* Tab Chuyển đổi: Pallet Đứng vs Tủ Top Nóc */}
+            <div style={{ display: 'flex', padding: '8px 16px', gap: '6px', backgroundColor: '#FAF5EE' }}>
+              <button
+                type="button"
+                onClick={() => setEditingPalletActiveTab('standing')}
+                style={{
+                  flex: 1,
+                  padding: '7px 10px',
+                  borderRadius: '7px',
+                  border: 'none',
+                  fontSize: '11.5px',
+                  fontWeight: '800',
+                  cursor: 'pointer',
+                  backgroundColor: editingPalletActiveTab === 'standing' ? '#7b5233' : '#e6dcce',
+                  color: editingPalletActiveTab === 'standing' ? '#ffffff' : '#5c3a21',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                1. PALLET ĐỨNG ({editingPalletData.standing?.skus?.length || 0} SKU • {editingPalletData.standing?.lpns?.length || 0} LPN)
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setEditingPalletActiveTab('roof')}
+                style={{
+                  flex: 1,
+                  padding: '7px 10px',
+                  borderRadius: '7px',
+                  border: 'none',
+                  fontSize: '11.5px',
+                  fontWeight: '800',
+                  cursor: 'pointer',
+                  backgroundColor: editingPalletActiveTab === 'roof' ? '#7b5233' : '#e6dcce',
+                  color: editingPalletActiveTab === 'roof' ? '#ffffff' : '#5c3a21',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                2. TỦ TOP NÓC {editingPalletData.roof?.hasRoof ? '(BẬT)' : '(TẮT)'}
+              </button>
+            </div>
+
+            {/* Body Nội Dung Cuộn */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              
+              {/* ──────────────── TAB 1: PALLET ĐỨNG ──────────────── */}
+              {editingPalletActiveTab === 'standing' && (
+                <>
+                  {/* Khối SKU Đứng */}
+                  <div style={{ backgroundColor: '#FAF5EE', borderRadius: '10px', padding: '12px', border: '1px solid #ebdccb' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: '800', color: '#4a240e', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <Package size={14} color="#7b5233" />
+                        DANH SÁCH MÃ SKU ĐỨNG ({editingPalletData.standing?.skus?.length || 0}/8 SKU)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingPalletData(prev => ({
+                            ...prev,
+                            standing: {
+                              ...prev.standing,
+                              skus: [
+                                ...(prev.standing?.skus || []),
+                                { id: Math.random().toString(36).substr(2, 9), code: prev.standing?.skus?.[0]?.code || '', count: 1 }
+                              ]
+                            }
+                          }));
+                        }}
+                        style={{
+                          border: 'none',
+                          backgroundColor: '#7b5233',
+                          color: '#ffffff',
+                          padding: '3px 8px',
+                          borderRadius: '5px',
+                          fontSize: '10.5px',
+                          fontWeight: '800',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        + Thêm SKU
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {(editingPalletData.standing?.skus || []).length === 0 ? (
+                        <div style={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic', padding: '6px 0' }}>Chưa có mã SKU đứng</div>
+                      ) : (
+                        (editingPalletData.standing?.skus || []).map((item, idx) => (
+                          <div key={item.id || idx} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '10px', color: '#8c786a', width: '22px', textAlign: 'right' }}>#{idx + 1}</span>
+                            <input
+                              type="text"
+                              value={item.code}
+                              placeholder="Mã SKU (VD: 060094519)"
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setEditingPalletData(prev => {
+                                  const skus = [...(prev.standing?.skus || [])];
+                                  skus[idx] = { ...skus[idx], code: val };
+                                  return { ...prev, standing: { ...prev.standing, skus } };
+                                });
+                              }}
+                              style={{
+                                flex: 1,
+                                padding: '6px 8px',
+                                borderRadius: '6px',
+                                border: '1px solid #cbd5e1',
+                                fontSize: '11.5px',
+                                fontFamily: 'Consolas, monospace',
+                                fontWeight: '700',
+                                color: '#9a3412',
+                                backgroundColor: '#ffffff'
+                              }}
+                            />
+                            <input
+                              type="number"
+                              min="1"
+                              max="10"
+                              value={item.count || 1}
+                              title="Số lượng tem"
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value, 10) || 1;
+                                setEditingPalletData(prev => {
+                                  const skus = [...(prev.standing?.skus || [])];
+                                  skus[idx] = { ...skus[idx], count: val };
+                                  return { ...prev, standing: { ...prev.standing, skus } };
+                                });
+                              }}
+                              style={{
+                                width: '45px',
+                                padding: '6px 4px',
+                                borderRadius: '6px',
+                                border: '1px solid #cbd5e1',
+                                fontSize: '11px',
+                                textAlign: 'center',
+                                fontWeight: '700'
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingPalletData(prev => ({
+                                  ...prev,
+                                  standing: {
+                                    ...prev.standing,
+                                    skus: (prev.standing?.skus || []).filter((_, i) => i !== idx)
+                                  }
+                                }));
+                              }}
+                              style={{ border: 'none', background: '#fee2e2', color: '#b91c1c', padding: '6px', borderRadius: '5px', cursor: 'pointer' }}
+                              title="Xóa dòng này"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Khối LPN Đứng */}
+                  <div style={{ backgroundColor: '#FAF5EE', borderRadius: '10px', padding: '12px', border: '1px solid #ebdccb' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: '800', color: '#4a240e', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <Barcode size={14} color="#7b5233" />
+                        DANH SÁCH MÃ LPN ĐỨNG ({editingPalletData.standing?.lpns?.length || 0}/4 LPN)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingPalletData(prev => ({
+                            ...prev,
+                            standing: {
+                              ...prev.standing,
+                              lpns: [
+                                ...(prev.standing?.lpns || []),
+                                { id: Math.random().toString(36).substr(2, 9), code: prev.standing?.lpns?.[0]?.code || '', count: 1 }
+                              ]
+                            }
+                          }));
+                        }}
+                        style={{
+                          border: 'none',
+                          backgroundColor: '#7b5233',
+                          color: '#ffffff',
+                          padding: '3px 8px',
+                          borderRadius: '5px',
+                          fontSize: '10.5px',
+                          fontWeight: '800',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        + Thêm LPN
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {(editingPalletData.standing?.lpns || []).length === 0 ? (
+                        <div style={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic', padding: '6px 0' }}>Chưa có mã LPN đứng</div>
+                      ) : (
+                        (editingPalletData.standing?.lpns || []).map((item, idx) => (
+                          <div key={item.id || idx} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '10px', color: '#8c786a', width: '22px', textAlign: 'right' }}>#{idx + 1}</span>
+                            <input
+                              type="text"
+                              value={item.code}
+                              placeholder="Mã LPN"
+                              onChange={(e) => {
+                                const val = e.target.value.toUpperCase();
+                                setEditingPalletData(prev => {
+                                  const lpns = [...(prev.standing?.lpns || [])];
+                                  lpns[idx] = { ...lpns[idx], code: val };
+                                  return { ...prev, standing: { ...prev.standing, lpns } };
+                                });
+                              }}
+                              style={{
+                                flex: 1,
+                                padding: '6px 8px',
+                                borderRadius: '6px',
+                                border: '1px solid #cbd5e1',
+                                fontSize: '11.5px',
+                                fontFamily: 'Consolas, monospace',
+                                fontWeight: '700',
+                                color: '#1e40af',
+                                backgroundColor: '#ffffff'
+                              }}
+                            />
+                            <input
+                              type="number"
+                              min="1"
+                              max="10"
+                              value={item.count || 1}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value, 10) || 1;
+                                setEditingPalletData(prev => {
+                                  const lpns = [...(prev.standing?.lpns || [])];
+                                  lpns[idx] = { ...lpns[idx], count: val };
+                                  return { ...prev, standing: { ...prev.standing, lpns } };
+                                });
+                              }}
+                              style={{
+                                width: '45px',
+                                padding: '6px 4px',
+                                borderRadius: '6px',
+                                border: '1px solid #cbd5e1',
+                                fontSize: '11px',
+                                textAlign: 'center',
+                                fontWeight: '700'
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingPalletData(prev => ({
+                                  ...prev,
+                                  standing: {
+                                    ...prev.standing,
+                                    lpns: (prev.standing?.lpns || []).filter((_, i) => i !== idx)
+                                  }
+                                }));
+                              }}
+                              style={{ border: 'none', background: '#fee2e2', color: '#b91c1c', padding: '6px', borderRadius: '5px', cursor: 'pointer' }}
+                              title="Xóa dòng này"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* ──────────────── TAB 2: TỦ TOP NÓC ──────────────── */}
+              {editingPalletActiveTab === 'roof' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {/* Nút Toggle Bật/Tắt Tủ Nóc */}
+                  <div style={{
+                    backgroundColor: editingPalletData.roof?.hasRoof ? '#f0fdf4' : '#f8fafc',
+                    borderRadius: '10px',
+                    padding: '12px',
+                    border: editingPalletData.roof?.hasRoof ? '1.5px solid #86efac' : '1px solid #cbd5e1',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between'
+                  }}>
+                    <div>
+                      <div style={{ fontSize: '12.5px', fontWeight: '800', color: editingPalletData.roof?.hasRoof ? '#166534' : '#475569' }}>
+                        {editingPalletData.roof?.hasRoof ? '✓ Pallet này CÓ Tủ Top Nóc (Kiện #5)' : 'Pallet này KHÔNG CÓ Tủ Top Nóc (4 kiện)'}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#64748b' }}>
+                        {editingPalletData.roof?.hasRoof ? 'Yêu cầu: 2 tem SKU và 1 tem LPN nóc (quy chuẩn số chẵn toàn Cont)' : 'Chỉ có 4 kiện đứng (8 SKU / 4 LPN)'}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextHasRoof = !editingPalletData.roof?.hasRoof;
+                        setEditingPalletData(prev => ({
+                          ...prev,
+                          roof: {
+                            ...prev.roof,
+                            hasRoof: nextHasRoof,
+                            skus: nextHasRoof && (!prev.roof?.skus || prev.roof.skus.length === 0)
+                              ? [{ id: 'rs-1', code: prev.standing?.skus?.[0]?.code || '', count: 2 }]
+                              : prev.roof?.skus || [],
+                            lpns: nextHasRoof && (!prev.roof?.lpns || prev.roof.lpns.length === 0)
+                              ? [{ id: 'rl-1', code: '', count: 1 }]
+                              : prev.roof?.lpns || []
+                          }
+                        }));
+                      }}
+                      style={{
+                        padding: '7px 14px',
+                        borderRadius: '7px',
+                        border: 'none',
+                        fontSize: '11.5px',
+                        fontWeight: '800',
+                        cursor: 'pointer',
+                        backgroundColor: editingPalletData.roof?.hasRoof ? '#15803d' : '#94a3b8',
+                        color: '#ffffff'
+                      }}
+                    >
+                      {editingPalletData.roof?.hasRoof ? 'Đang BẬT' : 'Bật Tủ Nóc'}
+                    </button>
+                  </div>
+
+                  {editingPalletData.roof?.hasRoof && (
+                    <div style={{ backgroundColor: '#FAF5EE', borderRadius: '10px', padding: '12px', border: '1px solid #ebdccb', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {/* Mã LPN Nóc & Live Counter kiểm tra số chẵn */}
+                      <div>
+                        <label style={{ fontSize: '11.5px', fontWeight: '800', color: '#4a240e', display: 'block', marginBottom: '4px' }}>
+                          MÃ LPN TOP NÓC (KIỂM TRA CHẴN/LẺ TOÀN CONT):
+                        </label>
+                        <input
+                          type="text"
+                          value={editingPalletData.roof?.lpns?.[0]?.code || editingPalletData.roof?.standardLpn || ''}
+                          placeholder="Nhập mã LPN Top Nóc (VD: 060094519)"
+                          onChange={(e) => {
+                            const val = e.target.value.trim().toUpperCase();
+                            setEditingPalletData(prev => ({
+                              ...prev,
+                              roof: {
+                                ...prev.roof,
+                                standardLpn: val,
+                                lpns: [{ id: 'rl-1', code: val, count: 1 }]
+                              }
+                            }));
+                          }}
+                          style={{
+                            width: '100%',
+                            padding: '8px 10px',
+                            borderRadius: '7px',
+                            border: '1.5px solid #2563eb',
+                            fontSize: '13px',
+                            fontWeight: '800',
+                            fontFamily: 'Consolas, monospace',
+                            color: '#1e40af',
+                            backgroundColor: '#eff6ff',
+                            boxSizing: 'border-box'
+                          }}
+                        />
+
+                        {/* LIVE CHECK INDICATOR: Kiểm tra ngay mã LPN nóc này có số chẵn hay lẻ */}
+                        {(() => {
+                          const inputCode = (editingPalletData.roof?.lpns?.[0]?.code || editingPalletData.roof?.standardLpn || '').trim();
+                          if (!inputCode) return null;
+
+                          let otherContCount = 0;
+                          (selectedHistoryContainer?.pallets || []).forEach((p, idx) => {
+                            if (idx !== editingPalletIndex) {
+                              const pCode = (p.roof?.standardLpn || p.roof?.lpns?.[0]?.code || '').trim();
+                              if (pCode === inputCode) otherContCount++;
+                            }
+                          });
+                          const totalWithThisPallet = otherContCount + 1;
+                          const isEven = totalWithThisPallet % 2 === 0;
+
+                          return (
+                            <div style={{
+                              marginTop: '6px',
+                              padding: '6px 10px',
+                              borderRadius: '6px',
+                              fontSize: '11px',
+                              fontWeight: '700',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              backgroundColor: isEven ? '#dcfce7' : '#fee2e2',
+                              color: isEven ? '#15803d' : '#b91c1c',
+                              border: isEven ? '1px solid #86efac' : '1px solid #fca5a5'
+                            }}>
+                              {isEven ? <CheckCircle2 size={14} color="#15803d" /> : <AlertTriangle size={14} color="#dc2626" />}
+                              <span>
+                                Toàn Cont sẽ có: <strong>{totalWithThisPallet} kiện</strong> mã [{inputCode}] 
+                                ({isEven ? 'Số chẵn - HỢP LỆ' : 'Số lẻ - BÁO ĐỎ'})
+                              </span>
+                            </div>
+                          );
+                        })()}
+                      </div>
+
+                      {/* Mã SKU Nóc */}
+                      <div>
+                        <label style={{ fontSize: '11.5px', fontWeight: '800', color: '#4a240e', display: 'block', marginBottom: '4px' }}>
+                          MÃ SKU TOP NÓC (2 TEM / 1 KIỆN):
+                        </label>
+                        <input
+                          type="text"
+                          value={editingPalletData.roof?.skus?.[0]?.code || editingPalletData.roof?.standardSku || ''}
+                          placeholder="Mã SKU Top Nóc"
+                          onChange={(e) => {
+                            const val = e.target.value.trim();
+                            setEditingPalletData(prev => ({
+                              ...prev,
+                              roof: {
+                                ...prev.roof,
+                                standardSku: val,
+                                skus: [{ id: 'rs-1', code: val, count: 2 }]
+                              }
+                            }));
+                          }}
+                          style={{
+                            width: '100%',
+                            padding: '8px 10px',
+                            borderRadius: '7px',
+                            border: '1.5px solid #16a34a',
+                            fontSize: '13px',
+                            fontWeight: '800',
+                            fontFamily: 'Consolas, monospace',
+                            color: '#15803d',
+                            backgroundColor: '#f0fdf4',
+                            boxSizing: 'border-box'
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Footer Modal Pallet */}
+            <div style={{
+              padding: '12px 16px',
+              backgroundColor: '#FAF5EE',
+              borderTop: '1px solid #ebdccb',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <button
+                type="button"
+                onClick={() => setIsEditPalletModalOpen(false)}
+                style={{
+                  padding: '9px 16px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                  backgroundColor: '#ffffff',
+                  color: '#64748b',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  cursor: 'pointer'
+                }}
+              >
+                Hủy
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSaveEditedPallet}
+                style={{
+                  padding: '9px 20px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  backgroundColor: '#7b5233',
+                  color: '#ffffff',
+                  fontSize: '12.5px',
+                  fontWeight: '900',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 3px 8px rgba(123, 82, 51, 0.25)'
+                }}
+              >
+                <Save size={14} />
+                <span>✓ Lưu Thay Đổi Pallet</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════
           MODAL 2: ĐỔI TÊN CONTAINER ĐANG QUÉT
       ═══════════════════════════════════════════════════════════════ */}
       {isEditContainerModalOpen && (
@@ -5353,42 +6674,116 @@ const CheckPalletV1View = () => {
               border: '1.5px solid #ebdccb'
             }}
           >
-            {/* Header Modal Container */}
+            {/* Header Modal Container (Thiết kế 3 tầng thông minh chuẩn Mobile ERP) */}
             <div style={{
-              padding: '14px 18px',
-              borderBottom: '1px solid #ebdccb',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              backgroundColor: '#faf7f2',
+              padding: '12px 14px',
+              borderBottom: '1.5px solid #ebdccb',
+              backgroundColor: '#FAF5EE',
               position: 'sticky',
               top: 0,
-              zIndex: 10
+              zIndex: 10,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '9px'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '8px',
-                  backgroundColor: '#7b5233',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#ffffff'
-                }}>
-                  <Boxes size={18} />
-                </div>
-                <div>
-                  <div style={{ fontSize: '15px', fontWeight: '900', color: '#2d1810' }}>
-                    {selectedHistoryContainer.name}
+              {/* Tầng 1: Icon + Tên Container + Nút Sửa Cont + Nút Đóng X */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+                  <div style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
+                    backgroundColor: '#7b5233',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#ffffff',
+                    flexShrink: 0
+                  }}>
+                    <Boxes size={18} />
                   </div>
-                  <div style={{ fontSize: '11px', color: '#786556', fontFamily: 'Consolas, monospace' }}>
-                    {selectedHistoryContainer.id} • {selectedHistoryContainer.pallets?.length || 0} Pallet
+
+                  <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    <span style={{
+                      fontSize: '15.5px',
+                      fontWeight: '900',
+                      color: '#2d1810',
+                      whiteSpace: 'nowrap',
+                      letterSpacing: '0.2px'
+                    }}>
+                      {selectedHistoryContainer.name}
+                    </span>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditHistoryContainerModal(selectedHistoryContainer)}
+                        style={{
+                          border: '1px solid #d5c7b7',
+                          backgroundColor: '#ffffff',
+                          borderRadius: '6px',
+                          padding: '2px 7px',
+                          cursor: 'pointer',
+                          color: '#7b5233',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '3px',
+                          fontSize: '10.5px',
+                          fontWeight: '800',
+                          whiteSpace: 'nowrap'
+                        }}
+                        title="Chỉnh sửa tên và thông tin Container"
+                      >
+                        <Edit3 size={11} />
+                        <span>Sửa Cont</span>
+                      </button>
+                    )}
                   </div>
                 </div>
+
+                {/* Nút Đóng Modal tròn thanh lịch */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedHistoryContainer(null)}
+                  style={{
+                    border: 'none',
+                    backgroundColor: '#e6dcce',
+                    color: '#5c3a21',
+                    borderRadius: '50%',
+                    width: '28px',
+                    height: '28px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}
+                  title="Đóng chi tiết Container"
+                >
+                  <X size={16} />
+                </button>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              {/* Tầng 2: Thông tin Meta (Mã Cont, Số Pallet, Người kiểm tra) */}
+              <div style={{
+                fontSize: '11px',
+                color: '#786556',
+                fontFamily: 'Consolas, monospace',
+                backgroundColor: '#ffffff',
+                padding: '6px 10px',
+                borderRadius: '7px',
+                border: '1px solid #ebdccb',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '4px'
+              }}>
+                <span>Mã: <strong>{selectedHistoryContainer.id}</strong> • {selectedHistoryContainer.pallets?.length || 0} Pallet</span>
+                <span>Người kiểm: <strong style={{ color: '#2d1810' }}>{selectedHistoryContainer.inspector || operatorName}</strong></span>
+              </div>
+
+              {/* Tầng 3: Thanh công cụ hành động (3 nút cân xứng, không bao giờ vỡ chữ) */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr auto', gap: '6px' }}>
                 <button
                   type="button"
                   onClick={() => handleResumeContainer(selectedHistoryContainer)}
@@ -5397,14 +6792,16 @@ const CheckPalletV1View = () => {
                     backgroundColor: '#7b5233',
                     color: '#ffffff',
                     cursor: 'pointer',
-                    padding: '5px 11px',
+                    height: '34px',
                     borderRadius: '7px',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '4px',
-                    fontSize: '11px',
+                    justifyContent: 'center',
+                    gap: '5px',
+                    fontSize: '11.5px',
                     fontWeight: '800',
-                    boxShadow: '0 2px 6px rgba(123, 82, 51, 0.25)'
+                    boxShadow: '0 2px 6px rgba(123, 82, 51, 0.2)',
+                    whiteSpace: 'nowrap'
                   }}
                   title="Tiếp tục quét thêm Pallet cho Container này"
                 >
@@ -5416,17 +6813,19 @@ const CheckPalletV1View = () => {
                   type="button"
                   onClick={() => handlePrintContainerSummary(selectedHistoryContainer)}
                   style={{
-                    border: '1px solid #ebdccb',
-                    backgroundColor: '#ffffff',
+                    border: '1px solid #86efac',
+                    backgroundColor: '#f0fdf4',
                     color: '#15803d',
                     cursor: 'pointer',
-                    padding: '5px 9px',
+                    height: '34px',
                     borderRadius: '7px',
                     display: 'flex',
                     alignItems: 'center',
+                    justifyContent: 'center',
                     gap: '4px',
-                    fontSize: '11px',
-                    fontWeight: '800'
+                    fontSize: '11.5px',
+                    fontWeight: '800',
+                    whiteSpace: 'nowrap'
                   }}
                   title="In phiếu tổng hợp Container khổ 56mm"
                 >
@@ -5442,34 +6841,21 @@ const CheckPalletV1View = () => {
                     backgroundColor: '#fee2e2',
                     color: '#b91c1c',
                     cursor: 'pointer',
-                    padding: '5px 8px',
+                    height: '34px',
+                    padding: '0 12px',
                     borderRadius: '7px',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '3px',
-                    fontSize: '11px',
-                    fontWeight: '800'
+                    justifyContent: 'center',
+                    gap: '4px',
+                    fontSize: '11.5px',
+                    fontWeight: '800',
+                    whiteSpace: 'nowrap'
                   }}
                   title="Xóa Container này khỏi Database"
                 >
                   <Trash2 size={13} />
                   <span>Xóa</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setSelectedHistoryContainer(null)}
-                  style={{
-                    border: 'none',
-                    backgroundColor: 'transparent',
-                    color: '#64748b',
-                    cursor: 'pointer',
-                    padding: '4px',
-                    display: 'flex',
-                    alignItems: 'center'
-                  }}
-                >
-                  <X size={18} />
                 </button>
               </div>
             </div>
@@ -5585,14 +6971,19 @@ const CheckPalletV1View = () => {
                       ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                           {Object.entries(validation.topLpnGroup || {}).map(([lpnCode, info], idx) => {
-                            const isEven = info.count % 2 === 0;
+                            const isSelfEven = info.count % 2 === 0;
+                            const isOddCombinedEven = validation.isOddCombinedEven || (
+                              !isSelfEven && (!validation.oddTopLpnErrors || validation.oddTopLpnErrors.length === 0)
+                            );
+                            const isOk = isSelfEven || isOddCombinedEven;
+
                             return (
                               <div
                                 key={idx}
                                 style={{
-                                  backgroundColor: isEven ? '#ffffff' : '#fef2f2',
+                                  backgroundColor: isOk ? '#ffffff' : '#fef2f2',
                                   borderRadius: '8px',
-                                  border: isEven ? '1px solid #e2e8f0' : '1.5px solid #f87171',
+                                  border: isOk ? (isSelfEven ? '1px solid #e2e8f0' : '1.5px solid #86efac') : '1.5px solid #f87171',
                                   padding: '7px 10px',
                                   display: 'flex',
                                   alignItems: 'center',
@@ -5605,7 +6996,7 @@ const CheckPalletV1View = () => {
                                   <span style={{
                                     fontFamily: 'Consolas, monospace',
                                     fontWeight: '800',
-                                    color: isEven ? '#1e40af' : '#b91c1c'
+                                    color: isOk ? (isSelfEven ? '#1e40af' : '#15803d') : '#b91c1c'
                                   }}>
                                     {lpnCode}
                                   </span>
@@ -5619,11 +7010,15 @@ const CheckPalletV1View = () => {
                                   fontWeight: '800',
                                   padding: '2px 7px',
                                   borderRadius: '4px',
-                                  backgroundColor: isEven ? '#dcfce7' : '#fee2e2',
-                                  color: isEven ? '#15803d' : '#dc2626',
-                                  border: isEven ? '1px solid #86efac' : '1px solid #fca5a5'
+                                  backgroundColor: isOk ? '#dcfce7' : '#fee2e2',
+                                  color: isOk ? '#15803d' : '#dc2626',
+                                  border: isOk ? '1px solid #86efac' : '1px solid #fca5a5'
                                 }}>
-                                  {isEven ? `✓ ${info.count} kiện (Chẵn - Hợp lệ)` : `❌ ${info.count} kiện (LẺ - BÁO ĐỎ)`}
+                                  {isSelfEven
+                                    ? `✓ ${info.count} kiện (Chẵn - Hợp lệ)`
+                                    : isOddCombinedEven
+                                      ? `✓ ${info.count} kiện (Ghép chẵn ${validation.totalOddBoxes || ''} kiện - Hợp lệ)`
+                                      : `❌ ${info.count} kiện (LẺ - BÁO ĐỎ)`}
                                 </span>
                               </div>
                             );
@@ -5635,16 +7030,48 @@ const CheckPalletV1View = () => {
                 );
               })()}
 
+              {/* DANH SÁCH PALLET HEADER */}
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                fontSize: '11.5px',
-                color: '#5c3a21',
-                fontWeight: '700'
+                padding: '4px 0',
+                gap: '8px'
               }}>
-                <span>DANH SÁCH PALLET ({selectedHistoryContainer.pallets?.length || 0})</span>
-                <span style={{ color: '#8c786a' }}>Chạm vào pallet để xem chi tiết mã</span>
+                <div>
+                  <span style={{ fontSize: '12.5px', fontWeight: '900', color: '#4a240e', textTransform: 'uppercase' }}>
+                    DANH SÁCH PALLET ({selectedHistoryContainer.pallets?.length || 0})
+                  </span>
+                  <div style={{ fontSize: '10px', color: '#8c786a', marginTop: '1px' }}>
+                    Chạm vào pallet để xem chi tiết mã
+                  </div>
+                </div>
+
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={handleAddNewPalletToHistoryContainer}
+                    style={{
+                      border: '1px solid #7b5233',
+                      backgroundColor: '#FAF5EE',
+                      color: '#7b5233',
+                      padding: '5px 10px',
+                      borderRadius: '7px',
+                      fontSize: '11px',
+                      fontWeight: '800',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      boxShadow: '0 1px 3px rgba(123, 82, 51, 0.12)',
+                      whiteSpace: 'nowrap'
+                    }}
+                    title="Thêm một Pallet mới vào Container này"
+                  >
+                    <Plus size={13} />
+                    <span>Thêm Pallet</span>
+                  </button>
+                )}
               </div>
 
               {(selectedHistoryContainer.pallets || []).map((pallet, pIdx) => {
@@ -5671,65 +7098,117 @@ const CheckPalletV1View = () => {
                       transition: 'all 0.15s ease'
                     }}
                   >
-                    {/* Header Pallet (Click to Expand / Collapse) */}
+                    {/* Header Pallet (Thiết kế 2 tầng thoáng đãng, chống vỡ chữ trên di động) */}
                     <div
                       onClick={() => setExpandedPalletIndex(isExpanded ? null : pIdx)}
                       style={{
-                        padding: '12px 14px',
+                        padding: '10px 12px',
                         display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
+                        flexDirection: 'column',
+                        gap: '6px',
                         cursor: 'pointer',
                         backgroundColor: palletErr
                           ? (isExpanded ? '#fee2e2' : '#fff5f5')
                           : (isExpanded ? '#f3ece2' : 'transparent')
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{
-                          padding: '3px 8px',
-                          borderRadius: '5px',
-                          backgroundColor: palletErr ? '#dc2626' : '#7b5233',
-                          color: '#ffffff',
-                          fontWeight: '900',
-                          fontSize: '11px'
-                        }}>
-                          PALLET #{pallet.palletIndex}
-                        </span>
-                        <span style={{ fontSize: '12px', fontWeight: '800', color: palletErr ? '#991b1b' : '#2d1810', fontFamily: 'Consolas, monospace' }}>
-                          {pallet.palletId}
-                        </span>
+                      {/* DÒNG 1: Badge PALLET #N + Badge Đạt/Lỗi + Nút Sửa + Chevron */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'nowrap' }}>
+                          <span style={{
+                            padding: '2px 7px',
+                            borderRadius: '5px',
+                            backgroundColor: palletErr ? '#dc2626' : '#7b5233',
+                            color: '#ffffff',
+                            fontWeight: '900',
+                            fontSize: '11px',
+                            whiteSpace: 'nowrap',
+                            flexShrink: 0
+                          }}>
+                            PALLET #{pallet.palletIndex}
+                          </span>
+
+                          {palletErr ? (
+                            <span style={{
+                              fontSize: '10px',
+                              fontWeight: '800',
+                              backgroundColor: '#fee2e2',
+                              color: '#b91c1c',
+                              border: '1px solid #fca5a5',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              ❌ THIẾU MÃ ({palletErr.currentSkus}/{palletErr.expectedSkus})
+                            </span>
+                          ) : (
+                            <span style={{
+                              fontSize: '10px',
+                              fontWeight: '800',
+                              backgroundColor: '#dcfce7',
+                              color: '#15803d',
+                              border: '1px solid #86efac',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              ✓ ĐỦ: {hasRoof ? '10 SKU • 5 LPN' : (standingSkus.length === 4 && standingLpns.length === 2 ? '4 SKU • 2 LPN (2 Kiện)' : '8 SKU • 4 LPN')}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Phía phải: Nút Sửa nhanh + Mũi tên */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenEditPalletModal(pallet, pIdx);
+                              }}
+                              style={{
+                                border: '1px solid #d5c7b7',
+                                backgroundColor: '#ffffff',
+                                color: '#7b5233',
+                                padding: '2px 8px',
+                                borderRadius: '5px',
+                                fontSize: '10.5px',
+                                fontWeight: '800',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                whiteSpace: 'nowrap'
+                              }}
+                              title="Sửa mã Pallet này"
+                            >
+                              <Edit3 size={11} />
+                              <span>Sửa</span>
+                            </button>
+                          )}
+                          <div style={{ display: 'flex', alignItems: 'center', color: '#7b5233' }}>
+                            {isExpanded ? <ChevronDown size={17} /> : <ChevronRight size={17} />}
+                          </div>
+                        </div>
                       </div>
 
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        {palletErr ? (
-                          <span style={{
-                            fontSize: '10px',
-                            fontWeight: '800',
-                            backgroundColor: '#fee2e2',
-                            color: '#b91c1c',
-                            border: '1px solid #fca5a5',
-                            padding: '2px 6px',
-                            borderRadius: '4px'
-                          }}>
-                            ❌ THIẾU: {palletErr.currentSkus}/{palletErr.expectedSkus} SKU • {palletErr.currentLpns}/{palletErr.expectedLpns} LPN
-                          </span>
-                        ) : (
-                          <span style={{
-                            fontSize: '10px',
-                            fontWeight: '800',
-                            backgroundColor: '#dcfce7',
-                            color: '#15803d',
-                            padding: '2px 6px',
-                            borderRadius: '4px'
-                          }}>
-                            ✓ ĐỦ: {hasRoof ? '10 SKU • 5 LPN' : '8 SKU • 4 LPN'}
-                          </span>
-                        )}
-                        <span style={{ fontSize: '10px', color: '#8c786a' }}>
-                          ({standingSkus.length + roofSkus.length} SKU)
+                      {/* DÒNG 2: Mã Pallet ID đầy đủ + Số lượng mã */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', fontSize: '10.5px' }}>
+                        <span style={{
+                          fontFamily: 'Consolas, monospace',
+                          fontWeight: '700',
+                          color: palletErr ? '#991b1b' : '#5c3a21',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          maxWidth: '75%'
+                        }} title={pallet.palletId}>
+                          {pallet.palletId}
                         </span>
-                        {isExpanded ? <ChevronDown size={16} color="#7b5233" /> : <ChevronRight size={16} color="#7b5233" />}
+
+                        <span style={{ color: '#8c786a', fontSize: '10px', fontWeight: '600', whiteSpace: 'nowrap' }}>
+                          ({standingSkus.length + roofSkus.length} SKU • {standingLpns.length + roofLpns.length} LPN)
+                        </span>
                       </div>
                     </div>
 
@@ -5904,8 +7383,60 @@ const CheckPalletV1View = () => {
                           )}
                         </div>
 
-                        {/* Nút In thẻ kiểm tra cho Pallet này */}
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '4px' }}>
+                        {/* Các nút Thao tác cho Pallet (In / Sửa / Xóa) */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px', paddingTop: '4px' }}>
+                          <div>
+                            {isAdmin && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                {selectedHistoryContainer.pallets?.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeletePalletFromHistoryContainer(pIdx)}
+                                    style={{
+                                      border: '1px solid #fecaca',
+                                      backgroundColor: '#fee2e2',
+                                      color: '#b91c1c',
+                                      padding: '5px 9px',
+                                      borderRadius: '7px',
+                                      fontSize: '11px',
+                                      fontWeight: '800',
+                                      cursor: 'pointer',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px'
+                                    }}
+                                    title="Xóa Pallet này khỏi Container"
+                                  >
+                                    <Trash2 size={12} />
+                                    <span>Xóa Pallet</span>
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditPalletModal(pallet, pIdx)}
+                                  style={{
+                                    border: '1px solid #7b5233',
+                                    backgroundColor: '#7b5233',
+                                    color: '#ffffff',
+                                    padding: '5px 12px',
+                                    borderRadius: '7px',
+                                    fontSize: '11px',
+                                    fontWeight: '800',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    boxShadow: '0 2px 6px rgba(123, 82, 51, 0.2)'
+                                  }}
+                                  title="Chỉnh sửa mã SKU và LPN trên Pallet này"
+                                >
+                                  <Edit3 size={12} color="#ffffff" />
+                                  <span>Chỉnh sửa Pallet</span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
                           <button
                             type="button"
                             onClick={() => {
@@ -5913,7 +7444,7 @@ const CheckPalletV1View = () => {
                                 id: pallet.palletId,
                                 tabTitle: `Pallet #${pallet.palletIndex}`,
                                 timestamp: pallet.timestamp,
-                                inspector: selectedHistoryContainer.inspector || 'Nguyễn A',
+                                inspector: selectedHistoryContainer.inspector || operatorName,
                                 skus: [...standingSkus, ...roofSkus],
                                 lpns: [...standingLpns, ...roofLpns]
                               };

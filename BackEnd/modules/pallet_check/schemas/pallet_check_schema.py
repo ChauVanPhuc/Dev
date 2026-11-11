@@ -20,3 +20,11 @@ class ContainerCreatePayload(BaseModel):
     pallets: Optional[List[PalletCreatePayload]] = []
     auditResult: Optional[Dict[str, Any]] = None
 
+class ContainerUpdatePayload(BaseModel):
+    id: Optional[str] = None
+    name: Optional[str] = None
+    inspector: Optional[str] = None
+    status: Optional[str] = None
+    completedAt: Optional[str] = None
+    pallets: Optional[List[PalletCreatePayload]] = None
+    auditResult: Optional[Dict[str, Any]] = None

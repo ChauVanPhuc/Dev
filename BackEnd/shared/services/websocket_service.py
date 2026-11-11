@@ -42,6 +42,17 @@ class ConnectionManager:
         for user_id in list(self.active_connections.keys()):
             await self.send_personal_message(user_id, message)
 
+    async def close_all(self):
+        """Đóng toàn bộ kết nối WebSocket đang mở khi Server Shutdown / Reload để tránh treo Uvicorn"""
+        for user_id in list(self.active_connections.keys()):
+            conns = list(self.active_connections.get(user_id, []))
+            for ws in conns:
+                try:
+                    await ws.close(code=1001)
+                except Exception:
+                    pass
+        self.active_connections.clear()
+
     async def broadcast_to_stage(self, db, stage_name: str, message: dict, role_filter: str = None):
         """
         Gửi tin nhắn Realtime cho TOÀN BỘ nhân viên thuộc một Công đoạn cụ thể.
@@ -88,3 +99,4 @@ class ConnectionManager:
 
 # Khởi tạo instance duy nhất
 socket_manager = ConnectionManager()
+

@@ -1215,7 +1215,23 @@ const QualityRecordsListView = () => {
                                                 >
                                                     <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#8D6E63' }}>#{stt}</td>
                                                     <td className="font-bold" style={{ color: '#7B5233', fontWeight: 'bold' }}>
-                                                        <div>{order.name || order.order_code}</div>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                            <span>{order.name || order.order_code}</span>
+                                                            {order.sub_order_count > 1 && (
+                                                                <span style={{
+                                                                    display: 'inline-block',
+                                                                    padding: '2px 8px',
+                                                                    borderRadius: '6px',
+                                                                    fontSize: '0.72rem',
+                                                                    fontWeight: '700',
+                                                                    backgroundColor: '#FAF6F0',
+                                                                    color: '#7B5233',
+                                                                    border: '1px solid #EADCC9'
+                                                                }}>
+                                                                    {order.sub_order_count} đợt lệnh
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                         {order.last_activity && (
                                                             <div style={{ fontSize: '0.72rem', color: '#6B7280', fontWeight: '500', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '5px' }}>
                                                                 <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10B981' }}></span>
@@ -1305,8 +1321,24 @@ const QualityRecordsListView = () => {
                                                     {hasData ? 'ĐÃ CÓ DỮ LIỆU' : 'CHƯA CÓ DỮ LIỆU'}
                                                 </span>
                                             </div>
-                                            <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#7B5233', marginBottom: '2px' }}>
-                                                {order.name || order.order_code}
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+                                                <span style={{ fontSize: '1rem', fontWeight: 'bold', color: '#7B5233' }}>
+                                                    {order.name || order.order_code}
+                                                </span>
+                                                {order.sub_order_count > 1 && (
+                                                    <span style={{
+                                                        display: 'inline-block',
+                                                        padding: '1px 6px',
+                                                        borderRadius: '4px',
+                                                        fontSize: '0.68rem',
+                                                        fontWeight: '700',
+                                                        backgroundColor: '#FAF6F0',
+                                                        color: '#7B5233',
+                                                        border: '1px solid #EADCC9'
+                                                    }}>
+                                                        {order.sub_order_count} đợt
+                                                    </span>
+                                                )}
                                             </div>
                                             {order.last_activity && (
                                                 <div style={{ fontSize: '0.72rem', color: '#6B7280', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>

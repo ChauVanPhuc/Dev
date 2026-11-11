@@ -80,7 +80,7 @@ window.onload = function () {
       r0.tdList[1].realHeight = 85
       r0.tdList[1].realMinHeight = 85
       r0.tdList[1].rowspan = 1
-      if (t0.colgroup && t0.colgroup.length >= 5) {
+      if (t0.colgroup && t0.colgroup.length >= 2) {
         r0.tdList[1].colspan = t0.colgroup.length - 1
         let wSum = 0
         for (let wi = 1; wi < t0.colgroup.length; wi++) wSum += (t0.colgroup[wi].width || 0)
@@ -360,6 +360,9 @@ window.onload = function () {
       // Đệm dưới
       newValues.push({ value: '\n', size: 12, rowFlex: 'center' as any, disabled: true })
 
+      c10.colspan = 4
+      c10.rowspan = 1
+      c10.width = 718
       c10.value = newValues
       c10.verticalAlign = 'top' as any
       // Chiều cao chuẩn xác 550px để toàn bộ Trang bìa (Table 0) nằm gọn 100% trong Trang 1, tuyệt đối không tràn sang Trang 2
@@ -369,6 +372,7 @@ window.onload = function () {
       c10.realMinHeight = targetTr1Height
       el.trList[1].height = targetTr1Height
       el.trList[1].minHeight = targetTr1Height
+      el.trList[1].tdList = [c10]
     }
 
     // 4. Bảng phân công trách nhiệm (Rows 2, 3, 4) - Chuẩn 4 cột 718px không bao giờ lệch cột
@@ -621,10 +625,20 @@ window.onload = function () {
         enforceAllTextBlack(el.valueList)
       }
       if (el.trList && Array.isArray(el.trList)) {
+        const colLen = Array.isArray(el.colgroup) ? el.colgroup.length : 0
         for (const tr of el.trList) {
           if (tr && Array.isArray(tr.tdList)) {
+            let usedCols = 0
             for (const td of tr.tdList) {
-              if (td && Array.isArray(td.value)) {
+              if (!td) continue
+              if (colLen > 0) {
+                const maxSpan = Math.max(1, colLen - usedCols)
+                if (!td.colspan || td.colspan > maxSpan) {
+                  td.colspan = maxSpan
+                }
+                usedCols += td.colspan
+              }
+              if (Array.isArray(td.value)) {
                 enforceAllTextBlack(td.value)
               }
             }
@@ -635,13 +649,6 @@ window.onload = function () {
   }
 
   function lockAndEnsureThreePages(mainList: any[]): boolean {
-    let pF: any = null
-    try {
-      pF = (window.parent as any)?.__ISO_FORM_DATA__ || (window.parent as any)?.formData
-    } catch (_) {}
-    if (pF && pF.apply_iso_template === false) {
-      return false
-    }
     if (!Array.isArray(mainList) || mainList.length === 0) return false
     let modified = false
     let tblCount = 0
@@ -662,6 +669,14 @@ window.onload = function () {
           t1Idx = i
         }
       }
+    }
+
+    let pF: any = null
+    try {
+      pF = (window.parent as any)?.__ISO_FORM_DATA__ || (window.parent as any)?.formData
+    } catch (_) {}
+    if (pF && pF.apply_iso_template === false && !isIsoCoverTable(t0)) {
+      return false
     }
 
     // 1. Khóa toàn diện Table 0 (Trang bìa - Trang 1)
@@ -1511,27 +1526,6 @@ window.onload = function () {
       if (!meta) meta = {}
       const curData = instance.command.getValue().data
       if (!curData || !curData.main) return
-      let pF: any = null
-      try {
-        pF = (window.parent as any)?.__ISO_FORM_DATA__ || (window.parent as any)?.formData
-      } catch (_) {}
-      if (!pF || !pF.apply_iso_template) {
-        let t0: any = null
-        for (const el of curData.main) {
-          if (el.type === 'table' && el.trList) {
-            t0 = el
-            break
-          }
-        }
-        if (t0) {
-          formatCoverLogoCell(t0)
-          instance.command.executeSetValue(curData)
-        }
-        return
-      }
-
-      let modified = false
-
       let t0: any = null
       let t1: any = null
       for (const el of curData.main) {
@@ -1540,6 +1534,20 @@ window.onload = function () {
           else if (!t1) t1 = el
         }
       }
+
+      let pF: any = null
+      try {
+        pF = (window.parent as any)?.__ISO_FORM_DATA__ || (window.parent as any)?.formData
+      } catch (_) {}
+      if (pF && pF.apply_iso_template === false && !isIsoCoverTable(t0)) {
+        if (t0) {
+          formatCoverLogoCell(t0)
+          instance.command.executeSetValue(curData)
+        }
+        return
+      }
+
+      let modified = false
 
       if (t0) {
         formatAndSyncCoverTable(t0, meta)

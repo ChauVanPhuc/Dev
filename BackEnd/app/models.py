@@ -69,6 +69,9 @@ from modules.system.models.system_sidebar import SystemSidebar
 from modules.hr.models.assessment_models import (
     HRAssessment, HRAssessmentQuestion, HRAssessmentSubmission, HRAssessmentAnswer
 )
+from modules.daily_production.models.daily_production_model import (
+    DailyProductionBatch, DailyProductionItem
+)
 
 __all__ = [
     "Base", "Account", "Category", "Delivery", "DeliveryDetails", "DeliveryImage",
@@ -91,7 +94,6 @@ __all__ = [
     "InspectionGuideStepImage", "InspectionGuideAssignment",
     "InspectionParameter", "InspectionGuideParameter",
     "InspectionFormType",
-    "HRAssessment", "HRAssessmentQuestion", "HRAssessmentSubmission", "HRAssessmentAnswer"
+    "HRAssessment", "HRAssessmentQuestion", "HRAssessmentSubmission", "HRAssessmentAnswer",
+    "DailyProductionBatch", "DailyProductionItem"
 ]
-
-

@@ -255,6 +255,11 @@ def resolve_cross_item_matches(container_id: int, db) -> Dict[str, Any]:
                 top_ocr.status = "success"
                 top_ocr.error_reason = f"Khớp hoán đổi: Ảnh {top_itm.suffix_key} chụp tem {base_itm.suffix_key} và ngược lại"
 
+                base_itm.resolution_status = "resolved"
+                base_itm.resolution_note = f"Kh?p ho?n ??i: ?nh {base_itm.suffix_key} ch?p tem {top_itm.suffix_key} v? ng??c l?i"
+                top_itm.resolution_status = "resolved"
+                top_itm.resolution_note = f"Kh?p ho?n ??i: ?nh {top_itm.suffix_key} ch?p tem {base_itm.suffix_key} v? ng??c l?i"
+
                 resolved_count += 2
 
     # 3. Bước 2: Tem Pallet đứng nằm trên ảnh Box Top Nóc cùng Pallet Index

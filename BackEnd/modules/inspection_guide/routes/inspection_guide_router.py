@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
+import re
 from typing import List, Optional
+from datetime import datetime
+from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from config.database import get_db
 
@@ -15,13 +19,17 @@ from modules.inspection_guide.services.inspection_guide_service import (
     list_parameters, get_parameter, create_parameter, update_parameter, delete_parameter,
     set_guide_parameters, seed_default_parameters
 )
+from modules.inspection_guide.services.inspection_guide_docx_service import (
+    generate_guide_docx,
+    generate_batch_guides_zip
+)
 from modules.inspection_guide.schemas.inspection_guide import (
     InspectionGuideCreate, InspectionGuideUpdate, InspectionGuideOut, InspectionGuideListOut,
     InspectionGuideStepCreate, InspectionGuideStepUpdate, InspectionGuideStepOut,
     InspectionGuideSubStepCreate, InspectionGuideSubStepUpdate, InspectionGuideSubStepOut,
     GuideAssignmentPayload, ReorderPayload,
     InspectionParameterOut, InspectionParameterCreate, InspectionParameterUpdate,
-    GuideParameterPayload
+    GuideParameterPayload, ExportDocxBatchPayload
 )
 
 router = APIRouter()
@@ -64,6 +72,146 @@ def mobile_guide(
     if not guide:
         raise HTTPException(status_code=404, detail="Không tìm thấy hướng dẫn cho loại phiếu này.")
     return guide
+
+
+# --- Xuất file Word (.docx) & Tải theo lô (.zip) ---
+@router.get("/export-docx-batch")
+def export_guides_docx_batch_get(
+    ids: str = Query(..., description="Danh sách ID tài liệu cách nhau bởi dấu phẩy, ví dụ: 1,2,3"),
+    db: Session = Depends(get_db)
+):
+    """
+    Xuất file Word cho danh sách tài liệu đã chọn (qua query param).
+    - Nếu chọn 1 tài liệu: Trả về file .docx trực tiếp.
+    - Nếu chọn từ 2 tài liệu trở lên: Đóng gói các file .docx vào 1 file .zip.
+    """
+    id_list = []
+    for item in ids.split(","):
+        clean_item = item.strip()
+        if clean_item.isdigit():
+            id_list.append(int(clean_item))
+
+    if not id_list:
+        raise HTTPException(status_code=400, detail="Vui lòng cung cấp ít nhất một mã tài liệu hợp lệ.")
+
+    guides = [get_guide(db, gid) for gid in id_list]
+    valid_guides = [g for g in guides if g is not None]
+
+    if not valid_guides:
+        raise HTTPException(status_code=404, detail="Không tìm thấy tài liệu nào phù hợp.")
+
+    # Nếu chỉ có 1 tài liệu -> Tải trực tiếp .docx
+    if len(valid_guides) == 1:
+        g = valid_guides[0]
+        docx_buf = generate_guide_docx(g, db)
+        safe_code = re.sub(r'[\\/*?:"<>|]', '_', g.code or f"HD_{g.id}").strip()
+        safe_name = re.sub(r'[\\/*?:"<>|]', '_', g.name or "Tai_lieu").strip()[:80]
+        filename = f"{safe_code}_{safe_name}.docx"
+        encoded_filename = quote(filename)
+
+        return Response(
+            content=docx_buf.getvalue(),
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={
+                "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
+                "Access-Control-Expose-Headers": "Content-Disposition"
+            }
+        )
+
+    # Nếu có nhiều tài liệu -> Đóng gói .zip
+    zip_buf = generate_batch_guides_zip(valid_guides, db)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    doc_types = list({g.doc_type or "HDKT" for g in valid_guides})
+    type_tag = doc_types[0] if len(doc_types) == 1 else "TAI_LIEU"
+    zip_filename = f"{type_tag}_Selected_{len(valid_guides)}_Docs_{timestamp}.zip"
+    encoded_zip = quote(zip_filename)
+
+    return Response(
+        content=zip_buf.getvalue(),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_zip}",
+            "Access-Control-Expose-Headers": "Content-Disposition"
+        }
+    )
+
+
+@router.post("/export-docx-batch")
+def export_guides_docx_batch_post(
+    payload: ExportDocxBatchPayload,
+    db: Session = Depends(get_db)
+):
+    """
+    Xuất file Word cho danh sách tài liệu đã chọn (qua POST payload).
+    """
+    if not payload.guide_ids:
+        raise HTTPException(status_code=400, detail="Danh sách tài liệu cần xuất không được để trống.")
+
+    guides = [get_guide(db, gid) for gid in payload.guide_ids]
+    valid_guides = [g for g in guides if g is not None]
+
+    if not valid_guides:
+        raise HTTPException(status_code=404, detail="Không tìm thấy tài liệu nào phù hợp.")
+
+    # Nếu chỉ có 1 tài liệu -> Tải trực tiếp .docx
+    if len(valid_guides) == 1:
+        g = valid_guides[0]
+        docx_buf = generate_guide_docx(g, db)
+        safe_code = re.sub(r'[\\/*?:"<>|]', '_', g.code or f"HD_{g.id}").strip()
+        safe_name = re.sub(r'[\\/*?:"<>|]', '_', g.name or "Tai_lieu").strip()[:80]
+        filename = f"{safe_code}_{safe_name}.docx"
+        encoded_filename = quote(filename)
+
+        return Response(
+            content=docx_buf.getvalue(),
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={
+                "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
+                "Access-Control-Expose-Headers": "Content-Disposition"
+            }
+        )
+
+    # Nếu có nhiều tài liệu -> Đóng gói .zip
+    zip_buf = generate_batch_guides_zip(valid_guides, db)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    doc_types = list({g.doc_type or "HDKT" for g in valid_guides})
+    type_tag = doc_types[0] if len(doc_types) == 1 else "TAI_LIEU"
+    zip_filename = f"{type_tag}_Selected_{len(valid_guides)}_Docs_{timestamp}.zip"
+    encoded_zip = quote(zip_filename)
+
+    return Response(
+        content=zip_buf.getvalue(),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_zip}",
+            "Access-Control-Expose-Headers": "Content-Disposition"
+        }
+    )
+
+
+@router.get("/{guide_id}/export-docx")
+def export_single_guide_docx(guide_id: int, db: Session = Depends(get_db)):
+    """
+    Xuất file Word (.docx) chi tiết cho 1 tài liệu duy nhất.
+    """
+    guide = get_guide(db, guide_id)
+    if not guide:
+        raise HTTPException(status_code=404, detail="Không tìm thấy hướng dẫn kiểm tra.")
+
+    docx_buf = generate_guide_docx(guide, db)
+    safe_code = re.sub(r'[\\/*?:"<>|]', '_', guide.code or f"HD_{guide.id}").strip()
+    safe_name = re.sub(r'[\\/*?:"<>|]', '_', guide.name or "Tai_lieu").strip()[:80]
+    filename = f"{safe_code}_{safe_name}.docx"
+    encoded_filename = quote(filename)
+
+    return Response(
+        content=docx_buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
+            "Access-Control-Expose-Headers": "Content-Disposition"
+        }
+    )
 
 
 @router.get("/{guide_id}", response_model=InspectionGuideOut)

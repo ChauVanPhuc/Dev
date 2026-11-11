@@ -56,7 +56,7 @@ const CALC_METHOD_MAP = {
   'report_on_time_ratio': 'Báo cáo đúng hạn / Tổng báo cáo (> 95%)',
   'continuous_improvement_rate': 'Hiệu suất TB giải pháp cải tiến (> 95%)',
   'audit_average_score': 'Trung bình điểm audit (> 95%)',
-  'manager_score': 'Điểm đánh giá từ Trưởng phòng / Quản lý (> 95%)',
+  'manager_score': 'Điểm đánh giá từ Trưởng phòng / Quản lý',
   'capa_support_rate': 'Hỗ trợ CAPA & Cấp thông tin đạt yêu cầu (= 100%)',
   'risk_detection_ratio': 'Rủi ro phát hiện / Vụ lỗi hàng loạt (> 95%)',
   'iqc_fqc_defect_escape': 'CAPA công đoạn / Tổng CAPA (< 10%)',

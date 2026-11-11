@@ -461,7 +461,7 @@ export const ContainerDetailModal = ({
     try {
       const res = await lpnCrawlerApi.resendContainerZaloReport(cId);
       if (res && res.success) {
-        alert(`Đã gửi báo cáo Zalo thành công tới ${res.recipient_name || res.target_phone || 'người nhận'}`);
+        alert(`Đã gửi báo cáo Zalo thành công cho ${res.success_count || 1}/${res.total_sent || 1} người nhận.`);
         const fresh = {
           ...currentContainer,
           zalo_notify_status: 'sent',
@@ -470,10 +470,16 @@ export const ContainerDetailModal = ({
         setCurrentContainer(fresh);
         if (onContainerUpdate) onContainerUpdate(fresh);
       } else {
-        alert(`Gửi Zalo thất bại: ${res?.message || 'Không rõ nguyên nhân'}`);
+        const msg = res?.message || 'Không rõ nguyên nhân';
+        alert(`Gửi Zalo thất bại: ${msg}`);
       }
     } catch (err) {
-      alert(`Lỗi khi gửi Zalo: ${err?.response?.data?.detail || err.message}`);
+      const detail = err?.response?.data?.detail || err.message;
+      if (detail && (detail.includes('Zalo Bot') || detail.includes('kết nối'))) {
+        alert(`⚠️ Không thể gửi Zalo: ${detail}\n\nVui lòng mở "Cấu hình Zalo Bot" hoặc vào "Cấu hình hệ thống" để cập nhật Cookies / IMEI mới từ Zalo Web.`);
+      } else {
+        alert(`Lỗi khi gửi Zalo: ${detail}`);
+      }
     } finally {
       setIsSendingZalo(false);
     }

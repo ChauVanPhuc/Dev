@@ -291,7 +291,7 @@ const ISOExportModal = ({
                       Thư mục ZIP Hồ Sơ G7
                     </div>
                     <div style={{ fontSize: '0.74rem', color: '#64748B', marginTop: '4px', lineHeight: 1.4 }}>
-                      Cây thư mục <code>Hồ Sơ G7/</code> &gt; <code>[Mã] Tên/</code> gồm file chính + đính kèm.
+                      Cây thư mục <code>Hồ Sơ G7/</code> &gt; <code>[Loại]/</code> &gt; <code>Mã - Tên/</code> gồm file gốc + đính kèm.
                     </div>
                   </div>
                 </div>
@@ -509,7 +509,7 @@ const ISOExportModal = ({
                 </>
               ) : (
                 <>
-                  Gói ZIP tự động đóng gói thư mục <code>Hồ Sơ G7/</code> chứa các thư mục con <code>[Mã] Tên/</code> gồm <strong>File chính (.docx) đang soạn thảo</strong> và toàn bộ tài liệu đính kèm.
+                  Gói ZIP giải nén thành <code>Hồ Sơ G7/</code> phân chia theo <strong>Loại tài liệu</strong> (Quy trình, Hướng dẫn, Quy định, Chính sách), bên trong mỗi loại có <strong>thư mục riêng của tài liệu</strong> chứa <strong>file gốc (.docx)</strong> và toàn bộ <strong>file đính kèm</strong>.
                 </>
               )}
             </div>

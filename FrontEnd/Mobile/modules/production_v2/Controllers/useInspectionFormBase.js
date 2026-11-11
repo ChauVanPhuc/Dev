@@ -112,7 +112,7 @@ const parseDimensionsFromText = (text) => {
 const parseDimensionStringFromText = (text) => {
   if (!text) return null
   const str = String(text)
-  
+
   // 1. 3D Dimensions: e.g. 50*50*876, 18*42*1636, 18x42x1636, 18.5*42*1636.5
   const m3d = str.match(/(\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?\s*[*xX×]\s*\d+(?:[.,]\d+)?(?:\s*mm|\s*cm)?)/i)
   if (m3d) return m3d[1].replace(/\s*/g, '')
@@ -282,6 +282,21 @@ const isStageMatching = (selectedStage, targetStage) => {
 }
 
 const DEFAULT_FALLBACK_DEFECTS = []
+
+const stripDefectCodePrefix = (rawName, rawCode = '') => {
+  if (!rawName) return ''
+  let str = String(rawName).trim()
+  if (!str) return ''
+  str = str.replace(/^(?:\[[^\]]+\]\s*(?:[-–—:]\s*)?)+/, '').trim()
+  const codeStr = String(rawCode || '').trim()
+  if (codeStr) {
+    const escaped = codeStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const codeRegex = new RegExp(`^(?:\\[?\\s*${escaped}\\s*\\]?\\s*(?:[-–—:]\\s*|\\s+))+`, 'i')
+    str = str.replace(codeRegex, '').trim()
+  }
+  str = str.replace(/^[A-Za-z]{2,8}[-_]\d{1,6}\s*[-–—:]\s*/, '').trim()
+  return str || String(rawName).trim()
+}
 
 export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, propId = null, propBackupQrCode = null) => {
   const { id: routeId } = useParams()
@@ -647,8 +662,8 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
         }
 
         const effectiveBom = (Array.isArray(currentBom) && currentBom.length > 0) ? currentBom : bomData
-        const matchedPart = effectiveBom?.find(p => 
-          p.part_name === origin.product || 
+        const matchedPart = effectiveBom?.find(p =>
+          p.part_name === origin.product ||
           (p.sku && p.sku === origin.product) ||
           (origin.product && p.part_name && (p.part_name.includes(origin.product) || origin.product.includes(p.part_name)))
         )
@@ -678,9 +693,9 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
 
         let matchedOpt = null
         if (cSpec && specOpts.length > 0) {
-          matchedOpt = specOpts.find(o => 
-            o.rawSpec === cSpec || 
-            o.label === cSpec || 
+          matchedOpt = specOpts.find(o =>
+            o.rawSpec === cSpec ||
+            o.label === cSpec ||
             compactSpec(o.label) === compactSpec(cSpec) ||
             compactSpec(o.rawSpec) === compactSpec(cSpec)
           )
@@ -694,11 +709,11 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
           setSelectedSpecs([matchedOpt.value])
           setSpec(matchedOpt.rawSpec || matchedOpt.label || cSpec)
         } else if (cSpec) {
-          const customOpt = { 
-            value: cSpec, 
-            label: cSpec, 
-            rawSpec: cSpec, 
-            qty: Number(origin.plan_qty || origin.totalBatchQty || 0) 
+          const customOpt = {
+            value: cSpec,
+            label: cSpec,
+            rawSpec: cSpec,
+            qty: Number(origin.plan_qty || origin.totalBatchQty || 0)
           }
           setSpecOptions([customOpt, ...specOpts])
           setSelectedSpecs([cSpec])
@@ -747,7 +762,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
         if (Array.isArray(origin.errors) && origin.errors.length > 0) {
           setErrors(origin.errors.map((e, i) => ({
             id: e.id || i + 1,
-            name: e.name || e.label || '',
+            name: stripDefectCodePrefix(e.name || e.label || '', e.code),
             qty: Number(e.qty || 1),
             defectId: e.defectId,
             code: e.code,
@@ -783,7 +798,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       setSampleQty(histTicket.sampleQty || histTicket.sample_qty)
     }
     if (Array.isArray(histTicket.errors) && histTicket.errors.length > 0) {
-      setErrors(histTicket.errors.map((e, i) => ({ id: e.id || i + 1, name: e.name || e.label || '', qty: e.qty || 1 })))
+      setErrors(histTicket.errors.map((e, i) => ({ id: e.id || i + 1, name: stripDefectCodePrefix(e.name || e.label || '', e.code), qty: e.qty || 1 })))
       setErrorQty(histTicket.errors.reduce((acc, curr) => acc + Number(curr.qty || 1), 0))
     }
     if (histTicket.result || histTicket.conclusion) {
@@ -821,8 +836,8 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
         id: `ctq_${ctq.id}`,
         ctq_id: ctq.id,
         code: code,
-        name: name,
-        label: code ? `[${code}] ${name}` : name,
+        name: stripDefectCodePrefix(name, code),
+        label: stripDefectCodePrefix(name, code),
         category: 'CTQ',
         stage: ctqStage && ctqStage !== 'Chung' ? [ctqStage] : null,
         description: ctq.description,
@@ -864,8 +879,8 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       list.push({
         id: d.id,
         code: d.code,
-        name: d.name,
-        label: d.code ? `[${d.code}] ${d.name}` : d.name,
+        name: stripDefectCodePrefix(d.name, d.code),
+        label: stripDefectCodePrefix(d.name, d.code),
         category: d.category,
         stage: d.stage,
         description: d.description,
@@ -885,8 +900,8 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
         list.push({
           id: d.id,
           code: d.code,
-          name: d.name,
-          label: d.code ? `[${d.code}] ${d.name}` : d.name,
+          name: stripDefectCodePrefix(d.name, d.code),
+          label: stripDefectCodePrefix(d.name, d.code),
           category: d.category,
           stage: d.stage,
           description: d.description,
@@ -907,8 +922,8 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       value: d.id,
       id: d.id,
       code: d.code,
-      name: d.name,
-      label: d.code ? `[${d.code}] ${d.name}` : d.name,
+      name: stripDefectCodePrefix(d.name, d.code),
+      label: stripDefectCodePrefix(d.name, d.code),
       category: d.category,
       stage: d.stage,
       needs_tracking: d.needs_tracking,
@@ -938,9 +953,9 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       list.push({
         id: `ctq_${ctq.id}`,
         ctq_id: ctq.id,
-        code,
-        name,
-        label: code ? `[${code}] ${name}` : name,
+        code: ctq.name?.match(/^\[([A-Za-z0-9_-]+)\]/)?.[1] || code,
+        name: stripDefectCodePrefix(name, code),
+        label: stripDefectCodePrefix(name, code),
         category: 'CTQ',
         stage: ctqStage && ctqStage !== 'Chung' ? [ctqStage] : null,
         description: ctq.description,
@@ -980,8 +995,8 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       list.push({
         id: d.id,
         code: d.code,
-        name: d.name,
-        label: d.code ? `[${d.code}] ${d.name}` : d.name,
+        name: stripDefectCodePrefix(d.name, d.code),
+        label: stripDefectCodePrefix(d.name, d.code),
         category: d.category,
         stage: d.stage,
         description: d.description,
@@ -1003,8 +1018,8 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       value: d.id,
       id: d.id,
       code: d.code,
-      name: d.name,
-      label: d.code ? `[${d.code}] ${d.name}` : d.name,
+      name: stripDefectCodePrefix(d.name, d.code),
+      label: stripDefectCodePrefix(d.name, d.code),
       category: d.category,
       stage: d.stage,
       needs_tracking: d.needs_tracking,
@@ -1298,7 +1313,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
             setPoOptions([{ value: '', label: 'Nhập hoặc chọn PO...' }, ...opts])
           }
         })
-        .catch(() => {})
+        .catch(() => { })
     } else {
       // Tìm kiếm Lệnh sản xuất Full siêu tốc (5-10ms)
       orderService.getPoCodes({ search: term, limit: 1000 })
@@ -1319,7 +1334,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
             setPoOptions([{ value: '', label: 'Nhập hoặc chọn PO...' }, ...opts])
           }
         })
-        .catch(() => {})
+        .catch(() => { })
     }
   }, [stage, paramStage, po, paramPo, selectedPos])
 
@@ -1437,7 +1452,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       setAction(actVal)
 
       if (ticket.note || ticket.notes) setNote(ticket.note || ticket.notes || '')
-      
+
       const effectivePallet = ticket.palletCode || ticket.pallet_code || ''
       if (effectivePallet) {
         setPalletCode(effectivePallet)
@@ -1489,7 +1504,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
             const fallbackName = (ticket.note || ticket.notes || '').trim() || 'Lỗi ghi nhận'
             return { ...e, name: fallbackName, is_custom: true }
           }
-          return e
+          return { ...e, name: stripDefectCodePrefix(nameStr || e.label || '', codeStr) }
         })
         setErrors(cleanedErrors)
       }
@@ -1589,7 +1604,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
               }
             }
           })
-          .catch(() => {})
+          .catch(() => { })
       } else if (mode === INSPECT_MODES.FIRST_SAMPLE) {
         // Đối với kiểm tra mẫu đầu (FIRST_SAMPLE):
         // "Số lượng kiểm tra" (SL Cần Kiểm) ăn theo AQL của lô sản xuất (lotSize)!
@@ -1609,7 +1624,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
               }
             }
           })
-          .catch(() => {})
+          .catch(() => { })
       } else {
         // Đối với các phiếu kiểm tra khác (RE_INSPECT, PARAMETER, DAILY...):
         // Mặc định lấy theo số lượng sản xuất (lotSize)!
@@ -1691,7 +1706,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
           rawProductLabel: rawLabel
         }
       })
-      
+
       // Sắp xếp danh sách chi tiết (tủ) tăng dần tự nhiên (A-Z, 0-9)
       opts.sort((a, b) => {
         const aLabel = a.label || a.rawLabel || a.value || ''
@@ -1715,8 +1730,8 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
         // GIỮ NGUYÊN spec, selectedSpecs, requiredQty, totalBatchQty đã được nạp!
         if (mode === INSPECT_MODES.RE_INSPECT || isPalletSelectingRef.current) {
           const currentProdStr = product || paramProduct
-          const matchedPart = bomList.find(p => 
-            p.part_name === currentProdStr || 
+          const matchedPart = bomList.find(p =>
+            p.part_name === currentProdStr ||
             (p.sku && p.sku === currentProdStr) ||
             (currentProdStr && p.part_name && (p.part_name.includes(currentProdStr) || currentProdStr.includes(p.part_name)))
           )
@@ -1748,9 +1763,9 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
             setSpecOptions(specOpts)
             if (spec) {
               const cSpec = compactSpec(spec)
-              const foundOpt = specOpts.find(o => 
-                o.rawSpec === cSpec || 
-                o.label === cSpec || 
+              const foundOpt = specOpts.find(o =>
+                o.rawSpec === cSpec ||
+                o.label === cSpec ||
                 compactSpec(o.label) === cSpec ||
                 compactSpec(o.rawSpec) === cSpec
               )
@@ -1776,7 +1791,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
 
         const currentProdStr = product || paramProduct
         const currentProdArray = currentProdStr ? currentProdStr.split(', ').map(s => s.trim()).filter(Boolean) : []
-        
+
         let matchedParts = []
         if (currentProdArray.length > 0) {
           matchedParts = bomList.filter(p => currentProdArray.includes(p.part_name) || (p.sku && currentProdArray.includes(p.sku)))
@@ -1788,7 +1803,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
           setProduct(combinedName)
           setParamProduct(combinedName)
           setSelectedProducts(partNames)
-          
+
           let specOpts = []
           let totalQtySum = 0
           let isAnyConverted = false
@@ -1820,7 +1835,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
               if (details.isConverted) isAnyConverted = true
             }
           })
-          
+
           specOpts.sort((a, b) => {
             const aLabel = a.label || a.rawSpec || a.value || ''
             const bLabel = b.label || b.rawSpec || b.value || ''
@@ -2120,9 +2135,9 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
       const partSpecs = (Array.isArray(part.specs) && part.specs.length > 0)
         ? part.specs
         : (part.specification || part.spec
-            ? [{ specification: part.specification || part.spec, qty: part.total_qty }]
-            : [{ specification: getEffectiveSpec('', part.part_name), qty: part.total_qty }]
-          )
+          ? [{ specification: part.specification || part.spec, qty: part.total_qty }]
+          : [{ specification: getEffectiveSpec('', part.part_name), qty: part.total_qty }]
+        )
 
       partSpecs.forEach((s, idx) => {
         const effSpec = getEffectiveSpec(s.specification, part.part_name)
@@ -2540,7 +2555,7 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
               is_custom: true
             }
           }
-          return e
+          return { ...e, name: stripDefectCodePrefix(nameStr || e.label || '', codeStr) }
         })
 
       // Đợi các ảnh đang upload hoàn tất nếu có
@@ -2628,15 +2643,15 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
           ? steps
           : (Array.isArray(currentGuide?.steps) && currentGuide.steps.length > 0
             ? currentGuide.steps.map((st, idx) => ({
-                id: st.id,
-                step_no: st.step_no || (idx + 1),
-                step: st.step_no || (idx + 1),
-                title: st.title || `Bước ${idx + 1}`,
-                standard: st.standard || st.content || '',
-                content: st.content || st.standard || '',
-                result: 'pass',
-                note: ''
-              }))
+              id: st.id,
+              step_no: st.step_no || (idx + 1),
+              step: st.step_no || (idx + 1),
+              title: st.title || `Bước ${idx + 1}`,
+              standard: st.standard || st.content || '',
+              content: st.content || st.standard || '',
+              result: 'pass',
+              note: ''
+            }))
             : null)
       })
 
@@ -2666,8 +2681,8 @@ export const useInspectionFormBase = (fixedMode = INSPECT_MODES.FIRST_SAMPLE, pr
         mode === INSPECT_MODES.PROCESS
           ? 'Đã lưu phiếu kiểm tra quy trình thành công!'
           : (finalPalletCode
-              ? `Đã lưu phiếu kiểm tra thành công cho mã Pallet: ${finalPalletCode}!`
-              : 'Đã lưu phiếu kiểm tra thành công!'),
+            ? `Đã lưu phiếu kiểm tra thành công cho mã Pallet: ${finalPalletCode}!`
+            : 'Đã lưu phiếu kiểm tra thành công!'),
         'success',
         () => {
           setIsDirty(false)

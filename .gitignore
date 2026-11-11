@@ -88,6 +88,9 @@ scratch/
 scratch_*.py
 audit_*.py
 test_*.py
+test_*.js
+test_*.mjs
+update_*.js
 check_*.py
 find_image.py
 inspect_doc.py

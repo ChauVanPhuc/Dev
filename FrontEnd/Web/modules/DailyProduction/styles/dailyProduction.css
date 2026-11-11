@@ -1,0 +1,1206 @@
+/* ==========================================================================
+   DAILY PRODUCTION MODULE STYLES (GOLD DESIGN SYSTEM + FACTORY SHEET PRINT)
+   ========================================================================== */
+
+.daily-prod-page {
+  background-color: #FAF7F2;
+  min-height: calc(100vh - 70px);
+  padding: 18px 22px 40px 22px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  color: #2D1A12;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* ==========================================================================
+   ULTRA-COMPACT SINGLE PANEL HEADER (CỰC KỲ GỌN GÀNG, KHÔNG RƯỜM RÀ)
+   ========================================================================== */
+.daily-prod-compact-panel {
+  background: #FFFFFF;
+  border: 1px solid #EADCC9;
+  border-radius: 8px;
+  padding: 6px 12px;
+  margin-bottom: 8px;
+  box-shadow: 0 1px 3px rgba(123, 82, 51, 0.04);
+}
+
+.daily-panel-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.daily-compact-filters {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+}
+
+.daily-mini-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #FAF7F2;
+  border: 1px solid #EADCC9;
+  border-radius: 6px;
+  padding: 2px 6px;
+  height: 26px;
+  box-sizing: border-box;
+}
+
+.daily-mini-date-input {
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.76rem;
+  color: #2D1A12;
+  width: 102px;
+  padding: 0;
+  outline: none;
+}
+
+.daily-mini-btn-pill {
+  border: 1px solid #DECBB4;
+  background: #FFFFFF;
+  font-family: inherit;
+  font-size: 0.7rem;
+  color: #786452;
+  padding: 1px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1.2;
+}
+
+.daily-mini-btn-pill:hover {
+  background: #F5EBE1;
+  color: #7B5233;
+}
+
+.daily-mini-btn-pill.active {
+  background: #7B5233;
+  color: #FFFFFF;
+  border-color: #7B5233;
+  font-weight: 600;
+}
+
+.daily-mini-select {
+  background: #FAF7F2;
+  border: 1px solid #EADCC9;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.76rem;
+  color: #2D1A12;
+  height: 26px;
+  padding: 0 5px;
+  outline: none;
+  cursor: pointer;
+}
+
+.daily-mini-search-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.daily-mini-search-icon {
+  position: absolute;
+  left: 7px;
+  color: #9CA3AF;
+  pointer-events: none;
+}
+
+.daily-mini-search-input {
+  background: #FAF7F2;
+  border: 1px solid #EADCC9;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.76rem;
+  height: 26px;
+  padding: 0 6px 0 24px;
+  width: 130px;
+  color: #2D1A12;
+  outline: none;
+}
+
+.daily-mini-search-input:focus {
+  border-color: #7B5233;
+  background: #FFFFFF;
+}
+
+.daily-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.daily-mini-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: #FAF7F2;
+  border: 1px solid #EADCC9;
+  border-radius: 6px;
+  color: #7B5233;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.daily-mini-icon-btn:hover {
+  background: #7B5233;
+  color: #FFFFFF;
+}
+
+.daily-btn-primary-compact {
+  height: 26px !important;
+  padding: 0 10px !important;
+  font-size: 0.78rem !important;
+  gap: 5px !important;
+}
+
+/* Hàng 2: Liền mạch ngay bên dưới hàng 1 trong cùng 1 panel */
+.daily-panel-row-sub {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px dashed #EEDDC8;
+}
+
+.daily-compact-batches {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  overflow-x: auto;
+  flex: 1;
+  min-width: 0;
+}
+
+.daily-batch-lead-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #7B5233;
+  white-space: nowrap;
+}
+
+.daily-batch-empty-text {
+  font-size: 0.72rem;
+  color: #9CA3AF;
+  font-style: italic;
+}
+
+.daily-mini-batch-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #FAF7F2;
+  border: 1px solid #DECBB4;
+  border-radius: 5px;
+  padding: 2px 7px;
+  font-size: 0.74rem;
+  font-family: inherit;
+  color: #2D1A12;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.daily-mini-batch-chip:hover {
+  background: #F3E7D9;
+  border-color: #7B5233;
+}
+
+.daily-mini-batch-chip.active {
+  background: #7B5233;
+  border-color: #7B5233;
+  color: #FFFFFF;
+}
+
+.daily-mini-batch-chip .chip-badge {
+  font-size: 0.66rem;
+  font-weight: 800;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: #EEDDC8;
+  color: #7B5233;
+}
+
+.daily-mini-batch-chip.active .chip-badge {
+  background: rgba(255, 255, 255, 0.25);
+  color: #FFFFFF;
+}
+
+.daily-mini-batch-chip .chip-title {
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.daily-mini-batch-chip .chip-count {
+  font-size: 0.68rem;
+  opacity: 0.85;
+}
+
+.daily-compact-stats-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.73rem;
+  color: #786452;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.daily-compact-stats-inline .dot {
+  color: #DECBB4;
+}
+
+.daily-compact-stats-inline b {
+  color: #2D1A12;
+}
+
+.daily-compact-stats-inline .stat-success {
+  color: #15803D;
+}
+
+.daily-compact-stats-inline .stat-success b {
+  color: #15803D;
+}
+
+.daily-compact-stats-inline .stat-warning {
+  color: #B45309;
+}
+
+.daily-compact-stats-inline .stat-warning b {
+  color: #B45309;
+}
+
+/* ==========================================================================
+   COMPACT & SLIM HEADER STYLES (GỌN GÀNG, TINH TẾ, DỄ NHÌN)
+   ========================================================================== */
+/* Dòng thứ 2 kết hợp: Đợt SX bên trái & Mini Stats bên phải trên CÙNG 1 HÀNG */
+.daily-sub-bar-combined {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  min-height: 28px;
+}
+
+.daily-batch-chips-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  flex: 1;
+  min-width: 0;
+}
+
+.daily-mini-stats-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: #FFFFFF;
+  border: 1px solid #EADCC9;
+  border-radius: 7px;
+  padding: 3px 10px;
+  font-size: 0.76rem;
+  flex-shrink: 0;
+}
+
+.daily-mini-stat-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #786452;
+}
+
+.daily-mini-stat-item b {
+  color: #2D1A12;
+}
+
+.daily-mini-divider {
+  width: 1px;
+  height: 12px;
+  background: #E5D5C2;
+}
+
+.daily-batch-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #FFFFFF;
+  border: 1px solid #DECBB4;
+  border-radius: 6px;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  font-family: inherit;
+  font-size: 0.76rem;
+}
+
+.daily-batch-chip:hover {
+  background: #FAF7F2;
+  border-color: #7B5233;
+}
+
+.daily-batch-chip.active {
+  background: #7B5233;
+  border-color: #7B5233;
+  color: #FFFFFF;
+}
+
+.daily-batch-chip .chip-badge {
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: #FAF3E8;
+  color: #7B5233;
+}
+
+.daily-batch-chip.active .chip-badge {
+  background: rgba(255, 255, 255, 0.22);
+  color: #FFFFFF;
+}
+
+.daily-batch-chip .chip-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: inherit;
+}
+
+.daily-batch-chip .chip-count {
+  font-size: 0.7rem;
+  opacity: 0.85;
+}
+
+.daily-prod-filter-label {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #7B5233;
+  text-transform: uppercase;
+  letter-spacing: 0.25px;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+/* Field label above inputs inside forms */
+.daily-field-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #7B5233;
+  text-transform: uppercase;
+  letter-spacing: 0.2px;
+  line-height: 1.35;
+  margin-bottom: 5px;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.daily-prod-input,
+.daily-prod-select {
+  border: 1px solid #DECBB4;
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: #2D1A12;
+  background: #FFFFFF;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.daily-prod-input:focus,
+.daily-prod-select:focus {
+  border-color: #7B5233;
+  box-shadow: 0 0 0 3px rgba(123, 82, 51, 0.14);
+}
+
+/* Primary & Secondary Buttons */
+.daily-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #7B5233;
+  color: #FFFFFF;
+  border: none;
+  border-radius: 10px;
+  padding: 9px 16px;
+  font-size: 0.86rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+  box-shadow: 0 3px 8px rgba(123, 82, 51, 0.22);
+}
+
+.daily-btn-primary:hover:not(:disabled) {
+  background: #5D3E26;
+  transform: translateY(-1px);
+}
+
+.daily-btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.daily-btn-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  background: #FFFFFF;
+  color: #7B5233;
+  border: 1px solid #DECBB4;
+  border-radius: 9px;
+  padding: 7px 12px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.18s ease;
+}
+
+.daily-btn-outline:hover:not(:disabled) {
+  background: #FAF3EB;
+  border-color: #7B5233;
+}
+
+.daily-btn-outline.active {
+  background: #FEF3C7;
+  color: #92400E;
+  border-color: #F59E0B;
+}
+
+.daily-btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: #FEE2E2;
+  color: #DC2626;
+  border: 1px solid #FECACA;
+  border-radius: 9px;
+  padding: 7px 12px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.daily-btn-danger:hover {
+  background: #FECACA;
+}
+
+/* Summary KPI Strip */
+.daily-kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.daily-kpi-card {
+  background: #FFFFFF;
+  border: 1px solid #EADCC9;
+  border-radius: 12px;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 2px 6px rgba(123, 82, 51, 0.04);
+}
+
+.daily-kpi-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #786452;
+  margin-bottom: 4px;
+}
+
+.daily-kpi-value {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #2D1A12;
+}
+
+/* Batch Tabs Selector */
+.daily-batch-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.daily-batch-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: #FFFFFF;
+  border: 1.5px solid #EADCC9;
+  border-radius: 12px;
+  padding: 10px 16px;
+  cursor: pointer;
+  min-width: 240px;
+  max-width: 380px;
+  text-align: left;
+  transition: all 0.18s ease;
+}
+
+.daily-batch-tab:hover {
+  border-color: #B69272;
+  background: #FDFBF8;
+}
+
+.daily-batch-tab.selected {
+  background: #7B5233;
+  border-color: #7B5233;
+  color: #FFFFFF;
+  box-shadow: 0 4px 12px rgba(123, 82, 51, 0.25);
+}
+
+.daily-batch-tab-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.daily-batch-tab-title {
+  font-size: 0.9rem;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.daily-batch-tab-sub {
+  font-size: 0.76rem;
+  opacity: 0.85;
+}
+
+/* Factory Paper Sheet Card ("BẢNG LIỆT KÊ CHI TIẾT") */
+.factory-sheet-card {
+  background: #FFFFFF;
+  border: 1.5px solid #D8C4AC;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 6px 20px rgba(45, 26, 18, 0.06);
+}
+
+.factory-sheet-banner {
+  background: linear-gradient(180deg, #FDFBF7 0%, #F7EFE4 100%);
+  border-bottom: 2px solid #2D1A12;
+  padding: 18px 24px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.factory-sheet-heading-center {
+  flex: 1;
+  min-width: 280px;
+  text-align: center;
+}
+
+.factory-sheet-main-title {
+  font-size: 1.28rem;
+  font-weight: 900;
+  color: #1F120B;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0 0 6px 0;
+}
+
+.factory-sheet-sub-orders {
+  font-size: 1.02rem;
+  font-weight: 800;
+  color: #7B5233;
+  margin: 0 0 4px 0;
+  line-height: 1.4;
+}
+
+.factory-sheet-line-summary {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #4A3525;
+  margin: 0;
+}
+
+/* Factory Sheet Table */
+.factory-sheet-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.factory-sheet-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.factory-sheet-table th {
+  background: #F4ECE1;
+  color: #2D1A12;
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.25px;
+  border: 1px solid #C6B199;
+  padding: 8px 9px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.factory-sheet-table thead tr:first-child th {
+  position: sticky;
+  top: 0;
+  z-index: 12;
+  background: #F4ECE1;
+  box-shadow: inset 0 -1px 0 #C6B199;
+}
+
+.factory-sheet-table thead tr:nth-child(2) th {
+  position: sticky;
+  top: 34px;
+  z-index: 11;
+  background: #EFE4D4;
+  box-shadow: inset 0 -1px 0 #C6B199;
+}
+
+.factory-sheet-table td {
+  border: 1px solid #DFD2C3;
+  padding: 6px 9px;
+  vertical-align: middle;
+  color: #1E130C;
+}
+
+/* Row Type: CABINET_HEADER (e.g. R42 | WHT | 10-42 ... 120) */
+.factory-sheet-row-cabinet {
+  background-color: #FAF3E8 !important;
+  font-weight: 800;
+}
+
+.factory-sheet-row-cabinet td {
+  border-top: 2px solid #9E8063 !important;
+  border-bottom: 1.5px solid #B89D82 !important;
+  font-size: 0.92rem;
+  color: #2D1A12;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+/* Row Type: Parent Assembly (e.g. STT 2, 3, 4, 8) vs Child Component (4.1, 4.2, 4.3) */
+.factory-sheet-row-assembly td {
+  font-weight: 700;
+  background-color: #FFFFFF;
+}
+
+.factory-sheet-row-subpart td {
+  font-weight: 500;
+  background-color: #FFFEFC;
+}
+
+.factory-sheet-row-hidden {
+  opacity: 0.45;
+  background-color: #F9FAFB !important;
+}
+
+/* Khi mở Workspace Builder gộp Cont: Khóa chiều cao vừa khít màn hình, không sinh thanh cuộn trang bên ngoài */
+.daily-prod-page.builder-active {
+  height: calc(100vh - 65px);
+  max-height: calc(100vh - 65px);
+  padding: 8px 14px 10px 14px;
+  overflow: hidden;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ==========================================================================
+   INLINE BUILDER WORKSPACE (KHÔNG DÙNG FIXED MODAL ĐỂ TRÁNH BỊ SIDEBAR CHE)
+   ========================================================================== */
+.daily-builder-workspace {
+  background: #FAF7F2;
+  border: 1.5px solid #D8C4AC;
+  border-radius: 12px;
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  box-shadow: 0 4px 18px rgba(45, 26, 18, 0.08);
+}
+
+.daily-builder-header {
+  background: #FFFFFF;
+  border-bottom: 1px solid #EADCC9;
+  padding: 8px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.daily-builder-body {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: 0;
+  overflow: hidden;
+}
+
+@media (max-width: 1200px) {
+  .daily-builder-body {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+}
+
+.daily-builder-left {
+  background: #FFFFFF;
+  border-right: 1px solid #EADCC9;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (max-width: 1200px) {
+  .daily-builder-left {
+    border-right: none;
+    border-bottom: 1px solid #EADCC9;
+    height: 380px;
+  }
+}
+
+.daily-builder-right {
+  background: #FAF7F2;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding: 10px 14px;
+}
+
+@media (max-width: 1200px) {
+  .daily-builder-right {
+    height: auto;
+  }
+}
+
+.daily-builder-form-grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+@media (max-width: 1400px) {
+  .daily-builder-form-grid-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .daily-builder-form-grid-4 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.daily-builder-form-grid-2 {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 900px) {
+  .daily-builder-form-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.daily-builder-footer {
+  background: #FFFFFF;
+  border-top: 1px solid #EADCC9;
+  padding: 8px 18px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+/* Container Tree List in Builder Left Panel */
+.po-root-card {
+  border: 1px solid #EADCC9;
+  border-radius: 10px;
+  margin-bottom: 8px;
+  background: #FFFFFF;
+  overflow: hidden;
+}
+
+.po-root-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #FAF7F2;
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid transparent;
+  gap: 8px;
+}
+
+.po-root-header.expanded {
+  border-bottom-color: #EADCC9;
+  background: #F5EDE2;
+}
+
+/* Danh sách Cont hiển thị dạng 1 cột rõ ràng, không bị co giật hay cắt mất chữ */
+.po-sub-grid {
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: #FFFFFF;
+}
+
+.po-sub-item {
+  border: 1.5px solid #E5D7C6;
+  border-radius: 8px;
+  padding: 7px 10px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: all 0.15s ease;
+  background: #FFFFFF;
+  min-width: 0;
+}
+
+.po-sub-item:hover {
+  border-color: #9C6B43;
+  background: #FDFBF8;
+}
+
+.po-sub-item.checked {
+  border-color: #7B5233;
+  background: #FEF6EC;
+  box-shadow: 0 2px 6px rgba(123, 82, 51, 0.12);
+}
+
+.po-sub-item.expanded {
+  border-color: #7B5233;
+  box-shadow: 0 3px 10px rgba(123, 82, 51, 0.12);
+  background: #FFFDFB;
+}
+
+/* Level 3: Danh sách sản phẩm chi tiết trong Cont */
+.po-prod-list {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #DECBB4;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.po-prod-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 8px;
+  background: #FAF7F2;
+  border: 1px solid #EADCC9;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.po-prod-item:hover {
+  background: #F5ECE0;
+  border-color: #7B5233;
+}
+
+.po-prod-item.checked {
+  background: #FEF9EE;
+  border-color: #7B5233;
+}
+
+/* ==========================================================================
+   CABINET TABLE BADGES & EXPANDABLE / COLAB SUB-TABLE (TRỰC QUAN & DỄ HIỂU)
+   ========================================================================== */
+.badge-source-cont {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #F7EFE4;
+  color: #4A2E18;
+  border: 1px solid #D8C4AC;
+  padding: 3px 8px;
+  border-radius: 99px;
+  font-weight: 700;
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+.badge-source-cont b {
+  color: #15803D;
+  font-weight: 800;
+}
+
+.badge-model-code {
+  display: inline-block;
+  background: #F1E9DE;
+  color: #5D3E26;
+  border: 1px solid #D5C2AD;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-weight: 800;
+  font-size: 0.8rem;
+  letter-spacing: 0.3px;
+}
+
+.badge-color-tag {
+  display: inline-block;
+  background: #FEF3C7;
+  color: #92400E;
+  border: 1px solid #FCD34D;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-weight: 800;
+  font-size: 0.78rem;
+}
+
+.btn-colab-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #FAF3E8;
+  color: #7B5233;
+  border: 1.5px solid #DECBB4;
+  border-radius: 7px;
+  padding: 4px 9px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.btn-colab-toggle:hover {
+  background: #F5ECE0;
+  border-color: #7B5233;
+  color: #5D3E26;
+}
+
+.btn-colab-toggle.active {
+  background: #7B5233;
+  color: #FFFFFF;
+  border-color: #7B5233;
+}
+
+/* Khung chi tiết Colab xổ ra bên dưới dòng tủ */
+.cabinet-colab-row td {
+  padding: 0 !important;
+  background: #FDFBF8 !important;
+  border-bottom: 2px solid #DECBB4 !important;
+}
+
+.cabinet-colab-container {
+  padding: 10px 14px 14px 14px;
+  background: #FDFBF8;
+  border-left: 4px solid #7B5233;
+}
+
+.cabinet-nested-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.cabinet-nested-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #FFFFFF;
+  border: 1px solid #DECBB4;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(45, 26, 18, 0.05);
+}
+
+.cabinet-nested-table th {
+  background: #F5ECE0;
+  color: #4A2E18;
+  font-weight: 700;
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  padding: 6px 8px;
+  border: 1px solid #DECBB4;
+  text-align: center;
+}
+
+.cabinet-nested-table td {
+  padding: 5px 8px !important;
+  font-size: 0.8rem;
+  border: 1px solid #EADBCE;
+  color: #2D1A12;
+  vertical-align: middle;
+}
+
+.cabinet-nested-table tr:hover td {
+  background: #FAF7F2;
+}
+
+.cabinet-nested-table tr.row-hidden td {
+  opacity: 0.45;
+  background: #F3F4F6 !important;
+}
+
+/* ==========================================================================
+   STICKY SCROLL & HIERARCHY TREE STYLES (CHIA BẬC & ĂN THEO KHI SCROLL)
+   ========================================================================== */
+/* Dòng Mã Tủ ghim dính khi cuộn qua chi tiết linh kiện của nó */
+.factory-sheet-row-cabinet.is-colab-open td {
+  position: sticky;
+  top: 35px;
+  z-index: 20;
+  background: #FAF3E8 !important;
+  border-top: 2px solid #7B5233 !important;
+  border-bottom: 2px solid #7B5233 !important;
+  box-shadow: 0 4px 10px rgba(45, 26, 18, 0.12);
+}
+
+/* Header cụm linh kiện ghim dính bên dưới dòng Mã Tủ */
+.cabinet-nested-header.sticky-header {
+  position: sticky;
+  top: 77px;
+  z-index: 18;
+  background: #FAF7F2;
+  padding: 8px 12px;
+  border-bottom: 1.5px solid #D8C4AC;
+  box-shadow: 0 2px 6px rgba(45, 26, 18, 0.06);
+}
+
+/* Header các cột linh kiện ghim dính tiếp theo */
+.cabinet-nested-table thead th {
+  position: sticky;
+  top: 114px;
+  z-index: 17;
+  background: #EADBCE !important;
+  border: 1px solid #D5C2AD !important;
+  box-shadow: 0 2px 4px rgba(45, 26, 18, 0.05);
+}
+
+/* Phân chia giao diện theo bậc (Hierarchy Level 1, 2, 3) */
+.colab-row-level-1 td {
+  background: #FAF3E8 !important;
+  border-top: 1.5px solid #D8C4AC !important;
+  border-bottom: 1px solid #E5D5C2 !important;
+}
+
+.colab-row-level-2 td {
+  background: #FFFFFF !important;
+  border-bottom: 1px solid #EADBCE !important;
+}
+
+.colab-row-level-3 td {
+  background: #FFFEFC !important;
+  border-bottom: 1px dashed #EDE2D3 !important;
+}
+
+.badge-level-stt {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 800;
+  font-size: 0.74rem;
+  letter-spacing: 0.2px;
+}
+
+.badge-level-stt.lvl-1 {
+  background: #7B5233;
+  color: #FFFFFF;
+}
+
+.badge-level-stt.lvl-2 {
+  background: #EADCC9;
+  color: #5D3E26;
+  border: 1px solid #D8C4AC;
+}
+
+.badge-level-stt.lvl-3 {
+  background: #F5ECE0;
+  color: #7B5233;
+  font-weight: 700;
+}
+
+.tree-connector-guide {
+  color: #B89D82;
+  font-family: monospace;
+  font-weight: 700;
+  user-select: none;
+  margin-right: 4px;
+}
+
+/* Print Layout - Chuẩn Tờ Phiếu Xưởng */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .factory-sheet-printable,
+  .factory-sheet-printable * {
+    visibility: visible;
+  }
+  .factory-sheet-printable {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .factory-sheet-table th,
+  .factory-sheet-table td {
+    border: 1px solid #000000 !important;
+    color: #000000 !important;
+    padding: 5px 6px !important;
+    font-size: 11pt !important;
+  }
+}

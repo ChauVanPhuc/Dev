@@ -13,6 +13,15 @@ try:
 except Exception:
     pass
 
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module=r"torch.*")
+
+try:
+    from PIL import ImageFile
+    ImageFile.LOAD_TRUNCATED_IMAGES = True
+except Exception:
+    pass
+
 try:
     import torch
     torch.set_num_threads(2)
@@ -102,22 +111,34 @@ async def lifespan(app: FastAPI):
 
 
 
-    # Pre-warm AI OCR Engine in background thread to eliminate initial 6-8s cold-start latency
-    def _bg_warmup_ocr():
-        try:
-            import time
-            time.sleep(1.0)
-            from lpn_crawler.ai_ocr_train.core.ocr_engine import OcrEngine
-            eng = OcrEngine()
-            eng.warmup()
-            print("[OcrEngine] GPU DirectML & CRNN models pre-warmed in background successfully!")
-        except Exception as e:
-            print(f"[OcrEngine] Background warmup notice: {e}")
+    # Pre-warm AI OCR Engine only if explicitly enabled via WARMUP_OCR_IN_API=1
+    # (By default, AI OCR runs inside the dedicated `ocr_worker.py` process so API stays light)
+    if os.getenv("WARMUP_OCR_IN_API", "0").lower() in ("1", "true"):
+        def _bg_warmup_ocr():
+            try:
+                import time
+                time.sleep(1.0)
+                from lpn_crawler.ai_ocr_train.core.ocr_engine import OcrEngine
+                eng = OcrEngine()
+                eng.warmup()
+                print("[OcrEngine] GPU DirectML & CRNN models pre-warmed in background successfully!")
+            except Exception as e:
+                print(f"[OcrEngine] Background warmup notice: {e}")
 
-    import threading
-    threading.Thread(target=_bg_warmup_ocr, daemon=True).start()
+        import threading
+        threading.Thread(target=_bg_warmup_ocr, daemon=True).start()
 
     yield
+
+    # Giải phóng kết nối WebSocket và DB Engine khi Uvicorn Reload/Shutdown để không bị treo ở "Reloading..."
+    try:
+        await socket_manager.close_all()
+    except Exception:
+        pass
+    try:
+        engine.dispose()
+    except Exception:
+        pass
 
 
 
@@ -238,6 +259,7 @@ async def check_write_permissions(request: Request, call_next):
             "/api/v1/deliveries/upload-image",
             "/api/v1/assessment",
             "/api/v1/iso-documents/onlyoffice/callback",
+            "/api/v1/daily-production/preview-merge",
             "/health",
             "/ws",
         )
@@ -332,6 +354,12 @@ async def check_write_permissions(request: Request, call_next):
                                     ]
                                     
                                 # 3. Production & Plans
+                                elif path.startswith("/api/v1/daily-production"):
+                                    candidate_keys = [
+                                        "/admin/daily-production", "daily-production",
+                                        "/plan", "/admin/plan", "plan", "/production/plans",
+                                        "/production/orders", "/admin/production-orders", "orders"
+                                    ]
                                 elif path.startswith("/api/v1/plans") or path.startswith("/api/v1/production-plans"):
                                     candidate_keys = [
                                         "/plan", "/admin/plan", "plan", "/production/plans",
@@ -348,9 +376,10 @@ async def check_write_permissions(request: Request, call_next):
                                     candidate_keys = ["/admin/products", "products", "/products", "/admin/master-products", "master-products"]
                                     
                                 # 4. KPI & HR
-                                elif path.startswith("/api/v1/kpis") or path.startswith("/api/v1/kpi"):
+                                elif path.startswith("/api/v1/kpis") or path.startswith("/api/v1/kpi") or path.startswith("/api/v1/quality-employees"):
                                     candidate_keys = [
                                         "/kpi", "/kpi-staff", "/admin/kpi", "kpi",
+                                        "/admin/kpi/quality-employees", "quality-employees",
                                         "/admin/kpi/checklist", "/admin/kpi/list", "/admin/kpi/rules", "/admin/kpi/feedback"
                                     ]
                                 elif path.startswith("/api/v1/awards-discipline"):

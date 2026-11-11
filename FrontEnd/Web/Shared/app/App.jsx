@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useParams, useLocatio
 import LoginPage from '@modules/Auth/Views/Login/LoginView';
 import PortalLayout from '@webShared/Views/components/layout/PortalLayout';
 import { ToastProvider } from '@webShared/Views/components/feedback/ToastContext';
+import ErrorBoundary from '@webShared/Views/components/feedback/ErrorBoundary';
 
 // Import các trang Admin (Tải động)
 const Dashboard = lazy(() => import('@modules/Dashboard/Views/System/DashboardView'));
@@ -100,6 +101,7 @@ const ShipmentList = lazy(() => import('@claim/views/ClaimListView'));
 const ClaimDashboard = lazy(() => import('@dashboard/DashboardView'));
 const LpnCrawler = lazy(() => import('@lpn/pages/LpnCrawlerView'));
 const AiOcrTrain = lazy(() => import('@ai-ocr/AiOcrTrainTab'));
+const ContainerScanListView = lazy(() => import('@modules/pallet/Views/ContainerScanListView'));
 
 // Import Manufacture module (Tải động)
 const ManufactureDashboard = lazy(() => import('@modules/Dashboard/Views/Manufacture/ManufactureDashboardView'));
@@ -120,6 +122,7 @@ const ProductionDashboard = lazy(() => import('@modules/Production/Views/Dashboa
 const ProductionOrders = lazy(() => import('@modules/Production/Views/Orders/ProductionOrdersView'));
 const ProductionOrderCreate = lazy(() => import('@modules/Production/Views/Orders/ProductionOrderCreateView'));
 const ProductionSchedule = lazy(() => import('@modules/Production/Views/Schedule/ProductionScheduleView'));
+const DailyProductionManage = lazy(() => import('@modules/DailyProduction/Views/DailyProductionManageView'));
 const ProductionPlans = lazy(() => import('@modules/Production/Views/Plans/ProductionPlansView'));
 const ProductionRouting = lazy(() => import('@modules/Production/Views/Routing/ProductionRoutingView'));
 const ManufactureOrders = lazy(() => import('@modules/Order/Views/List/OrdersListView'));
@@ -660,7 +663,8 @@ function App() {
     <ToastProvider>
       <ScreenProvider>
         <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-          <Suspense fallback={
+          <ErrorBoundary>
+            <Suspense fallback={
             <div style={{
               display: 'flex',
               alignItems: 'center',
@@ -801,6 +805,7 @@ function App() {
                 <Route path="production-orders" element={<ProtectedRoute permissionKey="orders"><ProductionOrders /></ProtectedRoute>} />
                 <Route path="production-orders/create" element={<ProtectedRoute permissionKey="orders"><ProductionOrderCreate /></ProtectedRoute>} />
                 <Route path="production-orders/edit/:id" element={<ProtectedRoute permissionKey="orders"><ProductionOrderCreate /></ProtectedRoute>} />
+                <Route path="daily-production" element={<ProtectedRoute permissionKey={["plan", "orders", "/admin/production-orders", "/admin/production-schedule", "/admin/plan", "/admin/daily-production"]}><DailyProductionManage /></ProtectedRoute>} />
                 <Route path="production-schedule" element={<ProtectedRoute permissionKey="plan"><ProductionSchedule /></ProtectedRoute>} />
                 <Route path="production-routing" element={<ProtectedRoute permissionKey="products"><ProductionRouting /></ProtectedRoute>} />
                 <Route path="technical-dashboard" element={<ProtectedRoute permissionKey="products"><TechnicalDashboard /></ProtectedRoute>} />
@@ -832,6 +837,7 @@ function App() {
                 <Route path="shipments" element={<ProtectedRoute permissionKey="shipments"><ClaimPortalLayout><ShipmentList /></ClaimPortalLayout></ProtectedRoute>} />
                 <Route path="lpn-crawler" element={<ProtectedRoute><LpnCrawler /></ProtectedRoute>} />
                 <Route path="ai-ocr-train" element={<ProtectedRoute><AiOcrTrain /></ProtectedRoute>} />
+                <Route path="pallet-check" element={<ProtectedRoute><ContainerScanListView /></ProtectedRoute>} />
               </Route>
 
               {/* Route ChatBot - redirects to claims with chat open */}
@@ -852,7 +858,8 @@ function App() {
               {/* Catch-all route to prevent white screen */}
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>
-          </Suspense>
+            </Suspense>
+          </ErrorBoundary>
         </Router>
       </ScreenProvider>
     </ToastProvider>

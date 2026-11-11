@@ -577,7 +577,7 @@ const InspectionDetailView = () => {
           <div style="text-align: right;">
             <div style="font-size: 16px; font-weight: bold; color: #7B5233; text-transform: uppercase;">PHIẾU KIỂM TRA CHẤT LƯỢNG</div>
             <div style="font-size: 12px; color: #64748b; margin-top: 2px;">Mã phiếu: ${item.ticket_code || 'QC-' + item.id} | Ngày: ${new Date(dateVal).toLocaleDateString('vi-VN')}</div>
-            <div style="font-size: 11px; color: #7B5233; font-weight: 700; margin-top: 3px; letter-spacing: 0.5px;">BM: G7.CL.JHKS001-BM01</div>
+            <div style="font-size: 11px; color: #7B5233; font-weight: 700; margin-top: 3px; letter-spacing: 0.5px;">BM: G7.CL.KHKSCL-BM01</div>
           </div>
         </div>
 

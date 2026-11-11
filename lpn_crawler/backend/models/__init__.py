@@ -6,6 +6,8 @@ from lpn_crawler.backend.models.models import (
     LpnItem,
     LpnImage,
     LpnCrawlLog,
+    LpnAiOcrResult,
+    LpnOcrJob,
     check_item_missing_fields,
 )
 from lpn_crawler.backend.models.schemas import (
@@ -27,6 +29,8 @@ __all__ = [
     "LpnItem",
     "LpnImage",
     "LpnCrawlLog",
+    "LpnAiOcrResult",
+    "LpnOcrJob",
     "check_item_missing_fields",
     "LpnImageSchema",
     "LpnItemSchema",

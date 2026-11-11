@@ -651,12 +651,47 @@ const CanvasISOEditor = ({
       }, delay);
     };
 
+    const sanitizeCanvasTables = (elements) => {
+      if (!Array.isArray(elements)) return;
+      elements.forEach(el => {
+        if (!el || typeof el !== 'object') return;
+        if (el.type === 'table' && Array.isArray(el.trList)) {
+          const colLen = Array.isArray(el.colgroup) ? el.colgroup.length : 0;
+          el.trList.forEach(tr => {
+            if (!tr || !Array.isArray(tr.tdList)) return;
+            let usedCols = 0;
+            tr.tdList.forEach(td => {
+              if (!td) return;
+              delete td.colIndex;
+              delete td.rowIndex;
+              delete td.x;
+              delete td.y;
+              if (colLen > 0) {
+                const maxSpan = Math.max(1, colLen - usedCols);
+                if (!td.colspan || td.colspan > maxSpan) {
+                  td.colspan = maxSpan;
+                }
+                usedCols += td.colspan;
+              }
+              if (Array.isArray(td.value)) {
+                sanitizeCanvasTables(td.value);
+              }
+            });
+          });
+        } else if (Array.isArray(el.valueList)) {
+          sanitizeCanvasTables(el.valueList);
+        }
+      });
+    };
+
     try {
       // Ưu tiên 1: Snapshot JSON đã lưu trong CSDL
       const rawSnapshot = fd.sections?.__canvas_editor_data__;
       if (rawSnapshot) {
         const parsed = typeof rawSnapshot === 'string' ? JSON.parse(rawSnapshot) : rawSnapshot;
         if (parsed && (parsed.main || Array.isArray(parsed))) {
+          const mainArr = Array.isArray(parsed) ? parsed : parsed.main;
+          sanitizeCanvasTables(mainArr);
           editor.command.executeSetValue(parsed);
           hasImportedWordDocRef.current = true;
           finishLoad(300);
@@ -1945,7 +1980,7 @@ const CanvasISOEditor = ({
           }}>
             <iframe
               ref={iframeRef}
-              src="/canvas-editor/"
+              src="/canvas-editor/?v=20261110_2"
               title="Canvas Editor Full UI"
               onLoad={handleIframeLoaded}
               style={{

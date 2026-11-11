@@ -744,7 +744,7 @@ def get_iso_meta_departments(db: Session = Depends(get_db)):
         if r.name in skip_roles:
             continue
         
-        # 1. Mã phòng ban (code): Lấy trực tiếp từ cột code trong CSDL
+        # 1. Mã phòng ban (code): Lấy trực tiếp từ cột code trong CSDL (quy ước BGD -> ISO)
         dept_code = (getattr(r, "code", None) or "").strip()
         if not dept_code:
             # Fallback nếu dòng cũ chưa điền cột code
@@ -754,6 +754,8 @@ def get_iso_meta_departments(db: Session = Depends(get_db)):
                 dept_code = r.name.strip()
             else:
                 dept_code = (r.name or "PB").strip()
+        if dept_code.upper() in ("BGD", "BG"):
+            dept_code = "ISO"
 
         # 2. Tên đầy đủ phòng ban (name)
         if r.description and len(r.description.strip()) > len(r.name.strip()):
@@ -884,8 +886,8 @@ def get_iso_processes(
         nc = (getattr(p_obj, "new_code", "") or getattr(p_obj, "code", "") or "").strip().upper()
         m = re.match(r"^G7\.([A-Z]+)\.([A-Z]+)(\d+)$", nc)
         if m:
-            return (0, m.group(1), int(m.group(3)), m.group(2), p_obj.id or 0)
-        return (1, nc, 999999, "", p_obj.id or 0)
+            return (0, m.group(1), m.group(2), int(m.group(3)), p_obj.id or 0)
+        return (1, nc, "", 999999, p_obj.id or 0)
 
     procs.sort(key=_process_sort_key)
     result = []
@@ -985,19 +987,19 @@ def save_iso_process(
             norm_seq = int(m_nc.group(3))
             new_code = f"G7.{norm_dept}.{norm_type}{norm_seq:02d}"
 
-            # Khi thêm mới: nếu số thứ tự norm_seq đã tồn tại trong cùng phòng ban G7.{norm_dept}.*, tự động lấy số tiếp theo của phòng ban
+            # Khi thêm mới: nếu số thứ tự norm_seq đã tồn tại trong cùng (Phòng ban + Loại tài liệu) G7.{norm_dept}.{norm_type}*, tự động lấy số tiếp theo
             if is_new_proc:
-                dept_pat = re.compile(rf"^G7\.{re.escape(norm_dept)}\.[A-Z]+(\d+)$", re.IGNORECASE)
-                existing_dept_codes = db.query(ISOProcess.new_code).filter(
-                    ISOProcess.new_code.like(f"G7.{norm_dept}.%")
+                type_pat = re.compile(rf"^G7\.{re.escape(norm_dept)}\.{re.escape(norm_type)}(\d+)$", re.IGNORECASE)
+                existing_type_codes = db.query(ISOProcess.new_code).filter(
+                    ISOProcess.new_code.like(f"G7.{norm_dept}.{norm_type}%")
                 ).all()
-                used_dept_seqs = set()
-                for (ec,) in existing_dept_codes:
+                used_type_seqs = set()
+                for (ec,) in existing_type_codes:
                     if ec:
-                        m_ec = dept_pat.match(ec.strip())
+                        m_ec = type_pat.match(ec.strip())
                         if m_ec:
-                            used_dept_seqs.add(int(m_ec.group(1)))
-                if norm_seq in used_dept_seqs:
+                            used_type_seqs.add(int(m_ec.group(1)))
+                if norm_seq in used_type_seqs:
                     next_data = get_next_process_code(
                         department_code=norm_dept,
                         doc_type_code=norm_type,
@@ -1017,7 +1019,22 @@ def save_iso_process(
             )
     else:
         # Nếu chưa có mã mới, tự động sinh mã mới duy nhất tăng dần theo phòng ban G7.<dept>.<type><seq>
+        dept_id = payload.get("department_id")
         dept_name = payload.get("department_name") or ""
+        if dept_id:
+            from modules.auth.models.role import Role
+            r_dept = db.query(Role).filter(Role.id == int(dept_id)).first()
+            if r_dept:
+                dept_name = r_dept.description or r_dept.name
+        elif dept_name:
+            from modules.auth.models.role import Role
+            r_dept = db.query(Role).filter(
+                (Role.description == dept_name) | (Role.name == dept_name) | (Role.code == dept_name)
+            ).first()
+            if r_dept:
+                dept_id = r_dept.id
+                dept_name = r_dept.description or r_dept.name
+
         dept_acr = get_department_acronym(dept_name, db=db)
         t_code = (payload.get("doc_type_code") or payload.get("symbol") or "QT").strip().upper()
         next_data = get_next_process_code(
@@ -1033,17 +1050,25 @@ def save_iso_process(
         code = new_code
 
     if is_new_proc:
+        dept_id = payload.get("department_id")
+        dept_name = payload.get("department_name", "")
+        if dept_id:
+            from modules.auth.models.role import Role
+            r_dept = db.query(Role).filter(Role.id == int(dept_id)).first()
+            if r_dept:
+                dept_name = r_dept.description or r_dept.name
+
         proc = ISOProcess(
             code=code,
             name=name,
             iso_document_id=int(iso_doc_id) if (iso_doc_id is not None and iso_doc_id != "") else None,
-            department_id=payload.get("department_id"),
-            department_name=payload.get("department_name", ""),
+            department_id=dept_id,
+            department_name=dept_name,
             file_path=(payload.get("file_path") or payload.get("docx_path") or "").replace("\\", "/"),
             original_file_path=(payload.get("original_file_path") or payload.get("raw_file_path") or payload.get("file_path") or payload.get("docx_path") or "").replace("\\", "/"),
             original_file_name=payload.get("original_file_name", ""),
-            owner=payload.get("owner", ""),
-            editor=payload.get("editor", ""),
+            owner=payload.get("owner") or "Ngô Diễm My",
+            editor=payload.get("editor") or "Ngô Diễm My",
             approver=payload.get("approver", ""),
             approver_bgd=payload.get("approver_bgd", ""),
             issue_date=payload.get("issue_date", now_str[:10]),
@@ -1411,7 +1436,7 @@ def save_iso_process(
                     notes=tpl_note,
                     version="01",
                     issue_date=proc.issue_date or now_str[:10],
-                    issuer=proc.editor or proc.owner or "Administrator",
+                    issuer=proc.editor or proc.owner or "Ngô Diễm My",
                     approver=proc.approver,
                     approver_bgd=proc.approver_bgd,
                     status="Hiệu lực",
@@ -1456,7 +1481,7 @@ def save_iso_process(
                         "version": eff_ver,
                         "issue_date": eff_date,
                         "dept_name": proc.department_name or "",
-                        "issuer_name": proc.editor or proc.owner or "Administrator",
+                        "issuer_name": proc.editor or proc.owner or "Ngô Diễm My",
                         "approver_name": proc.approver or "",
                         "approver_bgd": getattr(proc, "approver_bgd", "") or "",
                         "document_level": proc.document_level or "Cấp phòng",
@@ -1575,18 +1600,20 @@ def get_iso_process_details(id: int, db: Session = Depends(get_db)):
             "is_new": True
         }
 
-    # Tự động đồng bộ nội dung ăn theo file nếu quy trình chưa có nội dung thực tế hoặc chưa có các bước
+    # Tự động đồng bộ nội dung ăn theo file nếu quy trình chưa có nội dung thực tế hoặc chưa có các bước hoặc chưa có định dạng rich HTML
     has_real_sections = False
+    has_rich_sections = False
     if proc.sections:
         for s in proc.sections:
             cnt = (s.content_html or "").strip()
             if cnt and "Chuẩn bị sẵn sàng" not in cnt:
                 has_real_sections = True
-                break
+            if "iso-subheading" in cnt or "iso-lead-item" in cnt or "iso-content-table" in cnt:
+                has_rich_sections = True
 
     has_real_steps = bool(proc.steps and len(proc.steps) > 0)
 
-    if (not has_real_sections or not has_real_steps) and proc.file_path:
+    if (not has_real_sections or not has_rich_sections or not has_real_steps) and proc.file_path:
         resolved_file = resolve_iso_file_path(proc.file_path)
         if resolved_file and os.path.exists(resolved_file):
             try:
@@ -1594,7 +1621,7 @@ def get_iso_process_details(id: int, db: Session = Depends(get_db)):
                 parsed = parse_iso_docx(resolved_file) if resolved_file.lower().endswith(('.docx', '.doc')) else {}
                 parsed_secs = parsed.get("sections", {})
                 parsed_steps = parsed.get("steps", [])
-                if not has_real_sections and parsed_secs:
+                if (not has_real_sections or not has_rich_sections) and parsed_secs:
                     db.query(ISOProcessSection).filter(ISOProcessSection.process_id == proc.id).delete()
                     for s_name, s_html in parsed_secs.items():
                         db.add(ISOProcessSection(process_id=proc.id, section_name=s_name, content_html=s_html))
@@ -1875,6 +1902,7 @@ def get_iso_process_details(id: int, db: Session = Depends(get_db)):
         "sections": sections,
         "template_sections": template_sections,
         "steps": steps,
+        "documents": related_templates,
         "related_templates": related_templates,
         "inspection_guide_id": proc.inspection_guide_id,
         "inspection_guide": {
@@ -2264,7 +2292,7 @@ def download_raw_iso_process(
                 "version": eff_ver,
                 "issue_date": eff_date,
                 "dept_name": proc_obj.department_name or "",
-                "issuer_name": proc_obj.editor or proc_obj.owner or "Administrator",
+                "issuer_name": proc_obj.editor or proc_obj.owner or "Ngô Diễm My",
                 "approver_name": proc_obj.approver or "",
                 "approver_bgd": getattr(proc_obj, "approver_bgd", "") or "",
                 "document_level": proc_obj.document_level or "Cấp phòng",
@@ -2660,11 +2688,10 @@ def get_next_process_code(
 
     dept = get_department_acronym(department_code or "QL", db=db)
     dtype = (doc_type_code or "QT").strip().upper()
-    dept_prefix = f"G7.{dept}."
     prefix = f"G7.{dept}.{dtype}"
 
     query = db.query(ISOProcess.new_code).filter(
-        ISOProcess.new_code.like(f"{dept_prefix}%")
+        ISOProcess.new_code.like(f"{prefix}%")
     )
     if exclude_id is not None:
         query = query.filter(ISOProcess.id != exclude_id)
@@ -2672,21 +2699,21 @@ def get_next_process_code(
     existing_codes = query.all()
 
     used_nums = set()
-    dept_seq_pattern = re.compile(rf"^G7\.{re.escape(dept)}\.[A-Z]+(\d+)$", re.IGNORECASE)
+    type_seq_pattern = re.compile(rf"^G7\.{re.escape(dept)}\.{re.escape(dtype)}(\d+)$", re.IGNORECASE)
     for (c,) in existing_codes:
         if c:
-            m = dept_seq_pattern.match(c.strip())
+            m = type_seq_pattern.match(c.strip())
             if m:
                 try:
                     used_nums.add(int(m.group(1)))
                 except Exception:
                     pass
 
-    # Nếu đang chỉnh sửa một quy trình đã có số thứ tự trong cùng phòng ban này, giữ nguyên số thứ tự đó khi đổi loại tài liệu
+    # Nếu đang chỉnh sửa một quy trình đã có số thứ tự trong cùng loại này, giữ nguyên số thứ tự đó
     if exclude_id is not None:
         current_proc = db.query(ISOProcess).filter(ISOProcess.id == exclude_id).first()
         if current_proc and current_proc.new_code:
-            m_curr = dept_seq_pattern.match(current_proc.new_code.strip())
+            m_curr = type_seq_pattern.match(current_proc.new_code.strip())
             if m_curr:
                 curr_seq = int(m_curr.group(1))
                 if curr_seq not in used_nums:
@@ -2845,7 +2872,7 @@ async def export_process_docx(data: dict):
     issue_date = (str(data.get("issue_date") or "").strip() or datetime.date.today().strftime("%Y-%m-%d"))
     version = (str(data.get("version") or "").strip() or "01")
     dept = (str(data.get("folder") or data.get("department_name") or "").strip() or "Ban Quản trị Chất lượng & ISO (QLCL)")
-    issuer = str(data.get("issuer") or "").strip() or "Administrator"
+    issuer = str(data.get("issuer") or "").strip() or "Ngô Diễm My"
     approver = str(data.get("approver") or "").strip() or "Đặng Minh Tuấn"
 
     # Đảm bảo toàn bộ tài liệu dùng font Times New Roman chuẩn
@@ -3313,7 +3340,7 @@ async def export_process_docx(data: dict):
                         else:
                             form_rows_data.append({"code": "", "name": l})
 
-            default_dept_clean = dept if (dept and "phòng" not in dept.lower() and dept != "---") else "Ban hệ thống ISO\n(ISO)"
+            default_dept_clean = dept if (dept and "phòng" not in dept.lower() and dept != "---") else "ISO"
 
             # 3. Nếu vẫn chưa có, lấy từ cột phụ lục của steps_data
             if not form_rows_data:
@@ -3336,9 +3363,9 @@ async def export_process_docx(data: dict):
                 proc_name = doc_title or "Quy trình"
                 form_rows_data = [
                     {"code": f"{doc_code}-BM01", "name": f"Biểu mẫu theo dõi {proc_name}", "storage": default_dept_clean, "retention": "12 tháng"},
-                    {"code": f"{doc_code}-BM02", "name": "Phiếu ghi nhận thông tin/khiếu nại", "storage": "Ban hệ thống ISO\n(ISO)", "retention": "12 tháng"},
-                    {"code": f"{doc_code}-BM03", "name": "Biên bản xác minh thông tin", "storage": "Ban hệ thống ISO\n(ISO)", "retention": "12 tháng"},
-                    {"code": f"{doc_code}-BM04", "name": "Biên bản họp Hội đồng kỷ luật", "storage": "Ban hệ thống ISO\n(ISO)", "retention": "12 tháng"}
+                    {"code": f"{doc_code}-BM02", "name": "Phiếu ghi nhận thông tin/khiếu nại", "storage": "ISO", "retention": "12 tháng"},
+                    {"code": f"{doc_code}-BM03", "name": "Biên bản xác minh thông tin", "storage": "ISO", "retention": "12 tháng"},
+                    {"code": f"{doc_code}-BM04", "name": "Biên bản họp Hội đồng kỷ luật", "storage": "ISO", "retention": "12 tháng"}
                 ]
 
             for f_idx, f_item in enumerate(form_rows_data):
@@ -3349,7 +3376,7 @@ async def export_process_docx(data: dict):
                 else:
                     f_c = re.sub(r'\s*-\s*(BM|HD|PL)', r'-\1', raw_c)
                 f_n = (f_item.get("name") or f"Biểu mẫu {f_seq}").strip()
-                f_store = f_item.get("storage") or ("Ban hệ thống ISO\n(ISO)" if (f_idx in [1, 2, 3] or "BM02" in f_c or "ISO" in f_c) else default_dept_clean)
+                f_store = f_item.get("storage") or ("ISO" if (f_idx in [1, 2, 3] or "BM02" in f_c or "ISO" in f_c) else default_dept_clean)
                 f_ret = f_item.get("retention") or "12 tháng"
 
                 row = t_forms.add_row()
@@ -3682,11 +3709,11 @@ async def export_processes_excel(payload: dict, db: Session = Depends(get_db)):
 
     # 2. Cột bảng tính
     headers = [
-        ("STT", 8, "center"),
-        ("PHÂN CẤP", 16, "center"),
+        ("STT", 7, "center"),
+        ("PHÂN CẤP", 15, "center"),
         ("MÃ HIỆU MỚI", 18, "center"),
         ("MÃ HIỆU CŨ", 15, "center"),
-        ("TÊN TÀI LIỆU / TÊN FILE ĐÍNH KÈM", 42, "left"),
+        ("TÊN TÀI LIỆU / TÊN FILE ĐÍNH KÈM", 75, "left"),
         ("PHÒNG BAN", 14, "center"),
         ("CẤP QUẢN LÝ", 14, "center"),
         ("LẦN BH", 10, "center"),
@@ -3736,6 +3763,10 @@ async def export_processes_excel(payload: dict, db: Session = Depends(get_db)):
     order_pref = ["CS", "QT", "HD", "QD", "BM", "ST", "SD", "MT", "TT", "KHAC"]
     sorted_cat_keys = sorted(groups.keys(), key=lambda k: order_pref.index(k) if k in order_pref else 99)
 
+    from sqlalchemy import text
+    rows_roles = db.execute(text("SELECT id, name, description FROM roles")).fetchall()
+    roles_map = {r[0]: (r[2] or r[1]) for r in rows_roles}
+
     current_row = 7
     global_stt = 0
     roman_numerals = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"]
@@ -3761,13 +3792,13 @@ async def export_processes_excel(payload: dict, db: Session = Depends(get_db)):
         # CẤP 2: Dòng Tài liệu gốc đang soạn thảo
         for proc in cat_procs:
             global_stt += 1
-            p_code = proc.new_code or proc.code or "---"
-            p_old_code = proc.code if (proc.code and proc.code != p_code) else "---"
-            p_name = proc.name or "---"
-            p_dept = proc.department_name or "---"
+            p_code = proc.new_code or proc.code or ""
+            p_old_code = proc.code if (proc.code and proc.code != p_code) else ""
+            p_name = proc.name or ""
+            p_dept = proc.department_name or roles_map.get(proc.department_id) or ""
             p_level = proc.document_level or "Cấp phòng"
-            p_issuer = proc.editor or proc.owner or "---"
-            p_approver = proc.approver_bgd or proc.approver or "---"
+            p_issuer = proc.editor or proc.owner or ""
+            p_approver = proc.approver_bgd or proc.approver or ""
             p_status = proc.status or "Hiệu lực"
             p_notes = proc.notes or ""
 
@@ -3830,7 +3861,20 @@ async def export_processes_excel(payload: dict, db: Session = Depends(get_db)):
                 p_notes
             ]
 
-            ws.row_dimensions[current_row].height = 23
+            def _calc_row_height(text_val, width=65, base_h=25, line_h=18):
+                if not text_val:
+                    return base_h
+                text_str = str(text_val)
+                lines = 0
+                for segment in text_str.split("\n"):
+                    est_lines = max(1, (len(segment) + width - 1) // width)
+                    lines += est_lines
+                if lines <= 1:
+                    return base_h
+                return lines * line_h + 8
+
+            h_proc = _calc_row_height(p_name, width=65, base_h=25, line_h=18)
+            ws.row_dimensions[current_row].height = h_proc
             ws.row_dimensions[current_row].outlineLevel = 1
 
             for col_idx, val in enumerate(p_row, start=1):
@@ -3862,33 +3906,40 @@ async def export_processes_excel(payload: dict, db: Session = Depends(get_db)):
 
             current_row += 1
 
-            # CẤP 3: Các dòng File đính kèm / Biểu mẫu
+            # CẤP 3: Các dòng File đính kèm / Biểu mẫu (chỉ ghi khi thực sự có tài liệu/biểu mẫu đính kèm)
             if related_templates:
                 for att_idx, tpl in enumerate(related_templates, start=1):
                     att_code = tpl.get("code") or f"BM{att_idx:02d}"
-                    att_title = tpl.get("title") or tpl.get("name") or "Biểu mẫu đính kèm"
+                    att_title = tpl.get("title") or tpl.get("name") or ""
                     att_fn = tpl.get("original_file_name") or tpl.get("file_name") or ""
-                    display_fn = f"{att_title} ({att_fn})" if (att_fn and att_fn not in att_title) else att_title
+                    if att_title and att_fn and att_title in att_fn:
+                        display_fn = att_title
+                    elif att_title:
+                        display_fn = att_title
+                    else:
+                        display_fn = att_fn or "Biểu mẫu đính kèm"
+
                     att_scope = tpl.get("scope") or tpl.get("note") or "Tài liệu đính kèm kiểm soát"
 
                     sub_row = [
                         f"{global_stt}.{att_idx}",
                         "   └── Đính kèm",
                         att_code,
-                        "---",
+                        "",
                         f"   └── {display_fn}",
                         p_dept,
-                        "---",
-                        "---",
-                        "---",
-                        "---",
-                        "---",
+                        "",
+                        "",
+                        "",
+                        "",
+                        "",
                         "Đính kèm",
                         1,
                         att_scope
                     ]
 
-                    ws.row_dimensions[current_row].height = 20
+                    h_att = _calc_row_height(f"   └── {display_fn}", width=65, base_h=23, line_h=17)
+                    ws.row_dimensions[current_row].height = h_att
                     ws.row_dimensions[current_row].outlineLevel = 2
 
                     for col_idx, val in enumerate(sub_row, start=1):
@@ -3907,34 +3958,6 @@ async def export_processes_excel(payload: dict, db: Session = Depends(get_db)):
                         cell.fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
 
                     current_row += 1
-            else:
-                sub_row = [
-                    f"{global_stt}.1",
-                    "   └── (Không)",
-                    "---",
-                    "---",
-                    "   └── (Chưa có tài liệu/biểu mẫu đính kèm)",
-                    p_dept,
-                    "---",
-                    "---",
-                    "---",
-                    "---",
-                    "---",
-                    "---",
-                    0,
-                    ""
-                ]
-                ws.row_dimensions[current_row].height = 19
-                ws.row_dimensions[current_row].outlineLevel = 2
-
-                for col_idx, val in enumerate(sub_row, start=1):
-                    cell = ws.cell(row=current_row, column=col_idx, value=val)
-                    cell.font = Font(name=font_family, size=9, italic=True, color="94A3B8")
-                    cell.border = box_border
-                    align_mode = headers[col_idx-1][2]
-                    cell.alignment = Alignment(horizontal=align_mode, vertical="center")
-                    cell.fill = PatternFill(start_color="FAFAFA", end_color="FAFAFA", fill_type="solid")
-                current_row += 1
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -3952,12 +3975,19 @@ async def export_processes_excel(payload: dict, db: Session = Depends(get_db)):
 @router.post("/processes/export-folder-zip")
 async def export_processes_folder_zip(payload: dict, db: Session = Depends(get_db)):
     """
-    [POST] Xuất gói thư mục ZIP 'Hồ Sơ G7' chuẩn hóa:
-    - Thư mục bao quát: 'Hồ Sơ G7/'
-    - Thư mục con: '[Mã] Tên tài liệu/'
-    - Bên trong mỗi thư mục:
-      + File chính: File Word .docx tài liệu gốc sinh từ bản soạn thảo hiện hành (3+ trang)
-      + Tất cả tài liệu / biểu mẫu đính kèm liên quan
+    [POST] Xuất gói thư mục ZIP 'Hồ Sơ G7' chuẩn hóa theo 4 cấp phân tầng:
+    - Cấp 1: Thư mục gốc 'Hồ Sơ G7/'
+    - Cấp 2: Thư mục theo Loại tài liệu:
+        + '1. Quy trình (QT)/'
+        + '2. Hướng dẫn (HD)/'
+        + '3. Quy định (QD)/'
+        + '4. Chính sách (CS)/'
+        + '5. Biểu mẫu (BM)/'
+        + '6. Khác/'
+    - Cấp 3: Thư mục của từng tài liệu 'Mã hiệu - Tên tài liệu/'
+    - Cấp 4:
+        + File gốc: 'Mã hiệu - Tên tài liệu.docx'
+        + File đính kèm: 'Mã biểu mẫu - Tên biểu mẫu.xlsx/.docx'
     """
     import io
     import zipfile
@@ -3968,19 +3998,41 @@ async def export_processes_folder_zip(payload: dict, db: Session = Depends(get_d
     if not procs:
         raise HTTPException(status_code=404, detail="Không tìm thấy quy trình nào phù hợp để xuất.")
 
+    DOC_TYPE_FOLDER_MAP = {
+        "QT": "1. Quy trình (QT)",
+        "HD": "2. Hướng dẫn (HD)",
+        "QD": "3. Quy định (QD)",
+        "CS": "4. Chính sách (CS)",
+        "BM": "5. Biểu mẫu (BM)",
+        "ST": "6. Sổ tay (ST)",
+        "SD": "7. Sơ đồ tổ chức (SD)",
+        "MT": "8. Mục tiêu (MT)",
+        "TT": "9. Thông tư (TT)",
+    }
+
     zip_buf = io.BytesIO()
 
     with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for proc in procs:
-            # Tên thư mục quy trình: [Mã] Tên tài liệu
+            # 1. Xác định Cấp 2: Thư mục Loại tài liệu
+            raw_type = (getattr(proc, "doc_type_code", "") or getattr(proc, "symbol", "") or "").strip().upper()
+            if not raw_type:
+                nc = (proc.new_code or proc.code or "").upper()
+                m = re.search(r'\b(CS|QT|HD|QD|BM|ST|SD|MT|TT)\b', nc)
+                raw_type = m.group(1) if m else "KHAC"
+            category_folder = DOC_TYPE_FOLDER_MAP.get(raw_type, f"Loại {raw_type}")
+
+            # 2. Xác định Cấp 3: Thư mục của từng tài liệu 'Mã hiệu - Tên tài liệu'
             raw_code = (proc.new_code or proc.code or "").strip()
             raw_name = (proc.name or f"Quy_trinh_{proc.id}").strip()
             safe_code = re.sub(r'[/\\:*?"<>|]', '_', raw_code)
             safe_name = re.sub(r'[/\\:*?"<>|]', '_', raw_name)
-            folder_title = f"[{safe_code}] {safe_name}" if safe_code else safe_name
+            folder_title = f"{safe_code} - {safe_name}" if safe_code else safe_name
             folder_title = folder_title.strip()
 
-            # 1. Sinh File chính (.docx đang soạn thảo)
+            base_folder_path = f"Hồ Sơ G7/{category_folder}/{folder_title}"
+
+            # 3. Cấp 4: Ghi File gốc (.docx/.doc)
             eff_ver = "01"
             eff_date = proc.issue_date or ""
             rev_logs = proc.revision_logs if hasattr(proc, 'revision_logs') and proc.revision_logs else []
@@ -3993,13 +4045,12 @@ async def export_processes_folder_zip(payload: dict, db: Session = Depends(get_d
                         eff_date = str(l.rev_date)
                         break
 
-            # Tạo file docx chuẩn ISO 3+ trang từ dữ liệu soạn thảo
             doc_meta = {
                 "doc_title": proc.name,
                 "doc_code": raw_code,
-                "issuer_name": proc.editor or proc.owner,
-                "approver_name": proc.approver,
-                "approver_bgd": proc.approver_bgd,
+                "issuer_name": proc.editor or proc.owner or "Ngô Diễm My",
+                "approver_name": proc.approver or "Đặng Văn Nam",
+                "approver_bgd": proc.approver_bgd or "Nguyễn Hòa",
                 "document_level": proc.document_level or "Cấp phòng",
                 "dept_name": proc.department_name,
                 "version": eff_ver,
@@ -4007,26 +4058,29 @@ async def export_processes_folder_zip(payload: dict, db: Session = Depends(get_d
             }
 
             try:
-                # Nếu có file đã lưu trên server, đọc và chuẩn hóa
-                main_docx_buf = None
+                main_file_data = None
+                main_ext = ".docx"
                 if proc.file_path:
                     resolved_file = resolve_iso_file_path(proc.file_path)
                     if resolved_file and os.path.exists(resolved_file):
+                        _, ext_cand = os.path.splitext(resolved_file)
+                        if ext_cand and len(ext_cand) <= 5:
+                            main_ext = ext_cand.lower()
                         with open(resolved_file, "rb") as f_in:
-                            main_docx_buf = io.BytesIO(f_in.read())
+                            main_file_data = f_in.read()
 
-                if not main_docx_buf:
+                if not main_file_data:
                     doc_tpl = generate_default_created_new_doc(doc_meta)
-                    main_docx_buf = io.BytesIO()
-                    doc_tpl.save(main_docx_buf)
-                    main_docx_buf.seek(0)
+                    tmp_buf = io.BytesIO()
+                    doc_tpl.save(tmp_buf)
+                    main_file_data = tmp_buf.getvalue()
 
-                main_file_path_in_zip = f"Hồ Sơ G7/{folder_title}/{folder_title}.docx"
-                zf.writestr(main_file_path_in_zip, main_docx_buf.getvalue())
+                main_file_path_in_zip = f"{base_folder_path}/{folder_title}{main_ext}"
+                zf.writestr(main_file_path_in_zip, main_file_data)
             except Exception as eDoc:
                 print(f"Lỗi sinh file chính cho {proc.id}: {eDoc}")
 
-            # 2. Thu thập tất cả tài liệu đính kèm
+            # 4. Cấp 4: Thu thập và ghi các File đính kèm liên quan
             related_templates = []
             if hasattr(proc, 'sections'):
                 for s in proc.sections:
@@ -4048,7 +4102,7 @@ async def export_processes_folder_zip(payload: dict, db: Session = Depends(get_d
                         "original_file_name": getattr(doc_att, "original_file_name", "") or os.path.basename(doc_att.file_path or "")
                     })
 
-            # Ghi từng file đính kèm vào thư mục của quy trình
+            # Ghi từng file đính kèm vào đúng thư mục con của tài liệu
             seen_att_names = set()
             for att_idx, tpl in enumerate(related_templates, start=1):
                 att_fp = tpl.get("file_path") or ""
@@ -4059,8 +4113,32 @@ async def export_processes_folder_zip(payload: dict, db: Session = Depends(get_d
                     try:
                         ext = os.path.splitext(resolved_att)[1] or ".docx"
                         att_code = tpl.get("code") or f"BM{att_idx:02d}"
-                        att_title = tpl.get("title") or tpl.get("name") or "Bieu_mau"
-                        raw_att_fn = f"[{att_code}] {att_title}{ext}" if not att_title.endswith(ext) else f"[{att_code}] {att_title}"
+                        att_title = tpl.get("title") or tpl.get("name") or ""
+                        att_fn = tpl.get("original_file_name") or tpl.get("file_name") or ""
+
+                        if att_title and att_fn and att_title in att_fn:
+                            title_text = att_title
+                        elif att_title:
+                            title_text = att_title
+                        else:
+                            title_text = att_fn or "Biểu mẫu đính kèm"
+
+                        if title_text.lower().endswith(ext.lower()):
+                            title_text = title_text[:-len(ext)]
+                        title_text = title_text.strip()
+
+                        # Chuẩn hóa tên file: Mã biểu mẫu - Tên biểu mẫu
+                        if title_text.startswith(f"[{att_code}]"):
+                            clean_t = title_text[len(f"[{att_code}]"):].strip(" -_")
+                            raw_att_fn = f"{att_code} - {clean_t}{ext}" if clean_t else f"{att_code}{ext}"
+                        elif title_text.startswith(f"{att_code} -"):
+                            raw_att_fn = f"{title_text}{ext}"
+                        elif title_text.startswith(att_code):
+                            clean_t = title_text[len(att_code):].strip(" -_")
+                            raw_att_fn = f"{att_code} - {clean_t}{ext}" if clean_t else f"{att_code}{ext}"
+                        else:
+                            raw_att_fn = f"{att_code} - {title_text}{ext}" if att_code else f"{title_text}{ext}"
+
                         clean_att_fn = re.sub(r'[/\\:*?"<>|]', '_', raw_att_fn)
 
                         # Tránh trùng tên trong zip
@@ -4069,7 +4147,7 @@ async def export_processes_folder_zip(payload: dict, db: Session = Depends(get_d
                         seen_att_names.add(clean_att_fn)
 
                         with open(resolved_att, "rb") as af:
-                            zf.writestr(f"Hồ Sơ G7/{folder_title}/{clean_att_fn}", af.read())
+                            zf.writestr(f"{base_folder_path}/{clean_att_fn}", af.read())
                     except Exception as eAtt:
                         print(f"Lỗi ghi file đính kèm {att_fp}: {eAtt}")
 
@@ -4084,7 +4162,7 @@ async def export_processes_folder_zip(payload: dict, db: Session = Depends(get_d
                                 try:
                                     sub_fn = sub.get("file_name") or os.path.basename(res_sub)
                                     clean_sub_fn = re.sub(r'[/\\:*?"<>|]', '_', sub_fn)
-                                    zf.writestr(f"Hồ Sơ G7/{folder_title}/{clean_sub_fn}", open(res_sub, "rb").read())
+                                    zf.writestr(f"{base_folder_path}/{clean_sub_fn}", open(res_sub, "rb").read())
                                 except Exception as eSub:
                                     print(f"Lỗi ghi sub file {sub_fp}: {eSub}")
 

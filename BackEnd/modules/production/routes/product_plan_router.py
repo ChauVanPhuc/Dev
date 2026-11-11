@@ -31,6 +31,28 @@ def normalize_vn(s):
     s = s.replace('dg', 'dong goi')
     return s
 
+def extract_root_po(code: str) -> str:
+    """
+    Trích xuất mã PO gốc từ mã lệnh phân đoạn hoặc mã có hậu tố đợt/lô sản xuất.
+    Ví dụ:
+      APT-0126-34 -> APT-0126
+      APT-0125-01 -> APT-0125
+      APT-0078-84 -> APT-0078
+      ADV-0406-01BS -> ADV-0406
+      APT-0048-49-01 -> APT-0048-49
+      APT - 126 -> APT-126
+    """
+    if not code:
+        return ""
+    code_clean = re.sub(r'\s*-\s*', '-', str(code).strip())
+    m = re.match(r'^([A-Za-z0-9]+-\d+(?:-\d+)?)-(\d+[A-Za-z]*)$', code_clean)
+    if m:
+        return m.group(1)
+    m2 = re.match(r'^(.*?)-(\d+[A-Za-z]*)$', code_clean)
+    if m2 and len(m2.group(1).split('-')) >= 2:
+        return m2.group(1)
+    return code_clean
+
 router = APIRouter()
 
 @router.get("/debug-bom")
@@ -782,6 +804,7 @@ def get_plan_detail(
     statusFilter: Optional[str] = None,
     filterProduct: Optional[str] = None,
     sortBy: Optional[str] = None,
+    group_root: Optional[bool] = None,
     db: Session = Depends(get_db)
 ):
     # Tự động kích hoạt simple=True nếu limit == 0 và stage is None (luồng xem nhanh từ di động)
@@ -983,6 +1006,70 @@ def get_plan_detail(
                     "products": products_list
                 })
             
+            # Gôm nhóm PO theo Root PO (khử phân mảnh các đợt lệnh con)
+            should_group_root = (group_root is True) or (group_root is None and (page is not None or statusFilter is not None))
+            if should_group_root:
+                grouped_map = {}
+                for o in result_orders:
+                    raw_name = o["name"] or ""
+                    root_name = extract_root_po(raw_name) or raw_name
+                    if root_name not in grouped_map:
+                        grouped_map[root_name] = {
+                            "id": o["id"],
+                            "name": root_name,
+                            "order_code": root_name,
+                            "root_po": root_name,
+                            "customer": o.get("customer") or "",
+                            "is_priority": o.get("is_priority", 0),
+                            "priority_score": o.get("priority_score", 0),
+                            "order_status": o.get("order_status", 0),
+                            "has_data": o.get("has_data", False),
+                            "last_activity_dt": o.get("last_activity_dt"),
+                            "last_activity": o.get("last_activity"),
+                            "order_progress": 0.0,
+                            "sub_order_count": 1,
+                            "sub_orders": [raw_name],
+                            "products_map": {}
+                        }
+                    else:
+                        grp = grouped_map[root_name]
+                        grp["sub_order_count"] += 1
+                        grp["sub_orders"].append(raw_name)
+                        if not grp["customer"] and o.get("customer"):
+                            grp["customer"] = o.get("customer")
+                        if o.get("has_data"):
+                            grp["has_data"] = True
+                        if o.get("last_activity_dt"):
+                            if not grp["last_activity_dt"] or o["last_activity_dt"] > grp["last_activity_dt"]:
+                                grp["last_activity_dt"] = o["last_activity_dt"]
+                                grp["last_activity"] = o["last_activity"]
+
+                    # Gom sản phẩm trùng SKU/Tên
+                    grp = grouped_map[root_name]
+                    for p in o.get("products", []):
+                        p_key = (p.get("sku") or p.get("name") or str(p.get("id"))).strip().lower()
+                        if p_key not in grp["products_map"]:
+                            grp["products_map"][p_key] = {
+                                "id": p.get("id"),
+                                "sku": p.get("sku") or "---",
+                                "name": p.get("name") or "---",
+                                "quantity": p.get("quantity", 0),
+                                "finished_quantity": 0,
+                                "total_parts_qty": 0,
+                                "finished_time": "---",
+                                "progress": 0.0,
+                                "bom_details": []
+                            }
+                        else:
+                            grp["products_map"][p_key]["quantity"] += p.get("quantity", 0)
+
+                grouped_orders = []
+                for grp in grouped_map.values():
+                    grp["products"] = list(grp.pop("products_map").values())
+                    grouped_orders.append(grp)
+
+                result_orders = grouped_orders
+
             # Nếu KHÔNG phân trang (tương thích ngược)
             if page is None:
                 for o in result_orders:
@@ -1007,8 +1094,14 @@ def get_plan_detail(
 
             # Lọc theo Tìm kiếm (q)
             if q:
-                q_lower = q.lower()
-                result_orders = [o for o in result_orders if q_lower in (o["name"] or "").lower()]
+                q_clean = q.strip().replace(" ", "").lower()
+                result_orders = [
+                    o for o in result_orders 
+                    if q_clean in (o.get("name") or "").replace(" ", "").lower() 
+                    or (o.get("root_po") and q_clean in o["root_po"].replace(" ", "").lower())
+                    or any(q_clean in sub.replace(" ", "").lower() for sub in o.get("sub_orders", []))
+                    or (o.get("customer") and q_clean in o["customer"].replace(" ", "").lower())
+                ]
 
             # Lọc theo Sản phẩm (filterProduct)
             if filterProduct and filterProduct != 'all':

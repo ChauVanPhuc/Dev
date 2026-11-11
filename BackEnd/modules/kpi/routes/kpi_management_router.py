@@ -157,6 +157,49 @@ class KPICustomResultCreate(BaseModel):
     custom_score: float
     reason: Optional[str] = None
     modified_by: Optional[str] = None
+    custom_weight: Optional[float] = None
+    custom_operator: Optional[str] = None
+    custom_target: Optional[str] = None
+    custom_unit: Optional[str] = None
+    custom_content: Optional[str] = None
+    achievement: Optional[str] = None
+    difficulty: Optional[str] = None
+    action_plan: Optional[str] = None
+    proposal: Optional[str] = None
+    note: Optional[str] = None
+
+class KPICustomResultBatchRequest(BaseModel):
+    month: int
+    year: Optional[int] = 2026
+    modified_by: Optional[str] = "Quản lý QC"
+    items: List[KPICustomResultCreate]
+
+_CUSTOM_RESULT_COLS_MIGRATED = False
+
+def ensure_custom_result_columns(db: Session):
+    global _CUSTOM_RESULT_COLS_MIGRATED
+    if _CUSTOM_RESULT_COLS_MIGRATED:
+        return
+    from sqlalchemy import text
+    cols_to_add = [
+        ("custom_weight", "FLOAT NULL"),
+        ("custom_operator", "NVARCHAR(20) NULL"),
+        ("custom_target", "NVARCHAR(50) NULL"),
+        ("custom_unit", "NVARCHAR(20) NULL"),
+        ("custom_content", "NVARCHAR(500) NULL"),
+        ("achievement", "NVARCHAR(500) NULL"),
+        ("difficulty", "NVARCHAR(500) NULL"),
+        ("action_plan", "NVARCHAR(500) NULL"),
+        ("proposal", "NVARCHAR(500) NULL"),
+        ("note", "NVARCHAR(500) NULL"),
+    ]
+    for col_name, col_type in cols_to_add:
+        try:
+            db.execute(text(f"IF COL_LENGTH('kpi_employee_custom_results', '{col_name}') IS NULL ALTER TABLE kpi_employee_custom_results ADD {col_name} {col_type}"))
+            db.commit()
+        except Exception:
+            db.rollback()
+    _CUSTOM_RESULT_COLS_MIGRATED = True
 
 # --- DEFAULT DATA GENERATOR (SEEDERS) ---
 
@@ -169,26 +212,36 @@ def seed_employee_defaults(db: Session, employee_id: str):
         emp = db.query(Employee).filter(Employee.employee_id == employee_id).first()
         pos = (emp.position or '').lower() if emp else ''
 
-        # Xác định target_role theo chức danh
-        target_role = "QC_DONGGOI"
-        if any(k in pos for k in ['trưởng phòng', 'tp_qlcl']): target_role = 'TP_QLCL'
-        elif any(k in pos for k in ['qa lead', 'trưởng nhóm kiểm soát']): target_role = 'QA_LEAD'
-        elif any(k in pos for k in ['qc lead', 'trưởng nhóm qc']): target_role = 'QC_LEAD'
-        elif any(k in pos for k in ['qa admin', 'hành chính']): target_role = 'QA_ADMIN'
-        elif any(k in pos for k in ['qa process', 'quy trình']): target_role = 'QA_PROCESS'
-        elif any(k in pos for k in ['iqc', 'đầu vào']): target_role = 'IQC'
-        elif any(k in pos for k in ['supervisor', 'điều phối']): target_role = 'QC_SUPERVISOR'
-        elif any(k in pos for k in ['gia công']): target_role = 'QC_GIACONG'
-        elif any(k in pos for k in ['định hình']): target_role = 'QC_DINHHINH'
-        elif any(k in pos for k in ['lắp ráp']): target_role = 'QC_LAPRAP'
-        elif any(k in pos for k in ['sơn']): target_role = 'QC_SON'
-        elif any(k in pos for k in ['đóng gói']): target_role = 'QC_DONGGOI'
+        # Xác định role_code theo chức danh
+        role_code = "QC_CONGDOAN"
+        if any(k in pos for k in ['trưởng phòng', 'tp_qlcl']): role_code = 'TP_QLCL'
+        elif any(k in pos for k in ['qa lead', 'trưởng nhóm kiểm soát']): role_code = 'QA_LEAD'
+        elif any(k in pos for k in ['qc lead', 'trưởng nhóm qc']): role_code = 'QC_LEAD'
+        elif any(k in pos for k in ['qa admin', 'hành chính']): role_code = 'QA_ADMIN'
+        elif any(k in pos for k in ['qa process', 'quy trình']): role_code = 'QA_PROCESS'
+        elif any(k in pos for k in ['iqc', 'đầu vào']): role_code = 'IQC'
+        elif any(k in pos for k in ['supervisor', 'điều phối']): role_code = 'QC_SUPERVISOR'
+        else: role_code = 'QC_CONGDOAN'
 
-        pool_items = db.query(KPIItemPool).filter(KPIItemPool.target_role == target_role).all()
-        if not pool_items:
-            pool_items = db.query(KPIItemPool).all()[:5]
+        role_kpi_map = {
+            'TP_QLCL':       ['KPI-TP-01', 'KPI-TP-02', 'KPI-TP-03', 'KPI-TP-04', 'KPI-TP-05'],
+            'QA_LEAD':       ['KPI-CAPA-01', 'KPI-QAL-02', 'KPI-QAL-03', 'KPI-QAL-04', 'KPI-LEAD-05'],
+            'QC_LEAD':       ['KPI-QCL-01', 'KPI-QCL-02', 'KPI-QCL-03', 'KPI-QCL-04', 'KPI-LEAD-05'],
+            'QA_ADMIN':      ['KPI-QAA-01', 'KPI-QAA-02', 'KPI-QAA-03', 'KPI-QAA-04', 'KPI-LEAD-05'],
+            'QA_PROCESS':    ['KPI-CAPA-01', 'KPI-QAP-02', 'KPI-QAP-03', 'KPI-QAP-04', 'KPI-LEAD-05'],
+            'IQC':           ['KPI-IQC-01', 'KPI-IQC-02', 'KPI-IQC-03', 'KPI-IQC-04', 'KPI-QC-02'],
+            'QC_SUPERVISOR': ['KPI-SUP-01', 'KPI-SUP-02', 'KPI-SUP-03', 'KPI-SUP-04', 'KPI-LEAD-05'],
+            'QC_CONGDOAN':   ['KPI-QC-01', 'KPI-QC-02', 'KPI-QC-03', 'KPI-QC-04', 'KPI-QC-05'],
+        }
 
-        for p in pool_items:
+        kpi_codes = role_kpi_map.get(role_code, role_kpi_map['QC_CONGDOAN'])
+        pool_items = db.query(KPIItemPool).filter(KPIItemPool.kpi_code.in_(kpi_codes)).all()
+        pool_dict = {p.kpi_code: p for p in pool_items}
+
+        for code in kpi_codes:
+            p = pool_dict.get(code)
+            if not p:
+                continue
             db.add(KPIEmployeeItem(
                 employee_id=employee_id,
                 kpi_code=p.kpi_code,
@@ -210,44 +263,7 @@ def seed_employee_defaults(db: Session, employee_id: str):
                 penalty_factor=p.penalty_factor,
                 no_data_behavior="full_score"
             ))
-
-    # 3. Vi phạm mẫu (Quy tắc cộng trừ điểm)
-    existing_violations = db.query(KPIViolation).filter(KPIViolation.employee_id == employee_id).first()
-    if not existing_violations:
-        default_violations = [
-            ("VP01", "Thiếu form mẫu bản vẽ kiểm tra", "-10", "2026-06-28 09:15", "Quản lý QC", "Phát hiện trong lúc đi tuần xưởng"),
-            ("VP02", "Đóng góp sáng kiến cải tiến quy trình đóng gói", "+50", "2026-06-29 14:00", "Trưởng phòng", "Đã được phê duyệt áp dụng thực tế"),
-        ]
-        for code, content, calc, time_str, perf, note in default_violations:
-            db.add(KPIViolation(
-                employee_id=employee_id,
-                violation_code=code,
-                content=content,
-                calculation=calc,
-                violation_time=time_str,
-                performer=perf,
-                note=note
-            ))
-
-    # 4. Nhận xét mẫu
-    existing_feedbacks = db.query(KPIFeedback).filter(KPIFeedback.employee_id == employee_id).first()
-    if not existing_feedbacks:
-        default_feedbacks = [
-            ("NX01", "Thành tích nổi bật", "Hoàn thành xuất sắc nhiệm vụ cải tiến quy trình kiểm tra đầu vào, giảm 15% thời gian chờ.", "2026-06-30", "Quản lý QC"),
-            ("NX02", "Những khó khăn", "Thiết bị kiểm thử thi thoảng chập chờn gây ảnh hưởng đến năng suất thực tế.", "2026-06-30", "Quản lý QC"),
-            ("NX03", "Đề xuất", "Đề xuất nâng cấp phần mềm firmware của máy đo hoặc trang bị thêm 1 máy dự phòng.", "2026-06-30", "Quản lý QC"),
-        ]
-        for code, type_str, content, time_str, rev in default_feedbacks:
-            db.add(KPIFeedback(
-                employee_id=employee_id,
-                feedback_code=code,
-                type=type_str,
-                content=content,
-                feedback_time=time_str,
-                reviewer=rev
-            ))
-
-    db.commit()
+        db.commit()
 
 # --- API ENDPOINTS ---
 
@@ -432,7 +448,7 @@ async def upload_kpi_file(file: UploadFile = File(...)):
 # 3. Danh sách KPI CRUD
 @router.get("/employee-items", response_model=List[dict])
 def get_employee_kpis(employee_id: str, db: Session = Depends(get_db)):
-    items = db.query(KPIEmployeeItem).filter(KPIEmployeeItem.employee_id == employee_id).order_by(KPIEmployeeItem.id.desc()).all()
+    items = db.query(KPIEmployeeItem).filter(KPIEmployeeItem.employee_id == employee_id).order_by(KPIEmployeeItem.id.asc()).all()
     return [
         {
             "id": idx.id,
@@ -696,8 +712,18 @@ def update_checklist_pool_item(id: int, item: KPIChecklistPoolBase, db: Session 
         raise HTTPException(status_code=404, detail="Không tìm thấy mẫu checklist")
     for key, value in item.model_dump().items():
         setattr(db_item, key, value)
+
+    # Cascade sync sang các checklist phân bổ cho nhân viên có cùng task_code
+    if db_item.task_code:
+        chks = db.query(KPIChecklist).filter(KPIChecklist.task_code == db_item.task_code).all()
+        for c in chks:
+            c.content = db_item.content
+            c.frequency = db_item.frequency
+            if db_item.department_code:
+                c.department_code = db_item.department_code
+
     db.commit()
-    return {"status": "success", "message": "Cập nhật mẫu checklist thành công"}
+    return {"status": "success", "message": "Cập nhật mẫu checklist và đồng bộ nhân sự thành công"}
 
 @router.delete("/checklist-pool/{id}", response_model=dict)
 def delete_checklist_pool_item(id: int, db: Session = Depends(get_db)):
@@ -754,8 +780,34 @@ def update_kpi_pool_item(id: int, item: KPIItemPoolBase, db: Session = Depends(g
         raise HTTPException(status_code=404, detail="Không tìm thấy mẫu KPI")
     for key, value in item.model_dump().items():
         setattr(db_item, key, value)
+
+    # Cascade sync sang toàn bộ chỉ tiêu kpi_employee_items của nhân viên có cùng kpi_code
+    if db_item.kpi_code:
+        emp_items = db.query(KPIEmployeeItem).filter(KPIEmployeeItem.kpi_code == db_item.kpi_code).all()
+        for ei in emp_items:
+            ei.target = db_item.target
+            ei.target_val = db_item.target_val
+            ei.operator = db_item.operator
+            ei.unit = db_item.unit
+            ei.content = db_item.content
+            ei.calc_method = db_item.calc_method
+            if hasattr(db_item, 'department') and db_item.department:
+                ei.department = db_item.department
+            if hasattr(db_item, 'data_source') and db_item.data_source:
+                ei.data_source = db_item.data_source
+            if hasattr(db_item, 'stage_filter'):
+                ei.stage_filter = db_item.stage_filter
+            if hasattr(db_item, 'type_filter'):
+                ei.type_filter = db_item.type_filter
+            if hasattr(db_item, 'penalty_factor') and db_item.penalty_factor is not None:
+                ei.penalty_factor = db_item.penalty_factor
+            if hasattr(db_item, 'denominator') and db_item.denominator is not None:
+                ei.denominator = db_item.denominator
+            if hasattr(db_item, 'no_data_behavior') and db_item.no_data_behavior:
+                ei.no_data_behavior = db_item.no_data_behavior
+
     db.commit()
-    return {"status": "success", "message": "Cập nhật mẫu KPI thành công"}
+    return {"status": "success", "message": "Cập nhật mẫu KPI và đồng bộ chỉ tiêu nhân sự thành công"}
 
 @router.delete("/kpi-pool/{id}", response_model=dict)
 def delete_kpi_pool_item(id: int, db: Session = Depends(get_db)):
@@ -1069,6 +1121,39 @@ def extract_ticket_sample_and_error(i):
     return sample, err, is_pass
 
 
+def _match_evaluation_month_year(ev, month: int, year: int) -> bool:
+    """
+    Kiểm tra bản ghi StaffEvaluation có thuộc đúng Tháng (month) và Năm (year) đang tính toán hay không.
+    Hỗ trợ định dạng D/M/YYYY, DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY, YYYY-MM-DD hoặc 'Tháng M'.
+    """
+    import re
+    eval_dt = str(getattr(ev, 'eval_date', '') or '').strip()
+    if eval_dt:
+        date_token = eval_dt.replace('/', '.').replace('-', '.').split(' ')[0]
+        parts = [p for p in date_token.split('.') if p.isdigit()]
+        if len(parts) == 3:
+            try:
+                p0, p1, p2 = int(parts[0]), int(parts[1]), int(parts[2])
+                if p2 > 1900:
+                    return p1 == int(month) and p2 == int(year)
+                if p0 > 1900:
+                    return p1 == int(month) and p0 == int(year)
+            except Exception:
+                pass
+        m_match = re.search(r'tháng\s*(\d{1,2})', eval_dt, re.IGNORECASE)
+        if m_match:
+            m_val = int(m_match.group(1))
+            y_match = re.search(r'(20\d{2})', eval_dt)
+            y_val = int(y_match.group(1)) if y_match else int(year)
+            return m_val == int(month) and y_val == int(year)
+
+    created = getattr(ev, 'created_at', None)
+    if created and hasattr(created, 'month') and hasattr(created, 'year'):
+        return created.month == int(month) and created.year == int(year)
+
+    return False
+
+
 def calculate_dynamic_kpi_metric(db: Session, item, emp: Employee, month: int, year: int):
     """
     Hàm tính toán chỉ số KPI hoàn toàn dựa trên các tham số cấu hình động,
@@ -1283,7 +1368,9 @@ def calculate_dynamic_kpi_metric(db: Session, item, emp: Employee, month: int, y
                     (StaffEvaluation.employee_id == str(employee_id)) |
                     (StaffEvaluation.staff_name == emp_name)
                 )
-            eval_rec = query.order_by(StaffEvaluation.id.desc()).first()
+            all_evals = query.order_by(StaffEvaluation.id.desc()).all()
+            month_evals = [e for e in all_evals if _match_evaluation_month_year(e, month, year)]
+            eval_rec = month_evals[0] if month_evals else None
 
             if eval_rec and eval_rec.actual_score is not None:
                 val = float(eval_rec.actual_score)
@@ -1488,13 +1575,179 @@ def calculate_dynamic_kpi_metric(db: Session, item, emp: Employee, month: int, y
     return calc_actual, earned_percentage, status, records_list
 
 
-def calculate_employee_kpi_score(db: Session, employee_id: str, month: int, year: int):
+def _get_employee_month_evaluation_feedback(
+    db: Session,
+    employee_id: str,
+    emp_name: str,
+    month: int,
+    year: int
+) -> dict:
+    """
+    Lấy 5 trường Phản hồi & Ghi chú từ bảng staff_evaluations (/admin/kpi/staff-evaluations)
+    của nhân sự trong đúng Tháng/Năm:
+    - Cột Q (achievement)      <-- StaffEvaluation.achievements
+    - Cột R (difficulty)       <-- StaffEvaluation.limitations
+    - Cột S (action_plan)      <-- StaffEvaluation.improvement_plan
+    - Cột T (proposal)         <-- StaffEvaluation.proposals
+    - Cột U (note)             <-- StaffEvaluation.manager_note (nếu khác achievements để tránh lặp nội dung)
+    """
+    res = {
+        "achievement": "",
+        "difficulty": "",
+        "action_plan": "",
+        "proposal": "",
+        "note": "",
+        "eval_id": None
+    }
+    try:
+        from modules.kpi.models.staff_evaluation import StaffEvaluation
+        emp_code_str = str(employee_id or "").strip()
+        if not emp_name and emp_code_str:
+            from modules.kpi.models.quality_employee import QualityEmployee
+            qe = db.query(QualityEmployee).filter(QualityEmployee.employee_id == emp_code_str).first()
+            if qe and qe.full_name:
+                emp_name = qe.full_name.strip()
+
+        q = db.query(StaffEvaluation)
+        if emp_code_str and emp_name:
+            q = q.filter(
+                (StaffEvaluation.employee_id == emp_code_str) |
+                (StaffEvaluation.staff_name == emp_name)
+            )
+        elif emp_code_str:
+            q = q.filter(StaffEvaluation.employee_id == emp_code_str)
+        elif emp_name:
+            q = q.filter(StaffEvaluation.staff_name == emp_name)
+        else:
+            return res
+
+        all_evals = q.order_by(StaffEvaluation.id.desc()).all()
+        month_evals = [e for e in all_evals if _match_evaluation_month_year(e, int(month), int(year))]
+        ev = month_evals[0] if month_evals else None
+        if not ev:
+            return res
+
+        ach = str(getattr(ev, 'achievements', '') or '').strip()
+        lim = str(getattr(ev, 'limitations', '') or '').strip()
+        imp = str(getattr(ev, 'improvement_plan', '') or '').strip()
+        prop = str(getattr(ev, 'proposals', '') or '').strip()
+        m_note = str(getattr(ev, 'manager_note', '') or '').strip()
+        p_act = str(getattr(ev, 'proposed_action', '') or '').strip()
+
+        # Tránh hiển thị trùng lặp nếu manager_note chỉ là bản copy tự động của achievements
+        note_clean = ""
+        if m_note and m_note != ach:
+            note_clean = m_note
+        elif p_act and p_act != imp and p_act != ach:
+            note_clean = p_act
+
+        res["achievement"] = ach
+        res["difficulty"] = lim
+        res["action_plan"] = imp
+        res["proposal"] = prop
+        res["note"] = note_clean
+        res["eval_id"] = ev.id
+    except Exception as e:
+        print(f"[WARNING] _get_employee_month_evaluation_feedback error for {employee_id}: {e}")
+    return res
+
+
+def _sync_custom_feedback_to_staff_evaluation(
+    db: Session,
+    employee_id: str,
+    month: int,
+    year: int,
+    achievement: Optional[str] = None,
+    difficulty: Optional[str] = None,
+    action_plan: Optional[str] = None,
+    proposal: Optional[str] = None,
+    note: Optional[str] = None
+):
+    """
+    Đồng bộ ngược 5 trường Phản hồi & Ghi chú từ Bảng Tổng Hợp KPI
+    sang bảng staff_evaluations (/admin/kpi/staff-evaluations).
+    """
+    if all(v is None for v in [achievement, difficulty, action_plan, proposal, note]):
+        return
+    try:
+        from modules.kpi.models.staff_evaluation import StaffEvaluation
+        from modules.kpi.models.quality_employee import QualityEmployee
+        emp_code_str = str(employee_id or "").strip()
+        if not emp_code_str:
+            return
+
+        qe = db.query(QualityEmployee).filter(QualityEmployee.employee_id == emp_code_str).first()
+        emp_name = qe.full_name.strip() if (qe and qe.full_name) else ""
+
+        q = db.query(StaffEvaluation)
+        if emp_name:
+            q = q.filter(
+                (StaffEvaluation.employee_id == emp_code_str) |
+                (StaffEvaluation.staff_name == emp_name)
+            )
+        else:
+            q = q.filter(StaffEvaluation.employee_id == emp_code_str)
+
+        all_evals = q.order_by(StaffEvaluation.id.desc()).all()
+        month_evals = [e for e in all_evals if _match_evaluation_month_year(e, int(month), int(year))]
+        ev = month_evals[0] if month_evals else None
+
+        if ev:
+            if achievement is not None:
+                ev.achievements = str(achievement).strip()
+            if difficulty is not None:
+                ev.limitations = str(difficulty).strip()
+            if action_plan is not None:
+                ev.improvement_plan = str(action_plan).strip()
+            if proposal is not None:
+                ev.proposals = str(proposal).strip()
+            if note is not None:
+                ev.manager_note = str(note).strip()
+        else:
+            # Chỉ tự động tạo mới bản ghi ở /admin/kpi/staff-evaluations khi người dùng thực sự có nhập nội dung phản hồi/ghi chú
+            has_non_empty = any(
+                v is not None and str(v).strip() != ""
+                for v in [achievement, difficulty, action_plan, proposal, note]
+            )
+            if has_non_empty:
+                new_ev = StaffEvaluation(
+                    employee_id=emp_code_str,
+                    staff_name=emp_name or f"Nhân sự {emp_code_str}",
+                    stage=(qe.stage if qe and qe.stage else "QC"),
+                    level=(qe.level if qe and qe.level else "Cấp 4"),
+                    department=(qe.department if qe and qe.department else "QLCL"),
+                    goal_score=100.0,
+                    actual_score=100.0,
+                    status="Đã đánh giá",
+                    rating=(qe.latest_rating if qe and qe.latest_rating else "A"),
+                    eval_date=f"05/{int(month):02d}/{int(year)}",
+                    achievements=str(achievement or "").strip(),
+                    limitations=str(difficulty or "").strip(),
+                    improvement_plan=str(action_plan or "").strip(),
+                    proposals=str(proposal or "").strip(),
+                    manager_note=str(note or "").strip(),
+                    proposed_action=""
+                )
+                db.add(new_ev)
+    except Exception as e:
+        print(f"[WARNING] _sync_custom_feedback_to_staff_evaluation error for {employee_id}: {e}")
+
+
+def calculate_employee_kpi_score(db: Session, employee_id: str, month: int, year: int, commit: bool = True):
     # 1. Fetch employee details for name matching
     emp = db.query(Employee).filter(Employee.employee_id == employee_id).first()
     emp_name = emp.full_name if emp else ""
+    if not emp_name:
+        try:
+            from modules.kpi.models.quality_employee import QualityEmployee
+            qe_emp = db.query(QualityEmployee).filter(QualityEmployee.employee_id == str(employee_id)).first()
+            if qe_emp and qe_emp.full_name:
+                emp_name = qe_emp.full_name
+        except Exception:
+            pass
 
     # 2. Fetch employee KPI items
-    raw_kpi_items = db.query(KPIEmployeeItem).filter(KPIEmployeeItem.employee_id == employee_id).all()
+    raw_kpi_items = db.query(KPIEmployeeItem).filter(KPIEmployeeItem.employee_id == employee_id).order_by(KPIEmployeeItem.id.asc()).all()
 
     # If no KPI items assigned yet, fetch from global pool KPIItemPool
     if not raw_kpi_items:
@@ -1534,6 +1787,7 @@ def calculate_employee_kpi_score(db: Session, employee_id: str, month: int, year
                 kpi_items.append(item)
 
     # Truy vấn bảng riêng kpi_employee_custom_results xem có kết quả điều chỉnh thủ công không
+    ensure_custom_result_columns(db)
     custom_records = []
     try:
         custom_records = db.query(KPIEmployeeCustomResult).filter(
@@ -1542,19 +1796,65 @@ def calculate_employee_kpi_score(db: Session, employee_id: str, month: int, year
             KPIEmployeeCustomResult.year == int(year)
         ).all()
     except Exception as e:
+        ensure_custom_result_columns(db)
         custom_records = []
     
     custom_by_code = {c.kpi_code: c for c in custom_records if c.kpi_code}
-    custom_by_id = {c.kpi_item_id: c for c in custom_records if c.kpi_item_id}
+    custom_by_id = {c.kpi_item_id: c for c in custom_records if c.kpi_item_id and c.kpi_item_id > 0}
+
+    # Lấy dữ liệu Phản hồi & Ghi chú (Cột Q, R, S, T, U) từ /admin/kpi/staff-evaluations (bảng staff_evaluations)
+    eval_feedback = _get_employee_month_evaluation_feedback(db, str(employee_id), emp_name, int(month), int(year))
+
+    # Nếu trong custom_records của tháng có lưu phản hồi/ghi chú trên bất kỳ dòng nào thì cho phép ưu tiên
+    custom_emp_feedback = {
+        "achievement": next((c.achievement for c in custom_records if getattr(c, 'achievement', None) and str(c.achievement).strip() != ""), None),
+        "difficulty": next((c.difficulty for c in custom_records if getattr(c, 'difficulty', None) and str(c.difficulty).strip() != ""), None),
+        "action_plan": next((c.action_plan for c in custom_records if getattr(c, 'action_plan', None) and str(c.action_plan).strip() != ""), None),
+        "proposal": next((c.proposal for c in custom_records if getattr(c, 'proposal', None) and str(c.proposal).strip() != ""), None),
+        "note": next((c.note for c in custom_records if getattr(c, 'note', None) and str(c.note).strip() != ""), None),
+    }
+
+    eff_emp_achievement = custom_emp_feedback["achievement"] if custom_emp_feedback["achievement"] is not None else eval_feedback["achievement"]
+    eff_emp_difficulty = custom_emp_feedback["difficulty"] if custom_emp_feedback["difficulty"] is not None else eval_feedback["difficulty"]
+    eff_emp_action_plan = custom_emp_feedback["action_plan"] if custom_emp_feedback["action_plan"] is not None else eval_feedback["action_plan"]
+    eff_emp_proposal = custom_emp_feedback["proposal"] if custom_emp_feedback["proposal"] is not None else eval_feedback["proposal"]
+    eff_emp_note = custom_emp_feedback["note"] if custom_emp_feedback["note"] is not None else eval_feedback["note"]
 
     processed_details = []
     total_weighted_earned = 0.0
     total_weight = 0.0
 
+    # Load Master KPI Pool dictionary to ensure dynamic synchronization of standard targets
+    master_pool_map = {p.kpi_code: p for p in db.query(KPIItemPool).all() if p.kpi_code}
+
     for item in kpi_items:
         weight = item.score or 20
         item_id = getattr(item, 'id', 0)
-        custom_override = custom_by_id.get(item_id) or custom_by_code.get(item.kpi_code)
+        custom_override = (custom_by_id.get(item_id) if (item_id and item_id > 0) else None) or custom_by_code.get(item.kpi_code)
+        pool_item = master_pool_map.get(item.kpi_code) if item.kpi_code else None
+
+        # Tự động đồng bộ các trường tiêu chuẩn từ Master Pool nếu nhân sự chưa có điều chỉnh tùy chỉnh riêng
+        if pool_item and not custom_override:
+            item.target = pool_item.target
+            item.target_val = pool_item.target_val
+            item.operator = pool_item.operator
+            item.unit = pool_item.unit
+            if pool_item.content:
+                item.content = pool_item.content
+            if pool_item.calc_method:
+                item.calc_method = pool_item.calc_method
+            if hasattr(pool_item, 'data_source') and pool_item.data_source:
+                item.data_source = pool_item.data_source
+            if hasattr(pool_item, 'penalty_factor') and pool_item.penalty_factor is not None:
+                item.penalty_factor = pool_item.penalty_factor
+            if hasattr(pool_item, 'denominator') and pool_item.denominator is not None:
+                item.denominator = pool_item.denominator
+            if hasattr(pool_item, 'no_data_behavior') and pool_item.no_data_behavior:
+                item.no_data_behavior = pool_item.no_data_behavior
+            if hasattr(pool_item, 'stage_filter'):
+                item.stage_filter = pool_item.stage_filter
+            if hasattr(pool_item, 'type_filter'):
+                item.type_filter = pool_item.type_filter
 
         if custom_override:
             calc_actual = custom_override.custom_actual
@@ -1562,6 +1862,24 @@ def calculate_employee_kpi_score(db: Session, employee_id: str, month: int, year
             status = evaluate_kpi_target_status(earned_percentage, getattr(item, 'operator', '>='), getattr(item, 'target_val', '95'))
             is_custom = True
             custom_reason = custom_override.reason
+            if getattr(custom_override, 'custom_weight', None) is not None:
+                weight = float(custom_override.custom_weight)
+            eff_content = getattr(custom_override, 'custom_content', None) or item.content
+            eff_operator = getattr(custom_override, 'custom_operator', None) or getattr(item, 'operator', '>=')
+            eff_target_val = getattr(custom_override, 'custom_target', None) or getattr(item, 'target_val', '95')
+            eff_unit = getattr(custom_override, 'custom_unit', None) or getattr(item, 'unit', '%')
+            eff_target = f"{eff_operator} {eff_target_val}{eff_unit if str(eff_unit) not in str(eff_target_val) else ''}" if getattr(custom_override, 'custom_target', None) else item.target
+            status = evaluate_kpi_target_status(earned_percentage, eff_operator, eff_target_val)
+            c_ach = getattr(custom_override, 'achievement', None)
+            c_dif = getattr(custom_override, 'difficulty', None)
+            c_act = getattr(custom_override, 'action_plan', None)
+            c_pro = getattr(custom_override, 'proposal', None)
+            c_not = getattr(custom_override, 'note', None)
+            achievement_val = c_ach if (c_ach is not None and str(c_ach).strip() != "") else eff_emp_achievement
+            difficulty_val = c_dif if (c_dif is not None and str(c_dif).strip() != "") else eff_emp_difficulty
+            action_plan_val = c_act if (c_act is not None and str(c_act).strip() != "") else eff_emp_action_plan
+            proposal_val = c_pro if (c_pro is not None and str(c_pro).strip() != "") else eff_emp_proposal
+            note_val = c_not if (c_not is not None and str(c_not).strip() != "") else eff_emp_note
             modified_by = custom_override.modified_by
         else:
             calc_actual, earned_percentage, status, _ = calculate_dynamic_kpi_metric(db, item, emp, month, year)
@@ -1580,6 +1898,16 @@ def calculate_employee_kpi_score(db: Session, employee_id: str, month: int, year
                 status = "Đạt"
             is_custom = False
             custom_reason = None
+            eff_content = pool_item.content if (pool_item and pool_item.content) else item.content
+            eff_operator = pool_item.operator if (pool_item and pool_item.operator) else getattr(item, 'operator', '>=')
+            eff_target_val = pool_item.target_val if (pool_item and pool_item.target_val) else getattr(item, 'target_val', '95')
+            eff_unit = pool_item.unit if (pool_item and pool_item.unit) else getattr(item, 'unit', '%')
+            eff_target = pool_item.target if (pool_item and pool_item.target) else item.target
+            achievement_val = eff_emp_achievement
+            difficulty_val = eff_emp_difficulty
+            action_plan_val = eff_emp_action_plan
+            proposal_val = eff_emp_proposal
+            note_val = eff_emp_note
             modified_by = None
 
         total_weighted_earned += (earned_percentage * weight)
@@ -1588,10 +1916,10 @@ def calculate_employee_kpi_score(db: Session, employee_id: str, month: int, year
         processed_details.append({
             "id": getattr(item, 'id', 0),
             "kpi_code": item.kpi_code,
-            "content": item.content,
+            "content": eff_content,
             "score": weight,
             "calc_method": item.calc_method,
-            "target": item.target,
+            "target": eff_target,
             "actual": calc_actual,
             "earned_percentage": round(earned_percentage, 1),
             "status": status,
@@ -1608,7 +1936,14 @@ def calculate_employee_kpi_score(db: Session, employee_id: str, month: int, year
             "no_data_behavior": getattr(item, 'no_data_behavior', 'full_score'),
             "unit": getattr(item, 'unit', '%'),
             "operator": getattr(item, 'operator', '>='),
-            "target_val": getattr(item, 'target_val', '95')
+            "target_val": eff_target_val,
+            "operator": eff_operator,
+            "unit": eff_unit,
+            "achievement": achievement_val,
+            "difficulty": difficulty_val,
+            "action_plan": action_plan_val,
+            "proposal": proposal_val,
+            "note": note_val
         })
 
     kpi_score = round(total_weighted_earned / total_weight, 1) if total_weight > 0 else 95.0
@@ -1673,18 +2008,22 @@ def calculate_employee_kpi_score(db: Session, employee_id: str, month: int, year
     manager_score = 0.0
     try:
         from modules.kpi.models.staff_evaluation import StaffEvaluation
-        eval_rec = db.query(StaffEvaluation).filter(
+        all_evals = db.query(StaffEvaluation).filter(
             (StaffEvaluation.employee_id == employee_id) |
             (StaffEvaluation.employee_id == str(employee_id))
-        ).order_by(StaffEvaluation.id.desc()).first()
+        ).order_by(StaffEvaluation.id.desc()).all()
+        month_evals = [e for e in all_evals if _match_evaluation_month_year(e, month, year)]
+        eval_rec = month_evals[0] if month_evals else None
         if eval_rec and eval_rec.actual_score is not None:
             manager_score = float(eval_rec.actual_score)
     except Exception:
         manager_score = 0.0
 
     # Điểm hiệu suất cơ sở = 70% KPI + 30% Checklist + Thưởng - Phạt
+    # LƯU Ý QUAN TRỌNG: manager_score (thang 100) ĐÃ ĐƯỢC TÍNH bên trong kpi_score (mục tiêu cm='manager_score').
+    # Tuyệt đối KHÔNG cộng trùng manager_score một lần nữa vào base_perf (tránh đẩy tổng điểm lên 200 -> kẹt ở trần 120).
     base_perf = (0.7 * kpi_score) + (0.3 * checklist_score)
-    total_score = max(0.0, min(120.0, round(base_perf + manager_score + reward_score - violation_score, 1)))
+    total_score = max(0.0, min(120.0, round(base_perf + reward_score - violation_score, 1)))
 
     # Quy chuẩn xếp loại theo chuẩn hệ thống:
     # - Loại A: >= 100 điểm
@@ -1742,8 +2081,11 @@ def calculate_employee_kpi_score(db: Session, employee_id: str, month: int, year
         monthly_record.rating = rating
         monthly_record.details_json = json.dumps(processed_details, ensure_ascii=False)
 
-    db.commit()
-    db.refresh(monthly_record)
+    if commit:
+        db.commit()
+        db.refresh(monthly_record)
+    else:
+        db.flush()
 
     return {
         "id": monthly_record.id,
@@ -1753,9 +2095,15 @@ def calculate_employee_kpi_score(db: Session, employee_id: str, month: int, year
         "kpi_score": monthly_record.kpi_score,
         "checklist_score": monthly_record.checklist_score,
         "violation_score": monthly_record.violation_score,
+        "reward_score": reward_score,
         "manager_score": monthly_record.manager_score,
         "total_score": monthly_record.total_score,
         "rating": monthly_record.rating,
+        "achievement": eff_emp_achievement,
+        "difficulty": eff_emp_difficulty,
+        "action_plan": eff_emp_action_plan,
+        "proposal": eff_emp_proposal,
+        "note": eff_emp_note,
         "details": processed_details
     }
 
@@ -1824,6 +2172,7 @@ def upsert_kpi_custom_result(
     """
     [POST] Lưu hoặc cập nhật kết quả KPI tùy chỉnh thủ công cho nhân viên theo tháng vào bảng riêng kpi_employee_custom_results.
     """
+    ensure_custom_result_columns(db)
     existing = db.query(KPIEmployeeCustomResult).filter(
         KPIEmployeeCustomResult.employee_id == payload.employee_id,
         KPIEmployeeCustomResult.kpi_code == payload.kpi_code,
@@ -1835,7 +2184,7 @@ def upsert_kpi_custom_result(
 
     # Đảm bảo định dạng có dấu % nếu người dùng chỉ nhập số
     clean_actual = payload.custom_actual.strip()
-    if not clean_actual.endswith('%') and clean_actual.replace('.', '', 1).isdigit():
+    if not clean_actual.endswith('%') and clean_actual.replace('.', '', 1).replace('-', '', 1).isdigit():
         clean_actual = f"{clean_actual}%"
 
     if existing:
@@ -1846,6 +2195,16 @@ def upsert_kpi_custom_result(
         if payload.kpi_item_id:
             existing.kpi_item_id = payload.kpi_item_id
         existing.updated_at = datetime.utcnow()
+        if payload.custom_weight is not None: existing.custom_weight = float(payload.custom_weight)
+        if payload.custom_operator is not None: existing.custom_operator = payload.custom_operator
+        if payload.custom_target is not None: existing.custom_target = payload.custom_target
+        if payload.custom_unit is not None: existing.custom_unit = payload.custom_unit
+        if payload.custom_content is not None: existing.custom_content = payload.custom_content
+        if payload.achievement is not None: existing.achievement = payload.achievement
+        if payload.difficulty is not None: existing.difficulty = payload.difficulty
+        if payload.action_plan is not None: existing.action_plan = payload.action_plan
+        if payload.proposal is not None: existing.proposal = payload.proposal
+        if payload.note is not None: existing.note = payload.note
     else:
         new_rec = KPIEmployeeCustomResult(
             employee_id=payload.employee_id,
@@ -1858,9 +2217,32 @@ def upsert_kpi_custom_result(
             reason=payload.reason,
             modified_by=payload.modified_by or "Quản lý QC",
             created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
+            updated_at=datetime.utcnow(),
+            custom_weight=float(payload.custom_weight) if payload.custom_weight is not None else None,
+            custom_operator=payload.custom_operator,
+            custom_target=payload.custom_target,
+            custom_unit=payload.custom_unit,
+            custom_content=payload.custom_content,
+            achievement=payload.achievement,
+            difficulty=payload.difficulty,
+            action_plan=payload.action_plan,
+            proposal=payload.proposal,
+            note=payload.note
         )
         db.add(new_rec)
+
+    # Đồng bộ ngược 5 trường Phản hồi & Ghi chú sang /admin/kpi/staff-evaluations (bảng staff_evaluations)
+    _sync_custom_feedback_to_staff_evaluation(
+        db=db,
+        employee_id=payload.employee_id,
+        month=payload.month,
+        year=payload.year or 2026,
+        achievement=payload.achievement,
+        difficulty=payload.difficulty,
+        action_plan=payload.action_plan,
+        proposal=payload.proposal,
+        note=payload.note
+    )
 
     # Ghi log vào KPIAuditLog
     try:
@@ -1888,31 +2270,172 @@ def upsert_kpi_custom_result(
     }
 
 
+@router.post("/custom-results/batch", response_model=dict)
+def batch_upsert_kpi_custom_results(
+    payload: KPICustomResultBatchRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    [POST] Lưu hàng loạt các dòng KPI đã chỉnh sửa từ Popup Bảng Tổng Hợp KPI
+    trực tiếp vào bảng chung kpi_employee_custom_results.
+    """
+    ensure_custom_result_columns(db)
+    affected_employees = set()
+    saved_count = 0
+
+    for item in payload.items:
+        emp_id = str(item.employee_id)
+        affected_employees.add(emp_id)
+        m = item.month or payload.month
+        y = item.year or payload.year or 2026
+
+        existing = db.query(KPIEmployeeCustomResult).filter(
+            KPIEmployeeCustomResult.employee_id == emp_id,
+            KPIEmployeeCustomResult.kpi_code == item.kpi_code,
+            KPIEmployeeCustomResult.month == m,
+            KPIEmployeeCustomResult.year == y
+        ).first()
+
+        clean_actual = (item.custom_actual or "").strip()
+        if clean_actual and not clean_actual.endswith('%') and not clean_actual.lower().endswith('h') and clean_actual.replace('.', '', 1).replace('-', '', 1).isdigit():
+            clean_actual = f"{clean_actual}%"
+
+        clean_target = (item.custom_target or "").strip() if item.custom_target is not None else None
+        if clean_target and not clean_target.endswith('%') and not clean_target.lower().endswith('h') and clean_target.replace('.', '', 1).replace('-', '', 1).isdigit():
+            clean_target = f"{clean_target}%"
+
+        old_val = existing.custom_actual if existing else None
+
+        if existing:
+            existing.custom_actual = clean_actual
+            existing.custom_score = float(item.custom_score)
+            existing.reason = item.reason or "Chỉnh sửa trên Popup Bảng Tổng Hợp KPI"
+            existing.modified_by = item.modified_by or payload.modified_by or "Quản lý QC"
+            if item.kpi_item_id:
+                existing.kpi_item_id = item.kpi_item_id
+            existing.updated_at = datetime.utcnow()
+            if item.custom_weight is not None: existing.custom_weight = float(item.custom_weight)
+            if item.custom_operator is not None: existing.custom_operator = item.custom_operator
+            if clean_target is not None: existing.custom_target = clean_target
+            if item.custom_unit is not None: existing.custom_unit = item.custom_unit
+            if item.custom_content is not None: existing.custom_content = item.custom_content
+            if item.achievement is not None: existing.achievement = item.achievement
+            if item.difficulty is not None: existing.difficulty = item.difficulty
+            if item.action_plan is not None: existing.action_plan = item.action_plan
+            if item.proposal is not None: existing.proposal = item.proposal
+            if item.note is not None: existing.note = item.note
+        else:
+            new_rec = KPIEmployeeCustomResult(
+                employee_id=emp_id,
+                kpi_code=item.kpi_code,
+                kpi_item_id=item.kpi_item_id,
+                month=m,
+                year=y,
+                custom_actual=clean_actual,
+                custom_score=float(item.custom_score),
+                reason=item.reason or "Chỉnh sửa trên Popup Bảng Tổng Hợp KPI",
+                modified_by=item.modified_by or payload.modified_by or "Quản lý QC",
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow(),
+                custom_weight=float(item.custom_weight) if item.custom_weight is not None else None,
+                custom_operator=item.custom_operator,
+                custom_target=clean_target,
+                custom_unit=item.custom_unit,
+                custom_content=item.custom_content,
+                achievement=item.achievement,
+                difficulty=item.difficulty,
+                action_plan=item.action_plan,
+                proposal=item.proposal,
+                note=item.note
+            )
+            db.add(new_rec)
+
+        try:
+            audit = KPIAuditLog(
+                item_id=item.kpi_item_id,
+                employee_id=emp_id,
+                kpi_code=item.kpi_code,
+                old_value=old_val,
+                new_value=clean_actual,
+                modified_by=item.modified_by or payload.modified_by or "Quản lý QC",
+                reason=item.reason or "Chỉnh sửa trực tiếp trên Bảng Tổng Hợp KPI"
+            )
+            db.add(audit)
+        except Exception:
+            pass
+
+        # Đồng bộ ngược 5 trường Phản hồi & Ghi chú sang /admin/kpi/staff-evaluations (bảng staff_evaluations)
+        _sync_custom_feedback_to_staff_evaluation(
+            db=db,
+            employee_id=emp_id,
+            month=m,
+            year=y,
+            achievement=item.achievement,
+            difficulty=item.difficulty,
+            action_plan=item.action_plan,
+            proposal=item.proposal,
+            note=item.note
+        )
+
+        saved_count += 1
+
+    db.commit()
+
+    # Tính toán lại điểm tháng cho các nhân sự có thay đổi
+    for emp_id in affected_employees:
+        try:
+            calculate_employee_kpi_score(db, emp_id, payload.month, payload.year or 2026)
+        except Exception:
+            pass
+
+    return {
+        "status": "success",
+        "saved_count": saved_count,
+        "affected_employees": len(affected_employees),
+        "message": f"Đã lưu {saved_count} mục điều chỉnh KPI vào bảng kpi_employee_custom_results"
+    }
+
+
 @router.delete("/custom-results", response_model=dict)
 def delete_kpi_custom_result(
-    employee_id: str = Query(...),
-    kpi_code: str = Query(...),
+    employee_id: Optional[str] = Query(None),
+    kpi_code: Optional[str] = Query(None),
     month: int = Query(...),
     year: int = Query(2026),
     db: Session = Depends(get_db)
 ):
     """
-    [DELETE] Xóa kết quả KPI tùy chỉnh thủ công (Khôi phục kết quả tính tự động / mặc định của hệ thống).
+    [DELETE] Xóa kết quả KPI tùy chỉnh thủ công trong kpi_employee_custom_results
+    (Khôi phục kết quả tính tự động / mặc định của hệ thống cho 1 mục, 1 nhân sự hoặc toàn bộ tháng).
     """
-    deleted = db.query(KPIEmployeeCustomResult).filter(
-        KPIEmployeeCustomResult.employee_id == employee_id,
-        KPIEmployeeCustomResult.kpi_code == kpi_code,
+    ensure_custom_result_columns(db)
+    q = db.query(KPIEmployeeCustomResult).filter(
         KPIEmployeeCustomResult.month == month,
         KPIEmployeeCustomResult.year == year
-    ).delete()
+    )
+    if employee_id and employee_id != "ALL":
+        q = q.filter(KPIEmployeeCustomResult.employee_id == employee_id)
+    if kpi_code and kpi_code != "ALL":
+        q = q.filter(KPIEmployeeCustomResult.kpi_code == kpi_code)
 
+    affected_emp_ids = [r.employee_id for r in q.all()]
+    deleted = q.delete(synchronize_session=False)
     db.commit()
 
-    updated_scores = calculate_employee_kpi_score(db, employee_id, month, year)
+    updated_scores = None
+    if employee_id and employee_id != "ALL":
+        updated_scores = calculate_employee_kpi_score(db, employee_id, month, year)
+    else:
+        for eid in set(affected_emp_ids):
+            try:
+                calculate_employee_kpi_score(db, eid, month, year)
+            except Exception:
+                pass
+
     return {
         "status": "success",
         "deleted_count": deleted,
-        "message": "Đã khôi phục kết quả KPI tự động",
+        "message": "Đã khôi phục kết quả KPI tự động từ CSDL gốc",
         "scores": updated_scores
     }
 
@@ -1954,13 +2477,13 @@ def get_kpi_score_evidence(
         KPIEmployeeItem.kpi_code == kpi_code
     ).first()
 
-    content_str = emp_item.content if emp_item else (pool_item.content if pool_item else kpi_code)
-    target = emp_item.target if emp_item else (pool_item.target if pool_item else ">= 95%")
-    category = emp_item.category if (emp_item and emp_item.category) else (pool_item.category if (pool_item and pool_item.category) else "D")
-    calc_method = (emp_item.calc_method if emp_item else (pool_item.calc_method if pool_item else "")) or ""
-    data_source = (emp_item.data_source if (emp_item and emp_item.data_source) else (pool_item.data_source if (pool_item and pool_item.data_source) else "")) or ""
-    stage_filter = emp_item.stage_filter if emp_item else (pool_item.stage_filter if pool_item else None)
-    type_filter = emp_item.type_filter if emp_item else (pool_item.type_filter if pool_item else None)
+    content_str = pool_item.content if pool_item else (emp_item.content if emp_item else kpi_code)
+    target = pool_item.target if pool_item else (emp_item.target if emp_item else ">= 95%")
+    category = pool_item.category if (pool_item and pool_item.category) else (emp_item.category if (emp_item and emp_item.category) else "D")
+    calc_method = (pool_item.calc_method if pool_item else (emp_item.calc_method if emp_item else "")) or ""
+    data_source = (pool_item.data_source if (pool_item and pool_item.data_source) else (emp_item.data_source if (emp_item and emp_item.data_source) else "")) or ""
+    stage_filter = pool_item.stage_filter if (pool_item and pool_item.stage_filter) else (emp_item.stage_filter if emp_item else None)
+    type_filter = pool_item.type_filter if (pool_item and pool_item.type_filter) else (emp_item.type_filter if emp_item else None)
 
     # Kiểm tra xem có kết quả điều chỉnh thủ công (Custom Override) hay không
     custom_override = db.query(KPIEmployeeCustomResult).filter(
@@ -2010,7 +2533,8 @@ def get_kpi_score_evidence(
                     (StaffEvaluation.employee_id == employee_id) |
                     (StaffEvaluation.staff_name.ilike(f"%{emp_name}%"))
                 )
-            eval_records = ev_query.order_by(StaffEvaluation.id.desc()).all()
+            all_eval_records = ev_query.order_by(StaffEvaluation.id.desc()).all()
+            eval_records = [ev for ev in all_eval_records if _match_evaluation_month_year(ev, month, year)]
             if eval_records:
                 for ev in eval_records:
                     score_val = float(getattr(ev, 'actual_score', None) or 100.0)

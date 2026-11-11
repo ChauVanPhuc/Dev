@@ -22,6 +22,9 @@ def ensure_staff_evaluations_columns(db: Session):
         ("limitations", "NVARCHAR(1000) NULL"),
         ("improvement_plan", "NVARCHAR(1000) NULL"),
         ("proposals", "NVARCHAR(1000) NULL"),
+        ("created_by", "NVARCHAR(50) NULL"),
+        ("creator_name", "NVARCHAR(255) NULL"),
+        ("created_at", "DATETIME NULL DEFAULT GETDATE()"),
     ]
     for col_name, col_type in columns_to_add:
         try:
@@ -41,7 +44,8 @@ def ensure_staff_evaluations_columns(db: Session):
 
 def sync_evaluation_to_kpi(db: Session, eval_obj: StaffEvaluation):
     """
-    Sau khi có đánh giá, tự động đồng bộ điểm và xếp loại này sang QualityEmployee và KPI Items
+    Sau khi có đánh giá, tự động đồng bộ điểm, xếp loại và 5 trường Phản hồi & Ghi chú
+    sang QualityEmployee, KPIEmployeeItem và bảng tạm kpi_employee_custom_results.
     """
     try:
         emp_code = str(eval_obj.employee_id or "").strip()
@@ -66,6 +70,47 @@ def sync_evaluation_to_kpi(db: Session, eval_obj: StaffEvaluation):
             if cm == "manager_score" or ("đánh giá" in content and ("trưởng phòng" in content or "quản lý" in content)):
                 item.actual = f"{score_val:.0f} điểm (Loại {rating_val})"
                 item.status = "Đạt KPI" if score_val >= 80 else "Chưa đạt KPI"
+
+        # 3. Đồng bộ 5 trường Phản hồi & Ghi chú sang bảng tạm kpi_employee_custom_results (nếu có bản ghi trong tháng)
+        try:
+            from modules.kpi.models.kpi_management import KPIEmployeeCustomResult
+            eval_dt_str = str(getattr(eval_obj, 'eval_date', '') or '').strip()
+            target_month = datetime.now().month
+            target_year = datetime.now().year
+            if eval_dt_str:
+                parts = eval_dt_str.replace('-', '/').replace('.', '/').split('/')
+                if len(parts) == 3:
+                    if len(parts[0]) == 4:
+                        target_year, target_month = int(parts[0]), int(parts[1])
+                    else:
+                        target_month, target_year = int(parts[1]), int(parts[2])
+                elif len(parts) == 2:
+                    target_month, target_year = int(parts[0]), int(parts[1])
+            elif getattr(eval_obj, 'created_at', None):
+                target_month = eval_obj.created_at.month
+                target_year = eval_obj.created_at.year
+
+            eff_emp_id = emp_code or (qe.employee_id if qe else "")
+            if eff_emp_id:
+                custom_rows = db.query(KPIEmployeeCustomResult).filter(
+                    KPIEmployeeCustomResult.employee_id == str(eff_emp_id),
+                    KPIEmployeeCustomResult.month == int(target_month),
+                    KPIEmployeeCustomResult.year == int(target_year)
+                ).all()
+                ach_str = str(getattr(eval_obj, 'achievements', '') or '').strip()
+                lim_str = str(getattr(eval_obj, 'limitations', '') or '').strip()
+                imp_str = str(getattr(eval_obj, 'improvement_plan', '') or '').strip()
+                prop_str = str(getattr(eval_obj, 'proposals', '') or '').strip()
+                m_note_str = str(getattr(eval_obj, 'manager_note', '') or '').strip()
+                note_clean = m_note_str if (m_note_str and m_note_str != ach_str) else ""
+                for cr in custom_rows:
+                    cr.achievement = ach_str
+                    cr.difficulty = lim_str
+                    cr.action_plan = imp_str
+                    cr.proposal = prop_str
+                    cr.note = note_clean
+        except Exception as sync_err:
+            print("[WARNING] sync_evaluation_to_kpi custom_results sync error:", sync_err)
 
         db.commit()
     except Exception as e:
@@ -160,7 +205,10 @@ def get_staff_evaluations(
             "achievements": getattr(r, 'achievements', None),
             "limitations": getattr(r, 'limitations', None),
             "improvement_plan": getattr(r, 'improvement_plan', None),
-            "proposals": getattr(r, 'proposals', None)
+            "proposals": getattr(r, 'proposals', None),
+            "created_by": getattr(r, 'created_by', None),
+            "creator_name": getattr(r, 'creator_name', None),
+            "created_at": getattr(r, 'created_at', None).isoformat() if getattr(r, 'created_at', None) else None
         })
 
     return result
@@ -206,6 +254,8 @@ def create_staff_evaluation(payload: dict, db: Session = Depends(get_db)):
         limitations=payload.get("limitations") or "",
         improvement_plan=payload.get("improvement_plan") or "",
         proposals=payload.get("proposals") or "",
+        created_by=payload.get("created_by") or None,
+        creator_name=payload.get("creator_name") or None,
         kpi_details=payload.get("kpi_details") if isinstance(payload.get("kpi_details"), str) else json.dumps(payload.get("kpi_details") or [])
     )
     db.add(new_eval)
@@ -252,20 +302,39 @@ def get_staff_evaluation_detail(eval_id: int, db: Session = Depends(get_db)):
         "achievements": getattr(r, 'achievements', None),
         "limitations": getattr(r, 'limitations', None),
         "improvement_plan": getattr(r, 'improvement_plan', None),
-        "proposals": getattr(r, 'proposals', None)
+        "proposals": getattr(r, 'proposals', None),
+        "created_by": getattr(r, 'created_by', None),
+        "creator_name": getattr(r, 'creator_name', None),
+        "created_at": getattr(r, 'created_at', None).isoformat() if getattr(r, 'created_at', None) else None
     }
 
 @router.put("/{eval_id}", response_model=dict)
 def update_staff_evaluation(eval_id: int, payload: dict, db: Session = Depends(get_db)):
     """
-    [PUT] Cập nhật đánh giá xếp loại, nhận xét của quản lý
+    [PUT] Cập nhật đánh giá xếp loại, nhận xét của quản lý (Chỉ người tạo mới được quyền sửa)
     """
     ensure_staff_evaluations_columns(db)
     r = db.query(StaffEvaluation).filter(StaffEvaluation.id == eval_id).first()
     if not r:
         raise HTTPException(status_code=404, detail="Không tìm thấy đánh giá nhân sự")
         
+    # Kiểm tra phân quyền tác giả: Chỉ người tạo đánh giá mới được phép Edit
+    requester_code = str(payload.get("updated_by") or payload.get("created_by") or "").strip().lower()
+    record_creator = str(getattr(r, 'created_by', '') or '').strip().lower()
+    
+    if record_creator and requester_code:
+        # Cho phép người tạo hoặc quản trị viên cấp cao
+        if requester_code not in ["admin", "superadmin", "3973"] and requester_code != record_creator:
+            creator_disp = r.creator_name or r.created_by
+            raise HTTPException(
+                status_code=403, 
+                detail=f"Bạn không có quyền chỉnh sửa. Bản ghi này do {creator_disp} tạo, chỉ người tạo mới được phép chỉnh sửa."
+            )
+
     for k, v in payload.items():
+        # Không cho phép ghi đè created_by/creator_name của bản ghi đã có
+        if k in ["created_by", "creator_name", "created_at"] and getattr(r, k, None):
+            continue
         if hasattr(r, k) and v is not None:
             setattr(r, k, v)
     

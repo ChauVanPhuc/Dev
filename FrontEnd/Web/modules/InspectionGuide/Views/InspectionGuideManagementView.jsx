@@ -4,7 +4,7 @@ import {
   BookOpen, Plus, Search, Filter, LayoutGrid, List, Eye, Edit3, Trash2,
   CheckCircle2, XCircle, Layers, CheckSquare, Image as ImageIcon,
   Tag, RefreshCw, Sparkles, ShieldCheck, FileText, AlertTriangle, MoreVertical,
-  ChevronLeft, ChevronRight, Sliders
+  ChevronLeft, ChevronRight, Sliders, FileDown
 } from 'lucide-react';
 import api from '@webShared/Services/api.service';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
@@ -155,6 +155,10 @@ const InspectionGuideManagementView = ({ docType }) => {
   const [deleting, setDeleting] = useState(false);
   const [actionMenuId, setActionMenuId] = useState(null);
 
+  // Multi-select & Export state
+  const [selectedGuideIds, setSelectedGuideIds] = useState([]);
+  const [exporting, setExporting] = useState(false);
+
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (!e.target.closest('.action-btn') && !e.target.closest('.action-menu')) {
@@ -274,6 +278,85 @@ const InspectionGuideManagementView = ({ docType }) => {
     const start = (currentPage - 1) * pageSize;
     return filteredGuides.slice(start, start + pageSize);
   }, [filteredGuides, currentPage, pageSize]);
+
+  useEffect(() => {
+    setSelectedGuideIds([]);
+  }, [activeDocType]);
+
+  // Download file helper (docx or zip)
+  const handleDownloadFile = async (url, payload = null, fallbackName = 'Tai_lieu.docx') => {
+    setExporting(true);
+    try {
+      const res = payload
+        ? await api.post(url, payload, { responseType: 'blob' })
+        : await api.get(url, { responseType: 'blob' });
+
+      const blob = new Blob([res], {
+        type: fallbackName.endsWith('.zip')
+          ? 'application/zip'
+          : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      });
+
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = fallbackName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+
+      if (toast) toast('success', `Đã xuất file "${fallbackName}" thành công!`);
+    } catch (err) {
+      console.error('Lỗi xuất file Word:', err);
+      if (toast) toast('error', err?.response?.data?.detail || err.message || 'Lỗi khi xuất file Word');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportSingle = (g) => {
+    const safeCode = (g.code || `HD_${g.id}`).replace(/[\\/*?:"<>|]/g, '_').trim();
+    const safeName = (g.name || 'Tai_lieu').replace(/[\\/*?:"<>|]/g, '_').trim().slice(0, 80);
+    const filename = `${safeCode}_${safeName}.docx`;
+    handleDownloadFile(`/inspection-guides/${g.id}/export-docx`, null, filename);
+  };
+
+  const handleExportSelected = () => {
+    if (selectedGuideIds.length === 0) return;
+    if (selectedGuideIds.length === 1) {
+      const singleGuide = guides.find(g => g.id === selectedGuideIds[0]);
+      if (singleGuide) {
+        handleExportSingle(singleGuide);
+        return;
+      }
+    }
+    const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const zipName = `${config.shortLabel}_Selected_${selectedGuideIds.length}_Docs_${timestamp}.zip`;
+    handleDownloadFile(
+      `/inspection-guides/export-docx-batch?ids=${selectedGuideIds.join(',')}`,
+      null,
+      zipName
+    );
+  };
+
+  const handleToggleSelect = (guideId, e) => {
+    if (e) e.stopPropagation();
+    setSelectedGuideIds(prev =>
+      prev.includes(guideId) ? prev.filter(id => id !== guideId) : [...prev, guideId]
+    );
+  };
+
+  const handleSelectAllCurrentPage = (e) => {
+    if (e) e.stopPropagation();
+    const currentPageIds = paginatedGuides.map(g => g.id);
+    const allSelected = currentPageIds.length > 0 && currentPageIds.every(id => selectedGuideIds.includes(id));
+    if (allSelected) {
+      setSelectedGuideIds(prev => prev.filter(id => !currentPageIds.includes(id)));
+    } else {
+      setSelectedGuideIds(prev => Array.from(new Set([...prev, ...currentPageIds])));
+    }
+  };
 
   // Statistics calculation for activeDocType
   const stats = useMemo(() => {
@@ -719,6 +802,86 @@ const InspectionGuideManagementView = ({ docType }) => {
         </div>
       </div>
 
+      {/* Selection Action Bar (Khi người dùng chọn tài liệu) */}
+      {selectedGuideIds.length > 0 && (
+        <div style={{
+          backgroundColor: '#FFFFFF',
+          borderRadius: 12,
+          padding: '10px 18px',
+          border: `1.5px solid ${config.color}`,
+          boxShadow: '0 4px 14px rgba(123, 82, 51, 0.08)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 14,
+          flexShrink: 0,
+          animation: 'fadeIn 0.2s ease-out'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 30,
+              height: 30,
+              borderRadius: 8,
+              backgroundColor: config.bg,
+              color: config.color,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <CheckSquare size={16} />
+            </div>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: '#2D1A12' }}>
+              Đã chọn <strong style={{ color: config.color, fontSize: 15 }}>{selectedGuideIds.length}</strong> / {filteredGuides.length} {config.shortLabel}
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button
+              onClick={handleExportSelected}
+              disabled={exporting}
+              style={{
+                padding: '7px 16px',
+                borderRadius: 8,
+                border: 'none',
+                backgroundColor: config.color,
+                color: '#FFFFFF',
+                fontWeight: 700,
+                fontSize: 13,
+                cursor: exporting ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                boxShadow: `0 2px 6px ${config.color}35`,
+                opacity: exporting ? 0.7 : 1,
+                transition: 'all 0.15s'
+              }}
+            >
+              <FileDown size={15} className={exporting ? 'animate-spin' : ''} />
+              {exporting ? 'Đang tạo file Word...' : (selectedGuideIds.length === 1 ? 'Xuất file Word (.docx)' : `Xuất file Word (.zip) (${selectedGuideIds.length})`)}
+            </button>
+
+            <button
+              onClick={() => setSelectedGuideIds([])}
+              style={{
+                padding: '7px 12px',
+                borderRadius: 8,
+                border: '1px solid #CBD5E1',
+                backgroundColor: '#FFFFFF',
+                color: '#64748B',
+                fontWeight: 600,
+                fontSize: 12.5,
+                cursor: 'pointer',
+                transition: 'all 0.15s'
+              }}
+              onMouseEnter={e => e.currentTarget.style.backgroundColor = '#F1F5F9'}
+              onMouseLeave={e => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+            >
+              Bỏ chọn
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main Content List Area */}
       {loading ? (
         <div style={{
@@ -792,6 +955,15 @@ const InspectionGuideManagementView = ({ docType }) => {
                 textTransform: 'uppercase',
                 letterSpacing: '0.04em'
               }}>
+                <th style={{ padding: '12px 14px', textAlign: 'center', width: 44, backgroundColor: '#FAF8F6', position: 'sticky', top: 0, zIndex: 10 }}>
+                  <input
+                    type="checkbox"
+                    checked={paginatedGuides.length > 0 && paginatedGuides.every(g => selectedGuideIds.includes(g.id))}
+                    onChange={handleSelectAllCurrentPage}
+                    style={{ cursor: 'pointer', width: 16, height: 16, accentColor: config.color }}
+                    title="Chọn tất cả trên trang này"
+                  />
+                </th>
                 <th style={{ padding: '12px 16px', textAlign: 'left', width: 140, backgroundColor: '#FAF8F6', position: 'sticky', top: 0, zIndex: 10 }}>Mã tài liệu</th>
                 <th style={{ padding: '12px 16px', textAlign: 'left', backgroundColor: '#FAF8F6', position: 'sticky', top: 0, zIndex: 10 }}>Tên tài liệu & Mô tả</th>
                 <th style={{ padding: '12px 16px', textAlign: 'left', width: 180, backgroundColor: '#FAF8F6', position: 'sticky', top: 0, zIndex: 10 }}>Quy mô các bước</th>
@@ -815,7 +987,7 @@ const InspectionGuideManagementView = ({ docType }) => {
                       borderBottom: '1px solid #F1F5F9',
                       cursor: 'pointer',
                       transition: 'background-color 0.15s',
-                      backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FCFBFA',
+                      backgroundColor: selectedGuideIds.includes(g.id) ? '#F5EFE9' : (idx % 2 === 0 ? '#FFFFFF' : '#FCFBFA'),
                       position: 'relative',
                       zIndex: actionMenuId === g.id ? 40 : 1
                     }}
@@ -823,9 +995,19 @@ const InspectionGuideManagementView = ({ docType }) => {
                       if (actionMenuId !== g.id) e.currentTarget.style.backgroundColor = '#F5EFE9';
                     }}
                     onMouseLeave={e => {
-                      if (actionMenuId !== g.id) e.currentTarget.style.backgroundColor = idx % 2 === 0 ? '#FFFFFF' : '#FCFBFA';
+                      if (actionMenuId !== g.id) e.currentTarget.style.backgroundColor = selectedGuideIds.includes(g.id) ? '#F5EFE9' : (idx % 2 === 0 ? '#FFFFFF' : '#FCFBFA');
                     }}
                   >
+                    {/* Checkbox chọn */}
+                    <td style={{ padding: '14px 14px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedGuideIds.includes(g.id)}
+                        onChange={e => handleToggleSelect(g.id, e)}
+                        style={{ cursor: 'pointer', width: 16, height: 16, accentColor: config.color }}
+                      />
+                    </td>
+
                     {/* Mã tài liệu */}
                     <td style={{ padding: '14px 18px' }}>
                       <span style={{
@@ -1104,6 +1286,18 @@ const InspectionGuideManagementView = ({ docType }) => {
                             </button>
                             <button
                               type="button"
+                              className="action-menu-item"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActionMenuId(null);
+                                handleExportSingle(g);
+                              }}
+                              style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#0284C7' }}
+                            >
+                              <FileDown size={14} /> Xuất file Word (.docx)
+                            </button>
+                            <button
+                              type="button"
                               className="action-menu-item danger"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1145,9 +1339,9 @@ const InspectionGuideManagementView = ({ docType }) => {
                 key={g.id}
                 onClick={() => navigate(`/admin/inspection-guides/edit/${g.id}`)}
                 style={{
-                  backgroundColor: '#FFFFFF',
+                  backgroundColor: selectedGuideIds.includes(g.id) ? '#FAF5F0' : '#FFFFFF',
                   borderRadius: 16,
-                  border: '1px solid #EADCC9',
+                  border: selectedGuideIds.includes(g.id) ? `1.5px solid ${config.color}` : '1px solid #EADCC9',
                   padding: 20,
                   boxShadow: '0 4px 12px rgba(123, 82, 51, 0.04)',
                   cursor: 'pointer',
@@ -1162,7 +1356,7 @@ const InspectionGuideManagementView = ({ docType }) => {
                   e.currentTarget.style.boxShadow = '0 10px 24px rgba(123, 82, 51, 0.12)';
                 }}
                 onMouseLeave={e => {
-                  e.currentTarget.style.borderColor = '#EADCC9';
+                  e.currentTarget.style.borderColor = selectedGuideIds.includes(g.id) ? config.color : '#EADCC9';
                   e.currentTarget.style.transform = 'translateY(0)';
                   e.currentTarget.style.boxShadow = '0 4px 12px rgba(123, 82, 51, 0.04)';
                 }}
@@ -1170,6 +1364,15 @@ const InspectionGuideManagementView = ({ docType }) => {
                 <div>
                   {/* Card Top Row */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedGuideIds.includes(g.id)}
+                        onChange={e => handleToggleSelect(g.id, e)}
+                        onClick={e => e.stopPropagation()}
+                        style={{ cursor: 'pointer', width: 16, height: 16, accentColor: config.color }}
+                        title="Chọn tài liệu này"
+                      />
                     <span style={{
                       padding: '3px 8px',
                       borderRadius: 6,
@@ -1182,6 +1385,7 @@ const InspectionGuideManagementView = ({ docType }) => {
                     }}>
                       {g.code}
                     </span>
+                  </div>
 
                     <button
                       onClick={e => handleToggleActive(g, e)}
@@ -1305,24 +1509,49 @@ const InspectionGuideManagementView = ({ docType }) => {
                   justifyContent: 'space-between',
                   alignItems: 'center'
                 }} onClick={e => e.stopPropagation()}>
-                  <button
-                    onClick={e => handleOpenPreview(g, e)}
-                    style={{
-                      padding: '6px 12px',
-                      borderRadius: 8,
-                      border: '1px solid #EADCC9',
-                      backgroundColor: '#FAF8F6',
-                      color: '#7B5233',
-                      fontSize: 12.5,
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 6
-                    }}
-                  >
-                    <Eye size={14} /> Xem trước
-                  </button>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <button
+                      onClick={e => handleOpenPreview(g, e)}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: 8,
+                        border: '1px solid #EADCC9',
+                        backgroundColor: '#FAF8F6',
+                        color: '#7B5233',
+                        fontSize: 12.5,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6
+                      }}
+                    >
+                      <Eye size={14} /> Xem trước
+                    </button>
+
+                    <button
+                      onClick={e => {
+                        e.stopPropagation();
+                        handleExportSingle(g);
+                      }}
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: 8,
+                        border: '1px solid #BAE6FD',
+                        backgroundColor: '#F0F9FF',
+                        color: '#0284C7',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4
+                      }}
+                      title="Xuất file Word (.docx)"
+                    >
+                      <FileDown size={13} /> Word
+                    </button>
+                  </div>
 
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button

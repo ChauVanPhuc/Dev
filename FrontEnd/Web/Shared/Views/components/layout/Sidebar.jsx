@@ -152,7 +152,7 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
         }
 
         // 3. Đảm bảo nhóm "Crawl & Tích hợp" (icon Globe) luôn xuất hiện
-        const hasCrawler = list.some(item => item.title === 'Crawl & Tích hợp' || item.id === 'crawler');
+        const hasCrawler = list.some(item => item.title === 'Crawl & Tích hợp' || item.id === 'crawler' || item.id === 3136);
         if (!hasCrawler) {
           const crawlerGroup = {
             id: 'crawler',
@@ -164,7 +164,8 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
             is_active: true,
             children: [
               { id: 'sub-lpn-crawler', title: 'Crawl dữ liệu LPN', route_path: '/admin/lpn-crawler', icon: 'Database', is_active: true },
-              { id: 'sub-ai-ocr-train', title: 'Train Hình ảnh', route_path: '/admin/ai-ocr-train', icon: 'Cpu', is_active: true }
+              { id: 'sub-ai-ocr-train', title: 'Train Hình ảnh', route_path: '/admin/ai-ocr-train', icon: 'Cpu', is_active: true },
+              { id: 'sub-pallet-check', title: 'Quét Cont', route_path: '/admin/pallet-check', icon: 'Boxes', is_active: true }
             ]
           };
           const bizIdx = list.findIndex(item => item.title === 'Quản lý kinh doanh');
@@ -172,6 +173,26 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
             list.splice(bizIdx + 1, 0, crawlerGroup);
           } else {
             list.push(crawlerGroup);
+          }
+        }
+
+        // Đảm bảo "Quét Cont" luôn có trong Crawl & Tích hợp
+        const crawlGroup = list.find(item => item.title === 'Crawl & Tích hợp' || item.id === 'crawler' || item.id === 3136);
+        if (crawlGroup) {
+          if (!Array.isArray(crawlGroup.children)) {
+            crawlGroup.children = [];
+          }
+          const hasPalletCheck = crawlGroup.children.some(c => c.route_path === '/admin/pallet-check' || c.title === 'Quét Cont');
+          if (!hasPalletCheck) {
+            crawlGroup.children.push({
+              id: 'sub-pallet-check',
+              parent_id: crawlGroup.id,
+              title: 'Quét Cont',
+              route_path: '/admin/pallet-check',
+              icon: 'Boxes',
+              sort_order: 3,
+              is_active: true
+            });
           }
         }
 
@@ -185,6 +206,30 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
           }
           return item;
         });
+
+        // Đảm bảo "Hôm nay sản xuất gì" luôn xuất hiện trong nhóm "Quản lý sản xuất" ngay sau "Lệnh sản xuất"
+        const prodGroup = list.find(item => item.title === 'Quản lý sản xuất');
+        if (prodGroup && Array.isArray(prodGroup.children)) {
+          const existingDailyIdx = prodGroup.children.findIndex(c => c.route_path === '/admin/daily-production');
+          const dailyProdItem = existingDailyIdx !== -1
+            ? prodGroup.children.splice(existingDailyIdx, 1)[0]
+            : {
+                id: 'sub-daily-production',
+                parent_id: prodGroup.id,
+                title: 'Hôm nay sản xuất gì',
+                route_path: '/admin/daily-production',
+                icon: 'CalendarCheck',
+                sort_order: 2,
+                is_active: true,
+                permission_key: 'plan'
+              };
+          const ordersIdx = prodGroup.children.findIndex(c => c.route_path === '/admin/production-orders');
+          if (ordersIdx !== -1) {
+            prodGroup.children.splice(ordersIdx + 1, 0, dailyProdItem);
+          } else {
+            prodGroup.children.unshift(dailyProdItem);
+          }
+        }
 
         // Đảm bảo "Cấu hình hệ thống" luôn xuất hiện trong nhóm "Quản lý hệ thống"
         const sysGroup = list.find(item => item.title === 'Quản lý hệ thống' || item.id === 2);
@@ -244,8 +289,10 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
       '/admin/prices',
       '/admin/lpn-crawler',
       '/admin/ai-ocr-train',
+      '/admin/pallet-check',
       '/admin/system-config',
-      '/admin/quality-reports'
+      '/admin/quality-reports',
+      '/admin/daily-production'
     ];
     if (allowByDefaultRoutes.includes(item.route_path)) {
       if (perm === 'none') return true;
@@ -402,7 +449,8 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
     if (group.title === 'Crawl & Tích hợp') {
       return [
         { id: 995, parent_id: group.id, title: 'Crawl dữ liệu LPN', route_path: '/admin/lpn-crawler', icon: 'Database' },
-        { id: 996, parent_id: group.id, title: 'Train Hình ảnh', route_path: '/admin/ai-ocr-train', icon: 'Cpu' }
+        { id: 996, parent_id: group.id, title: 'Train Hình ảnh', route_path: '/admin/ai-ocr-train', icon: 'Cpu' },
+        { id: 997, parent_id: group.id, title: 'Quét Cont', route_path: '/admin/pallet-check', icon: 'Boxes' }
       ];
     }
     if (group.title === 'Hồ sơ ISO' || group.title === 'Hồ sơ chuẩn ISO' || group.title === 'Quản lý ISO') {
@@ -468,7 +516,9 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
       location.pathname === '/admin/lpn-crawler' ||
       location.pathname === '/admin/lpn-crawler/' ||
       location.pathname === '/admin/ai-ocr-train' ||
-      location.pathname === '/admin/ai-ocr-train/'
+      location.pathname === '/admin/ai-ocr-train/' ||
+      location.pathname === '/admin/pallet-check' ||
+      location.pathname === '/admin/pallet-check/'
     )) {
       return true;
     }

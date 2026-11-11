@@ -663,7 +663,10 @@ export default function ZaloBotConfigView({ isEmbedded = true }) {
                 Nhấn phím <strong>F12</strong> (hoặc chuột phải chọn <em>Kiểm tra / Inspect</em>) ➔ Chọn tab <strong>Console</strong>.
               </li>
               <li>
-                Gõ lệnh: <code style={{ backgroundColor: '#DBEAFE', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>document.cookie</code> rồi ấn <strong>Enter</strong> để copy toàn bộ chuỗi Cookies dán vào ô bên dưới.
+                Ư u tiên dùng <strong>Tiện ích Chrome Extension</strong> ở trên để đồng bộ 1-Click (tự động lấy đủ cả cookie bảo mật HttpOnly <code>zpw_sek</code>).
+              </li>
+              <li>
+                Nếu làm thủ công: Vào tab <strong>Application</strong> ➔ mục <strong>Storage / Cookies / https://chat.zalo.me</strong> ➔ copy các giá trị cookie (hoặc dùng nút Copy trên Extension và dán vào ô bên dưới).
               </li>
               <li>
                 Vào tab <strong>Application</strong> ➔ mục <strong>Storage / Cookies / https://chat.zalo.me</strong> ➔ tìm khóa <code>imei</code> (hoặc copy IMEI định danh của trình duyệt).

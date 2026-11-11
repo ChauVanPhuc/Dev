@@ -7,7 +7,7 @@ import FormSelect from '@mobile/Shared/Views/components/form/FormSelect'
 import DataTable from '@mobile/Shared/Views/components/ui/DataTable'
 import MessageModal from '@mobile/Shared/Views/components/feedback/MessageModal'
 import ConfirmModal from '@mobile/Shared/Views/components/feedback/ConfirmModal'
-import { Check, RotateCcw, User, FileText, BarChart3, Award } from 'lucide-react'
+import { Check, RotateCcw, User, FileText, BarChart3, Award, X, AlertCircle, Info } from 'lucide-react'
 import apiClient from '@shared/services/api'
 import useAuthStore from '@modules/auth/Models/authModel'
 
@@ -84,6 +84,10 @@ const StaffEvaluation = () => {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [messageModal, setMessageModal] = useState({ isOpen: false, type: 'info', title: '', message: '' })
+
+  // Danh sách các phiếu đánh giá hiện có & Thông tin người tạo bản ghi (phân quyền Edit)
+  const [evaluatedList, setEvaluatedList] = useState([])
+  const [recordCreator, setRecordCreator] = useState({ id: null, name: '' })
 
   // Dữ liệu KPI mẫu dự phòng
   const fallbackKpis = [
@@ -184,6 +188,23 @@ const StaffEvaluation = () => {
     }
   }
 
+  // 0. Nạp danh sách các phiếu đánh giá hiện có để lọc bỏ người đã đánh giá
+  useEffect(() => {
+    let isMounted = true
+    const loadEvaluations = async () => {
+      try {
+        const resp = await apiClient.get('/staff-evaluations/')
+        if (isMounted && Array.isArray(resp.data)) {
+          setEvaluatedList(resp.data)
+        }
+      } catch (err) {
+        console.warn('Lỗi lấy danh sách phiếu đánh giá:', err)
+      }
+    }
+    loadEvaluations()
+    return () => { isMounted = false }
+  }, [])
+
   // 1. Fetch toàn bộ danh sách nhân sự từ Backend Quality Database (/quality-employees/?size=100)
   useEffect(() => {
     const fetchStaffDropdowns = async () => {
@@ -277,6 +298,10 @@ const StaffEvaluation = () => {
       try {
         const resp = await apiClient.get(`/staff-evaluations/${id}`)
         if (resp.data) {
+          setRecordCreator({
+            id: resp.data.created_by,
+            name: resp.data.creator_name
+          })
           setFormData({
             employeeId: resp.data.employee_id || 'NV_QLCL_002',
             staffName: resp.data.staff_name || '',
@@ -406,6 +431,18 @@ const StaffEvaluation = () => {
     }
   }, [employees, savedUser])
 
+  // Tập hợp mã / tên nhân sự đã có trạng thái "Đã đánh giá"
+  const evaluatedStaffCodes = useMemo(() => {
+    const set = new Set()
+    evaluatedList
+      .filter(item => item.status === 'Đã đánh giá')
+      .forEach(item => {
+        if (item.employee_id) set.add(String(item.employee_id).trim())
+        if (item.staff_name) set.add(String(item.staff_name).trim().toLowerCase())
+      })
+    return set
+  }, [evaluatedList])
+
   // Lọc danh sách nhân sự cần đánh giá theo đúng cấp bậc thẩm quyền:
   // Cấp 1 (Trưởng phòng) -> Đánh giá Cấp 2 (Lead) & Cấp 3 (Supervisor)
   // Cấp 2 (QA/QC Lead)   -> Đánh giá Cấp 3 trực thuộc (Uyên, Lịch, Hải...)
@@ -417,6 +454,16 @@ const StaffEvaluation = () => {
     return employees.filter(emp => {
       // 1. Tuyệt đối không tự đánh giá chính mình
       if (String(emp.code) === evCode) return false
+
+      // 2. Khi tạo mới (id === 'new'): Loại bỏ những người đã được đánh giá rồi
+      if (!id || id === 'new') {
+        const code = String(emp.code || '').trim()
+        const idStr = String(emp.id || '').trim()
+        const name = String(emp.name || '').trim().toLowerCase()
+        if (evaluatedStaffCodes.has(code) || evaluatedStaffCodes.has(idStr) || evaluatedStaffCodes.has(name)) {
+          return false
+        }
+      }
 
       if (evLevel === 'Cấp 1') {
         // Cấp 1 -> Cấp 2 (Lead) & Cấp 3 (Supervisor) trực thuộc
@@ -436,7 +483,51 @@ const StaffEvaluation = () => {
       // Mặc định tài khoản quản trị hệ thống
       return emp.level === 'Cấp 2' || emp.level === 'Cấp 3'
     })
-  }, [employees, currentEvaluator])
+  }, [employees, currentEvaluator, id, evaluatedStaffCodes])
+
+  // Danh sách options cho Dropdown chọn nhân sự
+  const selectOptions = useMemo(() => {
+    if (filteredEvaluatees.length === 0 && (!id || id === 'new')) {
+      return [{ label: '-- Tất cả nhân sự trực thuộc đã được đánh giá --', value: '' }]
+    }
+    const opts = [
+      { label: '-- Chọn nhân sự --', value: '' },
+      ...filteredEvaluatees.map(e => ({
+        label: `${e.name} (${e.code}) - ${e.stage}`,
+        value: e.code
+      }))
+    ]
+    // Nếu đang xem/sửa bản ghi cũ và nhân sự không nằm trong list options (do đã đánh giá), thêm vào để hiển thị đúng
+    if (id && id !== 'new' && formData.employeeId && !filteredEvaluatees.some(e => e.code === formData.employeeId)) {
+      opts.splice(1, 0, {
+        label: `${formData.staffName || 'Nhân sự'} (${formData.employeeId}) - ${formData.stage || 'QLCL'}`,
+        value: formData.employeeId
+      })
+    }
+    return opts
+  }, [filteredEvaluatees, id, formData.employeeId, formData.staffName, formData.stage])
+
+  // Phân quyền chỉ người tạo mới được sửa:
+  const isReadOnly = useMemo(() => {
+    if (!id || id === 'new') return false // Đang tạo mới -> Cho phép nhập
+    
+    const myCode = String(currentEvaluator.code || savedUser.employee_id || savedUser.username || '').toLowerCase()
+    const myName = String(currentEvaluator.name || savedUser.full_name || '').toLowerCase()
+    const creatorCode = String(recordCreator.id || '').toLowerCase()
+    const creatorName = String(recordCreator.name || '').toLowerCase()
+
+    // Nếu bản ghi chưa có người tạo trong DB (dữ liệu cũ): Chỉ Trưởng phòng QLCL (3973) hoặc Admin được sửa
+    if (!creatorCode) {
+      return myCode !== '3973' && myCode !== 'admin'
+    }
+
+    // Người nào tạo thì mới được phép Edit:
+    const matchesCode = myCode && creatorCode && myCode === creatorCode
+    const matchesName = myName && creatorName && myName === creatorName
+    const isAdmin = myCode === 'admin' || savedUser.role === 'admin' || savedUser.permission_level === 'superadmin'
+
+    return !(matchesCode || matchesName || isAdmin)
+  }, [id, recordCreator, currentEvaluator, savedUser])
 
   const handleConfirm = () => {
     if (!formData.staffName) {
@@ -471,7 +562,10 @@ const StaffEvaluation = () => {
       manager_note: formData.managerNote || formData.achievements,
       proposed_action: formData.proposedAction || formData.improvementPlan,
       status: 'Đã đánh giá',
-      kpi_details: kpiDetails
+      kpi_details: kpiDetails,
+      created_by: recordCreator.id || currentEvaluator.code || savedUser.employee_id || savedUser.username || '3973',
+      creator_name: recordCreator.name || currentEvaluator.name || savedUser.full_name || savedUser.username || 'Đặng Văn Nam',
+      updated_by: currentEvaluator.code || savedUser.employee_id || savedUser.username || '3973'
     }
 
     try {
@@ -502,12 +596,54 @@ const StaffEvaluation = () => {
 
   return (
     <Layout>
-      <PageHeader title="G7 - Smart Flow" subTitle={id === 'new' ? "MB8.1 | Đánh giá nhân sự mới" : "MB8.1 | Đánh giá nhân sự"} />
+      <PageHeader title="G7 - Smart Flow" subTitle={id === 'new' ? "MB8.1 | Đánh giá nhân sự mới" : (isReadOnly ? "MB8.1 | Xem đánh giá nhân sự (Chỉ xem)" : "MB8.1 | Đánh giá nhân sự")} />
 
       <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0, padding: '0px', backgroundColor: 'var(--bg-cream)', display: 'flex', flexDirection: 'column' }}>
         
         <div style={{ padding: '16px 16px 100px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           
+          {/* Thông báo Chế độ Chỉ xem nếu không phải người tạo */}
+          {isReadOnly && (
+            <div style={{
+              padding: '12px 16px',
+              backgroundColor: '#EFF6FF',
+              border: '1.5px solid #BFDBFE',
+              borderRadius: '12px',
+              color: '#1E40AF',
+              fontSize: '0.875rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              boxShadow: '0 2px 6px rgba(37, 99, 235, 0.08)'
+            }}>
+              <Info size={18} color="#2563EB" style={{ flexShrink: 0 }} />
+              <span>
+                <strong>Chế độ chỉ xem:</strong> Bản ghi này do <strong>{recordCreator.name || recordCreator.id || 'Quản lý'}</strong> tạo. Bạn không có quyền chỉnh sửa nội dung này.
+              </span>
+            </div>
+          )}
+
+          {/* Thông báo khi tất cả nhân sự trực thuộc đã được đánh giá xong */}
+          {(!id || id === 'new') && filteredEvaluatees.length === 0 && (
+            <div style={{
+              padding: '12px 16px',
+              backgroundColor: '#F0FDF4',
+              border: '1.5px solid #BBF7D0',
+              borderRadius: '12px',
+              color: '#166534',
+              fontSize: '0.875rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              boxShadow: '0 2px 6px rgba(22, 101, 52, 0.08)'
+            }}>
+              <Check size={18} color="#16A34A" style={{ flexShrink: 0 }} />
+              <span>
+                Tất cả nhân sự trong phạm vi đánh giá đã hoàn tất đánh giá. Để xem lại hoặc cập nhật, vui lòng chọn từ danh sách ở màn hình trước.
+              </span>
+            </div>
+          )}
+
           {/* 1. Phần thông tin chọn nhân sự HR */}
           <div id="kpi-eval-info" style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '20px', border: '1px solid #e8e1d5', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
@@ -516,19 +652,15 @@ const StaffEvaluation = () => {
             </div>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {/* CHỌN NHÂN SỰ CẦN ĐÁNH GIÁ (ĐÃ TỰ ĐỘNG LỌC THEO CẤP BẬC TÀI KHOẢN ĐĂNG NHẬP) */}
+              {/* CHỌN NHÂN SỰ CẦN ĐÁNH GIÁ (ĐÃ TỰ ĐỘNG LỌC BỎ NGƯỜI ĐÃ ĐÁNH GIÁ KHI TẠO MỚI) */}
               <div>
                 <FormSelect 
                   label="Chọn nhân sự cần đánh giá *" 
                   value={formData.employeeId} 
-                  options={[
-                    { label: '-- Chọn nhân sự --', value: '' }, 
-                    ...filteredEvaluatees.map(e => ({ 
-                      label: `${e.name} (${e.code}) - ${e.stage}`, 
-                      value: e.code 
-                    }))
-                  ]} 
+                  options={selectOptions} 
                   onChange={(e) => handleSelectStaff(e.target.value)}
+                  disabled={isReadOnly || ((!id || id === 'new') && filteredEvaluatees.length === 0)}
+                  inputStyle={{ backgroundColor: isReadOnly ? '#f8fafc' : '#fff' }}
                 />
               </div>
 
@@ -546,7 +678,13 @@ const StaffEvaluation = () => {
                   <FormInput label="Bộ phận" value={formData.department} readOnly={true} inputStyle={{ backgroundColor: '#f8fafc' }} />
                 </div>
                 <div>
-                  <FormInput label="Thời gian đánh giá" value={formData.evalDate} onChange={e => setFormData({...formData, evalDate: e.target.value})} />
+                  <FormInput 
+                    label="Thời gian đánh giá" 
+                    value={formData.evalDate} 
+                    onChange={e => !isReadOnly && setFormData({...formData, evalDate: e.target.value})} 
+                    readOnly={isReadOnly}
+                    inputStyle={{ backgroundColor: isReadOnly ? '#f8fafc' : '#fff' }}
+                  />
                 </div>
               </div>
             </div>
@@ -568,8 +706,20 @@ const StaffEvaluation = () => {
                   rows="3" 
                   placeholder="Nhập các thành tích nổi bật trong tháng..." 
                   value={formData.achievements}
-                  onChange={e => setFormData({...formData, achievements: e.target.value})}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1px solid #cbd5e1', fontSize: '0.9rem', color: '#1e293b', resize: 'none', outline: 'none' }}
+                  onChange={e => !isReadOnly && setFormData({...formData, achievements: e.target.value})}
+                  readOnly={isReadOnly}
+                  style={{ 
+                    width: '100%', 
+                    padding: '10px 12px', 
+                    borderRadius: '10px', 
+                    border: '1px solid #cbd5e1', 
+                    fontSize: '0.9rem', 
+                    color: isReadOnly ? '#475569' : '#1e293b', 
+                    backgroundColor: isReadOnly ? '#f8fafc' : '#fff',
+                    cursor: isReadOnly ? 'default' : 'text',
+                    resize: 'none', 
+                    outline: 'none' 
+                  }}
                 />
               </div>
 
@@ -581,8 +731,20 @@ const StaffEvaluation = () => {
                   rows="3" 
                   placeholder="Nhập các vướng mắc, hạn chế hoặc sai sót cần lưu ý..." 
                   value={formData.limitations}
-                  onChange={e => setFormData({...formData, limitations: e.target.value})}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1px solid #cbd5e1', fontSize: '0.9rem', color: '#1e293b', resize: 'none', outline: 'none' }}
+                  onChange={e => !isReadOnly && setFormData({...formData, limitations: e.target.value})}
+                  readOnly={isReadOnly}
+                  style={{ 
+                    width: '100%', 
+                    padding: '10px 12px', 
+                    borderRadius: '10px', 
+                    border: '1px solid #cbd5e1', 
+                    fontSize: '0.9rem', 
+                    color: isReadOnly ? '#475569' : '#1e293b', 
+                    backgroundColor: isReadOnly ? '#f8fafc' : '#fff',
+                    cursor: isReadOnly ? 'default' : 'text',
+                    resize: 'none', 
+                    outline: 'none' 
+                  }}
                 />
               </div>
 
@@ -594,8 +756,20 @@ const StaffEvaluation = () => {
                   rows="3" 
                   placeholder="Nhập kế hoạch và giải pháp khắc phục..." 
                   value={formData.improvementPlan}
-                  onChange={e => setFormData({...formData, improvementPlan: e.target.value})}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1px solid #cbd5e1', fontSize: '0.9rem', color: '#1e293b', resize: 'none', outline: 'none' }}
+                  onChange={e => !isReadOnly && setFormData({...formData, improvementPlan: e.target.value})}
+                  readOnly={isReadOnly}
+                  style={{ 
+                    width: '100%', 
+                    padding: '10px 12px', 
+                    borderRadius: '10px', 
+                    border: '1px solid #cbd5e1', 
+                    fontSize: '0.9rem', 
+                    color: isReadOnly ? '#475569' : '#1e293b', 
+                    backgroundColor: isReadOnly ? '#f8fafc' : '#fff',
+                    cursor: isReadOnly ? 'default' : 'text',
+                    resize: 'none', 
+                    outline: 'none' 
+                  }}
                 />
               </div>
 
@@ -607,13 +781,25 @@ const StaffEvaluation = () => {
                   rows="3" 
                   placeholder="Nhập các đề xuất khen thưởng, hỗ trợ hoặc thăng cấp..." 
                   value={formData.proposals}
-                  onChange={e => setFormData({...formData, proposals: e.target.value})}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1px solid #cbd5e1', fontSize: '0.9rem', color: '#1e293b', resize: 'none', outline: 'none' }}
+                  onChange={e => !isReadOnly && setFormData({...formData, proposals: e.target.value})}
+                  readOnly={isReadOnly}
+                  style={{ 
+                    width: '100%', 
+                    padding: '10px 12px', 
+                    borderRadius: '10px', 
+                    border: '1px solid #cbd5e1', 
+                    fontSize: '0.9rem', 
+                    color: isReadOnly ? '#475569' : '#1e293b', 
+                    backgroundColor: isReadOnly ? '#f8fafc' : '#fff',
+                    cursor: isReadOnly ? 'default' : 'text',
+                    resize: 'none', 
+                    outline: 'none' 
+                  }}
                 />
               </div>
             </div>
           </div>
- 
+
           {/* 3. Bảng chi tiết KPI */}
           <div id="kpi-eval-table-container" style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '16px', border: '1px solid #e8e1d5', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
@@ -632,7 +818,7 @@ const StaffEvaluation = () => {
               <DataTable columns={kpiColumns} data={kpiDetails.filter(item => !isManagerEvalItem(item))} />
             )}
           </div>
- 
+
           {/* 4. Xếp loại tháng */}
           <div id="kpi-eval-rating" style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '20px', border: '1px solid #e8e1d5', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
@@ -645,7 +831,7 @@ const StaffEvaluation = () => {
                 const isSelected = formData.rating === opt.type
                 return (
                   <div key={opt.type} 
-                    onClick={() => handleRatingChange(opt.type)}
+                    onClick={() => !isReadOnly && handleRatingChange(opt.type)}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -654,7 +840,8 @@ const StaffEvaluation = () => {
                       borderRadius: '12px',
                       border: isSelected ? '2px solid #32251e' : '1px solid #e2e8f0',
                       backgroundColor: isSelected ? '#fefce8' : '#fff',
-                      cursor: 'pointer',
+                      cursor: isReadOnly ? 'default' : 'pointer',
+                      opacity: isReadOnly && !isSelected ? 0.5 : 1,
                       transition: 'all 0.2s ease'
                     }}
                   >
@@ -662,7 +849,7 @@ const StaffEvaluation = () => {
                       width: '20px', 
                       height: '20px', 
                       borderRadius: '50%', 
-                      border: '2px solid #32251e', 
+                      border: isSelected ? '2px solid #32251e' : '2px solid #cbd5e1', 
                       display: 'flex', 
                       alignItems: 'center', 
                       justifyContent: 'center',
@@ -682,50 +869,87 @@ const StaffEvaluation = () => {
 
         </div>
 
-        {/* Nút hành động (Fixed Bottom) */}
-        <div className="responsive-fixed-footer" style={{ backgroundColor: '#fff', padding: '14px 16px', display: 'flex', gap: '12px', borderTop: '1px solid #e2e8f0', zIndex: 100 }}>
-          <button 
-            onClick={handleConfirm} 
-            disabled={isSubmitting} 
-            style={{ 
-              flex: 1, 
-              backgroundColor: '#8FA0B5', 
-              color: '#ffffff', 
-              border: 'none', 
-              borderRadius: '12px', 
-              padding: '14px', 
-              fontSize: '0.95rem', 
-              fontWeight: '700', 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              gap: '8px', 
-              cursor: 'pointer',
-              boxShadow: '0 2px 6px rgba(143, 160, 181, 0.3)'
-            }}
-          >
-            <Check size={18} strokeWidth={2.5} /> Xác nhận
-          </button>
-          <button 
-            onClick={() => navigate('/kpi-staff')} 
-            style={{ 
-              flex: 1, 
-              backgroundColor: '#ffffff', 
-              color: '#5A6B7C', 
-              border: '1px solid #C5D2E1', 
-              borderRadius: '12px', 
-              padding: '14px', 
-              fontSize: '0.95rem', 
-              fontWeight: '700', 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              gap: '8px', 
-              cursor: 'pointer' 
-            }}
-          >
-            <RotateCcw size={18} /> Hủy
-          </button>
+        {/* Nút hành động chân trang (Fixed Bottom) - Đồng bộ màu nâu Earth Bronze như Ảnh 4 */}
+        <div className="responsive-fixed-footer" style={{
+          backgroundColor: '#ffffff',
+          padding: '14px 16px',
+          display: 'flex',
+          gap: '12px',
+          borderTop: '1px solid #e2e8f0',
+          zIndex: 100
+        }}>
+          {isReadOnly ? (
+            <button 
+              onClick={() => navigate('/kpi-staff')} 
+              style={{ 
+                flex: 1, 
+                backgroundColor: '#ffffff', 
+                color: '#633617', 
+                border: '1.5px solid #8C7362', 
+                borderRadius: '12px', 
+                padding: '14px', 
+                fontSize: '0.95rem', 
+                fontWeight: '700', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                gap: '8px', 
+                cursor: 'pointer' 
+              }}
+            >
+              <RotateCcw size={18} /> Quay lại danh sách
+            </button>
+          ) : (
+            <>
+              {/* Nút Hủy bỏ (Bên Trái) */}
+              <button 
+                onClick={() => navigate('/kpi-staff')} 
+                style={{ 
+                  flex: 1, 
+                  backgroundColor: '#ffffff', 
+                  color: '#633617', 
+                  border: '1.5px solid #8C7362', 
+                  borderRadius: '12px', 
+                  padding: '14px', 
+                  fontSize: '0.95rem', 
+                  fontWeight: '700', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  gap: '8px', 
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                <X size={18} /> Hủy bỏ
+              </button>
+
+              {/* Nút Xác nhận (Bên Phải - Màu nâu chuẩn như Ảnh 4) */}
+              <button 
+                onClick={handleConfirm} 
+                disabled={isSubmitting || ((!id || id === 'new') && !formData.employeeId)} 
+                style={{ 
+                  flex: 1, 
+                  backgroundColor: (isSubmitting || ((!id || id === 'new') && !formData.employeeId)) ? '#B19A8B' : '#8C7362', 
+                  color: '#ffffff', 
+                  border: 'none', 
+                  borderRadius: '12px', 
+                  padding: '14px', 
+                  fontSize: '0.95rem', 
+                  fontWeight: '700', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  gap: '8px', 
+                  cursor: (isSubmitting || ((!id || id === 'new') && !formData.employeeId)) ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 3px 8px rgba(140, 115, 98, 0.35)',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                <Check size={18} strokeWidth={2.5} /> Xác nhận
+              </button>
+            </>
+          )}
         </div>
 
         <MessageModal

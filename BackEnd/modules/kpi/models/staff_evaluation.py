@@ -1,6 +1,7 @@
-from sqlalchemy import Column, Integer, Float
+from sqlalchemy import Column, Integer, Float, DateTime
 from sqlalchemy.dialects.mssql import NVARCHAR
 from config.database import Base
+from datetime import datetime
 
 class StaffEvaluation(Base):
     """
@@ -28,3 +29,8 @@ class StaffEvaluation(Base):
     limitations = Column(NVARCHAR(1000), nullable=True) # Hạn chế / Khó khăn
     improvement_plan = Column(NVARCHAR(1000), nullable=True) # Kế hoạch cải tiến
     proposals = Column(NVARCHAR(1000), nullable=True) # Đề xuất kiến nghị
+
+    # Phân quyền tác giả đánh giá (Chỉ người tạo mới được sửa)
+    created_by = Column(NVARCHAR(50), nullable=True) # Mã nhân viên / Username người lập đánh giá
+    creator_name = Column(NVARCHAR(255), nullable=True) # Họ và tên người lập đánh giá
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=True) # Ngày giờ tạo bản ghi

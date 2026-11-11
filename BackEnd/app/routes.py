@@ -145,6 +145,9 @@ api_router.include_router(routing_router.router)
 from modules.pallet_check.routes.pallet_check_router import router as pallet_check_router
 api_router.include_router(pallet_check_router, prefix="/pallet-check", tags=["pallet-check"])
 
+from modules.daily_production.routes.daily_production_router import router as daily_production_router
+api_router.include_router(daily_production_router, prefix="/daily-production", tags=["daily-production"])
+
 import sys
 import os
 

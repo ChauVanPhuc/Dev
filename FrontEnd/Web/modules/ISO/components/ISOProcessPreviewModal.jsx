@@ -34,8 +34,8 @@ const ISOProcessPreviewModal = ({
   // Lấy chi tiết tài liệu khi doc thay đổi
   useEffect(() => {
     if (!isOpen || !doc?.id) {
-      setDetails(null);
-      setSelectedDocKey('main');
+      setDetails(prev => prev !== null ? null : prev);
+      setSelectedDocKey(prev => prev !== 'main' ? 'main' : prev);
       return;
     }
 
@@ -808,6 +808,54 @@ const ISOProcessPreviewModal = ({
                   justify-content: space-between;
                   box-sizing: border-box;
                 }
+                .iso-section-html-content {
+                  font-family: "Times New Roman", Times, serif !important;
+                  font-size: 12pt;
+                  line-height: 1.6;
+                  color: #000000;
+                }
+                .iso-section-html-content h4, .iso-section-html-content .iso-subheading {
+                  font-family: "Times New Roman", Times, serif !important;
+                  font-size: 12.5pt !important;
+                  font-weight: bold !important;
+                  color: #000000 !important;
+                  margin-top: 18px !important;
+                  margin-bottom: 6px !important;
+                  line-height: 1.4 !important;
+                  text-align: left !important;
+                }
+                .iso-section-html-content p {
+                  font-family: "Times New Roman", Times, serif !important;
+                  font-size: 12pt !important;
+                  line-height: 1.6 !important;
+                  color: #000000 !important;
+                  margin: 6px 0 !important;
+                  text-align: justify !important;
+                }
+                .iso-section-html-content p.iso-lead-item {
+                  margin: 6px 0 6px 20px !important;
+                }
+                .iso-section-html-content strong, .iso-section-html-content b {
+                  font-weight: bold !important;
+                  color: #000000 !important;
+                }
+                .iso-section-html-content table, .iso-section-html-content .iso-content-table {
+                  width: 100% !important;
+                  border-collapse: collapse !important;
+                  margin: 14px 0 !important;
+                  border: 1.5px solid #000000 !important;
+                  font-family: "Times New Roman", Times, serif !important;
+                  font-size: 10.5pt !important;
+                }
+                .iso-section-html-content th, .iso-section-html-content td {
+                  border: 1px solid #000000 !important;
+                  padding: 6px 8px !important;
+                }
+                .iso-section-html-content th {
+                  background-color: #f1f5f9 !important;
+                  font-weight: bold !important;
+                  text-align: center !important;
+                }
                 @media print {
                   body * {
                     visibility: hidden;
@@ -1051,12 +1099,12 @@ const ISOProcessPreviewModal = ({
                     <div style={{ flex: 1 }}>
                       <h3
                         style={{
-                          fontSize: '13pt',
+                          fontSize: '13.5pt',
                           fontWeight: 'bold',
                           color: '#000000',
-                          marginBottom: '14px',
-                          borderBottom: '1px solid #E5E7EB',
-                          paddingBottom: '6px'
+                          marginBottom: '12px',
+                          marginTop: '4px',
+                          textAlign: 'left'
                         }}
                       >
                         {secName}

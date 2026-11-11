@@ -69,6 +69,12 @@ class State(object):
 				url = f"https://wpa.chat.zalo.me/api/login/getLoginInfo?imei={imei}&type=30&client_version=645&computer_name=Web&ts={_util.now()}"
 				response = requests.get(url, headers=headers, cookies=cls._cookies)
 				data = response.json()
+				if not data or not data.get("data") or data.get("error_code") != 0:
+					err_code = data.get("error_code") if isinstance(data, dict) else "unknown"
+					err_msg = data.get("error_message") if isinstance(data, dict) else str(data)
+					if err_code == 102:
+						raise _exception.ZaloLoginError("Phi?n ??ng nh?p Zalo ?? h?t h?n (M? 102 - Session timeout). Vui l?ng ??ng nh?p l?i Zalo Web ?? l?y IMEI/Cookies m?i!")
+					raise _exception.ZaloLoginError(f"??ng nh?p Zalo th?t b?i (M? #{err_code}): {err_msg}")
 				zpw = data["data"]["zpw_ws"]
 				uid = data["data"]["uid"]
 				phone = data["data"]["phone_number"]

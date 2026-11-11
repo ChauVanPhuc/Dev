@@ -10,7 +10,7 @@ from config.database import get_db, engine, Base
 from modules.kpi.models.quality_employee import QualityEmployee
 from modules.hr.models.hr_models import HREmployee
 from fastapi.responses import StreamingResponse
-from modules.kpi.services.kpi_excel_exporter import generate_monthly_kpi_excel
+from modules.kpi.services.kpi_excel_exporter import generate_monthly_kpi_excel, build_monthly_kpi_master_sheet_data
 
 # Khởi tạo bảng nếu chưa có
 QualityEmployee.__table__.create(bind=engine, checkfirst=True)
@@ -147,6 +147,27 @@ class ExportKPIExcelRequest(BaseModel):
     year: int = 2026
     scope: str = "ALL"  # ALL, QLCL_ONLY, QCSX_ONLY
     factory: Optional[str] = None
+
+
+@router.get("/kpi/master-sheet", response_model=dict)
+def get_kpi_master_sheet_data(
+    month: int = Query(9, ge=1, le=12),
+    year: int = Query(2026, ge=2020),
+    scope: str = Query("ALL"),
+    factory: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Trả về dữ liệu Bảng Tổng Hợp KPI (giống 100% file xuất Excel 'Bảng đánh giá KPI nhân viên CL')
+    đồng bộ trực tiếp với bảng tạm kpi_employee_custom_results.
+    """
+    return build_monthly_kpi_master_sheet_data(
+        db=db,
+        month=month,
+        year=year,
+        scope=scope,
+        factory=factory
+    )
 
 
 @router.post("/kpi/export-excel")

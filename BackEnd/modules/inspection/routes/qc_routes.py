@@ -200,22 +200,32 @@ def get_qc_history_by_po(order_code: str, db: Session = Depends(get_db)):
     from modules.auth.models.accounts import Account as AccountModel
 
     clean_code = (order_code or "").strip()
-    order = db.query(OrderModel).filter(
+    from modules.production.routes.product_plan_router import extract_root_po
+    root_po = extract_root_po(clean_code)
+
+    matching_orders = db.query(OrderModel).filter(
         or_(
+            OrderModel.order_code == root_po,
+            OrderModel.order_code.ilike(f"{root_po}-%"),
+            OrderModel.partner_po == root_po,
+            OrderModel.partner_po.ilike(f"{root_po}-%"),
             OrderModel.order_code == clean_code,
             OrderModel.order_code.ilike(f"%{clean_code}%")
         )
-    ).first()
+    ).all()
+    matching_order_ids = [o.id for o in matching_orders]
+    order = matching_orders[0] if matching_orders else None
 
-    # 1. Lấy toàn bộ danh sách phiếu bàn giao của PO
+    # 1. Lấy toàn bộ danh sách phiếu bàn giao của PO (hỗ trợ đa đợt con)
     deliveries = []
-    if order:
+    if matching_order_ids:
         deliv_query = db.query(DeliveryModel).filter(
             or_(
-                DeliveryModel.order_id == order.id,
+                DeliveryModel.order_id.in_(matching_order_ids),
                 DeliveryModel.id.in_(
-                    db.query(DeliveryDetailsModel.delivery_id).filter(DeliveryDetailsModel.order_id == order.id)
+                    db.query(DeliveryDetailsModel.delivery_id).filter(DeliveryDetailsModel.order_id.in_(matching_order_ids))
                 ),
+                DeliveryModel.note.ilike(f"%{root_po}%"),
                 DeliveryModel.note.ilike(f"%{clean_code}%")
             )
         ).order_by(DeliveryModel.created_at.asc()).all()

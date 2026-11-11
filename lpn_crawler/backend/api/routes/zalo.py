@@ -27,6 +27,10 @@ router = APIRouter(prefix="/zalo", tags=["lpn-zalo"])
 
 def verify_admin_access(request: Request, db: Session):
     """Kiểm tra phân quyền: Chỉ tài khoản Quản trị viên (Admin) mới có quyền sử dụng chức năng Zalo"""
+    # 0. Cho ph?p Ti?n ?ch Extension SmartFlow Zalo Extension ??ng b? an to?n
+    ext_key = request.headers.get("X-Extension-Key")
+    if ext_key == "SmartFlowZaloExt2026":
+        return True
     # 1. Kiểm tra Authorization Bearer Token
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith("Bearer "):
@@ -216,9 +220,16 @@ def update_zalo_bot_config(
     cfg.updated_at = datetime.utcnow()
     db.commit()
 
+        # Ki?m tra t? ??ng k?t n?i sau khi c?p nh?t IMEI / Cookies
+    conn_info = ZaloBotService.check_connection(db)
+    is_conn = conn_info.get("is_connected", False)
+    msg = "C?p nh?t c?u h?nh & K?t n?i Zalo Bot th?nh c?ng!" if is_conn else f"?? l?u c?u h?nh, nh?ng ch?a k?t n?i ???c: {conn_info.get('message')}"
+
     return {
         "success": True,
-        "message": "Cập nhật cấu hình Zalo Bot thành công!"
+        "is_connected": is_conn,
+        "message": msg,
+        "connection": conn_info
     }
 
 
@@ -278,7 +289,8 @@ def resend_container_report(
         container_id=container_id,
         target_phone=payload.phone,
         target_phones=payload.phones,
-        send_image=payload.send_image
+        send_image=payload.send_image,
+        force_send=True
     )
     if not res.get("success"):
         raise HTTPException(status_code=400, detail=res.get("message"))

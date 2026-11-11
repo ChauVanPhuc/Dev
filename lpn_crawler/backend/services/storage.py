@@ -16,7 +16,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, ImageFile
+
+# Cho phép Pillow đọc và nén được cả những file ảnh bị thiếu vài byte cuối (truncated) từ AppSheet/Camera
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 from lpn_crawler.backend.config.settings import settings
 from lpn_crawler.backend.worker.manager import crawl_job_manager

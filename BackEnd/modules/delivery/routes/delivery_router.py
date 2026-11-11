@@ -893,84 +893,103 @@ def get_handover_history_by_po(order_code: str, db: Session = Depends(get_db)):
     if not clean_code:
         return []
 
-    order = db.query(OrderModel).filter(
+    from modules.production.routes.product_plan_router import extract_root_po
+    root_po = extract_root_po(clean_code)
+
+    matching_orders = db.query(OrderModel).filter(
         or_(
+            OrderModel.order_code == root_po,
+            OrderModel.order_code.ilike(f"{root_po}-%"),
+            OrderModel.partner_po == root_po,
+            OrderModel.partner_po.ilike(f"{root_po}-%"),
+            OrderModel.production_code == root_po,
+            OrderModel.production_code.ilike(f"{root_po}-%"),
             OrderModel.order_code == clean_code,
             OrderModel.order_code.ilike(f"%{clean_code}%")
         )
-    ).first()
+    ).all()
 
     matched_delivery_ids = set()
 
-    if order:
-        # 1. Gán trực tiếp order_id trong Delivery
-        d_ids1 = [r[0] for r in db.query(DeliveryModel.id).filter(DeliveryModel.order_id == order.id).all()]
-        matched_delivery_ids.update(d_ids1)
+    if matching_orders:
+        matching_order_ids = [o.id for o in matching_orders]
 
-        # 2. Gán trực tiếp order_id trong DeliveryDetails
-        d_ids2 = [r[0] for r in db.query(DeliveryDetailsModel.delivery_id).filter(DeliveryDetailsModel.order_id == order.id).all() if r[0]]
-        matched_delivery_ids.update(d_ids2)
+        # 1. Gán trực tiếp order_id trong Delivery & DeliveryDetails
+        for chunk in [matching_order_ids[i:i + 1000] for i in range(0, len(matching_order_ids), 1000)]:
+            d_ids1 = [r[0] for r in db.query(DeliveryModel.id).filter(DeliveryModel.order_id.in_(chunk)).all()]
+            matched_delivery_ids.update(d_ids1)
 
-        # 3. Thu thập danh mục SKU và tên sản phẩm/BOM của PO này
-        products = db.query(ProductModel).filter(ProductModel.order_id == order.id).all()
-        keywords = set()
-        for p in products:
-            if p.sku and len(p.sku.strip()) >= 3:
-                keywords.add(p.sku.strip())
-            if p.name and len(p.name.strip()) >= 3:
-                keywords.add(p.name.strip())
-            
-            boms = db.query(BomDetailModel).filter(BomDetailModel.product_id == p.id).all()
-            for b in boms:
-                if b.sku and len(b.sku.strip()) >= 3:
-                    keywords.add(b.sku.strip())
-                if b.name and len(b.name.strip()) >= 5:
-                    keywords.add(b.name.strip())
+            d_ids2 = [r[0] for r in db.query(DeliveryDetailsModel.delivery_id).filter(DeliveryDetailsModel.order_id.in_(chunk)).all() if r[0]]
+            matched_delivery_ids.update(d_ids2)
 
-        if keywords:
-            kw_filters = [DeliveryModel.part_name.ilike(f"%{kw}%") for kw in keywords]
-            d_ids3 = [r[0] for r in db.query(DeliveryModel.id).filter(or_(*kw_filters)).all()]
-            matched_delivery_ids.update(d_ids3)
+    # 2. Tìm theo ghi chú / mã QR khớp root_po hoặc clean_code
+    target_terms = list({t for t in [clean_code, root_po] if t and len(t) >= 3})
+    note_filters = []
+    for term in target_terms:
+        note_filters.extend([
+            DeliveryModel.note.ilike(f"%{term}%"),
+            DeliveryModel.backup_qr.ilike(f"%{term}%")
+        ])
+    if note_filters:
+        d_ids_note = [r[0] for r in db.query(DeliveryModel.id).filter(or_(*note_filters)).all()]
+        matched_delivery_ids.update(d_ids_note)
 
-            dt_kw_filters = [DeliveryDetailsModel.part_name.ilike(f"%{kw}%") for kw in keywords]
-            d_ids4 = [r[0] for r in db.query(DeliveryDetailsModel.delivery_id).filter(or_(*dt_kw_filters)).all() if r[0]]
-            matched_delivery_ids.update(d_ids4)
-
-    # 4. Tìm theo ghi chú / mã QR / tên chi tiết khớp clean_code
-    d_ids_note = [r[0] for r in db.query(DeliveryModel.id).filter(
-        or_(
-            DeliveryModel.note.ilike(f"%{clean_code}%"),
-            DeliveryModel.backup_qr.ilike(f"%{clean_code}%"),
-            DeliveryModel.part_name.ilike(f"%{clean_code}%")
-        )
-    ).all()]
-    matched_delivery_ids.update(d_ids_note)
+    # 3. Với các phiếu giao chưa gán đơn hàng (order_id is None), kiểm tra xem có khớp chi tiết SP của đơn không
+    if matching_orders:
+        products = db.query(ProductModel.sku, ProductModel.name).filter(ProductModel.order_id.in_(matching_order_ids)).all()
+        prod_kws = {p[0].strip() for p in products if p[0] and len(p[0].strip()) >= 3} | {p[1].strip() for p in products if p[1] and len(p[1].strip()) >= 4}
+        if prod_kws:
+            kw_filters = [DeliveryModel.part_name.ilike(f"%{kw}%") for kw in list(prod_kws)[:20]]
+            d_ids_kw = [r[0] for r in db.query(DeliveryModel.id).filter(
+                DeliveryModel.order_id.is_(None),
+                or_(*kw_filters)
+            ).all()]
+            matched_delivery_ids.update(d_ids_kw)
 
     if not matched_delivery_ids:
         return []
 
+    matching_order_ids_set = set([o.id for o in matching_orders]) if matching_orders else set()
+
     deliveries = db.query(DeliveryModel).options(
         joinedload(DeliveryModel.images)
     ).filter(
-        DeliveryModel.id.in_(matched_delivery_ids)
+        DeliveryModel.id.in_(list(matched_delivery_ids))
     ).order_by(DeliveryModel.created_at.desc()).all()
 
-    Sender = aliased(AccountModel)
-    Receiver = aliased(AccountModel)
+    # Batch load tài khoản (tránh N+1 query)
+    acc_ids = list({d.sx_delivery for d in deliveries if d.sx_delivery} | {d.sx_receipt for d in deliveries if d.sx_receipt})
+    acc_map = {}
+    if acc_ids:
+        acc_rows = db.query(AccountModel.id, AccountModel.full_name).filter(AccountModel.id.in_(acc_ids)).all()
+        acc_map = {r[0]: r[1] for r in acc_rows}
+
+    # Batch load detail quantity (tránh N+1 query)
+    detail_qty_map = {}
+    if matching_order_ids_set and matched_delivery_ids:
+        chunk_delivery_ids = list(matched_delivery_ids)
+        for chunk in [chunk_delivery_ids[i:i + 1000] for i in range(0, len(chunk_delivery_ids), 1000)]:
+            d_rows = db.query(
+                DeliveryDetailsModel.delivery_id,
+                func.sum(DeliveryDetailsModel.quantity)
+            ).filter(
+                DeliveryDetailsModel.delivery_id.in_(chunk),
+                DeliveryDetailsModel.order_id.in_(list(matching_order_ids_set))
+            ).group_by(DeliveryDetailsModel.delivery_id).all()
+            for r in d_rows:
+                if r[1]:
+                    detail_qty_map[r[0]] = r[1]
 
     results = []
     for d in deliveries:
-        sender = db.query(AccountModel).filter(AccountModel.id == d.sx_delivery).first()
-        receiver = db.query(AccountModel).filter(AccountModel.id == d.sx_receipt).first()
+        sender_name = acc_map.get(d.sx_delivery, "N/A")
+        receiver_name = acc_map.get(d.sx_receipt, "---")
 
         actual_quantity = d.quantity_total
-        if order and d.order_id and d.order_id != order.id:
-            detail_qty = db.query(func.sum(DeliveryDetailsModel.quantity)).filter(
-                DeliveryDetailsModel.delivery_id == d.id,
-                DeliveryDetailsModel.order_id == order.id
-            ).scalar()
-            if detail_qty and detail_qty > 0:
-                actual_quantity = detail_qty
+        if matching_order_ids_set and d.order_id and d.order_id not in matching_order_ids_set:
+            dq = detail_qty_map.get(d.id)
+            if dq and dq > 0:
+                actual_quantity = dq
 
         results.append({
             "id": d.id,
@@ -985,8 +1004,8 @@ def get_handover_history_by_po(order_code: str, db: Session = Depends(get_db)):
             "created_at": d.created_at,
             "note": d.note,
             "residual": d.residual or 0,
-            "sx_delivery_name": sender.full_name if sender else "N/A",
-            "sx_receipt_name": receiver.full_name if receiver else "---",
+            "sx_delivery_name": sender_name,
+            "sx_receipt_name": receiver_name,
             "images": [{"image_path": img.image_path} for img in (d.images or []) if img.description == "ảnh giao"]
         })
 

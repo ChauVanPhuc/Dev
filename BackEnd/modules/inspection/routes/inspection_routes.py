@@ -1007,15 +1007,32 @@ def get_all_inspections_by_po(
     if not po_clean:
         return []
 
+    from modules.production.routes.product_plan_router import extract_root_po
+    root_po = extract_root_po(po_clean)
+
+    search_terms = {po_clean, root_po}
+    if "-" in root_po:
+        parts = root_po.split("-")
+        if len(parts) >= 2 and parts[1].isdigit():
+            stripped = parts[1].lstrip("0")
+            if stripped:
+                search_terms.add(f"{parts[0]}-{stripped}")
+                search_terms.add(f"{parts[0]} - {stripped}")
+                search_terms.add(f"{parts[0]}-{parts[1]}")
+
+    filters = []
+    for term in search_terms:
+        if term and len(term) >= 3:
+            filters.extend([
+                InputInspection.batch_no == term,
+                InputInspection.batch_no.ilike(f"%{term}%"),
+                InputInspection.cont_name == term,
+                InputInspection.cont_name.ilike(f"%{term}%")
+            ])
+
     records = db.query(InputInspection).filter(
         InputInspection.is_confirmed == True,
-        or_(
-            InputInspection.batch_no == po_clean,
-            InputInspection.batch_no.ilike(f"%{po_clean}%"),
-            InputInspection.cont_name == po_clean,
-            InputInspection.cont_name.ilike(f"%{po_clean}%"),
-            InputInspection.data_json.ilike(f"%{po_clean}%")
-        )
+        or_(*filters)
     ).order_by(InputInspection.inspected_at.desc(), InputInspection.id.desc()).all()
 
     # Batch load inspector names if missing
@@ -1123,14 +1140,32 @@ def get_inbound_inspections_by_po(
     if not po_clean:
         return []
 
+    from modules.production.routes.product_plan_router import extract_root_po
+    root_po = extract_root_po(po_clean)
+
+    search_terms = {po_clean, root_po}
+    if "-" in root_po:
+        parts = root_po.split("-")
+        if len(parts) >= 2 and parts[1].isdigit():
+            stripped = parts[1].lstrip("0")
+            if stripped:
+                search_terms.add(f"{parts[0]}-{stripped}")
+                search_terms.add(f"{parts[0]} - {stripped}")
+                search_terms.add(f"{parts[0]}-{parts[1]}")
+
+    filters = []
+    for term in search_terms:
+        if term and len(term) >= 3:
+            filters.extend([
+                InputInspection.batch_no == term,
+                InputInspection.batch_no.ilike(f"%{term}%"),
+                InputInspection.cont_name == term,
+                InputInspection.cont_name.ilike(f"%{term}%")
+            ])
+
     records = db.query(InputInspection).filter(
         InputInspection.is_confirmed == True,
-        or_(
-            InputInspection.batch_no == po_clean,
-            InputInspection.batch_no.ilike(f"%{po_clean}%"),
-            InputInspection.cont_name == po_clean,
-            InputInspection.cont_name.ilike(f"%{po_clean}%")
-        )
+        or_(*filters)
     ).order_by(InputInspection.inspected_at.desc(), InputInspection.id.desc()).all()
 
     return records

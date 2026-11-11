@@ -796,12 +796,8 @@ def get_container_detail(container_id: int, db: Session = Depends(get_db)):
     valid_lpns = set([i.lpn for i in sorted_items if i.lpn and i.lpn.strip() and i.lpn != 'None'])
     valid_skus = set([i.sku for i in sorted_items if i.sku and i.sku.strip() and i.sku != 'None'])
 
-    # Tự động đồng bộ và đối soát chéo thông minh cho các kiện hoán đổi / cụm Pallet Nóc
-    try:
-        from lpn_crawler.backend.services.pallet_grouping import resolve_cross_item_matches
-        resolve_cross_item_matches(container_id, db)
-    except Exception:
-        pass
+    # L?u ?: Kh?ng ch?y ??i so?t bi?n ??i d? li?u trong GET request ?? tr?nh side-effect
+
 
     # Nạp kết quả OCR cho các items trong Container
     item_ids = [i.id for i in sorted_items]

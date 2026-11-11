@@ -1,3 +1,132 @@
+import html
+from docx.text.paragraph import Paragraph
+from docx.table import Table
+
+def extract_rich_sections_from_doc(doc) -> dict:
+    """
+    Trích xuất trung thực nội dung các phần lớn (Mục 1 đến Mục n hoặc Điều/Phần) từ file Word .docx,
+    giữ nguyên vẹn định dạng in đậm (bold), chữ nghiêng, gạch chân, tiêu đề mục con (1.1, 1.2),
+    thụt lề các ý con có tiêu đề in đậm (lead-in bold run), và nhúng trực tiếp các Bảng biểu (Tables)
+    vào đúng vị trí dòng chảy văn bản tự nhiên như khi xem trên Word / Canvas Editor.
+    """
+    def clean_text(t):
+        if not t:
+            return ""
+        return unicodedata.normalize('NFC', t).strip()
+
+    def table_to_html(tbl):
+        rows_html = []
+        for r_idx, row in enumerate(tbl.rows):
+            cells_html = []
+            is_header = (r_idx == 0)
+            tag = 'th' if is_header else 'td'
+            for c in row.cells:
+                cell_text = html.escape(clean_text(c.text)).replace('\n', '<br/>')
+                style_str = "border: 1px solid #000; padding: 6px 8px; font-family: Times New Roman, serif; font-size: 10.5pt; "
+                if is_header:
+                    style_str += "background-color: #f1f5f9; font-weight: bold; text-align: center;"
+                else:
+                    style_str += "text-align: left;"
+                cells_html.append(f'<{tag} style="{style_str}">{cell_text}</{tag}>')
+            rows_html.append(f'<tr>{"".join(cells_html)}</tr>')
+        return f'<table class="iso-content-table" style="width: 100%; border-collapse: collapse; margin: 14px 0; border: 1.5px solid #000; font-family: Times New Roman, serif;"><tbody>{"".join(rows_html)}</tbody></table>'
+
+    def paragraph_to_html(p):
+        text = clean_text(p.text)
+        if not text:
+            return None
+        
+        # Sub-heading: ví dụ "1.1. Mục đích ban hành", "1.2. Phạm vi áp dụng", "2.1. ..."
+        subhead_match = re.match(r'^(\d+\.\d+\.?\s+)(.*)$', text)
+        if subhead_match:
+            num_prefix = subhead_match.group(1)
+            raw_title = subhead_match.group(2).strip()
+            words = [w.capitalize() if len(w) > 1 else w for w in raw_title.split()]
+            title_formatted = " ".join(words)
+            return f'<h4 class="iso-subheading" style="font-size: 12.5pt; font-weight: bold; margin: 18px 0 6px 0; color: #000000; font-family: Times New Roman, serif; line-height: 1.4;">{num_prefix}{title_formatted}</h4>'
+        
+        # Build runs giữ nguyên in đậm (bold), chữ nghiêng (italic), gạch chân (underline)
+        run_htmls = []
+        for r in p.runs:
+            t = unicodedata.normalize('NFC', r.text)
+            if not t:
+                continue
+            escaped = html.escape(t).replace('\n', '<br/>')
+            if r.bold:
+                escaped = f'<strong>{escaped}</strong>'
+            if r.italic:
+                escaped = f'<em>{escaped}</em>'
+            if r.underline:
+                escaped = f'<u>{escaped}</u>'
+            run_htmls.append(escaped)
+        
+        inner_html = ''.join(run_htmls).strip()
+        if not inner_html:
+            return None
+        
+        # Nhận diện ý con có tiêu đề in đậm (e.g. "Chủ động phòng ngừa tai nạn: ") hoặc số thứ tự "1. Khu vực..."
+        has_bold_leadin = len(p.runs) > 0 and p.runs[0].bold and (len(p.runs) == 1 or not p.runs[1].bold or ':' in p.runs[0].text)
+        is_numbered = bool(re.match(r'^\d+\.', text))
+        
+        if has_bold_leadin or is_numbered:
+            return f'<p class="iso-lead-item" style="margin: 6px 0 6px 20px; line-height: 1.6; text-align: justify; font-family: Times New Roman, serif; font-size: 12pt; color: #000000;">{inner_html}</p>'
+        
+        return f'<p style="margin: 6px 0; line-height: 1.6; text-align: justify; font-family: Times New Roman, serif; font-size: 12pt; color: #000000;">{inner_html}</p>'
+
+    blocks = []
+    for child in doc.element.body:
+        if child.tag.endswith('p'):
+            blocks.append(('p', Paragraph(child, doc)))
+        elif child.tag.endswith('tbl'):
+            blocks.append(('tbl', Table(child, doc)))
+
+    sections = {}
+    current_sec_name = None
+    current_sec_elements = []
+
+    skip_first_tables = 2
+    tables_seen = 0
+
+    for b_type, b_obj in blocks:
+        if b_type == 'tbl':
+            tables_seen += 1
+            if tables_seen <= skip_first_tables:
+                continue
+            tbl_html = table_to_html(b_obj)
+            if current_sec_name:
+                current_sec_elements.append(tbl_html)
+        else:
+            p = b_obj
+            txt = clean_text(p.text)
+            if not txt:
+                continue
+            
+            # Kiểm tra Tiêu đề mục lớn (Mục 1, Mục 2, Điều 1, Phần 1...)
+            is_major_section = (
+                bool(re.match(r'^(?:MỤC|PHẦN|ĐIỀU|CHƯƠNG)\s+\d+[:\s\.-]', txt, re.IGNORECASE)) or
+                (len(txt) < 70 and txt.isupper() and any(k in txt for k in ['MỤC ĐÍCH', 'PHẠM VI', 'QUY TRÌNH', 'ĐỊNH NGHĨA', 'LƯU ĐỒ', 'BIỂU MẪU', 'TỔ CHỨC THỰC HIỆN']))
+            )
+            if 'THEO DÕI SỬA ĐỔI' in txt.upper():
+                continue
+                
+            if is_major_section:
+                if current_sec_name and current_sec_elements:
+                    sections[current_sec_name] = "".join(current_sec_elements)
+                words = [w.capitalize() if len(w) > 1 else w for w in txt.split()]
+                sec_title_formatted = " ".join(words)
+                current_sec_name = sec_title_formatted
+                current_sec_elements = []
+                continue
+                
+            p_html = paragraph_to_html(p)
+            if p_html and current_sec_name:
+                current_sec_elements.append(p_html)
+
+    if current_sec_name and current_sec_elements:
+        sections[current_sec_name] = "".join(current_sec_elements)
+
+    return sections
+
 import os
 import docx
 import json
@@ -678,6 +807,14 @@ def parse_iso_docx(file_path: str, original_filename: str = "") -> dict:
             k: v for k, v in result["sections"].items()
             if v and v.replace('<p>', '').replace('</p>', '').strip()
         }
+
+    # Ưu tiên lấy đầy đủ nội dung phong phú giữ nguyên in đậm (bold), đề mục con, và bảng biểu
+    try:
+        rich_secs = extract_rich_sections_from_doc(doc)
+        if rich_secs and len(rich_secs) > 0:
+            result["sections"] = rich_secs
+    except Exception as e_rich:
+        print(f"[!] Warning extract_rich_sections_from_doc: {e_rich}")
 
     # 7. Trích xuất thông tin Trang bìa chuẩn (Phần 1)
     result["cover_info"] = {

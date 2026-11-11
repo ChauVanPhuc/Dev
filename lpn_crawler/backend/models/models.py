@@ -187,3 +187,25 @@ class LpnZaloLog(Base):
 
     container = relationship("LpnContainer", back_populates="zalo_logs")
 
+
+class LpnOcrJob(Base):
+    __tablename__ = "lpn_ocr_jobs"
+
+    id = Column(BigInteger, primary_key=True, index=True, autoincrement=True)
+    container_id = Column(BigInteger, ForeignKey("lpn_containers.id", ondelete="CASCADE"), nullable=False, index=True)
+    container_number = Column(String(100), nullable=True, index=True)
+    status = Column(String(30), nullable=False, default="pending", index=True)  # pending, running, done, failed
+    attempts = Column(Integer, nullable=False, default=0)
+    total_items = Column(Integer, default=0)
+    processed_items = Column(Integer, default=0)
+    matched_items = Column(Integer, default=0)
+    payload_json = Column(UnicodeText, nullable=True)
+    target_phone = Column(String(50), nullable=True)
+    worker_id = Column(String(100), nullable=True)
+    last_error = Column(UnicodeText, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    started_at = Column(DateTime, nullable=True)
+    heartbeat_at = Column(DateTime, nullable=True)
+    finished_at = Column(DateTime, nullable=True)
+
+
