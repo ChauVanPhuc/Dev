@@ -220,6 +220,7 @@ export const ClaimFilterBar = ({
       border: '1px solid #EADCC9',
       flexWrap: 'wrap',
       position: 'relative',
+      zIndex: 90,
       boxSizing: 'border-box'
     }}>
       {/* CATEGORY 0: HIỂN THỊ SỐ DÒNG */}

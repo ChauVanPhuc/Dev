@@ -31,15 +31,37 @@ const getInitialPermissions = () => {
 }
 
 const isValidToken = (token) => {
-  return !!token && token !== 'null' && token !== 'undefined' && token !== ''
+  if (!token || token === 'null' || token === 'undefined' || token === '') return false
+  try {
+    const parts = String(token).split('.')
+    if (parts.length === 3) {
+      const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+      const payload = JSON.parse(atob(base64))
+      if (payload && typeof payload.exp === 'number' && payload.exp * 1000 <= Date.now()) {
+        return false
+      }
+    }
+  } catch {
+    return false
+  }
+  return true
+}
+
+const initialToken = localStorage.getItem('token') || localStorage.getItem('access_token') || null
+const initialTokenValid = isValidToken(initialToken)
+if (!initialTokenValid && initialToken) {
+  localStorage.removeItem('token')
+  localStorage.removeItem('access_token')
+  localStorage.removeItem('smartflow_user')
+  localStorage.removeItem('smartflow_active_permissions')
 }
 
 const useAuthStore = create((set, get) => ({
-  // Khởi tạo từ localStorage nếu có
-  user: getInitialUser(),
-  token: localStorage.getItem('token') || null,
-  isAuthenticated: isValidToken(localStorage.getItem('token')),
-  permissions: getInitialPermissions(),
+  // Khởi tạo từ localStorage nếu token còn hiệu lực
+  user: initialTokenValid ? getInitialUser() : null,
+  token: initialTokenValid ? initialToken : null,
+  isAuthenticated: initialTokenValid,
+  permissions: initialTokenValid ? getInitialPermissions() : {},
 
   /**
    * Cập nhật thông tin người dùng và token
@@ -197,6 +219,7 @@ const useAuthStore = create((set, get) => ({
   logout: () => {
     localStorage.removeItem('smartflow_user')
     localStorage.removeItem('token')
+    localStorage.removeItem('access_token')
     localStorage.removeItem('smartflow_active_permissions')
     localStorage.removeItem('smartflow_remembered_credentials')
     set({ user: null, token: null, isAuthenticated: false, permissions: {} })

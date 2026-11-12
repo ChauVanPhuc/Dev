@@ -6,15 +6,13 @@ export const getBaseURL = () => {
   if (typeof window === 'undefined') return '';
   const { hostname, port } = window.location;
 
-  if (hostname.includes('smartflowg7.cloud')) {
-    if (hostname.startsWith('dev_')) {
-      return 'https://dev_api.smartflowg7.cloud';
-    }
-    return 'https://api.smartflowg7.cloud';
+  if (hostname.includes('smartflowq7.cloud') || hostname.includes('smartflowg7.cloud')) {
+    return window.location.origin;
   }
 
   if (port === '5173' || port === '5174' || port === '5175' || port === '3000' || port === '1222' || port === '1333') {
-    return `http://${hostname}:8000`;
+    const resolvedHost = (hostname === 'localhost' || hostname === '::1') ? '127.0.0.1' : hostname;
+    return `http://${resolvedHost}:8000`;
   }
   
   return window.location.origin;
@@ -117,11 +115,16 @@ export const extractMultiplierFromPenalty = (penaltyStr) => {
 export const getCabinetSalePrice = (sku, cabinetPrices = []) => {
   if (!sku) return 0;
   const cleanSku = String(sku).trim().toLowerCase();
-  const match = cabinetPrices.find(p => 
-    (p.cabinet_code && String(p.cabinet_code).trim().toLowerCase() === cleanSku) ||
-    (p.cabinet_name && String(p.cabinet_name).trim().toLowerCase() === cleanSku)
-  );
-  if (match) return match.sale_price || 0;
+  if (cabinetPrices instanceof Map) {
+    return cabinetPrices.get(cleanSku) || 0;
+  }
+  if (Array.isArray(cabinetPrices)) {
+    const match = cabinetPrices.find(p => 
+      (p.cabinet_code && String(p.cabinet_code).trim().toLowerCase() === cleanSku) ||
+      (p.cabinet_name && String(p.cabinet_name).trim().toLowerCase() === cleanSku)
+    );
+    if (match) return match.sale_price || 0;
+  }
   return 0;
 };
 
@@ -296,4 +299,163 @@ export const formatMonthYear = (val) => {
     return `${parts[0].padStart(2, '0')}/${parts[1]}`;
   }
   return s;
+};
+
+export function getClaimYearMonth(claim) {
+  if (!claim) return null;
+  const raw = claim.date || claim.period || claim.export_date || claim.created_at;
+  if (!raw) return null;
+  const str = String(raw).trim();
+
+  let match = str.match(/^(\d{4})[-/](\d{1,2})(?:[-/]\d{1,2})?/);
+  if (match) {
+    const year = parseInt(match[1], 10);
+    const month = parseInt(match[2], 10);
+    if (year > 1900 && month >= 1 && month <= 12) {
+      return { year, month, monthIndex: year * 12 + month };
+    }
+  }
+
+  match = str.match(/^(\d{1,2})[-/](\d{4})$/);
+  if (match) {
+    const month = parseInt(match[1], 10);
+    const year = parseInt(match[2], 10);
+    if (year > 1900 && month >= 1 && month <= 12) {
+      return { year, month, monthIndex: year * 12 + month };
+    }
+  }
+
+  const d = new Date(str);
+  if (!isNaN(d.getTime())) {
+    const year = d.getFullYear();
+    const month = d.getMonth() + 1;
+    return { year, month, monthIndex: year * 12 + month };
+  }
+  return null;
+}
+
+const DELAY_PALETTE = [
+  '#C48750',
+  '#A66E3E',
+  '#8D5B35',
+  '#79543D',
+  '#5B3924',
+];
+
+function getDelayColor(delayMonths) {
+  if (delayMonths <= 1) return DELAY_PALETTE[0];
+  if (delayMonths <= 3) return DELAY_PALETTE[1];
+  if (delayMonths <= 5) return DELAY_PALETTE[2];
+  if (delayMonths <= 8) return DELAY_PALETTE[3];
+  return DELAY_PALETTE[4];
+}
+
+export function processContainerDelays(
+  claimsList = [],
+  containerExportsMap = {},
+  referenceMonthYear = ''
+) {
+  if (!Array.isArray(claimsList) || claimsList.length === 0) {
+    return { totalValid: 0, chartItems: [] };
+  }
+
+  const now = new Date();
+  let refYear = now.getFullYear();
+  let refMonth = now.getMonth() + 1;
+  if (referenceMonthYear && /^\d{4}[-/]\d{2}/.test(referenceMonthYear)) {
+    const [yStr, mStr] = referenceMonthYear.split(/[-/]/);
+    refYear = parseInt(yStr, 10) || refYear;
+    refMonth = parseInt(mStr, 10) || refMonth;
+  }
+  const refMonthIndex = refYear * 12 + refMonth;
+
+  const seenClaims = new Set();
+  const groupMap = new Map();
+  let totalValid = 0;
+
+  claimsList.forEach((c) => {
+    const cid = c?.id || c?.claim_code || c?.claim_no;
+    if (cid && seenClaims.has(cid)) return;
+    if (cid) seenClaims.add(cid);
+
+    const cont = String(c?.cont || c?.container_no || '').trim().toUpperCase();
+    const exportInfo = (cont && containerExportsMap && typeof containerExportsMap === 'object')
+      ? containerExportsMap[cont]
+      : null;
+    const exportDate = exportInfo?.exportDate || c?.export_date || '';
+    if (!exportDate || !/^\d{4}[-/]\d{2}/.test(String(exportDate))) return;
+
+    const [expYStr, expMStr] = String(exportDate).split(/[-/]/);
+    const expYear = parseInt(expYStr, 10);
+    const expMonth = parseInt(expMStr, 10);
+    if (!expYear || !expMonth) return;
+
+    const expMonthIndex = expYear * 12 + expMonth;
+    const groupName = `${String(expMonth).padStart(2, '0')}/${expYear}`;
+    const claimYm = getClaimYearMonth(c);
+    const claimIdx = claimYm ? claimYm.monthIndex : refMonthIndex;
+    const delayMonths = Math.max(0, claimIdx - expMonthIndex);
+
+    totalValid += 1;
+    if (!groupMap.has(groupName)) {
+      groupMap.set(groupName, {
+        groupName,
+        expMonthIndex,
+        claimCount: 0,
+        containers: new Set(),
+        delaySum: 0,
+      });
+    }
+    const grp = groupMap.get(groupName);
+    grp.claimCount += 1;
+    if (cont) grp.containers.add(cont);
+    grp.delaySum += delayMonths;
+  });
+
+  const chartItems = Array.from(groupMap.values())
+    .sort((a, b) => a.expMonthIndex - b.expMonthIndex)
+    .map((grp) => {
+      const avgDelay = Math.max(0, Math.round(grp.delaySum / (grp.claimCount || 1)));
+      const percentage = totalValid > 0 ? ((grp.claimCount / totalValid) * 100).toFixed(1) : '0.0';
+      const delayText = avgDelay > 0 ? `Trễ ${avgDelay} tháng` : 'Trong tháng';
+      const delayTooltipText =
+        avgDelay > 0
+          ? `Trễ ${avgDelay} tháng (tham chiếu T${String(refMonth).padStart(2, '0')}/${refYear})`
+          : 'Phát sinh trong tháng xuất';
+      const delayDatalabel = `${grp.claimCount} vụ (${avgDelay > 0 ? `Trễ ${avgDelay}T` : '0T'})`;
+      return {
+        groupName: grp.groupName,
+        claimCount: grp.claimCount,
+        containerCount: grp.containers.size,
+        percentage,
+        delayMonths: avgDelay,
+        color: getDelayColor(avgDelay),
+        delayText,
+        delayTooltipText,
+        delayDatalabel,
+      };
+    });
+
+  return { totalValid, chartItems };
+}
+
+/**
+ * Chuẩn hóa chuỗi/mảng công đoạn (stage) của lỗi G7 thành dạng hiển thị.
+ */
+export const formatStageTag = (stageVal) => {
+  if (!stageVal) return null;
+  if (Array.isArray(stageVal)) return stageVal.join(', ');
+  if (typeof stageVal === 'string') {
+    const cleaned = stageVal.trim();
+    if (cleaned.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(cleaned);
+        if (Array.isArray(parsed)) return parsed.join(', ');
+      } catch (err) {
+        console.warn('[claimHelpers] Invalid JSON stage array:', cleaned, err);
+      }
+    }
+    return cleaned.replace(/^\["|"]$/g, '').replace(/","/g, ', ').replace(/"/g, '');
+  }
+  return String(stageVal);
 };

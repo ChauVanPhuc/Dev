@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# coding: utf-8
 import fitz  # PyMuPDF
 import re
 import os
@@ -8,6 +8,7 @@ import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.drawing.image import Image as OpenpyxlImage
 
+from app.shared.utils import clean_and_standardize_sku, extract_product_line_from_sku, normalize_penalty_value
 logger = logging.getLogger("pdf_parser")
 
 def _split_composite_image_if_needed(img_path, images_batch_dir, cab_no, page_num, batch_id, caption_str, target_claims):
@@ -128,6 +129,22 @@ def parse_pdf_claims(pdf_path, batch_id, images_batch_dir, seen_keys=None, norma
     
     filename = os.path.basename(pdf_path)
     doc = fitz.open(pdf_path)
+
+    # 0. Phát hiện CƠ CHẾ 4 (Credit Note Table PDF - bảng 5 cột: STT, SKU/CLAIM, CONTAINER #, LPN, ACTION, không có ảnh)
+    is_mechanism_4 = False
+    for p_idx in range(min(3, len(doc))):
+        p_text = doc[p_idx].get_text()
+        if re.search(r'CREDIT\s+NOTE', p_text, re.IGNORECASE) or re.search(r'TOTAL\s+CREDIT\s+AMOUNT', p_text, re.IGNORECASE):
+            is_mechanism_4 = True
+            break
+        if (re.search(r'SKU\\s*/\\s*CLAIM', p_text, re.IGNORECASE) and re.search(r'CONTAINER\\s*#', p_text, re.IGNORECASE)):
+            is_mechanism_4 = True
+            break
+
+    if is_mechanism_4:
+        doc.close()
+        logger.info(f"[{filename}] ✓ Phát hiện CƠ CHẾ 4 (Bảng dữ liệu Credit Note)")
+        return parse_pdf_claims_mechanism_4(pdf_path, batch_id, images_batch_dir, seen_keys, normalize_penalty_func, claims_only)
 
     # 1. Phát hiện CƠ CHẾ 3 (Label-Value Table dạng Claim #<N> kèm các nhãn cột đặc trưng)
     is_mechanism_3 = False
@@ -1065,7 +1082,12 @@ def parse_pdf_claims_mechanism_3(pdf_path, batch_id, images_batch_dir, seen_keys
     [CƠ CHẾ 3]
     Dành cho cấu trúc claim dạng Label-Value:
     - Mỗi record bắt đầu bằng `Claim #N`.
-    - SKU, LPN, Defect Name, Container, Defect Code và Action là các field tách riêng.
+    - Bảng gồm 2 cặp Label-Value (hoặc 1 cặp):
+      Row 1: SKU, LPN
+      Row 2: Defect Name, Container
+      Row 3: Defect Code, Action
+    - Đọc theo từng ô (cell) dựa trên ranh giới thực tế của bảng để không ghép nhầm text giữa các trường.
+    - Chuẩn hóa Dòng hàng (trích xuất từ phần trước '-' đầu tiên của SKU).
     - Ảnh minh chứng nằm dưới phần thông tin claim và có thể tiếp tục sang trang kế.
     - Mã tham chiếu dùng `Claim#N_MMYYYY`.
     """
@@ -1073,8 +1095,26 @@ def parse_pdf_claims_mechanism_3(pdf_path, batch_id, images_batch_dir, seen_keys
         seen_keys = set()
     
     if normalize_penalty_func is None:
-        normalize_penalty_func = lambda x: x
-        
+        normalize_penalty_func = normalize_penalty_value
+
+    def _extract_words_in_bbox(page, bbox):
+        if not bbox:
+            return []
+        words = page.get_text("words", clip=bbox)
+        if not words:
+            return []
+        lines = []
+        for w in sorted(words, key=lambda x: (x[1], x[0])):
+            if not lines or abs(lines[-1][0][1] - w[1]) > 5:
+                lines.append([w])
+            else:
+                lines[-1].append(w)
+        result = []
+        for line in lines:
+            line.sort(key=lambda x: x[0])
+            result.append(" ".join(w[4] for w in line))
+        return result
+
     def _sort_and_join_cell_words(w_list):
         if not w_list:
             return ""
@@ -1102,6 +1142,7 @@ def parse_pdf_claims_mechanism_3(pdf_path, batch_id, images_batch_dir, seen_keys
     claims = []
     parse_warnings = []
     period = None
+    page_table_bottoms = {}
 
     # 1. Trích xuất Period từ 5 trang đầu
     for p_idx in range(min(5, len(doc))):
@@ -1125,66 +1166,167 @@ def parse_pdf_claims_mechanism_3(pdf_path, batch_id, images_batch_dir, seen_keys
             continue
             
         claim_no = int(header_m.group(1))
-        words = page.get_text("words")
         
-        # Định vị tọa độ các nhãn cột
-        sku_words = [w for w in words if w[4].upper() == 'SKU' and w[0] < 120]
-        lpn_words = [w for w in words if w[4].upper() == 'LPN']
-        defect_name_words = [w for w in words if w[4].upper() == 'DEFECT' and any(w2[4].upper() == 'NAME' and abs(w2[1] - w[1]) < 10 for w2 in words)]
-        container_words = [w for w in words if w[4].upper() == 'CONTAINER']
-        defect_code_words = [w for w in words if w[4].upper() == 'DEFECT' and any(w2[4].upper() == 'CODE' and abs(w2[1] - w[1]) < 10 for w2 in words)]
-        action_words = [w for w in words if w[4].upper() == 'ACTION']
+        data = {}
+        table_bottom_y = 0
+        table_found = False
+        
+        # Phương pháp 1: Trích xuất dựa trên cấu trúc bảng ô (cell-level) từ PyMuPDF find_tables()
+        tabs = page.find_tables()
+        if tabs.tables:
+            for tab in tabs.tables:
+                extracted = tab.extract()
+                text_flat = " ".join(" ".join(str(c or "") for c in row) for row in extracted).upper()
+                if "SKU" in text_flat and ("ACTION" in text_flat or "CONTAINER" in text_flat):
+                    table_found = True
+                    table_bottom_y = tab.bbox[3]
+                    for r_idx, row in enumerate(extracted):
+                        c_idx = 0
+                        while c_idx < len(row):
+                            cell_val = str(row[c_idx] or "").strip()
+                            cell_upper = cell_val.upper()
+                            
+                            target_key = None
+                            if re.search(r'^\s*SKU\b', cell_upper):
+                                target_key = "sku"
+                            elif re.search(r'\bLPN\b', cell_upper):
+                                target_key = "lpn"
+                            elif "DEFECT" in cell_upper and "NAME" in cell_upper:
+                                target_key = "defect_name"
+                            elif re.search(r'\bCONTAINER\b', cell_upper):
+                                target_key = "container"
+                            elif "DEFECT" in cell_upper and "CODE" in cell_upper:
+                                target_key = "defect_code"
+                            elif re.search(r'\bACTION\b', cell_upper):
+                                target_key = "action"
+                            
+                            if target_key:
+                                val_str = ""
+                                if c_idx + 1 < len(row) and row[c_idx + 1] is not None:
+                                    val_str = str(row[c_idx + 1] or "").strip()
+                                
+                                val_lines = [l.strip() for l in val_str.split("\n") if l.strip()]
+                                if not val_lines and r_idx < len(tab.rows) and c_idx + 1 < len(tab.rows[r_idx].cells):
+                                    cell_bbox = tab.rows[r_idx].cells[c_idx + 1]
+                                    if cell_bbox is not None:
+                                        val_lines = _extract_words_in_bbox(page, cell_bbox)
+                                
+                                data[target_key] = val_lines
+                                c_idx += 2
+                            else:
+                                c_idx += 1
+                    break
 
-        if sku_words and defect_name_words and defect_code_words and action_words:
-            r1_y0 = sku_words[0][1] - 5
-            r2_y0 = defect_name_words[0][1] - 5
-            r3_y0 = defect_code_words[0][1] - 5
-            r3_y1 = r3_y0 + 70
+        # Phương pháp 2: Fallback định vị ranh giới ô độc lập qua đường kẻ ngang vector / nhãn
+        if not table_found or not ("sku" in data and "action" in data and data.get("sku")):
+            words = page.get_text("words")
+            drawings = page.get_drawings()
+            
+            sku_words = [w for w in words if w[4].upper() == 'SKU' and w[0] < 120]
+            lpn_words = [w for w in words if w[4].upper() == 'LPN' and w[0] > 250]
+            defect_name_words = [w for w in words if w[4].upper() == 'DEFECT' and any(w2[4].upper() == 'NAME' and abs(w2[1] - w[1]) < 10 for w2 in words) and w[0] < 120]
+            container_words = [w for w in words if w[4].upper() == 'CONTAINER' and w[0] > 250]
+            defect_code_words = [w for w in words if w[4].upper() == 'DEFECT' and any(w2[4].upper() == 'CODE' and abs(w2[1] - w[1]) < 10 for w2 in words) and w[0] < 120]
+            action_words = [w for w in words if w[4].upper() == 'ACTION' and w[0] > 250]
 
-            lpn_x = lpn_words[0][0] if lpn_words else 320
-            r1_col2 = [w for w in words if r1_y0 <= w[1] < r2_y0 and 90 <= w[0] < lpn_x - 5]
-            r1_col4 = [w for w in words if r1_y0 - 25 <= w[1] < r2_y0 and w[0] >= lpn_x + 25 and w[4].upper() != 'LPN']
+            if sku_words and defect_name_words and defect_code_words:
+                min_y = sku_words[0][1] - 15
+                max_y = defect_code_words[0][1] + 80
+                h_lines = sorted(list(set(round(d['rect'].y0, 1) for d in drawings if min_y <= d['rect'].y1 <= max_y and d['rect'].width > 80)))
+                
+                left_labels = sku_words + defect_name_words + defect_code_words
+                right_labels = lpn_words + container_words + action_words
+                
+                col2_x0 = max(w[2] for w in left_labels) + 5
+                col2_x1 = min(w[0] for w in right_labels) - 5 if right_labels else 320
+                col4_x0 = max(w[2] for w in right_labels) + 5 if right_labels else 350
+                col4_x1 = page.rect.width - 20
+                
+                if len(h_lines) >= 4:
+                    r1_y0, r1_y1 = h_lines[0], h_lines[1]
+                    r2_y0, r2_y1 = h_lines[1], h_lines[2]
+                    r3_y0, r3_y1 = h_lines[2], h_lines[3]
+                    table_bottom_y = h_lines[3]
+                else:
+                    r1_y0 = sku_words[0][1] - 5
+                    r2_y0 = defect_name_words[0][1] - 5
+                    r3_y0 = defect_code_words[0][1] - 5
+                    r1_y1 = r2_y0
+                    r2_y1 = r3_y0
+                    r3_y1 = r3_y0 + 70
+                    table_bottom_y = r3_y1
 
-            cont_x = container_words[0][0] if container_words else 320
-            r2_col2 = [w for w in words if r2_y0 <= w[1] < r3_y0 and 90 <= w[0] < cont_x - 5]
-            r2_col4 = [w for w in words if r2_y0 <= w[1] < r3_y0 and w[0] >= cont_x + 25 and w[4].upper() != 'CONTAINER']
+                r1_col2 = [w for w in words if r1_y0 <= w[1] < r1_y1 and col2_x0 <= w[0] < col2_x1]
+                r1_col4 = [w for w in words if r1_y0 <= w[1] < r1_y1 and col4_x0 <= w[0] < col4_x1]
+                r2_col2 = [w for w in words if r2_y0 <= w[1] < r2_y1 and col2_x0 <= w[0] < col2_x1]
+                r2_col4 = [w for w in words if r2_y0 <= w[1] < r2_y1 and col4_x0 <= w[0] < col4_x1]
+                r3_col2 = [w for w in words if r3_y0 <= w[1] < r3_y1 and col2_x0 <= w[0] < col2_x1]
+                r3_col4 = [w for w in words if r3_y0 <= w[1] < r3_y1 and col4_x0 <= w[0] < col4_x1]
 
-            act_x = action_words[0][0] if action_words else 320
-            r3_col2 = [w for w in words if r3_y0 <= w[1] < r3_y1 and 90 <= w[0] < act_x - 5]
-            r3_col4 = [w for w in words if r3_y0 <= w[1] < r3_y1 and w[0] >= act_x + 25 and w[4].upper() != 'ACTION']
+                if "sku" not in data or not data["sku"]: data["sku"] = _sort_and_join_cell_words(r1_col2).split("\n")
+                if "lpn" not in data: data["lpn"] = _sort_and_join_cell_words(r1_col4).split("\n")
+                if "defect_name" not in data or not data["defect_name"]: data["defect_name"] = _sort_and_join_cell_words(r2_col2).split("\n")
+                if "container" not in data: data["container"] = _sort_and_join_cell_words(r2_col4).split("\n")
+                if "defect_code" not in data or not data["defect_code"]: data["defect_code"] = _sort_and_join_cell_words(r3_col2).split("\n")
+                if "action" not in data or not data["action"]: data["action"] = _sort_and_join_cell_words(r3_col4).split("\n")
 
-            sku_val = _sort_and_join_cell_words(r1_col2)
-            lpn_raw = _sort_and_join_cell_words(r1_col4)
-            lpn_val = ", ".join(lpn_raw.split()) if lpn_raw else ""
-            defect_name_val = _sort_and_join_cell_words(r2_col2).replace('\n', ', ')
-            container_val = _sort_and_join_cell_words(r2_col4)
-            defect_code_val = _sort_and_join_cell_words(r3_col2).replace('\n', ', ')
-            action_raw = _sort_and_join_cell_words(r3_col4)
-            action_clean = re.sub(r'VIDEO\s*LINK:.*$', '', action_raw, flags=re.IGNORECASE | re.DOTALL).strip()
-            action_val = action_clean.replace('\n', ' ')
+        if table_bottom_y == 0:
+            table_bottom_y = 145
+        page_table_bottoms[page_num] = table_bottom_y
 
-            penalty_val = normalize_penalty_func(action_val) if normalize_penalty_func else 0.0
+        # Chuẩn hóa dữ liệu theo mapping nghiêm ngặt
+        sku_val = clean_and_standardize_sku(" ".join(data.get("sku", [])))
+        dong_hang_val = extract_product_line_from_sku(sku_val)
+        
+        lpn_lines = data.get("lpn", [])
+        lpn_val = ", ".join(" ".join(lpn_lines).split()) if lpn_lines else ""
+        
+        defect_name_lines = [l.strip() for l in data.get("defect_name", []) if l.strip()]
+        defect_name_val = ", ".join(defect_name_lines)
+        
+        container_lines = data.get("container", [])
+        container_val = " ".join(container_lines).strip()
+        
+        raw_dc = " ".join(data.get("defect_code", []))
+        clean_codes = []
+        for mc in re.finditer(r'\b([A-Za-z]{2,4})\s*[-_]?\s*(\d{2,3})\b', raw_dc):
+            c_str = f"{mc.group(1).upper()}_{mc.group(2)}"
+            if c_str not in clean_codes:
+                clean_codes.append(c_str)
+        defect_code_val = ", ".join(clean_codes) if clean_codes else raw_dc.replace('\n', ' ').strip()
+        
+        action_lines = [l.strip() for l in data.get("action", []) if l.strip()]
+        action_raw = " ".join(action_lines)
+        action_clean = re.sub(r'VIDEO\s*LINK:.*$', '', action_raw, flags=re.IGNORECASE | re.DOTALL).strip()
+        action_val = normalize_penalty_value(action_clean)
 
-            claim_data = {
-                "stt": claim_no,
-                "cabinet_no": claim_no,
-                "claim_no": claim_no,
-                "reference_prefix": "Claim",
-                "mechanism_id": 3,
-                "sku": sku_val,
-                "claim_description": defect_name_val,
-                "defect_code": defect_code_val,
-                "action": action_val,
-                "lpn": lpn_val,
-                "container_no": container_val,
-                "period": period,
-                "penalty": penalty_val,
-                "source_page": page_num + 1,
-                "image_paths": [],
-                "image_captions": [],
-                "photo_pages": []
-            }
-            claims.append(claim_data)
+        # Tiền phạt cụ thể (chỉ trích xuất nếu có số tiền cụ thể trong PDF)
+        dollar_m = re.search(r'\$\s*(\d+(?:\.\d+)?)', action_clean)
+        penalty_val = float(dollar_m.group(1)) if dollar_m else 0.0
+
+        claim_data = {
+            "stt": claim_no,
+            "cabinet_no": claim_no,
+            "claim_no": claim_no,
+            "reference_prefix": "Claim",
+            "mechanism_id": 3,
+            "sku": sku_val,
+            "dong_hang": dong_hang_val,
+            "line": dong_hang_val,
+            "product_line": dong_hang_val,
+            "claim_description": defect_name_val,
+            "defect_code": defect_code_val,
+            "action": action_val,
+            "lpn": lpn_val,
+            "container_no": container_val,
+            "period": period,
+            "penalty": penalty_val,
+            "source_page": page_num + 1,
+            "image_paths": [],
+            "image_captions": [],
+            "photo_pages": []
+        }
+        claims.append(claim_data)
 
     parsed_count_before_dedup = len(claims)
     logger.info(f"[{filename}] Cơ chế 3: Đã parse được {parsed_count_before_dedup} claims (trước dedup)")
@@ -1252,8 +1394,7 @@ def parse_pdf_claims_mechanism_3(pdf_path, batch_id, images_batch_dir, seen_keys
         header_m = re.search(r'Claim\s*#\s*(\d+)', text, re.IGNORECASE)
         if header_m:
             current_claim_no = int(header_m.group(1))
-            act_words = [w for w in page.get_text("words") if w[4].upper() == 'ACTION']
-            table_bottom_y = act_words[0][3] + 25 if act_words else 350
+            table_bottom_y = page_table_bottoms.get(page_num, 145) + 5
         else:
             table_bottom_y = 30
 
@@ -1286,9 +1427,13 @@ def parse_pdf_claims_mechanism_3(pdf_path, batch_id, images_batch_dir, seen_keys
 
             crop_rect = fitz.Rect(crop_x0, crop_y0, crop_x1, crop_y1) & page.rect
             if crop_rect.is_empty or crop_rect.width < 5 or crop_rect.height < 5:
+                crop_rect = fitz.Rect(bx0, by0, bx1, by1) & page.rect
+            if crop_rect.is_empty or crop_rect.width < 5 or crop_rect.height < 5:
                 continue
 
             try:
+                if not os.path.exists(images_batch_dir):
+                    os.makedirs(images_batch_dir, exist_ok=True)
                 pix = page.get_pixmap(clip=crop_rect, dpi=150)
                 is_continuation = page_num != (target_claim["source_page"] - 1)
                 sub_num = len(target_claim["image_paths"]) + 1
@@ -1306,7 +1451,6 @@ def parse_pdf_claims_mechanism_3(pdf_path, batch_id, images_batch_dir, seen_keys
     doc.close()
     logger.info(f"[{os.path.basename(pdf_path)}] Cơ chế 3: Kết quả cuối cùng = {len(claims)} claims")
     return claims, period or datetime.now().strftime("%m-%Y"), parse_warnings, mechanism_info
-
 
 def calculate_total_penalty(action, sku, cabinet_prices_map) -> float:
     if not action:
@@ -1355,14 +1499,19 @@ def save_claims_to_excel(claims, excel_path, images_batch_dir=None, claim_import
     # We keep a list of BytesIO streams to keep them alive until workbook is saved!
     keep_alive_streams = []
     
-    headers = [
-        "STT", "Dòng hàng", "Mã tham chiếu", "Tên sản phẩm", "Mô tả", "Mã lỗi KH", "Mã lỗi G7", "Tên lỗi G7", 
-        "Mức độ", "Trạng thái", "Giá trị phạt", "Tổng tiền phạt", "LPN", "Container", 
-        "Thời gian Claim", "Hình ảnh 1", "Hình ảnh 2", "Hình ảnh 3"
-    ]
+    # 1. Xác định số ảnh lớn nhất trong tập Claim để sinh cột hình ảnh động
+    max_images = max([len(c.get("image_paths") or []) for c in claims] or [0])
     
-    # Styled header block matching wood-brown dashboard color #7B5233
-    header_fill = PatternFill(start_color="7B5233", end_color="7B5233", fill_type="solid")
+    headers = [
+        "STT", "Dòng hàng", "Mã tham chiếu", "Tên sản phẩm", "Mô tả", 
+        "Mã lỗi KH", "Mã lỗi G7", "Tên lỗi G7", "Trạng thái", "Giá trị phạt", 
+        "Tổng tiền phạt", "LPN", "Container", "Thời gian Claim"
+    ]
+    for i in range(1, max_images + 1):
+        headers.append(f"Hình ảnh {i}")
+    
+    # Styled header block matching wood-brown dashboard color #5B3924
+    header_fill = PatternFill(start_color="5B3924", end_color="5B3924", fill_type="solid")
     header_font = Font(name="Segoe UI", size=11, bold=True, color="FFFFFF")
     center_align = Alignment(horizontal="center", vertical="center")
     
@@ -1373,138 +1522,198 @@ def save_claims_to_excel(claims, excel_path, images_batch_dir=None, claim_import
         cell.font = header_font
         cell.alignment = center_align
     
+    # Freeze header row & add AutoFilter
+    last_col_letter = openpyxl.utils.get_column_letter(len(headers))
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = f"A1:{last_col_letter}{max(len(claims) + 1, 2)}"
+    
+    backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    
     for idx, c in enumerate(claims):
         row_num = idx + 2 # Header is row 1
         
-        # Write values directly to cells
-        ws.cell(row=row_num, column=1, value=c.get("stt") or (idx + 1))
-        ws.cell(row=row_num, column=2, value=c.get("customer_name") or "")
+        # 1. STT
+        ws.cell(row=row_num, column=1, value=c.get("stt") or (idx + 1)).alignment = Alignment(vertical="center", horizontal="center")
         
-        # 3. Mã tham chiếu (Cabinet No) standing before SKU
-        cabinet_no = c.get("cabinet_no") or ""
+        # 2. Dòng hàng
+        p_line = c.get("dong_hang") or c.get("product_line") or c.get("customer_name") or ""
+        if not p_line and c.get("product_name") and "-" in c.get("product_name"):
+            p_line = c.get("product_name").split("-")[0].strip()
+        ws.cell(row=row_num, column=2, value=str(p_line)).alignment = Alignment(vertical="center", horizontal="center")
+        
+        # 3. Mã tham chiếu (Cabinet No)
+        cabinet_no = c.get("claim_code") or c.get("cabinet_no") or ""
         if cabinet_no:
             import re
             cabinet_no_str = str(cabinet_no).strip()
-            # Clean up all repeated Cabinet# or Cabinet # prefixes at start
             clean_cab_no = re.sub(r'^(Cabinet\s*#\s*)+', '', cabinet_no_str, flags=re.IGNORECASE)
             cabinet_no = f"Cabinet #{clean_cab_no}"
-        ws.cell(row=row_num, column=3, value=cabinet_no)
+        cab_cell = ws.cell(row=row_num, column=3, value=str(cabinet_no))
+        cab_cell.alignment = Alignment(vertical="center", horizontal="left")
         
-        ws.cell(row=row_num, column=4, value=c.get("sku") or "")
-        ws.cell(row=row_num, column=5, value=c.get("claim_description") or "")
-        ws.cell(row=row_num, column=6, value=c.get("defect_code") or "")
+        # 4. Tên sản phẩm (SKU)
+        sku_cell = ws.cell(row=row_num, column=4, value=str(c.get("product_name") or c.get("sku") or ""))
+        sku_cell.alignment = Alignment(vertical="center", horizontal="left")
         
+        # 5. Mô tả
+        desc_val = str(c.get("description") or c.get("claim_description") or "")
+        desc_cell = ws.cell(row=row_num, column=5, value=desc_val)
+        desc_cell.alignment = Alignment(vertical="center", horizontal="left")
+        
+        # 6. Mã lỗi KH
+        defect_code_cell = ws.cell(row=row_num, column=6, value=str(c.get("order_code") or c.get("defect_code") or ""))
+        defect_code_cell.alignment = Alignment(vertical="center", horizontal="center")
+        
+        # 7. Mã lỗi G7
         resolved_company_code = c.get("company_error_code") or ""
-        if resolve_company_func:
-            resolved_company_code = resolve_company_func(c.get("defect_code") or "")
-        ws.cell(row=row_num, column=7, value=resolved_company_code)
+        if not resolved_company_code and resolve_company_func:
+            resolved_company_code = resolve_company_func(c.get("defect_code") or c.get("order_code") or "")
+        g7_code_cell = ws.cell(row=row_num, column=7, value=str(resolved_company_code or ""))
+        g7_code_cell.alignment = Alignment(vertical="center", horizontal="center")
         
-        # New column: Tên lỗi G7
-        resolved_company_name = ""
-        if resolve_company_name_func:
-            resolved_company_name = resolve_company_name_func(c.get("defect_code") or "")
-        ws.cell(row=row_num, column=8, value=resolved_company_name)
+        # 8. Tên lỗi G7
+        resolved_company_name = c.get("company_error_name") or ""
+        if not resolved_company_name and resolve_company_name_func:
+            resolved_company_name = resolve_company_name_func(c.get("defect_code") or c.get("order_code") or "")
+        g7_name_cell = ws.cell(row=row_num, column=8, value=str(resolved_company_name or ""))
+        g7_name_cell.alignment = Alignment(vertical="center", horizontal="center")
         
-        ws.cell(row=row_num, column=9, value=c.get("severity") or "")
-        ws.cell(row=row_num, column=10, value=c.get("status") or "")
+        # 9. Trạng thái
+        status_val = str(c.get("status") or "")
+        status_cell = ws.cell(row=row_num, column=9, value=status_val)
+        status_cell.alignment = Alignment(vertical="center", horizontal="center")
         
-        action_val = c.get("action") or ""
-        ws.cell(row=row_num, column=11, value=action_val)
+        # 10. Giá trị phạt
+        action_val = str(c.get("penalty") or c.get("action") or "")
+        ws.cell(row=row_num, column=10, value=action_val).alignment = Alignment(vertical="center", horizontal="center")
         
-        # Calculate and format total penalty
-        tot = calculate_total_penalty(action_val, c.get("sku"), cabinet_prices_map)
-        ws.cell(row=row_num, column=12, value=f"${tot:.2f}")
-        
-        ws.cell(row=row_num, column=13, value=c.get("lpn") or "")
-        ws.cell(row=row_num, column=14, value=c.get("container_no") or "")
-        ws.cell(row=row_num, column=15, value=c.get("period") or "")
-        
-        # Set alignment for cells
-        for col_num in range(1, 16):
-            ws.cell(row=row_num, column=col_num).alignment = Alignment(vertical="center", horizontal="center")
+        # 11. Tổng tiền phạt (Kiểu số thực USD, định dạng tiền tệ)
+        tot_val = 0.0
+        raw_tot = c.get("total_penalty")
+        if raw_tot is not None:
+            try:
+                tot_val = float(str(raw_tot).replace("$", "").replace(",", "").strip())
+            except Exception:
+                tot_val = 0.0
+        else:
+            tot_val = float(calculate_total_penalty(action_val, c.get("sku") or c.get("product_name"), cabinet_prices_map) or 0.0)
             
-        # Embed images if available
-        if c.get("image_paths"):
-            has_image = False
-            backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            for img_idx, img_path in enumerate(c["image_paths"][:3]): # Max 3 images
-                if not img_path:
-                    continue
-                
-                # Handle full HTTP/HTTPS URLs
-                raw_path = str(img_path)
-                if raw_path.startswith("http://") or raw_path.startswith("https://"):
-                    from urllib.parse import urlparse
-                    raw_path = urlparse(raw_path).path
+        penalty_cell = ws.cell(row=row_num, column=11, value=tot_val)
+        penalty_cell.number_format = '"$"#,##0.00'
+        penalty_cell.alignment = Alignment(vertical="center", horizontal="right")
+        
+        # 12. LPN (Chuỗi Text để không mất số 0 đầu)
+        lpn_val = str(c.get("lpn") or "")
+        lpn_cell = ws.cell(row=row_num, column=12, value=lpn_val)
+        lpn_cell.number_format = '@'
+        lpn_cell.alignment = Alignment(vertical="center", horizontal="center")
+        
+        # 13. Container (Chuỗi Text để không mất số 0 đầu)
+        cont_val = str(c.get("cont") or c.get("container_no") or "")
+        cont_cell = ws.cell(row=row_num, column=13, value=cont_val)
+        cont_cell.number_format = '@'
+        cont_cell.alignment = Alignment(vertical="center", horizontal="center")
+        
+        # 14. Thời gian Claim (MM/YYYY)
+        period_val = str(c.get("date") or c.get("period") or "")
+        period_cell = ws.cell(row=row_num, column=14, value=period_val)
+        period_cell.alignment = Alignment(vertical="center", horizontal="center")
+        
+        # 15+. Nhúng ảnh minh chứng động vào các cột hình ảnh
+        claim_images = c.get("image_paths") or []
+        has_embedded_image = False
+        
+        for img_idx, img_path in enumerate(claim_images):
+            if not img_path:
+                continue
+            
+            target_col = 15 + img_idx
+            
+            # Resolve image path
+            raw_path = str(img_path)
+            if raw_path.startswith("http://") or raw_path.startswith("https://"):
+                from urllib.parse import urlparse
+                raw_path = urlparse(raw_path).path
 
-                local_img_path = None
-                if "/static/" in raw_path:
-                    sub_path = raw_path.split("/static/")[-1]
-                    local_img_path = os.path.join(backend_dir, "static", sub_path.replace("/", os.sep))
-                elif "/uploads/" in raw_path:
-                    sub_path = raw_path.split("/uploads/")[-1]
-                    local_img_path = os.path.join(backend_dir, "static", "uploads", sub_path.replace("/", os.sep))
-                
-                # Fallback to claim_imports_dir legacy resolution
-                if (not local_img_path or not os.path.exists(local_img_path)) and claim_imports_dir and "/claim_imports/" in raw_path:
-                    sub_path = raw_path.split("/claim_imports/")[-1]
-                    local_img_path = os.path.join(claim_imports_dir, sub_path.replace("/", os.sep))
-                
-                # Fallback to images_batch_dir
-                if (not local_img_path or not os.path.exists(local_img_path)) and images_batch_dir:
-                    filename = raw_path.split("/")[-1]
-                    local_img_path = os.path.join(images_batch_dir, filename)
-                
-                # Check if it is already a valid absolute path
-                if not local_img_path or not os.path.exists(local_img_path):
-                    if os.path.exists(raw_path) and os.path.isfile(raw_path):
-                        local_img_path = raw_path
-                
-                if local_img_path and os.path.exists(local_img_path):
-                    try:
-                        from PIL import Image as PILImage
-                        pil_img = PILImage.open(local_img_path)
-                        
-                        # Resize to max width 120px to optimize Excel file size (from 320MB down to ~3MB)
-                        max_width = 120
-                        if pil_img.width > max_width:
-                            w_percent = (max_width / float(pil_img.width))
-                            h_size = int((float(pil_img.height) * float(w_percent)))
-                            resample_filter = getattr(PILImage, 'Resampling', None)
-                            filter_type = resample_filter.LANCZOS if resample_filter else PILImage.ANTIALIAS
-                            pil_img = pil_img.resize((max_width, h_size), filter_type)
-                            
-                        import io
-                        img_io = io.BytesIO()
-                        pil_img.save(img_io, format='PNG')
-                        img_io.seek(0)
-                        keep_alive_streams.append(img_io)
-                        
-                        img = OpenpyxlImage(img_io)
-                        col_letter = openpyxl.utils.get_column_letter(16 + img_idx)
-                        cell_coordinate = f"{col_letter}{row_num}"
-                        ws.add_image(img, cell_coordinate)
-                        has_image = True
-                    except Exception as e:
-                        logger.warning(f"Không thể chèn ảnh {local_img_path} vào Excel: {str(e)}")
+            local_img_path = None
+            if "/static/" in raw_path:
+                sub_path = raw_path.split("/static/")[-1]
+                local_img_path = os.path.join(backend_dir, "static", sub_path.replace("/", os.sep))
+            elif "/uploads/" in raw_path:
+                sub_path = raw_path.split("/uploads/")[-1]
+                local_img_path = os.path.join(backend_dir, "static", "uploads", sub_path.replace("/", os.sep))
             
-            if has_image:
-                ws.row_dimensions[row_num].height = 65
-                        
-    # Auto-adjust column sizes for text columns (1 to 15)
-    for col_idx in range(1, 16):
+            if (not local_img_path or not os.path.exists(local_img_path)) and claim_imports_dir and "/claim_imports/" in raw_path:
+                sub_path = raw_path.split("/claim_imports/")[-1]
+                local_img_path = os.path.join(claim_imports_dir, sub_path.replace("/", os.sep))
+            
+            if (not local_img_path or not os.path.exists(local_img_path)) and images_batch_dir:
+                filename = raw_path.split("/")[-1]
+                local_img_path = os.path.join(images_batch_dir, filename)
+            
+            if not local_img_path or not os.path.exists(local_img_path):
+                if os.path.exists(raw_path) and os.path.isfile(raw_path):
+                    local_img_path = raw_path
+            
+            if local_img_path and os.path.exists(local_img_path):
+                try:
+                    from PIL import Image as PILImage
+                    pil_img = PILImage.open(local_img_path)
+                    
+                    # Resize thumbnail (max width 120px, max height 60px)
+                    max_width = 120
+                    max_height = 60
+                    pil_img.thumbnail((max_width, max_height))
+                    
+                    import io
+                    img_io = io.BytesIO()
+                    pil_img.save(img_io, format='PNG')
+                    img_io.seek(0)
+                    keep_alive_streams.append(img_io)
+                    
+                    img = OpenpyxlImage(img_io)
+                    col_letter = openpyxl.utils.get_column_letter(target_col)
+                    cell_coordinate = f"{col_letter}{row_num}"
+                    ws.add_image(img, cell_coordinate)
+                    has_embedded_image = True
+                except Exception as e:
+                    logger.warning(f"Không thể nhúng ảnh {local_img_path} vào ô {target_col}:{row_num}: {str(e)}")
+        
+        if has_embedded_image:
+            ws.row_dimensions[row_num].height = 65
+            
+    # Auto-adjust column sizes for standard 14 business columns + dynamic image columns
+    column_min_widths = {
+        1: 8,   # STT
+        2: 14,  # Dòng hàng
+        3: 20,  # Mã tham chiếu
+        4: 18,  # Tên sản phẩm
+        5: 25,  # Mô tả
+        6: 14,  # Mã lỗi KH
+        7: 14,  # Mã lỗi G7
+        8: 22,  # Tên lỗi G7
+        9: 14,  # Trạng thái
+        10: 14, # Giá trị phạt
+        11: 16, # Tổng tiền phạt
+        12: 14, # LPN
+        13: 16, # Container
+        14: 16  # Thời gian Claim
+    }
+    
+    for col_idx in range(1, 15):
         col_letter = openpyxl.utils.get_column_letter(col_idx)
         max_len = 0
         for cell in ws[col_letter]:
             val_str = str(cell.value or '')
             if len(val_str) > max_len:
                 max_len = len(val_str)
-        ws.column_dimensions[col_letter].width = max(max_len + 3, 10)
-        
-    # Set fixed column widths for Image columns
-    ws.column_dimensions["P"].width = 20
-    ws.column_dimensions["Q"].width = 20
-    ws.column_dimensions["R"].width = 20
+        min_w = column_min_widths.get(col_idx, 12)
+        ws.column_dimensions[col_letter].width = max(max_len + 3, min_w)
+    
+    # Set fixed column widths for all dynamic Image columns (15 to 14 + max_images)
+    for img_i in range(1, max_images + 1):
+        col_letter = openpyxl.utils.get_column_letter(14 + img_i)
+        ws.column_dimensions[col_letter].width = 20
     
     wb.save(excel_path)
     
@@ -1514,3 +1723,173 @@ def save_claims_to_excel(claims, excel_path, images_batch_dir=None, claim_import
             stream.close()
         except:
             pass
+
+
+def parse_pdf_claims_mechanism_4(pdf_path, batch_id, images_batch_dir, seen_keys=None, normalize_penalty_func=None, claims_only=False):
+    """
+    [CƠ CHẾ 4]
+    Dành cho bảng dữ liệu Credit Note PDF (bảng 5 cột: STT, SKU/CLAIM, CONTAINER #, LPN, ACTION).
+    Không chứa ảnh minh chứng lỗi, có tổng tiền phạt TOTAL CREDIT AMOUNT.
+    Bảo toàn số 0 ở đầu LPN dạng chuỗi, xử lý các ô trống container/lpn, ghép nối đầy đủ các trang.
+    """
+    if seen_keys is None:
+        seen_keys = set()
+    if normalize_penalty_func is None:
+        normalize_penalty_func = lambda x: x
+
+    filename = os.path.basename(pdf_path)
+    doc = fitz.open(pdf_path)
+
+    full_text = ""
+    page_texts = []
+    for p in doc:
+        pt = p.get_text()
+        page_texts.append(pt)
+        full_text += pt + "\n"
+
+    factory = "VINA G7"
+    m_fact = re.search(r'FACTORY\s*:\s*([^\r\n]+)', full_text, re.IGNORECASE)
+    if m_fact:
+        factory = m_fact.group(1).strip()
+
+    credit_note_no = ""
+    m_cn = re.search(r'CREDIT\s+NOTE\s*:\s*([A-Za-z0-9\-]+)', full_text, re.IGNORECASE)
+    if m_cn:
+        credit_note_no = m_cn.group(1).strip()
+
+    date_issued = ""
+    m_date = re.search(r'DATE\s+REPORT\s+ISSUED\s*:\s*([^\r\n]+)', full_text, re.IGNORECASE)
+    if m_date:
+        date_issued = m_date.group(1).strip()
+
+    total_amount = 0.0
+    m_amt = re.search(r'TOTAL\s+CREDIT\s+AMOUNT\s*[:\-]?\s*[\$]?\s*([\d,]+(?:\.\d+)?)', full_text, re.IGNORECASE)
+    if not m_amt:
+        m_amt = re.search(r'TOTAL\s+AMOUNT\s*[:\-]?\s*[\$]?\s*([\d,]+(?:\.\d+)?)', full_text, re.IGNORECASE)
+    if m_amt:
+        try:
+            total_amount = float(m_amt.group(1).replace(",", ""))
+        except ValueError:
+            pass
+
+    # Month extraction priority
+    month_map = {
+        "january": "01", "february": "02", "march": "03", "april": "04",
+        "may": "05", "june": "06", "july": "07", "august": "08",
+        "september": "09", "october": "10", "november": "11", "december": "12",
+        "jan": "01", "feb": "02", "mar": "03", "apr": "04", "may": "05", "jun": "06",
+        "jul": "07", "aug": "08", "sep": "09", "sept": "09", "oct": "10", "nov": "11", "dec": "12"
+    }
+    parsed_month = None
+    for pt in page_texts:
+        top_lines = [l.strip() for l in pt.splitlines() if l.strip()][:6]
+        for line in top_lines:
+            if "DATE REPORT ISSUED" in line.upper():
+                continue
+            m_my = re.search(r'\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\s*[-–\s\/]\s*(\d{4})\b', line, re.IGNORECASE)
+            if m_my:
+                m_digit = month_map.get(m_my.group(1).lower())
+                if m_digit:
+                    parsed_month = f"{m_digit}-{m_my.group(2)}"
+                    break
+            m_th = re.search(r'TH[AÁ]NG\s*(\d{1,2})\s*[-–\/]\s*(\d{4})', line, re.IGNORECASE)
+            if m_th:
+                parsed_month = f"{int(m_th.group(1)):02d}-{m_th.group(2)}"
+                break
+        if parsed_month:
+            break
+
+    if not parsed_month:
+        m_meta = re.search(r'(?:CLAIM\s+MONTH|PERIOD|THÁNG\s+CLAIM)\s*[:\-]?\s*(\d{1,2})[-–\/](\d{4})', full_text, re.IGNORECASE)
+        if m_meta:
+            parsed_month = f"{int(m_meta.group(1)):02d}-{m_meta.group(2)}"
+
+    if not parsed_month and filename:
+        m_fn = re.search(r'[T_](\d{1,2})[_\-\s].*?(\d{4})', filename, re.IGNORECASE)
+        if m_fn:
+            parsed_month = f"{int(m_fn.group(1)):02d}-{m_fn.group(2)}"
+        else:
+            m_fn2 = re.search(r'(?:^|[^\d])(\d{1,2})[-_](\d{4})(?:[^\d]|$)', filename)
+            if m_fn2:
+                parsed_month = f"{int(m_fn2.group(1)):02d}-{m_fn2.group(2)}"
+
+    period = parsed_month or "09-2026"
+    clean_period = period.replace("-", "")
+
+    claims = []
+    ignore_patterns = [
+        r'FACTORY:', r'CREDIT\s+NOTE:', r'DATE\s+REPORT\s+ISSUED:',
+        r'TOTAL\s+CREDIT\s+AMOUNT', r'TOTAL\s+AMOUNT',
+        r'STT\s+SKU', r'STT\tSKU'
+    ]
+
+    for page in doc:
+        for raw_line in page.get_text().splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if any(re.search(pat, line, re.IGNORECASE) for pat in ignore_patterns):
+                continue
+            if re.match(r'^(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{4}$', line, re.IGNORECASE):
+                continue
+            stt_match = re.match(r'^(\d{1,3})\s+(.*)$', line)
+            if not stt_match:
+                continue
+            stt_num = int(stt_match.group(1))
+            rest = stt_match.group(2).strip()
+
+            if '\t' in raw_line:
+                parts = [p.strip() for p in raw_line.split('\t')]
+                sku = parts[1] if len(parts) > 1 else ''
+                container = parts[2] if len(parts) > 2 else ''
+                lpn = parts[3] if len(parts) > 3 else ''
+                action = parts[4] if len(parts) > 4 else ''
+            else:
+                tokens = rest.split()
+                if not tokens:
+                    continue
+                sku = tokens[0]
+                tokens = tokens[1:]
+                container = ''
+                lpn = ''
+                action = ''
+                if tokens and re.match(r'^[A-Za-z]{3,4}\d{6,7}$', tokens[0]):
+                    container = tokens[0].upper()
+                    tokens = tokens[1:]
+                if tokens and re.match(r'^\d{7,12}$', tokens[0]):
+                    lpn = str(tokens[0])
+                    tokens = tokens[1:]
+                action = ' '.join(tokens)
+
+            claims.append({
+                "cabinet_no": stt_num,
+                "claim_no": stt_num,
+                "stt": stt_num,
+                "claim_code": f"Claim#{stt_num}_{clean_period}",
+                "customer_name": factory,
+                "sku": sku,
+                "product_name": sku,
+                "container_no": container,
+                "lpn": str(lpn) if lpn else "",
+                "action": action,
+                "period": period,
+                "status": "Mới",
+                "defect_code": "Credit Note",
+                "claim_description": f"Credit Note {credit_note_no} - Item {stt_num} ({sku})",
+                "image_paths": [],
+                "image_captions": [],
+                "photo_pages": []
+            })
+
+    doc.close()
+    parse_warnings = []
+    mechanism_info = {
+        "id": "mechanism_4",
+        "name": "Cơ chế 4 (Credit Note Table)",
+        "credit_note_no": credit_note_no,
+        "factory": factory,
+        "date_issued": date_issued,
+        "total_credit_amount": total_amount,
+        "currency": "USD"
+    }
+    return claims, period, parse_warnings, mechanism_info

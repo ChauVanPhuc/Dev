@@ -6,15 +6,13 @@ export const getBaseURL = () => {
   if (typeof window === 'undefined') return '';
   const { hostname, port } = window.location;
 
-  if (hostname.includes('smartflowg7.cloud')) {
-    if (hostname.startsWith('dev_')) {
-      return 'https://dev_api.smartflowg7.cloud';
-    }
-    return 'https://api.smartflowg7.cloud';
+  if (hostname.includes('smartflowq7.cloud') || hostname.includes('smartflowg7.cloud')) {
+    return window.location.origin;
   }
 
   if (port === '5173' || port === '5174' || port === '5175' || port === '3000' || port === '1222' || port === '1333') {
-    return `http://${hostname}:8000`;
+    const resolvedHost = (hostname === 'localhost' || hostname === '::1') ? '127.0.0.1' : hostname;
+    return `http://${resolvedHost}:8000`;
   }
   
   return window.location.origin;
@@ -117,11 +115,16 @@ export const extractMultiplierFromPenalty = (penaltyStr) => {
 export const getCabinetSalePrice = (sku, cabinetPrices = []) => {
   if (!sku) return 0;
   const cleanSku = String(sku).trim().toLowerCase();
-  const match = cabinetPrices.find(p => 
-    (p.cabinet_code && String(p.cabinet_code).trim().toLowerCase() === cleanSku) ||
-    (p.cabinet_name && String(p.cabinet_name).trim().toLowerCase() === cleanSku)
-  );
-  if (match) return match.sale_price || 0;
+  if (cabinetPrices instanceof Map) {
+    return cabinetPrices.get(cleanSku) || 0;
+  }
+  if (Array.isArray(cabinetPrices)) {
+    const match = cabinetPrices.find(p => 
+      (p.cabinet_code && String(p.cabinet_code).trim().toLowerCase() === cleanSku) ||
+      (p.cabinet_name && String(p.cabinet_name).trim().toLowerCase() === cleanSku)
+    );
+    if (match) return match.sale_price || 0;
+  }
   return 0;
 };
 
@@ -296,4 +299,25 @@ export const formatMonthYear = (val) => {
     return `${parts[0].padStart(2, '0')}/${parts[1]}`;
   }
   return s;
+};
+
+/**
+ * Chuẩn hóa chuỗi/mảng công đoạn (stage) của lỗi G7 thành dạng hiển thị.
+ */
+export const formatStageTag = (stageVal) => {
+  if (!stageVal) return null;
+  if (Array.isArray(stageVal)) return stageVal.join(', ');
+  if (typeof stageVal === 'string') {
+    const cleaned = stageVal.trim();
+    if (cleaned.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(cleaned);
+        if (Array.isArray(parsed)) return parsed.join(', ');
+      } catch (err) {
+        console.warn('[claimHelpers] Invalid JSON stage array:', cleaned, err);
+      }
+    }
+    return cleaned.replace(/^\["|"]$/g, '').replace(/","/g, ', ').replace(/"/g, '');
+  }
+  return String(stageVal);
 };

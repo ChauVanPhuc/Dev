@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 
 export const ClaimMonthlyStatsModal = ({
   isOpen,
@@ -10,6 +10,8 @@ export const ClaimMonthlyStatsModal = ({
   totalCountAll = 0,
   totalG7AmountAll = 0,
   totalCustomerAmountAll = 0,
+  totalOverallAmountAll = 0,
+  isLoading = false,
   filteredClaimsCount = 0,
   isParsingPdf = false,
   parsingMonthTarget = null,
@@ -21,6 +23,17 @@ export const ClaimMonthlyStatsModal = ({
 
   const handleEditClick = onOpenEditMonth || onOpenEditPenaltyModal;
   const displayClaimCount = filteredClaimsCount || totalCountAll || 0;
+
+  // Pre-calculate chart scales once (eliminates O(N^2) inner mapping)
+  const maxAmountVal = useMemo(() => {
+    if (!analyticsData || analyticsData.length === 0) return 1;
+    return Math.max(...analyticsData.map(m => Math.max(m.totalAmount, customerPenalties[m.month] || 0)), 1);
+  }, [analyticsData, customerPenalties]);
+
+  const maxCountVal = useMemo(() => {
+    if (!analyticsData || analyticsData.length === 0) return 1;
+    return Math.max(...analyticsData.map(m => m.count), 1);
+  }, [analyticsData]);
 
   return (
     <div
@@ -99,7 +112,12 @@ export const ClaimMonthlyStatsModal = ({
 
         {/* MODAL BODY */}
         <div className="exception-modal-body" style={{ padding: '20px 24px', overflowY: 'auto' }}>
-          {analyticsData.length === 0 ? (
+          {isLoading ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '260px', gap: '12px' }}>
+              <div style={{ width: '32px', height: '32px', border: '3px solid #EADCC9', borderTopColor: '#7B5233', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+              <span style={{ fontSize: '0.88rem', color: '#79543D', fontWeight: 600 }}>Đang tổng hợp số liệu thống kê...</span>
+            </div>
+          ) : analyticsData.length === 0 ? (
             <div className="exception-empty-state">
               <span>Không có dữ liệu khiếu nại để thống kê</span>
             </div>
@@ -146,8 +164,6 @@ export const ClaimMonthlyStatsModal = ({
                     gap: '8px'
                   }}>
                     {analyticsData.map((d) => {
-                      const maxAmountVal = Math.max(...analyticsData.map(m => Math.max(m.totalAmount, customerPenalties[m.month] || 0)), 1);
-                      const maxCountVal = Math.max(...analyticsData.map(m => m.count), 1);
                       const customerAmount = customerPenalties[d.month] !== undefined ? customerPenalties[d.month] : 0;
                       
                       const countHeight = (d.count / maxCountVal) * 135;
@@ -254,10 +270,10 @@ export const ClaimMonthlyStatsModal = ({
                       <tr style={{ backgroundColor: '#FAF6F0', borderBottom: '2px solid #EADCC9' }}>
                         <th style={{ padding: '12px 18px', textAlign: 'center', color: '#7B5233', fontWeight: '700', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Tháng</th>
                         <th style={{ padding: '12px 18px', textAlign: 'center', color: '#7B5233', fontWeight: '700', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Số lượng khiếu nại (vụ)</th>
-                        <th style={{ padding: '12px 18px', textAlign: 'right', color: '#7B5233', fontWeight: '700', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Tổng tiền phạt G7</th>
+                        <th style={{ padding: '12px 18px', textAlign: 'right', color: '#7B5233', fontWeight: '700', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Tổng tiền phạt G7 (USD)</th>
                         <th style={{ padding: '12px 18px', textAlign: 'right', color: '#7B5233', fontWeight: '700', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
-                            <span>Tổng tiền phạt Khách hàng</span>
+                            <span>Tổng tiền phạt Khách hàng (USD)</span>
                             <label
                               htmlFor="batch-pdf-upload-input"
                               style={{
@@ -306,6 +322,7 @@ export const ClaimMonthlyStatsModal = ({
                             />
                           </div>
                         </th>
+                        <th style={{ padding: '12px 18px', textAlign: 'right', color: '#7B5233', fontWeight: '700', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Tổng cộng (USD)</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -375,6 +392,9 @@ export const ClaimMonthlyStatsModal = ({
                         </td>
                         <td style={{ padding: '14px 18px', textAlign: 'right', color: '#2D1A12', fontSize: '0.95rem', fontWeight: '800' }}>
                           ${totalCustomerAmountAll.toLocaleString()}
+                        </td>
+                        <td style={{ padding: '14px 18px', textAlign: 'right', color: '#7B5233', fontSize: '0.95rem', fontWeight: '800' }}>
+                          ${(totalOverallAmountAll || (totalG7AmountAll + totalCustomerAmountAll)).toLocaleString()}
                         </td>
                       </tr>
                     </tfoot>

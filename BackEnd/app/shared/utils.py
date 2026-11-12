@@ -35,6 +35,24 @@ def clean_and_standardize_sku(sku: str) -> str:
         return ""
     return str(sku).strip().upper()
 
+def extract_product_line_from_sku(sku: str) -> str:
+    """
+    Xác định Dòng hàng từ SKU theo quy tắc:
+    - Đọc SKU đầy đủ trước.
+    - Chuẩn hóa SKU, tách phần trước dấu '-' đầu tiên để tạo trường Dòng hàng.
+    - Nếu SKU không chứa dấu '-', giữ nguyên SKU làm Dòng hàng và không tự suy diễn.
+    - Nếu không có SKU hợp lệ, trả về chuỗi rỗng "".
+    - Không lấy thông tin từ Defect Name để xác định Dòng hàng.
+    """
+    if not sku:
+        return ""
+    clean_sku = str(sku).strip().upper()
+    if not clean_sku:
+        return ""
+    if "-" in clean_sku:
+        return clean_sku.split("-")[0].strip()
+    return clean_sku
+
 def clean_and_standardize_name(name: str) -> str:
     """
     Standardizes name: trimmed, reduces multiple spaces.

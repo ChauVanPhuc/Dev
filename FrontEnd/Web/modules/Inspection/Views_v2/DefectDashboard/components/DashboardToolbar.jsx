@@ -1,190 +1,253 @@
-import React, { useState } from 'react';
-import { Search, Filter, FileText, ArrowUpDown, X } from 'lucide-react';
-import { TimeFilterDropdown, TimeFilterChips } from '@webShared/Views/components/ui/TimeFilterDropdown';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Search, Filter, RotateCcw, Calendar, Layers, AlertCircle, ShieldAlert, X, Download } from 'lucide-react';
 
-/**
- * DashboardToolbar
- * Thanh toolbar chuẩn ERP với Bộ lọc Thời gian Popover (Năm, Tháng, Từ ngày, Đến ngày)
- */
+export const TIME_PRESETS = [
+  { key: 'all', label: 'Tất cả' },
+  { key: 'today', label: 'Hôm nay' },
+  { key: 'yesterday', label: 'Hôm qua' },
+  { key: 'this_week', label: 'Tuần này' },
+  { key: 'last_week', label: 'Tuần trước' },
+  { key: 'this_month', label: 'Tháng này' },
+  { key: 'last_month', label: 'Tháng trước' },
+  { key: 'this_year', label: 'Năm nay' },
+  { key: 'custom', label: 'Tùy chọn' }
+];
+
 export const DashboardToolbar = ({
   searchQuery = '',
   setSearchQuery,
-  selectedMonth = 9,
-  setSelectedMonth,
-  selectedYear = 2026,
-  setSelectedYear,
+  preset = 'all',
+  setPreset,
   startDate = '',
   setStartDate,
   endDate = '',
   setEndDate,
   selectedStage = '',
   setSelectedStage,
+  stagesList = [],
   selectedCategory = '',
   setSelectedCategory,
+  categoriesList = [],
   selectedAql = 'all',
   setSelectedAql,
-  stagesList = [],
-  categoriesList = [],
-  activeCrossFilter = null,
-  clearCrossFilter,
+  resetAllFilters,
   hasActiveFilter = false,
-  onExport
+  lastUpdatedTime = '',
+  onExportClick
 }) => {
-  const [showFilters, setShowFilters] = useState(false);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [localSearch, setLocalSearch] = useState(searchQuery || '');
 
-  const handleExportCSV = () => {
-    if (onExport) {
-      onExport();
-    } else {
-      alert('Đang xuất dữ liệu phân tích lỗi chất lượng...');
-    }
-  };
+  // Đồng bộ search query từ props khi thay đổi bên ngoài
+  useEffect(() => {
+    setLocalSearch(searchQuery || '');
+  }, [searchQuery]);
+
+  // Debounce tìm kiếm (280ms) để không gây lag giật biểu đồ
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (setSearchQuery) {
+        setSearchQuery(localSearch);
+      }
+    }, 280);
+    return () => clearTimeout(timer);
+  }, [localSearch, setSearchQuery]);
+
+  // Đếm số lượng tiêu chí lọc nâng cao đang áp dụng
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (preset && preset !== 'all') count++;
+    if (selectedStage && selectedStage !== 'all') count++;
+    if (selectedCategory && selectedCategory !== 'all') count++;
+    if (selectedAql && selectedAql !== 'all') count++;
+    return count;
+  }, [preset, selectedStage, selectedCategory, selectedAql]);
 
   return (
     <div
-      className="erp-dashboard-toolbar"
-      style={{
-        marginBottom: '0px',
-        padding: '3px 8px',
-        borderRadius: '6px',
-        position: 'relative',
-        zIndex: 500,
-        overflow: 'visible'
-      }}
+      data-toolbar="true"
+      data-no-export="true"
+      className="no-export dashboard-toolbar-container"
+      style={{ display: 'flex', flexDirection: 'column', width: '100%', flexShrink: 0 }}
     >
-      {/* Hàng 1: Thanh tìm kiếm + Sort + Filter + Nút Xuất dữ liệu */}
-      <div className="erp-toolbar-row1" style={{ height: '26px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          {/* Ô tìm kiếm dạng viên thuốc (Pill search) */}
-          <div className="erp-search-wrapper" style={{ width: '260px', height: '25px' }}>
-            <Search size={13} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+      {/* ── THANH CÔNG CỤ CHÍNH CHUẨN G7 / ĐỒNG BỘ ĐƠN HÀNG XUẤT KHẨU ── */}
+      <div className="exp-toolbar" data-toolbar="true" data-no-export="true">
+        {/* Bên trái: Ô tìm kiếm + Nút bật/tắt Bộ lọc */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '280px' }}>
+          {/* Ô tìm kiếm */}
+          <div className="exp-search-box filter">
+            <Search size={15} color="#7B5233" />
             <input
               type="text"
-              placeholder="Search nhanh mã lỗi, tên lỗi, vị trí..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery && setSearchQuery(e.target.value)}
-              className="erp-search-input"
-              style={{ height: '25px', fontSize: '0.73rem', paddingLeft: '28px' }}
+              placeholder="Tìm mã lỗi, tên lỗi, công đoạn..."
+              value={localSearch}
+              onChange={(e) => setLocalSearch(e.target.value)}
             />
-            {searchQuery && (
-              <X
-                size={12}
-                style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', cursor: 'pointer' }}
-                onClick={() => setSearchQuery && setSearchQuery('')}
-              />
+            {localSearch && (
+              <button
+                type="button"
+                className="page-btn"
+                onClick={() => {
+                  setLocalSearch('');
+                  if (setSearchQuery) setSearchQuery('');
+                }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: '#8D6E63' }}
+                title="Xóa tìm kiếm"
+              >
+                <X size={14} />
+              </button>
             )}
           </div>
 
-          {/* Nút icon Sort */}
-          <button className="erp-btn-icon" style={{ width: '25px', height: '25px' }} title="Sắp xếp">
-            <ArrowUpDown size={12} />
-          </button>
-
-          {/* Nút icon Lọc */}
+          {/* Nút bật/tắt Bộ lọc nâng cao */}
           <button
-            onClick={() => setShowFilters(prev => !prev)}
-            className={`erp-btn-icon ${showFilters || hasActiveFilter ? 'active' : ''}`}
-            title={showFilters ? 'Ẩn bộ lọc' : 'Mở bộ lọc chi tiết'}
-            style={{ width: '25px', height: '25px' }}
+            type="button"
+            className={`exp-btn-icon page-btn ${isFilterOpen || activeFiltersCount > 0 ? 'active' : ''}`}
+            onClick={() => setIsFilterOpen((prev) => !prev)}
+            title="Bộ lọc nâng cao"
           >
-            <Filter size={12} />
+            <Filter size={15} />
+            {activeFiltersCount > 0 && <span className="exp-badge-count">{activeFiltersCount}</span>}
           </button>
         </div>
 
-        {/* Nút Xuất dữ liệu */}
-        <div>
-          <button onClick={handleExportCSV} className="erp-btn-export" style={{ height: '25px', padding: '0 10px', fontSize: '0.72rem', gap: '5px' }}>
-            <FileText size={12} />
-            <span>Xuất dữ liệu</span>
-          </button>
+        {/* Bên phải: Nút Xuất Dashboard */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+          {lastUpdatedTime && (
+            <span style={{ fontSize: '0.67rem', color: '#A8A29E', fontWeight: '500', whiteSpace: 'nowrap' }}>
+              {lastUpdatedTime}
+            </span>
+          )}
+
+          {onExportClick && (
+            <button
+              type="button"
+              className="exp-btn-brown page-btn"
+              onClick={onExportClick}
+              title="Xuất báo cáo Dashboard (PNG/PDF)"
+            >
+              <Download size={14} />
+              <span>Xuất Dashboard</span>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Hàng 2: Chỉ hiển thị KHI NHẤN VÀO ICON LỌC */}
-      {(showFilters || hasActiveFilter) && (
-        <div className="erp-toolbar-row2" style={{ height: 'auto', paddingTop: '6px', paddingBottom: '4px', position: 'relative', zIndex: 500, overflow: 'visible' }}>
-          <div className="erp-filter-chips" style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-            {/* 1. Bộ lọc Thời gian dạng Popover Dropdown */}
-            <TimeFilterDropdown
-              year={selectedYear ? String(selectedYear) : ''}
-              setYear={setSelectedYear ? (y) => setSelectedYear(y ? parseInt(y) : '') : undefined}
-              month={selectedMonth ? String(selectedMonth) : ''}
-              setMonth={setSelectedMonth ? (m) => setSelectedMonth(m ? parseInt(m) : '') : undefined}
-              startDate={startDate}
-              setStartDate={setStartDate}
-              endDate={endDate}
-              setEndDate={setEndDate}
-              showChipsInline={false}
+      {/* ── VÙNG BỘ LỌC MỞ RỘNG (COLLAPSIBLE FILTER BAR) ── */}
+      {isFilterOpen && (
+        <div className="exp-filter-inline-bar filter">
+          {/* 1. Lựa chọn thời gian (Presets) */}
+          <div className="exp-filter-item">
+            <span className="exp-filter-item-label" style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+              <Calendar size={12} />
+              Thời gian:
+            </span>
+            <select
+              value={preset}
+              onChange={(e) => setPreset(e.target.value)}
+              className={`exp-filter-select ${preset && preset !== 'all' ? 'has-value' : ''}`}
+            >
+              {TIME_PRESETS.map((p) => (
+                <option key={p.key} value={p.key}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* 2 & 3. Từ ngày - Đến ngày */}
+          <div className="exp-filter-item">
+            <span className="exp-filter-item-label">Từ</span>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              disabled={preset === 'all'}
+              className="exp-filter-input exp-filter-date-input"
+              style={{ cursor: preset === 'all' ? 'not-allowed' : 'pointer' }}
             />
-
-            {/* 2. Chip: Công đoạn */}
-            <div className={`erp-chip ${activeCrossFilter?.type === 'stage' ? 'active' : ''}`} style={{ gap: '4px', height: '30px' }}>
-              <span style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: '700' }}>Công đoạn:</span>
-              <select
-                value={selectedStage || (activeCrossFilter?.type === 'stage' ? activeCrossFilter.value : '')}
-                onChange={(e) => setSelectedStage && setSelectedStage(e.target.value)}
-                style={{ cursor: 'pointer', border: 'none', background: 'transparent', fontSize: '0.68rem', fontWeight: '600' }}
-              >
-                <option value="">Tất cả</option>
-                {stagesList.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-
-            {/* 3. Chip: Nhóm lỗi */}
-            <div className={`erp-chip ${activeCrossFilter?.type === 'category' ? 'active' : ''}`} style={{ gap: '4px', height: '30px' }}>
-              <span style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: '700' }}>Nhóm lỗi:</span>
-              <select
-                value={selectedCategory || (activeCrossFilter?.type === 'category' ? activeCrossFilter.value : '')}
-                onChange={(e) => setSelectedCategory && setSelectedCategory(e.target.value)}
-                style={{ cursor: 'pointer', border: 'none', background: 'transparent', fontSize: '0.68rem', fontWeight: '600' }}
-              >
-                <option value="">Tất cả</option>
-                {categoriesList.map(c => <option key={c.code || c} value={c.code || c}>{c.name || c}</option>)}
-              </select>
-            </div>
-
-            {/* 4. Chip: Mức AQL */}
-            <div className="erp-chip" style={{ gap: '4px', height: '30px' }}>
-              <span style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: '700' }}>Mức AQL:</span>
-              <select
-                value={selectedAql}
-                onChange={(e) => setSelectedAql && setSelectedAql(e.target.value)}
-                style={{ cursor: 'pointer', border: 'none', background: 'transparent', fontSize: '0.68rem', fontWeight: '600' }}
-              >
-                <option value="all">Tất cả</option>
-                <option value="Critical">Critical</option>
-                <option value="Major">Major</option>
-                <option value="Minor">Minor</option>
-              </select>
-            </div>
-
-            {/* 5. Khung ĐÃ CHỌN đặt ở ngoài cùng */}
-            <TimeFilterChips
-              year={selectedYear ? String(selectedYear) : ''}
-              setYear={setSelectedYear ? (y) => setSelectedYear(y ? parseInt(y) : '') : undefined}
-              month={selectedMonth ? String(selectedMonth) : ''}
-              setMonth={setSelectedMonth ? (m) => setSelectedMonth(m ? parseInt(m) : '') : undefined}
-              startDate={startDate}
-              setStartDate={setStartDate}
-              endDate={endDate}
-              setEndDate={setEndDate}
-              extraChips={[
-                selectedStage ? { label: `Công đoạn: ${selectedStage}`, onRemove: () => setSelectedStage && setSelectedStage('') } : null,
-                selectedCategory ? { label: `Nhóm lỗi: ${categoriesList.find(c => (c.code || c) === selectedCategory)?.name || selectedCategory}`, onRemove: () => setSelectedCategory && setSelectedCategory('') } : null,
-                selectedAql !== 'all' ? { label: `AQL: ${selectedAql}`, onRemove: () => setSelectedAql && setSelectedAql('all') } : null
-              ].filter(Boolean)}
-              onClearAll={() => {
-                if (setSelectedYear) setSelectedYear('');
-                if (setSelectedMonth) setSelectedMonth('');
-                if (setStartDate) setStartDate('');
-                if (setEndDate) setEndDate('');
-                if (setSelectedStage) setSelectedStage('');
-                if (setSelectedCategory) setSelectedCategory('');
-                if (setSelectedAql) setSelectedAql('all');
-                if (clearCrossFilter) clearCrossFilter();
-              }}
+            <span className="exp-filter-item-label">Đến</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              disabled={preset === 'all'}
+              className="exp-filter-input exp-filter-date-input"
+              style={{ cursor: preset === 'all' ? 'not-allowed' : 'pointer' }}
             />
           </div>
+
+          {/* 4. Công đoạn */}
+          <div className="exp-filter-item">
+            <span className="exp-filter-item-label" style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+              <Layers size={12} />
+              Công đoạn:
+            </span>
+            <select
+              value={selectedStage}
+              onChange={(e) => setSelectedStage(e.target.value)}
+              className={`exp-filter-select ${selectedStage && selectedStage !== 'all' ? 'has-value' : ''}`}
+              style={{ minWidth: '110px' }}
+            >
+              <option value="">Tất cả công đoạn</option>
+              {stagesList.map((stg) => (
+                <option key={stg} value={stg}>
+                  {stg}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* 5. Nhóm lỗi */}
+          <div className="exp-filter-item">
+            <span className="exp-filter-item-label" style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+              <AlertCircle size={12} />
+              Nhóm lỗi:
+            </span>
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className={`exp-filter-select ${selectedCategory && selectedCategory !== 'all' ? 'has-value' : ''}`}
+              style={{ minWidth: '110px' }}
+            >
+              <option value="">Tất cả nhóm lỗi</option>
+              {categoriesList.map((cat) => (
+                <option key={cat.code || cat.name} value={cat.code || cat.name}>
+                  {cat.name || cat.code}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* 6. Mức AQL */}
+          <div className="exp-filter-item">
+            <span className="exp-filter-item-label" style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+              <ShieldAlert size={12} />
+              AQL:
+            </span>
+            <select
+              value={selectedAql}
+              onChange={(e) => setSelectedAql(e.target.value)}
+              className={`exp-filter-select ${selectedAql !== 'all' ? 'has-value' : ''}`}
+              style={{ minWidth: '85px' }}
+            >
+              <option value="all">Tất cả</option>
+              <option value="Minor">Minor</option>
+              <option value="Major">Major</option>
+              <option value="Critical">Critical</option>
+            </select>
+          </div>
+
+          {/* 7. Nút Đặt lại bộ lọc */}
+          <button
+            type="button"
+            onClick={resetAllFilters}
+            className="exp-btn-reset page-btn"
+            title="Đặt lại toàn bộ bộ lọc về mặc định"
+          >
+            <RotateCcw size={12} />
+            <span>Đặt lại</span>
+          </button>
         </div>
       )}
     </div>
@@ -192,4 +255,3 @@ export const DashboardToolbar = ({
 };
 
 export default DashboardToolbar;
-

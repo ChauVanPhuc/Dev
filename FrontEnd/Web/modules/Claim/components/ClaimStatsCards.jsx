@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { calculateTotalPenalty, getMonthYear, getMonthNumber } from '../utils/claimHelpers';
+import '../styles/claim.css';
 
 export const ClaimStatsCards = ({
   cabinetPrices = [],
@@ -139,129 +140,186 @@ export const ClaimStatsCards = ({
   const exceptionCount = exceptionData?.totalCount || 0;
 
   return (
-    <div className="overview-cards-grid">
-      {/* 1. Tiền phạt G7 */}
-      <div 
-        className="summary-card" 
-        style={{ 
-          transition: 'transform 0.2s ease',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          padding: '12px 16px',
-          cursor: 'pointer'
-        }}
-        onClick={onOpenAnalytics}
-        title="Nhấn để xem chi tiết thống kê theo tháng"
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, paddingRight: '12px' }}>
-          <span style={{ fontSize: '0.85rem', color: '#7B5233', fontWeight: 'bold' }}>
-            Tiền phạt G7 ({kpiData.displayTargetMonth})
-          </span>
-          <span style={{ 
-            fontSize: '0.72rem', 
-            color: kpiData.penaltyColor,
-            marginTop: '4px',
-            fontStyle: 'italic',
-            fontWeight: '700'
-          }}>
-            {kpiData.penaltyDiffText}
-          </span>
+    <>
+      <style>{`
+        .overview-cards-grid {
+          display: grid !important;
+          grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+          gap: 12px !important;
+          margin-bottom: 12px !important;
+          width: 100% !important;
+          box-sizing: border-box !important;
+        }
+        @media (max-width: 1200px) {
+          .overview-cards-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+        }
+        @media (max-width: 600px) {
+          .overview-cards-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+        .summary-card {
+          background-color: #FFFFFF !important;
+          border: 1px solid #F3EAE0 !important;
+          border-radius: 12px !important;
+          padding: 12px 16px !important;
+          box-shadow: 0 2px 4px rgba(123, 82, 51, 0.04) !important;
+          display: flex !important;
+          justify-content: space-between !important;
+          align-items: center !important;
+          position: relative !important;
+          transition: all 0.2s ease !important;
+          cursor: pointer !important;
+          box-sizing: border-box !important;
+        }
+        .summary-card:hover {
+          box-shadow: 0 4px 10px rgba(123, 82, 51, 0.08) !important;
+          border-color: #EADCC9 !important;
+          transform: translateY(-1px) !important;
+        }
+      `}</style>
+      <div className="overview-cards-grid">
+        {/* Tiền phạt G7 */}
+        <div 
+          className="summary-card" 
+          style={{ 
+            backgroundColor: '#FFFFFF',
+            border: '1px solid #F3EAE0',
+            borderRadius: '12px',
+            padding: '12px 16px',
+            boxShadow: '0 2px 4px rgba(123, 82, 51, 0.04)',
+            transition: 'all 0.2s ease',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            cursor: 'pointer'
+          }}
+          onClick={onOpenAnalytics}
+          title="Nhấn để xem chi tiết thống kê theo tháng"
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, paddingRight: '12px' }}>
+            <span style={{ fontSize: '0.85rem', color: '#7B5233', fontWeight: 'bold' }}>
+              Tiền phạt G7 ({kpiData.displayTargetMonth})
+            </span>
+            <span style={{ 
+              fontSize: '0.72rem', 
+              color: kpiData.penaltyColor,
+              marginTop: '4px',
+              fontStyle: 'italic',
+              fontWeight: '700'
+            }}>
+              {kpiData.penaltyDiffText}
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '1.5rem', fontWeight: '800', color: '#2D1A12' }}>
+              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(kpiData.targetPenaltySum || 0)}
+            </span>
+          </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '1.5rem', fontWeight: '800', color: '#2D1A12' }}>
-            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(kpiData.targetPenaltySum || 0)}
-          </span>
-        </div>
-      </div>
 
-      {/* 2. Số vụ ghi nhận */}
-      <div 
-        className="summary-card" 
-        style={{ 
-          transition: 'transform 0.2s ease',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          padding: '12px 16px',
-          cursor: 'pointer'
-        }}
-        onClick={onOpenAnalytics}
-        title="Nhấn để xem chi tiết thống kê theo tháng"
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, paddingRight: '12px' }}>
-          <span style={{ fontSize: '0.85rem', color: '#7B5233', fontWeight: 'bold' }}>
-            Số vụ ghi nhận ({kpiData.displayTargetMonth})
-          </span>
-          <span style={{ 
-            fontSize: '0.72rem', 
-            color: kpiData.countColor,
-            marginTop: '4px',
-            fontStyle: 'italic',
-            fontWeight: '700'
-          }}>
-            {kpiData.countDiffText}
-          </span>
+        {/* Số vụ ghi nhận */}
+        <div 
+          className="summary-card" 
+          style={{ 
+            backgroundColor: '#FFFFFF',
+            border: '1px solid #F3EAE0',
+            borderRadius: '12px',
+            padding: '12px 16px',
+            boxShadow: '0 2px 4px rgba(123, 82, 51, 0.04)',
+            transition: 'all 0.2s ease',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            cursor: 'pointer'
+          }}
+          onClick={onOpenAnalytics}
+          title="Nhấn để xem chi tiết thống kê theo tháng"
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, paddingRight: '12px' }}>
+            <span style={{ fontSize: '0.85rem', color: '#7B5233', fontWeight: 'bold' }}>
+              Số vụ ghi nhận ({kpiData.displayTargetMonth})
+            </span>
+            <span style={{ 
+              fontSize: '0.72rem', 
+              color: kpiData.countColor,
+              marginTop: '4px',
+              fontStyle: 'italic',
+              fontWeight: '700'
+            }}>
+              {kpiData.countDiffText}
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '1.5rem', fontWeight: '800', color: '#2D1A12' }}>
+              {kpiData.targetCount || 0}
+            </span>
+          </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '1.5rem', fontWeight: '800', color: '#2D1A12' }}>
-            {kpiData.targetCount || 0}
-          </span>
-        </div>
-      </div>
 
-      {/* 3. Đang xem xét */}
-      <div 
-        className="summary-card" 
-        style={{ 
-          transition: 'transform 0.2s ease',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          padding: '12px 16px',
-          cursor: 'pointer'
-        }}
-        onClick={onOpenUnderReview}
-        title="Nhấn để xem chi tiết danh sách đang xem xét"
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, paddingRight: '12px' }}>
-          <span style={{ fontSize: '0.85rem', color: '#7B5233', fontWeight: 'bold' }}>
-            Đang xem xét
-          </span>
+        {/* Đang xem xét */}
+        <div 
+          className="summary-card" 
+          style={{ 
+            backgroundColor: '#FFFFFF',
+            border: '1px solid #F3EAE0',
+            borderRadius: '12px',
+            padding: '12px 16px',
+            boxShadow: '0 2px 4px rgba(123, 82, 51, 0.04)',
+            transition: 'all 0.2s ease',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            cursor: 'pointer'
+          }}
+          onClick={onOpenUnderReview}
+          title="Nhấn để xem chi tiết danh sách đang xem xét"
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, paddingRight: '12px' }}>
+            <span style={{ fontSize: '0.85rem', color: '#7B5233', fontWeight: 'bold' }}>
+              Đang xem xét
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '1.5rem', fontWeight: '800', color: '#D97706' }}>
+              {underReviewCount}
+            </span>
+          </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '1.5rem', fontWeight: '800', color: '#D97706' }}>
-            {underReviewCount}
-          </span>
-        </div>
-      </div>
 
-      {/* 4. Số vụ ngoại lệ */}
-      <div 
-        className="summary-card" 
-        style={{ 
-          transition: 'transform 0.2s ease',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          padding: '12px 16px',
-          cursor: 'pointer'
-        }}
-        onClick={onOpenExceptions}
-        title="Nhấn để xem chi tiết danh sách ngoại lệ"
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, paddingRight: '12px' }}>
-          <span style={{ fontSize: '0.85rem', color: '#7B5233', fontWeight: 'bold' }}>
-            Số vụ ngoại lệ
-          </span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '1.5rem', fontWeight: '800', color: '#DC2626' }}>
-            {exceptionCount}
-          </span>
+        {/* Số vụ ngoại lệ */}
+        <div 
+          className="summary-card" 
+          style={{ 
+            backgroundColor: '#FFFFFF',
+            border: '1px solid #F3EAE0',
+            borderRadius: '12px',
+            padding: '12px 16px',
+            boxShadow: '0 2px 4px rgba(123, 82, 51, 0.04)',
+            transition: 'all 0.2s ease',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            cursor: 'pointer'
+          }}
+          onClick={onOpenExceptions}
+          title="Nhấn để xem chi tiết danh sách ngoại lệ"
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, paddingRight: '12px' }}>
+            <span style={{ fontSize: '0.85rem', color: '#7B5233', fontWeight: 'bold' }}>
+              Số vụ ngoại lệ
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '1.5rem', fontWeight: '800', color: '#DC2626' }}>
+              {exceptionCount}
+            </span>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 };
 

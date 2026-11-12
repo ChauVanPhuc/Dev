@@ -72,6 +72,16 @@ from modules.hr.models.assessment_models import (
 from modules.daily_production.models.daily_production_model import (
     DailyProductionBatch, DailyProductionItem
 )
+from modules.warehouse.models import (
+    UnitOfMeasure,
+    Warehouse,
+    WarehouseMaterial,
+    GoodsReceipt,
+    GoodsReceiptItem,
+    GoodsIssue,
+    GoodsIssueItem,
+    RejectedGoods,
+)
 
 __all__ = [
     "Base", "Account", "Category", "Delivery", "DeliveryDetails", "DeliveryImage",
@@ -95,5 +105,8 @@ __all__ = [
     "InspectionParameter", "InspectionGuideParameter",
     "InspectionFormType",
     "HRAssessment", "HRAssessmentQuestion", "HRAssessmentSubmission", "HRAssessmentAnswer",
-    "DailyProductionBatch", "DailyProductionItem"
+    "DailyProductionBatch", "DailyProductionItem",
+    "UnitOfMeasure", "Warehouse", "WarehouseMaterial",
+    "GoodsReceipt", "GoodsReceiptItem",
+    "GoodsIssue", "GoodsIssueItem", "RejectedGoods"
 ]

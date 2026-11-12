@@ -71,13 +71,25 @@ def run_migration():
                         finished_at DATETIME NULL
                     )
                 """))
-                conn.execute(text("""
-                    CREATE INDEX IX_lpn_ocr_jobs_status_created ON lpn_ocr_jobs (status, created_at)
-                """))
-                conn.execute(text("""
-                    CREATE INDEX IX_lpn_ocr_jobs_container_status ON lpn_ocr_jobs (container_id, status)
-                """))
-                print("[OK] Created table 'lpn_ocr_jobs' and indexes successfully.")
+                print("[OK] Created table 'lpn_ocr_jobs' successfully.")
+
+            conn.execute(text("""
+                IF NOT EXISTS (
+                    SELECT 1 FROM sys.indexes
+                    WHERE name = 'IX_lpn_ocr_jobs_status_created'
+                      AND object_id = OBJECT_ID('lpn_ocr_jobs')
+                )
+                CREATE INDEX IX_lpn_ocr_jobs_status_created ON lpn_ocr_jobs (status, created_at)
+            """))
+            conn.execute(text("""
+                IF NOT EXISTS (
+                    SELECT 1 FROM sys.indexes
+                    WHERE name = 'IX_lpn_ocr_jobs_container_status'
+                      AND object_id = OBJECT_ID('lpn_ocr_jobs')
+                )
+                CREATE INDEX IX_lpn_ocr_jobs_container_status ON lpn_ocr_jobs (container_id, status)
+            """))
+            print("[OK] Ensured composite indexes on 'lpn_ocr_jobs'.")
 
             trans.commit()
             print("[SUCCESS] Migration for 'lpn_ocr_jobs' completed successfully!")

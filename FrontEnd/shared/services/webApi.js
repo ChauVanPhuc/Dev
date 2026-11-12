@@ -11,16 +11,13 @@ import axios from 'axios';
  */
 // [NEW] Tự động nhận diện URL API thông minh
 const getBaseURL = () => {
-  const hostname = window.location.hostname
-  if (hostname.includes('smartflowg7.cloud')) {
-    // Nếu chạy chế độ Production gộp vào 1 domain
-    if (hostname === 'smartflowg7.cloud') return window.location.origin
-    // Nếu chạy chế độ Dev tách biệt subdomain
-    if (hostname.startsWith('dev_')) return 'https://dev_api.smartflowg7.cloud'
-    return 'https://api.smartflowg7.cloud'
+  const hostname = window.location.hostname;
+  if (hostname.includes('smartflowq7.cloud') || hostname.includes('smartflowg7.cloud')) {
+    return window.location.origin;
   }
-  return `http://${hostname}:8000`
-}
+  const resolvedHost = (hostname === 'localhost' || hostname === '::1') ? '127.0.0.1' : hostname;
+  return `http://${resolvedHost}:8000`;
+};
 
 const API_BASE_URL = getBaseURL();
 

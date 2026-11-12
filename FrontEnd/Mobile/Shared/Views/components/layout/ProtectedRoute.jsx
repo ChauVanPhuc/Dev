@@ -44,6 +44,10 @@ const mapPathToPermissionKeys = (pathname) => {
   if (path.startsWith('/production_v2') || path.startsWith('/production-v2')) return [path, path.replace(/^\//, ''), '/production_v2', 'mobile_production_v2', 'production_v2', '/delivery-info', '/inspection-stage'];
   if (path.startsWith('/pallet-check')) return [path, path.replace(/^\//, ''), 'pallet-check', 'mobile_pallet-check', '/pallet-check'];
   if (path.startsWith('/cabinet-box-check')) return [path, path.replace(/^\//, ''), 'cabinet-box-check', 'mobile_cabinet-box-check', '/cabinet-box-check'];
+  if (path.startsWith('/warehouse/goods-receipt')) return ['/warehouse/goods-receipt', 'mobile_warehouse-receipt', 'mobile_warehouse', '/admin/warehouse/goods-receipt', 'goods-receipt', 'warehouse'];
+  if (path.startsWith('/warehouse/handover')) return ['/warehouse/handover', 'mobile_warehouse-handover', 'mobile_warehouse', '/admin/warehouse/goods-issue', 'goods-issue', 'warehouse'];
+  if (path.startsWith('/warehouse/returns')) return ['/warehouse/returns', 'mobile_warehouse-return', 'mobile_warehouse', '/admin/warehouse/rejected-goods', 'warehouse-rejected', 'warehouse-management', 'warehouse'];
+  if (path.startsWith('/warehouse')) return ['/warehouse/goods-receipt', 'mobile_warehouse', 'warehouse'];
 
   return [path, path.replace(/^\//, '')];
 };

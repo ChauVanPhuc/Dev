@@ -76,4 +76,19 @@ apiClient.interceptors.request.use((config) => {
   return Promise.reject(error)
 })
 
+// Interceptor dọn token hỏng / hết hạn khi server trả về 401
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const reqUrl = String(error?.config?.url || '')
+    if (error?.response?.status === 401 && !reqUrl.includes('accounts/login')) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('access_token')
+      localStorage.removeItem('smartflow_user')
+      localStorage.removeItem('smartflow_active_permissions')
+    }
+    return Promise.reject(error)
+  }
+)
+
 export default apiClient

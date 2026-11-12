@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import claimService from '../services/claim.service';
 import { calculateTotalPenalty, getMonthYear } from '../utils/claimHelpers';
 
-export const useClaimStatistics = (claims = [], cabinetPrices = [], showModal) => {
+export const useClaimStatistics = (claims = [], cabinetPrices = [], showModal, fetchClaims) => {
   // Monthly trends analytics modal state
   const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
   const [analyticsViewTab, setAnalyticsViewTab] = useState('chart'); // 'chart' or 'table'
@@ -48,6 +48,91 @@ export const useClaimStatistics = (claims = [], cabinetPrices = [], showModal) =
   const [isParsingPdf, setIsParsingPdf] = useState(false);
   const [parsingMonthTarget, setParsingMonthTarget] = useState(null);
 
+  // Credit Note Preview Modal States
+  const [creditNotePreviewData, setCreditNotePreviewData] = useState(null);
+  const [isCreditNotePreviewOpen, setIsCreditNotePreviewOpen] = useState(false);
+  const [isConfirmingCreditNote, setIsConfirmingCreditNote] = useState(false);
+
+  // Sync penalties from custom events (e.g. from standard PDF import)
+  useEffect(() => {
+    const syncPenalties = () => {
+      try {
+        const saved = localStorage.getItem('smartflow_customer_penalties');
+        if (saved) setCustomerPenalties(JSON.parse(saved));
+        const savedFiles = localStorage.getItem('smartflow_customer_penalty_files');
+        if (savedFiles) setCustomerPenaltyFiles(JSON.parse(savedFiles));
+      } catch (e) {
+        console.error('Error syncing penalties:', e);
+      }
+    };
+    window.addEventListener('claim-penalties-updated', syncPenalties);
+    return () => window.removeEventListener('claim-penalties-updated', syncPenalties);
+  }, []);
+
+  const handleConfirmCreditNoteImport = async (dataToImport) => {
+    const payload = dataToImport || creditNotePreviewData;
+    if (!payload) return;
+
+    setIsConfirmingCreditNote(true);
+    try {
+      await claimService.confirmCreditNoteImport({
+        credit_note_no: payload.credit_note_no,
+        factory: payload.factory || 'VINA G7',
+        date_issued: payload.date_issued,
+        period: payload.period || payload.month,
+        total_amount: payload.total_amount,
+        currency: payload.currency || 'USD',
+        saved_filename: payload.saved_filename,
+        file_url: payload.file_url,
+        claims: payload.claims || []
+      });
+
+      const m = payload.period || payload.month;
+      if (m && payload.total_amount !== undefined) {
+        setCustomerPenalties(prev => ({
+          ...prev,
+          [m]: payload.total_amount
+        }));
+      }
+
+      if (m && (payload.saved_filename || payload.filename)) {
+        setCustomerPenaltyFiles(prev => ({
+          ...prev,
+          [m]: {
+            fileName: payload.filename || payload.saved_filename,
+            fileUrl: payload.file_url || `/static/uploads/customer_penalty_pdfs/${payload.saved_filename}`
+          }
+        }));
+      }
+
+      if (editingMonthData && editingMonthData.month === m) {
+        setEditValue(payload.total_amount.toString());
+      }
+
+      if (fetchClaims) {
+        await fetchClaims();
+      }
+      window.dispatchEvent(new CustomEvent('claim-list-refresh'));
+
+      setIsCreditNotePreviewOpen(false);
+      setCreditNotePreviewData(null);
+
+      if (showModal) {
+        showModal(
+          'Nhập dữ liệu thành công',
+          `Đã đối chiếu ${payload.claims?.length || 0} mục từ Credit Note ${payload.credit_note_no || ''} và cập nhật tiền phạt $${payload.total_amount?.toLocaleString()} cho tháng ${m}!`,
+          'success'
+        );
+      }
+    } catch (err) {
+      console.error('Lỗi lưu Credit Note:', err);
+      const errMsg = err.response?.data?.detail || err.message || 'Lỗi khi lưu dữ liệu Credit Note.';
+      if (showModal) showModal('Lỗi lưu dữ liệu', errMsg, 'error');
+    } finally {
+      setIsConfirmingCreditNote(false);
+    }
+  };
+
   // Single Month PDF Upload (from modal)
   const handleSingleMonthPdfUpload = async (e, targetMonth) => {
     const files = Array.from(e.target.files || []);
@@ -79,6 +164,15 @@ export const useClaimStatistics = (claims = [], cabinetPrices = [], showModal) =
             fileName: res.filename || files[0].name,
             fileUrl: res.file_url || `/static/uploads/customer_penalty_pdfs/${res.saved_filename}`
           };
+
+          // If credit note contains extracted claims, open preview modal for user confirmation
+          if (res.claims && res.claims.length > 0) {
+            setIsParsingPdf(false);
+            setParsingMonthTarget(null);
+            setCreditNotePreviewData(res);
+            setIsCreditNotePreviewOpen(true);
+            return;
+          }
         }
       } else {
         const formData = new FormData();
@@ -175,25 +269,50 @@ export const useClaimStatistics = (claims = [], cabinetPrices = [], showModal) =
         return;
       }
 
+      // If single file uploaded and has claims table, open preview modal
+      if (res.results.length === 1 && res.results[0].success && res.results[0].claims && res.results[0].claims.length > 0) {
+        setCreditNotePreviewData(res.results[0]);
+        setIsCreditNotePreviewOpen(true);
+        return;
+      }
+
       const newPenalties = { ...customerPenalties };
       const newFiles = { ...customerPenaltyFiles };
       const updatedMonths = new Map();
       let successCount = 0;
       let failCount = 0;
 
-      res.results.forEach(item => {
+      for (const item of res.results) {
         if (item.success && item.month && item.month !== 'N/A') {
           successCount++;
           const current = updatedMonths.get(item.month) || 0;
-          updatedMonths.set(item.month, current + item.total_amount);
+          updatedMonths.set(item.month, current + (Number(item.total_amount) || 0));
           newFiles[item.month] = {
             fileName: item.filename,
             fileUrl: item.file_url
           };
+
+          if (item.claims && item.claims.length > 0) {
+            try {
+              await claimService.confirmCreditNoteImport({
+                credit_note_no: item.credit_note_no,
+                factory: item.factory || 'VINA G7',
+                date_issued: item.date_issued,
+                period: item.period || item.month,
+                total_amount: item.total_amount,
+                currency: item.currency || 'USD',
+                saved_filename: item.saved_filename,
+                file_url: item.file_url,
+                claims: item.claims || []
+              });
+            } catch (linkErr) {
+              console.error('Error auto-linking credit note:', linkErr);
+            }
+          }
         } else {
           failCount++;
         }
-      });
+      }
 
       updatedMonths.forEach((amt, m) => {
         newPenalties[m] = amt;
@@ -201,6 +320,11 @@ export const useClaimStatistics = (claims = [], cabinetPrices = [], showModal) =
 
       setCustomerPenalties(newPenalties);
       setCustomerPenaltyFiles(newFiles);
+
+      if (fetchClaims) {
+        await fetchClaims();
+      }
+      window.dispatchEvent(new CustomEvent('claim-list-refresh'));
 
       const summaryList = Array.from(updatedMonths.entries())
         .map(([m, amt]) => `• Tháng ${m}: $${amt.toLocaleString()}`)
@@ -232,6 +356,25 @@ export const useClaimStatistics = (claims = [], cabinetPrices = [], showModal) =
     }
   };
 
+  // Pre-build O(1) cabinet price map to eliminate O(N*M) lookups
+  const cabinetPriceMap = useMemo(() => {
+    const map = new Map();
+    if (Array.isArray(cabinetPrices)) {
+      for (let i = 0; i < cabinetPrices.length; i++) {
+        const item = cabinetPrices[i];
+        if (!item) continue;
+        const price = item.sale_price || 0;
+        if (item.cabinet_code) {
+          map.set(String(item.cabinet_code).trim().toLowerCase(), price);
+        }
+        if (item.cabinet_name) {
+          map.set(String(item.cabinet_name).trim().toLowerCase(), price);
+        }
+      }
+    }
+    return map;
+  }, [cabinetPrices]);
+
   // Aggregated analytics data per month
   const analyticsData = useMemo(() => {
     const groups = {};
@@ -250,7 +393,7 @@ export const useClaimStatistics = (claims = [], cabinetPrices = [], showModal) =
       }
 
       groups[my].count += 1;
-      const penaltyVal = calculateTotalPenalty(c, undefined, cabinetPrices);
+      const penaltyVal = calculateTotalPenalty(c, undefined, cabinetPriceMap);
       groups[my].totalAmount += penaltyVal;
       groups[my].claims.push(c);
     });
@@ -264,7 +407,7 @@ export const useClaimStatistics = (claims = [], cabinetPrices = [], showModal) =
     });
 
     return list;
-  }, [claims, cabinetPrices]);
+  }, [claims, cabinetPriceMap]);
 
   const totalCountAll = useMemo(() => {
     return analyticsData.reduce((acc, curr) => acc + curr.count, 0);
@@ -280,6 +423,10 @@ export const useClaimStatistics = (claims = [], cabinetPrices = [], showModal) =
       return acc + (p !== undefined ? p : 0);
     }, 0);
   }, [analyticsData, customerPenalties]);
+
+  const totalOverallAmountAll = useMemo(() => {
+    return totalG7AmountAll + totalCustomerAmountAll;
+  }, [totalG7AmountAll, totalCustomerAmountAll]);
 
   return {
     isAnalyticsOpen,
@@ -300,8 +447,15 @@ export const useClaimStatistics = (claims = [], cabinetPrices = [], showModal) =
     totalCountAll,
     totalG7AmountAll,
     totalCustomerAmountAll,
+    totalOverallAmountAll,
     handleSingleMonthPdfUpload,
     handleCreditNotePdfChange,
-    handleBatchPdfUpload
+    handleBatchPdfUpload,
+    creditNotePreviewData,
+    setCreditNotePreviewData,
+    isCreditNotePreviewOpen,
+    setIsCreditNotePreviewOpen,
+    isConfirmingCreditNote,
+    handleConfirmCreditNoteImport
   };
 };

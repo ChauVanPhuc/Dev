@@ -1,108 +1,144 @@
 import React from 'react';
 
-/**
- * 1 Hàng 5 KPI Cards chuẩn ERP G7 theo tháng (Gọn gàng, không icon rườm rà):
- * 1. Tổng phiếu kiểm tra (Tháng X/YYYY) - số bên phải, so sánh vs Tháng (X-1)/YYYY
- * 2. Tổng SP đã kiểm tra (Tháng X/YYYY) - số bên phải, so sánh vs Tháng (X-1)/YYYY
- * 3. Tổng lỗi phát hiện (Tháng X/YYYY) - số bên phải, so sánh vs Tháng (X-1)/YYYY
- * 4. Tỷ lệ lỗi T.Bình (Tháng X/YYYY) - số bên phải, so sánh vs Tháng (X-1)/YYYY
- * 5. Nhóm lỗi lớn nhất (Tháng X/YYYY) - số bên phải, so sánh vs Tháng (X-1)/YYYY
- */
-export const KpiCardsRow = ({ summary = {}, selectedMonth, selectedYear }) => {
-  const curMonth = Number(selectedMonth) || (new Date().getMonth() + 1);
-  const curYear = Number(selectedYear) || new Date().getFullYear();
-  const prevMonth = curMonth === 1 ? 12 : curMonth - 1;
-  const prevYear = curMonth === 1 ? curYear - 1 : curYear;
+// 6 thẻ chỉ số KPI cho Trang 1: Tổng quan chất lượng
+export const KpiCardsRow = ({ summary = {} }) => {
+  const comparison = summary?.comparison || {};
+  const hasComp = comparison?.has_comparison;
 
-  const curMonthStr = `Tháng ${String(curMonth).padStart(2, '0')}/${curYear}`;
-  const prevMonthStr = `Tháng ${String(prevMonth).padStart(2, '0')}/${prevYear}`;
+  const renderDeltaLine = (kpi) => {
+    if (!hasComp || !kpi || kpi.trend === 'no_data' || (kpi.diff_pct === null && kpi.diff_pts === null && kpi.trend !== 'neutral')) {
+      return (
+        <span className="erp-kpi-delta-label" style={{ fontStyle: 'italic' }}>
+          Chưa có kỳ trước
+        </span>
+      );
+    }
+
+    const { diff_pct, diff_pts, trend, is_favorable, unit_type, label = 'so với kỳ trước' } = kpi;
+
+    if (trend === 'neutral') {
+      const zeroText = unit_type === 'pts' ? '0.0 điểm %' : '0%';
+      return (
+        <div className="erp-kpi-delta">
+          <span className="erp-kpi-delta-val" style={{ color: '#78716C' }}>
+            — {zeroText}
+          </span>
+          <span className="erp-kpi-delta-label">
+            {label}
+          </span>
+        </div>
+      );
+    }
+
+    const deltaValue = unit_type === 'pts' ? `${diff_pts} điểm %` : `${diff_pct}%`;
+    const isGood = is_favorable === true;
+    const isBad = is_favorable === false;
+    const deltaColor = isGood ? '#15803D' : (isBad ? '#B91C1C' : '#78716C');
+    const arrow = trend === 'up' ? '↑' : '↓';
+
+    return (
+      <div className="erp-kpi-delta">
+        <span className="erp-kpi-delta-val" style={{ color: deltaColor }}>
+          {arrow} {deltaValue}
+        </span>
+        <span className="erp-kpi-delta-label">
+          {label}
+        </span>
+      </div>
+    );
+  };
+
+  const totalRecords = Number(summary?.total_records ?? 0);
+  const passRate = Number(summary?.pass_rate ?? 0);
+  const totalProducts = Number(summary?.total_products ?? 0);
+  const defectiveProducts = Number(summary?.defective_products ?? 0);
+  const totalDefects = Number(summary?.total_defects ?? 0);
+  const avgDefectRate = Number(summary?.avg_defect_rate ?? 0);
+
+  const cards = [
+    {
+      title: 'Lượt kiểm tra',
+      value: totalRecords.toLocaleString('vi-VN'),
+      unit: 'lượt',
+      kpiData: summary?.kpi_records,
+      tooltip: summary?.kpi_records?.tooltip || 'Tổng số lượt kiểm tra ghi nhận trong phạm vi lọc.'
+    },
+    {
+      title: 'Tỷ lệ sản phẩm đạt',
+      value: passRate.toFixed(1),
+      unit: '%',
+      valueColor: passRate >= 90 ? '#15803D' : (passRate >= 70 ? '#AD8057' : '#B91C1C'),
+      kpiData: summary?.kpi_pass_rate,
+      tooltip: summary?.kpi_pass_rate?.tooltip || 'Tỷ lệ sản phẩm đạt tiêu chuẩn chất lượng trong kỳ.'
+    },
+    {
+      title: 'SP kiểm tra',
+      value: totalProducts.toLocaleString('vi-VN'),
+      unit: 'SP',
+      kpiData: summary?.kpi_products,
+      tooltip: summary?.kpi_products?.tooltip || 'Tổng số lượng sản phẩm được QC lấy mẫu kiểm tra trong kỳ.'
+    },
+    {
+      title: 'SP lỗi',
+      value: defectiveProducts.toLocaleString('vi-VN'),
+      unit: 'SP',
+      valueColor: defectiveProducts > 0 ? '#B91C1C' : '#292524',
+      kpiData: summary?.kpi_defective_products,
+      tooltip: summary?.kpi_defective_products?.tooltip || 'Số sản phẩm phát hiện có lỗi trong kỳ.'
+    },
+    {
+      title: 'Tổng lỗi phát sinh',
+      value: totalDefects.toLocaleString('vi-VN'),
+      unit: 'lỗi',
+      valueColor: totalDefects > 0 ? '#B91C1C' : '#292524',
+      kpiData: summary?.kpi_defects,
+      tooltip: summary?.kpi_defects?.tooltip || 'Tổng số lượng lỗi phát hiện trong kỳ.'
+    },
+    {
+      title: 'Tỷ lệ lỗi',
+      value: avgDefectRate.toFixed(2),
+      unit: '%',
+      valueColor: avgDefectRate > 3.0 ? '#B91C1C' : (avgDefectRate > 1.5 ? '#C58A4B' : '#292524'),
+      kpiData: summary?.kpi_defect_rate,
+      tooltip: summary?.kpi_defect_rate?.tooltip || 'Tỷ lệ lỗi bình quân = Tổng số lỗi / Tổng SP kiểm tra × 100%.'
+    }
+  ];
 
   return (
     <div className="erp-kpi-grid">
-      {/* KPI 1: Tổng phiếu kiểm tra trong tháng */}
-      <div className="erp-kpi-card">
-        <div className="erp-kpi-content">
-          <div className="erp-kpi-label" title={`Tổng phiếu kiểm tra (${curMonthStr})`}>
-            Tổng phiếu kiểm tra ({curMonthStr})
-          </div>
-          <div className="erp-kpi-value" style={{ textAlign: 'right', display: 'flex', alignItems: 'baseline', justifyContent: 'flex-end', gap: '3px' }}>
-            <span style={{ fontSize: '1.35rem', fontWeight: '850' }}>{Number(summary?.total_records || 622).toLocaleString()}</span>
-            <span style={{ fontSize: '0.74rem', color: '#64748B', fontWeight: '700' }}>phiếu</span>
-          </div>
-          <div style={{ fontSize: '0.64rem', color: '#16A34A', fontWeight: '700', lineHeight: 1.1, marginTop: '2px', textAlign: 'right' }}>
-            ↓ 4.2% so với {prevMonthStr}
-          </div>
-        </div>
-      </div>
-
-      {/* KPI 2: Tổng số sản phẩm đã kiểm tra trong tháng */}
-      <div className="erp-kpi-card">
-        <div className="erp-kpi-content">
-          <div className="erp-kpi-label" title={`Tổng SP đã kiểm tra (${curMonthStr})`}>
-            Tổng SP đã kiểm tra ({curMonthStr})
-          </div>
-          <div className="erp-kpi-value" style={{ textAlign: 'right', display: 'flex', alignItems: 'baseline', justifyContent: 'flex-end', gap: '3px' }}>
-            <span style={{ fontSize: '1.35rem', fontWeight: '850' }}>{Number(summary?.total_products || 246017).toLocaleString()}</span>
-            <span style={{ fontSize: '0.74rem', color: '#64748B', fontWeight: '700' }}>SP</span>
-          </div>
-          <div style={{ fontSize: '0.64rem', color: '#334155', fontWeight: '700', lineHeight: 1.1, marginTop: '2px', textAlign: 'right' }}>
-            ↑ 12.5% so với {prevMonthStr}
-          </div>
-        </div>
-      </div>
-
-      {/* KPI 3: Tổng lỗi phát hiện trong tháng */}
-      <div className="erp-kpi-card">
-        <div className="erp-kpi-content">
-          <div className="erp-kpi-label" title={`Tổng lỗi phát hiện (${curMonthStr})`}>
-            Tổng lỗi phát hiện ({curMonthStr})
-          </div>
-          <div className="erp-kpi-value alert" style={{ textAlign: 'right', display: 'flex', alignItems: 'baseline', justifyContent: 'flex-end', gap: '3px' }}>
-            <span style={{ fontSize: '1.35rem', fontWeight: '850', color: '#DC2626' }}>{Number(summary?.total_defects || 1933).toLocaleString()}</span>
-            <span style={{ fontSize: '0.74rem', color: '#DC2626', fontWeight: '700' }}>lỗi</span>
-          </div>
-          <div style={{ fontSize: '0.64rem', color: '#16A34A', fontWeight: '700', lineHeight: 1.1, marginTop: '2px', textAlign: 'right' }}>
-            ↓ 8.3% so với {prevMonthStr}
-          </div>
-        </div>
-      </div>
-
-      {/* KPI 4: Tỷ lệ lỗi T.Bình theo tháng */}
-      <div className="erp-kpi-card">
-        <div className="erp-kpi-content">
-          <div className="erp-kpi-label" title={`Tỷ lệ lỗi T.Bình (${curMonthStr})`}>
-            Tỷ lệ lỗi T.Bình ({curMonthStr})
-          </div>
-          <div className="erp-kpi-value alert" style={{ textAlign: 'right', display: 'flex', alignItems: 'baseline', justifyContent: 'flex-end', gap: '2px' }}>
-            <span style={{ fontSize: '1.35rem', fontWeight: '850', color: '#DC2626' }}>{Number(summary?.avg_defect_rate ?? 0.8).toFixed(1)}</span>
-            <span style={{ fontSize: '0.82rem', color: '#DC2626', fontWeight: '850' }}>%</span>
-          </div>
-          <div style={{ fontSize: '0.64rem', color: '#16A34A', fontWeight: '700', lineHeight: 1.1, marginTop: '2px', textAlign: 'right' }}>
-            ↓ 0.15% so với {prevMonthStr}
-          </div>
-        </div>
-      </div>
-
-      {/* KPI 5: Nhóm lỗi có tỉ trọng lớn nhất */}
-      <div className="erp-kpi-card">
-        <div className="erp-kpi-content">
-          <div className="erp-kpi-label" title={`Nhóm lỗi lớn nhất (${curMonthStr})`}>
-            Nhóm lỗi lớn nhất ({curMonthStr})
-          </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '4px' }}>
-            <span style={{ fontSize: '0.9rem', fontWeight: '800', color: '#1E293B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {summary?.top_category_name || 'Ngoại quan'}
+      {cards.map((c, idx) => (
+        <div
+          key={idx}
+          className={`erp-kpi-card ${c.isCritical ? 'erp-kpi-card-critical' : ''}`}
+          title={c.tooltip}
+        >
+          {/* Tên chỉ số và so sánh kỳ trước */}
+          <div className="erp-kpi-left">
+            <span
+              className="erp-kpi-title"
+              style={c.isCritical ? { color: '#B91C1C' } : undefined}
+            >
+              {c.title}
             </span>
-            <div className="erp-kpi-value" style={{ display: 'flex', alignItems: 'baseline', gap: '2px' }}>
-              <span style={{ fontSize: '1.35rem', fontWeight: '850', color: '#4B301E' }}>{summary?.top_category_percentage !== undefined ? `${summary.top_category_percentage}` : '76.8'}</span>
-              <span style={{ fontSize: '0.82rem', color: '#4B301E', fontWeight: '850' }}>%</span>
-            </div>
+            {renderDeltaLine(c.kpiData)}
           </div>
-          <div style={{ fontSize: '0.64rem', color: '#16A34A', fontWeight: '700', lineHeight: 1.1, marginTop: '2px', textAlign: 'right' }}>
-            ↑ 2.6% so với {prevMonthStr}
+
+          {/* Giá trị và đơn vị */}
+          <div className="erp-kpi-right">
+            <span
+              className="erp-kpi-value"
+              style={c.valueColor ? { color: c.valueColor } : undefined}
+            >
+              {c.value}
+            </span>
+            {c.unit && (
+              <span className="erp-kpi-unit">
+                {c.unit}
+              </span>
+            )}
           </div>
         </div>
-      </div>
+      ))}
     </div>
   );
 };

@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
 import os
+import re
 import json
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Request
+from app.shared.utils import extract_product_line_from_sku
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from jose import jwt
@@ -46,18 +49,48 @@ def read_claims(
             import_service.logger.error(f"Error auto-syncing claims company_error_code: {e}")
             
     # Serialize items
+    img_changed = False
     item_dicts = []
     for c in items:
         img_paths = json.loads(c.image_paths) if c.image_paths else []
         img_caps = json.loads(c.image_captions) if c.image_captions else []
+        if not img_paths and c.claim_code:
+            cab_match = re.search(r'(?:Cabinet|Claim)\s*#?\s*(\d+)', c.claim_code, re.IGNORECASE)
+            if cab_match and hasattr(import_service, "IMAGES_DIR") and os.path.exists(import_service.IMAGES_DIR):
+                c_num = cab_match.group(1)
+                for b_folder in sorted(os.listdir(import_service.IMAGES_DIR), reverse=True):
+                    b_path = os.path.join(import_service.IMAGES_DIR, b_folder)
+                    if os.path.isdir(b_path):
+                        matched = [
+                            f for f in os.listdir(b_path)
+                            if re.search(rf'claim_{c_num}_page_\d+_photo', f, re.IGNORECASE)
+                        ]
+                        if matched:
+                            matched.sort()
+                            img_paths = [f"/static/uploads/claim_imports/images/{b_folder}/{f}" for f in matched]
+                            img_caps = [f"Claim #{c_num} (Ảnh {idx+1})" for idx in range(len(matched))]
+                            try:
+                                c.image_paths = json.dumps(img_paths)
+                                c.image_captions = json.dumps(img_caps)
+                                img_changed = True
+                            except Exception as img_err:
+                                import_service.logger.warning(f"Error caching recovered images for {c.claim_code}: {img_err}")
+                            break
+        p_line = extract_product_line_from_sku(c.product_name)
         item_dicts.append({
             "id": c.id,
             "claim_code": c.claim_code,
             "customer_name": c.customer_name or "",
             "product_name": c.product_name,
+            "sku": c.product_name,
+            "dong_hang": p_line,
+            "line": p_line,
+            "product_line": p_line,
             "order_code": c.order_code or "",
+            "defect_code": c.order_code or "",
             "company_error_code": c.company_error_code or "",
             "description": c.description or "",
+            "claim_description": c.description or "",
             "severity": c.severity or "Medium",
             "status": c.status or "Received",
             "lpn": c.lpn or "",
@@ -80,11 +113,26 @@ def read_claims(
             db_codes = {c["claim_code"] for c in item_dicts}
             for tc in temp_claims:
                 if tc.get("claim_code") not in db_codes:
+                    if not tc.get("dong_hang"):
+                        p_line = extract_product_line_from_sku(tc.get("product_name") or tc.get("sku") or "")
+                        tc["dong_hang"] = p_line
+                        tc["line"] = p_line
+                        tc["product_line"] = p_line
+                    if not tc.get("sku"):
+                        tc["sku"] = tc.get("product_name")
+                    if not tc.get("product_name"):
+                        tc["product_name"] = tc.get("sku")
                     item_dicts.append(tc)
                     total += 1
     except Exception as e:
         import_service.logger.warning(f"Error loading temp_claims: {e}")
 
+    if img_changed:
+        try:
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            import_service.logger.warning(f"Error committing recovered images: {e}")
     return {"items": item_dicts, "total": total, "page": page, "size": size}
 
 @router.post("/claims/import-pdf")
@@ -109,12 +157,16 @@ def import_claims_from_pdf(
             "batch_id": extracted_data.get("batch_id"),
             "period": extracted_data.get("period"),
             "total_records": extracted_data.get("total_records", 0),
+            "photo_count": extracted_data.get("photo_count", 0),
+            "linked_photos_count": extracted_data.get("photo_count", 0),
             "db_saved_count": extracted_data.get("db_saved_count", 0),
             "parse_warnings": extracted_data.get("parse_warnings", []),
             "file_stats": extracted_data.get("file_stats", []),
             "mechanism": extracted_data.get("mechanism"),
             "data": extracted_data
         }
+    except ValueError as val_err:
+        raise HTTPException(status_code=400, detail=str(val_err))
     except Exception as e:
         import_service.logger.exception("Error processing PDF import:")
         raise HTTPException(status_code=500, detail=f"Lỗi bóc tách PDF: {str(e)}")
@@ -132,6 +184,7 @@ def import_claims_from_folder(
     errors = []
     total_records_count = 0
     total_saved_count = 0
+    total_photos_count = 0
     all_warnings = []
     all_file_stats = []
     latest_batch_id = None
@@ -148,6 +201,7 @@ def import_claims_from_folder(
             saved_cnt = ext_data.get("db_saved_count", 0)
             total_records_count += claims_count
             total_saved_count += saved_cnt
+            total_photos_count += ext_data.get("photo_count", 0)
             latest_batch_id = ext_data.get("batch_id") or latest_batch_id
             if ext_data.get("parse_warnings"):
                 all_warnings.extend(ext_data["parse_warnings"])
@@ -173,6 +227,8 @@ def import_claims_from_folder(
         "success_count": len(results),
         "error_count": len(errors),
         "total_records": total_records_count,
+        "photo_count": total_photos_count,
+        "linked_photos_count": total_photos_count,
         "db_saved_count": total_saved_count,
         "batch_id": latest_batch_id or datetime.now().strftime("%Y%m%d_%H%M%S"),
         "parse_warnings": all_warnings,
@@ -228,6 +284,120 @@ def parse_credit_notes_batch(
         "results": results
     }
 
+class CreditNoteConfirmPayload(BaseModel):
+    credit_note_no: Optional[str] = None
+    factory: Optional[str] = "VINA G7"
+    date_issued: Optional[str] = None
+    period: str
+    total_amount: float
+    currency: Optional[str] = "USD"
+    saved_filename: Optional[str] = None
+    file_url: Optional[str] = None
+    claims: List[Dict[str, Any]]
+
+@router.post("/claims/confirm-credit-note-import")
+def confirm_credit_note_import(
+    payload: CreditNoteConfirmPayload,
+    db: Session = Depends(get_db)
+):
+    try:
+        from modules.claim.models import CustomerClaim
+        updated_count = 0
+        unlinked_claims = []
+
+        for c in payload.claims:
+            stt = c.get("stt", 0)
+            sku = str(c.get("sku") or c.get("product_name") or "").strip()
+            lpn = str(c.get("lpn") or "").strip()
+            container = str(c.get("container_no") or "").strip()
+            action = str(c.get("action") or "").strip()
+            claim_desc = str(c.get("description") or c.get("claim_description") or f"Credit Note {payload.credit_note_no or ''} - Item {stt} ({sku})").strip()
+
+            existing = None
+            if lpn or container or sku:
+                query = db.query(CustomerClaim).filter(
+                    CustomerClaim.period == payload.period
+                )
+                if sku:
+                    query = query.filter(CustomerClaim.product_name == sku)
+                if lpn:
+                    query = query.filter(CustomerClaim.lpn == lpn)
+                if container:
+                    query = query.filter(CustomerClaim.container_no == container)
+                existing = query.first()
+
+            if existing:
+                if action and not existing.action:
+                    existing.action = action
+                updated_count += 1
+            else:
+                # Do NOT create fake CustomerClaim! Put into unlinked list to prevent double counting
+                unlinked_claims.append({
+                    "stt": stt,
+                    "sku": sku,
+                    "lpn": lpn,
+                    "container_no": container,
+                    "action": action,
+                    "description": claim_desc,
+                    "period": payload.period,
+                    "credit_note_no": payload.credit_note_no or ""
+                })
+
+        db.commit()
+
+        # If there are unlinked items, persist to data/unlinked_credit_notes.json
+        if unlinked_claims:
+            unlinked_file = os.path.join(import_service.DATA_DIR, "unlinked_credit_notes.json")
+            existing_unlinked = []
+            if os.path.exists(unlinked_file):
+                try:
+                    with open(unlinked_file, "r", encoding="utf-8") as uf:
+                        existing_unlinked = json.load(uf)
+                except Exception as read_err:
+                    import_service.logger.warning(f"Error reading unlinked credit notes file: {read_err}")
+                    existing_unlinked = []
+
+            unlinked_keys = {(u.get("credit_note_no"), u.get("stt"), u.get("sku")) for u in existing_unlinked}
+            for u in unlinked_claims:
+                k = (u.get("credit_note_no"), u.get("stt"), u.get("sku"))
+                if k not in unlinked_keys:
+                    existing_unlinked.append(u)
+                    unlinked_keys.add(k)
+
+            try:
+                with open(unlinked_file, "w", encoding="utf-8") as uf:
+                    json.dump(existing_unlinked, uf, ensure_ascii=False, indent=2)
+            except Exception as fe:
+                import_service.logger.warning(f"Error persisting unlinked credit notes: {fe}")
+
+        return {
+            "success": True,
+            "status": "success",
+            "message": f"Đã đối chiếu {updated_count} khiếu nại kỳ {payload.period}." + (f" Có {len(unlinked_claims)} mục chưa tìm thấy Claim tương ứng đã lưu vào danh sách chờ đối chiếu." if unlinked_claims else ""),
+            "saved_count": 0,
+            "updated_count": updated_count,
+            "unlinked_count": len(unlinked_claims),
+            "total_records": len(payload.claims),
+            "period": payload.period,
+            "total_amount": payload.total_amount,
+            "credit_note_no": payload.credit_note_no
+        }
+    except Exception as e:
+        db.rollback()
+        import_service.logger.exception("Error confirming credit note import:")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/claims/unlinked-credit-notes")
+def get_unlinked_credit_notes():
+    unlinked_file = os.path.join(import_service.DATA_DIR, "unlinked_credit_notes.json")
+    if os.path.exists(unlinked_file):
+        try:
+            with open(unlinked_file, "r", encoding="utf-8") as uf:
+                return {"success": True, "items": json.load(uf)}
+        except Exception as e:
+            return {"success": False, "error": str(e), "items": []}
+    return {"success": True, "items": []}
+
 @router.post("/claims/import-folder-stream")
 def import_claims_from_folder_stream(
     files: List[UploadFile] = File(...),
@@ -243,6 +413,7 @@ def import_claims_from_folder_stream(
         errors = []
         total_records_count = 0
         total_saved_count = 0
+        total_photos_count = 0
         all_warnings = []
         all_file_stats = []
         latest_batch_id = None
@@ -263,6 +434,7 @@ def import_claims_from_folder_stream(
                 saved_cnt = ext_data.get("db_saved_count", 0)
                 total_records_count += claims_count
                 total_saved_count += saved_cnt
+                total_photos_count += ext_data.get("photo_count", 0)
                 latest_batch_id = ext_data.get("batch_id") or latest_batch_id
                 if ext_data.get("parse_warnings"):
                     for w in ext_data["parse_warnings"]:
@@ -310,6 +482,8 @@ def import_claims_from_folder_stream(
             "success_count": len(results),
             "error_count": len(errors),
             "total_records": total_records_count,
+            "photo_count": total_photos_count,
+            "linked_photos_count": total_photos_count,
             "db_saved_count": total_saved_count,
             "batch_id": latest_batch_id or datetime.now().strftime("%Y%m%d_%H%M%S"),
             "parse_warnings": all_warnings,

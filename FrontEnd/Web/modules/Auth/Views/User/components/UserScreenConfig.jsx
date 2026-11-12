@@ -356,7 +356,8 @@ export const SCREEN_GROUPS = [
       { key: 'data', name: 'Backup data', desc: 'Sao lưu và đồng bộ cơ sở dữ liệu hệ thống.' },
       { key: 'bugs', name: 'Quản lý Bug', desc: 'Quản lý danh sách lỗi chức năng do người dùng báo cáo.' },
       { key: 'monitor', name: 'Giám sát hệ thống', desc: 'Theo dõi trực tiếp hiệu năng máy chủ và CSDL.' },
-      { key: 'backup-qrs', name: 'Quản lý mã QR tạm', desc: 'Quản lý mã QR dự phòng/tạm thời dán trên sản phẩm, giải phóng QR kẹt.' }
+      { key: 'backup-qrs', name: 'Quản lý mã QR tạm', desc: 'Quản lý mã QR dự phòng/tạm thời dán trên sản phẩm, giải phóng QR kẹt.' },
+      { key: 'units', name: 'Quản lý đơn vị tính', desc: 'Quản lý danh mục đơn vị tính dùng chung cho Kho và BOM.' }
     ]
   },
   {
@@ -409,6 +410,15 @@ export const SCREEN_GROUPS = [
       { key: 'prices', name: 'Đơn giá sản phẩm', desc: 'Biểu giá các loại sản phẩm làm căn cứ bồi thường.' },
       { key: 'purchase-requisitions', name: 'Danh sách đơn hàng', desc: 'Quản lý danh sách đơn mua hàng và đơn bán hàng, theo dõi trạng thái duyệt.' },
       { key: 'order-shipping-monitoring', name: 'Giám sát vận chuyển', desc: 'Hiển thị danh sách về thời gian vận chuyển hàng và tiến độ giao nhận.' }
+    ]
+  },
+  {
+    title: 'Module quản lý kho',
+    screens: [
+      { key: 'goods-receipt', name: 'Nhập kho', desc: 'Quản lý danh sách phiếu nhập kho, kiểm đếm và đối soát vật tư.' },
+      { key: 'goods-issue', name: 'Xuất kho', desc: 'Quản lý phiếu xuất kho sản xuất, bán hàng và kiểm soát tồn kho.' },
+      { key: 'warehouse-management', name: 'Quản lý kho (XNT)', desc: 'Báo cáo Xuất - Nhập - Tồn tổng hợp, tuổi kho FIFO và Hàng loại/Trả về.' },
+      { key: 'warehouse-rejected', name: 'Hàng trả về / Hàng loại', desc: 'Theo dõi phiếu trả hàng từ Mobile/Xưởng, QC đầu vào và duyệt xử lý.' }
     ]
   },
   {
@@ -469,6 +479,14 @@ export const MOBILE_SCREEN_GROUPS = [
     screens: [
       { key: 'mobile_equipment-list', name: 'Danh sách thiết bị - máy móc', desc: 'Xem thông tin và trạng thái bảo trì thiết bị máy móc.' }
     ]
+  },
+  {
+    title: 'Kho (Mobile)',
+    screens: [
+      { key: 'mobile_warehouse-receipt', name: 'Phiếu nhập kho (Mobile)', desc: 'Lập, kiểm đếm và xác nhận phiếu nhập kho từ thiết bị di động.' },
+      { key: 'mobile_warehouse-handover', name: 'Phiếu bàn giao (Mobile)', desc: 'Lập phiếu xuất / bàn giao vật tư cho xưởng sản xuất & ký nhận.' },
+      { key: 'mobile_warehouse-return', name: 'Phiếu trả về (Mobile)', desc: 'Lập phiếu trả hàng về kho (hàng lỗi hoặc hàng tốt dư) & xử lý.' }
+    ]
   }
 ];
 
@@ -525,6 +543,12 @@ export const MOBILE_GROUP_ICONS = [
   // Thiết bị
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+  </svg>,
+  // Kho (Mobile)
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 21V8l9-4 9 4v13" />
+    <path d="M9 21v-6h6v6" />
+    <path d="M10 10h4" />
   </svg>
 ];
 

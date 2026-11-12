@@ -1,25 +1,25 @@
-/* ==========================================================================
-   ERP G7 - Defect Analytics Dashboard Styles (Pixel-Perfect Reference Match)
-   ========================================================================== */
+/* Giao diện Dashboard phân tích lỗi */
 
 :root {
-  --erp-bg: #FAF6F0;
+  --erp-bg: #F8F9FB;
   --erp-card-bg: #FFFFFF;
-  --erp-border: #EADCC9;
-  --erp-border-light: #F0E6D8;
-  --erp-primary: #4B301E;
-  --erp-primary-accent: #7B5233;
-  --erp-secondary: #A67C52;
-  --erp-beige-light: #F7F2EB;
-  --erp-tan: #D9B99B;
-  --erp-red: #DC2626;
-  --erp-red-bg: #FEE2E2;
-  --erp-text-main: #1E293B;
-  --erp-text-muted: #64748B;
-  --erp-text-brown: #2D1A12;
+  --erp-border: #E8E2DC;
+  --erp-border-light: #F2ECE7;
+  --erp-grid-line: #EAECEF;
+  --erp-primary: #795137;
+  --erp-secondary: #AD8057;
+  --erp-neutral-chart: #C4A78D;
+  --erp-text-main: #292524;
+  --erp-text-muted: #78716C;
+  --erp-green: #15803D;
+  --erp-green-bg: #F0FDF4;
+  --erp-red: #B91C1C;
+  --erp-red-bg: #FEF2F2;
+  --erp-amber: #C58A4B;
+  --erp-amber-bg: #FFFBEB;
 }
 
-/* Triệt tiêu hoàn toàn viền đen / outline khi click vào biểu đồ Recharts */
+/* Bỏ outline khi focus biểu đồ Recharts */
 *:focus,
 svg:focus,
 path:focus,
@@ -36,310 +36,612 @@ rect:focus,
   box-shadow: none !important;
 }
 
-/* Khung chứa tổng thể Dashboard: Tự động chiếm 100% chiều cao màn hình tới sát đáy */
+/* Container Dashboard - Vừa vặn viewport desktop, không cuộn dọc khi đủ không gian */
 .erp-defect-dashboard {
-  display: flex !important;
-  flex-direction: column !important;
-  height: calc(100vh - 116px) !important;
-  max-height: calc(100vh - 116px) !important;
-  min-height: calc(100vh - 116px) !important;
-  width: 100% !important;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  flex: 1;
+  padding: 4px 8px 6px 8px;
+  gap: 3px;
+  background-color: var(--erp-bg);
+  box-sizing: border-box;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.erp-defect-dashboard.fit-screen,
+.erp-defect-dashboard:has(.erp-claim-dashboard) {
   overflow: hidden !important;
-  gap: 8px !important;
-  box-sizing: border-box !important;
-  background-color: transparent !important;
-  padding: 0 !important;
-  margin: 0 !important;
-}
-
-/* ── 1. KPI CARDS ROW (1 Hàng 5 KPI đồng nhất, góc bo 8px, viền mảnh #EADCC9) ── */
-.erp-kpi-grid {
-  display: grid !important;
-  grid-template-columns: repeat(5, 1fr) !important;
-  gap: 8px !important;
-  flex-shrink: 0 !important;
-  height: 66px !important;
-  min-height: 66px !important;
-  max-height: 66px !important;
-  box-sizing: border-box !important;
-}
-
-.erp-kpi-card {
-  background-color: #FFFFFF !important;
-  border: 1px solid var(--erp-border) !important;
-  border-radius: 8px !important;
-  padding: 5px 10px !important;
-  display: flex !important;
-  align-items: center !important;
-  gap: 8px !important;
-  box-shadow: 0 1px 2px rgba(123, 82, 51, 0.04) !important;
-  box-sizing: border-box !important;
   height: 100% !important;
-  overflow: hidden !important;
+  max-height: 100% !important;
+  padding: 2px 6px 4px 6px !important;
 }
 
-.erp-kpi-icon {
-  width: 32px !important;
-  height: 32px !important;
-  border-radius: 6px !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  flex-shrink: 0 !important;
+/* Thanh công cụ lọc thống nhất */
+.erp-dashboard-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: nowrap;
+  gap: 6px;
+  background: var(--erp-card-bg);
+  border: 1px solid var(--erp-border);
+  border-radius: 6px;
+  padding: 3px 8px;
+  box-shadow: 0 1px 2px rgba(41, 37, 36, 0.03);
+  box-sizing: border-box;
+  min-height: 32px;
+  width: 100%;
+  flex-shrink: 0;
 }
 
-.erp-kpi-icon.primary {
-  background-color: #F7F2EB !important;
-  color: #7B5233 !important;
+/* ─── Chuẩn hóa thanh công cụ Dashboard đồng bộ Đơn hàng xuất khẩu ─── */
+.exp-toolbar {
+  background-color: #FFFFFF;
+  border: 1px solid #E8E2DC;
+  border-radius: 8px;
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  box-sizing: border-box;
+  width: 100%;
+  flex-shrink: 0;
+  margin-bottom: 6px;
 }
 
-.erp-kpi-icon.alert {
-  background-color: #FEE2E2 !important;
-  color: #DC2626 !important;
+.exp-search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: #FAF6F0;
+  border: 1px solid #E8E2DC;
+  border-radius: 6px;
+  padding: 0 10px;
+  height: 32px;
+  flex: 1 1 240px;
+  max-width: 360px;
+  min-width: 180px;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.erp-kpi-content {
-  display: flex !important;
-  flex-direction: column !important;
-  justify-content: center !important;
-  min-width: 0 !important;
-  flex: 1 !important;
+.exp-search-box:focus-within {
+  border-color: #7B5233;
+  box-shadow: 0 0 0 2px rgba(123, 82, 51, 0.1);
 }
 
-.erp-kpi-label {
-  font-size: 0.74rem !important;
-  color: #1E293B !important;
-  font-weight: 750 !important;
-  line-height: 1.2 !important;
-  white-space: nowrap !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  margin-bottom: 2px !important;
+.exp-search-box input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 0.80rem;
+  color: #292524;
+  width: 100%;
+  font-family: inherit;
+}
+
+.exp-search-box input::placeholder {
+  color: #9CA3AF;
+}
+
+.exp-btn-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid #E8E2DC;
+  background-color: #FFFFFF;
+  color: #7B5233;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+  box-sizing: border-box;
+}
+
+.exp-btn-icon:hover {
+  background-color: #FAF6F0;
+}
+
+.exp-btn-icon.active {
+  background-color: #7B5233;
+  color: #FFFFFF;
+  border-color: #7B5233;
+}
+
+.exp-badge-count {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background-color: #DC2626;
+  color: #FFFFFF;
+  font-size: 0.65rem;
+  font-weight: 800;
+  border-radius: 10px;
+  padding: 1px 5px;
+  line-height: 1;
+}
+
+.exp-btn-brown {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 0.80rem;
+  cursor: pointer;
+  background-color: #4A2E1B;
+  color: #FFFFFF;
+  border: 1px solid #4A2E1B;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  box-sizing: border-box;
+  user-select: none;
+}
+
+.exp-btn-brown:hover {
+  background-color: #352113;
+  border-color: #352113;
+}
+
+.exp-filter-inline-bar {
+  background-color: #FAF6F0;
+  border: 1px solid #EADCC9;
+  border-radius: 8px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  box-sizing: border-box;
+  width: 100%;
+  margin-bottom: 6px;
+  animation: slideDown 0.18s ease;
+  flex-shrink: 0;
+}
+
+.exp-filter-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.exp-filter-item-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #795137;
+  white-space: nowrap;
+}
+
+.exp-filter-select,
+.exp-filter-input {
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid #C4B5A5;
+  background-color: #FFFFFF;
+  color: #2D1A12;
+  font-size: 0.76rem;
+  font-weight: 600;
+  outline: none;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: all 0.15s ease;
+}
+
+.exp-filter-select:hover,
+.exp-filter-input:hover {
+  border-color: #7B5233;
+}
+
+.exp-filter-select:focus,
+.exp-filter-input:focus {
+  border-color: #7B5233;
+  box-shadow: 0 0 0 2px rgba(123, 82, 51, 0.15);
+  background-color: #FFFFFF;
+}
+
+/* Date input specific styling - always white background unless focused */
+.exp-filter-date-input,
+.exp-filter-input[type="date"] {
+  background-color: #FFFFFF !important;
+  color: #2D1A12;
+  font-family: inherit;
+  font-weight: 600;
+}
+
+.exp-filter-date-input:focus,
+.exp-filter-input[type="date"]:focus {
+  background-color: #FFFFFF !important;
+  border-color: #7B5233;
+  box-shadow: 0 0 0 2px rgba(123, 82, 51, 0.15);
+}
+
+.exp-filter-date-input::-webkit-calendar-picker-indicator,
+.exp-filter-input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.65;
+  filter: invert(36%) sepia(21%) saturate(1215%) hue-rotate(345deg) brightness(93%) contrast(88%);
+  transition: opacity 0.15s ease;
+}
+
+.exp-filter-date-input:hover::-webkit-calendar-picker-indicator,
+.exp-filter-input[type="date"]:hover::-webkit-calendar-picker-indicator,
+.exp-filter-date-input:focus::-webkit-calendar-picker-indicator,
+.exp-filter-input[type="date"]:focus::-webkit-calendar-picker-indicator {
+  opacity: 0.95;
+}
+
+/* Only select dropdowns get highlighted with has-value when filtered */
+.exp-filter-select.has-value {
+  background-color: #F5EBE1;
+  border-color: #7B5233;
+  color: #7B5233;
+  font-weight: 700;
+}
+
+.exp-btn-reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid #D7CCC8;
+  background-color: #FFFFFF;
+  color: #795137;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+}
+
+.exp-btn-reset:hover {
+  background-color: #F5EDE4;
+  border-color: #7B5233;
+}
+
+/* KPI Cards Grid (6 cột cho Trang 1, 4 cột cho Trang 2 & 3) */
+.erp-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  width: 100%;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.erp-kpi-grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+/* KPI Card: Bố cục 2 cột rõ ràng (Trái: Tên + So sánh | Phải: Số chính + Đơn vị) */
+.erp-kpi-card {
+  background-color: var(--erp-card-bg);
+  border: 1px solid var(--erp-border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  box-shadow: 0 1px 2px rgba(41, 37, 36, 0.03);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 60px;
+  min-height: 60px;
+  position: relative;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.erp-kpi-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 6px rgba(41, 37, 36, 0.06);
+  border-color: #D6CBC1;
+}
+
+.erp-kpi-card-critical {
+  border-color: #FECACA !important;
+  background-color: #FFFAFA !important;
+}
+
+.erp-kpi-card-critical:hover {
+  border-color: #F87171 !important;
+}
+
+/* Cột Trái: Tên chỉ tiêu (hàng trên) & Dòng so sánh kỳ trước (hàng dưới) */
+.erp-kpi-left {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 3px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.erp-kpi-title {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #5B3924;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.erp-kpi-delta {
+  font-size: 0.69rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.erp-kpi-delta-val {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.erp-kpi-delta-label {
+  color: #78716C;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Cột Phải: Số liệu KPI chính to rõ & Đơn vị (căn phải) */
+.erp-kpi-right {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 3px;
+  flex-shrink: 0;
+  text-align: right;
 }
 
 .erp-kpi-value {
-  font-size: 1.25rem !important;
-  font-weight: 800 !important;
-  line-height: 1.1 !important;
-  color: #1E293B !important;
-  white-space: nowrap !important;
-  letter-spacing: -0.02em !important;
+  font-size: 1.35rem;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: #292524;
 }
 
-.erp-kpi-value.alert {
-  color: #DC2626 !important;
+.erp-kpi-unit {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #78716C;
+  line-height: 1;
 }
 
-/* ── 2. TOOLBAR FILTER (Chuẩn ERP G7, ẩn hiện bộ lọc thông minh) ── */
-.erp-dashboard-toolbar {
-  background-color: #FFFFFF !important;
-  border: 1px solid var(--erp-border) !important;
-  border-radius: 8px !important;
-  padding: 5px 10px !important;
-  display: flex !important;
-  flex-direction: column !important;
-  gap: 5px !important;
-  flex-shrink: 0 !important;
-  box-shadow: 0 1px 2px rgba(123, 82, 51, 0.04) !important;
-  box-sizing: border-box !important;
-  transition: all 0.2s ease-in-out !important;
-  position: relative !important;
-  z-index: 500 !important;
-  overflow: visible !important;
-}
-
-.erp-toolbar-row1 {
-  display: flex !important;
-  justify-content: space-between !important;
-  align-items: center !important;
-  gap: 8px !important;
-  height: 28px !important;
-}
-
-.erp-toolbar-row2 {
-  display: flex !important;
-  justify-content: space-between !important;
-  align-items: center !important;
-  gap: 8px !important;
-  flex-wrap: nowrap !important;
-  height: auto !important;
-  padding-top: 4px !important;
-  border-top: 1px dashed #F1F5F9 !important;
-  position: relative !important;
-  z-index: 500 !important;
-  overflow: visible !important;
-}
-
-.erp-search-wrapper {
-  position: relative !important;
-  width: 250px !important;
-  height: 26px !important;
-}
-
-.erp-search-input {
-  width: 100% !important;
-  height: 26px !important;
-  padding: 0 24px 0 28px !important;
-  font-size: 0.74rem !important;
-  border: 1px solid #E2E8F0 !important;
-  border-radius: 20px !important;
-  outline: none !important;
-  background-color: #FAF8F5 !important;
-  box-sizing: border-box !important;
-  color: #1E293B !important;
-  transition: all 0.15s ease !important;
-}
-
-.erp-search-input:focus {
-  border-color: #7B5233 !important;
-  background-color: #FFFFFF !important;
-  box-shadow: 0 0 0 2px rgba(123, 82, 51, 0.1) !important;
-}
-
-.erp-btn-icon {
-  width: 26px !important;
-  height: 26px !important;
-  padding: 0 !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  border: 1px solid #E2E8F0 !important;
-  border-radius: 6px !important;
-  background-color: #FFFFFF !important;
-  color: #64748B !important;
-  cursor: pointer !important;
-  transition: all 0.15s ease !important;
-}
-
-.erp-btn-icon:hover {
-  background-color: #F7F2EB !important;
-  color: #4B301E !important;
-  border-color: #D9B99B !important;
-}
-
-.erp-btn-icon.active {
-  background-color: #7B5233 !important;
-  color: #FFFFFF !important;
-  border-color: #7B5233 !important;
-}
-
-.erp-btn-export {
-  height: 26px !important;
-  padding: 0 12px !important;
-  border: 1px solid #4B301E !important;
-  border-radius: 6px !important;
-  background-color: #4B301E !important;
-  color: #FFFFFF !important;
-  font-size: 0.74rem !important;
-  font-weight: 700 !important;
-  cursor: pointer !important;
-  display: flex !important;
-  align-items: center !important;
-  gap: 6px !important;
-  white-space: nowrap !important;
-  transition: all 0.15s ease !important;
-}
-
-.erp-btn-export:hover {
-  background-color: #382315 !important;
-}
-
-.erp-filter-chips {
-  display: flex !important;
-  align-items: center !important;
-  gap: 8px !important;
-  flex-wrap: nowrap !important;
-  overflow-x: auto !important;
-}
-
-.erp-chip {
-  display: flex !important;
-  align-items: center !important;
-  background-color: #FFFFFF !important;
-  border: 1px solid #E2E8F0 !important;
-  border-radius: 6px !important;
-  padding: 2px 8px !important;
-  font-size: 0.72rem !important;
-  color: #334155 !important;
-  font-weight: 600 !important;
-  white-space: nowrap !important;
-  height: 24px !important;
-  box-sizing: border-box !important;
-}
-
-.erp-chip select {
-  border: none !important;
-  background: transparent !important;
-  font-size: 0.72rem !important;
-  font-weight: 700 !important;
-  color: #1E293B !important;
-  outline: none !important;
-  cursor: pointer !important;
-  padding: 0 2px !important;
-}
-
-.erp-chip.active {
-  background-color: #FEF3C7 !important;
-  border-color: #F59E0B !important;
-}
-
-/* ── 3. KHU VỰC 4 BIỂU ĐỒ (Chiếm toàn bộ chiều cao còn lại tới sát đáy màn hình) ── */
+/* Charts Grid (2x2) tự co giãn chiều cao theo availableHeight */
 .erp-charts-grid {
-  display: grid !important;
-  grid-template-columns: 1.42fr 1fr !important;
-  grid-template-rows: 1fr 1fr !important;
-  gap: 8px !important;
-  flex: 1 !important;
-  min-height: 0 !important;
-  height: calc(100% - 100px) !important;
-  width: 100% !important;
-  box-sizing: border-box !important;
-  overflow: hidden !important;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
+.erp-chart-wrapper {
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Card biểu đồ */
 .erp-chart-card {
-  background-color: #FFFFFF !important;
-  border: 1px solid var(--erp-border) !important;
-  border-radius: 8px !important;
-  padding: 10px 14px !important;
-  display: flex !important;
-  flex-direction: column !important;
-  min-height: 0 !important;
-  height: 100% !important;
-  width: 100% !important;
-  box-sizing: border-box !important;
-  box-shadow: 0 1px 2px rgba(123, 82, 51, 0.03) !important;
-  overflow: hidden !important;
-}
-
-.erp-chart-header {
-  display: flex !important;
-  justify-content: space-between !important;
-  align-items: center !important;
-  margin-bottom: 4px !important;
-  flex-shrink: 0 !important;
-  height: 22px !important;
-}
-
-.erp-chart-title {
-  font-size: 0.82rem !important;
-  font-weight: 800 !important;
-  color: #4B301E !important;
-  line-height: 1.2 !important;
-  letter-spacing: -0.01em !important;
-}
-
-.erp-chart-subtitle {
-  font-size: 0.68rem !important;
-  color: #64748B !important;
-  font-weight: 500 !important;
+  background-color: var(--erp-card-bg);
+  border: 1px solid var(--erp-border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  box-shadow: 0 1px 2px rgba(41, 37, 36, 0.02);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
 }
 
 .erp-chart-body {
-  flex: 1 !important;
-  min-height: 0 !important;
-  height: calc(100% - 26px) !important;
-  width: 100% !important;
-  position: relative !important;
-  overflow: hidden !important;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  position: relative;
+}
+
+/* Khung nội dung Donut + Bảng có vùng cuộn độc lập */
+.aql-detail-content {
+  display: grid;
+  grid-template-columns: minmax(0, 45fr) minmax(0, 55fr);
+  gap: 10px;
+  flex: 1 1 0px;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* Khung bảng bên phải */
+.aql-table-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  border: 1px solid var(--erp-border);
+  border-radius: 6px;
+  background-color: #FFFFFF;
+  overflow: hidden;
+}
+
+/* Header cố định */
+.aql-table-header {
+  flex-shrink: 0;
+}
+
+/* Vùng cuộn duy nhất */
+.aql-table-scroll {
+  flex: 1 1 0px;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+}
+
+.aql-table-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+
+.aql-table-scroll::-webkit-scrollbar-track {
+  background: #F8F9FB;
+}
+
+.aql-table-scroll::-webkit-scrollbar-thumb {
+  background: #D6CBC1;
+  border-radius: 3px;
+}
+
+.aql-table-scroll::-webkit-scrollbar-thumb:hover {
+  background: #B58A67;
+}
+
+/* Footer tổng cộng */
+.aql-table-footer {
+  flex-shrink: 0;
+}
+
+/* Dark Mode Compatibility (Dev_v4) */
+[data-theme="dark"] .erp-defect-dashboard {
+  --erp-bg: #242220;
+  --erp-card-bg: #302D2A;
+  --erp-border: #4D4742;
+  --erp-border-light: #3F3935;
+  --erp-grid-line: #443E39;
+  --erp-text-main: #F7F3EF;
+  --erp-text-muted: #BDB0A4;
+}
+
+[data-theme="dark"] .erp-defect-dashboard .exp-toolbar,
+[data-theme="dark"] .erp-defect-dashboard .erp-kpi-card,
+[data-theme="dark"] .erp-defect-dashboard .erp-chart-card,
+[data-theme="dark"] .erp-defect-dashboard .aql-table-panel {
+  background-color: #302D2A;
+  border-color: #4D4742;
+  color: #F7F3EF;
+}
+
+[data-theme="dark"] .erp-defect-dashboard .exp-filter-inline-bar {
+  background-color: #282523;
+  border-color: #4D4742;
+}
+
+[data-theme="dark"] .erp-defect-dashboard .exp-search-box {
+  background-color: #282523;
+  border-color: #544E49;
+}
+
+[data-theme="dark"] .erp-defect-dashboard .exp-search-box input {
+  color: #F7F3EF;
+}
+
+[data-theme="dark"] .erp-defect-dashboard .erp-kpi-title {
+  color: #D8B282;
+}
+
+[data-theme="dark"] .erp-defect-dashboard .erp-kpi-value {
+  color: #F7F3EF;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1600px) {
+  .erp-kpi-card {
+    padding: 5px 8px;
+    height: 58px;
+    min-height: 58px;
+  }
+  .erp-kpi-title {
+    font-size: 0.73rem;
+  }
+  .erp-kpi-delta {
+    font-size: 0.66rem;
+  }
+  .erp-kpi-value {
+    font-size: 1.25rem;
+  }
+  .erp-kpi-unit {
+    font-size: 0.68rem;
+  }
+}
+
+@media (max-width: 1440px) {
+  .erp-kpi-grid {
+    gap: 4px;
+  }
+  .erp-kpi-card {
+    padding: 4px 6px;
+    height: 56px;
+    min-height: 56px;
+    gap: 4px;
+  }
+  .erp-kpi-title {
+    font-size: 0.70rem;
+  }
+  .erp-kpi-delta {
+    font-size: 0.63rem;
+  }
+  .erp-kpi-value {
+    font-size: 1.18rem;
+  }
+  .erp-kpi-unit {
+    font-size: 0.65rem;
+  }
+}
+
+@media (max-width: 1200px) {
+  .erp-kpi-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (max-width: 1024px) {
+  .erp-charts-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+  }
+  .erp-chart-wrapper {
+    min-height: 240px;
+  }
+}
+
+@media (max-width: 768px) {
+  .erp-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }

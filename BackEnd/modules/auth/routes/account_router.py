@@ -49,6 +49,37 @@ def update_fcm_token(data: FCMTokenUpdate, db: Session = Depends(get_db)):
     
     return {"message": "Đã đồng bộ mã Token thiết bị thành công"}
 
+def _resolve_account_factory_fields(db: Session, account_obj) -> tuple:
+    raw_id = getattr(account_obj, 'factory_id', None)
+    raw_name = (getattr(account_obj, 'factory_name', None) or '').strip()
+    try:
+        from modules.hr.models.hr_models import HRFactoryStructure
+        rows = db.query(HRFactoryStructure).all()
+        if raw_name:
+            low = raw_name.lower()
+            matched = next(
+                (
+                    f for f in rows
+                    if (f.structure_name or '').strip().lower() == low
+                    or (f.structure_code or '').strip().lower() == low
+                ),
+                None,
+            )
+            if matched:
+                return matched.id, matched.structure_name
+            return raw_id, raw_name
+        if raw_id:
+            matched = next((f for f in rows if f.id == raw_id), None)
+            if matched:
+                return matched.id, matched.structure_name or matched.structure_code
+            return raw_id, f"Nhà Máy {raw_id}"
+    except Exception as exc:
+        print(f"[Auth] Fallback resolve factory: {exc}")
+        if raw_id and not raw_name:
+            return raw_id, f"Nhà Máy {raw_id}"
+    return raw_id, raw_name or None
+
+
 @router.get("/", response_model=PaginatedAccountResponse)
 def list_accounts(
     page: int = 1, 
@@ -214,18 +245,7 @@ def login_for_access_token(db: Session = Depends(get_db), form_data: OAuth2Passw
         if dept_obj:
             department_name = dept_obj.name
 
-    factory_id = getattr(user, 'factory_id', None)
-    factory_name = getattr(user, 'factory_name', None)
-    if factory_id and not factory_name:
-        try:
-            from modules.hr.models.hr_models import HRFactoryStructure
-            fac_obj = db.query(HRFactoryStructure).filter(HRFactoryStructure.id == factory_id).first()
-            if fac_obj:
-                factory_name = fac_obj.structure_name or fac_obj.name or fac_obj.structure_code
-            else:
-                factory_name = f"Nhà Máy {factory_id}"
-        except Exception:
-            factory_name = f"Nhà Máy {factory_id}"
+    factory_id, factory_name = _resolve_account_factory_fields(db, user)
 
     import json
     resolved_perms = account_controller.resolve_user_permissions(user, db)
@@ -383,18 +403,7 @@ def get_user_detail(account_id: int, db: Session = Depends(get_db)):
         if dept_obj:
             department_name = dept_obj.name
 
-    factory_id = getattr(db_account, 'factory_id', None)
-    factory_name = getattr(db_account, 'factory_name', None)
-    if factory_id and not factory_name:
-        try:
-            from modules.hr.models.hr_models import HRFactoryStructure
-            fac_obj = db.query(HRFactoryStructure).filter(HRFactoryStructure.id == factory_id).first()
-            if fac_obj:
-                factory_name = fac_obj.structure_name or fac_obj.name or fac_obj.structure_code
-            else:
-                factory_name = f"Nhà Máy {factory_id}"
-        except Exception:
-            factory_name = f"Nhà Máy {factory_id}"
+    factory_id, factory_name = _resolve_account_factory_fields(db, db_account)
 
     return {
         "id": db_account.id,

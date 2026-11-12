@@ -1,242 +1,182 @@
-import React from 'react';
-import { ResponsiveContainer, LineChart, Line, ReferenceLine, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import { MoreVertical } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, LabelList } from 'recharts';
+import { TrendingUp } from 'lucide-react';
 
-/**
- * Custom Data Label thông minh dạng Thẻ Badge (có nền trắng + viền rõ nét):
- * 1. Số to rõ hơn (font 10px, fontWeight 800), có background che đường lưới chống chìm số.
- * 2. Điểm VƯỢT TRUNG BÌNH (> avgRate): Viền đỏ + chữ đỏ nổi bật.
- * 3. Điểm bình thường/đáy: Viền xám + chữ đen đậm nét.
- * 4. Không hiển thị ở điểm cuối để tránh đè vào nhãn "TB: ...".
- */
-const createSmartTrendLabelRenderer = (data, avgRate, activeCrossFilter) => {
-  if (!data || data.length === 0) return () => null;
+export const TrendLineChart = ({ trendChartData = [] }) => {
+  const hasData = Array.isArray(trendChartData) && trendChartData.length > 0;
 
-  const validRates = data.map(d => Number(d.defect_rate || 0));
-  const minVal = Math.min(...validRates);
-  const totalPoints = data.length;
+  // Định dạng ngày hiển thị (VD: YYYY-MM-DD -> DD/MM)
+  const formattedData = useMemo(() => {
+    return trendChartData.map((item) => {
+      let label = item.date;
+      if (typeof item.date === 'string' && item.date.includes('-')) {
+        const parts = item.date.split('-');
+        if (parts.length === 3) {
+          label = `${parts[2]}/${parts[1]}`;
+        } else if (parts.length === 2) {
+          label = `T${parts[1]}/${parts[0]}`;
+        }
+      }
+      return {
+        ...item,
+        displayDate: label
+      };
+    });
+  }, [trendChartData]);
 
-  return (props) => {
+  const rates = formattedData.map((d) => Number(d.defect_rate || 0));
+  let minIdx = 0;
+  let maxIdx = 0;
+  rates.forEach((val, i) => {
+    if (val < rates[minIdx]) minIdx = i;
+    if (val > rates[maxIdx]) maxIdx = i;
+  });
+
+  const maxRate = Math.max(...rates, 1);
+  const yDomainMax = Math.ceil(maxRate * 1.38 * 10) / 10;
+
+  // Vị trí hiển thị nhãn: điểm đầu, điểm cuối, điểm cao nhất, thấp nhất và các điểm trung gian
+  const labelIndices = useMemo(() => {
+    const n = formattedData.length;
+    if (n === 0) return new Set();
+    const set = new Set();
+    set.add(0);
+    set.add(n - 1);
+    set.add(maxIdx);
+    set.add(minIdx);
+
+    const step = n >= 20 ? 4 : (n >= 10 ? 3 : 2);
+    for (let i = step; i < n - 1; i += step) {
+      if (Math.abs(i - maxIdx) > 1 && Math.abs(i - minIdx) > 1) {
+        set.add(i);
+      }
+    }
+    return set;
+  }, [formattedData.length, maxIdx, minIdx]);
+
+  // Nhãn tỷ lệ lỗi trên đường biểu đồ
+  const renderCustomLabel = (props) => {
     const { x, y, value, index } = props;
     if (value === undefined || value === null) return null;
+    if (!labelIndices.has(index)) return null;
 
-    const item = data[index];
-    const isDateFiltered = activeCrossFilter?.type === 'date';
-    const isSelected = isDateFiltered && (
-      activeCrossFilter?.value === item?.displayDate ||
-      activeCrossFilter?.value === item?.date
-    );
-
-    // Khi đang chọn 1 ngày: Chỉ hiện thẻ của ngày đó, hoặc làm mờ các ngày khác
-    if (isDateFiltered && !isSelected) return null;
-
-    const numVal = Number(value);
-    const isExceeded = numVal > avgRate;
-    const isMin = numVal === minVal;
-    const isSampled = index % 4 === 0;
-    const isLast = index === totalPoints - 1;
-
-    // Không hiển thị ở điểm cuối cùng để tránh rối mắt (trừ khi đang chọn đúng điểm đó)
-    if (isLast && !isSelected) return null;
-
-    // Chỉ hiển thị: Điểm vượt TB, hoặc điểm đáy Min, hoặc điểm mốc cách 4 ngày (hoặc đang được chọn)
-    if (!isSelected && !isExceeded && !isMin && !isSampled) return null;
-
-    // Màu sắc: Vượt TB -> Màu ĐỎ (#DC2626); Đang chọn -> Màu Nâu đậm (#4B301E); Bình thường -> Viền xám, chữ đen (#0F172A)
-    const strokeColor = isSelected ? '#4B301E' : (isExceeded ? '#DC2626' : '#CBD5E1');
-    const textColor = isSelected ? '#4B301E' : (isExceeded ? '#DC2626' : '#0F172A');
-    const fillColor = isExceeded && !isSelected ? '#FFF5F5' : '#FFFFFF';
-    const badgeWidth = 46;
-    const badgeHeight = 20;
+    const isMin = index === minIdx;
+    const numVal = Number(value).toFixed(2);
 
     return (
-      <g>
-        {/* Background Badge trắng viền sắc nét, chống chìm màu */}
+      <g key={`trend-lbl-${index}`} style={{ pointerEvents: 'none' }}>
         <rect
-          x={x - badgeWidth / 2}
-          y={y - 25}
-          width={badgeWidth}
-          height={badgeHeight}
+          x={x - 22}
+          y={isMin ? y + 8 : y - 25}
+          width={44}
+          height={17}
           rx={4}
-          fill={fillColor}
-          stroke={strokeColor}
-          strokeWidth={isSelected || isExceeded ? 1.8 : 1.2}
+          fill="#FFFFFF"
+          stroke="#E8E2DC"
+          strokeWidth={1}
+          opacity={0.96}
         />
-        {/* Chữ số to rõ nét */}
         <text
           x={x}
-          y={y - 14}
-          fill={textColor}
+          y={isMin ? y + 20 : y - 13}
+          fill="#795137"
+          fontSize={11}
+          fontWeight={800}
           textAnchor="middle"
-          dominantBaseline="central"
-          fontSize="12"
-          fontWeight="900"
         >
-          {`${value}%`}
+          {`${numVal}%`}
         </text>
       </g>
     );
   };
-};
-
-/**
- * Custom Label cho đường Trung bình (TB):
- * Đặt hoàn toàn ở lề ngoài bên phải (x + width + 4), tách biệt 100% không bao giờ dính vào đường biểu đồ!
- */
-const renderAvgReferenceLabel = (avgRate) => (props) => {
-  const { viewBox } = props;
-  if (!viewBox) return null;
-  const { x, y, width } = viewBox;
-
-  const text = `TB: ${avgRate}%`;
-  const badgeWidth = 46;
-  const badgeHeight = 16;
-  // Đặt ở vùng lề phải bên ngoài vùng vẽ đường
-  const badgeX = x + width + 4;
-  const badgeY = y - badgeHeight / 2;
 
   return (
-    <g>
-      <rect
-        x={badgeX}
-        y={badgeY}
-        width={badgeWidth}
-        height={badgeHeight}
-        rx={3.5}
-        fill="#FFFFFF"
-        stroke="#DC2626"
-        strokeWidth={1.2}
-      />
-      <text
-        x={badgeX + badgeWidth / 2}
-        y={badgeY + badgeHeight / 2}
-        fill="#DC2626"
-        textAnchor="middle"
-        dominantBaseline="central"
-        fontSize="9"
-        fontWeight="800"
-      >
-        {text}
-      </text>
-    </g>
-  );
-};
-
-/**
- * [Z1] Xu hướng tỷ lệ lỗi theo thời gian (Line Chart)
- * - Legend hiển thị rõ ràng: "Tỷ lệ lỗi" & "Trung bình (0.79%)".
- * - Data label có background trắng, số to rõ 12px.
- * - Nhãn "TB: 0.79%" đặt ở lề ngoài bên phải, tách biệt hoàn toàn không dính vào đường vẽ.
- */
-export const TrendLineChart = ({ trendChartData, activeCrossFilter, avgRate = 0.8, onDateClick }) => {
-  const smartLabelRenderer = createSmartTrendLabelRenderer(trendChartData, avgRate, activeCrossFilter);
-
-  return (
-    <div className="erp-chart-card">
-      <div className="erp-chart-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span className="erp-chart-title">Xu hướng tỷ lệ lỗi theo thời gian</span>
+    <div className="erp-chart-card" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, overflow: 'hidden' }}>
+      {/* Tiêu đề biểu đồ */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <TrendingUp size={15} style={{ color: '#795137' }} />
+          <span style={{ fontSize: '0.82rem', fontWeight: '800', color: '#292524' }}>
+            Xu hướng tỷ lệ lỗi theo thời gian
+          </span>
         </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <MoreVertical size={14} style={{ color: '#94A3B8', cursor: 'pointer' }} />
-        </div>
+        <span style={{ fontSize: '0.68rem', color: '#78716C', fontWeight: '600' }}>
+          Đơn vị: %
+        </span>
       </div>
 
-      <div className="erp-chart-body" style={{ outline: 'none' }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart
-            data={trendChartData}
-            margin={{ top: 26, right: 54, left: -20, bottom: 0 }}
-            style={{ outline: 'none', cursor: 'pointer' }}
-            onClick={(state) => {
-              if (state && state.activePayload && state.activePayload.length > 0 && onDateClick) {
-                onDateClick(state.activePayload[0].payload);
-              }
-            }}
-          >
-            <CartesianGrid strokeDasharray="2 2" vertical={false} stroke="#F1F5F9" />
-            <XAxis
-              dataKey="displayDate"
-              fontSize={9}
-              stroke="#94A3B8"
-              tickLine={false}
-              axisLine={{ stroke: '#E2E8F0' }}
-            />
-            <YAxis
-              domain={[0, 1.2]}
-              ticks={[0, 0.3, 0.6, 0.9, 1.2]}
-              fontSize={9}
-              stroke="#94A3B8"
-              tickLine={false}
-              axisLine={{ stroke: '#E2E8F0' }}
-              tickFormatter={(v) => `${v}%`}
-            />
-            <Tooltip
-              formatter={(value, name, props) => [
-                `${value}% (${(props.payload.defect_count || 0).toLocaleString()} lỗi / ${(props.payload.product_count || 0).toLocaleString()} SP)`,
-                'Tỷ lệ lỗi'
-              ]}
-              labelFormatter={(lbl) => `Ngày ${lbl}`}
-              contentStyle={{ backgroundColor: '#FFFFFF', borderRadius: '6px', border: '1px solid #E2E8F0', fontSize: '0.72rem', padding: '6px 10px', boxShadow: '0 2px 6px rgba(0,0,0,0.06)' }}
-            />
+      {/* Nội dung biểu đồ */}
+      <div className="erp-chart-body" style={{ flex: 1, minHeight: 0 }}>
+        {!hasData ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#78716C', fontSize: '0.78rem' }}>
+            Không có dữ liệu kiểm tra trong phạm vi lọc
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={formattedData} margin={{ top: 26, right: 18, left: -20, bottom: 4 }}>
+              <CartesianGrid strokeDasharray="2 2" vertical={false} stroke="#EAECEF" />
+              <XAxis
+                dataKey="displayDate"
+                fontSize={9}
+                stroke="#78716C"
+                tickLine={false}
+                axisLine={{ stroke: '#E8E2DC' }}
+              />
+              <YAxis
+                domain={[0, yDomainMax]}
+                fontSize={9}
+                stroke="#78716C"
+                tickLine={false}
+                axisLine={{ stroke: '#E8E2DC' }}
+                tickFormatter={(v) => `${v}%`}
+              />
+              <Tooltip
+                content={({ active, payload }) => {
+                  if (!active || !payload || !payload.length) return null;
+                  const item = payload[0].payload;
+                  return (
+                    <div
+                      style={{
+                        backgroundColor: '#FFFFFF',
+                        border: '1px solid #E8E2DC',
+                        borderRadius: '6px',
+                        padding: '8px 12px',
+                        boxShadow: '0 4px 14px rgba(41, 37, 36, 0.08)',
+                        fontSize: '0.74rem',
+                        color: '#292524'
+                      }}
+                    >
+                      <div style={{ fontWeight: '800', color: '#292524', marginBottom: '4px', borderBottom: '1px solid #E8E2DC', paddingBottom: '3px' }}>
+                        Thời gian: {item.date}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '3px 10px', color: '#57534E' }}>
+                        <span>Sản phẩm kiểm tra:</span>
+                        <strong style={{ color: '#292524' }}>{Number(item.product_count || 0).toLocaleString()} SP</strong>
 
-            {/* Đường trung bình màu đỏ nét đứt + Nhãn TB đặt ở lề ngoài bên phải */}
-            <ReferenceLine
-              y={avgRate}
-              stroke="#DC2626"
-              strokeDasharray="4 4"
-              strokeWidth={1.5}
-              label={renderAvgReferenceLabel(avgRate)}
-            />
+                        <span>Tổng lỗi ghi nhận:</span>
+                        <strong style={{ color: '#B91C1C' }}>{Number(item.defect_count || 0).toLocaleString()} lỗi</strong>
 
-            <Line
-              type="monotone"
-              dataKey="defect_rate"
-              name="Tỷ lệ lỗi (%)"
-              stroke="#7B5233"
-              strokeWidth={2.4}
-              dot={(dotProps) => {
-                const isFiltered = activeCrossFilter?.type === 'date';
-                const isSelected = isFiltered &&
-                  (activeCrossFilter?.value === dotProps.payload?.displayDate || activeCrossFilter?.value === dotProps.payload?.date);
-                const isExceeded = Number(dotProps.payload?.defect_rate || 0) > avgRate;
-
-                const dotColor = isSelected ? '#4B301E' : (isExceeded ? '#DC2626' : '#7B5233');
-                const dotRadius = isSelected ? 6 : (isExceeded ? 4.5 : 3.5);
-
-                return (
-                  <circle
-                    key={`dot-${dotProps.index}`}
-                    cx={dotProps.cx}
-                    cy={dotProps.cy}
-                    r={dotRadius}
-                    fill={dotColor}
-                    opacity={isFiltered && !isSelected ? 0.22 : 1}
-                    stroke="#FFFFFF"
-                    strokeWidth={isSelected || isExceeded ? 2 : 1.5}
-                    style={{ cursor: 'pointer', transition: 'r 0.15s, opacity 0.2s' }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (onDateClick) onDateClick(dotProps.payload);
-                    }}
-                  />
-                );
-              }}
-              activeDot={{
-                r: 6.5,
-                fill: '#4B301E',
-                stroke: '#FFFFFF',
-                strokeWidth: 2,
-                cursor: 'pointer',
-                onClick: (e, payload) => {
-                  if (payload && payload.payload && onDateClick) onDateClick(payload.payload);
-                }
-              }}
-              label={smartLabelRenderer}
-            />
-          </LineChart>
-        </ResponsiveContainer>
+                        <span>Tỷ lệ lỗi:</span>
+                        <strong style={{ color: '#795137', fontSize: '0.8rem' }}>{Number(item.defect_rate || 0).toFixed(2)}%</strong>
+                      </div>
+                    </div>
+                  );
+                }}
+              />
+              <Line
+                type="monotone"
+                dataKey="defect_rate"
+                name="Tỷ lệ lỗi"
+                stroke="#795137"
+                strokeWidth={2.2}
+                dot={{ r: 3, fill: '#795137', strokeWidth: 1.5, stroke: '#FFFFFF' }}
+                activeDot={{ r: 5, fill: '#B91C1C', stroke: '#FFFFFF', strokeWidth: 2 }}
+              >
+                <LabelList content={renderCustomLabel} />
+              </Line>
+            </LineChart>
+          </ResponsiveContainer>
+        )}
       </div>
     </div>
   );

@@ -35,7 +35,7 @@ export const useClaimForm = ({
 
   // State form thêm mới Claim
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [addDongHang, setAddDongHang] = useState('Pigment');
+  const [addDongHang, setAddDongHang] = useState('Atlas');
   const [addLoaiClaim, setAddLoaiClaim] = useState('Khách nhắc nhở');
   const [addMaThamChieu, setAddMaThamChieu] = useState('');
   const [addTenSanPham, setAddTenSanPham] = useState('');
@@ -93,13 +93,33 @@ export const useClaimForm = ({
   // Auto populate Process Claim Form when activeDetailClaim changes
   useEffect(() => {
     if (activeDetailClaim) {
-      const autoLoai = activeDetailClaim.loai_hang || ((activeDetailClaim.product_name || activeDetailClaim.sku || '').toUpperCase().includes('WOA') ? 'OAK' : 'Pigment');
-      setProcessDongHang(autoLoai);
+      const skuVal = (activeDetailClaim.sku || activeDetailClaim.product_name || '').trim();
+      let extractedLine = activeDetailClaim.dong_hang || activeDetailClaim.product_line || activeDetailClaim.line || '';
+      if (!extractedLine && skuVal) {
+        extractedLine = skuVal.includes('-') ? skuVal.split('-')[0].trim() : skuVal;
+      }
+      setProcessDongHang(extractedLine || activeDetailClaim.loai_hang || 'Atlas');
       setProcessLoaiClaim(activeDetailClaim.claim_type || activeDetailClaim.loai_claim || 'Claim Thường');
       setProcessMaThamChieu(activeDetailClaim.claim_code || activeDetailClaim.ma_tham_chieu || '');
-      setProcessTenSanPham(activeDetailClaim.product_name || activeDetailClaim.sku || '');
-      setProcessMucPhat(activeDetailClaim.penalty || activeDetailClaim.action || 'Không có');
-      setProcessGiaTriPhat(activeDetailClaim.penalty || activeDetailClaim.action || '$0');
+      setProcessTenSanPham(skuVal);
+
+      // Mức phạt / Action lưu đầy đủ nội dung ô Action từ PDF
+      const actionText = (activeDetailClaim.action || activeDetailClaim.penalty_type || '').trim();
+      setProcessMucPhat(actionText || 'Không có');
+
+      // Giá trị phạt: chỉ gán khi có số tiền cụ thể ($), không tự sao chép Action text
+      let explicitPenalty = '';
+      if (typeof activeDetailClaim.penalty === 'number' && activeDetailClaim.penalty > 0) {
+        explicitPenalty = `$${activeDetailClaim.penalty}`;
+      } else if (typeof activeDetailClaim.penalty === 'string' && activeDetailClaim.penalty.includes('$')) {
+        explicitPenalty = activeDetailClaim.penalty.trim();
+      } else if (actionText && actionText.includes('$')) {
+        const dollarMatch = actionText.match(/\$\s*(\d+(?:\.\d+)?)/);
+        if (dollarMatch) {
+          explicitPenalty = `$${dollarMatch[1]}`;
+        }
+      }
+      setProcessGiaTriPhat(explicitPenalty);
 
       const rawPenalty = activeDetailClaim.penalty || activeDetailClaim.action || '';
       const initMult = activeDetailClaim.penalty_multiplier !== undefined
@@ -203,11 +223,13 @@ export const useClaimForm = ({
     }
   };
 
-  const handleSelectG7Code = (code, isProcess = false) => {
-    const name = resolveG7ErrorName(code, null, g7DefectTypes, defectCatalog);
+  const handleSelectG7Code = (codeOrObj, isProcess = false) => {
+    const code = typeof codeOrObj === 'object' ? (codeOrObj?.code || '') : codeOrObj;
+    const matchedObjName = typeof codeOrObj === 'object' ? codeOrObj?.name : null;
+    const name = matchedObjName || resolveG7ErrorName(code, null, g7DefectTypes, defectCatalog);
     const clientMatch = (defectCatalog || []).find(cd => (cd.g7_code || '').trim().toLowerCase() === (code || '').trim().toLowerCase());
     if (isProcess) {
-      setProcessMaLoiCty(code);
+      setProcessMaLoiCty(code || '');
       if (name) setProcessTenLoiG7(name);
       if (clientMatch && !processMaLoi) {
         setProcessMaLoi(clientMatch.code || clientMatch.client_defect_code || clientMatch.defect_code || '');
@@ -215,7 +237,7 @@ export const useClaimForm = ({
       }
       setShowProcessG7CodeSuggestions(false);
     } else {
-      setAddMaLoiCty(code);
+      setAddMaLoiCty(code || '');
       if (name) setAddTenLoiG7(name);
       if (clientMatch && !addMaLoi) {
         setAddMaLoi(clientMatch.code || clientMatch.client_defect_code || clientMatch.defect_code || '');
@@ -225,12 +247,14 @@ export const useClaimForm = ({
     }
   };
 
-  const handleSelectG7Name = (name, isProcess = false) => {
-    const match = (g7DefectTypes || []).find(gt => (gt.name || gt.short_description || '') === name);
-    const g7Code = match ? match.code : '';
+  const handleSelectG7Name = (nameOrObj, isProcess = false) => {
+    const name = typeof nameOrObj === 'object' ? (nameOrObj?.name || '') : nameOrObj;
+    const objCode = typeof nameOrObj === 'object' ? nameOrObj?.code : null;
+    const match = (g7DefectTypes || []).find(gt => (gt.name || gt.short_description || '').toLowerCase() === (name || '').toLowerCase());
+    const g7Code = objCode || (match ? match.code : '');
     const clientMatch = g7Code ? (defectCatalog || []).find(cd => (cd.g7_code || '').trim().toLowerCase() === g7Code.trim().toLowerCase()) : null;
     if (isProcess) {
-      setProcessTenLoiG7(name);
+      setProcessTenLoiG7(name || '');
       if (g7Code) setProcessMaLoiCty(g7Code);
       if (clientMatch && !processMaLoi) {
         setProcessMaLoi(clientMatch.code || clientMatch.client_defect_code || clientMatch.defect_code || '');
@@ -238,7 +262,7 @@ export const useClaimForm = ({
       }
       setShowProcessG7NameSuggestions(false);
     } else {
-      setAddTenLoiG7(name);
+      setAddTenLoiG7(name || '');
       if (g7Code) setAddMaLoiCty(g7Code);
       if (clientMatch && !addMaLoi) {
         setAddMaLoi(clientMatch.code || clientMatch.client_defect_code || clientMatch.defect_code || '');
@@ -252,6 +276,7 @@ export const useClaimForm = ({
   const getProcessTotalPenaltyPreview = () => {
     const mockClaim = {
       penalty: processGiaTriPhat,
+      action: processMucPhat || activeDetailClaim?.action || '',
       product_name: processTenSanPham || activeDetailClaim?.product_name || activeDetailClaim?.sku
     };
     return calculateTotalPenalty(mockClaim, processHeSoPhat, cabinetPrices);
@@ -358,7 +383,7 @@ export const useClaimForm = ({
 
   // Open add new claim modal
   const handleOpenAddNewClaim = () => {
-    setAddDongHang('Pigment');
+    setAddDongHang('Atlas');
     setAddLoaiClaim('Khách nhắc nhở');
     setAddMaThamChieu('');
     setAddTenSanPham('');

@@ -7,12 +7,15 @@ import {
 } from 'recharts';
 import Sidebar from './Sidebar';
 import BeautifulModal from '../feedback/BeautifulModal';
+import ErrorBoundary from '../feedback/ErrorBoundary';
 import ActivityFeed from '@modules/Dashboard/Views/components/ActivityFeed';
 import { authService } from '@modules/Auth/Models/auth.service';
 import { useScreen } from '@shared/context/ScreenContext';
 import { claimService } from '@modules/Claim/services/claim.service';
 import useUiStore from '@shared/store/uiStore';
 import api, { API_URL } from '@webShared/Services/api.service';
+import { resolvePageTitle } from '@webShared/utils/routeTitleResolver';
+import InspectionHeaderNavCard from '@modules/Inspection/Views_v2/components/InspectionHeaderNavCard';
 
 const renderChartComponent = (type, title, data, key) => {
   if (!data || data.length === 0) return null;
@@ -1409,6 +1412,18 @@ const PortalLayout = () => {
     activeUploads: uploads.length
   }), [uploads.length]); // Only update when upload count changes, setters are stable
 
+  // Reset custom headers on route transition (tránh xóa nhầm khi chuyển query ?tab=...&page=...)
+  const prevPathnameRef = useRef(location.pathname);
+  useEffect(() => {
+    if (prevPathnameRef.current !== location.pathname) {
+      prevPathnameRef.current = location.pathname;
+      setCustomTitle(null);
+      setCustomSubtitle(null);
+      setCustomScreenCode(null);
+      setHeaderExtra(null);
+    }
+  }, [location.pathname]);
+
   // --- PREVIEW MODE HANDLER ---
   const queryParams = new URLSearchParams(location.search);
   const isPreview = queryParams.get('preview') === 'true';
@@ -1416,40 +1431,83 @@ const PortalLayout = () => {
   if (isPreview) {
     return (
       <div className="preview-mode-layout" style={{ background: '#FAF6F0', minHeight: '100vh', padding: '15px' }}>
-        <Outlet context={{
-          setCustomTitle: () => { },
-          setCustomSubtitle: () => { },
-          setCustomScreenCode: () => { },
-          setHeaderExtra: () => { },
-          showModal,
-          startGlobalUpload: () => { },
-          activeUploads: 0
-        }} />
+        <ErrorBoundary title="Không thể hiển thị bản xem trước">
+          <Outlet context={{
+            setCustomTitle: () => { },
+            setCustomSubtitle: () => { },
+            setCustomScreenCode: () => { },
+            setHeaderExtra: () => { },
+            showModal,
+            startGlobalUpload: () => { },
+            activeUploads: 0
+          }} />
+        </ErrorBoundary>
       </div>
     );
   }
 
+  // Nhận diện và đồng bộ bộ điều hướng chuyển đổi các tab /admin/defects & Dashboard 4 trang
+  const isDefectRoute = location.pathname === '/admin/defects' || location.pathname === '/admin/defect-dashboard-v2';
+  const defectSearchParams = new URLSearchParams(location.search);
+  const rawDefectTab = defectSearchParams.get('tab') || (location.pathname === '/admin/defect-dashboard-v2' ? 'dashboard' : 'list');
+  const activeDefectTab = (rawDefectTab === 'analytics' || rawDefectTab === 'dashboard') ? 'dashboard' : rawDefectTab;
+  const activeDefectPage = defectSearchParams.get('page') || 'page1';
+
+  const handleDefectTabChange = (key) => {
+    if (key === 'dashboard' || key === 'analytics') {
+      navigate(`/admin/defects?tab=dashboard&page=${activeDefectPage}`);
+    } else {
+      navigate(`/admin/defects?tab=${key}`);
+    }
+  };
+
+  const handleDefectPageChange = (pageId) => {
+    navigate(`/admin/defects?tab=dashboard&page=${pageId}`);
+  };
+
   // --- DYNAMIC HEADER TITLE MANAGEMENT ---
   const getPageTitles = () => {
+    const resolved = resolvePageTitle(location.pathname, location.search);
+    const screenInfo = getScreenInfo ? getScreenInfo(location.pathname) : null;
+    const isGenericSubtitle = (s) => !s || s === 'Quản trị dự án' || s === 'ERP G7 Admin' || s === 'ERP G7 Manufacture';
+
+    if (isDefectRoute && resolved) {
+      return {
+        screenCode: customScreenCode || screenInfo?.screenCode || '',
+        title: resolved,
+        subtitle: ''
+      };
+    }
+
+    if (location.search && (location.pathname === '/admin/claims' || location.pathname === '/admin/products') && resolved) {
+      return {
+        screenCode: customScreenCode || screenInfo?.screenCode || '',
+        title: resolved,
+        subtitle: isGenericSubtitle(screenInfo?.subtitle) ? '' : screenInfo.subtitle
+      };
+    }
+
     if (customTitle) {
       return {
         screenCode: customScreenCode || '',
         title: customTitle,
-        subtitle: customSubtitle || (isAdmin ? 'ERP G7 Admin' : 'ERP G7 Manufacture')
+        subtitle: isGenericSubtitle(customSubtitle) ? '' : customSubtitle
       };
     }
-    return getScreenInfo(location.pathname);
+
+    const finalTitle = (screenInfo?.title && screenInfo.title !== 'Hệ thống ERP G7')
+      ? screenInfo.title
+      : (resolved || 'Trang chủ');
+    const finalSubtitle = isGenericSubtitle(screenInfo?.subtitle) ? '' : screenInfo.subtitle;
+
+    return {
+      screenCode: customScreenCode || screenInfo?.screenCode || '',
+      title: finalTitle,
+      subtitle: finalSubtitle
+    };
   };
 
   const { screenCode, title, subtitle } = getPageTitles();
-
-  // Reset custom headers on transition
-  useEffect(() => {
-    setCustomTitle(null);
-    setCustomSubtitle(null);
-    setCustomScreenCode(null);
-    setHeaderExtra(null);
-  }, [location.pathname]);
 
   const pathSegments = location.pathname.split('/').filter(Boolean);
   const showBackButton = (pathSegments.length >= 3 || location.pathname.includes('/product-details') || location.pathname.includes('/paint-colors')) && location.pathname !== '/admin/kpi/dashboard';
@@ -1505,15 +1563,26 @@ const PortalLayout = () => {
               </button>
               <div className="header-titles">
                 <h2 className="header-page-title">{title}</h2>
-                <p className="header-page-subtitle">
-                  {screenCode && !subtitle?.startsWith(screenCode) && <span>{screenCode} - </span>}
-                  {subtitle}
-                </p>
+                {subtitle ? (
+                  <p className="header-page-subtitle">
+                    {screenCode && !subtitle?.startsWith(screenCode) && <span>{screenCode} - </span>}
+                    {subtitle}
+                  </p>
+                ) : null}
               </div>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-              {headerExtra && <div className="header-extra-content">{headerExtra}</div>}
+              {isDefectRoute ? (
+                <InspectionHeaderNavCard
+                  activeTab={activeDefectTab}
+                  onTabChange={handleDefectTabChange}
+                  dashboardPage={activeDefectPage}
+                  onDashboardPageChange={handleDefectPageChange}
+                />
+              ) : (
+                headerExtra && <div className="header-extra-content">{headerExtra}</div>
+              )}
 
               {/* Back button logic */}
               {showBackButton && (
@@ -1658,7 +1727,9 @@ const PortalLayout = () => {
 
         {/* Core dynamic content template */}
         <div className="dashboard-content allow-y-scroll">
-          <Outlet context={outletContext} />
+          <ErrorBoundary title="Không thể hiển thị trang này">
+            <Outlet context={outletContext} />
+          </ErrorBoundary>
         </div>
       </div>
 
@@ -2255,7 +2326,7 @@ const PortalLayout = () => {
           overflow-y: auto !important;
           height: calc(100vh - 60px) !important;
         }
-        .dashboard-content > div:not(.gold-layout),
+        .dashboard-content > div:not(.gold-layout):not(.defect-mgmt-container),
         .dashboard-content .purchase-requisition-detail-container,
         .dashboard-content .detail-view-container,
         .dashboard-content .product-detail-container,

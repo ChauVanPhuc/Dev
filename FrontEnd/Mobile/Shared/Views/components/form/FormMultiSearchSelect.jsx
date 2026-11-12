@@ -1,10 +1,10 @@
 import { formatCabinetSeriesTag } from '@modules/production_v2/utils/cabinetSeriesMapper'
 import React, { useState, useRef, useEffect, useMemo } from 'react'
-import { Search, ChevronDown, X, Lock } from 'lucide-react'
+import { ChevronDown, X, Lock, Check } from 'lucide-react'
 
 /**
- * FormMultiSearchSelect - Component chọn nhiều kết hợp tìm kiếm (Multi-select Searchable Dropdown)
- * Hỗ trợ chọn nhiều sản phẩm / quy cách với ô tích chọn nằm bên phải.
+ * FormMultiSearchSelect - Component chọn 1 hoặc chọn nhiều kết hợp tìm kiếm (Searchable Dropdown)
+ * Hỗ trợ chọn nhiều (multiple=true) hoặc chọn 1 (multiple=false) với ô tìm kiếm trực tiếp.
  */
 const FormMultiSearchSelect = ({
   label,
@@ -15,9 +15,11 @@ const FormMultiSearchSelect = ({
   itemType = '', // 'chi tiết', 'sản phẩm', 'quy cách'
   required = false,
   disabled = false,
+  multiple = true, // false: chỉ cho chọn 1 mục và tự đóng dropdown
   lockedValues = [], // Mảng các ID/value không được phép bỏ chọn (cố định)
   lockedMessage = 'Quy cách duy nhất của chi tiết, không thể bỏ chọn',
   allowCustomInput = false, // Cho phép thêm mục tùy chọn khi tìm kiếm không có trong danh sách
+  uppercaseCustom = true, // Tự động viết hoa khi thêm mục nhập tay
   onSearch, // Hàm tìm kiếm trên Server khi người dùng nhập từ khóa
 }) => {
   const [isOpen, setIsOpen] = useState(false)
@@ -164,6 +166,15 @@ const FormMultiSearchSelect = ({
     if (disabled) return
     const valStr = val?.toString()
     const isChecked = values.includes(valStr)
+
+    if (!multiple) {
+      onChange([valStr])
+      setIsOpen(false)
+      setSearchTerm('')
+      if (onSearch) onSearch('')
+      return
+    }
+
     const isLocked = lockedValues.map(v => v?.toString()).includes(valStr) && isChecked
 
     if (isLocked) {
@@ -273,17 +284,21 @@ const FormMultiSearchSelect = ({
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0, marginLeft: '6px' }}>
-          {isOpen && searchTerm ? (
+          {(isOpen && searchTerm) || (!multiple && !disabled && values.length > 0) ? (
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation()
-                setSearchTerm('')
-                if (onSearch) {
-                  if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
-                  onSearch('')
+                if (searchTerm) {
+                  setSearchTerm('')
+                  if (onSearch) {
+                    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+                    onSearch('')
+                  }
+                  if (inputRef.current) inputRef.current.focus()
+                } else if (!multiple) {
+                  onChange([])
                 }
-                if (inputRef.current) inputRef.current.focus()
               }}
               style={{
                 border: 'none',
@@ -296,7 +311,7 @@ const FormMultiSearchSelect = ({
                 color: '#94a3b8',
                 borderRadius: '50%',
               }}
-              title="Xóa tìm kiếm"
+              title={searchTerm ? 'Xóa tìm kiếm' : 'Xóa lựa chọn'}
             >
               <X size={14} />
             </button>
@@ -349,8 +364,12 @@ const FormMultiSearchSelect = ({
             {allowCustomInput && searchTerm.trim() && !options.some(o => String(o.value || '').toLowerCase() === searchTerm.trim().toLowerCase() || String(o.label || '').toLowerCase() === searchTerm.trim().toLowerCase()) && (
               <div
                 onClick={() => {
-                  const customVal = searchTerm.trim().toUpperCase()
-                  if (!values.includes(customVal)) {
+                  const rawTrim = searchTerm.trim()
+                  const customVal = uppercaseCustom ? rawTrim.toUpperCase() : rawTrim
+                  if (!multiple) {
+                    onChange([customVal])
+                    setIsOpen(false)
+                  } else if (!values.includes(customVal)) {
                     onChange([...values, customVal])
                   }
                   setSearchTerm('')
@@ -371,8 +390,8 @@ const FormMultiSearchSelect = ({
                   boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
                 }}
               >
-                <span>+ Thêm {itemType ? itemType : 'mục'}: <strong>"{searchTerm.trim().toUpperCase()}"</strong></span>
-                <span style={{ fontSize: '11px', color: '#b45309', fontWeight: '800' }}>Nhấn để thêm</span>
+                <span>+ Thêm {itemType ? itemType : 'mục'}: <strong>"{uppercaseCustom ? searchTerm.trim().toUpperCase() : searchTerm.trim()}"</strong></span>
+                <span style={{ fontSize: '11px', color: '#b45309', fontWeight: '800' }}>Nhấn để {multiple ? 'thêm' : 'chọn'}</span>
               </div>
             )}
             {filteredOptions.length > 0 ? (
@@ -454,21 +473,25 @@ const FormMultiSearchSelect = ({
                       )}
                     </div>
                     
-                    {/* Ô Checkbox bên phải */}
-                    <div style={{
-                      width: '18px',
-                      height: '18px',
-                      borderRadius: '4px',
-                      border: `1.5px solid ${isLocked ? '#b45309' : isChecked ? '#5c2d0e' : '#94a3b8'}`,
-                      backgroundColor: isLocked ? '#92400e' : isChecked ? '#5c2d0e' : 'transparent',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      transition: 'all 0.1s',
-                      flexShrink: 0
-                    }}>
-                      {isChecked && <span style={{ color: '#fff', fontSize: '11px', fontWeight: 'bold', lineHeight: 1 }}>✓</span>}
-                    </div>
+                    {/* Chỉ hiển thị checkbox khi cho phép chọn nhiều (multiple=true) */}
+                    {multiple ? (
+                      <div style={{
+                        width: '18px',
+                        height: '18px',
+                        borderRadius: '4px',
+                        border: `1.5px solid ${isLocked ? '#b45309' : isChecked ? '#5c2d0e' : '#94a3b8'}`,
+                        backgroundColor: isLocked ? '#92400e' : isChecked ? '#5c2d0e' : 'transparent',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'all 0.1s',
+                        flexShrink: 0
+                      }}>
+                        {isChecked && <span style={{ color: '#fff', fontSize: '11px', fontWeight: 'bold', lineHeight: 1 }}>✓</span>}
+                      </div>
+                    ) : isChecked ? (
+                      <Check size={15} color="#5c2d0e" style={{ flexShrink: 0 }} />
+                    ) : null}
                   </div>
                 )
               })

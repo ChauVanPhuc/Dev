@@ -36,8 +36,9 @@ export default defineConfig({
     react()
   ],
   resolve: {
-    dedupe: ['react', 'react-dom', 'react-router-dom', 'lucide-react', 'axios', 'recharts', 'xlsx', 'zustand'],
+    dedupe: ['react', 'react-dom', 'react-router-dom', 'lucide-react', 'axios', 'recharts', 'xlsx', 'exceljs', 'zustand'],
     alias: {
+      'exceljs': path.resolve(__dirname, './node_modules/exceljs'),
       '@shared': path.resolve(__dirname, './shared'),
       '@web': path.resolve(__dirname, './Web'),
       '@mobile': path.resolve(__dirname, './Mobile'),
@@ -61,6 +62,9 @@ export default defineConfig({
       '@modules/Production': path.resolve(__dirname, './Web/modules/Production'),
       '@modules/report': path.resolve(__dirname, './Web/modules/Report'),
       '@modules/system': path.resolve(__dirname, './Web/modules/System'),
+      '@modules/warehouse': path.resolve(__dirname, './Web/modules/Warehouse'),
+      '@modules/Warehouse': path.resolve(__dirname, './Web/modules/Warehouse'),
+      '@modules/UnitOfMeasure': path.resolve(__dirname, './Web/modules/UnitOfMeasure'),
       '@lpn': path.resolve(__dirname, '../lpn_crawler/frontend'),
       '@ai-ocr': path.resolve(__dirname, '../lpn_crawler/ai_ocr_train/frontend'),
       '@dashboard': path.resolve(__dirname, '../dashboard/frontend'),

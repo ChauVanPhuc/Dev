@@ -1,0 +1,330 @@
+/* Stylesheet cho Phân hệ Quản lý Kho - SmartFlow ERP */
+
+.warehouse-page-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 8px 4px 32px 4px;
+}
+
+/* Header Card */
+.warehouse-header-card {
+  background: #FFFFFF;
+  border: 1px solid #EADCC9;
+  border-radius: 14px;
+  padding: 20px 24px;
+  box-shadow: 0 2px 8px rgba(123, 82, 51, 0.04);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.warehouse-header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.warehouse-header-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  background: #FAF6F0;
+  border: 1px solid #EADCC9;
+  color: #7B5233;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.warehouse-header-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.warehouse-header-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 3px 10px;
+  border-radius: 20px;
+  background: #FAF6F0;
+  border: 1px solid #EADCC9;
+  color: #7B5233;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.warehouse-header-title {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #2D1A12;
+  letter-spacing: -0.01em;
+}
+
+.warehouse-header-desc {
+  margin: 0;
+  font-size: 0.88rem;
+  color: #6B7280;
+  line-height: 1.45;
+}
+
+.warehouse-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.warehouse-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: #F0FDF4;
+  border: 1px solid #DCFCE7;
+  color: #166534;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.warehouse-status-pill.status-ready {
+  background: #FAF6F0;
+  border-color: #EADCC9;
+  color: #7B5233;
+}
+
+.warehouse-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: currentColor;
+}
+
+/* Main Staging & Work Area Card */
+.warehouse-work-area {
+  background: #FFFFFF;
+  border: 1px solid #EADCC9;
+  border-radius: 14px;
+  padding: 24px;
+  box-shadow: 0 4px 16px rgba(123, 82, 51, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.warehouse-work-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #F3F4F6;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.warehouse-work-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.warehouse-work-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #2D1A12;
+}
+
+.warehouse-work-tag {
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #F3F4F6;
+  color: #4B5563;
+  font-weight: 600;
+}
+
+/* Staging Placeholder Presentation */
+.warehouse-staging-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 56px 24px;
+  border: 2px dashed #EADCC9;
+  border-radius: 12px;
+  background: #FCFAF7;
+  transition: all 0.2s ease;
+}
+
+.warehouse-staging-placeholder:hover {
+  border-color: #7B5233;
+  background: #FAF6F0;
+}
+
+.warehouse-staging-icon-wrapper {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  border: 1px solid #EADCC9;
+  box-shadow: 0 6px 18px rgba(123, 82, 51, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #7B5233;
+  margin-bottom: 20px;
+}
+
+.warehouse-staging-title {
+  margin: 0 0 8px 0;
+  font-size: 1.18rem;
+  font-weight: 700;
+  color: #2D1A12;
+}
+
+.warehouse-staging-desc {
+  max-width: 580px;
+  margin: 0 auto 24px auto;
+  font-size: 0.9rem;
+  color: #6B7280;
+  line-height: 1.6;
+}
+
+/* Architecture Features Showcase Grid */
+.warehouse-blueprint-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.warehouse-blueprint-card {
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 10px;
+  padding: 16px 18px;
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  text-align: left;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.warehouse-blueprint-card:hover {
+  border-color: #7B5233;
+  box-shadow: 0 3px 10px rgba(123, 82, 51, 0.06);
+}
+
+.warehouse-blueprint-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: #FAF6F0;
+  color: #7B5233;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.warehouse-blueprint-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.warehouse-blueprint-title {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #2D1A12;
+}
+
+.warehouse-blueprint-desc {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #6B7280;
+  line-height: 1.45;
+}
+
+/* Quick Navigation Links between Warehouse Pages */
+.warehouse-quick-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.warehouse-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+  border: 1px solid #EADCC9;
+  background: #FFFFFF;
+  color: #5D3B32;
+  transition: all 0.15s ease;
+}
+
+.warehouse-nav-btn:hover {
+  background: #7B5233;
+  color: #FFFFFF;
+  border-color: #7B5233;
+}
+
+.warehouse-nav-btn.active {
+  background: #7B5233;
+  color: #FFFFFF;
+  border-color: #7B5233;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .warehouse-page-container {
+    padding: 4px 0 24px 0;
+    gap: 16px;
+  }
+
+  .warehouse-header-card {
+    padding: 16px;
+  }
+
+  .warehouse-header-icon {
+    width: 44px;
+    height: 44px;
+  }
+
+  .warehouse-header-title {
+    font-size: 1.15rem;
+  }
+
+  .warehouse-work-area {
+    padding: 16px;
+  }
+
+  .warehouse-staging-placeholder {
+    padding: 36px 16px;
+  }
+}

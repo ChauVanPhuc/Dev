@@ -49,6 +49,8 @@ export const useAuthController = () => {
           department_id: response.data.department_id || null,
           department_name: response.data.department_name || '',
           department_description: response.data.department_description || '',
+          factory_id: response.data.factory_id || null,
+          factory_name: response.data.factory_name || '',
           role_name: response.data.role_name || '',
           role_description: response.data.role_description || '',
           permission_name: response.data.permission_name || '',

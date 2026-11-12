@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Search, Filter } from 'lucide-react';
+import { Search, Filter, FilePlus, Download, FileText, Folder, Receipt } from 'lucide-react';
 
 export const ClaimToolbar = ({
   quickSearch = '',
@@ -37,6 +37,10 @@ export const ClaimToolbar = ({
   onDeleteSelected,
   onTriggerPdfUpload,
   onTriggerFolderUpload,
+  onTriggerClaimPdfUpload,
+  onTriggerClaimFolderUpload,
+  onTriggerCreditNotePdfUpload,
+  onTriggerCreditNoteFolderUpload,
   onExportExcel,
   onOpenAddNewClaim
 }) => {
@@ -45,6 +49,8 @@ export const ClaimToolbar = ({
   const handleOpenPdf = onOpenPdfFolderModal || onOpenPdfFolder;
   const handleOpenExc = onOpenExceptionModal || onOpenExceptions;
   const handleDeleteSelected = onDeleteSelectedClaims || onDeleteSelected;
+  const handleClaimPdf = onTriggerClaimPdfUpload || onTriggerPdfUpload;
+  const handleClaimFolder = onTriggerClaimFolderUpload || onTriggerFolderUpload;
 
   // Click outside listener for all dropdowns in Toolbar
   useEffect(() => {
@@ -70,6 +76,8 @@ export const ClaimToolbar = ({
 
   return (
     <div className="mgmt-toolbar card" style={{ 
+      position: 'relative',
+      zIndex: 100,
       marginBottom: isFilterBarOpen ? '6px' : '10px', 
       flexShrink: 0, 
       padding: '6px 14px',
@@ -84,7 +92,7 @@ export const ClaimToolbar = ({
     }}>
       {/* Left Side: Search + A↓Z + Filter */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
-        {/* 1. Search Input Box */}
+        {/* Search Input Box */}
         <div className="search-wrapper" style={{ margin: 0, height: '36px', width: '320px' }}>
           <Search size={16} className="search-icon" />
           <input 
@@ -166,7 +174,7 @@ export const ClaimToolbar = ({
           )}
         </div>
 
-        {/* 3. Filter Funnel Icon Button */}
+        {/* Filter Funnel Icon Button */}
         <div style={{ position: 'relative', display: 'inline-block' }}>
           <button
             type="button"
@@ -216,7 +224,7 @@ export const ClaimToolbar = ({
       {/* Right Side Actions: Khác, Nhập dữ liệu, Xuất dữ liệu, + Tạo mới */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         
-        {/* 4. NÚT KHÁC (Dropdown) */}
+        {/* NÚT KHÁC (Dropdown) */}
         <div className="other-dropdown-container" style={{ position: 'relative' }}>
           <button
             type="button"
@@ -361,7 +369,7 @@ export const ClaimToolbar = ({
           )}
         </div>
 
-        {/* 5. NÚT NHẬP DỮ LIỆU (Dropdown) */}
+        {/* NÚT NHẬP DỮ LIỆU (Dropdown tách Nhập Claim & Nhập Credit Note) */}
         <div className="import-dropdown-container" style={{ position: 'relative' }}>
           <button
             type="button"
@@ -389,11 +397,7 @@ export const ClaimToolbar = ({
               boxShadow: 'none'
             }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="7 10 12 15 17 10"></polyline>
-              <line x1="12" y1="15" x2="12" y2="3"></line>
-            </svg>
+            <FilePlus size={15} />
             <span>Nhập dữ liệu</span>
           </button>
           {isImportDropdownOpen && (
@@ -407,7 +411,7 @@ export const ClaimToolbar = ({
                 border: '1px solid #EADCC9',
                 borderRadius: '8px',
                 boxShadow: '0 10px 25px rgba(123, 82, 51, 0.12)',
-                minWidth: '180px',
+                minWidth: '220px',
                 zIndex: 1000,
                 display: 'flex',
                 flexDirection: 'column',
@@ -419,29 +423,52 @@ export const ClaimToolbar = ({
             >
               {hasWritePermission && (
                 <>
+                  {/* PHẦN 1: NHẬP CLAIM */}
+                  <div style={{ padding: '8px 16px 4px', fontSize: '0.72rem', fontWeight: '700', color: '#8C7A6B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Nhập Claim (Khiếu nại KH)
+                  </div>
                   <button
                     type="button"
                     className="import-dropdown-item"
-                    onClick={() => { setIsImportDropdownOpen(false); onTriggerPdfUpload && onTriggerPdfUpload(); }}
-                    style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: '600', fontSize: '0.85rem', color: '#2D1A12' }}
+                    onClick={() => { setIsImportDropdownOpen(false); handleClaimPdf && handleClaimPdf(); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '8px 16px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: '600', fontSize: '0.84rem', color: '#2D1A12' }}
                   >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                      <polyline points="14 2 14 8 20 8"></polyline>
-                    </svg>
-                    <span>Nhập file PDF</span>
+                    <FileText size={15} color="#79543D" />
+                    <span>Chọn file PDF...</span>
                   </button>
-                  <div style={{ height: '1px', backgroundColor: '#F0E6D8', margin: '4px 0' }}></div>
                   <button
                     type="button"
                     className="import-dropdown-item"
-                    onClick={() => { setIsImportDropdownOpen(false); onTriggerFolderUpload && onTriggerFolderUpload(); }}
-                    style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: '600', fontSize: '0.85rem', color: '#2D1A12' }}
+                    onClick={() => { setIsImportDropdownOpen(false); handleClaimFolder && handleClaimFolder(); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '8px 16px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: '600', fontSize: '0.84rem', color: '#2D1A12' }}
                   >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-                    </svg>
-                    <span>Nhập thư mục</span>
+                    <Folder size={15} color="#79543D" />
+                    <span>Chọn thư mục...</span>
+                  </button>
+
+                  <div style={{ height: '1px', backgroundColor: '#F0E6D8', margin: '6px 0' }}></div>
+
+                  {/* PHẦN 2: NHẬP CREDIT NOTE */}
+                  <div style={{ padding: '8px 16px 4px', fontSize: '0.72rem', fontWeight: '700', color: '#8C7A6B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Nhập Credit Note (Chứng từ phạt)
+                  </div>
+                  <button
+                    type="button"
+                    className="import-dropdown-item"
+                    onClick={() => { setIsImportDropdownOpen(false); onTriggerCreditNotePdfUpload && onTriggerCreditNotePdfUpload(); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '8px 16px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: '600', fontSize: '0.84rem', color: '#2D1A12' }}
+                  >
+                    <Receipt size={15} color="#79543D" />
+                    <span>Chọn file PDF...</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="import-dropdown-item"
+                    onClick={() => { setIsImportDropdownOpen(false); onTriggerCreditNoteFolderUpload && onTriggerCreditNoteFolderUpload(); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '8px 16px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: '600', fontSize: '0.84rem', color: '#2D1A12' }}
+                  >
+                    <Folder size={15} color="#79543D" />
+                    <span>Chọn thư mục...</span>
                   </button>
                 </>
               )}
@@ -449,16 +476,14 @@ export const ClaimToolbar = ({
           )}
         </div>
 
-        {/* 6. NÚT XUẤT DỮ LIỆU (Dropdown) */}
+        {/* NÚT XUẤT DỮ LIỆU (Dropdown) */}
+        {/* Nút Xuất Excel - Kích hoạt Popup Cấu hình & Xem trước Excel chuẩn ERP G7 */}
         <div className="export-dropdown-container" style={{ position: 'relative' }}>
           <button
             type="button"
             onClick={(e) => { 
               e.stopPropagation(); 
-              setIsExportDropdownOpen(!isExportDropdownOpen); 
-              setIsImportDropdownOpen(false); 
-              setIsOtherDropdownOpen(false);
-              setShowSortDropdown(false);
+              onExportExcel && onExportExcel();
             }}
             disabled={isExporting}
             style={{
@@ -478,71 +503,14 @@ export const ClaimToolbar = ({
               boxShadow: 'none',
               opacity: isExporting ? 0.7 : 1
             }}
+            title="Xuất Excel – Khiếu nại khách hàng"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="17 8 12 3 7 8"></polyline>
-              <line x1="12" y1="3" x2="12" y2="15"></line>
-            </svg>
-            <span>{isExporting ? 'Đang xuất...' : 'Xuất dữ liệu'}</span>
+            <Download size={15} />
+            <span>{isExporting ? 'Đang xuất...' : 'Xuất Excel'}</span>
           </button>
-          {isExportDropdownOpen && (
-            <div 
-              className="actions-dropdown-menu"
-              style={{
-                position: 'absolute',
-                top: 'calc(100% + 6px)',
-                right: 0,
-                backgroundColor: '#FFFFFF',
-                border: '1px solid #EADCC9',
-                borderRadius: '8px',
-                boxShadow: '0 10px 25px rgba(123, 82, 51, 0.12)',
-                minWidth: '180px',
-                zIndex: 1000,
-                display: 'flex',
-                flexDirection: 'column',
-                padding: '6px 0',
-                overflow: 'hidden',
-                animation: 'slideDown 0.2s ease forwards',
-                transformOrigin: 'top right'
-              }}
-            >
-              <button
-                type="button"
-                className="import-dropdown-item"
-                onClick={() => { setIsExportDropdownOpen(false); onExportExcel && onExportExcel('current'); }}
-                style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: '600', fontSize: '0.85rem', color: '#2D1A12' }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                  <polyline points="14 2 14 8 20 8"></polyline>
-                  <line x1="16" y1="13" x2="8" y2="13"></line>
-                  <line x1="16" y1="17" x2="8" y2="17"></line>
-                  <polyline points="10 9 9 9 8 9"></polyline>
-                </svg>
-                <span>Xuất trang hiện tại ({currentPageCount !== undefined ? currentPageCount : (paginatedClaims && paginatedClaims.length > 0 ? paginatedClaims.length : (claims.length > 0 ? Math.min(claims.length, 15) : 0))})</span>
-              </button>
-              <div style={{ height: '1px', backgroundColor: '#F0E6D8', margin: '4px 0' }}></div>
-              <button
-                type="button"
-                className="import-dropdown-item"
-                onClick={() => { setIsExportDropdownOpen(false); onExportExcel && onExportExcel('all'); }}
-                style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: '600', fontSize: '0.85rem', color: '#2D1A12' }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                  <line x1="3" y1="9" x2="21" y2="9"></line>
-                  <line x1="3" y1="15" x2="21" y2="15"></line>
-                  <line x1="9" y1="3" x2="9" y2="21"></line>
-                  <line x1="15" y1="3" x2="15" y2="21"></line>
-                </svg>
-                <span>Xuất tất cả ({totalCount !== undefined ? totalCount : (totalFilteredCount !== undefined ? totalFilteredCount : claims.length)})</span>
-              </button>
-            </div>
-          )}
         </div>
 
-        {/* 7. NÚT TẠO MỚI */}
+        {/* Nút tạo mới */}
         {hasWritePermission && (
           <button
             type="button"

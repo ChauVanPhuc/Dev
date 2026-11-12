@@ -1,6 +1,6 @@
 import React from 'react';
 import { FormModal } from './Modal';
-import { extractMultiplierFromPenalty, formatPenaltyValue, getFullImagePath, getCabinetSalePrice } from '../utils/claimHelpers';
+import { extractMultiplierFromPenalty, formatPenaltyValue, getFullImagePath, getCabinetSalePrice, formatStageTag } from '../utils/claimHelpers';
 
 export const ClaimAddModal = ({
   isOpen,
@@ -26,6 +26,7 @@ export const ClaimAddModal = ({
   handleSelectDefectCode,
   handleSelectCustomerDefectName,
   defectCatalog = [],
+  g7DefectTypes = [],
   addMaLoiCty, setAddMaLoiCty,
   showAddG7CodeSuggestions, setShowAddG7CodeSuggestions,
   uniqueCompanyErrorCodeOptions = [],
@@ -63,6 +64,8 @@ export const ClaimAddModal = ({
       onSubmit={onSave}
       title="Đăng ký khiếu nại mới"
       width="min(95vw, 1150px)"
+      style={{ height: 'min(90vh, 740px)' }}
+      bodyStyle={{ padding: '20px 24px 22px 24px', overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}
       cancelLabel="Hủy"
       confirmLabel="Lưu"
     >
@@ -72,12 +75,16 @@ export const ClaimAddModal = ({
           {/* Row 1: Dòng hàng & Loại claim */}
           <div className="add-claim-row add-claim-grid-2">
             <div className="add-claim-field">
-              <label className="add-claim-label">Loại hàng</label>
+              <label className="add-claim-label">Dòng hàng</label>
               <select
                 value={addDongHang}
                 onChange={(e) => setAddDongHang(e.target.value)}
                 className="add-claim-select"
               >
+                <option value="Atlas">Atlas</option>
+                <option value="Oak">Oak</option>
+                <option value="Maple">Maple</option>
+                <option value="Pine">Pine</option>
                 <option value="Pigment">Pigment</option>
                 <option value="OAK">OAK</option>
               </select>
@@ -119,7 +126,11 @@ export const ClaimAddModal = ({
                 onChange={(e) => {
                   const val = e.target.value;
                   setAddTenSanPham(val);
-                  setAddDongHang(val.toUpperCase().includes('WOA') ? 'OAK' : 'Pigment');
+                  if (val.includes('-')) {
+                    setAddDongHang(val.split('-')[0].trim().toUpperCase());
+                  } else if (val.toUpperCase().includes('WOA')) {
+                    setAddDongHang('Oak');
+                  }
                 }}
                 className="add-claim-input"
                 required
@@ -329,36 +340,136 @@ export const ClaimAddModal = ({
             {/* 3. Mã lỗi G7 */}
             <div className="add-claim-field" style={{ position: 'relative' }}>
               <label className="add-claim-label">Mã lỗi G7</label>
-              <input
-                type="text"
-                placeholder="Mã lỗi G7..."
-                value={addMaLoiCty}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setAddMaLoiCty(val);
-                  setShowAddG7CodeSuggestions(true);
-                  const match = (uniqueCompanyErrorCodeOptions || []).find(opt => opt.toLowerCase() === val.trim().toLowerCase());
-                  if (match && handleSelectG7Code) {
-                    handleSelectG7Code(match, false);
-                  }
-                }}
-                onFocus={() => setShowAddG7CodeSuggestions(true)}
-                onBlur={() => setTimeout(() => setShowAddG7CodeSuggestions(false), 200)}
-                className="add-claim-input"
-              />
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  placeholder="Mã lỗi G7..."
+                  value={addMaLoiCty}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setAddMaLoiCty(val);
+                    setShowAddG7CodeSuggestions(true);
+                    const match = (uniqueCompanyErrorCodeOptions || []).find(opt => opt.toLowerCase() === val.trim().toLowerCase());
+                    if (match && handleSelectG7Code) {
+                      handleSelectG7Code(match, false);
+                    }
+                  }}
+                  onFocus={() => setShowAddG7CodeSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowAddG7CodeSuggestions(false), 200)}
+                  className="add-claim-input"
+                  style={{ paddingRight: '28px' }}
+                />
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    setShowAddG7CodeSuggestions(!showAddG7CodeSuggestions);
+                  }}
+                  style={{
+                    position: 'absolute',
+                    right: '8px',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: '#7B5233',
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '2px'
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
+                </button>
+              </div>
               {showAddG7CodeSuggestions && (
-                <div className="custom-autocomplete-suggestions">
-                  {(uniqueCompanyErrorCodeOptions || [])
-                    .filter(opt => !addMaLoiCty || opt.toLowerCase().includes(addMaLoiCty.toLowerCase()))
-                    .map((opt, idx) => (
-                      <div
-                        key={idx}
-                        className="custom-autocomplete-option"
-                        onMouseDown={() => handleSelectG7Code(opt, false)}
-                      >
-                        {opt}
-                      </div>
-                    ))}
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    minWidth: '420px',
+                    maxWidth: '560px',
+                    width: 'max-content',
+                    backgroundColor: '#FFFFFF',
+                    border: '1.5px solid #EADCC9',
+                    borderRadius: '10px',
+                    boxShadow: '0 12px 28px rgba(0, 0, 0, 0.15)',
+                    maxHeight: '260px',
+                    overflowY: 'auto',
+                    overflowX: 'hidden',
+                    zIndex: 9999,
+                    marginTop: '4px'
+                  }}
+                >
+                  {g7DefectTypes && g7DefectTypes.length > 0 ? (
+                    g7DefectTypes
+                      .filter(d => {
+                        if (!addMaLoiCty) return true;
+                        const q = addMaLoiCty.toLowerCase();
+                        const stageStr = formatStageTag(d.stage) || '';
+                        return (d.code && d.code.toLowerCase().includes(q)) ||
+                               (d.name && d.name.toLowerCase().includes(q)) ||
+                               (d.category && d.category.toLowerCase().includes(q)) ||
+                               stageStr.toLowerCase().includes(q);
+                      })
+                      .map((defect, idx) => {
+                        const stageTag = formatStageTag(defect.stage || defect.category);
+                        return (
+                          <div
+                            key={defect.id || idx}
+                            className="custom-autocomplete-option"
+                            style={{
+                              padding: '9px 12px',
+                              cursor: 'pointer',
+                              borderBottom: '1px solid #FAF6F0',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              gap: '12px'
+                            }}
+                            onMouseDown={() => handleSelectG7Code(defect, false)}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                              <span style={{ fontWeight: '700', color: '#7B5233', fontSize: '0.85rem', flexShrink: 0 }}>
+                                {defect.code}
+                              </span>
+                              <span style={{ color: '#2D1A12', fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {defect.name}
+                              </span>
+                            </div>
+                            {stageTag && (
+                              <span style={{
+                                fontSize: '0.72rem',
+                                fontWeight: '500',
+                                padding: '2px 8px',
+                                borderRadius: '12px',
+                                backgroundColor: '#FAF0E6',
+                                color: '#8C6A51',
+                                border: '1px solid #EADCC9',
+                                flexShrink: 0,
+                                whiteSpace: 'nowrap'
+                              }}>
+                                {stageTag}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })
+                  ) : (
+                    (uniqueCompanyErrorCodeOptions || [])
+                      .filter(opt => !addMaLoiCty || opt.toLowerCase().includes(addMaLoiCty.toLowerCase()))
+                      .map((opt, idx) => (
+                        <div
+                          key={idx}
+                          className="custom-autocomplete-option"
+                          onMouseDown={() => handleSelectG7Code(opt, false)}
+                        >
+                          {opt}
+                        </div>
+                      ))
+                  )}
                 </div>
               )}
             </div>
@@ -366,36 +477,136 @@ export const ClaimAddModal = ({
             {/* 4. Tên lỗi G7 */}
             <div className="add-claim-field" style={{ position: 'relative' }}>
               <label className="add-claim-label">Tên lỗi G7</label>
-              <input
-                type="text"
-                placeholder="Tên lỗi G7..."
-                value={addTenLoiG7}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setAddTenLoiG7(val);
-                  setShowAddG7NameSuggestions(true);
-                  const match = (uniqueCompanyErrorNameOptions || []).find(opt => opt.toLowerCase() === val.trim().toLowerCase());
-                  if (match && handleSelectG7Name) {
-                    handleSelectG7Name(match, false);
-                  }
-                }}
-                onFocus={() => setShowAddG7NameSuggestions(true)}
-                onBlur={() => setTimeout(() => setShowAddG7NameSuggestions(false), 200)}
-                className="add-claim-input"
-              />
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  placeholder="Tên lỗi G7..."
+                  value={addTenLoiG7}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setAddTenLoiG7(val);
+                    setShowAddG7NameSuggestions(true);
+                    const match = (uniqueCompanyErrorNameOptions || []).find(opt => opt.toLowerCase() === val.trim().toLowerCase());
+                    if (match && handleSelectG7Name) {
+                      handleSelectG7Name(match, false);
+                    }
+                  }}
+                  onFocus={() => setShowAddG7NameSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowAddG7NameSuggestions(false), 200)}
+                  className="add-claim-input"
+                  style={{ paddingRight: '28px' }}
+                />
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    setShowAddG7NameSuggestions(!showAddG7NameSuggestions);
+                  }}
+                  style={{
+                    position: 'absolute',
+                    right: '8px',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: '#7B5233',
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '2px'
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
+                </button>
+              </div>
               {showAddG7NameSuggestions && (
-                <div className="custom-autocomplete-suggestions">
-                  {(uniqueCompanyErrorNameOptions || [])
-                    .filter(opt => !addTenLoiG7 || opt.toLowerCase().includes(addTenLoiG7.toLowerCase()))
-                    .map((opt, idx) => (
-                      <div
-                        key={idx}
-                        className="custom-autocomplete-option"
-                        onMouseDown={() => handleSelectG7Name(opt, false)}
-                      >
-                        {opt}
-                      </div>
-                    ))}
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    right: 0,
+                    minWidth: '420px',
+                    maxWidth: '560px',
+                    width: 'max-content',
+                    backgroundColor: '#FFFFFF',
+                    border: '1.5px solid #EADCC9',
+                    borderRadius: '10px',
+                    boxShadow: '0 12px 28px rgba(0, 0, 0, 0.15)',
+                    maxHeight: '260px',
+                    overflowY: 'auto',
+                    overflowX: 'hidden',
+                    zIndex: 9999,
+                    marginTop: '4px'
+                  }}
+                >
+                  {g7DefectTypes && g7DefectTypes.length > 0 ? (
+                    g7DefectTypes
+                      .filter(d => {
+                        if (!addTenLoiG7) return true;
+                        const q = addTenLoiG7.toLowerCase();
+                        const stageStr = formatStageTag(d.stage) || '';
+                        return (d.name && d.name.toLowerCase().includes(q)) ||
+                               (d.code && d.code.toLowerCase().includes(q)) ||
+                               (d.category && d.category.toLowerCase().includes(q)) ||
+                               stageStr.toLowerCase().includes(q);
+                      })
+                      .map((defect, idx) => {
+                        const stageTag = formatStageTag(defect.stage || defect.category);
+                        return (
+                          <div
+                            key={defect.id || idx}
+                            className="custom-autocomplete-option"
+                            style={{
+                              padding: '9px 12px',
+                              cursor: 'pointer',
+                              borderBottom: '1px solid #FAF6F0',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              gap: '12px'
+                            }}
+                            onMouseDown={() => handleSelectG7Name(defect, false)}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                              <span style={{ color: '#2D1A12', fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {defect.name}
+                              </span>
+                              <span style={{ fontWeight: '700', color: '#7B5233', fontSize: '0.82rem', flexShrink: 0 }}>
+                                ({defect.code})
+                              </span>
+                            </div>
+                            {stageTag && (
+                              <span style={{
+                                fontSize: '0.72rem',
+                                fontWeight: '500',
+                                padding: '2px 8px',
+                                borderRadius: '12px',
+                                backgroundColor: '#FAF0E6',
+                                color: '#8C6A51',
+                                border: '1px solid #EADCC9',
+                                flexShrink: 0,
+                                whiteSpace: 'nowrap'
+                              }}>
+                                {stageTag}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })
+                  ) : (
+                    (uniqueCompanyErrorNameOptions || [])
+                      .filter(opt => !addTenLoiG7 || opt.toLowerCase().includes(addTenLoiG7.toLowerCase()))
+                      .map((opt, idx) => (
+                        <div
+                          key={idx}
+                          className="custom-autocomplete-option"
+                          onMouseDown={() => handleSelectG7Name(opt, false)}
+                        >
+                          {opt}
+                        </div>
+                      ))
+                  )}
                 </div>
               )}
             </div>

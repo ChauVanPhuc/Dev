@@ -52,11 +52,26 @@ const CANONICAL_KHOI_TAO_PHIEU = {
   ]
 };
 
+// Nhóm menu chuẩn "Kho" trên Mobile (Phiếu nhập kho, Phiếu bàn giao, Phiếu trả về)
+const CANONICAL_KHO = {
+  id: 'm-warehouse',
+  title: 'Kho',
+  route_path: '#',
+  icon: 'Warehouse',
+  is_active: true,
+  permission_key: 'mobile_warehouse',
+  children: [
+    { id: 'sub-wh-receipt', title: 'Phiếu nhập kho', route_path: '/warehouse/goods-receipt', icon: 'PackagePlus', permission_key: 'mobile_warehouse-receipt' },
+    { id: 'sub-wh-handover', title: 'Phiếu bàn giao', route_path: '/warehouse/handover', icon: 'ClipboardCheck', permission_key: 'mobile_warehouse-handover' },
+    { id: 'sub-wh-return', title: 'Phiếu trả về', route_path: '/warehouse/returns', icon: 'RotateCcw', permission_key: 'mobile_warehouse-return' }
+  ]
+};
+
 // Chỉ loại bỏ 3 mục này nếu xuất hiện ở ngoài cấp 1 (root level) của sidebar, vẫn giữ ở trong menu con
 const ROOT_EXCLUDED_ROUTES = new Set(['/pallet-check-v1', '/pallet-check', '/cabinet-box-check']);
 
 const filterRootMenuItems = (items) => {
-  if (!Array.isArray(items)) return [CANONICAL_KHOI_TAO_PHIEU];
+  if (!Array.isArray(items)) return [CANONICAL_KHOI_TAO_PHIEU, CANONICAL_KHO];
   // 1. Chỉ lọc ở cấp ngoài cùng (cấp 1), không lọc children bên trong
   let filtered = items.filter(item => !ROOT_EXCLUDED_ROUTES.has(item.route_path));
 
@@ -72,6 +87,23 @@ const filterRootMenuItems = (items) => {
       ...filtered[createTicketIdx],
       icon: filtered[createTicketIdx].icon || 'MessageSquare',
       children: CANONICAL_KHOI_TAO_PHIEU.children
+    };
+  }
+
+  // 3. Đảm bảo nhóm "Kho" luôn tồn tại ngay sau "Khởi tạo phiếu" (fallback nếu DB chưa kịp seed)
+  const khoIdx = filtered.findIndex(it => it.title === 'Kho');
+  if (khoIdx === -1) {
+    const ticketPos = filtered.findIndex(it => it.title === 'Khởi tạo phiếu');
+    filtered.splice(ticketPos >= 0 ? ticketPos + 1 : 2, 0, CANONICAL_KHO);
+  } else {
+    const dbChildren = Array.isArray(filtered[khoIdx].children) && filtered[khoIdx].children.length >= 3
+      ? filtered[khoIdx].children
+      : CANONICAL_KHO.children;
+    filtered[khoIdx] = {
+      ...filtered[khoIdx],
+      icon: filtered[khoIdx].icon || 'Warehouse',
+      permission_key: filtered[khoIdx].permission_key || 'mobile_warehouse',
+      children: dbChildren,
     };
   }
 
@@ -100,6 +132,7 @@ const filterRootMenuItems = (items) => {
             is_active: true
           },
           CANONICAL_KHOI_TAO_PHIEU,
+          CANONICAL_KHO,
           {
             id: 'm-quality-management',
             title: 'Quản lý chất lượng',
@@ -228,9 +261,18 @@ const filterRootMenuItems = (items) => {
     });
 
   const isActive = (path) => {
-    if (!path) return false;
-    return location.pathname === path;
+    if (!path || path === '#') return false;
+    return location.pathname === path || (path !== '/' && path !== '/dashboard' && location.pathname.startsWith(`${path}/`));
   };
+
+  useEffect(() => {
+    const activeParent = menuList.find(
+      (it) => Array.isArray(it.children) && it.children.some((sub) => isActive(sub.route_path))
+    );
+    if (activeParent && !expandedItems.includes(activeParent.id)) {
+      setExpandedItems((prev) => (prev.includes(activeParent.id) ? prev : [...prev, activeParent.id]));
+    }
+  }, [location.pathname, menuList]);
 
   const isMenuRowActive = (item) => {
     if (item.hasSub) {

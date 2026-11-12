@@ -148,6 +148,13 @@ const ISOProcessEditor = lazy(() => import('@modules/ISO/Views/Process/ISOProces
 const ISOApprovalListView = lazy(() => import('@modules/ISOApproval/views/ISOApprovalListView'));
 const ISOSignatureListView = lazy(() => import('@modules/ISOSignature/views/ISOSignatureListView'));
 
+// Import Warehouse & UnitOfMeasure modules (Tải động)
+const GoodsReceiptPage = lazy(() => import('@modules/Warehouse/pages/GoodsReceipt/GoodsReceiptPage'));
+const GoodsIssuePage = lazy(() => import('@modules/Warehouse/pages/GoodsIssue/GoodsIssuePage'));
+const WarehouseManagementPage = lazy(() => import('@modules/Warehouse/pages/WarehouseManagement/WarehouseManagementPage'));
+const RejectedGoodsPage = lazy(() => import('@modules/Warehouse/pages/RejectedGoods/RejectedGoodsPage'));
+const UnitOfMeasureView = lazy(() => import('@modules/UnitOfMeasure/Views/UnitOfMeasureView'));
+
 import { authService } from '@modules/Auth/Models/auth.service';
 import { ScreenProvider } from '@shared/context/ScreenContext';
 
@@ -838,6 +845,16 @@ function App() {
                 <Route path="lpn-crawler" element={<ProtectedRoute><LpnCrawler /></ProtectedRoute>} />
                 <Route path="ai-ocr-train" element={<ProtectedRoute><AiOcrTrain /></ProtectedRoute>} />
                 <Route path="pallet-check" element={<ProtectedRoute><ContainerScanListView /></ProtectedRoute>} />
+
+                {/* Quản lý đơn vị tính & Quản lý kho (Warehouse) Module */}
+                <Route path="units" element={<ProtectedRoute permissionKey={["units", "screens", "system-config", "/admin/units"]}><UnitOfMeasureView /></ProtectedRoute>} />
+                <Route path="warehouse" element={<Navigate to="/admin/warehouse/goods-receipt" replace />} />
+                <Route path="warehouse/goods-receipt" element={<ProtectedRoute permissionKey={["warehouse", "goods-receipt", "warehouse-receipt", "/admin/warehouse/goods-receipt"]}><GoodsReceiptPage /></ProtectedRoute>} />
+                <Route path="warehouse/goods-issue" element={<ProtectedRoute permissionKey={["warehouse", "goods-issue", "warehouse-issue", "/admin/warehouse/goods-issue"]}><GoodsIssuePage /></ProtectedRoute>} />
+                <Route path="warehouse/management" element={<ProtectedRoute permissionKey={["warehouse", "warehouse-management", "inventory", "/admin/warehouse/management"]}><WarehouseManagementPage /></ProtectedRoute>} />
+                <Route path="warehouse/rejected-goods" element={<ProtectedRoute permissionKey={["warehouse", "warehouse-rejected", "warehouse-management", "/admin/warehouse/rejected-goods", "/admin/warehouse/management"]}><RejectedGoodsPage /></ProtectedRoute>} />
+                <Route path="warehouse/receipt" element={<Navigate to="/admin/warehouse/goods-receipt" replace />} />
+                <Route path="warehouse/issue" element={<Navigate to="/admin/warehouse/goods-issue" replace />} />
               </Route>
 
               {/* Route ChatBot - redirects to claims with chat open */}

@@ -1,190 +1,267 @@
-import React from 'react';
-import { ResponsiveContainer, ComposedChart, Bar, Line, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import React, { useState, useMemo } from 'react';
+import { ResponsiveContainer, ComposedChart, Bar, Line, ReferenceLine, XAxis, YAxis, Tooltip, Cell, LabelList } from 'recharts';
+import { BarChart3 } from 'lucide-react';
 
-/**
- * Custom Label cho đường % Lũy kế:
- * Tự động phân luồng tránh đè chữ:
- * - Khi ở các cột có đường cắt ngang gần đỉnh cột (như Cong vênh, Sứt mẻ): Thẻ % đặt PHÍA DƯỚI điểm nút (y + 10).
- * - Khi ở các cột khác: Thẻ % đặt PHÍA TRÊN điểm nút (y - 18).
- * => Đảm bảo số lượng cột màu đen ở trên đỉnh cột và thẻ % không bao giờ chạm nhau!
- */
-const renderSmartParetoLineLabel = (props) => {
-  const { x, y, value, index } = props;
-  if (value === undefined || value === null) return null;
+// Biểu đồ Pareto nguyên nhân lỗi (nguyên tắc 80/20):
+// - Cột: Số lượng lỗi của từng nguyên nhân
+// - Đường: Tỷ lệ lũy kế (%) và đường tham chiếu 80%
+export const ParetoDefectChart = ({
+  paretoList = [],
+  allDefects = [],
+  onDefectClick
+}) => {
+  const [viewMode, setViewMode] = useState('top10'); // 'top10' | 'all'
 
-  // Cột 3 và 4 (Trầy xước, Cong vênh) là điểm giao thoa gần đỉnh cột -> Đặt thẻ % ở PHÍA DƯỚI điểm nút
-  const isCrossover = index === 2 || index === 3;
-  const rectY = isCrossover ? y + 10 : y - 18;
-  const textY = isCrossover ? y + 19 : y - 9;
+  // Chuẩn bị dữ liệu hiển thị theo chế độ
+  const chartData = useMemo(() => {
+    if (viewMode === 'top10') {
+      return paretoList.slice(0, 10);
+    }
 
-  return (
-    <g>
-      <rect
-        x={x - 20}
-        y={rectY - 2}
-        width={40}
-        height={18}
-        rx={3.5}
-        fill="#FFFFFF"
-        stroke="#DC2626"
-        strokeWidth={1.2}
-      />
-      <text
-        x={x}
-        y={textY}
-        fill="#DC2626"
-        textAnchor="middle"
-        dominantBaseline="central"
-        fontSize="11"
-        fontWeight="900"
-      >
-        {`${value}%`}
-      </text>
-    </g>
-  );
-};
+    // Chế độ xem toàn bộ nguyên nhân (tính lũy kế đạt 100%)
+    const source = allDefects && allDefects.length > 0 ? allDefects : paretoList;
+    const totalCount = source.reduce((s, d) => s + (Number(d.count) || 0), 0);
+    let cum = 0;
 
-/**
- * [Z3] Pareto lỗi trọng yếu (Composed Chart)
- * - Tương tác click liên kết biểu đồ (Cross-filter theo loại lỗi).
- * - Số lượng màu đen nằm phía trên đỉnh cột rõ ràng, chuẩn đẹp.
- * - Thanh cột to khỏe (barSize 32px), bề rộng thoáng mát.
- */
-export const ParetoDefectChart = ({ paretoList, activeCrossFilter, onDefectClick }) => {
-  const paretoData = paretoList || [];
+    return source.map((d, idx) => {
+      cum += Number(d.count || 0);
+      const cumPct = totalCount > 0 ? Math.round((cum / totalCount) * 1000) / 10 : 0.0;
+      const pct = totalCount > 0 ? Math.round((d.count / totalCount) * 1000) / 10 : 0.0;
+      return {
+        ...d,
+        rank: idx + 1,
+        percentage: pct,
+        cumulative_percentage: Math.min(100.0, cumPct)
+      };
+    });
+  }, [viewMode, paretoList, allDefects]);
 
-  // Tính max count để set domain cho trục Y bên trái linh hoạt
-  const maxCount = Math.max(...paretoData.map(p => p.count || 0), 100);
-  const leftMax = Math.ceil(maxCount / 50) * 50;
+  const hasData = Array.isArray(chartData) && chartData.length > 0;
+  const maxCount = Math.max(...chartData.map((p) => Number(p.count || 0)), 10);
+  const leftYMax = Math.ceil(maxCount * 1.28);
 
-  const renderBarTopLabel = (props) => {
-    const { x, width, y, value, index } = props;
-    if (!value) return null;
-    const entry = paretoData[index];
-    const isFiltered = activeCrossFilter?.type === 'defect';
-    const isSelected = isFiltered && entry &&
-      (entry.defect_name?.toLowerCase() === activeCrossFilter?.value?.toLowerCase());
-    const opacity = isFiltered && !isSelected ? 0.22 : 1;
+  // Tìm các mốc lũy kế thực tế: ~20%, ~40%, ~60%, ~80%, mốc đầu và mốc cuối kỳ
+  const milestoneIndices = useMemo(() => {
+    if (!chartData || chartData.length === 0) return new Set();
+    const indices = new Set();
+    const targets = [20, 40, 60, 80];
+
+    targets.forEach((target) => {
+      const idx = chartData.findIndex((d) => Number(d.cumulative_percentage) >= target);
+      if (idx !== -1) indices.add(idx);
+    });
+
+    indices.add(0);
+    indices.add(chartData.length - 1);
+
+    return indices;
+  }, [chartData]);
+
+  // Nhãn tỷ lệ lũy kế (%)
+  const renderCumulativeLabel = (props) => {
+    const { x, y, value, index } = props;
+    if (value === undefined || value === null) return null;
+
+    if (!milestoneIndices.has(index)) return null;
+
+    const isAbove80 = Number(value) >= 80;
+
     return (
-      <text
-        x={x + width / 2}
-        y={y - 9}
-        fill="#0F172A"
-        textAnchor="middle"
-        fontSize="12"
-        fontWeight="900"
-        opacity={opacity}
-      >
-        {Number(value).toLocaleString()}
-      </text>
+      <g key={`cum-label-${index}`} style={{ pointerEvents: 'none' }}>
+        <rect
+          x={x - 21}
+          y={y - 20}
+          width={42}
+          height={16}
+          rx={4}
+          fill={isAbove80 ? '#FEF2F2' : '#FFFFFF'}
+          stroke={isAbove80 ? '#DC2626' : '#D97706'}
+          strokeWidth={1}
+          opacity={0.96}
+        />
+        <text
+          x={x}
+          y={y - 8}
+          fill={isAbove80 ? '#DC2626' : '#D97706'}
+          fontSize={11}
+          fontWeight={800}
+          textAnchor="middle"
+        >
+          {`${value}%`}
+        </text>
+      </g>
     );
   };
 
   return (
-    <div className="erp-chart-card">
-      <div className="erp-chart-header">
-        <span className="erp-chart-title">Pareto lỗi trọng yếu</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '0.68rem', fontWeight: '700' }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#4B301E' }}>
-            <span style={{ width: '8px', height: '8px', backgroundColor: '#7B5233', borderRadius: '1px', display: 'inline-block' }}></span>
-            Số lượng lỗi
+    <div className="erp-chart-card" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, overflow: 'hidden' }}>
+      {/* Tiêu đề biểu đồ */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <BarChart3 size={15} style={{ color: '#795137' }} />
+          <span style={{ fontSize: '0.82rem', fontWeight: '800', color: '#292524' }}>
+            Pareto nguyên nhân lỗi (Nguyên tắc 80/20)
           </span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#DC2626' }}>
-            <span style={{ width: '12px', height: '2px', backgroundColor: '#DC2626', display: 'inline-block' }}></span>
-            % Lũy kế
-          </span>
+        </div>
+
+        {/* Nút chuyển chế độ xem: Top 10 vs Toàn bộ */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <button
+            type="button"
+            className="page-btn"
+            onClick={() => setViewMode('top10')}
+            style={{
+              padding: '2px 8px',
+              borderRadius: '4px',
+              border: '1px solid',
+              borderColor: viewMode === 'top10' ? '#795137' : '#E8E2DC',
+              backgroundColor: viewMode === 'top10' ? '#795137' : '#FFFFFF',
+              color: viewMode === 'top10' ? '#FFFFFF' : '#57534E',
+              fontSize: '0.66rem',
+              fontWeight: '700',
+              cursor: 'pointer'
+            }}
+          >
+            Top 10 lỗi
+          </button>
+          <button
+            type="button"
+            className="page-btn"
+            onClick={() => setViewMode('all')}
+            style={{
+              padding: '2px 8px',
+              borderRadius: '4px',
+              border: '1px solid',
+              borderColor: viewMode === 'all' ? '#795137' : '#E8E2DC',
+              backgroundColor: viewMode === 'all' ? '#795137' : '#FFFFFF',
+              color: viewMode === 'all' ? '#FFFFFF' : '#57534E',
+              fontSize: '0.66rem',
+              fontWeight: '700',
+              cursor: 'pointer'
+            }}
+          >
+            Toàn bộ
+          </button>
         </div>
       </div>
 
-      <div className="erp-chart-body" style={{ outline: 'none' }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart
-            data={paretoData}
-            margin={{ top: 26, right: 16, left: -14, bottom: 4 }}
-            style={{ outline: 'none' }}
-            onClick={(state) => {
-              if (state && state.activePayload && state.activePayload.length > 0 && onDefectClick) {
-                onDefectClick(state.activePayload[0].payload.defect_name);
-              }
-            }}
-          >
-            <CartesianGrid strokeDasharray="2 2" vertical={false} stroke="#F1F5F9" />
-            <XAxis
-              dataKey="defect_name"
-              fontSize={8.5}
-              stroke="#475569"
-              tickLine={false}
-              axisLine={{ stroke: '#E2E8F0' }}
-              interval={0}
-              angle={paretoData.length > 6 ? -15 : 0}
-              textAnchor={paretoData.length > 6 ? 'end' : 'middle'}
-              height={paretoData.length > 6 ? 26 : 18}
-            />
-            <YAxis
-              yAxisId="left"
-              orientation="left"
-              domain={[0, leftMax]}
-              stroke="#94A3B8"
-              fontSize={9}
-              tickLine={false}
-              axisLine={{ stroke: '#E2E8F0' }}
-            />
-            <YAxis
-              yAxisId="right"
-              orientation="right"
-              domain={[0, 100]}
-              ticks={[0, 25, 50, 75, 100]}
-              stroke="#DC2626"
-              fontSize={9}
-              tickLine={false}
-              axisLine={{ stroke: '#E2E8F0' }}
-              tickFormatter={(v) => `${v}%`}
-            />
-            <Tooltip
-              formatter={(value, name) => [name === '% Lũy kế' ? `${value}%` : `${Number(value).toLocaleString()} lỗi`, name]}
-              contentStyle={{ backgroundColor: '#FFFFFF', borderRadius: '6px', border: '1px solid #E2E8F0', fontSize: '0.72rem', padding: '6px 10px', boxShadow: '0 2px 6px rgba(0,0,0,0.06)' }}
-            />
-            <Bar
-              yAxisId="left"
-              dataKey="count"
-              name="Số lượng lỗi"
-              fill="#7B5233"
-              radius={[4, 4, 0, 0]}
-              barSize={32}
-              label={renderBarTopLabel}
-              cursor="pointer"
+      {/* Nội dung biểu đồ */}
+      <div className="erp-chart-body">
+        {!hasData ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#78716C', fontSize: '0.78rem' }}>
+            Không có phát sinh lỗi trong phạm vi lọc
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart
+              data={chartData}
+              margin={{ top: 24, right: 14, left: 14, bottom: 18 }}
             >
-              {paretoData.map((entry, index) => {
-                const isFiltered = activeCrossFilter?.type === 'defect';
-                const isSelected = isFiltered &&
-                  (entry.defect_name?.toLowerCase() === activeCrossFilter?.value?.toLowerCase());
-                return (
-                  <Cell
-                    key={`pareto-cell-${index}`}
-                    fill={isSelected ? '#4B301E' : index === 0 ? '#5C3D24' : '#7B5233'}
-                    opacity={isFiltered && !isSelected ? 0.22 : 1}
-                    style={{ outline: 'none', cursor: 'pointer', transition: 'opacity 0.2s' }}
-                    onClick={(e) => {
-                      e?.stopPropagation?.();
-                      if (onDefectClick) onDefectClick(entry.defect_name);
-                    }}
-                  />
-                );
-              })}
-            </Bar>
-            <Line
-              yAxisId="right"
-              type="monotone"
-              dataKey="cumulative_percentage"
-              name="% Lũy kế"
-              stroke="#DC2626"
-              strokeWidth={2.2}
-              dot={{ r: 3.5, fill: '#DC2626', stroke: '#FFFFFF', strokeWidth: 1.5 }}
-              activeDot={{ r: 5.5, fill: '#DC2626', stroke: '#FFFFFF', strokeWidth: 2 }}
-              label={renderSmartParetoLineLabel}
-            />
-          </ComposedChart>
-        </ResponsiveContainer>
+              <XAxis
+                dataKey="defect_name"
+                fontSize={8}
+                stroke="#78716C"
+                tickLine={false}
+                axisLine={{ stroke: '#E8E2DC' }}
+                interval={0}
+                tick={({ x, y, payload }) => {
+                  const label = payload.value || '';
+                  const maxChars = viewMode === 'top10' ? 12 : 7;
+                  const short = label.length > maxChars ? `${label.substring(0, maxChars - 1)}..` : label;
+                  return (
+                    <text
+                      x={x}
+                      y={y + 10}
+                      fill="#292524"
+                      fontSize={viewMode === 'top10' ? 8.5 : 7.5}
+                      fontWeight={600}
+                      textAnchor="middle"
+                    >
+                      {short}
+                    </text>
+                  );
+                }}
+              />
+              <YAxis yAxisId="left" hide={true} domain={[0, leftYMax]} />
+              <YAxis yAxisId="right" orientation="right" hide={true} domain={[0, 100]} />
+              <Tooltip
+                content={({ active, payload }) => {
+                  if (!active || !payload || !payload.length) return null;
+                  const item = payload[0].payload;
+                  return (
+                    <div
+                      style={{
+                        backgroundColor: '#FFFFFF',
+                        border: '1px solid #E8E2DC',
+                        borderRadius: '6px',
+                        padding: '8px 10px',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+                        fontSize: '0.72rem'
+                      }}
+                    >
+                      <div style={{ fontWeight: '800', color: '#292524', marginBottom: '2px' }}>
+                        {item.defect_name}
+                      </div>
+                      <div style={{ fontSize: '0.66rem', color: '#78716C', marginBottom: '4px' }}>
+                        Mã lỗi: <strong>{item.defect_code || '---'}</strong>
+                      </div>
+                      <div style={{ color: '#78716C' }}>
+                        Số lượng lỗi: <strong style={{ color: '#795137' }}>{Number(item.count).toLocaleString('vi-VN')} lỗi</strong>
+                      </div>
+                      <div style={{ color: '#78716C' }}>
+                        Tỷ trọng: <strong>{item.percentage}%</strong>
+                      </div>
+                      <div style={{ color: '#D97706', marginTop: '2px', borderTop: '1px dashed #E8E2DC', paddingTop: '3px' }}>
+                        % Lũy kế: <strong>{item.cumulative_percentage}%</strong>
+                      </div>
+                    </div>
+                  );
+                }}
+              />
+              <ReferenceLine
+                yAxisId="right"
+                y={80}
+                stroke="#DC2626"
+                strokeDasharray="4 4"
+                strokeWidth={1.5}
+                label={{ value: '80%', position: 'top', fill: '#DC2626', fontSize: 9.5, fontWeight: '800' }}
+              />
+              <Bar
+                yAxisId="left"
+                dataKey="count"
+                name="Số lỗi"
+                fill="#795137"
+                barSize={viewMode === 'top10' ? 22 : 11}
+                radius={[3, 3, 0, 0]}
+                cursor="pointer"
+                onClick={(entry) => onDefectClick && onDefectClick(entry)}
+              >
+                {chartData.map((entry, index) => (
+                  <Cell key={`bar-${index}`} fill="#795137" cursor="pointer" />
+                ))}
+                <LabelList
+                  dataKey="count"
+                  position="top"
+                  fontSize={viewMode === 'top10' ? 11.5 : 9.5}
+                  fontWeight={800}
+                  fill="#5B3924"
+                  offset={4}
+                />
+              </Bar>
+              <Line
+                yAxisId="right"
+                type="monotone"
+                dataKey="cumulative_percentage"
+                name="% Lũy kế"
+                stroke="#D97706"
+                strokeWidth={2.4}
+                dot={{ r: 3.5, fill: '#D97706', strokeWidth: 1.5, stroke: '#FFFFFF' }}
+                activeDot={{ r: 5.5, fill: '#DC2626', stroke: '#FFFFFF', strokeWidth: 2 }}
+                label={renderCumulativeLabel}
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
+        )}
       </div>
     </div>
   );

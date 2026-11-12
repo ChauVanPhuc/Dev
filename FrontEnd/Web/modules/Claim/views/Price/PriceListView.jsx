@@ -3,7 +3,7 @@ import { useOutletContext } from 'react-router-dom';
 import { Search, Filter, Plus } from 'lucide-react';
 import { claimService } from '@/modules/claim/services/claim.service';
 import * as XLSX from 'xlsx';
-import { API_ROOT } from '@/shared/services/api.service';
+import { API_ROOT } from '@webShared/Services/api.service';
 import '@/modules/claim/styles/claim.css';
 import '@/shared/styles/components.css';
 

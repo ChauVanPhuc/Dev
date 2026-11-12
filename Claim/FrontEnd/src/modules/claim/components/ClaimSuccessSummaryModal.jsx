@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, FileText, X } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, FileText, Check, X, Layers, AlertCircle, Sparkles, Hash, FileCheck } from 'lucide-react';
 
 export const ClaimSuccessSummaryModal = ({
   isOpen,
@@ -14,6 +14,8 @@ export const ClaimSuccessSummaryModal = ({
 
   const totalFiles = fileStats.length || 1;
   const successFiles = fileStats.filter(f => f.status === 'success' || !f.status || f.claims_count > 0).length;
+  const duplicateFiles = fileStats.filter(f => f.status === 'warning' || (f.mechanism && f.mechanism.name && f.mechanism.name.includes('Trùng lặp'))).length;
+  const errorFiles = fileStats.filter(f => f.status === 'error').length;
   const displayWarnings = warnings || [];
   const percentComplete = totalFiles > 0 ? Math.round((successFiles / totalFiles) * 100) : 100;
 
@@ -27,8 +29,8 @@ export const ClaimSuccessSummaryModal = ({
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: 'rgba(15, 23, 42, 0.55)',
-        backdropFilter: 'blur(3px)',
+        backgroundColor: 'rgba(15, 23, 42, 0.65)',
+        backdropFilter: 'blur(4px)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -40,33 +42,49 @@ export const ClaimSuccessSummaryModal = ({
         className="form-modal-wrapper" 
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: 'min(96vw, 1140px)',
-          maxHeight: 'min(92vh, 740px)',
+          width: 'min(96vw, 1180px)',
+          maxHeight: 'min(92vh, 780px)',
           backgroundColor: '#FFFFFF',
-          borderRadius: '12px',
-          boxShadow: '0 20px 45px rgba(0, 0, 0, 0.15)',
-          border: '1px solid #E5E7EB',
+          borderRadius: '16px',
+          boxShadow: '0 25px 60px rgba(45, 26, 18, 0.28)',
+          border: '1px solid #EADCC9',
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
-          animation: 'fadeInUp 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
+          animation: 'fadeInUp 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
         }}
       >
         {/* Header */}
         <div style={{
-          padding: '14px 20px',
-          backgroundColor: '#FFFFFF',
-          borderBottom: '1px solid #E5E7EB',
+          padding: '16px 24px',
+          backgroundColor: '#F4FBF7',
+          borderBottom: '1px solid #D1E7DD',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           flexShrink: 0
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <CheckCircle2 size={19} color="#059669" />
-            <h3 style={{ margin: 0, color: '#111827', fontSize: '1.05rem', fontWeight: '700' }}>
-              Import & Bóc tách PDF thành công
-            </h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '10px',
+              backgroundColor: '#D1E7DD',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#0F5132'
+            }}>
+              <CheckCircle2 size={22} />
+            </div>
+            <div>
+              <h3 style={{ margin: 0, color: '#0F5132', fontSize: '1.2rem', fontWeight: '700', lineHeight: 1.2 }}>
+                Import & Bóc tách PDF thành công
+              </h3>
+              <div style={{ fontSize: '0.78rem', color: '#4B5563', marginTop: '2px' }}>
+                Đã xử lý và lưu trữ dữ liệu khiếu nại vào hệ thống
+              </div>
+            </div>
           </div>
           <button
             type="button"
@@ -75,26 +93,26 @@ export const ClaimSuccessSummaryModal = ({
               background: 'none',
               border: 'none',
               cursor: 'pointer',
-              color: '#6B7280',
-              padding: '4px',
-              borderRadius: '6px',
+              color: '#6C757D',
+              padding: '6px',
+              borderRadius: '8px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              transition: 'color 0.15s ease'
+              transition: 'background 0.2s ease'
             }}
-            title="Đóng"
+            title="Đóng cửa sổ"
           >
-            <X size={18} />
+            <X size={20} />
           </button>
         </div>
 
         {/* Modal Body - 3 Columns Layout */}
         <div className="summary-modal-3col-grid" style={{
-          padding: '18px 20px',
+          padding: '20px 24px',
           display: 'grid',
-          gridTemplateColumns: '280px 1.35fr 1.15fr',
-          gap: '16px',
+          gridTemplateColumns: '290px 1.35fr 1.15fr',
+          gap: '18px',
           flex: 1,
           minHeight: 0,
           overflowY: 'auto'
@@ -109,31 +127,41 @@ export const ClaimSuccessSummaryModal = ({
             <div style={{
               fontSize: '0.85rem',
               fontWeight: '700',
-              color: '#374151',
+              color: '#7B5233',
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
               paddingBottom: '2px'
             }}>
-              1. Tổng quan các file xử lý
+              <FileCheck size={16} />
+              <span>1. Tổng quan các file xử lý</span>
             </div>
 
             {/* Card 1: Mã lô (Batch ID) */}
             <div style={{
-              backgroundColor: '#F9FAFB',
-              border: '1px solid #E5E7EB',
-              borderRadius: '8px',
+              backgroundColor: '#FCFAF7',
+              border: '1px solid #EADCC9',
+              borderRadius: '10px',
               padding: '12px 14px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               gap: '8px'
             }}>
-              <div style={{ fontSize: '0.82rem', color: '#4B5563' }}>
+              <div style={{ fontSize: '0.78rem', color: '#8D6E63', fontWeight: '600' }}>
                 Mã lô (Batch ID)
               </div>
               <div style={{ 
-                fontSize: '0.88rem', 
-                fontWeight: '600', 
-                color: '#111827', 
-                fontFamily: 'monospace'
+                fontSize: '0.92rem', 
+                fontWeight: '700', 
+                color: '#2D1A12', 
+                fontFamily: 'monospace',
+                backgroundColor: '#FFFFFF',
+                padding: '3px 8px',
+                borderRadius: '6px',
+                border: '1px solid #EADCC9'
               }}>
                 {batchId || 'N/A'}
               </div>
@@ -141,48 +169,52 @@ export const ClaimSuccessSummaryModal = ({
 
             {/* Card 2: Số dòng đã trích xuất */}
             <div style={{
-              backgroundColor: '#F9FAFB',
-              border: '1px solid #E5E7EB',
-              borderRadius: '8px',
+              backgroundColor: '#FCFAF7',
+              border: '1px solid #EADCC9',
+              borderRadius: '10px',
               padding: '12px 14px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               gap: '8px'
             }}>
-              <div style={{ fontSize: '0.82rem', color: '#4B5563' }}>
+              <div style={{ fontSize: '0.78rem', color: '#8D6E63', fontWeight: '600' }}>
                 Số dòng đã trích xuất
               </div>
               <div style={{
-                fontSize: '1rem',
-                fontWeight: '700',
-                color: '#111827',
+                fontSize: '1.25rem',
+                fontWeight: '800',
+                color: '#065F46',
+                backgroundColor: '#ECFDF5',
+                border: '1px solid #A7F3D0',
+                padding: '2px 10px',
+                borderRadius: '8px',
                 display: 'flex',
                 alignItems: 'baseline',
                 gap: '4px'
               }}>
-                <span>{claimsCount}</span>
-                <span style={{ fontSize: '0.82rem', fontWeight: '500', color: '#6B7280' }}>dòng</span>
+                {claimsCount}
+                <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#047857' }}>dòng</span>
               </div>
             </div>
 
             {/* Card 3: Tổng số file PDF */}
             <div style={{
-              backgroundColor: '#F9FAFB',
-              border: '1px solid #E5E7EB',
-              borderRadius: '8px',
+              backgroundColor: '#FCFAF7',
+              border: '1px solid #EADCC9',
+              borderRadius: '10px',
               padding: '12px 14px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               gap: '8px'
             }}>
-              <div style={{ fontSize: '0.82rem', color: '#4B5563' }}>
+              <div style={{ fontSize: '0.78rem', color: '#8D6E63', fontWeight: '600' }}>
                 Tổng số file PDF
               </div>
-              <div style={{ fontSize: '1rem', fontWeight: '700', color: '#111827', display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+              <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#2D1A12', display: 'flex', alignItems: 'baseline', gap: '4px' }}>
                 <span>{totalFiles} file</span>
-                <span style={{ fontSize: '0.82rem', fontWeight: '500', color: '#6B7280' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: '700', color: '#059669' }}>
                   ({percentComplete}%)
                 </span>
               </div>
@@ -190,21 +222,21 @@ export const ClaimSuccessSummaryModal = ({
 
             {/* Card 4: Số cảnh báo / bỏ qua */}
             <div style={{
-              backgroundColor: '#F9FAFB',
-              border: '1px solid #E5E7EB',
-              borderRadius: '8px',
+              backgroundColor: '#FCFAF7',
+              border: '1px solid #EADCC9',
+              borderRadius: '10px',
               padding: '12px 14px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               gap: '8px'
             }}>
-              <div style={{ fontSize: '0.82rem', color: '#4B5563' }}>
+              <div style={{ fontSize: '0.78rem', color: '#8D6E63', fontWeight: '600' }}>
                 Số cảnh báo / bỏ qua
               </div>
-              <div style={{ fontSize: '1rem', fontWeight: '700', color: '#111827', display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-                <span>{displayWarnings.length}</span>
-                <span style={{ fontSize: '0.82rem', fontWeight: '500', color: '#6B7280' }}>mục</span>
+              <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#2D1A12', display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                {displayWarnings.length}
+                <span style={{ fontSize: '0.82rem', fontWeight: '600', color: '#6B7280' }}>mục</span>
               </div>
             </div>
           </div>
@@ -219,17 +251,28 @@ export const ClaimSuccessSummaryModal = ({
             <div style={{
               fontSize: '0.85rem',
               fontWeight: '700',
-              color: '#374151',
+              color: '#7B5233',
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'space-between',
-              paddingBottom: '2px'
+              justifyContent: 'space-between'
             }}>
-              <span>2. Danh sách file PDF ({totalFiles} file)</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <FileText size={16} />
+                <span>2. Danh sách file PDF ({totalFiles} file)</span>
+              </div>
               <span style={{
-                fontSize: '0.82rem',
-                fontWeight: '600',
-                color: '#6B7280'
+                fontSize: '0.78rem',
+                fontWeight: '700',
+                color: '#065F46',
+                backgroundColor: '#ECFDF5',
+                border: '1px solid #A7F3D0',
+                padding: '2px 10px',
+                borderRadius: '10px',
+                textTransform: 'none',
+                display: 'inline-flex',
+                alignItems: 'center'
               }}>
                 Tổng {claimsCount} dòng
               </span>
@@ -238,7 +281,7 @@ export const ClaimSuccessSummaryModal = ({
             <div style={{
               backgroundColor: '#FAFAFA',
               border: '1px solid #E5E7EB',
-              borderRadius: '8px',
+              borderRadius: '10px',
               flex: 1,
               maxHeight: '430px',
               minHeight: '260px',
@@ -256,7 +299,7 @@ export const ClaimSuccessSummaryModal = ({
                 fileStats.map((item, idx) => {
                   const rawFilename = item.original_name || item.filename || `File_${idx + 1}.pdf`;
                   const filename = rawFilename.split('/').pop().split('\\').pop();
-                  const mechanismName = item.mechanism ? (item.mechanism.name || item.mechanism) : 'Cơ chế 1';
+                  const mechanismName = item.mechanism ? (item.mechanism.name || item.mechanism) : 'Cơ chế 1 (Standard)';
                   const isWarning = item.status === 'warning' || mechanismName.includes('Trùng lặp');
                   const isErr = item.status === 'error';
 
@@ -267,9 +310,9 @@ export const ClaimSuccessSummaryModal = ({
                         padding: '10px 12px',
                         backgroundColor: '#FFFFFF',
                         border: isErr ? '1px solid #FCA5A5' : isWarning ? '1px solid #FDE68A' : '1px solid #E5E7EB',
-                        borderRadius: '6px',
+                        borderRadius: '8px',
                         fontSize: '0.82rem',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
                         display: 'flex',
                         flexDirection: 'column',
                         gap: '6px'
@@ -277,7 +320,7 @@ export const ClaimSuccessSummaryModal = ({
                     >
                       {/* Tên file */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <FileText size={15} style={{ color: isErr ? '#EF4444' : isWarning ? '#F59E0B' : '#4B5563', flexShrink: 0 }} />
+                        <FileText size={15} style={{ color: isErr ? '#EF4444' : isWarning ? '#F59E0B' : '#7B5233', flexShrink: 0 }} />
                         <span 
                           style={{ 
                             fontWeight: '600', 
@@ -297,18 +340,18 @@ export const ClaimSuccessSummaryModal = ({
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '2px' }}>
                         <span style={{
                           padding: '2px 8px',
-                          borderRadius: '4px',
+                          borderRadius: '5px',
                           fontSize: '0.72rem',
-                          fontWeight: '500',
-                          backgroundColor: isErr ? '#FEE2E2' : isWarning ? '#FEF3C7' : '#F3F4F6',
-                          color: isErr ? '#991B1B' : isWarning ? '#92400E' : '#374151'
+                          fontWeight: '600',
+                          backgroundColor: isErr ? '#FEE2E2' : isWarning ? '#FEF3C7' : mechanismName.includes('Mixed') ? '#EEF2FF' : '#E0E7FF',
+                          color: isErr ? '#991B1B' : isWarning ? '#92400E' : mechanismName.includes('Mixed') ? '#3730A3' : '#3730A3'
                         }}>
                           {mechanismName}
                         </span>
 
                         <span style={{ 
-                          fontWeight: '600', 
-                          color: isErr ? '#DC2626' : isWarning ? '#D97706' : '#111827', 
+                          fontWeight: '700', 
+                          color: isErr ? '#DC2626' : isWarning ? '#D97706' : '#059669', 
                           fontSize: '0.8rem' 
                         }}>
                           {item.claims_count || 0} dòng {item.period ? `(${item.period})` : ''}
@@ -331,26 +374,33 @@ export const ClaimSuccessSummaryModal = ({
             <div style={{
               fontSize: '0.85rem',
               fontWeight: '700',
-              color: '#374151',
+              color: '#7B5233',
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'space-between',
-              paddingBottom: '2px'
+              justifyContent: 'space-between'
             }}>
-              <span>3. Cảnh báo & Lưu ý</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <AlertTriangle size={16} style={{ color: displayWarnings.length > 0 ? '#D97706' : '#059669' }} />
+                <span>3. Cảnh báo & Lưu ý</span>
+              </div>
               <span style={{
-                fontSize: '0.82rem',
-                fontWeight: '600',
-                color: '#6B7280'
+                fontSize: '0.72rem',
+                padding: '2px 7px',
+                borderRadius: '10px',
+                fontWeight: '700',
+                backgroundColor: displayWarnings.length > 0 ? '#FEF3C7' : '#D1E7DD',
+                color: displayWarnings.length > 0 ? '#B45309' : '#0F5132'
               }}>
                 {displayWarnings.length} mục
               </span>
             </div>
 
             <div style={{
-              backgroundColor: displayWarnings.length > 0 ? '#FFFDF5' : '#FAFAFA',
-              border: displayWarnings.length > 0 ? '1px solid #FCD34D' : '1px solid #E5E7EB',
-              borderRadius: '8px',
+              backgroundColor: displayWarnings.length > 0 ? '#FFFDF5' : '#F9FBF9',
+              border: displayWarnings.length > 0 ? '1px solid #FCD34D' : '1px solid #D1E7DD',
+              borderRadius: '10px',
               flex: 1,
               maxHeight: '430px',
               minHeight: '260px',
@@ -368,13 +418,26 @@ export const ClaimSuccessSummaryModal = ({
                   justifyContent: 'center',
                   padding: '30px 16px',
                   textAlign: 'center',
+                  color: '#0F5132',
                   height: '100%'
                 }}>
-                  <div style={{ fontWeight: '600', fontSize: '0.88rem', color: '#111827', marginBottom: '6px' }}>
-                    Không có cảnh báo nào
+                  <div style={{
+                    width: '42px',
+                    height: '42px',
+                    borderRadius: '50%',
+                    backgroundColor: '#D1E7DD',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginBottom: '10px'
+                  }}>
+                    <Sparkles size={22} color="#0F5132" />
                   </div>
-                  <div style={{ fontSize: '0.8rem', color: '#6B7280', lineHeight: 1.4, maxWidth: '240px' }}>
-                    Toàn bộ các tệp PDF đã được bóc tách và trích xuất dữ liệu hoàn chỉnh, chuẩn xác.
+                  <div style={{ fontWeight: '700', fontSize: '0.88rem', marginBottom: '4px' }}>
+                    Không có cảnh báo nào!
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: '#4B5563', lineHeight: 1.4 }}>
+                    Toàn bộ các tệp PDF đã được bóc tách và trích xuất dữ liệu hoàn chỉnh, chuẩn xác 100%.
                   </div>
                 </div>
               ) : (
@@ -405,27 +468,31 @@ export const ClaimSuccessSummaryModal = ({
 
         {/* Footer */}
         <div style={{
-          padding: '12px 20px',
-          backgroundColor: '#FFFFFF',
-          borderTop: '1px solid #E5E7EB',
+          padding: '12px 24px',
+          backgroundColor: '#FCFAF7',
+          borderTop: '1px solid #EADCC9',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'flex-end',
+          justifyContent: 'space-between',
           flexShrink: 0
         }}>
+          <div style={{ fontSize: '0.78rem', color: '#6B7280', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10B981' }}></span>
+            <span>Dữ liệu đã tự động đồng bộ vào danh sách khiếu nại.</span>
+          </div>
           <button
             type="button"
             onClick={onClose}
             style={{
-              padding: '7px 24px',
+              padding: '8px 26px',
               backgroundColor: '#2D1A12',
               color: '#FFFFFF',
               border: 'none',
-              borderRadius: '7px',
-              fontWeight: '600',
+              borderRadius: '8px',
+              fontWeight: '700',
               fontSize: '0.88rem',
               cursor: 'pointer',
-              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+              boxShadow: '0 2px 6px rgba(45, 26, 18, 0.2)',
               transition: 'background-color 0.2s ease'
             }}
           >

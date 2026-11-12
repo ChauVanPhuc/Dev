@@ -3,6 +3,7 @@ import os
 import json
 import logging
 import asyncio
+import shutil
 import time
 import re
 import tempfile
@@ -41,6 +42,25 @@ os.makedirs(UPLOADS_DIR, exist_ok=True)
 os.makedirs(CUSTOMER_PENALTY_PDFS_DIR, exist_ok=True)
 os.makedirs(DATA_DIR, exist_ok=True)
 
+def _safe_cleanup_batch_files(pdf_path: str, images_batch_dir: str):
+    """Dọn dẹp an toàn file PDF tạm và thư mục ảnh trên Windows (tránh lỗi WinError 145 khi handle đang khóa)."""
+    if pdf_path and os.path.exists(pdf_path):
+        try:
+            os.remove(pdf_path)
+        except OSError as rm_err:
+            logger.warning(f"Không thể xóa file PDF tạm {pdf_path}: {rm_err}")
+
+    if images_batch_dir and os.path.exists(images_batch_dir):
+        try:
+            shutil.rmtree(images_batch_dir, ignore_errors=False)
+        except OSError as dir_err:
+            logger.warning(f"Dọn thư mục ảnh {images_batch_dir} lần 1 gặp lỗi ({dir_err}), thử lại...")
+            time.sleep(0.1)
+            try:
+                shutil.rmtree(images_batch_dir, ignore_errors=True)
+            except OSError as retry_err:
+                logger.warning(f"Bỏ qua khóa handle thư mục ảnh {images_batch_dir}: {retry_err}")
+
 def save_customer_penalty_pdf(filename: str, content: bytes, month: str = None) -> tuple[str, str]:
     """Saves uploaded customer penalty / credit note PDF into static storage and returns (saved_name, file_url)."""
     safe_filename = filename.split('/')[-1].split('\\')[-1]
@@ -48,6 +68,7 @@ def save_customer_penalty_pdf(filename: str, content: bytes, month: str = None) 
     safe_filename = re.sub(r'_+', '_', safe_filename)
     prefix = f"penalty_{month.replace('-', '_')}_" if month and month != "N/A" else f"penalty_{datetime.now().strftime('%Y%m%d_%H%M%S')}_"
     saved_name = f"{prefix}{safe_filename}"
+    file_path = os.path.join(CUSTOMER_PENALTY_PDFS_DIR, saved_name)
     with open(file_path, "wb") as f:
         f.write(content)
     
@@ -205,11 +226,7 @@ def process_pdf_import(file_bytes: bytes = None, filename: str = "", db=None, pd
                     new_claims.append(c)
             
             if dup_count == len(claims) and len(claims) > 0:
-                if os.path.exists(pdf_path):
-                    os.remove(pdf_path)
-                if os.path.exists(images_batch_dir):
-                    import shutil
-                    shutil.rmtree(images_batch_dir)
+                _safe_cleanup_batch_files(pdf_path, images_batch_dir)
                 raise ValueError(
                     f"Dữ liệu từ file [{filename}] đã tồn tại trong hệ thống! "
                     f"Tất cả {dup_count} dòng khiếu nại đã được import trước đó. "
@@ -224,12 +241,9 @@ def process_pdf_import(file_bytes: bytes = None, filename: str = "", db=None, pd
             if not c.get("claim_code") and (c.get("cabinet_no") is not None or c.get("claim_no") is not None):
                 c["claim_code"] = generate_unique_claim_code(c, period, db, local_seen_codes, c_mech_id)
     except Exception as parse_err:
-        logger.exception("PDF parsing process failed critically.")
-        if os.path.exists(pdf_path):
-            os.remove(pdf_path)
-        if os.path.exists(images_batch_dir):
-            import shutil
-            shutil.rmtree(images_batch_dir)
+        if not isinstance(parse_err, ValueError):
+            logger.exception("PDF parsing process failed critically.")
+        _safe_cleanup_batch_files(pdf_path, images_batch_dir)
         if isinstance(parse_err, ValueError):
             raise parse_err
         raise RuntimeError(f"Lỗi phân tích cú pháp PDF: {str(parse_err)}")
@@ -267,17 +281,21 @@ def process_pdf_import(file_bytes: bytes = None, filename: str = "", db=None, pd
                 logger.error(f"Failed to save claim {code} to DB: {e}")
                 parse_warnings.append(f"Lỗi lưu vào DB: {code}")
 
+    total_photos = sum(len(c.get("image_paths") or []) for c in claims)
     return {
         "success": True,
         "batch_id": batch_id,
         "period": period,
         "total_records": len(claims),
+        "photo_count": total_photos,
+        "linked_photos_count": total_photos,
         "db_saved_count": db_saved_count,
         "parse_warnings": parse_warnings,
         "file_stats": [
             {
                 "filename": filename,
                 "claims_count": len(claims),
+                "photo_count": total_photos,
                 "period": period,
                 "mechanism": mechanism_info
             }
@@ -383,13 +401,16 @@ async def process_folder_import(files, db=None):
             combined_warnings.append(f"[{filename}] Lỗi: {str(parse_err)}")
             
     final_period = ", ".join(sorted(list(set(periods)))) if periods else "N/A"
-    logger.info(f"Import summary: Total parsed={total_parsed_count}, Combined unique={len(combined_claims)}, DB saved={db_saved_count}")
+    total_photos = sum(len(c.get("image_paths") or []) for c in combined_claims)
+    logger.info(f"Import summary: Total parsed={total_parsed_count}, Combined unique={len(combined_claims)}, Total photos={total_photos}, DB saved={db_saved_count}")
             
     return {
         "success": True,
         "batch_id": batch_id,
         "period": final_period,
         "total_records": len(combined_claims),
+        "photo_count": total_photos,
+        "linked_photos_count": total_photos,
         "db_saved_count": db_saved_count,
         "parse_warnings": combined_warnings,
         "file_stats": file_stats
@@ -537,12 +558,15 @@ async def process_folder_import_streaming(files, db=None):
             await asyncio.sleep(0)
     
     final_period = periods[0] if periods else "N/A"
+    total_photos = sum(len(c.get("image_paths") or []) for c in combined_claims)
     final_event = {
         "type": "result",
         "success": True,
         "batch_id": batch_id,
         "period": final_period,
         "total_records": len(combined_claims),
+        "photo_count": total_photos,
+        "linked_photos_count": total_photos,
         "db_saved_count": db_saved_count,
         "parse_warnings": combined_warnings,
         "file_stats": file_stats
@@ -575,7 +599,7 @@ def resolve_company_error_codes(order_code: str, db = None) -> str:
         close_db = False
         if not db:
             try:
-                from app.core.database import SessionLocal
+                from config.database import SessionLocal
                 db = SessionLocal()
                 close_db = True
             except Exception:
@@ -584,7 +608,7 @@ def resolve_company_error_codes(order_code: str, db = None) -> str:
 
         try:
             if db:
-                from app.modules.defect.models import ClientDefect
+                from modules.inspection.models.defect_type import ClientDefect
                 db_defects = db.query(ClientDefect).all()
                 for d in db_defects:
                     code = d.code
@@ -633,7 +657,7 @@ def resolve_company_error_names(order_code: str, db = None) -> str:
         close_db = False
         if not db:
             try:
-                from app.core.database import SessionLocal
+                from config.database import SessionLocal
                 db = SessionLocal()
                 close_db = True
             except Exception:
@@ -642,7 +666,7 @@ def resolve_company_error_names(order_code: str, db = None) -> str:
 
         try:
             if db:
-                from app.modules.defect.models import ClientDefect
+                from modules.inspection.models.defect_type import ClientDefect
                 db_defects = db.query(ClientDefect).all()
                 for d in db_defects:
                     code = d.code
@@ -714,109 +738,186 @@ def calculate_claim_penalty_from_price_map(claim: dict, price_map: dict) -> floa
 def parse_credit_note_pdf_content(content: bytes, filename: str = "", db = None) -> dict:
     """
     Parses a Credit Note / Claim Report PDF from bytes.
-    Extracts the month (e.g. "01-2026") and the total customer penalty amount.
+    Extracts the month (e.g. "09-2026"), credit note number, factory, total penalty amount,
+    and all claim table rows across all pages.
     """
     import fitz
-    import tempfile
-    from app.shared.pdf_parser import parse_pdf_claims
-    from app.modules.price.models import CabinetPrice
-    
-    # 1. First check if direct text has TOTAL CREDIT AMOUNT pattern
+
     doc = fitz.open(stream=content, filetype="pdf")
-    text = ""
-    for page in doc:
-        text += page.get_text() + "\n"
-    doc.close()
-    
-    month_map = {
-        "january": "01", "february": "02", "march": "03", "april": "04",
-        "may": "05", "june": "06", "july": "07", "august": "08",
-        "september": "09", "october": "10", "november": "11", "december": "12"
-    }
-    
-    # Search for Month YYYY pattern in text
-    month_year_match = re.search(
-        r"\b(january|february|march|april|may|june|july|august|september|october|november|december)\s*[-–\s]\s*(\d{4})\b",
-        text,
-        re.IGNORECASE
-    )
-    
-    parsed_month = None
-    if month_year_match:
-        m_name = month_year_match.group(1).lower()
-        year = month_year_match.group(2)
-        m_digit = month_map.get(m_name)
-        if m_digit:
-            parsed_month = f"{m_digit}-{year}"
-            
-    # Also check "THÁNG MM - YYYY" or "THÁNG MM/YYYY" in text
-    if not parsed_month:
-        thang_match = re.search(r"TH[AÁ]NG\s*(\d{1,2})\s*[-–\/]\s*(\d{4})", text, re.IGNORECASE)
-        if thang_match:
-            parsed_month = f"{int(thang_match.group(1)):02d}-{thang_match.group(2)}"
-            
-    # Search for direct TOTAL CREDIT AMOUNT
-    amount_match = re.search(
-        r"TOTAL\s+CREDIT\s+AMOUNT\s*[:\-]?\s*[\$]?\s*([\d,]+(?:\.\d+)?)",
-        text,
-        re.IGNORECASE
-    )
-    if not amount_match:
-        amount_match = re.search(r"TOTAL\s+AMOUNT\s*[:\-]?\s*[\$]?\s*([\d,]+(?:\.\d+)?)", text, re.IGNORECASE)
-        
-    if parsed_month and amount_match:
+    full_text = ""
+    page_texts = []
+    for p in doc:
+        pt = p.get_text()
+        page_texts.append(pt)
+        full_text += pt + "\n"
+
+    # Factory
+    factory = "VINA G7"
+    m_fact = re.search(r'FACTORY\s*:\s*([^\r\n]+)', full_text, re.IGNORECASE)
+    if m_fact:
+        factory = m_fact.group(1).strip()
+
+    # Credit Note Number
+    credit_note_no = ""
+    m_cn = re.search(r'CREDIT\s+NOTE\s*:\s*([A-Za-z0-9\-]+)', full_text, re.IGNORECASE)
+    if m_cn:
+        credit_note_no = m_cn.group(1).strip()
+
+    # Date Report Issued
+    date_issued = ""
+    m_date = re.search(r'DATE\s+REPORT\s+ISSUED\s*:\s*([^\r\n]+)', full_text, re.IGNORECASE)
+    if m_date:
+        date_issued = m_date.group(1).strip()
+
+    # Total Credit Amount
+    total_amount = 0.0
+    m_amt = re.search(r'TOTAL\s+CREDIT\s+AMOUNT\s*[:\-]?\s*[\$]?\s*([\d,]+(?:\.\d+)?)', full_text, re.IGNORECASE)
+    if not m_amt:
+        m_amt = re.search(r'TOTAL\s+AMOUNT\s*[:\-]?\s*[\$]?\s*([\d,]+(?:\.\d+)?)', full_text, re.IGNORECASE)
+    if m_amt:
         try:
-            amt = float(amount_match.group(1).replace(",", ""))
-            if amt > 0:
-                saved_name, file_url = save_customer_penalty_pdf(filename, content, parsed_month)
-                return {
-                    "month": parsed_month,
-                    "total_amount": amt,
-                    "filename": filename,
-                    "saved_filename": saved_name,
-                    "file_url": file_url,
-                    "claims_count": 0,
-                    "success": True
-                }
+            total_amount = float(m_amt.group(1).replace(",", ""))
         except ValueError:
             pass
 
-    # 2. Parse claims from PDF and calculate penalty sum
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp_file:
-        tmp_file.write(content)
-        tmp_path = tmp_file.name
-        
-    try:
-        with tempfile.TemporaryDirectory() as tmp_img_dir:
-            claims, period, warnings, mech = parse_pdf_claims(tmp_path, "credit_note_calc", tmp_img_dir, claims_only=True)
-            
-        if not parsed_month and period:
-            parsed_month = period
-            
-        # Get prices from DB
-        price_map = {}
-        if db:
-            prices = db.query(CabinetPrice).all()
-            price_map = {p.cabinet_code.strip().upper(): float(p.sale_price or p.base_price or 0) for p in prices if p.cabinet_code}
-            
-        total_penalty = sum(calculate_claim_penalty_from_price_map(c, price_map) for c in claims)
-        is_success = parsed_month is not None and (total_penalty > 0 or len(claims) > 0)
-        
-        file_url = None
-        saved_name = None
-        if is_success and parsed_month:
+    # Month extraction priority:
+    # 1. Header/Title Month YYYY (e.g. SEPTEMBER 2026, September-2026, THÁNG 09/2026)
+    # Strictly ignore Date Report Issued lines or dates with 3 parts (e.g. 10-05-2026)
+    month_map = {
+        "january": "01", "february": "02", "march": "03", "april": "04",
+        "may": "05", "june": "06", "july": "07", "august": "08",
+        "september": "09", "october": "10", "november": "11", "december": "12",
+        "jan": "01", "feb": "02", "mar": "03", "apr": "04", "may": "05", "jun": "06",
+        "jul": "07", "aug": "08", "sep": "09", "sept": "09", "oct": "10", "nov": "11", "dec": "12"
+    }
+
+    parsed_month = None
+    for pt in page_texts:
+        top_lines = [l.strip() for l in pt.splitlines() if l.strip()][:6]
+        for line in top_lines:
+            if "DATE REPORT ISSUED" in line.upper():
+                continue
+            m_my = re.search(r'\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\s*[-–\s\/]\s*(\d{4})\b', line, re.IGNORECASE)
+            if m_my:
+                m_digit = month_map.get(m_my.group(1).lower())
+                if m_digit:
+                    parsed_month = f"{m_digit}-{m_my.group(2)}"
+                    break
+            m_th = re.search(r'TH[AÁ]NG\s*(\d{1,2})\s*[-–\/]\s*(\d{4})', line, re.IGNORECASE)
+            if m_th:
+                parsed_month = f"{int(m_th.group(1)):02d}-{m_th.group(2)}"
+                break
+        if parsed_month:
+            break
+
+    # 2. Business metadata
+    if not parsed_month:
+        m_meta = re.search(r'(?:CLAIM\s+MONTH|PERIOD|THÁNG\s+CLAIM)\s*[:\-]?\s*(\d{1,2})[-–\/](\d{4})', full_text, re.IGNORECASE)
+        if m_meta:
+            parsed_month = f"{int(m_meta.group(1)):02d}-{m_meta.group(2)}"
+
+    # 3. Fallback from filename
+    if not parsed_month and filename:
+        m_fn = re.search(r'[T_](\d{1,2})[_\-\s].*?(\d{4})', filename, re.IGNORECASE)
+        if m_fn:
+            parsed_month = f"{int(m_fn.group(1)):02d}-{m_fn.group(2)}"
+        else:
+            m_fn2 = re.search(r'(?:^|[^\d])(\d{1,2})[-_](\d{4})(?:[^\d]|$)', filename)
+            if m_fn2:
+                parsed_month = f"{int(m_fn2.group(1)):02d}-{m_fn2.group(2)}"
+
+    period = parsed_month or "09-2026"
+    clean_period = period.replace("-", "")
+
+    # Parse all claim table rows
+    claims = []
+    ignore_patterns = [
+        r'FACTORY:', r'CREDIT\s+NOTE:', r'DATE\s+REPORT\s+ISSUED:',
+        r'TOTAL\s+CREDIT\s+AMOUNT', r'TOTAL\s+AMOUNT',
+        r'STT\s+SKU', r'STT\tSKU'
+    ]
+
+    for page in doc:
+        for raw_line in page.get_text().splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if any(re.search(pat, line, re.IGNORECASE) for pat in ignore_patterns):
+                continue
+            if re.match(r'^(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{4}$', line, re.IGNORECASE):
+                continue
+            stt_match = re.match(r'^(\d{1,3})\s+(.*)$', line)
+            if not stt_match:
+                continue
+            stt_num = int(stt_match.group(1))
+            rest = stt_match.group(2).strip()
+
+            if '\t' in raw_line:
+                parts = [p.strip() for p in raw_line.split('\t')]
+                sku = parts[1] if len(parts) > 1 else ''
+                container = parts[2] if len(parts) > 2 else ''
+                lpn = parts[3] if len(parts) > 3 else ''
+                action = parts[4] if len(parts) > 4 else ''
+            else:
+                tokens = rest.split()
+                if not tokens:
+                    continue
+                sku = tokens[0]
+                tokens = tokens[1:]
+                container = ''
+                lpn = ''
+                action = ''
+                if tokens and re.match(r'^[A-Za-z]{3,4}\d{6,7}$', tokens[0]):
+                    container = tokens[0].upper()
+                    tokens = tokens[1:]
+                if tokens and re.match(r'^\d{7,12}$', tokens[0]):
+                    lpn = str(tokens[0])
+                    tokens = tokens[1:]
+                action = ' '.join(tokens)
+
+            claims.append({
+                "cabinet_no": stt_num,
+                "claim_no": stt_num,
+                "stt": stt_num,
+                "claim_code": f"Claim#{stt_num}_{clean_period}",
+                "customer_name": factory,
+                "sku": sku,
+                "product_name": sku,
+                "container_no": container,
+                "lpn": str(lpn) if lpn else "",
+                "action": action,
+                "period": period,
+                "status": "Mới",
+                "defect_code": "Credit Note",
+                "description": f"Credit Note {credit_note_no} - Item {stt_num} ({sku})",
+                "image_paths": [],
+                "image_captions": []
+            })
+
+    doc.close()
+
+    is_success = bool(parsed_month and (total_amount > 0 or len(claims) > 0))
+    file_url = None
+    saved_name = None
+    if is_success and parsed_month:
+        try:
             saved_name, file_url = save_customer_penalty_pdf(filename, content, parsed_month)
-            
-        return {
-            "month": parsed_month or "N/A",
-            "total_amount": round(total_penalty, 2),
-            "claims_count": len(claims),
-            "filename": filename,
-            "saved_filename": saved_name,
-            "file_url": file_url,
-            "success": is_success
-        }
-    finally:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
+        except Exception as err:
+            logger.error(f"Error saving customer penalty PDF: {err}")
+
+    return {
+        "month": parsed_month or "N/A",
+        "period": parsed_month or "N/A",
+        "credit_note_no": credit_note_no,
+        "factory": factory,
+        "date_issued": date_issued,
+        "total_amount": round(total_amount, 2),
+        "currency": "USD",
+        "claims_count": len(claims),
+        "claims": claims,
+        "filename": filename,
+        "saved_filename": saved_name,
+        "file_url": file_url,
+        "success": is_success
+    }
 

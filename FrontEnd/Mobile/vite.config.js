@@ -31,6 +31,7 @@ export default defineConfig({
       '@modules/production': path.resolve(__dirname, './modules/production'),
       '@modules/production_v2': path.resolve(__dirname, './modules/production_v2'),
       '@modules/report': path.resolve(__dirname, './modules/report'),
+      '@modules/warehouse': path.resolve(__dirname, './modules/warehouse'),
       'axios': path.resolve(__dirname, '../node_modules/axios'),
       '@capacitor/core': path.resolve(__dirname, '../node_modules/@capacitor/core'),
       '@capacitor/push-notifications': path.resolve(__dirname, '../node_modules/@capacitor/push-notifications'),

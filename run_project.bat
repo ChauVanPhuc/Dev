@@ -79,9 +79,9 @@ if %errorlevel% neq 0 (
 )
 :: Open specialized window for Backend
 start "Backend - ERP G7" cmd /k "cd /d %~dp0 && call start_server.bat"
-start "AI OCR Worker - ERP G7" cmd /k "cd /d %~dp0 && call start_ocr_worker.bat"
 echo [*] Waiting for Backend to initialize and connect to SQL Server...
 powershell -NoProfile -Command "for ($i=0; $i -lt 30; $i++) { try { $r = (Invoke-WebRequest -Uri 'http://127.0.0.1:8000/docs' -UseBasicParsing -TimeoutSec 1).StatusCode; if ($r -eq 200) { Write-Host ' [OK] Backend is LIVE and READY on port 8000!' -ForegroundColor Green; break } } catch { Start-Sleep -Milliseconds 400 } }"
+start "AI OCR Worker - ERP G7" cmd /k "cd /d %~dp0 && call start_ocr_worker.bat"
 
 :: --- 2. FRONTEND (Vite Web Dashboard) ---
 echo [2/7] Processing Frontend (Vite)...
@@ -235,9 +235,9 @@ powershell -NoProfile -Command "Get-NetTCPConnection -State Listen -ErrorAction 
 
 echo  [1/5] Starting Backend (FastAPI)...
 start "Backend (Cloud) - ERP G7" cmd /k "cd /d %~dp0 && call start_server.bat"
-start "AI OCR Worker (Cloud) - ERP G7" cmd /k "cd /d %~dp0 && call start_ocr_worker.bat"
 echo [*] Waiting for Backend to initialize and connect to SQL Server...
 powershell -NoProfile -Command "for ($i=0; $i -lt 30; $i++) { try { $r = (Invoke-WebRequest -Uri 'http://127.0.0.1:8000/docs' -UseBasicParsing -TimeoutSec 1).StatusCode; if ($r -eq 200) { Write-Host ' [OK] Backend is LIVE and READY on port 8000!' -ForegroundColor Green; break } } catch { Start-Sleep -Milliseconds 400 } }"
+start "AI OCR Worker (Cloud) - ERP G7" cmd /k "cd /d %~dp0 && call start_ocr_worker.bat"
 
 :: Kiem tra neu chua build thi tu dong build production
 if not exist "%~dp0FrontEnd\Mobile\dist" (
@@ -346,6 +346,8 @@ echo.
 cd /d %~dp0BackEnd
 :: Start Backend without reload, serving static dist folders
 start "ERP G7 PRODUCTION SERVER" cmd /k "cd /d %~dp0 && call start_server_prod.bat"
+echo [*] Waiting for Backend to initialize and connect to SQL Server...
+powershell -NoProfile -Command "for ($i=0; $i -lt 30; $i++) { try { $r = (Invoke-WebRequest -Uri 'http://127.0.0.1:8000/docs' -UseBasicParsing -TimeoutSec 1).StatusCode; if ($r -eq 200) { Write-Host ' [OK] Backend is LIVE and READY on port 8000!' -ForegroundColor Green; break } } catch { Start-Sleep -Milliseconds 400 } }"
 start "AI OCR Worker (Prod) - ERP G7" cmd /k "cd /d %~dp0 && call start_ocr_worker.bat"
 
 :: Start Quality Report Tool

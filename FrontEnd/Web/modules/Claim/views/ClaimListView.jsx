@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import claimService from '../services/claim.service';
+import '../styles/claim.css';
 
 import { useClaimFilter } from '../hooks/useClaimFilter';
 import { useClaimStatistics } from '../hooks/useClaimStatistics';
@@ -31,7 +32,9 @@ import { ClaimProcessModal } from '../components/ClaimProcessModal';
 import { ClaimImageZoomModal } from '../components/ClaimImageZoomModal';
 import { ClaimPdfFolderModal } from '../components/ClaimPdfFolderModal';
 import { AlertModal } from '../components/Modal';
+import { CreditNotePreviewModal } from '../components/CreditNotePreviewModal';
 import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
+import { ClaimExcelExportModal } from '../components/ClaimExcelExportModal';
 
 export const ClaimListView = () => {
   const hasWritePermission = true;
@@ -46,6 +49,7 @@ export const ClaimListView = () => {
   const [defectCatalog, setDefectCatalog] = useState([]);
   const [g7DefectTypes, setG7DefectTypes] = useState([]);
   const [cabinetPrices, setCabinetPrices] = useState([]);
+  const [isExcelExportModalOpen, setIsExcelExportModalOpen] = useState(false);
 
   // Local alert notification popup state
   const [localNotification, setLocalNotification] = useState(null);
@@ -71,38 +75,52 @@ export const ClaimListView = () => {
       }
 
       if (rawItems && rawItems.length > 0) {
-        const dbMapped = rawItems.map((item) => ({
-          id: item.id,
-          product_name: item.product_name || item.sku,
-          avatar: `https://ui-avatars.com/api/?name=${item.product_name || item.sku}&background=random`,
-          claim_code: item.claim_code,
-          order_code: item.order_code || item.defect_code,
-          company_error_code: item.company_error_code,
-          company_error_name: item.company_error_name,
-          penalty: item.penalty || item.action || '$0',
-          lpn: item.lpn || 'N/A',
-          cont: item.cont || item.container_no || 'N/A',
-          period: item.period,
-          created_at: item.created_at,
-          export_date: item.export_date,
-          date: item.period || (item.created_at ? (() => {
-            const d = new Date(item.created_at);
-            const mm = String(d.getMonth() + 1).padStart(2, '0');
-            const yyyy = d.getFullYear();
-            return `${mm}-${yyyy}`;
-          })() : 'N/A'),
-          status: item.status === 'Resolved' || item.status === 'Đã xử lý' || item.status === 'Chấp nhận' ? 'Đã xử lý' : item.status === 'Processing' || item.status === 'Đang xem xét' ? 'Đang xem xét' : 'Mới',
-          claim_description: item.description || item.claim_description,
-          image_paths: item.image_paths || [],
-          image_captions: item.image_captions || [],
-          customer_name: item.customer_name || 'N/A',
-          loai_hang: item.loai_hang || ((item.product_name || item.sku || '').toUpperCase().includes('WOA') ? 'OAK' : 'Pigment'),
-          date_loading: item.date_loading,
-          date_loading_raw: item.date_loading_raw,
-          lpn_container_number: item.lpn_container_number,
-          lpn_container_id: item.lpn_container_id,
-          severity: item.severity || 'Medium'
-        }));
+        const dbMapped = rawItems.map((item) => {
+          const skuVal = (item.product_name || item.sku || '').trim();
+          let dHang = item.dong_hang || item.product_line || item.line || '';
+          if (!dHang && skuVal) {
+            dHang = skuVal.includes('-') ? skuVal.split('-')[0].trim() : skuVal;
+          }
+          return {
+            id: item.id,
+            product_name: skuVal,
+            sku: skuVal,
+            dong_hang: dHang,
+            line: dHang,
+            product_line: dHang,
+            avatar: `https://ui-avatars.com/api/?name=${skuVal}&background=random`,
+            claim_code: item.claim_code,
+            order_code: item.order_code || item.defect_code,
+            defect_code: item.order_code || item.defect_code,
+            company_error_code: item.company_error_code,
+            company_error_name: item.company_error_name,
+            action: item.action || '',
+            penalty: item.action || item.penalty || '$0',
+            lpn: item.lpn || 'N/A',
+            cont: item.cont || item.container_no || 'N/A',
+            container_no: item.cont || item.container_no || 'N/A',
+            period: item.period || '',
+            created_at: item.created_at,
+            export_date: item.export_date,
+            date: item.period || (item.created_at ? (() => {
+              const d = new Date(item.created_at);
+              const mm = String(d.getMonth() + 1).padStart(2, '0');
+              const yyyy = d.getFullYear();
+              return `${mm}-${yyyy}`;
+            })() : 'N/A'),
+            status: item.status === 'Resolved' || item.status === 'Đã xử lý' || item.status === 'Chấp nhận' ? 'Đã xử lý' : item.status === 'Processing' || item.status === 'Đang xem xét' ? 'Đang xem xét' : 'Mới',
+            claim_description: item.description || item.claim_description,
+            image_paths: item.image_paths || [],
+            image_captions: item.image_captions || [],
+            customer_name: item.customer_name || 'N/A',
+            loai_hang: item.loai_hang || ((skuVal || '').toUpperCase().includes('WOA') ? 'OAK' : 'Pigment'),
+            date_loading: item.date_loading,
+            date_loading_raw: item.date_loading_raw,
+            lpn_container_number: item.lpn_container_number,
+            lpn_container_id: item.lpn_container_id,
+            severity: item.severity || 'Medium'
+          };
+        });
         setClaims(dbMapped);
       } else {
         setClaims([]);
@@ -238,7 +256,7 @@ export const ClaimListView = () => {
   } = filterProps;
 
   // Statistics Hook
-  const statsProps = useClaimStatistics(claims, cabinetPrices, showModal);
+  const statsProps = useClaimStatistics(claims, cabinetPrices, showModal, fetchClaims);
   const {
     isAnalyticsOpen,
     setIsAnalyticsOpen,
@@ -255,13 +273,38 @@ export const ClaimListView = () => {
     totalCountAll,
     totalG7AmountAll,
     totalCustomerAmountAll,
+    totalOverallAmountAll,
     handleSingleMonthPdfUpload,
     handleCreditNotePdfChange,
-    handleBatchPdfUpload
+    handleBatchPdfUpload,
+    creditNotePreviewData,
+    setCreditNotePreviewData,
+    isCreditNotePreviewOpen,
+    setIsCreditNotePreviewOpen,
+    isConfirmingCreditNote,
+    handleConfirmCreditNoteImport
   } = statsProps;
 
   // Import Hook
   const importProps = useClaimImport({ fetchClaims, setLoading, showModal });
+
+  // Dedicated refs & triggers for Credit Note import
+  const creditNotePdfInputRef = useRef(null);
+  const creditNoteFolderInputRef = useRef(null);
+
+  const triggerCreditNotePdfUpload = () => {
+    if (creditNotePdfInputRef.current) {
+      creditNotePdfInputRef.current.value = '';
+      creditNotePdfInputRef.current.click();
+    }
+  };
+
+  const triggerCreditNoteFolderUpload = () => {
+    if (creditNoteFolderInputRef.current) {
+      creditNoteFolderInputRef.current.value = '';
+      creditNoteFolderInputRef.current.click();
+    }
+  };
   const {
     pdfInputRef,
     folderInputRef,
@@ -764,60 +807,60 @@ export const ClaimListView = () => {
     );
   };
 
-  // Excel Export Handler
-  const handleExportExcel = async (type = 'all') => {
-    try {
-      let targetClaims = [];
-      let filename = 'DS_Khieu_Nai';
-
-      if (type === 'selected') {
-        targetClaims = claims.filter(c => selectedClaimIds.includes(c.id));
-        filename = `DS_Khieu_Nai_Da_Chon_${selectedClaimIds.length}`;
-      } else if (type === 'current') {
-        // Current page rows strictly matching table dataset
-        targetClaims = Array.isArray(paginatedClaims) ? paginatedClaims : [];
-        filename = `DS_Khieu_Nai_Trang_${currentPage}_${targetClaims.length}_dondoc`;
-      } else if (type === 'filtered') {
-        targetClaims = Array.isArray(sortedClaims) ? sortedClaims : [];
-        filename = `DS_Khieu_Nai_Bo_Loc_${targetClaims.length}`;
-      } else {
-        // Export all records within active search/filter scope
-        targetClaims = Array.isArray(sortedClaims) && sortedClaims.length > 0 ? sortedClaims : claims;
-        filename = `DS_Khieu_Nai_Tat_Ca_${targetClaims.length}`;
-      }
-
-      if (!targetClaims || targetClaims.length === 0) {
-        showModal('Cảnh báo', 'Không có dữ liệu khiếu nại để xuất file Excel.', 'warning');
-        return;
-      }
-
-      // Call backend API (POST /api/v1/claims/claims/export-excel)
-      const response = await claimService.exportExcel(targetClaims);
-      
-      // Explicitly wrap binary response in an Excel .xlsx Blob
-      const excelBlob = response instanceof Blob 
-        ? new Blob([response], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-        : new Blob([response], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-
-      const downloadUrl = window.URL.createObjectURL(excelBlob);
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      const cleanFilename = filename.endsWith('.xlsx') ? filename : `${filename}_${new Date().toISOString().slice(0, 10)}.xlsx`;
-      link.setAttribute('download', cleanFilename);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(downloadUrl);
-
-      showModal('Thành công', `Đã xuất ${targetClaims.length} dòng khiếu nại ra file Excel (.xlsx) thành công!`, 'success');
-    } catch (err) {
-      console.error('Lỗi khi xuất file Excel:', err);
-      showModal('Lỗi', 'Không thể xuất file Excel. Vui lòng thử lại.', 'error');
-    }
+  // Excel Export Handler: Mở Popup Cấu hình & Xem trước Excel chuẩn ERP G7
+  const handleExportExcel = () => {
+    setIsExcelExportModalOpen(true);
   };
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', height: '100%', minHeight: 0 }}>
+    <div className="claim-list-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', height: '100%', minHeight: 0 }}>
+      <style dangerouslySetInnerHTML={{
+        __html: `
+        .dashboard-content {
+          height: calc(100dvh - 60px) !important;
+          max-height: calc(100dvh - 60px) !important;
+          min-height: 0 !important;
+          padding: 8px 16px 8px 16px !important;
+          overflow: hidden !important;
+          display: flex !important;
+          flex-direction: column !important;
+          box-sizing: border-box !important;
+        }
+        .dashboard-content > div {
+          height: 100% !important;
+          max-height: 100% !important;
+          min-height: 0 !important;
+          flex: 1 1 auto !important;
+          display: flex !important;
+          flex-direction: column !important;
+          overflow: hidden !important;
+        }
+        .claim-list-container {
+          height: 100% !important;
+          max-height: 100% !important;
+          min-height: 0 !important;
+          display: flex !important;
+          flex-direction: column !important;
+          align-items: stretch !important;
+          overflow: hidden !important;
+          gap: 0 !important;
+          margin: 0 !important;
+        }
+        .admin-table-card {
+          flex: 1 1 auto !important;
+          min-height: 0 !important;
+          display: flex !important;
+          flex-direction: column !important;
+          overflow: hidden !important;
+        }
+        .admin-table-scroll {
+          flex: 1 1 auto !important;
+          min-height: 0 !important;
+          overflow-y: auto !important;
+          overflow-x: auto !important;
+        }
+        `
+      }} />
       {/* 4 KPI Overview Cards */}
       <div style={{ flexShrink: 0 }}>
         <ClaimStatsCards
@@ -885,6 +928,10 @@ export const ClaimListView = () => {
           setIsImportDropdownOpen={setIsImportDropdownOpen}
           onTriggerPdfUpload={triggerPdfUpload}
           onTriggerFolderUpload={triggerFolderUpload}
+          onTriggerClaimPdfUpload={triggerPdfUpload}
+          onTriggerClaimFolderUpload={triggerFolderUpload}
+          onTriggerCreditNotePdfUpload={triggerCreditNotePdfUpload}
+          onTriggerCreditNoteFolderUpload={triggerCreditNoteFolderUpload}
           isExportDropdownOpen={isExportDropdownOpen}
           setIsExportDropdownOpen={setIsExportDropdownOpen}
           isExporting={isExporting}
@@ -981,6 +1028,18 @@ export const ClaimListView = () => {
         cabinetPrices={cabinetPrices}
       />
 
+      {/* Xem trước và xác nhận nhập Credit Note PDF Modal */}
+      <CreditNotePreviewModal
+        isOpen={isCreditNotePreviewOpen}
+        previewData={creditNotePreviewData}
+        onClose={() => {
+          setIsCreditNotePreviewOpen(false);
+          setCreditNotePreviewData(null);
+        }}
+        onConfirm={handleConfirmCreditNoteImport}
+        isSubmitting={isConfirmingCreditNote}
+      />
+
       {/* Thống kê theo tháng Modal */}
       <ClaimMonthlyStatsModal
         isOpen={isAnalyticsOpen}
@@ -991,6 +1050,7 @@ export const ClaimListView = () => {
         totalCountAll={totalCountAll}
         totalG7AmountAll={totalG7AmountAll}
         totalCustomerAmountAll={totalCustomerAmountAll}
+        totalOverallAmountAll={totalOverallAmountAll}
         customerPenalties={customerPenalties}
         customerPenaltyFiles={customerPenaltyFiles}
         filteredClaimsCount={totalCountAll}
@@ -1086,6 +1146,7 @@ export const ClaimListView = () => {
         handleSelectDefectCode={handleSelectDefectCode}
         handleSelectCustomerDefectName={handleSelectCustomerDefectName}
         defectCatalog={defectCatalog}
+        g7DefectTypes={g7DefectTypes}
         addMaLoiCty={addMaLoiCty} setAddMaLoiCty={setAddMaLoiCty}
         showAddG7CodeSuggestions={showAddG7CodeSuggestions} setShowAddG7CodeSuggestions={setShowAddG7CodeSuggestions}
         uniqueCompanyErrorCodeOptions={companyErrorCodeSuggestions}
@@ -1143,6 +1204,7 @@ export const ClaimListView = () => {
         uniqueCustomerDefectNameOptions={customerDefectNameSuggestions}
         handleSelectCustomerDefectName={handleSelectCustomerDefectName}
         processMaLoiCty={processMaLoiCty} setProcessMaLoiCty={setProcessMaLoiCty}
+        g7DefectTypes={g7DefectTypes}
         showProcessG7CodeSuggestions={showProcessG7CodeSuggestions} setShowProcessG7CodeSuggestions={setShowProcessG7CodeSuggestions}
         uniqueCompanyErrorCodeOptions={companyErrorCodeSuggestions}
         handleSelectG7Code={handleSelectG7Code}
@@ -1190,6 +1252,7 @@ export const ClaimListView = () => {
       />
 
       {/* Hidden File Inputs for Import & Image Uploads */}
+      {/* 1. Nhập Claim (PDF & Thư mục) */}
       <input
         type="file"
         ref={pdfInputRef}
@@ -1206,6 +1269,24 @@ export const ClaimListView = () => {
         directory="true"
         multiple
         onChange={handleFolderFileChange}
+      />
+      {/* 2. Nhập Credit Note (PDF & Thư mục) */}
+      <input
+        type="file"
+        ref={creditNotePdfInputRef}
+        style={{ display: 'none' }}
+        accept=".pdf"
+        multiple
+        onChange={handleBatchPdfUpload}
+      />
+      <input
+        type="file"
+        ref={creditNoteFolderInputRef}
+        style={{ display: 'none' }}
+        webkitdirectory="true"
+        directory="true"
+        multiple
+        onChange={handleBatchPdfUpload}
       />
       <input
         type="file"
@@ -1327,6 +1408,18 @@ export const ClaimListView = () => {
             </div>
           );
         }}
+      />
+
+      {/* Modal Cấu hình & Xem trước Xuất Excel ERP G7 */}
+      <ClaimExcelExportModal
+        isOpen={isExcelExportModalOpen}
+        onClose={() => setIsExcelExportModalOpen(false)}
+        claims={claims}
+        filteredClaims={sortedClaims}
+        selectedClaimIds={selectedClaimIds}
+        cabinetPrices={cabinetPrices}
+        quickSearch={quickSearch}
+        statusFilter={statusFilter}
       />
     </div>
   );

@@ -1,19 +1,13 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { useOutletContext, useLocation, useNavigate } from 'react-router-dom';
 import api from '@webShared/Services/api.service';
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  LineChart, Line, PieChart, Pie, Cell, ComposedChart
-} from 'recharts';
-import { Calendar, Filter, ChevronDown, ChevronUp, BarChart3, PieChart as PieChartIcon, TrendingUp, RefreshCw, ChevronLeft, ChevronRight, Search, Edit, Trash2, Camera, Image as ImageIcon, X, ZoomIn, FileText, Box, AlertTriangle, Percent, MoreVertical, LayoutDashboard } from 'lucide-react';
+import { Calendar, Filter, ChevronDown, ChevronUp, RefreshCw, ChevronLeft, ChevronRight, Search, Edit, Trash2, Camera, Image as ImageIcon, X, ZoomIn, FileText, Box, AlertTriangle, Percent, MoreVertical } from 'lucide-react';
 import '@styles/components.css';
 import PageToolbar from '@webShared/Views/components/layout/PageToolbar';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
-import ClaimListView from '@modules/Claim/views/Claim/ClaimListView';
+import ErrorBoundary from '@webShared/Views/components/feedback/ErrorBoundary';
 import '@modules/Claim/styles/claim.css';
 import { TimeFilterDropdown, TimeFilterChips } from '@webShared/Views/components/ui/TimeFilterDropdown';
-
-const COLORS = ['#7B5233', '#A67C52', '#D9B99B', '#F2E2CE', '#4b301e', '#8c6a51'];
 
 const STAGES_LIST = [
   { id: '1', name: 'Đầu vào' },
@@ -26,10 +20,11 @@ const STAGES_LIST = [
 ];
 
 import DefectDashboardView from '../DefectDashboard/DefectDashboardView';
-import QualityOverviewDashboard from '../QualityOverview/QualityOverviewDashboard';
-import InspectionHeaderNavCard from '../components/InspectionHeaderNavCard';
-import InspectionReportsView from '../Report/InspectionReportsView';
-import CapaHistoryView from '@modules/CAPA/Views/Improvement/CapaHistoryView';
+
+// Tải động các View phụ để không làm phình bundle và tối ưu tốc độ nạp Trang 1 Dashboard
+const ClaimListView = lazy(() => import('@modules/Claim/views/Claim/ClaimListView'));
+const InspectionReportsView = lazy(() => import('../Report/InspectionReportsView'));
+const CapaHistoryView = lazy(() => import('@modules/CAPA/Views/Improvement/CapaHistoryView'));
 
 const DefectAnalytics = DefectDashboardView;
 
@@ -39,38 +34,33 @@ const DefectAnalytics = DefectDashboardView;
 const DefectManagement = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra } = useOutletContext() || {};
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = useOutletContext() || {};
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/defects');
 
   const searchParams = new URLSearchParams(location.search);
-  const currentTabFromUrl = searchParams.get('tab') || 'list';
-  const [viewTab, setViewTab] = useState(currentTabFromUrl); // 'overview', 'analytics', 'list', 'field', 'complaint', 'capa'
+  const rawTabFromUrl = searchParams.get('tab') || 'list';
+  const rawPageFromUrl = searchParams.get('page');
+  const normalizedTabFromUrl = (rawTabFromUrl === 'analytics' || rawTabFromUrl === 'dashboard') ? 'dashboard' : rawTabFromUrl;
+  const [viewTab, setViewTab] = useState(normalizedTabFromUrl); // 'dashboard', 'list', 'field', 'complaint', 'capa'
+  const [dashboardPage, setDashboardPage] = useState(rawPageFromUrl || 'page1');
 
   useEffect(() => {
-    if (currentTabFromUrl && currentTabFromUrl !== viewTab) {
-      setViewTab(currentTabFromUrl);
+    const norm = (rawTabFromUrl === 'analytics' || rawTabFromUrl === 'dashboard') ? 'dashboard' : rawTabFromUrl;
+    if (norm && norm !== viewTab) {
+      setViewTab(norm);
     }
-  }, [currentTabFromUrl]);
+  }, [rawTabFromUrl]);
 
-  const handleTabChange = (key) => {
-    setViewTab(key);
-    navigate(`/admin/defects?tab=${key}`, { replace: true });
-  };
-
-  // ─── Đưa 4 Tab điều hướng lên Header thanh tiêu đề ───
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (setHeaderExtra) {
-        setHeaderExtra(
-          <InspectionHeaderNavCard activeTab={viewTab} onTabChange={handleTabChange} />
-        );
-      }
-    }, 0);
-    return () => {
-      clearTimeout(timer);
-      if (setHeaderExtra) setHeaderExtra(null);
-    };
-  }, [setHeaderExtra, viewTab, location.pathname]);
+    if (rawPageFromUrl && rawPageFromUrl !== dashboardPage) {
+      setDashboardPage(rawPageFromUrl);
+    }
+  }, [rawPageFromUrl]);
+
+  const handleDashboardPageChange = (pageId) => {
+    setDashboardPage(pageId);
+    navigate(`/admin/defects?tab=dashboard&page=${pageId}`, { replace: true });
+  };
 
   useEffect(() => {
     if (screenCode && title) {
@@ -137,157 +127,11 @@ const DefectManagement = () => {
   const [sortBy, setSortBy] = useState('default'); // 'default', 'monthly_rate', 'all_time_rate'
   const [sortOrder, setSortOrder] = useState('desc'); // 'desc', 'asc'
 
-  // ─── State cho 2 biểu đồ phân tích nhanh & Bộ lọc thời gian ──────────
+  // ─── Bộ lọc thời gian danh mục lỗi ──────────────────────────
   const [filterYear, setFilterYear] = useState(() => String(new Date().getFullYear()));
   const [filterMonth, setFilterMonth] = useState(() => String(new Date().getMonth() + 1));
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
-  const [chartDefectFilter, setChartDefectFilter] = useState('all');
-  const [chartDateFilter, setChartDateFilter] = useState(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  });
-  const [isChartRefreshing, setIsChartRefreshing] = useState(false);
-
-  const formattedChartMonthYear = useMemo(() => {
-    if (filterMonth && filterYear) {
-      return `Tháng ${String(filterMonth).padStart(2, '0')}/${filterYear}`;
-    }
-    if (filterYear) return `Năm ${filterYear}`;
-    return 'Toàn bộ thời gian';
-  }, [filterMonth, filterYear]);
-
-  // Danh sách tên lỗi duy nhất cho dropdown
-  const chartDefectNames = useMemo(() => {
-    const names = new Set();
-    defects.forEach(d => {
-      if (d.name) names.add(d.name.trim());
-    });
-    return Array.from(names);
-  }, [defects]);
-
-  // State nhận dữ liệu từ CSDL cho 2 biểu đồ
-  const [dbLineChartData, setDbLineChartData] = useState([]);
-  const [dbAvgDefectsValue, setDbAvgDefectsValue] = useState(0);
-  const [dbDonutStageData, setDbDonutStageData] = useState([]);
-  const [dbDonutTotalDefects, setDbDonutTotalDefects] = useState(0);
-  const [chartDataLoaded, setChartDataLoaded] = useState(false);
-
-  const fetchChartData = async (isManual = false) => {
-    if (isManual) setIsChartRefreshing(true);
-    try {
-      const params = new URLSearchParams();
-      if (filterYear) params.append('year', filterYear);
-      if (filterMonth) params.append('month', filterMonth);
-      if (chartDefectFilter && chartDefectFilter !== 'all') params.append('defect_name', chartDefectFilter);
-      if (chartDateFilter) params.append('view_date', chartDateFilter);
-
-      const res = await api.get(`/inspections/daily/defect-charts-analytics?${params.toString()}`);
-      if (res && res.success) {
-        if (Array.isArray(res.lineChartData)) setDbLineChartData(res.lineChartData);
-        if (typeof res.averageDefectsValue === 'number') setDbAvgDefectsValue(res.averageDefectsValue);
-        if (Array.isArray(res.donutStageData)) setDbDonutStageData(res.donutStageData);
-        if (typeof res.donutTotalDefects === 'number') setDbDonutTotalDefects(res.donutTotalDefects);
-        setChartDataLoaded(true);
-      }
-    } catch (err) {
-      console.error('[DefectManagementView] Error fetching chart analytics:', err);
-    } finally {
-      if (isManual) {
-        setTimeout(() => setIsChartRefreshing(false), 500);
-      }
-    }
-  };
-
-  useEffect(() => {
-    fetchChartData();
-    // Tự động làm mới dữ liệu realtime mỗi 30 giây
-    const timer = setInterval(() => {
-      fetchChartData();
-    }, 30000);
-    return () => clearInterval(timer);
-  }, [filterYear, filterMonth, chartDefectFilter, chartDateFilter]);
-
-  // Dữ liệu biểu đồ lỗi theo thời gian (Line Chart thực tế từ CSDL)
-  const lineChartData = useMemo(() => {
-    if (chartDataLoaded && dbLineChartData.length > 0) {
-      return dbLineChartData;
-    }
-    return [];
-  }, [chartDataLoaded, dbLineChartData]);
-
-  const maxDefectInMonth = useMemo(() => {
-    if (!lineChartData || lineChartData.length === 0) return 10;
-    const maxVal = Math.max(...lineChartData.map(d => Math.max(d.count || 0, d.avgCount || 0)));
-    return Math.max(Math.ceil((maxVal * 1.25) / 5) * 5, 10);
-  }, [lineChartData]);
-
-  const averageDefectsValue = useMemo(() => {
-    if (chartDataLoaded && dbLineChartData.length > 0) return dbAvgDefectsValue;
-    if (!lineChartData || lineChartData.length === 0) return 0;
-    return lineChartData[0]?.avgCount || 0;
-  }, [chartDataLoaded, dbLineChartData, dbAvgDefectsValue, lineChartData]);
-
-  // Dữ liệu biểu đồ cơ cấu theo công đoạn (Donut Chart)
-  const RADIAN = Math.PI / 180;
-  const renderStageDonutLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
-    if (donutStageData.length === 0) return null;
-    if (percent === undefined || percent === null) return null;
-    const normalizedPct = percent <= 1 ? percent * 100 : percent;
-    if (normalizedPct < 7) return null;
-    const pctText = `${Math.round(normalizedPct)}%`;
-
-    const radius = innerRadius + (outerRadius - innerRadius) * 0.52;
-    const x = cx + radius * Math.cos(-midAngle * RADIAN);
-    const y = cy + radius * Math.sin(-midAngle * RADIAN);
-
-    return (
-      <text
-        x={x}
-        y={y}
-        fill="#FFFDFC"
-        textAnchor="middle"
-        dominantBaseline="central"
-        fontSize={10}
-        fontWeight={900}
-        style={{
-          filter: 'drop-shadow(0px 1px 2px rgba(0, 0, 0, 0.85))',
-          pointerEvents: 'none'
-        }}
-      >
-        {pctText}
-      </text>
-    );
-  };
-
-  const donutStageData = useMemo(() => {
-    if (chartDataLoaded) {
-      return dbDonutStageData;
-    }
-    return [];
-  }, [chartDataLoaded, dbDonutStageData]);
-
-  const renderDonutData = useMemo(() => {
-    if (donutStageData.length > 0) return donutStageData;
-    return [{ name: 'Không có lỗi', count: 1, color: '#E4DDD5', pct: '0%' }];
-  }, [donutStageData]);
-
-  const donutTotalDefects = useMemo(() => {
-    if (chartDataLoaded) return dbDonutTotalDefects;
-    return 0;
-  }, [chartDataLoaded, dbDonutTotalDefects]);
-
-  const formattedChartDate = useMemo(() => {
-    if (!chartDateFilter) {
-      const d = new Date();
-      return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
-    }
-    const parts = chartDateFilter.split('-');
-    if (parts.length === 3) {
-      return `${parts[2]}/${parts[1]}/${parts[0]}`;
-    }
-    return chartDateFilter;
-  }, [chartDateFilter]);
 
   // ─── Phân trang ─────────────────────────────────────────────
   const [currentPage, setCurrentPage] = useState(1);
@@ -770,15 +614,22 @@ const DefectManagement = () => {
       <div className="mgmt-container defect-mgmt-container">
         <style dangerouslySetInnerHTML={{
           __html: `
-        .dashboard-content {
+        .dashboard-content:has(.defect-mgmt-container),
+        .dashboard-content.allow-y-scroll:has(.defect-mgmt-container) {
           height: calc(100dvh - 60px) !important;
           max-height: calc(100dvh - 60px) !important;
           min-height: 0 !important;
-          padding: 6px 16px 6px 16px !important;
+          padding: 4px 12px 6px 12px !important;
           overflow: hidden !important;
           display: flex !important;
           flex-direction: column !important;
           box-sizing: border-box !important;
+        }
+        .dashboard-content .defect-mgmt-container,
+        .dashboard-content .mgmt-container.defect-mgmt-container {
+          height: 100% !important;
+          max-height: 100% !important;
+          min-height: 0 !important;
         }
         .defect-mgmt-container {
           height: 100% !important;
@@ -964,10 +815,22 @@ const DefectManagement = () => {
             </div>
           )}
 
-          {/* ── Analytics Tab Content ── */}
-          {viewTab === 'analytics' && (
+          {/* ── Dashboard Tab Content (Hỗ trợ 4 trang từ Dropdown Dashboard & tương thích tab=analytics) ── */}
+          {(viewTab === 'dashboard' || viewTab === 'analytics') && (
             <div className="analytics-view animate-fade-in">
-              <DefectAnalytics stage={selectedDepartment} />
+              <ErrorBoundary
+                fallback={
+                  <div style={{ padding: 24, textAlign: 'center', color: '#B91C1C', fontWeight: 600 }}>
+                    Không thể hiển thị Dashboard phân tích lỗi. Vui lòng thử tải lại trang.
+                  </div>
+                }
+              >
+                <DefectAnalytics
+                  stage={selectedDepartment}
+                  activePage={dashboardPage}
+                  onPageChange={handleDashboardPageChange}
+                />
+              </ErrorBoundary>
             </div>
           )}
 
@@ -1204,372 +1067,6 @@ const DefectManagement = () => {
                   />
                 </div>
               )}
-
-            {/* ── 2 BIỂU ĐỒ PHÂN TÍCH NHANH (Mở rộng biểu đồ đường 62% - 38%) ── */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: '1.62fr 1fr',
-              gap: '12px',
-              marginBottom: '12px',
-              width: '100%',
-              boxSizing: 'border-box'
-            }}>
-              {/* 1. Biểu đồ trái: Biểu đồ lỗi theo thời gian */}
-              <div style={{
-                background: '#FFFFFF',
-                border: '1px solid #EADCC9',
-                borderRadius: '8px',
-                padding: '10px 14px 10px 14px',
-                boxShadow: '0 1px 3px rgba(123, 82, 51, 0.03)',
-                display: 'flex',
-                flexDirection: 'column',
-                boxSizing: 'border-box'
-              }}>
-                {/* Header Card 1 (Đã bỏ legend) */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                  <div style={{ fontSize: '0.85rem', fontWeight: '800', color: '#1E293B', lineHeight: 1.2 }}>
-                    Biểu đồ lỗi theo thời gian <span style={{ color: '#7B5233', fontWeight: '700' }}>({formattedChartMonthYear})</span>
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: '600' }}>Tên lỗi</span>
-                    <select
-                      value={chartDefectFilter}
-                      onChange={(e) => setChartDefectFilter(e.target.value)}
-                      style={{
-                        height: '24px',
-                        padding: '0 8px',
-                        border: '1px solid #CBD5E1',
-                        borderRadius: '4px',
-                        background: '#FAF8F5',
-                        fontSize: '0.72rem',
-                        fontWeight: '600',
-                        color: '#1E293B',
-                        outline: 'none',
-                        cursor: 'pointer',
-                        minWidth: '105px'
-                      }}
-                    >
-                      <option value="all">Tất cả lỗi</option>
-                      {chartDefectNames.map(name => (
-                        <option key={name} value={name}>{name}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Line Chart */}
-                <div style={{ width: '100%', height: '215px', marginTop: '4px' }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={lineChartData} margin={{ top: 22, right: 60, left: -24, bottom: 8 }}>
-                      <CartesianGrid strokeDasharray="2 2" vertical={false} stroke="#F1F5F9" />
-                      <XAxis
-                        dataKey="day"
-                        fontSize={8.5}
-                        stroke="#334155"
-                        tick={{ fill: '#334155', fontSize: 8.5, fontWeight: 800 }}
-                        tickLine={false}
-                        axisLine={{ stroke: '#94A3B8', strokeWidth: 1.2 }}
-                        interval={0}
-                      />
-                      <YAxis
-                        domain={[0, maxDefectInMonth]}
-                        fontSize={8.5}
-                        stroke="#334155"
-                        tick={{ fill: '#475569', fontSize: 8.5, fontWeight: 700 }}
-                        tickLine={false}
-                        axisLine={{ stroke: '#94A3B8', strokeWidth: 1.2 }}
-                      />
-                      <Tooltip
-                        formatter={(val, name) => [
-                          `${val} lỗi`,
-                          name === 'avgCount' ? 'Mức trung bình' : (chartDefectFilter === 'all' ? 'Tổng số lỗi' : chartDefectFilter)
-                        ]}
-                        labelFormatter={(lbl) => `Ngày ${lbl}`}
-                        contentStyle={{ backgroundColor: '#FFFFFF', borderRadius: '6px', border: '1px solid #E2E8F0', fontSize: '0.72rem', padding: '4px 8px' }}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="avgCount"
-                        name="avgCount"
-                        stroke="#C58A4B"
-                        strokeWidth={1.8}
-                        strokeDasharray="4 4"
-                        dot={false}
-                        activeDot={false}
-                        label={(props) => {
-                          const { x, y, index } = props;
-                          if (index !== lineChartData.length - 1) return null;
-                          const badgeW = 48;
-                          const badgeH = 18;
-                          const badgeX = x + 6;
-                          const badgeY = y - badgeH / 2;
-                          return (
-                            <g>
-                              <rect
-                                x={badgeX}
-                                y={badgeY}
-                                width={badgeW}
-                                height={badgeH}
-                                rx={4}
-                                fill="#C58A4B"
-                                stroke="#FFFDFC"
-                                strokeWidth={1}
-                              />
-                              <text
-                                x={badgeX + badgeW / 2}
-                                y={y + 0.5}
-                                fill="#FFFDFC"
-                                textAnchor="middle"
-                                dominantBaseline="central"
-                                fontSize="9.5"
-                                fontWeight="900"
-                              >
-                                TB: {averageDefectsValue}
-                              </text>
-                            </g>
-                          );
-                        }}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="count"
-                        name="count"
-                        stroke="#7B5233"
-                        strokeWidth={2.4}
-                        dot={{ r: 2.5, fill: '#7B5233', strokeWidth: 1.2, stroke: '#FFFFFF' }}
-                        activeDot={{ r: 5, fill: '#DC2626', stroke: '#FFFFFF', strokeWidth: 1.5 }}
-                        label={(props) => {
-                          const { x, y, value, index } = props;
-                          const isPeak = [4, 10, 15, 20, 24, 28].includes(index);
-                          const isValley = [2, 7, 12, 17, 22, 29].includes(index);
-                          const isBoundary = index === 0 || index === 30;
-
-                          if (!isPeak && !isValley && !isBoundary) return null;
-
-                          const isAbove = isPeak || isBoundary;
-                          const boxW = 26;
-                          const boxH = 17;
-                          const boxX = x - boxW / 2;
-                          const boxY = isAbove ? y - 22 : y + 6;
-                          const textY = isAbove ? y - 13.5 : y + 14.5;
-
-                          return (
-                            <g>
-                              <rect
-                                x={boxX}
-                                y={boxY}
-                                width={boxW}
-                                height={boxH}
-                                rx={4}
-                                fill="#FFFFFF"
-                                stroke="#1E293B"
-                                strokeWidth={1.5}
-                                style={{ filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.18))' }}
-                              />
-                              <text
-                                x={x}
-                                y={textY}
-                                fill="#0F172A"
-                                textAnchor="middle"
-                                dominantBaseline="central"
-                                fontSize="11.5"
-                                fontWeight="900"
-                              >
-                                {value}
-                              </text>
-                            </g>
-                          );
-                        }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              {/* 2. Biểu đồ phải: Cơ cấu theo công đoạn */}
-              <div style={{
-                background: '#FFFFFF',
-                border: '1px solid #EADCC9',
-                borderRadius: '8px',
-                padding: '10px 14px 10px 14px',
-                boxShadow: '0 1px 3px rgba(123, 82, 51, 0.03)',
-                display: 'flex',
-                flexDirection: 'column',
-                boxSizing: 'border-box'
-              }}>
-                {/* Header Card 2 */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <div style={{ fontSize: '0.85rem', fontWeight: '800', color: '#1E293B', lineHeight: 1.2 }}>
-                    Cơ cấu theo công đoạn <span style={{ color: '#7B5233', fontWeight: '700' }}>({formattedChartDate})</span>
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      fontSize: '0.66rem',
-                      fontWeight: '700',
-                      color: '#16A34A',
-                      background: '#F0FDF4',
-                      border: '1px solid #BBF7D0',
-                      borderRadius: '10px',
-                      padding: '1px 6px'
-                    }}>
-                      <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#22C55E' }}></span>
-                      Realtime
-                    </span>
-
-                    <button
-                      type="button"
-                      onClick={() => fetchChartData(true)}
-                      title="Làm mới dữ liệu từ CSDL"
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        height: '24px',
-                        padding: '0 7px',
-                        border: '1px solid #EADCC9',
-                        borderRadius: '4px',
-                        background: '#FAF8F5',
-                        color: '#5B3924',
-                        fontSize: '0.7rem',
-                        fontWeight: '700',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      <RefreshCw size={11} style={{ animation: isChartRefreshing ? 'spin 0.8s linear infinite' : 'none' }} />
-                      <span>Làm mới</span>
-                    </button>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                      <span style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: '600' }}>Ngày xem</span>
-                      <input
-                        type="date"
-                        value={chartDateFilter}
-                        onChange={(e) => setChartDateFilter(e.target.value)}
-                        style={{
-                          height: '24px',
-                          padding: '0 6px',
-                          border: '1px solid #CBD5E1',
-                          borderRadius: '4px',
-                          background: '#FAF8F5',
-                          fontSize: '0.72rem',
-                          fontWeight: '600',
-                          color: '#1E293B',
-                          outline: 'none',
-                          cursor: 'pointer'
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Body Card 2 */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minHeight: '215px' }}>
-                  <div style={{ width: '46%', height: '210px', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div style={{
-                      position: 'absolute',
-                      top: '50%',
-                      left: '50%',
-                      transform: 'translate(-50%, -50%)',
-                      textAlign: 'center',
-                      pointerEvents: 'none',
-                      zIndex: 0
-                    }}>
-                      <div style={{ fontSize: '0.64rem', color: '#64748B', fontWeight: '700', lineHeight: 1.1 }}>Tổng lỗi</div>
-                      <div style={{ fontSize: '1.25rem', color: '#1E293B', fontWeight: '900', lineHeight: 1.1, marginTop: '2px' }}>
-                        {donutTotalDefects}
-                      </div>
-                    </div>
-
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={renderDonutData}
-                          cx="50%"
-                          cy="50%"
-                          startAngle={90}
-                          endAngle={-270}
-                          innerRadius="54%"
-                          outerRadius="88%"
-                          paddingAngle={donutStageData.length > 0 ? 2 : 0}
-                          dataKey="count"
-                          nameKey="name"
-                          stroke="#FFFFFF"
-                          strokeWidth={1.5}
-                          labelLine={false}
-                          label={renderStageDonutLabel}
-                        >
-                          {renderDonutData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <Tooltip
-                          wrapperStyle={{ zIndex: 999, pointerEvents: 'none' }}
-                          formatter={(val, name, props) => {
-                            if (donutStageData.length === 0) return ['0 lỗi', 'Không có lỗi'];
-                            return [`${val} lỗi (${props.payload.pct})`, name];
-                          }}
-                          contentStyle={{ backgroundColor: '#FFFFFF', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.72rem', padding: '5px 9px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  <div style={{
-                    width: '54%',
-                    border: '1px solid #EADCC9',
-                    borderRadius: '6px',
-                    overflow: 'hidden',
-                    backgroundColor: '#FFFFFF',
-                    boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
-                  }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.72rem' }}>
-                      <thead>
-                        <tr style={{ backgroundColor: '#FAF8F5', borderBottom: '1px solid #EADCC9' }}>
-                          <th style={{ textAlign: 'left', padding: '6px 8px', color: '#64748B', fontWeight: '700' }}>Công đoạn</th>
-                          <th style={{ textAlign: 'center', padding: '6px 8px', color: '#64748B', fontWeight: '700' }}>Số lỗi</th>
-                          <th style={{ textAlign: 'center', padding: '6px 8px', color: '#64748B', fontWeight: '700' }}>Tỷ lệ</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {donutStageData.length === 0 ? (
-                          <tr>
-                            <td colSpan={3} style={{ textAlign: 'center', padding: '24px 8px', color: '#16A34A', fontWeight: '600' }}>
-                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                                <span style={{ fontSize: '1.2rem', color: '#16A34A' }}>✓</span>
-                                <span style={{ color: '#15803D' }}>Không ghi nhận lỗi nào trong ngày {formattedChartDate}</span>
-                              </div>
-                            </td>
-                          </tr>
-                        ) : (
-                          donutStageData.map((item, idx) => (
-                            <tr key={idx} style={{ borderBottom: '1px solid #F8FAFC' }}>
-                              <td style={{ padding: '5px 8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: item.color, display: 'inline-block', flexShrink: 0 }}></span>
-                                <span style={{ fontWeight: '600', color: '#334155' }}>{item.name}</span>
-                              </td>
-                              <td style={{ textAlign: 'center', padding: '5px 8px', fontWeight: '700', color: '#1E293B' }}>{item.count}</td>
-                              <td style={{ textAlign: 'center', padding: '5px 8px', color: '#64748B', fontWeight: '600' }}>{item.pct}</td>
-                            </tr>
-                          ))
-                        )}
-                        {donutStageData.length > 0 && (
-                          <tr style={{ backgroundColor: '#FAF8F5', borderTop: '1px solid #EADCC9' }}>
-                            <td style={{ padding: '6px 8px', fontWeight: '800', color: '#1E293B' }}>Tổng</td>
-                            <td style={{ textAlign: 'center', padding: '6px 8px', fontWeight: '900', color: '#1E293B' }}>{donutTotalDefects}</td>
-                            <td style={{ textAlign: 'center', padding: '6px 8px', fontWeight: '800', color: '#1E293B' }}>100%</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            </div>
 
               {/* ── Layout wrapper: table cuộn nội bộ, pagination cố định đáy ── */}
               <div className="defect-list-layout">
@@ -2100,21 +1597,51 @@ const DefectManagement = () => {
           {/* ── Field Defects Tab Content ── */}
           {viewTab === 'field' && (
             <div className="field-view animate-fade-in" style={{ height: '100%', minHeight: 0, flex: 1, display: 'flex', flexDirection: 'column', width: '100%' }}>
-              <InspectionReportsView onlyDefects={true} isEmbedded={true} />
+              <ErrorBoundary
+                fallback={
+                  <div style={{ padding: 24, textAlign: 'center', color: '#B91C1C', fontWeight: 600 }}>
+                    Không thể hiển thị danh sách lỗi hiện trường. Vui lòng thử tải lại trang.
+                  </div>
+                }
+              >
+                <Suspense fallback={<div style={{ padding: 24, textAlign: 'center', color: '#78716C', fontWeight: 600 }}>Đang tải dữ liệu lỗi hiện trường...</div>}>
+                  <InspectionReportsView onlyDefects={true} isEmbedded={true} />
+                </Suspense>
+              </ErrorBoundary>
             </div>
           )}
 
           {/* ── Complaint Defects Tab Content ── */}
           {viewTab === 'complaint' && (
             <div className="complaint-view animate-fade-in" style={{ height: '100%', minHeight: 0, flex: 1, display: 'flex', flexDirection: 'column', width: '100%' }}>
-              <ClaimListView />
+              <ErrorBoundary
+                fallback={
+                  <div style={{ padding: 24, textAlign: 'center', color: '#B91C1C', fontWeight: 600 }}>
+                    Không thể hiển thị danh sách khiếu nại khách hàng. Vui lòng thử tải lại trang.
+                  </div>
+                }
+              >
+                <Suspense fallback={<div style={{ padding: 24, textAlign: 'center', color: '#78716C', fontWeight: 600 }}>Đang tải dữ liệu khiếu nại khách hàng...</div>}>
+                  <ClaimListView />
+                </Suspense>
+              </ErrorBoundary>
             </div>
           )}
 
           {/* ── CAPA Management Tab Content ── */}
           {viewTab === 'capa' && (
             <div className="capa-view animate-fade-in" style={{ height: '100%', minHeight: 0, flex: 1, display: 'flex', flexDirection: 'column', width: '100%' }}>
-              <CapaHistoryView isEmbedded={true} />
+              <ErrorBoundary
+                fallback={
+                  <div style={{ padding: 24, textAlign: 'center', color: '#B91C1C', fontWeight: 600 }}>
+                    Không thể hiển thị lịch sử CAPA. Vui lòng thử tải lại trang.
+                  </div>
+                }
+              >
+                <Suspense fallback={<div style={{ padding: 24, textAlign: 'center', color: '#78716C', fontWeight: 600 }}>Đang tải dữ liệu CAPA...</div>}>
+                  <CapaHistoryView isEmbedded={true} />
+                </Suspense>
+              </ErrorBoundary>
             </div>
           )}
         </div>

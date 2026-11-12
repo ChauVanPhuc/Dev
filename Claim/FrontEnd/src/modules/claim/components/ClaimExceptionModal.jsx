@@ -286,7 +286,7 @@ export const ClaimExceptionModal = ({
                                               {ex.duplicates.map((dupClaim, dupIdx) => (
                                                 <div key={dupIdx} style={{ marginBottom: '10px' }}>
                                                   <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#DC2626', display: 'block', marginBottom: '6px' }}>
-                                                    ⚠️ Ảnh minh chứng (Dòng đối ứng bị trùng):
+                                                    Ảnh minh chứng (Dòng đối ứng bị trùng):
                                                   </span>
                                                   {dupClaim.image_paths && dupClaim.image_paths.length > 0 ? (
                                                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>

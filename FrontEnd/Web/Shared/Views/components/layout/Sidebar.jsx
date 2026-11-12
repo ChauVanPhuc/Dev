@@ -231,7 +231,7 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
           }
         }
 
-        // Đảm bảo "Cấu hình hệ thống" luôn xuất hiện trong nhóm "Quản lý hệ thống"
+        // Đảm bảo "Cấu hình hệ thống" & "Quản lý đơn vị tính" luôn xuất hiện trong nhóm "Quản lý hệ thống"
         const sysGroup = list.find(item => item.title === 'Quản lý hệ thống' || item.id === 2);
         if (sysGroup && Array.isArray(sysGroup.children)) {
           const hasSystemConfig = sysGroup.children.some(c => c.route_path === '/admin/system-config');
@@ -246,6 +246,61 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
               is_active: true,
               permission_key: 'screens'
             });
+          }
+          const hasUnits = sysGroup.children.some(c => c.route_path === '/admin/units');
+          if (!hasUnits) {
+            sysGroup.children.push({
+              id: 3114,
+              parent_id: sysGroup.id,
+              title: 'Quản lý đơn vị tính',
+              route_path: '/admin/units',
+              icon: 'Scale',
+              sort_order: 11,
+              is_active: true,
+              permission_key: 'units'
+            });
+          }
+        }
+
+        // Đảm bảo nhóm "Quản lý kho" luôn xuất hiện đúng vị trí (ngay sau Quản lý kinh doanh)
+        let whGroup = list.find(item => item.title === 'Quản lý kho');
+        if (whGroup && Array.isArray(whGroup.children)) {
+          const hasRejected = whGroup.children.some(c => c.route_path === '/admin/warehouse/rejected-goods');
+          if (!hasRejected) {
+            whGroup.children.push({
+              id: 1204,
+              parent_id: whGroup.id,
+              title: 'Hàng trả về / Hàng loại',
+              route_path: '/admin/warehouse/rejected-goods',
+              icon: 'RotateCcw',
+              sort_order: 4,
+              is_active: true,
+              permission_key: 'warehouse-rejected'
+            });
+          }
+        }
+        if (!whGroup) {
+          whGroup = {
+            id: 1200,
+            parent_id: null,
+            title: 'Quản lý kho',
+            route_path: null,
+            icon: 'Warehouse',
+            sort_order: 8,
+            is_active: true,
+            permission_key: 'warehouse',
+            children: [
+              { id: 1201, parent_id: 1200, title: 'Nhập kho', route_path: '/admin/warehouse/goods-receipt', icon: 'PackagePlus', sort_order: 1, is_active: true, permission_key: 'goods-receipt' },
+              { id: 1202, parent_id: 1200, title: 'Xuất kho', route_path: '/admin/warehouse/goods-issue', icon: 'PackageMinus', sort_order: 2, is_active: true, permission_key: 'goods-issue' },
+              { id: 1203, parent_id: 1200, title: 'Quản lý kho', route_path: '/admin/warehouse/management', icon: 'Boxes', sort_order: 3, is_active: true, permission_key: 'warehouse-management' },
+              { id: 1204, parent_id: 1200, title: 'Hàng trả về / Hàng loại', route_path: '/admin/warehouse/rejected-goods', icon: 'RotateCcw', sort_order: 4, is_active: true, permission_key: 'warehouse-rejected' }
+            ]
+          };
+          const kdIdx = list.findIndex(item => item.title === 'Quản lý kinh doanh');
+          if (kdIdx !== -1) {
+            list.splice(kdIdx + 1, 0, whGroup);
+          } else {
+            list.push(whGroup);
           }
         }
 
@@ -267,6 +322,17 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
     // Fallback: nếu chưa cấu hình riêng cho SOS/CTQ, kế thừa quyền từ inspection-guides
     if (perm === undefined && (item.route_path === '/admin/sos-guides' || item.route_path === '/admin/ctq-guides')) {
       perm = activePermissions['/admin/inspection-guides'] || activePermissions['inspection-guides'];
+    }
+
+    // Cho phép hiển thị Quản lý kho & Quản lý đơn vị tính
+    if (item.route_path && item.route_path.startsWith('/admin/warehouse')) {
+      const whPerm = activePermissions ? (activePermissions[item.route_path] || activePermissions['warehouse']) : undefined;
+      if (whPerm !== 'none') return false;
+    }
+
+    if (item.route_path === '/admin/units' || item.permission_key === 'units') {
+      const uomPerm = activePermissions ? (activePermissions['/admin/units'] || activePermissions['units'] || activePermissions['screens'] || activePermissions['system-config']) : undefined;
+      if (uomPerm !== 'none') return false;
     }
 
     // Cho phép hiển thị Dashboard KPI nếu là kpi route
@@ -484,8 +550,12 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
     }
     if (group.title === 'Quản lý hệ thống' && (
       location.pathname === '/admin/monitor' || 
-      location.pathname === '/admin/monitor/'
+      location.pathname === '/admin/monitor/' ||
+      location.pathname.startsWith('/admin/units')
     )) {
+      return true;
+    }
+    if (group.title === 'Quản lý kho' && location.pathname.startsWith('/admin/warehouse')) {
       return true;
     }
     if ((group.title === 'Module chất lượng' || group.title === 'Quản lý chất lượng' || group.title === 'Quản lý Chất Lượng') && (
@@ -497,6 +567,8 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
       location.pathname === '/admin/claim-dashboard/' ||
       location.pathname === '/admin/defects' ||
       location.pathname === '/admin/defects/' ||
+      location.pathname === '/admin/defect-dashboard-v2' ||
+      location.pathname === '/admin/defect-dashboard-v2/' ||
       location.pathname === '/admin/claims' ||
       location.pathname === '/admin/claims/' ||
       location.pathname === '/admin/kpi/dashboard' ||

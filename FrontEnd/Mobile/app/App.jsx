@@ -91,6 +91,14 @@ const CheckPalletView = safeLazy(() => import('@modules/pallet_check/Views/Check
 const CheckPalletV1View = safeLazy(() => import('@modules/pallet_check/Views/CheckPalletV1View'))
 const CheckCabinetBoxView = safeLazy(() => import('@modules/cabinet_box_check/Views/CheckCabinetBoxView'))
 
+// Module Kho Mobile (Phiếu nhập kho, Phiếu bàn giao, Phiếu trả về)
+const WarehouseReceiptListView = safeLazy(() => import('@modules/warehouse/Views/WarehouseReceiptListView'))
+const WarehouseReceiptFormView = safeLazy(() => import('@modules/warehouse/Views/WarehouseReceiptFormView'))
+const WarehouseHandoverListView = safeLazy(() => import('@modules/warehouse/Views/WarehouseHandoverListView'))
+const WarehouseHandoverFormView = safeLazy(() => import('@modules/warehouse/Views/WarehouseHandoverFormView'))
+const WarehouseReturnListView = safeLazy(() => import('@modules/warehouse/Views/WarehouseReturnListView'))
+const WarehouseReturnFormView = safeLazy(() => import('@modules/warehouse/Views/WarehouseReturnFormView'))
+
 /**
  * Hiệu ứng tải trang nhẹ cho Mobile
  */
@@ -262,6 +270,18 @@ function App() {
             <Route path="/production-v2/inspection/daily/:id" element={<CL09F_DailyInspectionView />} />
             <Route path="/production-v2/inspection" element={<Navigate to="/production_v2/inspection/first-sample" replace />} />
             <Route path="/production-v2/inspection/:id" element={<Navigate to="/production_v2/inspection/first-sample" replace />} />
+
+            {/* Kho Mobile Routes */}
+            <Route path="/warehouse" element={<Navigate to="/warehouse/goods-receipt" replace />} />
+            <Route path="/warehouse/goods-receipt" element={<WarehouseReceiptListView />} />
+            <Route path="/warehouse/goods-receipt/new" element={<WarehouseReceiptFormView />} />
+            <Route path="/warehouse/goods-receipt/:id" element={<WarehouseReceiptFormView />} />
+            <Route path="/warehouse/handover" element={<WarehouseHandoverListView />} />
+            <Route path="/warehouse/handover/new" element={<WarehouseHandoverFormView />} />
+            <Route path="/warehouse/handover/:id" element={<WarehouseHandoverFormView />} />
+            <Route path="/warehouse/returns" element={<WarehouseReturnListView />} />
+            <Route path="/warehouse/returns/new" element={<WarehouseReturnFormView />} />
+            <Route path="/warehouse/returns/:id" element={<WarehouseReturnFormView />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/login" replace />} />

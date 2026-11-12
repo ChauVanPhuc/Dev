@@ -67,6 +67,8 @@ export const FormModal = ({
   onSubmit,
   title,
   width = 'min(95vw, 600px)',
+  style = {},
+  className = '',
   bodyStyle = { padding: '20px' },
   actionsStyle = { borderTop: '1px solid #E5E7EB', padding: '15px 24px', display: 'flex', gap: '12px', justifyContent: 'flex-end', backgroundColor: '#FFFDFB', margin: 0 },
   cancelLabel = 'Hủy bỏ',
@@ -81,12 +83,12 @@ export const FormModal = ({
 
   return (
     <div className="add-claim-backdrop" onClick={onClose}>
-      <div className="form-modal-wrapper" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={(e) => e.stopPropagation()}>
+      <div className="form-modal-wrapper" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', maxHeight: '100%' }} onClick={(e) => e.stopPropagation()}>
         {leftSideAction}
         <form 
           onSubmit={(e) => { e.preventDefault(); onSubmit(e); }}
-          className="add-claim-modal" 
-          style={{ width }}
+          className={`add-claim-modal ${className}`.trim()} 
+          style={{ width, ...style }}
         >
           {/* Modal Header */}
           <div className="add-claim-header">
@@ -112,7 +114,7 @@ export const FormModal = ({
 
           {/* Modal Footer */}
           {(leftFooterActions || cancelLabel || confirmLabel) && (
-            <div className="add-claim-actions-row" style={actionsStyle}>
+            <div className="add-claim-actions-row" style={{ flexShrink: 0, ...actionsStyle }}>
               {leftFooterActions && (
                 <div style={{ marginRight: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
                   {leftFooterActions}

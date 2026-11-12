@@ -219,11 +219,24 @@ export const useClaimImport = ({ fetchClaims, setLoading, showModal }) => {
             }];
 
             if (isSuccess && totalRecords > 0) {
+              // Auto-record total credit amount into penalties if parsed via Mechanism 4
+              if (response.mechanism?.total_credit_amount && response.period) {
+                try {
+                  const saved = localStorage.getItem('smartflow_customer_penalties');
+                  const pens = saved ? JSON.parse(saved) : {};
+                  pens[response.period] = response.mechanism.total_credit_amount;
+                  localStorage.setItem('smartflow_customer_penalties', JSON.stringify(pens));
+                  window.dispatchEvent(new CustomEvent('claim-penalties-updated'));
+                } catch (pe) {
+                  console.error('Error saving penalty from Mechanism 4:', pe);
+                }
+              }
+
               setClaimSuccessSummary({
                 isOpen: true,
                 batchId: batchId,
                 claimsCount: dbSavedCount || totalRecords,
-                photoCount: 0,
+                photoCount: response?.photo_count ?? response?.data?.photo_count ?? response?.linked_photos_count ?? 0,
                 warningsCount: parseWarnings ? parseWarnings.length : 0,
                 warnings: parseWarnings,
                 fileStats: singleFileStat
@@ -338,7 +351,7 @@ export const useClaimImport = ({ fetchClaims, setLoading, showModal }) => {
                 isOpen: true,
                 batchId: batchId,
                 claimsCount: dbSavedCount || totalRecords,
-                photoCount: 0,
+                photoCount: response?.photo_count ?? response?.data?.photo_count ?? response?.linked_photos_count ?? 0,
                 warningsCount: parseWarnings ? parseWarnings.length : 0,
                 warnings: parseWarnings,
                 fileStats: fileStats

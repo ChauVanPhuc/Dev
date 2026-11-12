@@ -1,0 +1,118 @@
+/* unitOfMeasure.css - Quản lý đơn vị tính đồng bộ Design System Đơn hàng xuất khẩu */
+@import '../../../Shared/styles/exportOrderBase.css';
+
+/* Form layout for Modals */
+.uom-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.uom-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.uom-form-group.full-width {
+  grid-column: span 2;
+}
+
+.uom-form-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #4A2E1B;
+}
+
+.uom-form-label .required {
+  color: #DC2626;
+  margin-left: 2px;
+}
+
+.uom-form-input,
+.uom-form-select {
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid #D5C7B7;
+  background-color: #FFFFFF;
+  color: #2D1A12;
+  font-size: 0.84rem;
+  font-family: inherit;
+  box-sizing: border-box;
+  outline: none;
+  transition: all 0.15s ease;
+}
+
+.uom-form-input:focus,
+.uom-form-select:focus {
+  border-color: #7B5233;
+  box-shadow: 0 0 0 2px rgba(123, 82, 51, 0.15);
+}
+
+.uom-form-input.error,
+.uom-form-select.error {
+  border-color: #DC2626;
+  background-color: #FEF2F2;
+}
+
+.uom-field-error {
+  font-size: 0.72rem;
+  color: #DC2626;
+  margin-top: 2px;
+  font-weight: 500;
+}
+
+.uom-field-hint {
+  font-size: 0.72rem;
+  color: #8D6E63;
+  margin-top: 2px;
+}
+
+/* Import Excel Dropzone & Preview Table */
+.uom-dropzone {
+  border: 2px dashed #C4B5A5;
+  border-radius: 8px;
+  padding: 24px 16px;
+  text-align: center;
+  background-color: #FAF8F5;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.uom-dropzone:hover,
+.uom-dropzone.dragover {
+  border-color: #7B5233;
+  background-color: #F5EFE6;
+}
+
+.uom-import-preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  margin-top: 10px;
+}
+
+.uom-import-preview-table th {
+  background-color: #FAF6F0;
+  padding: 6px 10px;
+  border: 1px solid #EADCC9;
+  color: #7B5233;
+  font-weight: 700;
+  text-align: left;
+}
+
+.uom-import-preview-table td {
+  padding: 6px 10px;
+  border: 1px solid #E5E7EB;
+  color: #2D1A12;
+}
+
+.uom-import-preview-table tr.has-error td {
+  background-color: #FEF2F2;
+}

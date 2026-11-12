@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { FormModal } from './Modal';
-import { extractMultiplierFromPenalty, formatPenaltyValue, getFullImagePath, getCabinetSalePrice, formatMonthYear } from '../utils/claimHelpers';
+import { extractMultiplierFromPenalty, formatPenaltyValue, getFullImagePath, getCabinetSalePrice, formatMonthYear, formatStageTag } from '../utils/claimHelpers';
 import claimService from '../services/claim.service';
 
 export const ClaimProcessModal = ({
@@ -34,6 +34,7 @@ export const ClaimProcessModal = ({
   uniqueCustomerDefectNameOptions = [],
   handleSelectCustomerDefectName,
   processMaLoiCty, setProcessMaLoiCty,
+  g7DefectTypes = [],
   showProcessG7CodeSuggestions, setShowProcessG7CodeSuggestions,
   uniqueCompanyErrorCodeOptions = [],
   handleSelectG7Code,
@@ -246,6 +247,8 @@ export const ClaimProcessModal = ({
       onSubmit={onSaveProcessClaim}
       title={processModalTitle}
       width="min(95vw, 1150px)"
+      style={{ height: 'min(90vh, 740px)' }}
+      bodyStyle={{ padding: '20px 24px 22px 24px', overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}
       cancelLabel={modalMode === 'view' ? null : "Hủy"}
       confirmLabel={modalMode === 'view' ? null : "Lưu lại"}
       leftFooterActions={exceptionNavMode ? null : claimNavFooterActions}
@@ -302,18 +305,18 @@ export const ClaimProcessModal = ({
           {/* Row 1: Dòng hàng & Loại claim */}
           <div className="add-claim-row add-claim-grid-2">
             <div className="add-claim-field">
-              <label className="add-claim-label">Loại hàng</label>
+              <label className="add-claim-label">Dòng hàng</label>
               <select
-                value={processDongHang || ((processTenSanPham || '').toUpperCase().includes('WOA') ? 'OAK' : 'Pigment')}
+                value={processDongHang || ((processTenSanPham || '').toUpperCase().includes('WOA') ? 'Oak' : 'Atlas')}
                 onChange={(e) => setProcessDongHang(e.target.value)}
                 className="add-claim-select"
                 disabled={modalMode !== 'edit'}
                 style={modalMode !== 'edit' ? disabledFieldStyle : undefined}
               >
-                {['Pigment', 'OAK'].map(opt => (
+                {['Atlas', 'Oak', 'Maple', 'Pine', 'Pigment', 'OAK'].map(opt => (
                   <option key={opt} value={opt}>{opt}</option>
                 ))}
-                {processDongHang && !['Pigment', 'OAK'].includes(processDongHang) && (
+                {processDongHang && !['Atlas', 'Oak', 'Maple', 'Pine', 'Pigment', 'OAK'].includes(processDongHang) && (
                   <option value={processDongHang}>{processDongHang}</option>
                 )}
               </select>
@@ -367,7 +370,7 @@ export const ClaimProcessModal = ({
 
           {/* Row 3: Mức phạt + Giá trị phạt + (X phạt nếu có 'unit') + Đơn giá tủ + Tổng phạt */}
           {(() => {
-            const isUnitPenalty = String(processGiaTriPhat || '').toLowerCase().includes('unit');
+            const isUnitPenalty = String(processMucPhat || processGiaTriPhat || '').toLowerCase().includes('unit');
             const targetSku = processTenSanPham || activeDetailClaim?.product_name || activeDetailClaim?.sku || '';
             const currentCabinetSalePrice = getCabinetSalePrice(targetSku, cabinetPrices);
             return (
@@ -376,8 +379,9 @@ export const ClaimProcessModal = ({
                   <label className="add-claim-label">Mức phạt</label>
                   <select
                     value={processMucPhat}
-                    disabled
-                    style={disabledFieldStyle}
+                    onChange={(e) => setProcessMucPhat(e.target.value)}
+                    disabled={modalMode === 'view'}
+                    style={modalMode === 'view' ? disabledFieldStyle : undefined}
                     className="add-claim-select"
                   >
                     {['Nhắc nhở', 'Phạt tiền', 'Hủy đơn'].map(opt => (
@@ -395,8 +399,15 @@ export const ClaimProcessModal = ({
                     type="text"
                     placeholder="$0"
                     value={processGiaTriPhat}
-                    disabled
-                    style={disabledFieldStyle}
+                    onChange={(e) => {
+                      const newVal = e.target.value;
+                      setProcessGiaTriPhat(newVal);
+                      if (newVal.toLowerCase().includes('unit')) {
+                        setProcessHeSoPhat(extractMultiplierFromPenalty(newVal));
+                      }
+                    }}
+                    disabled={modalMode === 'view'}
+                    style={modalMode === 'view' ? disabledFieldStyle : undefined}
                     className="add-claim-input"
                   />
                 </div>
@@ -406,9 +417,33 @@ export const ClaimProcessModal = ({
                     <label className="add-claim-label" style={{ color: '#B45309', fontWeight: 'bold' }}>X phạt</label>
                     <input
                       type="number"
+                      min="1"
+                      max="100"
+                      step="1"
+                      placeholder="1"
                       value={processHeSoPhat}
-                      disabled
-                      style={{ ...disabledFieldStyle, backgroundColor: '#FFFBEB', color: '#B45309', fontWeight: '700', textAlign: 'center', borderColor: '#FDE68A' }}
+                      onKeyDown={(e) => {
+                        if (e.key === '-' || e.key === 'e' || e.key === 'E' || e.key === '+') {
+                          e.preventDefault();
+                        }
+                      }}
+                      onChange={(e) => {
+                        let val = e.target.value;
+                        if (val !== '') {
+                          const parsed = parseFloat(val);
+                          if (parsed < 1) val = '1';
+                          if (parsed > 100) val = '100';
+                        }
+                        setProcessHeSoPhat(val);
+                        if (val && !isNaN(val) && parseFloat(val) >= 1 && String(processGiaTriPhat).match(/x\s*\d+/i)) {
+                          setProcessGiaTriPhat(String(processGiaTriPhat).replace(/x\s*\d+/i, `X${val}`));
+                        }
+                      }}
+                      disabled={modalMode === 'view'}
+                      style={modalMode === 'view'
+                        ? { ...disabledFieldStyle, backgroundColor: '#FFFBEB', color: '#B45309', fontWeight: '700', textAlign: 'center', borderColor: '#FDE68A' }
+                        : { backgroundColor: '#FFFBEB', borderColor: '#F59E0B', color: '#B45309', fontWeight: '700', textAlign: 'center' }
+                      }
                       className="add-claim-input"
                     />
                   </div>
@@ -477,38 +512,142 @@ export const ClaimProcessModal = ({
             {/* 3. Mã lỗi G7 */}
             <div className="add-claim-field" style={{ position: 'relative' }}>
               <label className="add-claim-label">Mã lỗi G7</label>
-              <input
-                type="text"
-                placeholder="Mã lỗi G7..."
-                value={processMaLoiCty}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setProcessMaLoiCty(val);
-                  setShowProcessG7CodeSuggestions(true);
-                  const match = (uniqueCompanyErrorCodeOptions || []).find(opt => opt.toLowerCase() === val.trim().toLowerCase());
-                  if (match && handleSelectG7Code) {
-                    handleSelectG7Code(match, true);
-                  }
-                }}
-                onFocus={() => setShowProcessG7CodeSuggestions(true)}
-                onBlur={() => setTimeout(() => setShowProcessG7CodeSuggestions(false), 200)}
-                className="add-claim-input"
-                disabled={modalMode !== 'edit'}
-                style={modalMode !== 'edit' ? disabledFieldStyle : {}}
-              />
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  placeholder="Mã lỗi G7..."
+                  value={processMaLoiCty}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setProcessMaLoiCty(val);
+                    setShowProcessG7CodeSuggestions(true);
+                    const match = (uniqueCompanyErrorCodeOptions || []).find(opt => opt.toLowerCase() === val.trim().toLowerCase());
+                    if (match && handleSelectG7Code) {
+                      handleSelectG7Code(match, true);
+                    }
+                  }}
+                  onFocus={() => setShowProcessG7CodeSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowProcessG7CodeSuggestions(false), 200)}
+                  className="add-claim-input"
+                  disabled={modalMode !== 'edit'}
+                  style={{
+                    ...(modalMode !== 'edit' ? disabledFieldStyle : {}),
+                    paddingRight: modalMode === 'edit' ? '28px' : '12px'
+                  }}
+                />
+                {modalMode === 'edit' && (
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      setShowProcessG7CodeSuggestions(!showProcessG7CodeSuggestions);
+                    }}
+                    style={{
+                      position: 'absolute',
+                      right: '8px',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: '#7B5233',
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '2px'
+                    }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                  </button>
+                )}
+              </div>
               {modalMode === 'edit' && showProcessG7CodeSuggestions && (
-                <div className="custom-autocomplete-suggestions">
-                  {(uniqueCompanyErrorCodeOptions || [])
-                    .filter(opt => !processMaLoiCty || opt.toLowerCase().includes(processMaLoiCty.toLowerCase()))
-                    .map((opt, idx) => (
-                      <div
-                        key={idx}
-                        className="custom-autocomplete-option"
-                        onMouseDown={() => handleSelectG7Code(opt, true)}
-                      >
-                        {opt}
-                      </div>
-                    ))}
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    minWidth: '420px',
+                    maxWidth: '560px',
+                    width: 'max-content',
+                    backgroundColor: '#FFFFFF',
+                    border: '1.5px solid #EADCC9',
+                    borderRadius: '10px',
+                    boxShadow: '0 12px 28px rgba(0, 0, 0, 0.15)',
+                    maxHeight: '260px',
+                    overflowY: 'auto',
+                    overflowX: 'hidden',
+                    zIndex: 9999,
+                    marginTop: '4px'
+                  }}
+                >
+                  {g7DefectTypes && g7DefectTypes.length > 0 ? (
+                    g7DefectTypes
+                      .filter(d => {
+                        if (!processMaLoiCty) return true;
+                        const q = processMaLoiCty.toLowerCase();
+                        const stageStr = formatStageTag(d.stage) || '';
+                        return (d.code && d.code.toLowerCase().includes(q)) ||
+                               (d.name && d.name.toLowerCase().includes(q)) ||
+                               (d.category && d.category.toLowerCase().includes(q)) ||
+                               stageStr.toLowerCase().includes(q);
+                      })
+                      .map((defect, idx) => {
+                        const stageTag = formatStageTag(defect.stage || defect.category);
+                        return (
+                          <div
+                            key={defect.id || idx}
+                            className="custom-autocomplete-option"
+                            style={{
+                              padding: '9px 12px',
+                              cursor: 'pointer',
+                              borderBottom: '1px solid #FAF6F0',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              gap: '12px'
+                            }}
+                            onMouseDown={() => handleSelectG7Code(defect, true)}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                              <span style={{ fontWeight: '700', color: '#7B5233', fontSize: '0.85rem', flexShrink: 0 }}>
+                                {defect.code}
+                              </span>
+                              <span style={{ color: '#2D1A12', fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {defect.name}
+                              </span>
+                            </div>
+                            {stageTag && (
+                              <span style={{
+                                fontSize: '0.72rem',
+                                fontWeight: '500',
+                                padding: '2px 8px',
+                                borderRadius: '12px',
+                                backgroundColor: '#FAF0E6',
+                                color: '#8C6A51',
+                                border: '1px solid #EADCC9',
+                                flexShrink: 0,
+                                whiteSpace: 'nowrap'
+                              }}>
+                                {stageTag}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })
+                  ) : (
+                    (uniqueCompanyErrorCodeOptions || [])
+                      .filter(opt => !processMaLoiCty || opt.toLowerCase().includes(processMaLoiCty.toLowerCase()))
+                      .map((opt, idx) => (
+                        <div
+                          key={idx}
+                          className="custom-autocomplete-option"
+                          onMouseDown={() => handleSelectG7Code(opt, true)}
+                        >
+                          {opt}
+                        </div>
+                      ))
+                  )}
                 </div>
               )}
             </div>
@@ -516,38 +655,142 @@ export const ClaimProcessModal = ({
             {/* 4. Tên lỗi G7 */}
             <div className="add-claim-field" style={{ position: 'relative' }}>
               <label className="add-claim-label">Tên lỗi G7</label>
-              <input
-                type="text"
-                placeholder="Tên lỗi G7..."
-                value={processTenLoiG7}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setProcessTenLoiG7(val);
-                  setShowProcessG7NameSuggestions(true);
-                  const match = (uniqueCompanyErrorNameOptions || []).find(opt => opt.toLowerCase() === val.trim().toLowerCase());
-                  if (match && handleSelectG7Name) {
-                    handleSelectG7Name(match, true);
-                  }
-                }}
-                onFocus={() => setShowProcessG7NameSuggestions(true)}
-                onBlur={() => setTimeout(() => setShowProcessG7NameSuggestions(false), 200)}
-                className="add-claim-input"
-                disabled={modalMode !== 'edit'}
-                style={modalMode !== 'edit' ? disabledFieldStyle : {}}
-              />
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  placeholder="Tên lỗi G7..."
+                  value={processTenLoiG7}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setProcessTenLoiG7(val);
+                    setShowProcessG7NameSuggestions(true);
+                    const match = (uniqueCompanyErrorNameOptions || []).find(opt => opt.toLowerCase() === val.trim().toLowerCase());
+                    if (match && handleSelectG7Name) {
+                      handleSelectG7Name(match, true);
+                    }
+                  }}
+                  onFocus={() => setShowProcessG7NameSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowProcessG7NameSuggestions(false), 200)}
+                  className="add-claim-input"
+                  disabled={modalMode !== 'edit'}
+                  style={{
+                    ...(modalMode !== 'edit' ? disabledFieldStyle : {}),
+                    paddingRight: modalMode === 'edit' ? '28px' : '12px'
+                  }}
+                />
+                {modalMode === 'edit' && (
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      setShowProcessG7NameSuggestions(!showProcessG7NameSuggestions);
+                    }}
+                    style={{
+                      position: 'absolute',
+                      right: '8px',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: '#7B5233',
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '2px'
+                    }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                  </button>
+                )}
+              </div>
               {modalMode === 'edit' && showProcessG7NameSuggestions && (
-                <div className="custom-autocomplete-suggestions">
-                  {(uniqueCompanyErrorNameOptions || [])
-                    .filter(opt => !processTenLoiG7 || opt.toLowerCase().includes(processTenLoiG7.toLowerCase()))
-                    .map((opt, idx) => (
-                      <div
-                        key={idx}
-                        className="custom-autocomplete-option"
-                        onMouseDown={() => handleSelectG7Name(opt, true)}
-                      >
-                        {opt}
-                      </div>
-                    ))}
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    right: 0,
+                    minWidth: '420px',
+                    maxWidth: '560px',
+                    width: 'max-content',
+                    backgroundColor: '#FFFFFF',
+                    border: '1.5px solid #EADCC9',
+                    borderRadius: '10px',
+                    boxShadow: '0 12px 28px rgba(0, 0, 0, 0.15)',
+                    maxHeight: '260px',
+                    overflowY: 'auto',
+                    overflowX: 'hidden',
+                    zIndex: 9999,
+                    marginTop: '4px'
+                  }}
+                >
+                  {g7DefectTypes && g7DefectTypes.length > 0 ? (
+                    g7DefectTypes
+                      .filter(d => {
+                        if (!processTenLoiG7) return true;
+                        const q = processTenLoiG7.toLowerCase();
+                        const stageStr = formatStageTag(d.stage) || '';
+                        return (d.name && d.name.toLowerCase().includes(q)) ||
+                               (d.code && d.code.toLowerCase().includes(q)) ||
+                               (d.category && d.category.toLowerCase().includes(q)) ||
+                               stageStr.toLowerCase().includes(q);
+                      })
+                      .map((defect, idx) => {
+                        const stageTag = formatStageTag(defect.stage || defect.category);
+                        return (
+                          <div
+                            key={defect.id || idx}
+                            className="custom-autocomplete-option"
+                            style={{
+                              padding: '9px 12px',
+                              cursor: 'pointer',
+                              borderBottom: '1px solid #FAF6F0',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              gap: '12px'
+                            }}
+                            onMouseDown={() => handleSelectG7Name(defect, true)}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                              <span style={{ color: '#2D1A12', fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {defect.name}
+                              </span>
+                              <span style={{ fontWeight: '700', color: '#7B5233', fontSize: '0.82rem', flexShrink: 0 }}>
+                                ({defect.code})
+                              </span>
+                            </div>
+                            {stageTag && (
+                              <span style={{
+                                fontSize: '0.72rem',
+                                fontWeight: '500',
+                                padding: '2px 8px',
+                                borderRadius: '12px',
+                                backgroundColor: '#FAF0E6',
+                                color: '#8C6A51',
+                                border: '1px solid #EADCC9',
+                                flexShrink: 0,
+                                whiteSpace: 'nowrap'
+                              }}>
+                                {stageTag}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })
+                  ) : (
+                    (uniqueCompanyErrorNameOptions || [])
+                      .filter(opt => !processTenLoiG7 || opt.toLowerCase().includes(processTenLoiG7.toLowerCase()))
+                      .map((opt, idx) => (
+                        <div
+                          key={idx}
+                          className="custom-autocomplete-option"
+                          onMouseDown={() => handleSelectG7Name(opt, true)}
+                        >
+                          {opt}
+                        </div>
+                      ))
+                  )}
                 </div>
               )}
             </div>

@@ -148,6 +148,10 @@ api_router.include_router(pallet_check_router, prefix="/pallet-check", tags=["pa
 from modules.daily_production.routes.daily_production_router import router as daily_production_router
 api_router.include_router(daily_production_router, prefix="/daily-production", tags=["daily-production"])
 
+from modules.warehouse.routes import warehouse_router, unit_of_measure_router
+api_router.include_router(warehouse_router, prefix="/warehouses", tags=["warehouses"])
+api_router.include_router(unit_of_measure_router, prefix="/units-of-measure", tags=["units-of-measure"])
+
 import sys
 import os
 

@@ -23,17 +23,41 @@ from modules.inspection.models.qc_sampling_rule import QCSamplingRule
 from modules.inspection.schemas.defect_type import DefectType as DefectTypeSchema, DefectTypeCreate, ClientDefect as ClientDefectSchema
 from modules.inspection.schemas.defect_category import DefectCategoryCreate, DefectCategoryUpdate, DefectCategoryResponse
 from modules.inspection.schemas.daily_inspection import (
-    DailyInspectionRecordCreate, 
+    DailyInspectionRecordCreate,
     DailyInspectionRecordRead,
     DailyInspectionAnalytics,
     DailyInspectionSummary,
+    KpiItem,
+    ComparisonMetadata,
     ParetoItem,
+    TopCauseItem,
     TrendItem,
-    DistributionItem
+    DistributionItem,
+    StageBreakdownItem,
+    StagePassRateItem,
+    CategorySeverityItem,
+    KpiPareto,
+    HeatmapStageItem,
+    HeatmapRow,
+    DailyBreakdownItem,
+    AqlSeverityItem,
+    DetailedDefectItem,
+    BatchDefectItem,
+    ProductLineItem,
+    QcRosterItem,
+    CapaStatusItem,
+    ActionItem,
+    KpiAction,
+    StageCauseDetailItem,
+    StageCausesResponse,
+    AqlBreakdownRow,
+    AqlBreakdownResponse,
 )
 from modules.inspection.schemas.stage_inspection import StageInspectionCreate, StageInspectionRead
 from modules.auth.models.accounts import Account
 from modules.auth.models.departments import Department
+from modules.capa.models.capa import CAPA
+from modules.production.models.stages import Stage
 from shared.utils.string_cleaner import clean_and_standardize_name
 import logging
 
@@ -121,28 +145,147 @@ def create_daily_inspection(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Lỗi khi lưu phiếu kiểm tra: {str(e)}")
 
+def canonical_stage_name(name: Optional[str]) -> str:
+    if not name or not str(name).strip():
+        return "Khác"
+    s = str(name).strip()
+    low = s.lower()
+    if any(k in low for k in ['nhập', 'nhap', 'đầu vào', 'dau vao', 'dau-vao', 'iqc']):
+        return 'Nhập Kho/Đầu Vào'
+    if 'phôi' in low or 'phoi' in low:
+        return 'Tạo Phôi'
+    if 'định hình' in low or 'dinh hinh' in low or low.startswith('định'):
+        return 'Định Hình'
+    if 'lắp ráp' in low or 'lap rap' in low or low.startswith('lắp'):
+        return 'Lắp Ráp'
+    if low == 'sơn' or low.startswith('sơn ') or low.startswith('son ') or ' sơn' in low:
+        return 'Sơn'
+    if 'đóng gói' in low or 'dong goi' in low or 'gói' in low:
+        return 'Đóng Gói'
+    if 'lưu kho' in low or 'luu kho' in low:
+        return 'Lưu Kho'
+    return s
+
+
+def build_stage_filter_clause(column, stage: str):
+    stage_s = str(stage or '').strip()
+    if not stage_s or stage_s.lower() == 'all':
+        return None
+    if any(ch.isdigit() for ch in stage_s):
+        return column == stage_s
+    canon = canonical_stage_name(stage_s)
+    if canon == 'Nhập Kho/Đầu Vào':
+        return or_(
+            column.ilike('%Nhập%'),
+            column.ilike('%nhap%'),
+            column.ilike('%Đầu Vào%'),
+            column.ilike('%IQC%'),
+        )
+    if canon == 'Tạo Phôi':
+        return or_(column.ilike('%Phôi%'), column.ilike('%phoi%'))
+    if canon == 'Định Hình':
+        return or_(column.ilike('%Định Hình%'), column.ilike('%Dinh Hinh%'))
+    if canon == 'Lắp Ráp':
+        return or_(column.ilike('%Lắp Ráp%'), column.ilike('%Lap Rap%'))
+    if canon == 'Sơn':
+        return or_(column == 'Sơn', column.ilike('Sơn %'), column.ilike('Son %'))
+    if canon == 'Đóng Gói':
+        return or_(column.ilike('%Đóng Gói%'), column.ilike('%Dong Goi%'))
+    if canon == 'Lưu Kho':
+        return or_(column.ilike('%Lưu Kho%'), column.ilike('%Luu Kho%'))
+    return column == stage_s
+
+
 @router.get("/daily", response_model=List[DailyInspectionRecordRead])
 def get_daily_inspections(
     skip: int = 0,
     limit: int = 100,
+    start_date: Optional[datetime.date] = None,
+    end_date: Optional[datetime.date] = None,
+    stage: Optional[str] = None,
+    defect_id: Optional[int] = None,
+    defect_name: Optional[str] = None,
+    category: Optional[str] = None,
+    aql_class: Optional[str] = None,
+    search: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     """
-    [GET] Lấy danh sách phiếu kiểm tra hàng ngày.
+    [GET] Lấy danh sách phiếu kiểm tra hàng ngày (hỗ trợ lọc cho Drill-down & Quản lý lỗi).
     """
-    query = db.query(DailyInspectionRecord).filter(
+    query = db.query(DailyInspectionRecord).options(
+        joinedload(DailyInspectionRecord.defects).joinedload(DailyInspectionDefect.defect_type)
+    ).filter(
         or_(DailyInspectionRecord.is_deleted == False, DailyInspectionRecord.is_deleted.is_(None))
-    ).order_by(DailyInspectionRecord.inspection_date.desc(), DailyInspectionRecord.id.desc())
+    )
+
+    if start_date:
+        query = query.filter(DailyInspectionRecord.inspection_date >= start_date)
+    if end_date:
+        query = query.filter(DailyInspectionRecord.inspection_date <= end_date)
+    if stage and stage.lower() != 'all':
+        stg_clause = build_stage_filter_clause(DailyInspectionRecord.stage_name, stage)
+        if stg_clause is not None:
+            query = query.filter(stg_clause)
+
+    if defect_id:
+        query = query.filter(
+            DailyInspectionRecord.defects.any(DailyInspectionDefect.defect_id == defect_id)
+        )
+    elif defect_name and defect_name.lower() != 'all':
+        d_clean = defect_name.strip()
+        query = query.filter(
+            DailyInspectionRecord.defects.any(
+                DailyInspectionDefect.defect_type.has(
+                    or_(DefectType.name.ilike(d_clean), DefectType.code.ilike(d_clean))
+                )
+            )
+        )
+
+    if category and category.lower() != 'all':
+        query = query.filter(
+            DailyInspectionRecord.defects.any(
+                DailyInspectionDefect.defect_type.has(DefectType.category == category)
+            )
+        )
+
+    if aql_class and aql_class.lower() != 'all':
+        query = query.filter(
+            DailyInspectionRecord.defects.any(
+                DailyInspectionDefect.defect_type.has(func.lower(DefectType.aql_class) == aql_class.lower())
+            )
+        )
+
+    if search and search.strip():
+        s = f"%{search.strip()}%"
+        matching_acc_ids = [a[0] for a in db.query(Account.id).filter(Account.full_name.ilike(s)).all()]
+        search_ors = [
+            DailyInspectionRecord.batch_no.ilike(s),
+            DailyInspectionRecord.pallet_code.ilike(s),
+            DailyInspectionRecord.stage_name.ilike(s),
+            DailyInspectionRecord.defects.any(
+                DailyInspectionDefect.defect_type.has(
+                    or_(DefectType.name.ilike(s), DefectType.code.ilike(s))
+                )
+            ),
+        ]
+        if matching_acc_ids:
+            search_ors.append(DailyInspectionRecord.inspector_id.in_(matching_acc_ids))
+        query = query.filter(or_(*search_ors))
+
+    query = query.order_by(DailyInspectionRecord.inspection_date.desc(), DailyInspectionRecord.id.desc())
     if skip > 0:
         query = query.offset(skip)
     if limit > 0:
         query = query.limit(limit)
     records = query.all()
-    
-    # [PERF] Batch load tên người kiểm tra & tên loại lỗi — 1-2 queries thay vì N queries
+
+    # [PERF] Batch load tên người kiểm tra — 1-2 queries thay vì N queries
     inspector_ids = list({r.inspector_id for r in records if r.inspector_id})
-    if inspector_ids:
-        accounts = db.query(Account.id, Account.full_name).filter(Account.id.in_(inspector_ids)).all()
+    fallback_ids = [27, 28, 30, 31, 32, 33, 40, 43]
+    all_lookup_ids = list(set(inspector_ids + fallback_ids))
+    if all_lookup_ids:
+        accounts = db.query(Account.id, Account.full_name).filter(Account.id.in_(all_lookup_ids)).all()
         name_map = {a.id: a.full_name for a in accounts}
     else:
         name_map = {}
@@ -160,19 +303,19 @@ def get_daily_inspections(
             if '1' in stage_str: factory = 1
             elif '2' in stage_str: factory = 2
             elif '3' in stage_str: factory = 3
-            
+
             is_inbound = any(k in stage_str for k in ['Nhập Kho', 'Nhập kho', 'Đầu Vào', 'IQC', 'Tạo Phôi', 'Tạo phôi', 'Phôi'])
             is_shaping = any(k in stage_str for k in ['Định Hình', 'Định hình', 'Lắp Ráp', 'Lắp ráp', 'Mộc'])
-            
+
             if is_inbound:
-                fallback_id = 28  # 28: Hà Đình Thành (QC PX1)
+                fallback_id = 28
             elif factory == 1:
-                fallback_id = 28 if is_shaping else 43  # 28: Hà Đình Thành, 43: Dương Văn Toàn (QC PX1)
+                fallback_id = 28 if is_shaping else 43
             elif factory == 2:
-                fallback_id = 30 if is_shaping else 32  # 30: Huỳnh Hoàng Sơn, 32: Phan Thị Lương (QC PX2)
+                fallback_id = 30 if is_shaping else 32
             else:
-                fallback_id = 40  # 40: Trần Thị Ánh (QC NM3)
-            
+                fallback_id = 40
+
             r.inspector_id = fallback_id
             r.inspector_name = name_map.get(fallback_id, default_qc_name)
     return records
@@ -3644,168 +3787,1367 @@ def get_defect_charts_analytics(
         "month": month
     }
 
+CATEGORY_LABELS = {
+    'visual': 'Ngoại quan',
+    'structure': 'Kết cấu',
+    'material': 'Nguyên liệu',
+    'paint': 'Sơn & Bề mặt',
+    'packaging': 'Đóng gói',
+    'tracking': 'Theo dõi',
+    'other': 'Khác'
+}
+
+WOOD_PALETTE = ['#55331F', '#70452C', '#88593B', '#A0704D', '#B58A67', '#CAA385', '#D9B99F', '#E8D0BA']
+
+
+def resolve_analytics_dates(preset: Optional[str], start_date: Optional[datetime.date], end_date: Optional[datetime.date]):
+    today = datetime.date.today()
+    p = (preset or "all").lower().strip()
+
+    if start_date and end_date and p in ['custom', 'tùy chọn', 'quy_dinh']:
+        p = 'custom'
+
+    is_daily_avg = False
+    ref_start = None
+    ref_end = None
+    ref_dates = None
+    ref_label = ""
+    comp_short_label = ""
+    has_comp = True
+    curr_start = None
+    curr_end = None
+
+    if p in ['today', 'hom_nay', 'hôm nay']:
+        p = 'today'
+        curr_start = today
+        curr_end = today
+        dates = []
+        d = today - datetime.timedelta(days=1)
+        while len(dates) < 7:
+            if d.weekday() != 6:
+                dates.append(d)
+            d -= datetime.timedelta(days=1)
+        ref_dates = dates
+        ref_start = min(dates)
+        ref_end = max(dates)
+        is_daily_avg = True
+        comp_short_label = "so với TB 7 ngày"
+        ref_label = f"TB 7 ngày làm việc ({ref_start.strftime('%d/%m')} - {ref_end.strftime('%d/%m')}, trừ CN)"
+
+    elif p in ['yesterday', 'hom_qua', 'hôm qua']:
+        p = 'yesterday'
+        yesterday = today - datetime.timedelta(days=1)
+        curr_start = yesterday
+        curr_end = yesterday
+        dates = []
+        d = yesterday - datetime.timedelta(days=1)
+        while len(dates) < 7:
+            if d.weekday() != 6:
+                dates.append(d)
+            d -= datetime.timedelta(days=1)
+        ref_dates = dates
+        ref_start = min(dates)
+        ref_end = max(dates)
+        is_daily_avg = True
+        comp_short_label = "so với TB 7 ngày"
+        ref_label = f"TB 7 ngày làm việc ({ref_start.strftime('%d/%m')} - {ref_end.strftime('%d/%m')}, trừ CN)"
+
+    elif p in ['this_week', 'tuan_nay', 'tuần này']:
+        p = 'this_week'
+        monday = today - datetime.timedelta(days=today.weekday())
+        curr_start = monday
+        curr_end = today
+        elapsed_days = (curr_end - curr_start).days
+        prev_monday = monday - datetime.timedelta(days=7)
+        ref_start = prev_monday
+        ref_end = prev_monday + datetime.timedelta(days=elapsed_days)
+        comp_short_label = "so với tuần trước"
+        ref_label = f"Cùng kỳ tuần trước ({ref_start.strftime('%d/%m')} - {ref_end.strftime('%d/%m')})"
+
+    elif p in ['last_week', 'tuan_truoc', 'tuần trước']:
+        p = 'last_week'
+        this_monday = today - datetime.timedelta(days=today.weekday())
+        curr_start = this_monday - datetime.timedelta(days=7)
+        curr_end = curr_start + datetime.timedelta(days=6)
+        ref_start = curr_start - datetime.timedelta(days=7)
+        ref_end = curr_end - datetime.timedelta(days=7)
+        comp_short_label = "so với tuần trước đó"
+        ref_label = f"Toàn bộ tuần trước đó ({ref_start.strftime('%d/%m')} - {ref_end.strftime('%d/%m')})"
+
+    elif p in ['this_month', 'thang_nay', 'tháng này']:
+        p = 'this_month'
+        curr_start = datetime.date(today.year, today.month, 1)
+        curr_end = today
+        last_day_prev_month = curr_start - datetime.timedelta(days=1)
+        first_day_prev_month = datetime.date(last_day_prev_month.year, last_day_prev_month.month, 1)
+        target_day = min(today.day, last_day_prev_month.day)
+        ref_start = first_day_prev_month
+        ref_end = datetime.date(last_day_prev_month.year, last_day_prev_month.month, target_day)
+        comp_short_label = "so với tháng trước"
+        ref_label = f"Cùng kỳ tháng trước ({ref_start.strftime('%d/%m')} - {ref_end.strftime('%d/%m')})"
+
+    elif p in ['last_month', 'thang_truoc', 'tháng trước']:
+        p = 'last_month'
+        first_this_month = datetime.date(today.year, today.month, 1)
+        last_prev_month = first_this_month - datetime.timedelta(days=1)
+        first_prev_month = datetime.date(last_prev_month.year, last_prev_month.month, 1)
+        curr_start = first_prev_month
+        curr_end = last_prev_month
+        last_prior_month = first_prev_month - datetime.timedelta(days=1)
+        first_prior_month = datetime.date(last_prior_month.year, last_prior_month.month, 1)
+        ref_start = first_prior_month
+        ref_end = last_prior_month
+        comp_short_label = "so với tháng trước đó"
+        ref_label = f"Toàn bộ tháng trước đó ({ref_start.strftime('%d/%m')} - {ref_end.strftime('%d/%m')})"
+
+    elif p in ['this_year', 'nam_nay', 'năm nay']:
+        p = 'this_year'
+        curr_start = datetime.date(today.year, 1, 1)
+        curr_end = today
+        ref_start = datetime.date(today.year - 1, 1, 1)
+        try:
+            ref_end = datetime.date(today.year - 1, today.month, today.day)
+        except ValueError:
+            ref_end = datetime.date(today.year - 1, today.month, 28)
+        comp_short_label = "so với năm trước"
+        ref_label = f"Cùng kỳ năm trước ({ref_start.strftime('%d/%m/%Y')} - {ref_end.strftime('%d/%m/%Y')})"
+
+    elif p in ['all', 'tat_ca', 'tất cả', 'tat_ca_lich_su', 'tất cả lịch sử']:
+        p = 'all'
+        curr_start = None
+        curr_end = None
+        has_comp = False
+        comp_short_label = ""
+        ref_label = ""
+
+    else:
+        p = 'custom'
+        curr_start = start_date or (today - datetime.timedelta(days=29))
+        curr_end = end_date or today
+        n_days = max(1, (curr_end - curr_start).days + 1)
+        ref_end = curr_start - datetime.timedelta(days=1)
+        ref_start = ref_end - datetime.timedelta(days=n_days - 1)
+        comp_short_label = "so với kỳ trước"
+        ref_label = f"Kỳ liền trước ({n_days} ngày: {ref_start.strftime('%d/%m')} - {ref_end.strftime('%d/%m')})"
+
+    return {
+        "preset": p,
+        "curr_start": curr_start,
+        "curr_end": curr_end,
+        "ref_start": ref_start,
+        "ref_end": ref_end,
+        "ref_dates": ref_dates,
+        "is_daily_avg": is_daily_avg,
+        "ref_label": ref_label,
+        "comp_short_label": comp_short_label,
+        "has_comp": has_comp,
+    }
+
+
+def _normalize_aql_label(aql_val: Optional[str]) -> str:
+    low = str(aql_val or "").strip().lower()
+    if "critical" in low or "nghiêm trọng" in low:
+        return "Critical"
+    if "major" in low or "nặng" in low:
+        return "Major"
+    if "minor" in low or "nhẹ" in low:
+        return "Minor"
+    return "Khác"
+
+
+def _resolve_inspector_names(db: Session, records) -> Dict[int, str]:
+    fallback_ids = [27, 28, 30, 31, 32, 33, 40, 43]
+    inspector_ids = list({r.inspector_id for r in records if r.inspector_id} | set(fallback_ids))
+    accounts = db.query(Account.id, Account.full_name).filter(Account.id.in_(inspector_ids)).all() if inspector_ids else []
+    name_map = {a.id: a.full_name for a in accounts}
+    default_account = db.query(Account.full_name).filter(Account.is_active == True).first()
+    default_qc_name = default_account[0] if default_account else "QC Hệ thống"
+
+    resolved = {}
+    for r in records:
+        if r.inspector_id and r.inspector_id in name_map:
+            resolved[r.id] = (r.inspector_id, name_map[r.inspector_id])
+        else:
+            stage_str = str(r.stage_name or '').strip()
+            factory = 2
+            if '1' in stage_str: factory = 1
+            elif '2' in stage_str: factory = 2
+            elif '3' in stage_str: factory = 3
+            is_inbound = any(k in stage_str for k in ['Nhập Kho', 'Nhập kho', 'Đầu Vào', 'IQC', 'Tạo Phôi', 'Tạo phôi', 'Phôi'])
+            is_shaping = any(k in stage_str for k in ['Định Hình', 'Định hình', 'Lắp Ráp', 'Lắp ráp', 'Mộc'])
+            if is_inbound:
+                fallback_id = 28
+            elif factory == 1:
+                fallback_id = 28 if is_shaping else 43
+            elif factory == 2:
+                fallback_id = 30 if is_shaping else 32
+            else:
+                fallback_id = 40
+            resolved[r.id] = (fallback_id, name_map.get(fallback_id, default_qc_name))
+    return resolved
+
+
+def _query_filtered_daily_records(
+    db: Session,
+    start_d: Optional[datetime.date],
+    end_d: Optional[datetime.date],
+    dates_list: Optional[List[datetime.date]],
+    stage: Optional[str],
+    category: Optional[str],
+    aql_class: Optional[str],
+    search: Optional[str],
+):
+    query = db.query(DailyInspectionRecord).options(
+        joinedload(DailyInspectionRecord.defects).joinedload(DailyInspectionDefect.defect_type)
+    ).filter(
+        or_(DailyInspectionRecord.is_deleted == False, DailyInspectionRecord.is_deleted.is_(None))
+    )
+
+    if dates_list:
+        query = query.filter(DailyInspectionRecord.inspection_date.in_(dates_list))
+    else:
+        if start_d:
+            query = query.filter(DailyInspectionRecord.inspection_date >= start_d)
+        if end_d:
+            query = query.filter(DailyInspectionRecord.inspection_date <= end_d)
+
+    if stage and stage.lower() != 'all':
+        stg_clause = build_stage_filter_clause(DailyInspectionRecord.stage_name, stage)
+        if stg_clause is not None:
+            query = query.filter(stg_clause)
+
+    records = query.all()
+    inspector_map = _resolve_inspector_names(db, records)
+
+    cat_filter = category.strip().lower() if (category and category.lower() != 'all') else None
+    aql_filter = aql_class.strip().lower() if (aql_class and aql_class.lower() != 'all') else None
+    search_s = search.strip().lower() if (search and search.strip()) else None
+
+    matched = []
+    for r in records:
+        canon_stg = canonical_stage_name(r.stage_name)
+        insp_id, insp_name = inspector_map.get(r.id, (None, "QC Hệ thống"))
+
+        # Filter defects attached to record by category & AQL
+        filtered_defects = []
+        for d in (r.defects or []):
+            dt = d.defect_type
+            d_cat = (dt.category or 'other').strip().lower() if dt else 'other'
+            d_aql = _normalize_aql_label(dt.aql_class if dt else '')
+            if cat_filter and d_cat != cat_filter:
+                continue
+            if aql_filter and d_aql.lower() != aql_filter:
+                continue
+            filtered_defects.append(d)
+
+        if (cat_filter or aql_filter) and len(filtered_defects) == 0:
+            continue
+
+        if search_s:
+            match_rec = (
+                search_s in str(r.stage_name or '').lower()
+                or search_s in canon_stg.lower()
+                or search_s in str(r.batch_no or '').lower()
+                or search_s in str(r.pallet_code or '').lower()
+                or search_s in str(insp_name or '').lower()
+            )
+            if not match_rec:
+                match_def = any(
+                    search_s in str(d.defect_type.name or '').lower()
+                    or search_s in str(d.defect_type.code or '').lower()
+                    or search_s in str(d.defect_type.category or '').lower()
+                    for d in (r.defects or []) if d.defect_type
+                )
+                if not match_def:
+                    continue
+
+        matched.append((r, canon_stg, insp_id, insp_name, filtered_defects))
+
+    return matched
+
+
+def _summarize_matched_records(matched_items, is_daily_avg=False, n_days=1):
+    total_records = len(matched_items)
+    total_products = 0
+    defective_products = 0
+    total_defects = 0
+    critical_defects = 0
+    major_defects = 0
+    minor_defects = 0
+
+    for r, _canon, _iid, _iname, f_defs in matched_items:
+        tp = int(r.total_products or 0)
+        total_products += tp
+        rec_def_sum = 0
+        for d in f_defs:
+            qty = int(d.quantity or 0)
+            rec_def_sum += qty
+            aql_norm = _normalize_aql_label(d.defect_type.aql_class if d.defect_type else '')
+            if aql_norm == 'Critical':
+                critical_defects += qty
+            elif aql_norm == 'Major':
+                major_defects += qty
+            elif aql_norm == 'Minor':
+                minor_defects += qty
+        total_defects += rec_def_sum
+        defective_products += min(tp, rec_def_sum) if tp > 0 else rec_def_sum
+
+    avg_defect_rate = round((total_defects / total_products * 100), 2) if total_products > 0 else 0.0
+    pass_rate = round(max(0.0, ((total_products - defective_products) / total_products * 100)), 1) if total_products > 0 else 0.0
+
+    if is_daily_avg and n_days > 0:
+        return {
+            "total_records": round(total_records / n_days, 1),
+            "total_products": round(total_products / n_days, 1),
+            "defective_products": round(defective_products / n_days, 1),
+            "total_defects": round(total_defects / n_days, 1),
+            "critical_defects": round(critical_defects / n_days, 1),
+            "major_defects": round(major_defects / n_days, 1),
+            "minor_defects": round(minor_defects / n_days, 1),
+            "avg_defect_rate": avg_defect_rate,
+            "pass_rate": pass_rate,
+            "raw_count": total_records,
+        }
+    return {
+        "total_records": total_records,
+        "total_products": total_products,
+        "defective_products": defective_products,
+        "total_defects": total_defects,
+        "critical_defects": critical_defects,
+        "major_defects": major_defects,
+        "minor_defects": minor_defects,
+        "avg_defect_rate": avg_defect_rate,
+        "pass_rate": pass_rate,
+        "raw_count": total_records,
+    }
+
+
+def make_count_kpi_card(curr_val, prev_val, is_favorable_when_down=True, label="", tooltip=""):
+    diff_pct = None
+    trend = "no_data" if prev_val is None else "neutral"
+    is_fav = None
+
+    if prev_val is not None:
+        if prev_val > 0:
+            diff_pct = round(((curr_val - prev_val) / prev_val) * 100.0, 1)
+            if diff_pct > 0:
+                trend = "up"
+                is_fav = not is_favorable_when_down
+            elif diff_pct < 0:
+                trend = "down"
+                is_fav = is_favorable_when_down
+            else:
+                trend = "neutral"
+                is_fav = True
+        elif prev_val == 0 and curr_val == 0:
+            diff_pct = 0.0
+            trend = "neutral"
+            is_fav = True
+        else:
+            trend = "up"
+            is_fav = not is_favorable_when_down
+            diff_pct = 100.0
+
+    return KpiItem(
+        value=float(curr_val),
+        prev_value=float(prev_val) if prev_val is not None else None,
+        diff_pct=diff_pct,
+        diff_pts=None,
+        unit_type="pct",
+        label=label or "so với kỳ trước",
+        trend=trend,
+        is_favorable=is_fav,
+        tooltip=tooltip,
+    )
+
+
+def make_rate_kpi_card(curr_val, prev_val, is_favorable_when_up=False, label="", tooltip=""):
+    diff_pts = None
+    trend = "no_data" if prev_val is None else "neutral"
+    is_fav = None
+
+    if prev_val is not None:
+        diff_pts = round(curr_val - prev_val, 2)
+        if diff_pts > 0:
+            trend = "up"
+            is_fav = is_favorable_when_up
+        elif diff_pts < 0:
+            trend = "down"
+            is_fav = not is_favorable_when_up
+        else:
+            trend = "neutral"
+            is_fav = True
+
+    return KpiItem(
+        value=float(curr_val),
+        prev_value=float(prev_val) if prev_val is not None else None,
+        diff_pct=None,
+        diff_pts=diff_pts,
+        unit_type="pts",
+        label=label or "so với kỳ trước",
+        trend=trend,
+        is_favorable=is_fav,
+        tooltip=tooltip,
+    )
+
+
+def _classify_product_line(text_val: Optional[str]) -> Optional[str]:
+    txt = str(text_val or "").strip().upper()
+    if not txt:
+        return None
+    if txt.startswith("APT"):
+        return "APT"
+    if txt.startswith("ADV"):
+        return "ADV"
+    if txt.startswith("FOL"):
+        return "FOL"
+    return "OTHER"
+
+
+def _parse_capa_status(c: CAPA, today_d: datetime.date):
+    t_stat = str(c.ticket_status or "").strip()
+    tab_stat = str(c.tab_status or "").strip().lower()
+    if tab_stat == "history" or t_stat in ("Đạt", "Đã đóng", "Đóng", "Hoàn thành"):
+        return "CLOSED", "-"
+    # Try extract deadline from preventive_plans_json
+    deadline_str = None
+    is_overdue = False
+    if c.preventive_plans_json:
+        try:
+            plans = json.loads(c.preventive_plans_json) if isinstance(c.preventive_plans_json, str) else c.preventive_plans_json
+            if isinstance(plans, list):
+                for p in plans:
+                    dl = str(p.get("deadline") or "").strip() if isinstance(p, dict) else ""
+                    if dl:
+                        deadline_str = dl
+                        for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
+                            try:
+                                dl_d = datetime.datetime.strptime(dl, fmt).date()
+                                if dl_d < today_d:
+                                    is_overdue = True
+                                break
+                            except Exception:
+                                continue
+        except Exception:
+            pass
+    if is_overdue:
+        return "OVERDUE", deadline_str or "-"
+    if t_stat in ("Vừa tạo", "Lưu nháp", "Chờ duyệt"):
+        return "OPEN", deadline_str or (c.created_at + datetime.timedelta(days=7)).strftime("%Y-%m-%d") if c.created_at else "-"
+    return "IN_PROGRESS", deadline_str or ((c.created_at + datetime.timedelta(days=7)).strftime("%Y-%m-%d") if c.created_at else "-")
+
+
 @router.get("/daily/analytics", response_model=DailyInspectionAnalytics)
 def get_daily_inspection_analytics(
     start_date: Optional[datetime.date] = None,
     end_date: Optional[datetime.date] = None,
+    preset: Optional[str] = "all",
     stage: Optional[str] = None,
-    category: Optional[str] = None, # Thêm lọc theo nhóm lỗi
-    group_by: Optional[str] = "date", # 'date' hoặc 'month'
+    category: Optional[str] = None,
+    aql_class: Optional[str] = None,
+    search: Optional[str] = None,
+    group_by: Optional[str] = "date",
     db: Session = Depends(get_db)
 ):
     """
-    [GET] Lấy dữ liệu phân tích lỗi (Pareto, Trend, Distribution).
+    [GET] Phân tích chất lượng toàn diện cho Dashboard Kiểm soát lỗi (Trang 1 - 3) từ SQL Server SmartFlow_v5.
     """
-    # 1. Filter conditions for Records
-    record_filters = []
-    if start_date:
-        record_filters.append(DailyInspectionRecord.inspection_date >= start_date)
-    if end_date:
-        record_filters.append(DailyInspectionRecord.inspection_date <= end_date)
-    if stage:
-        record_filters.append(DailyInspectionRecord.stage_name == stage)
+    date_info = resolve_analytics_dates(preset, start_date, end_date)
+    curr_start = date_info["curr_start"]
+    curr_end = date_info["curr_end"]
+    ref_start = date_info["ref_start"]
+    ref_end = date_info["ref_end"]
+    ref_dates = date_info["ref_dates"]
+    is_daily_avg = date_info["is_daily_avg"]
+    ref_label = date_info["ref_label"]
+    comp_short = date_info["comp_short_label"]
+    has_comp_window = date_info["has_comp"]
 
-    # 2. Base Records Query (Dùng để tính Tổng sản phẩm và Số phiếu)
-    # QUAN TRỌNG: Không join với defect_types ở bước này để tránh mất các phiếu có 0 lỗi hoặc sai lệch số lượng sản phẩm
-    base_records_query = db.query(
-        DailyInspectionRecord.id,
-        DailyInspectionRecord.total_products
-    ).filter(*record_filters)
-    
-    base_records = base_records_query.all()
-    record_ids = [r.id for r in base_records]
-    total_records = len(record_ids)
-    total_products = sum(r.total_products for r in base_records) if base_records else 0
+    # 1. Query matched records for current & reference periods
+    curr_matched = _query_filtered_daily_records(
+        db, curr_start, curr_end, None, stage, category, aql_class, search
+    )
+    curr_stats = _summarize_matched_records(curr_matched)
 
-    # 3. Calculate Total Defects for the selected category
-    if not record_ids:
-        summary = DailyInspectionSummary(total_records=0, total_products=0, total_defects=0, avg_defect_rate=0.0)
-    else:
-        defect_query = db.query(func.sum(DailyInspectionDefect.quantity))\
-                         .join(DefectType, DefectType.id == DailyInspectionDefect.defect_id)\
-                         .filter(DailyInspectionDefect.record_id.in_(record_ids))
-        
-        if category:
-            defect_query = defect_query.filter(DefectType.category == category)
-        
-        total_defects_val = defect_query.scalar() or 0
-        avg_rate = (total_defects_val / total_products * 100) if total_products > 0 else 0
-
-        summary = DailyInspectionSummary(
-            total_records = total_records,
-            total_products = total_products,
-            total_defects = int(total_defects_val),
-            avg_defect_rate = round(float(avg_rate), 2)
+    prev_stats = None
+    if has_comp_window:
+        ref_matched = _query_filtered_daily_records(
+            db, ref_start, ref_end, ref_dates, stage, category, aql_class, search
         )
+        if ref_matched:
+            n_days = len(ref_dates) if (is_daily_avg and ref_dates) else 1
+            prev_stats = _summarize_matched_records(ref_matched, is_daily_avg=is_daily_avg, n_days=n_days)
 
-    # 4. Pareto Data (Top 5)
-    if not record_ids:
-        pareto_data = []
-    else:
-        pareto_base = db.query(
-            DefectType.name.label("defect_name"),
-            func.sum(DailyInspectionDefect.quantity).label("count")
-        ).join(DailyInspectionDefect, DefectType.id == DailyInspectionDefect.defect_id)\
-         .filter(DailyInspectionDefect.record_id.in_(record_ids))\
-         .group_by(DefectType.name)
-        
-        if category:
-            pareto_base = pareto_base.filter(DefectType.category == category)
-            
-        all_pareto_results = pareto_base.order_by(func.sum(DailyInspectionDefect.quantity).desc()).all()
-        total_sum_defects = sum(item.count for item in all_pareto_results)
-        
-        # Chỉ lấy 5 loại lỗi cao nhất
-        top_5_results = all_pareto_results[:5]
-        
-        pareto_data = []
-        cumulative_count = 0
-        for item in top_5_results:
-            count = int(item.count)
-            cumulative_count += count
-            percentage = (count / total_sum_defects * 100) if total_sum_defects > 0 else 0
-            cumulative_percentage = (cumulative_count / total_sum_defects * 100) if total_sum_defects > 0 else 0
-            
-            pareto_data.append(ParetoItem(
-                defect_name = item.defect_name,
-                count = count,
-                percentage = round(percentage, 2),
-                cumulative_percentage = round(cumulative_percentage, 2)
-            ))
+    has_actual_comp = bool(has_comp_window and prev_stats is not None and prev_stats.get("raw_count", 0) > 0)
+    tooltip_prefix = f"Kỳ tham chiếu ({ref_label}): " if ref_label else ""
 
-    # 5. Trend Data (Grouping logic)
-    if group_by == "month":
-        # Group by Month
-        date_trunc = func.datefromparts(
-            func.year(DailyInspectionRecord.inspection_date),
-            func.month(DailyInspectionRecord.inspection_date),
-            1
+    kpi_records = make_count_kpi_card(
+        curr_stats["total_records"],
+        prev_stats["total_records"] if has_actual_comp else None,
+        is_favorable_when_down=False,
+        label=comp_short,
+        tooltip=f"{tooltip_prefix}{prev_stats['total_records']} lượt" if has_actual_comp else "Chưa có dữ liệu kỳ so sánh",
+    )
+    kpi_pass_rate = make_rate_kpi_card(
+        curr_stats["pass_rate"],
+        prev_stats["pass_rate"] if has_actual_comp else None,
+        is_favorable_when_up=True,
+        label=comp_short,
+        tooltip=f"{tooltip_prefix}{prev_stats['pass_rate']}% (Tỷ lệ SP đạt)" if has_actual_comp else "Tỷ lệ sản phẩm đạt = (Tổng SP - SP lỗi) / Tổng SP",
+    )
+    kpi_products = make_count_kpi_card(
+        curr_stats["total_products"],
+        prev_stats["total_products"] if has_actual_comp else None,
+        is_favorable_when_down=False,
+        label=comp_short,
+        tooltip=f"{tooltip_prefix}{int(prev_stats['total_products']):,} SP" if has_actual_comp else "Tổng số sản phẩm kiểm tra trong kỳ",
+    )
+    kpi_defective_products = make_count_kpi_card(
+        curr_stats["defective_products"],
+        prev_stats["defective_products"] if has_actual_comp else None,
+        is_favorable_when_down=True,
+        label=comp_short,
+        tooltip=f"{tooltip_prefix}{int(prev_stats['defective_products']):,} SP lỗi" if has_actual_comp else "Số sản phẩm ghi nhận lỗi (giới hạn theo tổng SP mỗi lượt)",
+    )
+    kpi_defects = make_count_kpi_card(
+        curr_stats["total_defects"],
+        prev_stats["total_defects"] if has_actual_comp else None,
+        is_favorable_when_down=True,
+        label=comp_short,
+        tooltip=f"{tooltip_prefix}{int(prev_stats['total_defects']):,} lỗi" if has_actual_comp else "Tổng số lỗi phát sinh trong kỳ",
+    )
+    kpi_defect_rate = make_rate_kpi_card(
+        curr_stats["avg_defect_rate"],
+        prev_stats["avg_defect_rate"] if has_actual_comp else None,
+        is_favorable_when_up=False,
+        label=comp_short,
+        tooltip=f"{tooltip_prefix}{prev_stats['avg_defect_rate']}%" if has_actual_comp else "Tỷ lệ lỗi = Tổng lỗi / Tổng SP kiểm tra × 100%",
+    )
+    kpi_critical_defects = make_count_kpi_card(
+        curr_stats["critical_defects"],
+        prev_stats["critical_defects"] if has_actual_comp else None,
+        is_favorable_when_down=True,
+        label=comp_short,
+        tooltip=f"{tooltip_prefix}{prev_stats['critical_defects']} lỗi Critical" if has_actual_comp else "Tổng số lỗi mức Critical",
+    )
+
+    comparison_meta = ComparisonMetadata(
+        has_comparison=has_actual_comp,
+        reference_period_label=ref_label,
+        ref_start_date=ref_start.isoformat() if ref_start else None,
+        ref_end_date=ref_end.isoformat() if ref_end else None,
+        current_start_date=curr_start.isoformat() if curr_start else None,
+        current_end_date=curr_end.isoformat() if curr_end else None,
+        is_daily_average=is_daily_avg,
+    )
+
+    summary = DailyInspectionSummary(
+        total_records=int(curr_stats["total_records"]),
+        pass_rate=float(curr_stats["pass_rate"]),
+        total_products=int(curr_stats["total_products"]),
+        defective_products=int(curr_stats["defective_products"]),
+        total_defects=int(curr_stats["total_defects"]),
+        avg_defect_rate=float(curr_stats["avg_defect_rate"]),
+        critical_defects=int(curr_stats["critical_defects"]),
+        kpi_records=kpi_records,
+        kpi_pass_rate=kpi_pass_rate,
+        kpi_products=kpi_products,
+        kpi_defective_products=kpi_defective_products,
+        kpi_defects=kpi_defects,
+        kpi_defect_rate=kpi_defect_rate,
+        kpi_critical_defects=kpi_critical_defects,
+        comparison=comparison_meta,
+    )
+
+    # 2. Trend & Daily Breakdown
+    day_buckets = {}
+    for r, _canon, _iid, _iname, f_defs in curr_matched:
+        if not r.inspection_date:
+            continue
+        if group_by == "month":
+            d_key = f"{r.inspection_date.year}-{r.inspection_date.month:02d}"
+        else:
+            d_key = r.inspection_date.isoformat()
+
+        b = day_buckets.setdefault(d_key, {
+            "total_orders": 0,
+            "passed_orders": 0,
+            "total_products": 0,
+            "defective_products": 0,
+            "defect_count": 0,
+        })
+        tp = int(r.total_products or 0)
+        rec_def = sum(int(d.quantity or 0) for d in f_defs)
+        rec_def_prod = min(tp, rec_def) if tp > 0 else rec_def
+        b["total_orders"] += 1
+        if rec_def == 0:
+            b["passed_orders"] += 1
+        b["total_products"] += tp
+        b["defective_products"] += rec_def_prod
+        b["defect_count"] += rec_def
+
+    trend_data = []
+    daily_breakdown = []
+    for d_key in sorted(day_buckets.keys()):
+        b = day_buckets[d_key]
+        tp = b["total_products"]
+        dp = b["defective_products"]
+        dc = b["defect_count"]
+        passed_p = max(0, tp - dp)
+        d_rate = round((dc / tp * 100), 2) if tp > 0 else 0.0
+        p_rate = round((passed_p / tp * 100), 1) if tp > 0 else 0.0
+        trend_data.append(TrendItem(
+            date=d_key,
+            defect_count=dc,
+            product_count=tp,
+            defective_products=dp,
+            defect_rate=d_rate,
+            pass_rate=p_rate,
+        ))
+        daily_breakdown.append(DailyBreakdownItem(
+            date=d_key,
+            total_orders=b["total_orders"],
+            passed_orders=b["passed_orders"],
+            failed_orders=max(0, b["total_orders"] - b["passed_orders"]),
+            total_products=tp,
+            passed_products=passed_p,
+            defective_products=dp,
+            defect_count=dc,
+            pass_rate=p_rate,
+            defect_rate=d_rate,
+        ))
+
+    # 3. Canonical stages order from `stages` table
+    stage_rows_db = db.query(Stage).filter(Stage.is_active == True).order_by(Stage.sequence.asc()).all()
+    ordered_stage_names = []
+    for st in stage_rows_db:
+        cname = canonical_stage_name(st.name)
+        if cname not in ordered_stage_names:
+            ordered_stage_names.append(cname)
+
+    stage_stats = {}
+    for _r, canon_stg, _iid, _iname, f_defs in curr_matched:
+        if canon_stg not in ordered_stage_names:
+            ordered_stage_names.append(canon_stg)
+        st_b = stage_stats.setdefault(canon_stg, {
+            "total_lots": 0,
+            "passed_lots": 0,
+            "total_products": 0,
+            "defective_products": 0,
+            "defect_count": 0,
+        })
+        tp = int(_r.total_products or 0)
+        rec_def = sum(int(d.quantity or 0) for d in f_defs)
+        rec_def_prod = min(tp, rec_def) if tp > 0 else rec_def
+        st_b["total_lots"] += 1
+        if rec_def == 0:
+            st_b["passed_lots"] += 1
+        st_b["total_products"] += tp
+        st_b["defective_products"] += rec_def_prod
+        st_b["defect_count"] += rec_def
+
+    total_stage_defects = sum(v["defect_count"] for v in stage_stats.values())
+    stage_breakdown = []
+    sorted_stage_items = sorted(stage_stats.items(), key=lambda kv: (-kv[1]["defect_count"], kv[0]))
+    for idx, (stg_name, st_b) in enumerate(sorted_stage_items):
+        if st_b["defect_count"] <= 0 and total_stage_defects > 0:
+            continue
+        pct = round((st_b["defect_count"] / total_stage_defects * 100), 1) if total_stage_defects > 0 else 0.0
+        stage_breakdown.append(StageBreakdownItem(
+            stage=stg_name,
+            defect_count=st_b["defect_count"],
+            percentage=pct,
+            color=WOOD_PALETTE[idx % len(WOOD_PALETTE)],
+        ))
+
+    stage_pass_rates = []
+    for stg_name in ordered_stage_names:
+        st_b = stage_stats.get(stg_name)
+        if not st_b or st_b["total_lots"] == 0:
+            continue
+        tp = st_b["total_products"]
+        dp = st_b["defective_products"]
+        passed_p = max(0, tp - dp)
+        p_rate = round((passed_p / tp * 100), 1) if tp > 0 else 0.0
+        stage_pass_rates.append(StagePassRateItem(
+            stage=stg_name,
+            code=stg_name,
+            total_lots=st_b["total_lots"],
+            passed_lots=st_b["passed_lots"],
+            failed_lots=max(0, st_b["total_lots"] - st_b["passed_lots"]),
+            total_products=tp,
+            passed_products=passed_p,
+            defective_products=dp,
+            pass_rate=p_rate,
+            target_rate=95.0,
+        ))
+
+    # 4. Aggregate all defect types + Heatmap + AQL + Category severity + Detailed defect table
+    defect_agg = {}
+    heatmap_stage_map = defaultdict(lambda: defaultdict(int))
+    aql_counts = {"Critical": 0, "Major": 0, "Minor": 0}
+    cat_sev_map = {}
+
+    for _r, canon_stg, _iid, _iname, f_defs in curr_matched:
+        for d in f_defs:
+            dt = d.defect_type
+            d_id = d.defect_id
+            d_code = (dt.code if dt and dt.code else f"DEF-{d_id:03d}")
+            d_name = (dt.name if dt and dt.name else f"Lỗi #{d_id}")
+            d_cat = (dt.category or 'other').strip().lower() if dt else 'other'
+            d_aql = _normalize_aql_label(dt.aql_class if dt else '')
+            qty = int(d.quantity or 0)
+
+            entry = defect_agg.setdefault(d_id, {
+                "defect_id": d_id,
+                "defect_code": d_code,
+                "defect_name": d_name,
+                "category": d_cat,
+                "category_name": CATEGORY_LABELS.get(d_cat, d_cat.capitalize()),
+                "aql_class": d_aql,
+                "count": 0,
+            })
+            entry["count"] += qty
+            heatmap_stage_map[d_id][canon_stg] += qty
+
+            if d_aql in aql_counts:
+                aql_counts[d_aql] += qty
+
+            cs = cat_sev_map.setdefault(d_cat, {
+                "minor": 0, "major": 0, "critical": 0, "unclassified": 0, "total": 0
+            })
+            cs["total"] += qty
+            if d_aql == "Critical":
+                cs["critical"] += qty
+            elif d_aql == "Major":
+                cs["major"] += qty
+            elif d_aql == "Minor":
+                cs["minor"] += qty
+            else:
+                cs["unclassified"] += qty
+
+    sorted_defects = sorted(defect_agg.values(), key=lambda x: (-x["count"], x["defect_name"]))
+    total_all_defects = sum(d["count"] for d in sorted_defects)
+
+    top_defect_causes = [
+        TopCauseItem(
+            defect_id=d["defect_id"],
+            defect_code=d["defect_code"],
+            defect_name=d["defect_name"],
+            category=d["category"],
+            aql_class=d["aql_class"],
+            count=d["count"],
+            percentage=round((d["count"] / total_all_defects * 100), 1) if total_all_defects > 0 else 0.0,
+            rank=idx + 1,
         )
-    else:
-        # Group by Date
-        date_trunc = DailyInspectionRecord.inspection_date
-
-    # Subquery để lấy số lượng lỗi theo từng record (có lọc category nếu cần)
-    defect_sub_q = db.query(
-        DailyInspectionDefect.record_id,
-        func.sum(DailyInspectionDefect.quantity).label("cat_defects")
-    ).join(DefectType, DefectType.id == DailyInspectionDefect.defect_id)
-    
-    if category:
-        defect_sub_q = defect_sub_q.filter(DefectType.category == category)
-    
-    defect_sub_q = defect_sub_q.group_by(DailyInspectionDefect.record_id).subquery()
-
-    trend_query = db.query(
-        date_trunc.label("trend_date"),
-        func.sum(func.coalesce(defect_sub_q.c.cat_defects, 0)).label("defect_count"),
-        func.sum(DailyInspectionRecord.total_products).label("product_count")
-    ).outerjoin(defect_sub_q, DailyInspectionRecord.id == defect_sub_q.c.record_id)\
-     .filter(*record_filters)\
-     .group_by(date_trunc)\
-     .order_by(date_trunc)\
-     .all()
-
-    trend_data = [
-        TrendItem(
-            date = item.trend_date,
-            defect_count = int(item.defect_count or 0),
-            product_count = int(item.product_count or 1),
-            defect_rate = round((int(item.defect_count or 0) / int(item.product_count or 1) * 100), 2)
-        ) for item in trend_query
+        for idx, d in enumerate(sorted_defects[:10])
     ]
 
-    # 6. Distribution Data
-    if not record_ids:
-        distribution_data = []
-    else:
-        dist_query = db.query(
-            DefectType.category,
-            func.sum(DailyInspectionDefect.quantity).label("value")
-        ).join(DailyInspectionDefect, DefectType.id == DailyInspectionDefect.defect_id)\
-         .filter(DailyInspectionDefect.record_id.in_(record_ids))\
-         .group_by(DefectType.category)\
-         .all()
+    pareto_data = []
+    cum_cnt = 0
+    for idx, d in enumerate(sorted_defects[:10]):
+        cum_cnt += d["count"]
+        pct = round((d["count"] / total_all_defects * 100), 1) if total_all_defects > 0 else 0.0
+        cum_pct = round((cum_cnt / total_all_defects * 100), 1) if total_all_defects > 0 else 0.0
+        pareto_data.append(ParetoItem(
+            defect_id=d["defect_id"],
+            defect_code=d["defect_code"],
+            defect_name=d["defect_name"],
+            count=d["count"],
+            percentage=pct,
+            cumulative_percentage=min(100.0, cum_pct),
+            rank=idx + 1,
+        ))
 
-        category_map = {
-            'visual': 'Ngoại quan',
-            'structure': 'Kết cấu',
-            'material': 'Nguyên liệu',
-            'other': 'Khác'
-        }
+    detailed_defect_table = [
+        DetailedDefectItem(
+            defect_id=d["defect_id"],
+            defect_code=d["defect_code"],
+            defect_name=d["defect_name"],
+            category=d["category"],
+            category_name=d["category_name"],
+            aql_class=d["aql_class"],
+            count=d["count"],
+        )
+        for d in sorted_defects
+    ]
 
-        distribution_data = [
-            DistributionItem(
-                label = category_map.get(item.category, item.category),
-                value = int(item.value or 0)
-            ) for item in dist_query
+    active_heatmap_stage_names = [s for s in ordered_stage_names if stage_stats.get(s, {}).get("defect_count", 0) > 0]
+    if not active_heatmap_stage_names:
+        active_heatmap_stage_names = [s for s in ordered_stage_names[:6]]
+
+    heatmap_stages = [
+        HeatmapStageItem(code=f"STG-{i+1}", name=s_name)
+        for i, s_name in enumerate(active_heatmap_stage_names)
+    ]
+    defect_stage_heatmap = [
+        HeatmapRow(
+            defect_id=d["defect_id"],
+            defect_code=d["defect_code"],
+            defect_name=d["defect_name"],
+            total_count=d["count"],
+            stages={s_name: int(heatmap_stage_map[d["defect_id"]].get(s_name, 0)) for s_name in active_heatmap_stage_names},
+        )
+        for d in sorted_defects[:10]
+    ]
+
+    severity_by_category = [
+        CategorySeverityItem(
+            category=cat_key,
+            category_name=CATEGORY_LABELS.get(cat_key, cat_key.capitalize()),
+            minor=cnts["minor"],
+            major=cnts["major"],
+            critical=cnts["critical"],
+            unclassified=cnts["unclassified"],
+            total=cnts["total"],
+        )
+        for cat_key, cnts in sorted(cat_sev_map.items(), key=lambda x: -x[1]["total"])
+    ]
+
+    aql_severity_breakdown = [
+        AqlSeverityItem(
+            name=label,
+            aql_class=aql_k,
+            count=aql_counts[aql_k],
+            percentage=round((aql_counts[aql_k] / total_all_defects * 100), 1) if total_all_defects > 0 else 0.0,
+            color=clr,
+        )
+        for label, aql_k, clr in [
+            ("Critical (Nghiêm trọng)", "Critical", "#5C381E"),
+            ("Major (Lỗi nặng)", "Major", "#9A6946"),
+            ("Minor (Lỗi nhẹ)", "Minor", "#D4B89B"),
         ]
+        if aql_counts[aql_k] > 0 or total_all_defects > 0
+    ]
+
+    top4_count = sum(d["count"] for d in sorted_defects[:4])
+    pareto_80_ratio = round((top4_count / total_all_defects * 100), 1) if total_all_defects > 0 else 0.0
+
+    kpi_critical = make_count_kpi_card(
+        curr_stats["critical_defects"],
+        prev_stats["critical_defects"] if has_actual_comp else None,
+        is_favorable_when_down=True,
+        label=comp_short,
+        tooltip=f"{tooltip_prefix}{prev_stats['critical_defects']} lỗi Critical" if has_actual_comp else "Tổng lỗi mức Critical theo AQL",
+    )
+    kpi_major = make_count_kpi_card(
+        curr_stats["major_defects"],
+        prev_stats["major_defects"] if has_actual_comp else None,
+        is_favorable_when_down=True,
+        label=comp_short,
+        tooltip=f"{tooltip_prefix}{prev_stats['major_defects']} lỗi Major" if has_actual_comp else "Tổng lỗi mức Major theo AQL",
+    )
+    kpi_minor = make_count_kpi_card(
+        curr_stats["minor_defects"],
+        prev_stats["minor_defects"] if has_actual_comp else None,
+        is_favorable_when_down=True,
+        label=comp_short,
+        tooltip=f"{tooltip_prefix}{prev_stats['minor_defects']} lỗi Minor" if has_actual_comp else "Tổng lỗi mức Minor theo AQL",
+    )
+
+    kpi_pareto = KpiPareto(
+        critical_defects=curr_stats["critical_defects"],
+        major_defects=curr_stats["major_defects"],
+        minor_defects=curr_stats["minor_defects"],
+        pareto_80_ratio=pareto_80_ratio,
+        kpi_critical=kpi_critical,
+        kpi_major=kpi_major,
+        kpi_minor=kpi_minor,
+        comparison=comparison_meta,
+    )
+
+    # 5. Page 3 — Top Defective Batches & Product Lines (DailyInspectionRecord.batch_no + InputInspection)
+    batch_map = {}
+    line_map = {}
+
+    # Seed from DailyInspectionRecord if batch_no exists
+    for r, canon_stg, _iid, insp_name, f_defs in curr_matched:
+        if not r.batch_no or not str(r.batch_no).strip():
+            continue
+        b_no = str(r.batch_no).strip()
+        tp = int(r.total_products or 0)
+        rec_def = sum(int(d.quantity or 0) for d in f_defs)
+        rec_dp = min(tp, rec_def) if tp > 0 else rec_def
+        p_line = _classify_product_line(b_no)
+        bm = batch_map.setdefault(b_no, {
+            "batch_no": b_no,
+            "pallet_code": r.pallet_code or "---",
+            "stage_name": canon_stg,
+            "product_line": p_line or "OTHER",
+            "inspector_name": insp_name,
+            "total_products": 0,
+            "defective_products": 0,
+            "total_defects": 0,
+        })
+        bm["total_products"] += tp
+        bm["defective_products"] += rec_dp
+        bm["total_defects"] += rec_def
+
+    # Query InputInspection tickets (lot-level PO / SKU data)
+    inp_q = db.query(InputInspection).filter(
+        or_(InputInspection.is_deleted == False, InputInspection.is_deleted.is_(None))
+    )
+    eff_ts = func.coalesce(InputInspection.inspected_at, InputInspection.created_at)
+    if curr_start:
+        inp_q = inp_q.filter(eff_ts >= datetime.datetime.combine(curr_start, datetime.time.min))
+    if curr_end:
+        inp_q = inp_q.filter(eff_ts <= datetime.datetime.combine(curr_end, datetime.time.max))
+    if stage and stage.lower() != 'all':
+        stg_inp_clause = build_stage_filter_clause(InputInspection.stage, stage)
+        if stg_inp_clause is not None:
+            inp_q = inp_q.filter(stg_inp_clause)
+    if search and search.strip():
+        s_inp = f"%{search.strip()}%"
+        inp_q = inp_q.filter(or_(
+            InputInspection.batch_no.ilike(s_inp),
+            InputInspection.pallet_code.ilike(s_inp),
+            InputInspection.product_sku.ilike(s_inp),
+            InputInspection.part_name.ilike(s_inp),
+            InputInspection.stage.ilike(s_inp),
+            InputInspection.inspector_name.ilike(s_inp),
+        ))
+
+    inp_rows = inp_q.all()
+    for inp in inp_rows:
+        b_no = str(inp.batch_no or "").strip()
+        sku = str(inp.product_sku or inp.part_name or "").strip()
+        sq = int(inp.sample_qty or 0)
+        eq = int(inp.error_qty or 0)
+        conc = str(inp.conclusion or "").strip().lower()
+        res = str(inp.result or "").strip().lower()
+        is_fail = conc in ("fail", "không đạt") or res in ("fail", "không đạt")
+
+        # Batch aggregation
+        if b_no and eq > 0:
+            canon_inp_stg = canonical_stage_name(inp.stage)
+            bm = batch_map.setdefault(b_no, {
+                "batch_no": b_no,
+                "pallet_code": inp.pallet_code or "---",
+                "stage_name": canon_inp_stg,
+                "product_line": _classify_product_line(b_no or sku) or "OTHER",
+                "inspector_name": inp.inspector_name or "QC",
+                "total_products": 0,
+                "defective_products": 0,
+                "total_defects": 0,
+            })
+            bm["total_products"] += max(sq, eq)
+            bm["defective_products"] += min(max(sq, eq), eq) if sq > 0 else eq
+            bm["total_defects"] += eq
+            if inp.pallet_code and bm["pallet_code"] == "---":
+                bm["pallet_code"] = inp.pallet_code
+
+        # Product Line classification (`APT`, `ADV`, `FOL`, and `OTHER` when present)
+        line_code = _classify_product_line(b_no) or _classify_product_line(sku)
+        if line_code:
+            lm = line_map.setdefault(line_code, {
+                "orders": 0,
+                "passed_orders": 0,
+                "failed_orders": 0,
+                "inspected_qty": 0,
+                "defective_qty": 0,
+            })
+            lm["orders"] += 1
+            if is_fail:
+                lm["failed_orders"] += 1
+            else:
+                lm["passed_orders"] += 1
+            lm["inspected_qty"] += sq
+            lm["defective_qty"] += eq
+
+    sorted_batches = sorted(
+        batch_map.values(),
+        key=lambda x: (-x["defective_products"], -x["total_defects"], x["batch_no"]),
+    )[:10]
+    top_defective_batches = [
+        BatchDefectItem(
+            batch_no=b["batch_no"],
+            pallet_code=b["pallet_code"],
+            stage_name=b["stage_name"],
+            product_line=b["product_line"],
+            inspector_name=b["inspector_name"],
+            total_products=b["total_products"],
+            defective_products=b["defective_products"],
+            total_defects=b["total_defects"],
+            defect_rate=round((b["defective_products"] / b["total_products"] * 100), 2) if b["total_products"] > 0 else 0.0,
+        )
+        for b in sorted_batches
+    ]
+
+    line_labels = {
+        "APT": "Dòng tủ APT",
+        "ADV": "Dòng tủ ADV",
+        "FOL": "Dòng bàn ghế FOL",
+        "OTHER": "Dòng SP khác",
+    }
+    line_order = {"APT": 1, "ADV": 2, "FOL": 3, "OTHER": 4}
+    total_line_defects = sum(v["defective_qty"] for v in line_map.values())
+    product_line_breakdown = []
+    for l_code in sorted(line_map.keys(), key=lambda c: line_order.get(c, 99)):
+        lm = line_map[l_code]
+        if l_code == "OTHER" and lm["orders"] == 0:
+            continue
+        p_rate = round((lm["passed_orders"] / lm["orders"] * 100), 1) if lm["orders"] > 0 else 0.0
+        d_rate = round((lm["defective_qty"] / lm["inspected_qty"] * 100), 2) if lm["inspected_qty"] > 0 else 0.0
+        d_share = round((lm["defective_qty"] / total_line_defects * 100), 1) if total_line_defects > 0 else 0.0
+        product_line_breakdown.append(ProductLineItem(
+            line_code=l_code,
+            line_name=line_labels.get(l_code, l_code),
+            orders=lm["orders"],
+            passed_orders=lm["passed_orders"],
+            failed_orders=lm["failed_orders"],
+            pass_rate=p_rate,
+            inspected_qty=lm["inspected_qty"],
+            defective_qty=lm["defective_qty"],
+            defect_rate=d_rate,
+            defect_share=d_share,
+        ))
+
+    # 6. Page 3 — QC Audit Roster
+    qc_map = {}
+    for r, canon_stg, insp_id, insp_name, f_defs in curr_matched:
+        key = insp_id or insp_name
+        qm = qc_map.setdefault(key, {
+            "id": insp_id,
+            "inspector_name": insp_name,
+            "stage_counts": defaultdict(int),
+            "total_inspections": 0,
+            "passed_inspections": 0,
+            "failed_inspections": 0,
+            "total_products": 0,
+            "defective_products": 0,
+        })
+        tp = int(r.total_products or 0)
+        rec_def = sum(int(d.quantity or 0) for d in f_defs)
+        rec_dp = min(tp, rec_def) if tp > 0 else rec_def
+        qm["stage_counts"][canon_stg] += 1
+        qm["total_inspections"] += 1
+        if rec_def == 0:
+            qm["passed_inspections"] += 1
+        else:
+            qm["failed_inspections"] += 1
+        qm["total_products"] += tp
+        qm["defective_products"] += rec_dp
+
+    qc_roster = []
+    for qm in qc_map.values():
+        primary_stg = max(qm["stage_counts"].items(), key=lambda kv: kv[1])[0] if qm["stage_counts"] else "Khác"
+        tp = qm["total_products"]
+        dp = qm["defective_products"]
+        passed_p = max(0, tp - dp)
+        p_rate = round((passed_p / tp * 100), 1) if tp > 0 else 0.0
+        qc_roster.append(QcRosterItem(
+            id=qm["id"],
+            inspector_name=qm["inspector_name"],
+            primary_stage=primary_stg,
+            total_inspections=qm["total_inspections"],
+            passed_inspections=qm["passed_inspections"],
+            failed_inspections=qm["failed_inspections"],
+            total_products=tp,
+            passed_products=passed_p,
+            defective_products=dp,
+            pass_rate=p_rate,
+        ))
+    qc_roster.sort(key=lambda x: (-x.total_inspections, -x.total_products))
+
+    # 7. Page 3 — CAPA Status & Action Items from `capas` table
+    all_capas = db.query(CAPA).order_by(CAPA.id.desc()).all()
+    today_d = datetime.date.today()
+
+    def _filter_capas(capas_list, s_d, e_d, d_list):
+        out = []
+        for c in capas_list:
+            c_date = c.created_at.date() if c.created_at else None
+            if d_list:
+                if not c_date or c_date not in d_list:
+                    continue
+            else:
+                if s_d and c_date and c_date < s_d:
+                    continue
+                if e_d and c_date and c_date > e_d:
+                    continue
+            if search and search.strip():
+                sq = search.strip().lower()
+                if not (
+                    sq in str(c.code or "").lower()
+                    or sq in str(c.issue_description or "").lower()
+                    or sq in str(c.handler_name or "").lower()
+                    or sq in str(c.scope or "").lower()
+                ):
+                    continue
+            out.append(c)
+        return out
+
+    curr_capas = _filter_capas(all_capas, curr_start, curr_end, None)
+    capa_counts = {"CLOSED": 0, "IN_PROGRESS": 0, "OPEN": 0, "OVERDUE": 0}
+    action_items = []
+    for c in curr_capas:
+        st_code, dl_str = _parse_capa_status(c, today_d)
+        capa_counts[st_code] = capa_counts.get(st_code, 0) + 1
+        urgency_raw = str(c.urgency or "").lower()
+        sev = "Critical" if any(k in urgency_raw for k in ("khẩn", "nghiêm trọng", "critical")) else "Major"
+        action_items.append(ActionItem(
+            id=c.id,
+            capa_code=c.code or f"CAPA-{c.id}",
+            issue_title=c.issue_description or c.scope or f"Phiếu {c.code}",
+            batch_no=c.scope or "-",
+            stage=c.scope or "Toàn xưởng",
+            owner=c.handler_name or c.creator_name or "QC",
+            severity=sev,
+            status=st_code,
+            deadline=dl_str,
+        ))
+
+    total_capa = len(curr_capas)
+    closed_capa = capa_counts["CLOSED"]
+    in_progress_capa = capa_counts["IN_PROGRESS"] + capa_counts["OPEN"]
+    overdue_capa = capa_counts["OVERDUE"]
+    resolution_rate = round((closed_capa / total_capa * 100), 1) if total_capa > 0 else 0.0
+
+    prev_capa_comp = None
+    if has_comp_window:
+        prev_capas = _filter_capas(all_capas, ref_start, ref_end, ref_dates)
+        if prev_capas:
+            p_tot = len(prev_capas)
+            p_closed = sum(1 for c in prev_capas if _parse_capa_status(c, today_d)[0] == "CLOSED")
+            p_res = round((p_closed / p_tot * 100), 1) if p_tot > 0 else 0.0
+            prev_capa_comp = {"total": p_tot, "res": p_res}
+
+    kpi_total_capa = make_count_kpi_card(
+        total_capa,
+        prev_capa_comp["total"] if prev_capa_comp else None,
+        is_favorable_when_down=True,
+        label=comp_short,
+        tooltip=f"{tooltip_prefix}{prev_capa_comp['total']} vụ" if prev_capa_comp else "Tổng số phiếu CAPA trong kỳ",
+    )
+    kpi_resolution_rate = make_rate_kpi_card(
+        resolution_rate,
+        prev_capa_comp["res"] if prev_capa_comp else None,
+        is_favorable_when_up=True,
+        label=comp_short,
+        tooltip=f"{tooltip_prefix}{prev_capa_comp['res']}%" if prev_capa_comp else "Tỷ lệ CAPA đã nghiệm thu đóng hồ sơ",
+    )
+    capa_comp_meta = ComparisonMetadata(
+        has_comparison=bool(prev_capa_comp),
+        reference_period_label=ref_label,
+        ref_start_date=ref_start.isoformat() if ref_start else None,
+        ref_end_date=ref_end.isoformat() if ref_end else None,
+        current_start_date=curr_start.isoformat() if curr_start else None,
+        current_end_date=curr_end.isoformat() if curr_end else None,
+        is_daily_average=is_daily_avg,
+    )
+    kpi_action = KpiAction(
+        total_capa=total_capa,
+        resolution_rate=resolution_rate,
+        in_progress_capa=in_progress_capa,
+        overdue_capa=overdue_capa,
+        kpi_total_capa=kpi_total_capa,
+        kpi_resolution_rate=kpi_resolution_rate,
+        comparison=capa_comp_meta,
+    )
+
+    capa_status_breakdown = [
+        CapaStatusItem(
+            name=label,
+            status=st_k,
+            count=capa_counts[st_k],
+            percentage=round((capa_counts[st_k] / total_capa * 100), 1) if total_capa > 0 else 0.0,
+            color=clr,
+        )
+        for st_k, label, clr in [
+            ("CLOSED", "Đã hoàn thành", "#55331F"),
+            ("IN_PROGRESS", "Đang khắc phục", "#88593B"),
+            ("OPEN", "Chờ duyệt", "#B58A67"),
+            ("OVERDUE", "Quá hạn SLA", "#B91C1C"),
+        ]
+        if capa_counts[st_k] > 0
+    ]
+
+    distribution_data = [
+        DistributionItem(label=item.category_name, value=item.total)
+        for item in severity_by_category
+    ]
 
     return DailyInspectionAnalytics(
-        summary = summary,
-        pareto = pareto_data,
-        trend = trend_data,
-        distribution = distribution_data
+        summary=summary,
+        pareto=pareto_data,
+        trend=trend_data,
+        stage_breakdown=stage_breakdown,
+        top_defect_causes=top_defect_causes,
+        stage_pass_rates=stage_pass_rates,
+        severity_by_category=severity_by_category,
+        kpi_pareto=kpi_pareto,
+        defect_stage_heatmap=defect_stage_heatmap,
+        heatmap_stages=heatmap_stages,
+        daily_breakdown=daily_breakdown,
+        aql_severity_breakdown=aql_severity_breakdown,
+        detailed_defect_table=detailed_defect_table,
+        kpi_action=kpi_action,
+        top_defective_batches=top_defective_batches,
+        product_line_breakdown=product_line_breakdown,
+        qc_roster=qc_roster,
+        capa_status_breakdown=capa_status_breakdown,
+        action_items=action_items,
+        distribution=distribution_data,
+    )
+
+
+@router.get("/daily/stage-causes", response_model=StageCausesResponse)
+def get_daily_stage_causes(
+    stage_name: str,
+    preset: Optional[str] = "all",
+    start_date: Optional[datetime.date] = None,
+    end_date: Optional[datetime.date] = None,
+    category: Optional[str] = None,
+    aql_class: Optional[str] = None,
+    search: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Lấy phân tích chi tiết nguyên nhân lỗi trong 1 công đoạn (Drill-down Donut Công đoạn).
+    """
+    date_info = resolve_analytics_dates(preset, start_date, end_date)
+    matched = _query_filtered_daily_records(
+        db,
+        date_info["curr_start"],
+        date_info["curr_end"],
+        None,
+        stage_name,
+        category,
+        aql_class,
+        search,
+    )
+
+    causes_map = {}
+    for _r, _canon, _iid, _iname, f_defs in matched:
+        for d in f_defs:
+            dt = d.defect_type
+            d_id = d.defect_id
+            entry = causes_map.setdefault(d_id, {
+                "defect_id": d_id,
+                "defect_code": (dt.code if dt and dt.code else f"DEF-{d_id:03d}"),
+                "defect_name": (dt.name if dt and dt.name else f"Lỗi #{d_id}"),
+                "aql_class": _normalize_aql_label(dt.aql_class if dt else ''),
+                "count": 0,
+            })
+            entry["count"] += int(d.quantity or 0)
+
+    total_stage_defects = sum(c["count"] for c in causes_map.values())
+    sorted_causes = sorted(causes_map.values(), key=lambda x: (-x["count"], x["defect_name"]))
+    causes = [
+        StageCauseDetailItem(
+            defect_id=c["defect_id"],
+            defect_code=c["defect_code"],
+            defect_name=c["defect_name"],
+            aql_class=c["aql_class"],
+            count=c["count"],
+            percentage=round((c["count"] / total_stage_defects * 100), 1) if total_stage_defects > 0 else 0.0,
+        )
+        for c in sorted_causes
+    ]
+    return StageCausesResponse(
+        stage_name=canonical_stage_name(stage_name),
+        totalStageDefects=total_stage_defects,
+        causes=causes,
+    )
+
+
+@router.get("/daily/aql-breakdown", response_model=AqlBreakdownResponse)
+def get_daily_aql_breakdown(
+    aql_class: str,
+    preset: Optional[str] = "all",
+    start_date: Optional[datetime.date] = None,
+    end_date: Optional[datetime.date] = None,
+    stage: Optional[str] = None,
+    category: Optional[str] = None,
+    search: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Lấy cơ cấu nguyên nhân lỗi theo mức AQL + so sánh kỳ trước (Drill-down Donut AQL Trang 2).
+    """
+    target_aql = _normalize_aql_label(aql_class)
+    date_info = resolve_analytics_dates(preset, start_date, end_date)
+    curr_matched = _query_filtered_daily_records(
+        db, date_info["curr_start"], date_info["curr_end"], None, stage, category, target_aql, search
+    )
+
+    curr_map = {}
+    for _r, _canon, _iid, _iname, f_defs in curr_matched:
+        for d in f_defs:
+            dt = d.defect_type
+            d_id = d.defect_id
+            entry = curr_map.setdefault(d_id, {
+                "defect_id": d_id,
+                "defect_code": (dt.code if dt and dt.code else f"DEF-{d_id:03d}"),
+                "defect_name": (dt.name if dt and dt.name else f"Lỗi #{d_id}"),
+                "curr_count": 0,
+            })
+            entry["curr_count"] += int(d.quantity or 0)
+
+    prev_map = {}
+    has_comp = False
+    if date_info["has_comp"]:
+        prev_matched = _query_filtered_daily_records(
+            db, date_info["ref_start"], date_info["ref_end"], date_info["ref_dates"], stage, category, target_aql, search
+        )
+        if prev_matched:
+            has_comp = True
+            n_days = len(date_info["ref_dates"]) if (date_info["is_daily_avg"] and date_info["ref_dates"]) else 1
+            raw_prev = defaultdict(int)
+            for _r, _canon, _iid, _iname, f_defs in prev_matched:
+                for d in f_defs:
+                    raw_prev[d.defect_id] += int(d.quantity or 0)
+            for d_id, q_sum in raw_prev.items():
+                prev_map[d_id] = round(q_sum / n_days) if n_days > 1 else q_sum
+
+    total_curr = sum(v["curr_count"] for v in curr_map.values())
+    total_prev = sum(prev_map.values()) if has_comp else None
+    total_diff = (total_curr - total_prev) if has_comp and total_prev is not None else None
+    if total_diff is None:
+        total_diff_str = "—"
+    elif total_diff > 0:
+        total_diff_str = f"+{total_diff:,}".replace(",", ".")
+    elif total_diff < 0:
+        total_diff_str = f"{total_diff:,}".replace(",", ".")
+    else:
+        total_diff_str = "0"
+
+    sorted_rows = sorted(curr_map.values(), key=lambda x: (-x["curr_count"], x["defect_name"]))
+    table_rows = []
+    for idx, row in enumerate(sorted_rows):
+        d_id = row["defect_id"]
+        c_val = row["curr_count"]
+        p_val = prev_map.get(d_id, 0) if has_comp else None
+        diff_v = (c_val - p_val) if has_comp and p_val is not None else None
+        if diff_v is None:
+            d_str = "—"
+        elif diff_v > 0:
+            d_str = f"+{diff_v:,}".replace(",", ".")
+        elif diff_v < 0:
+            d_str = f"{diff_v:,}".replace(",", ".")
+        else:
+            d_str = "0"
+
+        table_rows.append(AqlBreakdownRow(
+            defect_id=d_id,
+            defect_code=row["defect_code"],
+            defect_name=row["defect_name"],
+            curr_count=c_val,
+            prev_count=p_val,
+            diff=diff_v,
+            diff_str=d_str,
+            percentage=round((c_val / total_curr * 100), 1) if total_curr > 0 else 0.0,
+            color=WOOD_PALETTE[idx % len(WOOD_PALETTE)],
+        ))
+
+    return AqlBreakdownResponse(
+        aql_class=target_aql,
+        totalAqlDefects=total_curr,
+        totalPrevDefects=total_prev,
+        totalDiff=total_diff,
+        totalDiffStr=total_diff_str,
+        hasComparison=has_comp,
+        tableRows=table_rows,
     )
 
 

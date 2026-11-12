@@ -44,7 +44,7 @@ for _p in (_PROJECT_ROOT, _BACKEND_ROOT):
 import requests
 from sqlalchemy import text
 
-from app.core.database import SessionLocal, engine
+from app.core.database import Base, SessionLocal, engine
 from lpn_crawler.backend.config.settings import settings
 from lpn_crawler.backend.models.models import (
     LpnContainer,
@@ -742,7 +742,7 @@ def execute_container_ocr_pipeline(
                         ocr_logger.exception(f"[AI OCR Vong 2 Loi] {candidate['item'].suffix_key}: {p2_err}")
 
             total_dur_s = round(time.time() - t_start_all, 2)
-                        # Ch?y ??i so?t ch?o an to?n (Swap pairs / Co-located barcodes) tr??c khi t?ng k?t v? g?i Zalo
+            # Chạy đối soát chéo an toàn (Swap pairs / Co-located barcodes) trước khi tổng kết và gửi Zalo
             try:
                 from lpn_crawler.backend.services.pallet_grouping import resolve_cross_item_matches
                 cross_res = resolve_cross_item_matches(container_id, db)
@@ -789,6 +789,52 @@ def _lower_process_priority():
         ocr_logger.debug(f"[OCR Worker] Priority notice: {e}")
 
 
+def ensure_ocr_jobs_table() -> bool:
+    """
+    Ensure `lpn_ocr_jobs` (and parent LPN tables) + composite indexes exist in SQL Server
+    before the standalone worker enters its polling loop.
+    """
+    try:
+        Base.metadata.create_all(
+            bind=engine,
+            tables=[
+                LpnContainer.__table__,
+                LpnItem.__table__,
+                LpnImage.__table__,
+                LpnAiOcrResult.__table__,
+                LpnOcrJob.__table__,
+            ],
+            checkfirst=True,
+        )
+        with engine.connect() as conn:
+            trans = conn.begin()
+            try:
+                conn.execute(text("""
+                    IF NOT EXISTS (
+                        SELECT 1 FROM sys.indexes
+                        WHERE name = 'IX_lpn_ocr_jobs_status_created'
+                          AND object_id = OBJECT_ID('lpn_ocr_jobs')
+                    )
+                    CREATE INDEX IX_lpn_ocr_jobs_status_created ON lpn_ocr_jobs (status, created_at);
+                """))
+                conn.execute(text("""
+                    IF NOT EXISTS (
+                        SELECT 1 FROM sys.indexes
+                        WHERE name = 'IX_lpn_ocr_jobs_container_status'
+                          AND object_id = OBJECT_ID('lpn_ocr_jobs')
+                    )
+                    CREATE INDEX IX_lpn_ocr_jobs_container_status ON lpn_ocr_jobs (container_id, status);
+                """))
+                trans.commit()
+            except Exception:
+                trans.rollback()
+                raise
+        return True
+    except Exception as e:
+        ocr_logger.error(f"[OCR Worker] Failed to ensure table 'lpn_ocr_jobs': {e}")
+        return False
+
+
 def recover_stale_ocr_jobs(db):
     """Reset jobs stuck in 'running' whose heartbeat is older than STALE_JOB_MINUTES."""
     try:
@@ -808,7 +854,12 @@ def recover_stale_ocr_jobs(db):
             ocr_logger.warning(f"[OCR Worker] Recovered {res.rowcount} stale OCR job(s).")
     except Exception as e:
         db.rollback()
-        ocr_logger.warning(f"[OCR Worker] Stale recovery check failed: {e}")
+        err_msg = str(e)
+        if "Invalid object name 'lpn_ocr_jobs'" in err_msg or "42S02" in err_msg:
+            ocr_logger.warning("[OCR Worker] Table 'lpn_ocr_jobs' missing during stale check. Auto-creating...")
+            ensure_ocr_jobs_table()
+        else:
+            ocr_logger.warning(f"[OCR Worker] Stale recovery check failed: {e}")
 
 
 def claim_next_ocr_job(db, worker_id: str) -> Optional[Dict[str, Any]]:
@@ -841,7 +892,12 @@ def claim_next_ocr_job(db, worker_id: str) -> Optional[Dict[str, Any]]:
         }
     except Exception as e:
         db.rollback()
-        ocr_logger.error(f"[OCR Worker] Claim job error: {e}")
+        err_msg = str(e)
+        if "Invalid object name 'lpn_ocr_jobs'" in err_msg or "42S02" in err_msg:
+            ocr_logger.warning("[OCR Worker] Table 'lpn_ocr_jobs' missing while claiming job. Auto-creating...")
+            ensure_ocr_jobs_table()
+        else:
+            ocr_logger.error(f"[OCR Worker] Claim job error: {e}")
         return None
 
 
@@ -902,6 +958,10 @@ def run_worker_forever(poll_interval: float = 2.0):
     ocr_logger.info(f"[OCR Worker] Starting Dedicated AI OCR Worker ({worker_id})")
     ocr_logger.info(f"[OCR Worker] Log file: {LOG_FILE}")
     ocr_logger.info(f"============================================================")
+
+    # Ensure persistent queue table & indexes exist before polling
+    if ensure_ocr_jobs_table():
+        ocr_logger.info("[OCR Worker] Table 'lpn_ocr_jobs' verified/ready.")
 
     # Pre-warm models once inside worker process
     try:

@@ -257,6 +257,7 @@ async def check_write_permissions(request: Request, call_next):
             "/api/v1/inspections/upload-image",
             "/api/v1/inspections/upload",
             "/api/v1/deliveries/upload-image",
+            "/api/v1/warehouses/upload-image",
             "/api/v1/assessment",
             "/api/v1/iso-documents/onlyoffice/callback",
             "/api/v1/daily-production/preview-merge",
@@ -413,6 +414,38 @@ async def check_write_permissions(request: Request, call_next):
                                         "/admin/purchase-requisitions", "purchase-requisitions",
                                         "/inspection-stage", "/plan"
                                     ]
+
+                                # 6.5. Warehouse & Units of Measure (Web + Mobile)
+                                elif path.startswith("/api/v1/warehouses/receipts"):
+                                    candidate_keys = [
+                                        "/admin/warehouse/goods-receipt", "goods-receipt", "warehouse-receipt",
+                                        "/warehouse/goods-receipt", "mobile_warehouse-receipt",
+                                        "warehouse", "mobile_warehouse"
+                                    ]
+                                elif path.startswith("/api/v1/warehouses/issues"):
+                                    candidate_keys = [
+                                        "/admin/warehouse/goods-issue", "goods-issue", "warehouse-issue",
+                                        "/warehouse/handover", "mobile_warehouse-handover",
+                                        "warehouse", "mobile_warehouse"
+                                    ]
+                                elif path.startswith("/api/v1/warehouses/rejected-goods"):
+                                    candidate_keys = [
+                                        "/admin/warehouse/rejected-goods", "warehouse-rejected",
+                                        "/admin/warehouse/management", "warehouse-management",
+                                        "/warehouse/returns", "mobile_warehouse-return",
+                                        "warehouse", "mobile_warehouse"
+                                    ]
+                                elif path.startswith("/api/v1/warehouses"):
+                                    candidate_keys = [
+                                        "/admin/warehouse/management", "warehouse-management", "inventory", "warehouse",
+                                        "/warehouse/goods-receipt", "/warehouse/handover", "/warehouse/returns",
+                                        "mobile_warehouse-receipt", "mobile_warehouse-handover", "mobile_warehouse-return",
+                                        "mobile_warehouse"
+                                    ]
+                                elif path.startswith("/api/v1/units-of-measure"):
+                                    candidate_keys = [
+                                        "/admin/units", "units", "screens", "system-config"
+                                    ]
                                     
                                 # 7. Equipments & Machinery
                                 elif path.startswith("/api/v1/equipments"):
@@ -489,12 +522,19 @@ async def check_write_permissions(request: Request, call_next):
 
                                     # Xác định hành động được yêu cầu
                                     path_lower = path.lower()
+                                    path_segments = [seg for seg in path_lower.split("/") if seg]
+                                    approve_keywords = ("approve", "confirm", "accept", "reject", "verify", "resolve")
+                                    is_approve_endpoint = any(
+                                        seg == kw or seg.endswith(f"-{kw}") or seg.startswith(f"{kw}-")
+                                        for seg in path_segments
+                                        for kw in approve_keywords
+                                    )
                                     if any(kw in path_lower for kw in ("upload-ocr", "upload")):
                                         # Tải ảnh kiểm tra mẫu / OCR trong quy trình kiểm tra được phép với quyền create hoặc edit hoặc export_import
                                         required_action = "create"
                                     elif any(kw in path_lower for kw in ("export", "import", "download")):
                                         required_action = "export_import"
-                                    elif any(kw in path_lower for kw in ("approve", "confirm", "accept", "reject", "verify")):
+                                    elif is_approve_endpoint:
                                         required_action = "approve"
                                     elif request.method == "POST":
                                         required_action = "create"

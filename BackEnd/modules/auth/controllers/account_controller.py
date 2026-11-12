@@ -358,8 +358,12 @@ def resolve_permissions_by_params(
         if sc.route_path and sc.route_path not in all_screens_dict:
             parent_titles = set()
             r_lower = sc.route_path.lower()
-            if any(p in r_lower for p in ["/admin/users", "/admin/screens", "/admin/monitor", "/admin/system"]):
+            if any(p in r_lower for p in ["/admin/users", "/admin/screens", "/admin/monitor", "/admin/system", "/admin/units"]):
                 parent_titles.add("Quản lý hệ thống")
+            elif "/admin/warehouse" in r_lower:
+                parent_titles.add("Quản lý kho")
+            elif "/warehouse/" in r_lower:
+                parent_titles.add("Kho")
             elif "/admin/hr" in r_lower:
                 parent_titles.add("Quản lý nhân sự")
             elif "/admin/iso" in r_lower:

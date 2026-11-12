@@ -4,16 +4,13 @@ import axios from 'axios';
 export const getBaseURL = () => {
   const { hostname, port } = window.location;
 
-  // Nếu là môi trường Cloudflare với tách biệt subdomain
-  if (hostname.includes('smartflowg7.cloud')) {
-    if (hostname.startsWith('dev_')) {
-      return 'https://dev_api.smartflowg7.cloud';
-    }
-    return 'https://api.smartflowg7.cloud';
+  if (hostname.includes('smartflowq7.cloud') || hostname.includes('smartflowg7.cloud')) {
+    return window.location.origin;
   }
 
   if (port === '2222' || port === '3333' || port === '5173' || port === '5174' || port === '5175' || port === '3000' || port === '1222' || port === '1333') {
-    return `http://${hostname}:8000`;
+    const resolvedHost = (hostname === 'localhost' || hostname === '::1') ? '127.0.0.1' : hostname;
+    return `http://${resolvedHost}:8000`;
   }
   
   return window.location.origin;

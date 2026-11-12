@@ -42,6 +42,7 @@ export const ClaimTable = ({
     { label: 'TÊN LỖI G7' },
     { label: 'GIÁ TRỊ PHẠT' },
     { label: 'TỔNG TIỀN PHẠT' },
+    { label: 'LPN' },
     { label: 'CONTAINER' },
     { label: 'THỜI GIAN LOAD CONT' },
     { label: 'THỜI GIAN CLAIM' },
@@ -126,6 +127,7 @@ export const ClaimTable = ({
             >
               {formatPenaltyValue(calculateTotalPenalty(claim, undefined, cabinetPrices))}
             </td>
+            <td className="code-lpn" style={{ padding: '10px 14px' }}>{claim.lpn || '—'}</td>
             <td className="code-cont" style={{ padding: '10px 14px', fontWeight: '500' }}>{claim.cont || '—'}</td>
             <td style={{ padding: '10px 14px', fontWeight: '500', color: (claim.date_loading_raw || claim.date_loading) ? '#4B5563' : '#9CA3AF' }}>
               {formatMonthYear(claim.date_loading_raw || claim.date_loading) || '—'}
