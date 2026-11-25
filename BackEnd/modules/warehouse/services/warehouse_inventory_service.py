@@ -2,10 +2,11 @@
 import json
 import re
 import unicodedata
+from collections import defaultdict
 from datetime import date, datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, and_, case
 from fastapi import HTTPException
 
 from modules.warehouse.models import (
@@ -166,8 +167,10 @@ def _serialize_receipt(r: GoodsReceipt) -> dict:
         "ctgs": r.ctgs or "",
         "total_lines": r.total_lines or len(r.items or []),
         "total_quantity": round(float(r.total_quantity or 0), 3),
+        "total_amount": round(float(getattr(r, "total_amount", 0) or 0), 2),
         "created_at": r.created_at.strftime("%Y-%m-%d") if r.created_at else "",
         "created_by": r.created_by or "Người dùng",
+        "updated_by": getattr(r, "updated_by", None) or "",
         "created_channel": getattr(r, "created_channel", None) or "Web",
         "confirmed_by": getattr(r, "confirmed_by", None) or "",
         "confirmed_at": r.confirmed_at.strftime("%Y-%m-%d %H:%M") if getattr(r, "confirmed_at", None) else None,
@@ -189,6 +192,11 @@ def _serialize_receipt(r: GoodsReceipt) -> dict:
                 "unit2": it.unit2 or "",
                 "quantity2": it.quantity2 or 0.0,
                 "conversion_rate": it.conversion_rate or 1.0,
+                "unit_price": round(float(getattr(it, "unit_price", 0) or 0), 2),
+                "amount": round(float(getattr(it, "amount", 0) or 0), 2),
+                "po_code": getattr(it, "po_code", None) or "",
+                "order_code": getattr(it, "order_code", None) or "",
+                "partner_po": getattr(it, "partner_po", None) or "",
                 "lsx": it.lsx or "",
                 "package_split": it.package_split or "",
                 "notes": it.notes or "",
@@ -384,7 +392,22 @@ def _ensure_material_exists(db: Session, wh_name: str, item_code: str, item_name
 # ==========================================
 # XNT DYNAMIC AGGREGATION ENGINE
 # ==========================================
+_RAW_ITEMS_CACHE: Dict[Tuple[Optional[str], Optional[str]], Tuple[datetime, List[dict]]] = {}
+_RAW_ITEMS_CACHE_TTL = 60  # 60s cache TTL để tránh quét lại toàn bộ bảng liên tục
+
+
+def invalidate_raw_items_cache():
+    _RAW_ITEMS_CACHE.clear()
+
+
 def compute_raw_items(db: Session, from_date: Optional[str] = None, to_date: Optional[str] = None) -> List[dict]:
+    cache_key = (from_date, to_date)
+    now_dt = datetime.now()
+    if cache_key in _RAW_ITEMS_CACHE:
+        cached_time, cached_data = _RAW_ITEMS_CACHE[cache_key]
+        if (now_dt - cached_time).total_seconds() < _RAW_ITEMS_CACHE_TTL:
+            return cached_data
+
     f_date = parse_date_safe(from_date)
     t_date = parse_date_safe(to_date)
     as_of_date = t_date or date.today()
@@ -556,6 +579,7 @@ def compute_raw_items(db: Session, from_date: Optional[str] = None, to_date: Opt
             "last_issue_date": iss["last_date"].isoformat() if iss["last_date"] else None,
             "initial_receipt_date": mat.initial_receipt_date.isoformat() if mat.initial_receipt_date else None,
         })
+    _RAW_ITEMS_CACHE[cache_key] = (now_dt, results)
     return results
 
 
@@ -688,27 +712,61 @@ def get_inventory_report(
 
 
 def get_warehouse_counts(db: Session) -> dict:
-    raw_items = compute_raw_items(db)
-    counts = {"ALL": len(raw_items)}
+    rows = (
+        db.query(WarehouseMaterial.warehouse_code, func.count(WarehouseMaterial.id))
+        .filter(WarehouseMaterial.is_active == True)
+        .group_by(WarehouseMaterial.warehouse_code)
+        .all()
+    )
+    counts_by_code = {r[0]: r[1] for r in rows}
+    total = sum(counts_by_code.values())
+    counts = {"ALL": total}
     for code in WAREHOUSE_NAME_BY_CODE.keys():
-        counts[code] = sum(1 for it in raw_items if it["warehouse_code"] == code)
+        counts[code] = counts_by_code.get(code, 0)
     return counts
 
 
 def check_available_stock(db: Session, warehouse_name: str, item_code: str) -> dict:
-    raw_items = compute_raw_items(db)
     wh_full = normalize_wh_name(warehouse_name)
-    code_clean = (item_code or "").strip().lower()
-    match = next((it for it in raw_items if it["item_code"].lower() == code_clean and it["warehouse_name"] == wh_full), None)
-    if not match:
-        match = next((it for it in raw_items if it["item_code"].lower() == code_clean), None)
-    if not match:
+    wh_code = normalize_wh_code(wh_full)
+    code_clean = (item_code or "").strip()
+    mat = db.query(WarehouseMaterial).filter(
+        WarehouseMaterial.is_active == True,
+        WarehouseMaterial.item_code == code_clean,
+        or_(WarehouseMaterial.warehouse_code == wh_code, WarehouseMaterial.warehouse_name == wh_full)
+    ).first()
+    if not mat:
+        mat = db.query(WarehouseMaterial).filter(
+            WarehouseMaterial.is_active == True,
+            WarehouseMaterial.item_code == code_clean
+        ).first()
+    if not mat:
         return {"available": 0, "available_stock": 0, "unit": "", "item_name": ""}
+
+    # Tồn khả dụng thực tế = Tồn đầu + Nhập - Xuất - Lỗi QC + Tái sử dụng
+    # (đồng bộ 100% với compute_raw_items / màn hình tồn kho, thay vì chỉ đọc opening_main tĩnh)
+    code_low = code_clean.lower()
+    mat_wh = normalize_wh_name(mat.warehouse_name)
+    available = None
+    fallback = None
+    for it in compute_raw_items(db):
+        if (it.get("item_code") or "").strip().lower() != code_low:
+            continue
+        closing = float(it.get("closing_main") or 0.0)
+        if it.get("warehouse_name") == wh_full:
+            available = closing
+            break
+        if it.get("warehouse_name") == mat_wh and fallback is None:
+            fallback = closing
+    if available is None:
+        available = fallback if fallback is not None else float(mat.opening_main or 0.0)
+    available = round(available, 4)
+
     return {
-        "available": float(match["closing_main"]),
-        "available_stock": float(match["closing_main"]),
-        "unit": match["unit_main"],
-        "item_name": match["item_name"],
+        "available": available,
+        "available_stock": available,
+        "unit": mat.unit_main or "Cái",
+        "item_name": mat.item_name or "",
     }
 
 
@@ -732,68 +790,147 @@ def filter_receipts(
     sort_by: str = "receipt_date",
     sort_dir: str = "desc",
 ) -> dict:
-    rows = db.query(GoodsReceipt).options(joinedload(GoodsReceipt.items)).filter(GoodsReceipt.is_deleted == False).all()
-    all_serialized = [_serialize_receipt(r) for r in rows]
+    query = db.query(GoodsReceipt).filter(GoodsReceipt.is_deleted == False)
 
-    clean_search = (search or "").strip().lower()
-    clean_cust = (customer or "").strip().lower()
-    wh_norm = normalize_wh_name(warehouse) if warehouse and warehouse != "ALL" else "ALL"
-
-    filtered = []
-    for r in all_serialized:
-        if clean_search:
-            items_txt = " ".join(
-                f"{it.get('item_code', '')} {it.get('item_name', '')} {it.get('lsx', '')}"
-                for it in (r.get("items") or [])
+    # 1. Lọc theo Kho
+    if warehouse and warehouse != "ALL":
+        wh_norm = normalize_wh_name(warehouse)
+        wh_code = normalize_wh_code(wh_norm)
+        query = query.filter(
+            or_(
+                GoodsReceipt.warehouse_code == wh_code,
+                GoodsReceipt.warehouse_name == wh_norm,
+                GoodsReceipt.warehouse_name == warehouse
             )
-            haystack = f"{r['voucher_no']} {r['deliverer_name']} {r['customer_name']} {r['department_name']} {r['content']} {r['ctgs']} {items_txt}".lower()
-            if clean_search not in haystack:
-                continue
-        if wh_norm != "ALL" and normalize_wh_name(r["warehouse_name"]) != wh_norm:
-            continue
-        if receipt_type and receipt_type != "ALL" and r["receipt_type"] != receipt_type:
-            continue
-        if status and status != "ALL" and r["status"] != status:
-            continue
-        if department and department != "ALL" and r["department_name"] != department:
-            continue
-        if created_by and created_by != "ALL" and r["created_by"] != created_by:
-            continue
-        if created_channel and created_channel != "ALL" and r["created_channel"].lower() != created_channel.lower():
-            continue
-        if clean_cust and clean_cust not in (r["customer_name"] + " " + r["customer_code"]).lower():
-            continue
-        if from_date and r["receipt_date"] < from_date:
-            continue
-        if to_date and r["receipt_date"] > to_date:
-            continue
-        filtered.append(r)
+        )
 
-    reverse_sort = (sort_dir or "desc").lower() == "desc"
-    filtered.sort(key=lambda x: str(x.get(sort_by) or "").lower(), reverse=reverse_sort)
+    # 2. Lọc theo Loại phiếu nhập
+    if receipt_type and receipt_type != "ALL":
+        query = query.filter(GoodsReceipt.receipt_type == receipt_type)
 
-    total_lines = sum(int(r.get("total_lines") or len(r.get("items") or [])) for r in filtered)
-    total_qty = round(sum(float(r.get("total_quantity") or 0) for r in filtered), 2)
+    # 3. Lọc theo Trạng thái
+    if status and status != "ALL":
+        query = query.filter(GoodsReceipt.status == status)
+
+    # 4. Lọc theo Bộ phận
+    if department and department != "ALL":
+        query = query.filter(GoodsReceipt.department_name == department)
+
+    # 5. Lọc theo Người tạo
+    if created_by and created_by != "ALL":
+        query = query.filter(GoodsReceipt.created_by == created_by)
+
+    # 6. Lọc theo Kênh tạo (Web/Mobile/Excel)
+    if created_channel and created_channel != "ALL":
+        query = query.filter(func.lower(GoodsReceipt.created_channel) == created_channel.lower())
+
+    # 7. Lọc theo Khách hàng / NCC
+    clean_cust = (customer or "").strip()
+    if clean_cust:
+        cust_pat = f"%{clean_cust}%"
+        query = query.filter(
+            or_(
+                GoodsReceipt.customer_name.ilike(cust_pat),
+                GoodsReceipt.customer_code.ilike(cust_pat)
+            )
+        )
+
+    # 8. Lọc theo Khoảng thời gian
+    f_d = parse_date_safe(from_date) if from_date else None
+    if f_d:
+        query = query.filter(GoodsReceipt.receipt_date >= f_d)
+    t_d = parse_date_safe(to_date) if to_date else None
+    if t_d:
+        query = query.filter(GoodsReceipt.receipt_date <= t_d)
+
+    # 9. Tìm kiếm đa trường (Chứng từ, đối tác, nội dung, mã/tên hàng trong phiếu)
+    clean_search = (search or "").strip()
+    if clean_search:
+        s_pat = f"%{clean_search}%"
+        item_subq = db.query(GoodsReceiptItem.receipt_id).filter(
+            or_(
+                GoodsReceiptItem.item_code.ilike(s_pat),
+                GoodsReceiptItem.item_name.ilike(s_pat),
+                GoodsReceiptItem.po_code.ilike(s_pat),
+                GoodsReceiptItem.lsx.ilike(s_pat),
+            )
+        )
+        query = query.filter(
+            or_(
+                GoodsReceipt.voucher_no.ilike(s_pat),
+                GoodsReceipt.deliverer_name.ilike(s_pat),
+                GoodsReceipt.customer_name.ilike(s_pat),
+                GoodsReceipt.customer_code.ilike(s_pat),
+                GoodsReceipt.department_name.ilike(s_pat),
+                GoodsReceipt.content.ilike(s_pat),
+                GoodsReceipt.ctgs.ilike(s_pat),
+                GoodsReceipt.id.in_(item_subq)
+            )
+        )
+
+    # 10. Tính toán thống kê KPI tổng hợp trực tiếp trên SQL Server (< 15ms)
+    stats_row = query.with_entities(
+        func.count(GoodsReceipt.id).label("total_count"),
+        func.coalesce(func.sum(GoodsReceipt.total_lines), 0).label("total_lines"),
+        func.coalesce(func.sum(GoodsReceipt.total_quantity), 0.0).label("total_quantity"),
+        func.coalesce(func.sum(GoodsReceipt.total_amount), 0.0).label("total_amount"),
+        func.coalesce(func.sum(case((GoodsReceipt.status == "COMPLETED", 1), else_=0)), 0).label("completed"),
+        func.coalesce(func.sum(case((GoodsReceipt.status.in_(["PENDING", "PROCESSING"]), 1), else_=0)), 0).label("pending"),
+        func.coalesce(func.sum(case((func.lower(GoodsReceipt.created_channel) == "mobile", 1), else_=0)), 0).label("mobile_count"),
+    ).first()
+
+    total_count = stats_row.total_count if stats_row else 0
+    total_qty = round(float(stats_row.total_quantity if stats_row else 0), 2)
+    total_val = round(float(stats_row.total_amount if stats_row else 0), 2)
+    total_lines = int(stats_row.total_lines if stats_row else 0)
+
     stats = {
-        "total": len(filtered),
-        "total_vouchers": len(filtered),
+        "total": total_count,
+        "total_vouchers": total_count,
         "total_lines": total_lines,
         "total_quantity": total_qty,
-        "total_value": 0,
-        "completed": sum(1 for r in filtered if r["status"] == "COMPLETED"),
-        "pending": sum(1 for r in filtered if r["status"] in ("PENDING", "PROCESSING")),
-        "mobileCount": sum(1 for r in filtered if r["created_channel"] == "Mobile"),
+        "total_value": total_val,
+        "total_amount": total_val,
+        "completed": int(stats_row.completed if stats_row else 0),
+        "pending": int(stats_row.pending if stats_row else 0),
+        "mobileCount": int(stats_row.mobile_count if stats_row else 0),
         "totalQuantity": total_qty,
     }
 
-    total_count = len(filtered)
+    # 11. Tính toán phân trang
     safe_size = max(1, page_size)
     total_pages = max(1, (total_count + safe_size - 1) // safe_size)
-    safe_page = max(1, min(page, total_pages))
+    safe_page = max(1, min(page, total_pages)) if total_count > 0 else 1
     start_idx = (safe_page - 1) * safe_size
 
+    # 12. Sắp xếp trên SQL Server
+    sort_col_map = {
+        "voucher_no": GoodsReceipt.voucher_no,
+        "receipt_date": GoodsReceipt.receipt_date,
+        "warehouse_name": GoodsReceipt.warehouse_name,
+        "customer_name": GoodsReceipt.customer_name,
+        "customer_code": GoodsReceipt.customer_code,
+        "department_name": GoodsReceipt.department_name,
+        "status": GoodsReceipt.status,
+        "created_at": GoodsReceipt.created_at,
+        "total_lines": GoodsReceipt.total_lines,
+        "total_quantity": GoodsReceipt.total_quantity,
+        "total_amount": GoodsReceipt.total_amount,
+        "id": GoodsReceipt.id,
+    }
+    sort_col = sort_col_map.get(sort_by, GoodsReceipt.receipt_date)
+    is_desc = (sort_dir or "desc").lower() == "desc"
+    if is_desc:
+        query = query.order_by(sort_col.desc(), GoodsReceipt.id.desc())
+    else:
+        query = query.order_by(sort_col.asc(), GoodsReceipt.id.asc())
+
+    # 13. CHỈ tải và serialize các dòng thuộc trang hiện tại (15-25 dòng thay vì 4.401 dòng)
+    page_rows = query.options(joinedload(GoodsReceipt.items)).offset(start_idx).limit(safe_size).all()
+    serialized_page = [_serialize_receipt(r) for r in page_rows]
+
     return {
-        "data": filtered[start_idx: start_idx + safe_size],
+        "data": serialized_page,
         "totalCount": total_count,
         "totalPages": total_pages,
         "page": safe_page,
@@ -846,6 +983,11 @@ def _build_receipt_item_row(db: Session, wh_name: str, ref_date: date, idx: int,
         unit2=it.unit2 or "",
         quantity2=q2,
         conversion_rate=conv_rate,
+        unit_price=float(getattr(it, "unit_price", 0.0) or 0.0),
+        amount=float(getattr(it, "amount", 0.0) or 0.0),
+        po_code=getattr(it, "po_code", None),
+        order_code=getattr(it, "order_code", None),
+        partner_po=getattr(it, "partner_po", None),
         lsx=it.lsx,
         package_split=it.package_split,
         notes=it.notes,
@@ -892,15 +1034,19 @@ def create_receipt(db: Session, payload, username: str = "Người dùng") -> di
     )
 
     total_qty = 0.0
+    total_amt = 0.0
     for idx, it in enumerate(payload.items, 1):
         row, q1 = _build_receipt_item_row(db, wh_name, payload.receipt_date, idx, it)
         total_qty += q1
+        total_amt += float(getattr(row, "amount", 0.0) or 0.0)
         rcp.items.append(row)
 
     rcp.total_lines = len(rcp.items)
     rcp.total_quantity = total_qty
+    rcp.total_amount = total_amt
     db.add(rcp)
     db.commit()
+    invalidate_raw_items_cache()
     db.refresh(rcp)
     return _serialize_receipt(rcp)
 
@@ -941,6 +1087,7 @@ def update_receipt(db: Session, receipt_id: int, payload, username: str = "Ngư�
 
     rcp.updated_at = datetime.now()
     db.commit()
+    invalidate_raw_items_cache()
     db.refresh(rcp)
     return _serialize_receipt(rcp)
 
@@ -965,6 +1112,7 @@ def confirm_receipt(db: Session, receipt_id: int, username: str = "Thủ kho", n
         rcp.images_json = _dump_images_json(merged)
     rcp.updated_at = datetime.now()
     db.commit()
+    invalidate_raw_items_cache()
     db.refresh(rcp)
     return _serialize_receipt(rcp)
 
@@ -974,6 +1122,7 @@ def delete_receipts(db: Session, ids: List[int]) -> int:
         {"is_deleted": True, "updated_at": datetime.now()}, synchronize_session=False
     )
     db.commit()
+    invalidate_raw_items_cache()
     return count
 
 
@@ -999,74 +1148,164 @@ def filter_issues(
     sort_by: str = "issue_date",
     sort_dir: str = "desc",
 ) -> dict:
-    rows = db.query(GoodsIssue).options(joinedload(GoodsIssue.items)).filter(GoodsIssue.is_deleted == False).all()
-    all_serialized = [_serialize_issue(iss) for iss in rows]
+    query = db.query(GoodsIssue).filter(GoodsIssue.is_deleted == False)
 
-    clean_search = (search or "").strip().lower()
-    clean_cust = (customer or "").strip().lower()
-    wh_norm = normalize_wh_name(warehouse) if warehouse and warehouse != "ALL" else "ALL"
+    # 1. Warehouse filter
+    if warehouse and warehouse != "ALL":
+        wh_norm = normalize_wh_name(warehouse)
+        wh_code = normalize_wh_code(wh_norm)
+        query = query.filter(
+            or_(
+                GoodsIssue.warehouse_code == wh_code,
+                GoodsIssue.warehouse_name == wh_norm,
+                GoodsIssue.warehouse_name == warehouse
+            )
+        )
+
+    # 2. Issue type filter
+    if issue_type and issue_type != "ALL":
+        query = query.filter(GoodsIssue.issue_type == issue_type)
+
+    # 3. Status filter
+    if status and status != "ALL":
+        query = query.filter(GoodsIssue.status == status)
+
+    # 4. Department filter
+    if department and department != "ALL":
+        query = query.filter(GoodsIssue.department_name == department)
+
+    # 5. Factory filter
     clean_fac_name = (factory_name or "").strip()
     has_fac_filter = bool(factory_id) or (clean_fac_name != "" and clean_fac_name != "ALL")
-    target_factory = _resolve_factory(db, factory_id, clean_fac_name) if has_fac_filter else None
+    if has_fac_filter:
+        target_factory = _resolve_factory(db, factory_id, clean_fac_name)
+        if target_factory:
+            fac_id = target_factory.get("id")
+            fac_name = target_factory.get("name")
+            conds = []
+            if fac_id:
+                conds.append(GoodsIssue.factory_id == fac_id)
+            if fac_name:
+                conds.append(GoodsIssue.factory_name.ilike(f"%{fac_name}%"))
+            if conds:
+                query = query.filter(or_(*conds))
 
-    filtered = []
-    for r in all_serialized:
-        if clean_search:
-            items_txt = " ".join(
-                f"{it.get('item_code', '')} {it.get('item_name', '')} {it.get('lsx', '')}"
-                for it in (r.get("items") or [])
+    # 6. Created by filter
+    if created_by and created_by != "ALL":
+        query = query.filter(GoodsIssue.created_by == created_by)
+
+    # 7. Created channel filter
+    if created_channel and created_channel != "ALL":
+        query = query.filter(func.lower(GoodsIssue.created_channel) == created_channel.lower())
+
+    # 8. Customer filter
+    clean_cust = (customer or "").strip()
+    if clean_cust:
+        cust_pat = f"%{clean_cust}%"
+        query = query.filter(
+            or_(
+                GoodsIssue.customer_name.ilike(cust_pat),
+                GoodsIssue.customer_code.ilike(cust_pat)
             )
-            haystack = f"{r['voucher_no']} {r['deliverer_name']} {r['receiver_name']} {r['department_name']} {r['factory_name']} {r['customer_name']} {r['content']} {r['ctgs']} {items_txt}".lower()
-            if clean_search not in haystack:
-                continue
-        if wh_norm != "ALL" and normalize_wh_name(r["warehouse_name"]) != wh_norm:
-            continue
-        if issue_type and issue_type != "ALL" and r["issue_type"] != issue_type:
-            continue
-        if status and status != "ALL" and r["status"] != status:
-            continue
-        if department and department != "ALL" and r["department_name"] != department:
-            continue
-        if has_fac_filter and not _factories_match(target_factory, r.get("factory_id"), r.get("factory_name")):
-            continue
-        if created_by and created_by != "ALL" and r["created_by"] != created_by:
-            continue
-        if created_channel and created_channel != "ALL" and r["created_channel"].lower() != created_channel.lower():
-            continue
-        if clean_cust and clean_cust not in (r["customer_name"] + " " + r["customer_code"]).lower():
-            continue
-        if from_date and r["issue_date"] < from_date:
-            continue
-        if to_date and r["issue_date"] > to_date:
-            continue
-        filtered.append(r)
+        )
 
-    reverse_sort = (sort_dir or "desc").lower() == "desc"
-    filtered.sort(key=lambda x: str(x.get(sort_by) or "").lower(), reverse=reverse_sort)
+    # 9. Date range filters
+    f_d = parse_date_safe(from_date) if from_date else None
+    if f_d:
+        query = query.filter(GoodsIssue.issue_date >= f_d)
+    t_d = parse_date_safe(to_date) if to_date else None
+    if t_d:
+        query = query.filter(GoodsIssue.issue_date <= t_d)
 
-    total_lines = sum(int(r.get("total_lines") or len(r.get("items") or [])) for r in filtered)
-    total_qty = round(sum(float(r.get("total_quantity") or 0) for r in filtered), 2)
-    total_val = round(sum(float(r.get("total_amount") or 0) for r in filtered), 2)
+    # 10. Search filter across issue and detail items
+    clean_search = (search or "").strip()
+    if clean_search:
+        s_pat = f"%{clean_search}%"
+        item_subq = db.query(GoodsIssueItem.issue_id).filter(
+            or_(
+                GoodsIssueItem.item_code.ilike(s_pat),
+                GoodsIssueItem.item_name.ilike(s_pat),
+                GoodsIssueItem.lsx.ilike(s_pat),
+            )
+        )
+        query = query.filter(
+            or_(
+                GoodsIssue.voucher_no.ilike(s_pat),
+                GoodsIssue.deliverer_name.ilike(s_pat),
+                GoodsIssue.receiver_name.ilike(s_pat),
+                GoodsIssue.customer_name.ilike(s_pat),
+                GoodsIssue.customer_code.ilike(s_pat),
+                GoodsIssue.department_name.ilike(s_pat),
+                GoodsIssue.factory_name.ilike(s_pat),
+                GoodsIssue.content.ilike(s_pat),
+                GoodsIssue.ctgs.ilike(s_pat),
+                GoodsIssue.id.in_(item_subq)
+            )
+        )
+
+    # 11. Compute stats directly in SQL
+    stats_row = query.with_entities(
+        func.count(GoodsIssue.id).label("total_count"),
+        func.coalesce(func.sum(GoodsIssue.total_lines), 0).label("total_lines"),
+        func.coalesce(func.sum(GoodsIssue.total_quantity), 0.0).label("total_quantity"),
+        func.coalesce(func.sum(GoodsIssue.total_amount), 0.0).label("total_amount"),
+        func.coalesce(func.sum(case((GoodsIssue.status == "COMPLETED", 1), else_=0)), 0).label("completed"),
+        func.coalesce(func.sum(case((GoodsIssue.status.in_(["PENDING", "PROCESSING"]), 1), else_=0)), 0).label("pending"),
+        func.coalesce(func.sum(case((func.lower(GoodsIssue.created_channel) == "mobile", 1), else_=0)), 0).label("mobile_count"),
+    ).first()
+
+    total_count = stats_row.total_count if stats_row else 0
+    total_qty = round(float(stats_row.total_quantity if stats_row else 0), 2)
+    total_val = round(float(stats_row.total_amount if stats_row else 0), 2)
+    total_lines = int(stats_row.total_lines if stats_row else 0)
+
     stats = {
-        "total": len(filtered),
-        "total_vouchers": len(filtered),
+        "total": total_count,
+        "total_vouchers": total_count,
         "total_lines": total_lines,
         "total_quantity": total_qty,
         "total_value": total_val,
-        "completed": sum(1 for r in filtered if r["status"] == "COMPLETED"),
-        "pending": sum(1 for r in filtered if r["status"] in ("PENDING", "PROCESSING")),
-        "mobileCount": sum(1 for r in filtered if r["created_channel"] == "Mobile"),
+        "completed": int(stats_row.completed if stats_row else 0),
+        "pending": int(stats_row.pending if stats_row else 0),
+        "mobileCount": int(stats_row.mobile_count if stats_row else 0),
         "totalQuantity": total_qty,
     }
 
-    total_count = len(filtered)
+    # 12. Pagination
     safe_size = max(1, page_size)
     total_pages = max(1, (total_count + safe_size - 1) // safe_size)
-    safe_page = max(1, min(page, total_pages))
+    safe_page = max(1, min(page, total_pages)) if total_count > 0 else 1
     start_idx = (safe_page - 1) * safe_size
 
+    # 13. Sorting
+    sort_col_map = {
+        "voucher_no": GoodsIssue.voucher_no,
+        "issue_date": GoodsIssue.issue_date,
+        "warehouse_name": GoodsIssue.warehouse_name,
+        "customer_name": GoodsIssue.customer_name,
+        "customer_code": GoodsIssue.customer_code,
+        "department_name": GoodsIssue.department_name,
+        "factory_name": GoodsIssue.factory_name,
+        "status": GoodsIssue.status,
+        "created_at": GoodsIssue.created_at,
+        "total_lines": GoodsIssue.total_lines,
+        "total_quantity": GoodsIssue.total_quantity,
+        "total_amount": GoodsIssue.total_amount,
+        "id": GoodsIssue.id,
+    }
+    sort_col = sort_col_map.get(sort_by, GoodsIssue.issue_date)
+    is_desc = (sort_dir or "desc").lower() == "desc"
+    if is_desc:
+        query = query.order_by(sort_col.desc(), GoodsIssue.id.desc())
+    else:
+        query = query.order_by(sort_col.asc(), GoodsIssue.id.asc())
+
+    # 14. Fetch current page rows with items
+    page_rows = query.options(joinedload(GoodsIssue.items)).offset(start_idx).limit(safe_size).all()
+    serialized_page = [_serialize_issue(iss) for iss in page_rows]
+
     return {
-        "data": filtered[start_idx: start_idx + safe_size],
+        "data": serialized_page,
         "totalCount": total_count,
         "totalPages": total_pages,
         "page": safe_page,
@@ -1120,6 +1359,7 @@ def create_issue(db: Session, payload, username: str = "Người dùng") -> dict
 
     total_qty = 0.0
     total_amt = 0.0
+    used_qty: Dict[str, float] = {}  # Cộng dồn SL khi 1 mã xuất hiện nhiều dòng trong cùng phiếu
     for idx, it in enumerate(payload.items, 1):
         q1 = _resolve_item_qty1(it)
         if q1 <= 0:
@@ -1127,13 +1367,16 @@ def create_issue(db: Session, payload, username: str = "Người dùng") -> dict
 
         # Chống xuất âm kho khi phiếu có hiệu lực xuất
         if is_deducting:
+            code_key = (it.item_code or "").strip().lower()
             stock_info = check_available_stock(db, wh_name, it.item_code)
             avail = stock_info["available"]
-            if q1 > avail + 0.0001:
+            need = used_qty.get(code_key, 0.0) + q1
+            if need > avail + 0.0001:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Vật tư '{it.item_code}' tại {wh_name} chỉ còn tồn khả dụng {avail} {stock_info['unit']}, không đủ để xuất {q1}."
+                    detail=f"Vật tư '{it.item_code}' tại {wh_name} chỉ còn tồn khả dụng {avail} {stock_info['unit']}, không đủ để xuất {round(need, 4)}."
                 )
+            used_qty[code_key] = need
 
         u1 = it.unit1 or it.unit or "Cái"
         conv_rate = float(it.conversion_rate or 1.0)
@@ -1165,6 +1408,7 @@ def create_issue(db: Session, payload, username: str = "Người dùng") -> dict
     iss.total_amount = total_amt
     db.add(iss)
     db.commit()
+    invalidate_raw_items_cache()
     db.refresh(iss)
     return _serialize_issue(iss)
 
@@ -1235,6 +1479,7 @@ def update_issue(db: Session, issue_id: int, payload, username: str = "Người 
 
     iss.updated_at = datetime.now()
     db.commit()
+    invalidate_raw_items_cache()
     db.refresh(iss)
     return _serialize_issue(iss)
 
@@ -1272,6 +1517,7 @@ def confirm_issue(db: Session, issue_id: int, username: str = "Người nhận",
         iss.images_json = _dump_images_json(merged)
     iss.updated_at = datetime.now()
     db.commit()
+    invalidate_raw_items_cache()
     db.refresh(iss)
     return _serialize_issue(iss)
 
@@ -1281,6 +1527,7 @@ def delete_issues(db: Session, ids: List[int]) -> int:
         {"is_deleted": True, "updated_at": datetime.now()}, synchronize_session=False
     )
     db.commit()
+    invalidate_raw_items_cache()
     return count
 
 
@@ -1711,15 +1958,22 @@ def search_catalog_items(
     results: List[dict] = []
     seen_codes = set()
 
-    # 1. Tồn kho hiện có trong WarehouseMaterial
-    raw_items = compute_raw_items(db)
-    for it in raw_items:
-        if wh_norm != "ALL" and it.get("warehouse_code") != wh_norm:
-            continue
-        code = (it.get("item_code") or "").strip()
-        name = (it.get("item_name") or "").strip()
-        if q_lower and q_lower not in code.lower() and q_lower not in name.lower():
-            continue
+    # 1. Tồn kho hiện có trong WarehouseMaterial (truy vấn SQL trực tiếp, tốc độ < 10ms)
+    mat_q = db.query(WarehouseMaterial).filter(WarehouseMaterial.is_active == True)
+    if wh_norm != "ALL":
+        mat_q = mat_q.filter(WarehouseMaterial.warehouse_code == wh_norm)
+    if q_str:
+        like_pat = f"%{q_str}%"
+        mat_q = mat_q.filter(
+            or_(
+                WarehouseMaterial.item_code.ilike(like_pat),
+                WarehouseMaterial.item_name.ilike(like_pat),
+            )
+        )
+    materials = mat_q.order_by(WarehouseMaterial.item_code.asc()).limit(max_limit).all()
+    for m in materials:
+        code = (m.item_code or "").strip()
+        name = (m.item_name or "").strip()
         key = (code or name).lower()
         if not key or key in seen_codes:
             continue
@@ -1727,16 +1981,16 @@ def search_catalog_items(
         results.append({
             "item_code": code,
             "item_name": name,
-            "unit": it.get("unit_main") or "Cái",
-            "unit_main": it.get("unit_main") or "Cái",
-            "unit1": it.get("unit_main") or "Cái",
-            "unit2": it.get("unit_conversion") or "",
-            "unit_conversion": it.get("unit_conversion") or "",
-            "conversion_rate": float(it.get("conversion_rate") or 1.0),
-            "closing_main": float(it.get("closing_main") or 0.0),
-            "warehouse_code": it.get("warehouse_code") or "",
-            "warehouse_name": it.get("warehouse_name") or "",
-            "image_url": "",
+            "unit": m.unit_main or "Cái",
+            "unit_main": m.unit_main or "Cái",
+            "unit1": m.unit_main or "Cái",
+            "unit2": m.unit_conversion or "",
+            "unit_conversion": m.unit_conversion or "",
+            "conversion_rate": float(m.conversion_rate or 1.0),
+            "closing_main": float(m.opening_main or 0.0),
+            "warehouse_code": m.warehouse_code or "",
+            "warehouse_name": m.warehouse_name or "",
+            "image_url": m.image_url or "",
             "po_code": "",
             "order_code": "",
             "supplier_name": "",
@@ -1838,8 +2092,8 @@ def search_catalog_items(
         if len(results) >= max_limit:
             return results
 
-    # 4. Fallback BOMDetail khi tìm kiếm chi tiết chưa đủ kết quả
-    if q_str and len(results) < max_limit:
+    # 4. Fallback BOMDetail chỉ khi chưa tìm thấy bất kỳ kết quả nào từ Kho, PO hay SP mẫu
+    if q_str and len(results) == 0:
         like_pat = f"%{q_str}%"
         bom_rows = (
             db.query(BOMDetail)
@@ -1886,4 +2140,632 @@ def search_catalog_items(
                 break
 
     return results
+
+
+def search_sub_po_codes(db: Session, search: Optional[str] = None, limit: int = 100) -> List[dict]:
+    """
+    Tìm kiếm mã Lệnh sản xuất / PO theo đúng phân đoạn thực tế (ví dụ: APT-0123-01, APT-0123-02...)
+    Giữ nguyên hậu tố phân đoạn để thủ kho chọn đúng đợt giao hàng.
+    """
+    from modules.delivery.models.order import Order
+
+    query = db.query(Order.id, Order.order_code, Order.partner_po, Order.production_code, Order.customer)
+
+    s_clean = search.strip() if search and isinstance(search, str) and search.strip() else None
+    if s_clean:
+        s_pat = f"%{s_clean}%"
+        query = query.filter(or_(
+            Order.order_code.ilike(s_pat),
+            Order.partner_po.ilike(s_pat),
+            Order.production_code.ilike(s_pat)
+        ))
+        rows = query.order_by(Order.order_code.asc(), Order.id.desc()).limit(limit * 3).all()
+    else:
+        rows = query.order_by(Order.id.desc()).limit(limit).all()
+
+    seen = set()
+    results = []
+    s_low = s_clean.lower() if s_clean else None
+
+    for r in rows:
+        code_candidates = [r.order_code, r.partner_po, r.production_code]
+        for c in code_candidates:
+            if not c:
+                continue
+            code_str = str(c).strip()
+            if not code_str:
+                continue
+            k = code_str.upper()
+            if k in seen:
+                continue
+            if s_low and s_low not in k.lower():
+                continue
+            seen.add(k)
+            results.append({
+                "value": code_str,
+                "label": code_str,
+                "order_code": code_str,
+                "customer": r.customer or ""
+            })
+            if len(results) >= limit:
+                break
+        if len(results) >= limit:
+            break
+
+    # Nếu có từ khóa tìm kiếm, ưu tiên xếp các mã bắt đầu bằng từ khóa lên trước
+    if s_low and results:
+        results.sort(key=lambda x: (
+            0 if x["order_code"].lower().startswith(s_low) else (
+                1 if f"-{s_low}" in x["order_code"].lower() else 2
+            ),
+            x["order_code"]
+        ))
+
+    return results
+
+
+def get_po_material_bom_summary(
+    db: Session,
+    po_code: Optional[str] = None,
+    po_codes: Optional[str] = None,
+    warehouse_name: Optional[str] = None,
+) -> dict:
+    """
+    Truy vấn 1 hoặc nhiều đơn hàng theo mã phân đoạn PO (ví dụ APT-0123-01, APT-0123-02...):
+    1. Lấy danh sách sản phẩm và số lượng của tất cả phân đoạn PO đã chọn.
+    2. Tra cứu định mức VTTH từ master_product_materials theo SKU/tên sản phẩm.
+    3. Cộng dồn tổng số lượng cần cho từng loại vật tư (quota * product_quantity) qua tất cả PO.
+    4. Gom nhóm theo material_code và tra cứu tồn kho thực tế 1 lần duy nhất tại warehouse_name.
+    """
+    from modules.delivery.models.order import Order
+    from modules.master.models.master_product_material import MasterProductMaterial
+
+    # 0. Chuẩn hóa danh sách mã PO đầu vào (hỗ trợ cả po_code đơn và po_codes nhiều mã)
+    raw_tokens: List[str] = []
+    for raw_src in (po_codes, po_code):
+        if raw_src:
+            for part in re.split(r"[,;\n]+", str(raw_src)):
+                cleaned = part.strip()
+                if cleaned and cleaned not in raw_tokens:
+                    raw_tokens.append(cleaned)
+
+    if not raw_tokens:
+        raise HTTPException(status_code=400, detail="Vui lòng cung cấp ít nhất 1 mã PO / Lệnh sản xuất.")
+
+    # 1. Tìm Order cho từng mã PO đã chọn
+    matched_orders: List[tuple] = []  # (requested_code, Order)
+    seen_order_ids = set()
+    not_found_codes: List[str] = []
+
+    for req_po in raw_tokens:
+        order = db.query(Order).options(joinedload(Order.products)).filter(
+            or_(
+                Order.order_code == req_po,
+                Order.partner_po == req_po,
+                Order.production_code == req_po,
+                Order.order_code == f"LSX-{req_po}",
+                Order.order_code.ilike(f"{req_po}"),
+                Order.partner_po.ilike(f"{req_po}"),
+            )
+        ).first()
+
+        if not order:
+            order = db.query(Order).options(joinedload(Order.products)).filter(
+                or_(
+                    Order.order_code.ilike(f"%{req_po}%"),
+                    Order.partner_po.ilike(f"%{req_po}%"),
+                )
+            ).first()
+
+        if not order:
+            not_found_codes.append(req_po)
+            continue
+
+        if order.id not in seen_order_ids:
+            seen_order_ids.add(order.id)
+            matched_orders.append((req_po, order))
+
+    if not matched_orders:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Không tìm thấy đơn hàng / PO '{', '.join(raw_tokens)}' trong hệ thống.",
+        )
+
+    joined_po_label = ", ".join(raw_tokens)
+    customers_unique: List[str] = []
+    products_list = []
+    all_prod_skus = set()
+    all_prod_names = set()
+    total_prod_qty = 0.0
+
+    # Lưu sản phẩm theo từng PO để tính định mức chính xác cho từng PO rồi cộng dồn
+    po_products_entries = []  # list of (po_label, sku_to_prod_list)
+    for req_po, order in matched_orders:
+        cust = (order.customer or "").strip()
+        if cust and cust not in customers_unique:
+            customers_unique.append(cust)
+
+        po_label = (order.order_code or req_po).strip()
+        per_po_prods = []
+        for p in (order.products or []):
+            sku = (p.sku or "").strip()
+            p_name = (p.name or "").strip()
+            qty = float(p.quantity or 0)
+            total_prod_qty += qty
+            prod_entry = {
+                "id": p.id,
+                "po_code": po_label,
+                "sku": sku,
+                "name": p_name,
+                "quantity": qty,
+            }
+            products_list.append(prod_entry)
+            per_po_prods.append(prod_entry)
+            if sku:
+                all_prod_skus.add(sku.upper())
+            if p_name:
+                all_prod_names.add(p_name.upper())
+        po_products_entries.append((po_label, per_po_prods))
+
+    first_order = matched_orders[0][1]
+    if not all_prod_skus and not products_list:
+        return {
+            "po_code": joined_po_label,
+            "po_codes": raw_tokens,
+            "not_found_codes": not_found_codes,
+            "order_id": first_order.id,
+            "order_code": first_order.order_code,
+            "partner_po": first_order.partner_po or "",
+            "customer": ", ".join(customers_unique),
+            "total_products": 0,
+            "total_product_qty": 0,
+            "products": [],
+            "materials": [],
+            "materials_count": 0,
+            "message": f"PO {joined_po_label} không có sản phẩm nào.",
+        }
+
+    # 2. Tra cứu định mức vật tư trong master_product_materials (1 lần cho tất cả SKU)
+    sku_list = list(all_prod_skus)
+    db_materials = []
+    if sku_list:
+        for i in range(0, len(sku_list), 500):
+            batch = sku_list[i:i + 500]
+            mats = db.query(MasterProductMaterial).filter(
+                MasterProductMaterial.product_sku.in_(batch)
+            ).all()
+            db_materials.extend(mats)
+
+    # Index định mức theo product_sku (upper) và product_name (upper)
+    mats_by_sku: Dict[str, list] = defaultdict(list)
+    mats_by_name: Dict[str, list] = defaultdict(list)
+    for m in db_materials:
+        s_k = (m.product_sku or "").strip().upper()
+        n_k = (m.product_name or "").strip().upper()
+        if s_k:
+            mats_by_sku[s_k].append(m)
+        if n_k:
+            mats_by_name[n_k].append(m)
+
+    # Fallback tìm theo product_name nếu có sản phẩm chưa khớp SKU
+    missing_names = [
+        p["name"]
+        for p in products_list
+        if p["name"] and (not p["sku"] or p["sku"].upper() not in mats_by_sku)
+    ]
+    if missing_names:
+        uniq_missing = list(dict.fromkeys(missing_names))
+        for i in range(0, len(uniq_missing), 500):
+            batch_n = uniq_missing[i:i + 500]
+            extra_mats = db.query(MasterProductMaterial).filter(
+                MasterProductMaterial.product_name.in_(batch_n)
+            ).all()
+            for m in extra_mats:
+                n_k = (m.product_name or "").strip().upper()
+                if n_k:
+                    mats_by_name[n_k].append(m)
+
+    # 3. Tính toán tồn kho thực tế 1 lần duy nhất tại kho đang chọn
+    raw_inventory = compute_raw_items(db)
+    wh_norm = normalize_wh_name(warehouse_name) if warehouse_name else ""
+    stock_map = {}
+    for it in raw_inventory:
+        code_k = (it.get("item_code") or "").strip().lower()
+        if not code_k:
+            continue
+        it_wh = it.get("warehouse_name") or ""
+        closing = float(it.get("closing_main") or 0)
+        if wh_norm and it_wh == wh_norm:
+            stock_map[code_k] = closing
+        elif code_k not in stock_map:
+            stock_map[code_k] = closing
+
+    # 4. Cộng dồn định mức vật tư theo material_code qua tất cả PO & sản phẩm
+    aggregated = {}
+    for po_label, per_po_prods in po_products_entries:
+        for prod_info in per_po_prods:
+            p_sku_u = (prod_info.get("sku") or "").strip().upper()
+            p_name_u = (prod_info.get("name") or "").strip().upper()
+            prod_mats = mats_by_sku.get(p_sku_u) or mats_by_name.get(p_name_u) or []
+            prod_qty = float(prod_info.get("quantity") or 0)
+
+            for m in prod_mats:
+                mat_code = (m.material_code or "").strip()
+                mat_name = (m.material_name or "").strip()
+                if not mat_code and not mat_name:
+                    continue
+                key = mat_code.lower() if mat_code else mat_name.lower()
+
+                quota = float(m.quota or 0)
+                sub_required = round(quota * prod_qty, 4)
+
+                if key not in aggregated:
+                    unit_val = m.unit or "Cái"
+                    avail_stock = stock_map.get(mat_code.lower(), 0.0)
+                    aggregated[key] = {
+                        "item_code": mat_code or f"VT-{mat_name[:8]}",
+                        "item_name": mat_name,
+                        "unit": unit_val,
+                        "unit1": unit_val,
+                        "group_type": m.group_type or "Vật tư dùng chung",
+                        "required_qty": 0.0,
+                        "available_stock": avail_stock,
+                        "color": m.color or "",
+                        "supplier": m.supplier or "",
+                        "source_pos": [],
+                        "lsx": "",
+                        "notes": "",
+                        "breakdown": [],
+                    }
+
+                entry = aggregated[key]
+                entry["required_qty"] = round(entry["required_qty"] + sub_required, 4)
+                if po_label not in entry["source_pos"]:
+                    entry["source_pos"].append(po_label)
+                entry["breakdown"].append({
+                    "po_code": po_label,
+                    "product_sku": prod_info.get("sku"),
+                    "product_name": prod_info.get("name"),
+                    "product_qty": prod_qty,
+                    "quota": quota,
+                    "sub_qty": sub_required,
+                })
+
+    materials_res = list(aggregated.values())
+    materials_res.sort(key=lambda x: (x.get("group_type") or "", x.get("item_code") or ""))
+
+    for item in materials_res:
+        src_pos_str = ", ".join(item.get("source_pos") or raw_tokens)
+        item["lsx"] = src_pos_str
+        grp_lbl = item.get("group_type") or ""
+        item["notes"] = f"[{grp_lbl}] PO {src_pos_str}" if grp_lbl else f"PO {src_pos_str}"
+        item["is_sufficient"] = item["available_stock"] >= item["required_qty"]
+
+    return {
+        "po_code": joined_po_label,
+        "po_codes": raw_tokens,
+        "not_found_codes": not_found_codes,
+        "order_id": first_order.id,
+        "order_code": first_order.order_code,
+        "partner_po": first_order.partner_po or "",
+        "customer": ", ".join(customers_unique),
+        "total_products": len(products_list),
+        "total_product_qty": total_prod_qty,
+        "products": products_list,
+        "materials_count": len(materials_res),
+        "materials": materials_res,
+    }
+
+
+# ==========================================
+# PURCHASE PO EXECUTION LOOKUP (TẠO PHIẾU NHẬP KHO)
+# ==========================================
+def search_purchase_po_codes(
+    db: Session,
+    search: Optional[str] = None,
+    warehouse_name: Optional[str] = None,
+    limit: int = 80,
+) -> List[dict]:
+    """
+    Tìm kiếm nhanh danh sách Mã PO đặt hàng từ bảng warehouse_purchase_order_items
+    phục vụ autocomplete trên màn hình Tạo Phiếu Nhập Kho (/warehouse/goods-receipt/new).
+    """
+    from modules.warehouse.models.purchase_po_execution import WarehousePurchaseOrderItem
+
+    query = db.query(
+        WarehousePurchaseOrderItem.po_code,
+        func.max(WarehousePurchaseOrderItem.supplier_code).label("supplier_code"),
+        func.max(WarehousePurchaseOrderItem.supplier_name).label("supplier_name"),
+        func.max(WarehousePurchaseOrderItem.order_date).label("order_date"),
+        func.max(WarehousePurchaseOrderItem.warehouse_name).label("warehouse_name"),
+        func.count(WarehousePurchaseOrderItem.id).label("item_count"),
+        func.sum(case((WarehousePurchaseOrderItem.remaining_qty > 0.0001, 1), else_=0)).label("pending_count"),
+    )
+
+    s_clean = search.strip() if search and isinstance(search, str) and search.strip() else None
+    if s_clean:
+        s_pat = f"%{s_clean}%"
+        query = query.filter(
+            or_(
+                WarehousePurchaseOrderItem.po_code.ilike(s_pat),
+                WarehousePurchaseOrderItem.supplier_name.ilike(s_pat),
+                WarehousePurchaseOrderItem.supplier_code.ilike(s_pat),
+            )
+        )
+
+    if warehouse_name and warehouse_name.strip() and warehouse_name.strip().upper() != "ALL":
+        wh_norm = normalize_wh_name(warehouse_name)
+        # Chỉ ưu tiên hoặc lọc nếu muốn; hiện giữ tất cả kết quả khi search để không sót PO liên kho
+        if not s_clean:
+            query = query.filter(
+                or_(
+                    WarehousePurchaseOrderItem.warehouse_name.ilike(f"%{wh_norm}%"),
+                    WarehousePurchaseOrderItem.warehouse_name == None,
+                    WarehousePurchaseOrderItem.warehouse_name == "",
+                )
+            )
+
+    rows = (
+        query.group_by(WarehousePurchaseOrderItem.po_code)
+        .order_by(func.max(WarehousePurchaseOrderItem.order_date).desc(), WarehousePurchaseOrderItem.po_code.asc())
+        .limit(limit)
+        .all()
+    )
+
+    results = []
+    for r in rows:
+        code = (r.po_code or "").strip()
+        if not code:
+            continue
+        p_count = int(r.pending_count or 0)
+        is_completed = (p_count == 0)
+        results.append({
+            "value": code,
+            "label": code,
+            "po_code": code,
+            "supplier_code": r.supplier_code or "",
+            "supplier_name": r.supplier_name or "",
+            "order_date": r.order_date.isoformat() if r.order_date else None,
+            "warehouse_name": r.warehouse_name or "",
+            "item_count": int(r.item_count or 0),
+            "pending_count": p_count,
+            "is_completed": is_completed,
+        })
+
+    # Sắp xếp ưu tiên:
+    # 1. Đơn CHƯA HOÀN THÀNH lên trước (0 nếu chưa xong, 1 nếu đã xong) -> Mặc định lấy đơn chưa hoàn thành!
+    # 2. Khớp chính xác hoặc bắt đầu bằng từ khóa tìm kiếm
+    # 3. Mã PO alphabet
+    if s_clean and results:
+        s_low = s_clean.lower()
+        results.sort(key=lambda x: (
+            0 if not x.get("is_completed", False) else 1,
+            0 if x["po_code"].lower().startswith(s_low) else 1,
+            x["po_code"],
+        ))
+    elif results:
+        results.sort(key=lambda x: (
+            0 if not x.get("is_completed", False) else 1,
+            x["po_code"],
+        ))
+    return results
+
+
+def get_purchase_po_items(db: Session, po_code: str) -> dict:
+    """
+    Lấy thông tin header (NCC, ngày đặt, kho) và toàn bộ danh sách Tên hàng + Số lượng đặt
+    theo Mã PO đặt hàng từ bảng warehouse_purchase_order_items.
+    """
+    from modules.warehouse.models.purchase_po_execution import WarehousePurchaseOrderItem
+
+    clean_po = (po_code or "").strip()
+    if not clean_po:
+        raise HTTPException(status_code=400, detail="Vui lòng cung cấp Mã PO đặt hàng.")
+
+    rows = (
+        db.query(WarehousePurchaseOrderItem)
+        .filter(WarehousePurchaseOrderItem.po_code == clean_po)
+        .order_by(WarehousePurchaseOrderItem.id.asc())
+        .all()
+    )
+    if not rows:
+        rows = (
+            db.query(WarehousePurchaseOrderItem)
+            .filter(WarehousePurchaseOrderItem.po_code.ilike(clean_po))
+            .order_by(WarehousePurchaseOrderItem.id.asc())
+            .all()
+        )
+
+    # Kiểm tra xem có đơn phụ / đợt bổ sung (ví dụ EXTRA, -01, ...) cùng gốc PO:
+    # Quy tắc: Nếu có 2 đơn thì mặc định lấy đơn nào chưa hoàn thành, nếu 2 đơn chưa hoàn thành thì show 2 đơn + lại luôn
+    exact_done = len(rows) > 0 and all(float(r.remaining_qty or 0.0) <= 0.0001 for r in rows)
+    related_rows = (
+        db.query(WarehousePurchaseOrderItem)
+        .filter(
+            WarehousePurchaseOrderItem.po_code.ilike(f"{clean_po}%"),
+            WarehousePurchaseOrderItem.po_code != clean_po,
+        )
+        .order_by(WarehousePurchaseOrderItem.id.asc())
+        .all()
+    )
+    if related_rows:
+        related_unc = [r for r in related_rows if float(r.remaining_qty or 0.0) > 0.0001]
+        if exact_done and related_unc:
+            # Đơn gốc đã xong, đơn phụ chưa xong -> Mặc định lấy đơn chưa hoàn thành!
+            rows = related_rows
+        elif not exact_done and related_unc:
+            # Cả 2 đơn đều chưa hoàn thành -> Gộp cả 2 đơn để show 2 đơn + lại luôn!
+            rows = list(rows) + list(related_rows)
+
+    if not rows:
+        return {
+            "po_code": clean_po,
+            "found": False,
+            "supplier_code": "",
+            "supplier_name": "",
+            "warehouse_name": "",
+            "order_date": None,
+            "delivery_date": None,
+            "items": [],
+        }
+
+    first = rows[0]
+    all_po_low = {r.po_code.strip().lower() for r in rows if r.po_code}
+    all_po_low.add(clean_po.lower())
+
+    # Cộng dồn số lượng đã lập phiếu nhập trên SmartFlow (Web/Mobile) cho Mã PO này
+    # (bỏ qua kênh 'Excel' vì đã nằm sẵn trong received_cum_main lúc import báo cáo)
+    app_rows = (
+        db.query(
+            GoodsReceiptItem.item_code,
+            GoodsReceiptItem.item_name,
+            GoodsReceiptItem.quantity1,
+            GoodsReceipt.id.label("receipt_id"),
+        )
+        .join(GoodsReceipt, GoodsReceipt.id == GoodsReceiptItem.receipt_id)
+        .filter(
+            GoodsReceipt.is_deleted == False,
+            GoodsReceipt.status != "CANCELLED",
+            func.lower(GoodsReceipt.created_channel) != "excel",
+            or_(
+                func.lower(GoodsReceiptItem.po_code).in_(all_po_low),
+                func.lower(GoodsReceipt.ctgs).in_(all_po_low),
+            ),
+        )
+        .all()
+    )
+
+    app_pool_code: Dict[str, float] = {}
+    app_pool_name: Dict[str, float] = {}
+    receipt_ids = set()
+    for ar in app_rows:
+        receipt_ids.add(ar.receipt_id)
+        q = float(ar.quantity1 or 0.0)
+        ck = (ar.item_code or "").strip().lower()
+        nk = (ar.item_name or "").strip().lower()
+        if ck:
+            app_pool_code[ck] = app_pool_code.get(ck, 0.0) + q
+        elif nk:
+            app_pool_name[nk] = app_pool_name.get(nk, 0.0) + q
+
+    raw_items = []
+    for r in rows:
+        ord_qty = round(float(r.order_qty_main or 0.0), 4)
+        excel_cum = round(float(r.received_cum_main or 0.0), 4)
+        ck = (r.item_code or "").strip().lower()
+        nk = (r.item_name or "").strip().lower()
+
+        # Phân bổ lượng đã nhập trên app theo từng dòng (tránh trừ lặp nếu 1 mã có nhiều dòng)
+        app_used = 0.0
+        excel_rem = max(0.0, ord_qty - excel_cum)
+        if ck and app_pool_code.get(ck, 0.0) > 0:
+            avail_pool = app_pool_code[ck]
+            take = min(excel_rem, avail_pool) if excel_rem > 0 else avail_pool
+            app_used = take
+            app_pool_code[ck] = round(avail_pool - take, 4)
+        elif nk and app_pool_name.get(nk, 0.0) > 0:
+            avail_pool = app_pool_name[nk]
+            take = min(excel_rem, avail_pool) if excel_rem > 0 else avail_pool
+            app_used = take
+            app_pool_name[nk] = round(avail_pool - take, 4)
+
+        cum_qty = round(excel_cum + app_used, 4)
+        rem_qty = round(max(0.0, ord_qty - cum_qty), 4)
+
+        raw_items.append({
+            "id": r.id,
+            "item_code": r.item_code or "",
+            "item_name": r.item_name or "",
+            "unit1": r.unit1 or "Cái",
+            "unit2": r.unit2 or "",
+            "order_qty": ord_qty,
+            "received_qty": cum_qty,
+            "remaining_qty": rem_qty,
+            "unit_price": float(r.unit_price or 0.0),
+            "category_group": r.category_group or "",
+            "warehouse_name": r.warehouse_name or "",
+            "lsx": r.lsx_code or "",
+            "po_code": r.po_code or clean_po,
+            "notes": r.notes or "",
+        })
+
+    # Nhóm các dòng theo mặt hàng (item_code hoặc item_name)
+    # Áp dụng quy tắc:
+    # 1. Nếu có 2 đơn (2 dòng) của cùng mặt hàng:
+    #    - Nếu có 1 đơn đã hoàn thành và 1 đơn chưa hoàn thành: mặc định lấy đơn chưa hoàn thành.
+    #    - Nếu cả 2 đơn chưa hoàn thành: cộng dồn (show 2 đơn + lại luôn).
+    #    - Nếu cả 2 đơn đều đã hoàn thành: gộp thành 1 dòng đã hoàn thành.
+    from collections import defaultdict
+    item_groups = defaultdict(list)
+    for it in raw_items:
+        key = (it["item_code"] or "").strip().lower() or (it["item_name"] or "").strip().lower()
+        item_groups[key].append(it)
+
+    items = []
+    pending_count = 0
+    completed_count = 0
+
+    for key, group in item_groups.items():
+        if len(group) == 1:
+            it = group[0]
+            if it["remaining_qty"] > 0.0001:
+                pending_count += 1
+            else:
+                completed_count += 1
+            items.append(it)
+            continue
+
+        unc = [it for it in group if it["remaining_qty"] > 0.0001]
+        comp = [it for it in group if it["remaining_qty"] <= 0.0001]
+
+        if len(unc) == 1:
+            # 1 đơn chưa hoàn thành + các đơn khác đã hoàn thành: mặc định lấy đơn chưa hoàn thành
+            act = dict(unc[0])
+            pending_count += 1
+            items.append(act)
+            if comp:
+                merged_comp = dict(comp[0])
+                merged_comp["order_qty"] = round(sum(x["order_qty"] for x in comp), 4)
+                merged_comp["received_qty"] = round(sum(x["received_qty"] for x in comp), 4)
+                merged_comp["remaining_qty"] = 0.0
+                completed_count += 1
+                items.append(merged_comp)
+        elif len(unc) > 1:
+            # Cả 2 đơn chưa hoàn thành: show 2 đơn + lại luôn!
+            merged = dict(unc[0])
+            merged["order_qty"] = round(sum(x["order_qty"] for x in unc), 4)
+            merged["received_qty"] = round(sum(x["received_qty"] for x in unc), 4)
+            merged["remaining_qty"] = round(sum(x["remaining_qty"] for x in unc), 4)
+            pending_count += 1
+            items.append(merged)
+            if comp:
+                merged_comp = dict(comp[0])
+                merged_comp["order_qty"] = round(sum(x["order_qty"] for x in comp), 4)
+                merged_comp["received_qty"] = round(sum(x["received_qty"] for x in comp), 4)
+                merged_comp["remaining_qty"] = 0.0
+                completed_count += 1
+                items.append(merged_comp)
+        else:
+            # Tất cả các đơn đều đã hoàn thành -> gom gọn thành 1 dòng đã hoàn thành
+            merged = dict(comp[0])
+            merged["order_qty"] = round(sum(x["order_qty"] for x in comp), 4)
+            merged["received_qty"] = round(sum(x["received_qty"] for x in comp), 4)
+            merged["remaining_qty"] = 0.0
+            completed_count += 1
+            items.append(merged)
+
+    return {
+        "po_code": first.po_code or clean_po,
+        "found": True,
+        "supplier_code": first.supplier_code or "",
+        "supplier_name": first.supplier_name or "",
+        "warehouse_name": first.warehouse_name or "",
+        "order_date": first.order_date.isoformat() if first.order_date else None,
+        "delivery_date": first.delivery_date.isoformat() if first.delivery_date else None,
+        "receipt_count": len(receipt_ids),
+        "pending_count": pending_count,
+        "completed_count": completed_count,
+        "items": items,
+    }
+
 

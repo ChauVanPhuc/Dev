@@ -1,6 +1,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { RotateCcw, Search, CheckCircle2, AlertCircle } from 'lucide-react';
+import {
+  RotateCcw,
+  Search,
+  CheckCircle2,
+  AlertCircle,
+  User,
+  Warehouse,
+  Calendar,
+  Clock,
+  Building2,
+  FileText,
+} from 'lucide-react';
 import Layout from '@mobile/Shared/Views/components/layout/MobileLayout';
 import PageHeader from '@mobile/Shared/Views/components/layout/MobilePageHeader';
 import ConfirmModal from '@mobile/Shared/Views/components/feedback/ConfirmModal';
@@ -434,63 +445,116 @@ const WarehouseReturnFormView = () => {
             )}
 
             <div className="mwh-card">
-              <div className="mwh-section-title">1. Kho & Thông tin trả hàng</div>
-
-              <div className="mwh-field-row">
-                <div className="mwh-field-group">
-                  <label className="mwh-label">Kho lưu trữ / nhận trả <span className="mwh-req">*</span></label>
-                  <select
-                    className="mwh-select"
-                    disabled={readOnly}
-                    value={form.warehouse_name}
-                    onChange={(e) => setForm((p) => ({ ...p, warehouse_name: e.target.value }))}
-                  >
-                    <option value="">-- Chọn kho --</option>
-                    {(meta.warehouses || []).map((w) => (
-                      <option key={w.code} value={w.name}>{w.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="mwh-field-group">
-                  <label className="mwh-label">Ngày phát sinh</label>
-                  <input
-                    type="date"
-                    className="mwh-input"
-                    readOnly={readOnly}
-                    value={form.created_date}
-                    onChange={(e) => setForm((p) => ({ ...p, created_date: e.target.value }))}
-                  />
-                </div>
+              <div className="mwh-section-title">
+                <span>1. Kho & Thông tin trả hàng {!isNew ? '& Giao nhận' : ''}</span>
               </div>
 
-              <div className="mwh-field-row">
-                <div className="mwh-field-group" style={!isNew && form.origin_voucher_no ? undefined : { marginBottom: 0 }}>
-                  <label className="mwh-label">Bộ phận trả hàng</label>
-                  <input
-                    type="text"
-                    className="mwh-input"
-                    readOnly={readOnly}
-                    placeholder="Nhập bộ phận / xưởng trả..."
-                    value={form.department_name}
-                    onChange={(e) => setForm((p) => ({ ...p, department_name: e.target.value }))}
-                  />
-                </div>
-                <div className="mwh-field-group" style={!isNew && form.origin_voucher_no ? undefined : { marginBottom: 0 }}>
-                  <label className="mwh-label">Người trả / Lập phiếu</label>
-                  <input
-                    className="mwh-input"
-                    readOnly={readOnly}
-                    value={form.returned_by}
-                    onChange={(e) => setForm((p) => ({ ...p, returned_by: e.target.value }))}
-                  />
-                </div>
-              </div>
+              {readOnly ? (
+                /* ── GIAO DIỆN LỊCH SỬ / CHI TIẾT ĐẦY ĐỦ THÔNG TIN TRẢ HÀNG: NGƯỜI GỬI, NGƯỜI NHẬN, THỜI GIAN ── */
+                <div className="mwh-audit-grid">
+                  <div className="mwh-audit-cell">
+                    <span className="mwh-audit-title">
+                      <User size={13} color="#7b5233" /> Bên trả (Người gửi)
+                    </span>
+                    <span className="mwh-audit-text" title={form.returned_by}>
+                      {form.returned_by || form.created_by || 'Người trả'}
+                    </span>
+                    <span className="mwh-audit-sub">
+                      {form.department_name || 'Bộ phận trả'}{form.factory_name ? ` • ${form.factory_name}` : ''}
+                    </span>
+                  </div>
 
-              {!isNew && form.origin_voucher_no && (
-                <div className="mwh-field-group" style={{ marginBottom: 0 }}>
-                  <label className="mwh-label">Phiếu bàn giao gốc</label>
-                  <input className="mwh-input" readOnly value={form.origin_voucher_no} />
+                  <div className="mwh-audit-cell">
+                    <span className="mwh-audit-title">
+                      <Warehouse size={13} color="#7b5233" /> Bên nhận (Kho lưu trữ)
+                    </span>
+                    <span className="mwh-audit-text" style={{ color: '#047857' }} title={form.received_by}>
+                      {form.received_by || 'Chờ kho nhận'}
+                    </span>
+                    <span className="mwh-audit-sub">Kho: {form.warehouse_name || '—'}</span>
+                  </div>
+
+                  <div className="mwh-audit-cell">
+                    <span className="mwh-audit-title">
+                      <Calendar size={13} color="#7b5233" /> Ngày phát sinh / Trả
+                    </span>
+                    <span className="mwh-audit-text">
+                      {formatDateVN(form.created_date)}
+                    </span>
+                    {form.created_at && (
+                      <span className="mwh-audit-sub">Tạo: {form.created_at}</span>
+                    )}
+                  </div>
+
+                  <div className="mwh-audit-cell">
+                    <span className="mwh-audit-title">
+                      <Clock size={13} color="#7b5233" /> Thời gian kho nhận
+                    </span>
+                    <span className="mwh-audit-text" style={{ color: form.received_at ? '#059669' : '#d97706' }}>
+                      {form.received_at ? form.received_at : (form.status === 'RESOLVED' ? 'Đã xử lý' : 'Chờ kho xử lý')}
+                    </span>
+                    {form.created_by && (
+                      <span className="mwh-audit-sub">Lập bởi: {form.created_by}</span>
+                    )}
+                  </div>
+
+                  {form.origin_voucher_no && (
+                    <div className="mwh-audit-cell mwh-audit-cell--full">
+                      <span className="mwh-audit-title">
+                        <Building2 size={13} color="#7b5233" /> Phiếu bàn giao gốc
+                      </span>
+                      <span className="mwh-audit-text" style={{ fontWeight: 600 }}>
+                        {form.origin_voucher_no}
+                      </span>
+                    </div>
+                  )}
+
+                  {(form.defect_reason || form.defect_category) && (
+                    <div className="mwh-audit-cell mwh-audit-cell--full">
+                      <span className="mwh-audit-title">
+                        <FileText size={13} color="#7b5233" /> Lý do / Tình trạng hàng
+                      </span>
+                      <span className="mwh-audit-sub" style={{ fontSize: '12.5px', color: '#4b382a', fontStyle: 'italic' }}>
+                        {form.defect_reason || form.defect_category}
+                      </span>
+                    </div>
+                  )}
                 </div>
+              ) : (
+                /* ── GIAO DIỆN FORM KHI TẠO MỚI HOẶC SỬA ── */
+                <>
+                  <div className="mwh-field-group">
+                    <label className="mwh-label">Kho lưu trữ / nhận trả <span className="mwh-req">*</span></label>
+                    <select
+                      className="mwh-select"
+                      value={form.warehouse_name}
+                      onChange={(e) => setForm((p) => ({ ...p, warehouse_name: e.target.value }))}
+                    >
+                      <option value="">-- Chọn kho --</option>
+                      {(meta.warehouses || []).map((w) => (
+                        <option key={w.code} value={w.name}>{w.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="mwh-field-group" style={!isNew && form.origin_voucher_no ? undefined : { marginBottom: 0 }}>
+                    <label className="mwh-label">Bộ phận trả hàng</label>
+                    <input
+                      type="text"
+                      className="mwh-input"
+                      placeholder="Nhập bộ phận / xưởng trả..."
+                      value={form.department_name}
+                      onChange={(e) => setForm((p) => ({ ...p, department_name: e.target.value }))}
+                    />
+                  </div>
+
+                  {!isNew && form.origin_voucher_no && (
+                    <div className="mwh-field-group" style={{ marginBottom: 0 }}>
+                      <label className="mwh-label">Phiếu bàn giao gốc</label>
+                      <input className="mwh-input" readOnly value={form.origin_voucher_no} />
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
@@ -510,37 +574,51 @@ const WarehouseReturnFormView = () => {
               </div>
 
               {form.item_code ? (
-                <div className="mwh-item-card" style={{ marginBottom: '10px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                        <span style={{ fontWeight: 800, color: '#5c2d0e', fontSize: '14px' }}>{form.item_code}</span>
-                        {form.origin_voucher_no && (
-                          <span className="mwh-channel-badge">{form.origin_voucher_no}</span>
-                        )}
-                        {selectedHandoverMeta?.delivered_qty > 0 && (
-                          <span className="mwh-stock-pill">
-                            Đã giao: {formatNumberVN(selectedHandoverMeta.delivered_qty)} {selectedHandoverMeta.delivered_unit}
+                <div className="mwh-grid-card" style={{ marginBottom: '12px' }}>
+                  <div className="mwh-grid-header">
+                    <div className="mwh-grid-col-mat">VẬT TƯ TRẢ VỀ</div>
+                    <div className="mwh-grid-col-quota" style={{ width: '90px' }}>PHIẾU GỐC</div>
+                    <div className="mwh-grid-col-qty-header" style={{ width: '70px' }}>
+                      <div>THAO TÁC</div>
+                    </div>
+                  </div>
+                  <div className="mwh-grid-body">
+                    <div className="mwh-grid-row">
+                      <div className="mwh-grid-col-mat">
+                        <div className="mwh-grid-code-title" title={form.item_code}>
+                          <span className="mwh-stt-pill">1</span>
+                          <span className="mwh-grid-mat-code">{form.item_code}</span>
+                        </div>
+                        <div className="mwh-grid-name" title={form.item_name}>
+                          {form.item_name}
+                        </div>
+                        <div style={{ fontSize: '10.5px', color: '#8d6e63', marginTop: 2 }}>
+                          {form.warehouse_name ? `${form.warehouse_name} • ` : ''}ĐVT: {form.unit_main}
+                          {selectedHandoverMeta?.delivered_qty > 0 && ` • Đã giao: ${formatNumberVN(selectedHandoverMeta.delivered_qty)}`}
+                        </div>
+                      </div>
+                      <div className="mwh-grid-col-quota" style={{ width: '90px' }}>
+                        {form.origin_voucher_no ? (
+                          <span className="mwh-channel-badge" style={{ fontSize: '10.5px' }}>
+                            {form.origin_voucher_no}
                           </span>
+                        ) : (
+                          <span style={{ fontSize: '11px', color: '#94a3b8' }}>—</span>
                         )}
                       </div>
-                      <div style={{ fontSize: '12.5px', color: '#374151', marginTop: 2 }}>{form.item_name}</div>
-                      {(form.warehouse_name || form.unit_main) && (
-                        <div style={{ fontSize: '11.5px', color: '#7b6456', marginTop: 2 }}>
-                          {form.warehouse_name ? `${form.warehouse_name} • ` : ''}ĐVT: {form.unit_main}
-                        </div>
-                      )}
+                      <div className="mwh-grid-col-qty" style={{ width: '70px', alignItems: 'flex-end' }}>
+                        {isNew && (
+                          <button
+                            type="button"
+                            className="mwh-btn-secondary"
+                            style={{ padding: '3px 8px', fontSize: '11px' }}
+                            onClick={clearSelectedItem}
+                          >
+                            Đổi
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    {isNew && (
-                      <button
-                        type="button"
-                        className="mwh-btn-secondary"
-                        style={{ padding: '4px 9px', fontSize: '11.5px', flexShrink: 0 }}
-                        onClick={clearSelectedItem}
-                      >
-                        Đổi
-                      </button>
-                    )}
                   </div>
                 </div>
               ) : (

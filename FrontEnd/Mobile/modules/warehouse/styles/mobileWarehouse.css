@@ -8,25 +8,42 @@
   flex-direction: column;
   flex: 1 1 0%;
   min-height: 0;
+  height: 100%;
   background-color: #f6f0e8;
   width: 100%;
   max-width: 100%;
-  overflow-x: hidden;
+  overflow: hidden;
   position: relative;
+}
+
+/* ── Neo giữ cố định đầu trang (Header + Toolbar + Stats) ── */
+.mwh-sticky-top {
+  flex-shrink: 0;
+  background-color: #f6f0e8;
+  z-index: 25;
+  box-shadow: 0 2px 6px rgba(66, 41, 24, 0.05);
+}
+
+.mwh-stats-wrapper {
+  padding: 8px 12px 6px;
+  background-color: #f6f0e8;
+  border-bottom: 1px solid #eadcc9;
 }
 
 .mwh-scroll-area {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 10px 12px 92px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  -webkit-overflow-scrolling: touch;
 }
 
 .mwh-scroll-area--list {
-  padding-bottom: 24px;
+  padding: 10px 12px 14px;
 }
 
 /* ── Top Search & Action Bar ───────────────────────── */
@@ -405,6 +422,55 @@
   color: #6b7280;
 }
 
+/* ── Lưới thông tin lịch sử giao nhận (Người gửi, người nhận, thời gian) ── */
+.mwh-audit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 10px;
+  background: #fdfaf6;
+  border: 1px solid #eadcc9;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.mwh-audit-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.mwh-audit-cell--full {
+  grid-column: 1 / -1;
+  border-top: 1px dashed #eedfcb;
+  padding-top: 6px;
+  margin-top: 2px;
+}
+
+.mwh-audit-title {
+  font-size: 11px;
+  color: #8c7a6b;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mwh-audit-text {
+  font-size: 13px;
+  font-weight: 700;
+  color: #4b382a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mwh-audit-sub {
+  font-size: 11px;
+  color: #78716c;
+  line-height: 1.3;
+}
+
 /* ── Section & Form Elements ───────────────────────── */
 .mwh-section-title {
   display: flex;
@@ -709,4 +775,1888 @@
   justify-content: space-between;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+/* ── Handover Materials Table (.mwh-table-*) ────────────────────────── */
+.mwh-table-container {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  border: 1px solid #eadcc9;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(66, 41, 24, 0.05);
+  max-height: 580px;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.mwh-table {
+  width: 100%;
+  max-width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12px;
+  box-sizing: border-box;
+}
+
+.mwh-table th {
+  background: #fbf7f2;
+  color: #5c2d0e;
+  font-weight: 700;
+  padding: 8px 6px;
+  border-bottom: 2px solid #dfd0be;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  box-shadow: 0 1px 2px rgba(92, 45, 14, 0.06);
+  font-size: 11.5px;
+}
+
+.mwh-table td {
+  padding: 6px 6px;
+  border-bottom: 1px solid #f2e9de;
+  vertical-align: middle;
+  color: #2d1d12;
+  word-break: break-word;
+}
+
+.mwh-table tbody tr:nth-child(even) td {
+  background-color: #fdfbf7;
+}
+
+.mwh-table tbody tr:hover td {
+  background-color: #f7efe6;
+}
+
+.mwh-table tbody tr.mwh-row--overstock td {
+  background-color: #fef4f4 !important;
+}
+
+.mwh-table tbody tr.mwh-row--overstock td:first-child {
+  border-left: 3.5px solid #dc2626;
+}
+
+.mwh-table-input {
+  width: 78px;
+  padding: 4px 6px;
+  border: 1.5px solid #d5c3ad;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: right;
+  color: #1f2937;
+  background: #ffffff;
+  outline: none;
+  transition: all 0.15s ease;
+}
+
+.mwh-table-input:focus {
+  border-color: #5c2d0e;
+  box-shadow: 0 0 0 2px rgba(92, 45, 14, 0.12);
+  background: #ffffff;
+}
+
+.mwh-table-input--overstock {
+  border-color: #dc2626 !important;
+  background: #fef2f2 !important;
+  color: #b91c1c !important;
+}
+
+.mwh-table-input-text {
+  width: 100%;
+  max-width: 135px;
+  padding: 4px 6px;
+  border: 1px solid #e2d5c5;
+  border-radius: 6px;
+  font-size: 11px;
+  color: #374151;
+  background: #ffffff;
+  outline: none;
+}
+
+.mwh-table-input-text:focus {
+  border-color: #5c2d0e;
+}
+
+.mwh-badge-group {
+  display: inline-block;
+  font-size: 10.5px;
+  background-color: #fef3c7;
+  color: #92400e;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  border: 1px solid #fde68a;
+  white-space: nowrap;
+}
+
+.mwh-badge-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10.5px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+  border: 1px solid #bfdbfe;
+  cursor: pointer;
+}
+
+.mwh-quota-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11.5px;
+  background-color: #eff6ff;
+  color: #1e40af;
+  padding: 3px 7px;
+  border-radius: 6px;
+  font-weight: 700;
+  border: 1px solid #bfdbfe;
+  white-space: nowrap;
+}
+
+.mwh-stock-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  cursor: pointer;
+  background: none;
+}
+
+.mwh-stock-btn--ok {
+  background-color: #ecfdf5;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+
+.mwh-stock-btn--zero {
+  background-color: #fef2f2;
+  color: #dc2626;
+  border-color: #fca5a5;
+  cursor: default;
+}
+
+.mwh-icon-btn--del {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #fee2e2;
+  background: #fff;
+  color: #dc2626;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.mwh-icon-btn--del:hover {
+  background: #fef2f2;
+  border-color: #fca5a5;
+}
+
+.mwh-table-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.mwh-table-search-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mwh-table-search-box {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.mwh-table-search-input {
+  width: 100%;
+  padding: 6px 28px 6px 28px;
+  border: 1px solid #dfd0be;
+  border-radius: 8px;
+  background: #faf7f2;
+  font-size: 12.5px;
+  color: #2d1d12;
+  outline: none;
+}
+
+.mwh-table-search-input:focus {
+  border-color: #7b5233;
+  background: #ffffff;
+}
+
+.mwh-view-toggle {
+  display: inline-flex;
+  border: 1px solid #d5c3ad;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fcfaf7;
+  flex-shrink: 0;
+}
+
+.mwh-view-toggle-btn {
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #5c2d0e;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mwh-view-toggle-btn.active {
+  background: #5c2d0e;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.mwh-table-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: #fbf7f2;
+  border: 1px solid #eadcc9;
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  font-size: 11.5px;
+  color: #5c2d0e;
+  font-weight: 600;
+}
+
+/* ── THẲNG HÀNG THẲNG CỘT & CAO CẤP - MOBILE HANDOVER GRID (.mwh-grid-*) ───────── */
+.mwh-grid-card {
+  width: 100%;
+  max-width: 100%;
+  border: 1px solid #e8ded2;
+  border-radius: 12px;
+  background: #ffffff;
+  overflow: hidden;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 2px 8px rgba(66, 41, 24, 0.05);
+}
+
+/* Scroll wrap chứa cả header và body để cùng chia sẻ chiều rộng và thanh cuộn */
+.mwh-grid-scroll-wrap {
+  max-height: 540px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.mwh-grid-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  padding: 9px 12px;
+  background: #f7f2ea;
+  border-bottom: 2px solid #e2d6c7;
+  box-sizing: border-box;
+  font-size: 11px;
+  font-weight: 800;
+  color: #6d4c41;
+  letter-spacing: 0.3px;
+  user-select: none;
+}
+
+.mwh-grid-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.mwh-grid-row {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid #f2e9de;
+  background: #ffffff;
+  box-sizing: border-box;
+  transition: background 0.15s ease;
+  min-height: 56px;
+}
+
+.mwh-grid-row:nth-child(even) {
+  background: #fdfcf9;
+}
+
+.mwh-grid-row:hover {
+  background: #f7f3ec;
+}
+
+/* Col 1: Vật tư (flex: 1) */
+.mwh-grid-col-mat {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding-right: 8px;
+  box-sizing: border-box;
+}
+
+.mwh-grid-code-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.mwh-stt-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 4px;
+  background: #f3ece4;
+  color: #7b5233;
+  font-size: 10.5px;
+  font-weight: 700;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.mwh-grid-mat-code {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #2e1a0c;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mwh-grid-name {
+  font-size: 11px;
+  color: #78716c;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+
+/* Col 2: Định mức (58px) */
+.mwh-grid-col-quota {
+  width: 58px;
+  flex-shrink: 0;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.mwh-grid-quota-val {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #1e40af;
+  line-height: 1.15;
+}
+
+.mwh-grid-unit-sub {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: #64748b;
+  line-height: 1;
+  margin-top: 2px;
+}
+
+/* Col 3: Gộp Bàn giao (trên) & Tồn kho (dưới) (140px) */
+.mwh-grid-col-qty-header {
+  width: 140px;
+  flex-shrink: 0;
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.mwh-grid-header-sub {
+  font-size: 9px;
+  font-weight: 600;
+  color: #8d6e63;
+  line-height: 1.1;
+  margin-top: 1px;
+}
+
+.mwh-grid-col-qty {
+  width: 140px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4px;
+  box-sizing: border-box;
+}
+
+/* Hàng trên: Input Group (Input + Unit) + Trash Icon */
+.mwh-grid-qty-top {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  width: 100%;
+}
+
+/* Input Wrapper tích hợp ĐVT như thanh công cụ cao cấp */
+.mwh-input-wrapper {
+  display: inline-flex;
+  align-items: center;
+  width: 104px;
+  height: 28px;
+  background: #ffffff;
+  border: 1.5px solid #d6c7b7;
+  border-radius: 6px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+}
+
+.mwh-input-wrapper:focus-within {
+  border-color: #7b5233;
+  box-shadow: 0 0 0 2px rgba(123, 82, 51, 0.15);
+  background: #ffffff;
+}
+
+.mwh-input-wrapper--warn {
+  border-color: #fca5a5 !important;
+  background: #fffcfb !important;
+}
+
+.mwh-compact-input {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: right;
+  color: #1c1917;
+  outline: none;
+  padding: 0 2px 0 0;
+  box-sizing: border-box;
+  -moz-appearance: textfield;
+}
+
+.mwh-compact-input::-webkit-outer-spin-button,
+.mwh-compact-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Inline text input for manual row name editing */
+.mwh-compact-text-input {
+  width: 100%;
+  height: 26px;
+  border: 1px solid #d6c7b7;
+  border-radius: 5px;
+  background: #ffffff;
+  padding: 0 6px;
+  font-size: 11.5px;
+  color: #1c1917;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.mwh-compact-text-input:focus {
+  border-color: #7b5233;
+  box-shadow: 0 0 0 1.5px rgba(123, 82, 51, 0.2);
+}
+
+.mwh-compact-text-input::placeholder {
+  color: #a8a29e;
+  font-style: italic;
+}
+
+.mwh-input-unit {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #78716c;
+  padding-left: 2px;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+/* Nút xóa borderless thanh lịch */
+.mwh-btn-trash-clean {
+  width: 22px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: #a8a29e;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.mwh-btn-trash-clean:hover, .mwh-btn-trash-clean:active {
+  color: #dc2626;
+  background: #fee2e2;
+}
+
+/* Hàng dưới: Tồn kho nằm thẳng dưới input wrapper */
+.mwh-grid-stock-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 100%;
+  padding-right: 27px;
+  box-sizing: border-box;
+}
+
+/* Stock chip tinh tế */
+.mwh-stock-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1.5px 6px;
+  border-radius: 4px;
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  box-sizing: border-box;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.mwh-stock-chip--green {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #15803d;
+  cursor: pointer;
+}
+
+.mwh-stock-chip--green:active {
+  background: #dcfce7;
+}
+
+.mwh-stock-chip--zero {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.mwh-stock-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.mwh-stock-dot--green {
+  background: #22c55e;
+}
+
+.mwh-stock-dot--red {
+  background: #ef4444;
+}
+
+.mwh-grid-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #f7f2ea;
+  border-top: 1px solid #e2d6c7;
+  font-size: 11.5px;
+  color: #5c2d0e;
+  font-weight: 600;
+}
+
+/* ── TOOLBAR BẢNG VẬT TƯ TINH GỌN (.mwh-toolbar-clean) ───────── */
+.mwh-toolbar-clean {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+/* Hàng 1: Search + Group Select */
+.mwh-filter-row-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.mwh-search-input-box {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.mwh-search-field {
+  width: 100%;
+  height: 32px;
+  padding: 0 26px 0 28px;
+  border: 1px solid #dcd1c4;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #374151;
+  background: #ffffff;
+  outline: none;
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+}
+
+.mwh-search-field:focus {
+  border-color: #7b5233;
+  box-shadow: 0 0 0 2px rgba(123, 82, 51, 0.12);
+}
+
+.mwh-search-icon {
+  position: absolute;
+  left: 8px;
+  color: #9ca3af;
+  pointer-events: none;
+}
+
+.mwh-search-clear {
+  position: absolute;
+  right: 6px;
+  background: none;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mwh-group-select-wrap {
+  width: 140px;
+  flex-shrink: 0;
+}
+
+.mwh-group-select {
+  width: 100%;
+  height: 32px;
+  padding: 0 6px;
+  border: 1px solid #dcd1c4;
+  border-radius: 8px;
+  background: #faf7f2;
+  font-size: 11px;
+  font-weight: 700;
+  color: #5c2d0e;
+  outline: none;
+  cursor: pointer;
+  box-sizing: border-box;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mwh-group-select:focus {
+  border-color: #7b5233;
+}
+
+/* Hàng 2: Segmented Control lọc Tồn kho */
+.mwh-stock-segments {
+  display: flex;
+  background: #f3ece4;
+  padding: 2.5px;
+  border-radius: 8px;
+  gap: 2px;
+  user-select: none;
+}
+
+.mwh-segment-btn {
+  flex: 1;
+  height: 27px;
+  border: none;
+  background: transparent;
+  color: #78716c;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  padding: 0 4px;
+}
+
+.mwh-segment-btn.active {
+  background: #ffffff;
+  color: #5c2d0e;
+  box-shadow: 0 1px 3px rgba(66, 41, 24, 0.08);
+}
+
+.mwh-segment-btn--green.active {
+  color: #15803d;
+}
+
+.mwh-segment-btn--red.active {
+  color: #dc2626;
+}
+
+.mwh-segment-btn--warn.active {
+  color: #b91c1c;
+}
+
+.mwh-segment-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.mwh-segment-dot--green {
+  background: #22c55e;
+}
+
+.mwh-segment-dot--red {
+  background: #ef4444;
+}
+
+.mwh-segment-dot--amber {
+  background: #f59e0b;
+}
+
+/* Hàng 3: Thanh tác vụ hàng loạt nhanh (.mwh-batch-bar) */
+.mwh-batch-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: #fff8f6;
+  border: 1px solid #fecdd3;
+  border-radius: 8px;
+  box-sizing: border-box;
+}
+
+.mwh-batch-bar-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #9f1239;
+  font-weight: 600;
+}
+
+.mwh-batch-actions {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+}
+
+.mwh-batch-btn {
+  flex: 1;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  padding: 0 4px;
+}
+
+.mwh-batch-btn--danger {
+  background: #ffe4e6;
+  border-color: #fecdd3;
+  color: #be123c;
+}
+
+.mwh-batch-btn--danger:active {
+  background: #fecdd3;
+}
+
+.mwh-batch-btn--primary {
+  background: #e0f2fe;
+  border-color: #bae6fd;
+  color: #0369a1;
+}
+
+.mwh-batch-btn--primary:active {
+  background: #bae6fd;
+}
+
+.mwh-batch-btn--neutral {
+  background: #faf6f0;
+  border-color: #eadcc9;
+  color: #5c2d0e;
+}
+
+.mwh-batch-btn--neutral:active {
+  background: #f5ece0;
+}
+
+
+/* ── Nút kích hoạt Chọn nhóm vật tư (.mwh-group-btn) ─────────────────────── */
+.mwh-group-btn {
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid #dcd1c4;
+  border-radius: 8px;
+  background: #faf7f2;
+  font-size: 11px;
+  font-weight: 700;
+  color: #5c2d0e;
+  outline: none;
+  cursor: pointer;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.mwh-group-btn:active {
+  background: #f5ede1;
+}
+
+.mwh-group-btn.active {
+  background: #fdf5ea;
+  border-color: #7b5233;
+  color: #5c2d0e;
+  box-shadow: 0 1px 3px rgba(123, 82, 51, 0.12);
+}
+
+.mwh-group-btn.prompt {
+  background: #fffbf5;
+  border-color: #d97706;
+  color: #92400e;
+  box-shadow: 0 1px 3px rgba(217, 119, 6, 0.15);
+}
+
+.mwh-group-btn-text {
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mwh-group-btn-icon {
+  color: #7b5233;
+  flex-shrink: 0;
+}
+
+.mwh-group-btn-arrow {
+  color: #9ca3af;
+  flex-shrink: 0;
+}
+
+/* ── Bottom Sheet Chọn nhóm bàn giao theo PO ─────────────────────── */
+.mwh-group-picker-sheet {
+  max-height: 80vh;
+}
+
+.mwh-sheet-close-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: #78716c;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.mwh-sheet-close-btn:active {
+  background: #eadcc9;
+}
+
+.mwh-gps-toolbar {
+  padding: 10px 14px 6px;
+  background: #ffffff;
+  border-bottom: 1px solid #f3ece4;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mwh-gps-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.mwh-gps-search-icon {
+  position: absolute;
+  left: 10px;
+  color: #9ca3af;
+  pointer-events: none;
+}
+
+.mwh-gps-search-input {
+  width: 100%;
+  height: 34px;
+  padding: 0 28px 0 32px;
+  border: 1px solid #dcd1c4;
+  border-radius: 8px;
+  background: #faf7f2;
+  font-size: 12px;
+  color: #374151;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.mwh-gps-search-input:focus {
+  border-color: #7b5233;
+  background: #ffffff;
+}
+
+.mwh-gps-search-clear {
+  position: absolute;
+  right: 8px;
+  background: none;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mwh-gps-quick-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.mwh-gps-quick-btn {
+  flex: 1;
+  height: 28px;
+  border: 1px solid #eadcc9;
+  border-radius: 6px;
+  background: #faf6f0;
+  color: #5c2d0e;
+  font-size: 11.5px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mwh-gps-quick-btn:active {
+  background: #efe3d3;
+}
+
+.mwh-gps-quick-btn.active {
+  background: #7b5233;
+  border-color: #7b5233;
+  color: #ffffff;
+}
+
+.mwh-gps-body {
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  max-height: 48vh;
+}
+
+.mwh-gps-row {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1.5px solid #eadcc9;
+  background: #ffffff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  gap: 10px;
+}
+
+.mwh-gps-row:active {
+  background: #faf5ee;
+}
+
+.mwh-gps-row.selected {
+  border-color: #7b5233;
+  background: #fdf8f3;
+}
+
+.mwh-gps-checkbox-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mwh-gps-checkbox-icon--checked {
+  color: #7b5233;
+}
+
+.mwh-gps-checkbox-icon--unchecked {
+  color: #d1d5db;
+}
+
+.mwh-gps-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.mwh-gps-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #432818;
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.mwh-gps-meta {
+  font-size: 11px;
+  margin-top: 2px;
+  display: flex;
+  gap: 6px;
+}
+
+.mwh-gps-stock-status.in-stock {
+  color: #15803d;
+  font-weight: 600;
+}
+
+.mwh-gps-stock-status.out-stock {
+  color: #b91c1c;
+  font-weight: 500;
+}
+
+.mwh-gps-badge {
+  flex-shrink: 0;
+}
+
+.mwh-gps-count-pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: #f3ece4;
+  color: #78716c;
+}
+
+.mwh-gps-row.selected .mwh-gps-count-pill {
+  background: #eadcc9;
+  color: #5c2d0e;
+}
+
+/* ── Danh sách vật tư con trong từng nhóm (Group Picker) ── */
+.mwh-gps-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.mwh-gps-group.selected .mwh-gps-row {
+  border-color: #7b5233;
+  background: #fdf8f3;
+}
+
+.mwh-gps-sel-count {
+  color: #7b5233;
+  font-weight: 700;
+}
+
+.mwh-gps-expand-btn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid #eadcc9;
+  background: #ffffff;
+  color: #7b5233;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+}
+
+.mwh-gps-items {
+  margin: 4px 0 2px 14px;
+  padding-left: 10px;
+  border-left: 2px solid #eadcc9;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mwh-gps-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid #f1e7da;
+  background: #ffffff;
+  cursor: pointer;
+  user-select: none;
+}
+
+.mwh-gps-item.checked {
+  background: #fdf8f3;
+  border-color: #d9c2a5;
+}
+
+.mwh-gps-item-check {
+  padding-top: 1px;
+  flex-shrink: 0;
+}
+
+.mwh-gps-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.mwh-gps-item-code {
+  font-size: 12px;
+  font-weight: 800;
+  color: #432818;
+  letter-spacing: 0.2px;
+}
+
+.mwh-gps-item-name {
+  font-size: 11.5px;
+  color: #64748b;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mwh-gps-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 3px;
+  font-size: 11px;
+}
+
+.mwh-gps-item-quota {
+  color: #57534e;
+}
+
+.mwh-gps-item-stock {
+  padding: 0 6px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.mwh-gps-item-stock.ok {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.mwh-gps-item-stock.low {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.mwh-gps-item-stock.zero {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.mwh-gps-footer {
+  padding: 10px 14px 14px;
+  background: #faf6f0;
+  border-top: 1px solid #eadcc9;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mwh-gps-warning-tip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: #b91c1c;
+  font-weight: 600;
+  padding: 4px 8px;
+  background: #fee2e2;
+  border-radius: 6px;
+}
+
+.mwh-gps-btn-row {
+  display: flex;
+  gap: 8px;
+}
+
+.mwh-gps-btn-cancel {
+  height: 40px;
+  padding: 0 16px;
+  background: #ffffff;
+  border: 1px solid #dcd1c4;
+  border-radius: 8px;
+  color: #57534e;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mwh-gps-btn-cancel:active {
+  background: #f5f5f4;
+}
+
+.mwh-gps-btn-apply {
+  flex: 1;
+  height: 40px;
+  background: #7b5233;
+  border: 1px solid #5c2d0e;
+  border-radius: 8px;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-shadow: 0 2px 6px rgba(123, 82, 51, 0.25);
+  transition: all 0.15s ease;
+}
+
+.mwh-gps-btn-apply:active {
+  background: #5c2d0e;
+}
+
+.mwh-gps-btn-apply.disabled {
+  background: #d6d3d1;
+  border-color: #a8a29e;
+  color: #78716c;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+
+/* ── Phân trang Mobile Kho Tinh gọn (.mwh-pagination-bar) ─────────────────────── */
+.mwh-pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+.mwh-page-nav-btn {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1.5px solid #eadcc9;
+  background: #faf7f2;
+  color: #5c2d0e;
+  font-size: 13px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  user-select: none;
+  box-shadow: 0 1px 3px rgba(66, 41, 24, 0.05);
+}
+
+.mwh-page-nav-btn:hover:not(:disabled) {
+  background: #f4ece2;
+  border-color: #d6beaa;
+  color: #422918;
+}
+
+.mwh-page-nav-btn:active:not(:disabled) {
+  transform: scale(0.97);
+  background: #ede0d0;
+}
+
+.mwh-page-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  border-color: #e5e7eb;
+  background: #f9fafb;
+  color: #9ca3af;
+  box-shadow: none;
+}
+
+.mwh-page-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  text-align: center;
+  flex: 1;
+}
+
+.mwh-page-indicator {
+  font-size: 13px;
+  color: #5c2d0e;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+}
+
+.mwh-page-indicator strong {
+  font-weight: 800;
+  color: #7b5233;
+}
+
+.mwh-page-subtext {
+  font-size: 11px;
+  color: #8d6e63;
+  font-weight: 500;
+}
+
+.mwh-page-subtext strong {
+  color: #5c2d0e;
+  font-weight: 700;
+}
+
+/* ── Phân trang Ghim đáy màn hình (.mwh-sticky-bottom) ── */
+.mwh-sticky-bottom {
+  flex-shrink: 0;
+  background: #ffffff;
+  border-top: 1.5px solid #eadcc9;
+  box-shadow: 0 -3px 12px rgba(66, 41, 24, 0.08);
+  padding: 8px 14px calc(8px + env(safe-area-inset-bottom, 0px));
+  z-index: 30;
+}
+
+
+/* ============================================================
+   MULTI-PO PICKER (FORM TRIGGER + BOTTOM SHEET)
+   ============================================================ */
+.mwh-po-trigger-box {
+  border: 1.5px solid #dfd0be;
+  border-radius: 11px;
+  background: #ffffff;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color 0.15s ease;
+}
+
+.mwh-po-trigger-box.has-value {
+  border-color: #c49b74;
+  background: #fffdfb;
+}
+
+.mwh-po-trigger-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 3px 2px;
+  text-align: left;
+  color: #8d6e63;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.mwh-po-chips-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mwh-po-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px 3px 9px;
+  border-radius: 7px;
+  background: #fef6ec;
+  border: 1px solid #c49b74;
+  color: #4a2e18;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.mwh-po-chip--readonly {
+  padding: 3px 9px;
+}
+
+.mwh-po-chip--sheet {
+  background: #7b5233;
+  border-color: #7b5233;
+  color: #ffffff;
+}
+
+.mwh-po-chip-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 4px;
+  border: none;
+  background: rgba(123, 82, 51, 0.12);
+  color: #7b5233;
+  cursor: pointer;
+  padding: 0;
+}
+
+.mwh-po-chip--sheet .mwh-po-chip-x {
+  background: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+}
+
+.mwh-po-trigger-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed #eadcc9;
+}
+
+.mwh-po-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1px solid #7b5233;
+  background: #faf3e8;
+  color: #5c2d0e;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.mwh-po-clear-btn {
+  border: none;
+  background: none;
+  color: #dc2626;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 4px 6px;
+  font-family: inherit;
+}
+
+.mwh-po-selected-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  max-height: 76px;
+  overflow-y: auto;
+  padding: 2px 0;
+}
+
+.mwh-po-sheet-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+}
+
+.mwh-po-option-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 11px;
+  border-radius: 10px;
+  border: 1px solid #eadcc9;
+  background: #ffffff;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.12s ease;
+}
+
+.mwh-po-option-row.checked {
+  border-color: #7b5233;
+  background: #fef6ec;
+}
+
+.mwh-po-option-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mwh-po-option-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.mwh-po-option-code {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: #2d1a12;
+  word-break: break-word;
+}
+
+.mwh-po-option-sub {
+  font-size: 11.5px;
+  color: #786452;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mwh-po-option-tag {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 99px;
+  background: #7b5233;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.mwh-po-custom-add {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 9px 11px;
+  border-radius: 10px;
+  border: 1.5px dashed #7b5233;
+  background: #faf3e8;
+  color: #5c2d0e;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.mwh-po-spin {
+  position: absolute;
+  right: 10px;
+  color: #7b5233;
+  animation: mwhSpin 0.9s linear infinite;
+}
+
+@keyframes mwhSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+
+/* ============================================================
+   INLINE MULTI-PO DROPDOWN (Y NHƯ CŨ + CHECKBOX CHỌN NHIỀU)
+   ============================================================ */
+.mwh-mpo-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.mwh-mpo-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-height: 42px;
+  padding: 5px 10px;
+  border: 1.5px solid #dfd0be;
+  border-radius: 11px;
+  background: #ffffff;
+  cursor: text;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.mwh-mpo-control.open {
+  border-color: #7b5233;
+  box-shadow: 0 0 0 2px rgba(123, 82, 51, 0.12);
+}
+
+.mwh-mpo-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+
+.mwh-mpo-chips {
+  display: contents;
+}
+
+.mwh-mpo-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 5px 2px 8px;
+  border-radius: 6px;
+  background: #fef5eb;
+  border: 1px solid #d5b492;
+  color: #5c2d0e;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.mwh-mpo-chip-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #7b5233;
+  cursor: pointer;
+  padding: 0;
+}
+
+.mwh-mpo-chip-x:hover {
+  background: rgba(123, 82, 51, 0.15);
+}
+
+.mwh-mpo-input {
+  flex: 1;
+  min-width: 90px;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #2d1a12;
+  padding: 3px 2px;
+}
+
+.mwh-mpo-input::placeholder {
+  color: #9ca3af;
+  font-weight: 400;
+}
+
+.mwh-mpo-icons {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.mwh-mpo-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #786452;
+  cursor: pointer;
+  padding: 0;
+}
+
+.mwh-mpo-spinner {
+  color: #7b5233;
+  animation: mwhSpin 0.9s linear infinite;
+}
+
+.mwh-mpo-dropdown {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  right: 0;
+  z-index: 60;
+  background: #ffffff;
+  border: 1px solid #e2d5c5;
+  border-radius: 12px;
+  box-shadow: 0 10px 26px rgba(45, 26, 18, 0.14);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.mwh-mpo-list {
+  max-height: 255px;
+  overflow-y: auto;
+  padding: 4px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mwh-mpo-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 9px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background-color 0.12s ease;
+}
+
+.mwh-mpo-item:hover {
+  background: #faf6f0;
+}
+
+.mwh-mpo-item.selected {
+  background: #fef5eb;
+}
+
+.mwh-mpo-item--custom {
+  color: #5c2d0e;
+  font-size: 13px;
+  border-bottom: 1px dashed #eadcc9;
+  border-radius: 0;
+  margin-bottom: 2px;
+}
+
+.mwh-mpo-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mwh-mpo-code {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #1e293b;
+  white-space: nowrap;
+}
+
+.mwh-mpo-item.selected .mwh-mpo-code {
+  color: #5c2d0e;
+}
+
+.mwh-mpo-cust {
+  margin-left: auto;
+  font-size: 11px;
+  color: #8d6e63;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 48%;
+}
+
+.mwh-mpo-empty {
+  padding: 18px 12px;
+  text-align: center;
+  font-size: 12.5px;
+  color: #8d6e63;
+}
+
+.mwh-mpo-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #faf7f2;
+  border-top: 1px solid #eadcc9;
+}
+
+.mwh-mpo-footer-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #5d3e26;
+}
+
+.mwh-mpo-clear-link {
+  border: none;
+  background: none;
+  color: #dc2626;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+}
+
+.mwh-mpo-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mwh-mpo-btn-cancel {
+  padding: 5px 10px;
+  border-radius: 7px;
+  border: 1px solid #d5c3ad;
+  background: #ffffff;
+  color: #5d3e26;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.mwh-mpo-btn-apply {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 11px;
+  border-radius: 7px;
+  border: none;
+  background: #5c2d0e;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
 }

@@ -7,8 +7,7 @@ import {
   ISSUE_TYPES,
   ISSUE_STATUSES,
   DEPARTMENT_OPTIONS,
-  formatNumber,
-  formatCurrencyVND
+  formatNumber
 } from '../../../types/goodsIssue.types';
 import warehouseInventoryService from '../../../services/warehouseInventory.service';
 import { useWarehouseMeta } from '../../../hooks/useWarehouseMeta';
@@ -24,7 +23,7 @@ const getLoggedUsername = () => {
 };
 
 /**
- * Kiểm tra xem một giá trị số lượng / đơn giá có phải là số âm hay không.
+ * Kiểm tra xem một giá trị số lượng có phải là số âm hay không.
  * Bắt chính xác cả số âm như -1, -11, -100, chuỗi '-...', không tự ý chuyển thành dương.
  */
 export const isNegativeQty = (val) => {
@@ -126,8 +125,6 @@ export const GoodsIssueDetailModal = ({
               ...it,
               unit: it.unit || 'Cái',
               quantity: it.quantity !== undefined ? it.quantity : '',
-              unit_price: it.unit_price !== undefined ? it.unit_price : 0,
-              amount: it.amount !== undefined ? it.amount : (Number(it.quantity || 0) * Number(it.unit_price || 0)),
               stock_qty: it.stock_qty !== undefined ? it.stock_qty : 0,
               notes: it.notes || ''
             }))
@@ -176,8 +173,6 @@ export const GoodsIssueDetailModal = ({
           stock_qty: 0,
           unit: '',
           quantity: '',
-          unit_price: '',
-          amount: 0,
           notes: ''
         }
       ]
@@ -235,12 +230,6 @@ export const GoodsIssueDetailModal = ({
       }
     }
 
-    if (field === 'quantity' || field === 'unit_price') {
-      const q = Number(field === 'quantity' ? value : item.quantity) || 0;
-      const p = Number(field === 'unit_price' ? value : item.unit_price) || 0;
-      item.amount = q * p;
-    }
-
     updated[index] = item;
     setFormData((prev) => ({ ...prev, items: updated }));
   };
@@ -285,14 +274,9 @@ export const GoodsIssueDetailModal = ({
       const it = formData.items[i];
       const rowNum = i + 1;
 
-      // Tuyệt đối không cho phép số lượng hoặc đơn giá âm
+      // Tuyệt đối không cho phép số lượng âm
       if (isNegativeQty(it.quantity)) {
         setFormError(`Dòng số ${rowNum}: Số lượng xuất không được âm. Vui lòng kiểm tra lại các ô cảnh báo màu đỏ!`);
-        return;
-      }
-
-      if (isNegativeQty(it.unit_price)) {
-        setFormError(`Dòng số ${rowNum}: Đơn giá không được âm. Vui lòng kiểm tra lại!`);
         return;
       }
 
@@ -344,10 +328,6 @@ export const GoodsIssueDetailModal = ({
         total_quantity: formData.items.reduce(
           (sum, it) => sum + (Number(it.quantity) > 0 ? Number(it.quantity) : 0),
           0
-        ),
-        total_amount: formData.items.reduce(
-          (sum, it) => sum + (Number(it.amount) > 0 ? Number(it.amount) : 0),
-          0
         )
       };
       await onSave?.(payloadToSave);
@@ -360,14 +340,10 @@ export const GoodsIssueDetailModal = ({
     }
   };
 
-  // Tính số lượng hàng, tổng số lượng xuất và tổng giá trị thực tế
+  // Tính số lượng hàng và tổng số lượng xuất thực tế
   const itemCount = formData.items.length;
   const totalQuantity = formData.items.reduce(
     (sum, it) => sum + (Number(it.quantity) > 0 ? Number(it.quantity) : 0),
-    0
-  );
-  const totalAmount = formData.items.reduce(
-    (sum, it) => sum + (Number(it.amount) > 0 ? Number(it.amount) : 0),
     0
   );
 
@@ -807,12 +783,6 @@ export const GoodsIssueDetailModal = ({
                       <th style={{ textAlign: 'right', width: '110px', minWidth: '100px' }}>
                         SL xuất
                       </th>
-                      <th style={{ textAlign: 'right', width: '130px', minWidth: '120px' }}>
-                        Đơn giá (VNĐ)
-                      </th>
-                      <th style={{ textAlign: 'right', width: '140px', minWidth: '130px' }}>
-                        Thành tiền
-                      </th>
                       <th style={{ textAlign: 'left', minWidth: '160px' }}>
                         Ghi chú
                       </th>
@@ -825,7 +795,7 @@ export const GoodsIssueDetailModal = ({
                     {formData.items.length === 0 ? (
                       <tr>
                         <td
-                          colSpan={isReadOnly ? 9 : 10}
+                          colSpan={isReadOnly ? 7 : 8}
                           style={{ textAlign: 'center', padding: '36px 16px', color: '#9CA3AF' }}
                         >
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
@@ -1000,61 +970,7 @@ export const GoodsIssueDetailModal = ({
                             )}
                           </td>
 
-                          {/* 7. Đơn giá VNĐ */}
-                          <td style={{ textAlign: 'right' }}>
-                            {isReadOnly ? (
-                              <span>{formatCurrencyVND(it.unit_price || 0)}</span>
-                            ) : (
-                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="any"
-                                  value={it.unit_price !== undefined ? it.unit_price : ''}
-                                  placeholder="0"
-                                  onKeyDown={(e) => {
-                                    if (e.key === '-' || e.key === 'Minus' || e.key === 'e' || e.key === 'E') {
-                                      e.preventDefault();
-                                    }
-                                  }}
-                                  onChange={(e) => handleItemChange(idx, 'unit_price', e.target.value)}
-                                  style={{
-                                    width: '100%',
-                                    textAlign: 'right',
-                                    padding: '3px 6px',
-                                    border: isNegativeQty(it.unit_price) ? '1.5px solid #DC2626' : '1px solid #D5C7B7',
-                                    backgroundColor: isNegativeQty(it.unit_price) ? '#FEF2F2' : '#FFFFFF',
-                                    color: isNegativeQty(it.unit_price) ? '#DC2626' : '#111827',
-                                    borderRadius: '4px',
-                                    fontSize: '0.78rem'
-                                  }}
-                                />
-                                {isNegativeQty(it.unit_price) && (
-                                  <span
-                                    style={{
-                                      color: '#DC2626',
-                                      fontSize: '0.68rem',
-                                      fontWeight: '600',
-                                      display: 'block',
-                                      marginTop: '2px',
-                                      lineHeight: 1.1,
-                                      textAlign: 'right',
-                                      whiteSpace: 'nowrap'
-                                    }}
-                                  >
-                                    Đơn giá không được âm
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                          </td>
-
-                          {/* 8. Thành tiền VNĐ */}
-                          <td style={{ textAlign: 'right', fontWeight: '700', color: '#047857' }}>
-                            {formatCurrencyVND(it.amount || 0)}
-                          </td>
-
-                          {/* 9. Ghi chú */}
+                          {/* 7. Ghi chú */}
                           <td>
                             {isReadOnly ? (
                               <span style={{ color: it.notes ? '#4B5563' : '#9CA3AF' }}>
@@ -1126,10 +1042,6 @@ export const GoodsIssueDetailModal = ({
                 <span style={{ color: '#D5C7B7' }}>|</span>
                 <span>
                   Tổng số lượng xuất: <strong style={{ color: '#2D1A12', fontWeight: 700 }}>{formatNumber(totalQuantity)}</strong>
-                </span>
-                <span style={{ color: '#D5C7B7' }}>|</span>
-                <span>
-                  Tổng giá trị xuất: <strong style={{ color: '#047857', fontWeight: 700 }}>{formatCurrencyVND(totalAmount)}</strong>
                 </span>
               </div>
               <MobileImagesGallery images={formData.images} title="Ảnh bàn giao hàng hóa từ Mobile" />

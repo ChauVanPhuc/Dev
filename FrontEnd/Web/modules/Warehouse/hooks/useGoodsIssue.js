@@ -11,12 +11,11 @@ export const useGoodsIssue = ({ toast }) => {
   const [totalCount, setTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize, setPageSize] = useState(15);
   const [stats, setStats] = useState({
     total_vouchers: 0,
     total_lines: 0,
-    total_quantity: 0,
-    total_value: 0
+    total_quantity: 0
   });
 
   // Tìm kiếm
@@ -74,7 +73,7 @@ export const useGoodsIssue = ({ toast }) => {
       setIssues(list);
       setTotalCount(typeof res?.totalCount === 'number' ? res.totalCount : list.length);
       setTotalPages(typeof res?.totalPages === 'number' ? res.totalPages : 1);
-      setStats(res?.stats || { total_vouchers: 0, total_lines: 0, total_quantity: 0, total_value: 0 });
+      setStats(res?.stats || { total_vouchers: 0, total_lines: 0, total_quantity: 0 });
     } catch (err) {
       console.error('Lỗi tải danh sách phiếu xuất kho:', err);
       if (toast?.error) toast.error('Không thể tải danh sách phiếu xuất kho');

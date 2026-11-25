@@ -197,6 +197,62 @@ def check_available_stock(
     return wh_srv.check_available_stock(db, warehouse_name, item_code)
 
 
+@router.get("/sub-po-codes")
+def get_sub_po_codes(
+    search: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=1000),
+    db: Session = Depends(get_db),
+):
+    """
+    [GET] Tìm kiếm danh sách mã phân đoạn PO / Lệnh sản xuất (APT-0123-01, APT-0123-02...)
+    phục vụ ô Autocomplete tìm kiếm nhanh trên phiếu bàn giao kho Mobile.
+    """
+    return wh_srv.search_sub_po_codes(db, search=search, limit=limit)
+
+
+@router.get("/po-materials")
+def get_po_materials_bom(
+    po_code: Optional[str] = Query(None, description="Mã PO / Phân đoạn Lệnh sản xuất (ví dụ: APT-0123-01)"),
+    po_codes: Optional[str] = Query(None, description="Danh sách nhiều mã PO cách nhau bởi dấu phẩy hoặc chấm phẩy"),
+    warehouse_name: Optional[str] = Query(None, description="Tên kho xuất để tính tồn khả dụng"),
+    db: Session = Depends(get_db),
+):
+    """
+    [GET] Tự động tra cứu sản phẩm trong 1 hoặc nhiều phân đoạn PO và cộng gộp toàn bộ vật tư cần giao theo định mức BOM.
+    """
+    return wh_srv.get_po_material_bom_summary(
+        db,
+        po_code=po_code,
+        po_codes=po_codes,
+        warehouse_name=warehouse_name,
+    )
+
+
+@router.get("/purchase-po-codes")
+def get_purchase_po_codes(
+    search: Optional[str] = Query(None, description="Từ khóa tìm Mã PO hoặc Tên NCC"),
+    warehouse_name: Optional[str] = Query(None, description="Lọc gợi ý theo kho nhập"),
+    limit: int = Query(80, ge=1, le=500),
+    db: Session = Depends(get_db),
+):
+    """
+    [GET] Tìm kiếm danh sách Mã PO đặt hàng từ bảng warehouse_purchase_order_items
+    phục vụ chọn nhanh Mã PO khi tạo Phiếu Nhập Kho (/warehouse/goods-receipt/new).
+    """
+    return wh_srv.search_purchase_po_codes(db, search=search, warehouse_name=warehouse_name, limit=limit)
+
+
+@router.get("/purchase-po-items")
+def get_purchase_po_items(
+    po_code: str = Query(..., description="Mã PO đặt hàng (ví dụ: DMH_00685/26)"),
+    db: Session = Depends(get_db),
+):
+    """
+    [GET] Lấy thông tin NCC và danh sách Tên hàng + Số lượng đặt theo Mã PO đặt hàng.
+    """
+    return wh_srv.get_purchase_po_items(db, po_code=po_code)
+
+
 # ==========================================
 # INVENTORY REPORT (XUẤT - NHẬP - TỒN)
 # ==========================================

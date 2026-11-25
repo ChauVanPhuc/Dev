@@ -174,6 +174,7 @@ export const GoodsIssuePage = () => {
         page={wh.page}
         setPage={wh.setPage}
         pageSize={wh.pageSize}
+        setPageSize={wh.setPageSize}
         sortBy={wh.sortBy}
         setSortBy={wh.setSortBy}
         sortDir={wh.sortDir}

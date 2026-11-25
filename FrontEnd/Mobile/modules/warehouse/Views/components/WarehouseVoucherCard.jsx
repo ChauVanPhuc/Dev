@@ -11,6 +11,7 @@ const WarehouseVoucherCard = ({
   createdChannel = 'Web',
   warehouseName,
   dateValue,
+  timeValue,
   primaryPersonLabel,
   primaryPerson,
   secondaryMetaLabel,
@@ -65,7 +66,10 @@ const WarehouseVoucherCard = ({
         </div>
         <div className="mwh-meta-item">
           <Calendar size={13} color="#7b5233" style={{ flexShrink: 0 }} />
-          <span className="mwh-meta-text">{formatDateVN(dateValue)}</span>
+          <span className="mwh-meta-text">
+            {formatDateVN(dateValue)}
+            {timeValue ? ` (${timeValue.includes(' ') ? timeValue.split(' ')[1] : timeValue})` : ''}
+          </span>
         </div>
         {primaryPerson && (
           <div className="mwh-meta-item">

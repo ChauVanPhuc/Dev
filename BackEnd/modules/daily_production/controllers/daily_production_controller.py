@@ -394,8 +394,10 @@ def get_available_containers_tree(
     """
     target_date = plan_date or get_vietnam_time().strftime("%Y-%m-%d")
 
-    existing_batches = db.query(DailyProductionBatch).filter(
-        DailyProductionBatch.plan_date == target_date
+    # Lấy toàn bộ các đợt sản xuất đã tạo để biết chính xác từng PO/Cont đã được chọn SX vào ngày nào
+    existing_batches = db.query(DailyProductionBatch).order_by(
+        DailyProductionBatch.plan_date.desc(),
+        DailyProductionBatch.id.desc()
     ).all()
 
     scheduled_map: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
@@ -407,11 +409,39 @@ def get_available_containers_tree(
                     "batch_id": b.id,
                     "batch_code": b.batch_code,
                     "batch_title": b.batch_title,
+                    "plan_date": b.plan_date,
+                    "factory": b.factory,
                     "section_name": b.section_name,
                     "status": b.status
                 })
         except Exception as e:
             logger.warning(f"Lỗi parse selected_orders_json của batch {b.id}: {e}")
+
+    # Tính tổng số tủ đã lên lịch SX cho từng Cont lẻ dựa trên các dòng CABINET_HEADER đã lưu
+    scheduled_qty_map: Dict[str, int] = defaultdict(int)
+    cab_items = db.query(
+        DailyProductionItem.source_orders_text,
+        DailyProductionItem.base_planned_qty,
+        DailyProductionItem.custom_planned_qty
+    ).filter(
+        DailyProductionItem.row_type == "CABINET_HEADER",
+        DailyProductionItem.is_visible == True
+    ).all()
+
+    src_order_pattern = re.compile(r"([^,()]+?)\s*\(\s*(\d+)\s*\)")
+    for src_text, base_qty, custom_qty in cab_items:
+        if not src_text:
+            continue
+        matches = src_order_pattern.findall(str(src_text))
+        if not matches:
+            continue
+        base_num = float(base_qty or 0)
+        custom_num = float(custom_qty if custom_qty is not None else base_num)
+        ratio = (custom_num / base_num) if base_num > 0 else 1.0
+        for raw_code, raw_q in matches:
+            oc_clean = raw_code.strip()
+            if oc_clean:
+                scheduled_qty_map[oc_clean] += int(round(int(raw_q) * ratio))
 
     query = db.query(Order).options(
         joinedload(Order.products),
@@ -526,13 +556,27 @@ def get_available_containers_tree(
             "product_summary": ", ".join(skus_preview[:5]) + (f" (+{len(skus_preview) - 5})" if len(skus_preview) > 5 else ""),
             "products": sub_products,
             "scheduled_batches": scheduled_map.get(o_code, []),
-            "is_scheduled_today": len(scheduled_map.get(o_code, [])) > 0
+            "scheduled_dates": sorted(list({
+                b["plan_date"] for b in scheduled_map.get(o_code, []) if b.get("plan_date")
+            }), reverse=True),
+            "scheduled_cabinets_qty": scheduled_qty_map.get(o_code, 0),
+            "is_scheduled_today": any(
+                b.get("plan_date") == target_date for b in scheduled_map.get(o_code, [])
+            ),
+            "is_scheduled": len(scheduled_map.get(o_code, [])) > 0
         })
 
     result_list = []
     for r_key in root_order_keys:
         g = root_groups[r_key]
         g["sub_containers"].sort(key=lambda x: (x["suffix_num"], x["order_code"]))
+        group_dates = sorted(list({
+            d
+            for sc in g["sub_containers"]
+            for d in (sc.get("scheduled_dates") or [])
+        }), reverse=True)
+        scheduled_cont_count = sum(1 for sc in g["sub_containers"] if sc.get("is_scheduled"))
+        scheduled_cabs_total = sum(int(sc.get("scheduled_cabinets_qty") or 0) for sc in g["sub_containers"])
         result_list.append({
             "root_po": g["root_po"],
             "total_containers": g["total_containers"],
@@ -543,6 +587,9 @@ def get_available_containers_tree(
             "plan_name": g["plan_name"],
             "plan_month": g["plan_month"],
             "plan_year": g["plan_year"],
+            "scheduled_dates": group_dates,
+            "scheduled_containers_count": scheduled_cont_count,
+            "scheduled_cabinets_qty": scheduled_cabs_total,
             "sub_containers": g["sub_containers"]
         })
 

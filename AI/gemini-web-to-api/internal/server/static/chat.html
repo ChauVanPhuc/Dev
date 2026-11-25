@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="vi" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gemini Web To API - Chat UI</title>
+  <link rel="icon" href="https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg" type="image/svg+xml">
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0f7ff',
+              100: '#e0effe',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+              800: '#1e40af',
+              900: '#1e3a8a',
+            },
+            gemini: {
+              blue: '#4a89f3',
+              purple: '#9b72cf',
+              pink: '#d96570',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Marked.js for Markdown -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- Highlight.js for Code Highlighting -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <!-- FontAwesome for Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+  <style>
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(156, 163, 175, 0.3); border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(156, 163, 175, 0.5); }
+
+    /* Markdown Styling */
+    .prose-chat pre {
+      margin: 0.75rem 0;
+      border-radius: 0.5rem;
+      background: #0f172a !important;
+      position: relative;
+      overflow-x: auto;
+    }
+    .prose-chat code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.875rem;
+    }
+    .prose-chat p { margin-bottom: 0.75rem; line-height: 1.625; }
+    .prose-chat p:last-child { margin-bottom: 0; }
+    .prose-chat ul { list-style-type: disc; padding-left: 1.5rem; margin-bottom: 0.75rem; }
+    .prose-chat ol { list-style-type: decimal; padding-left: 1.5rem; margin-bottom: 0.75rem; }
+    .prose-chat table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; }
+    .prose-chat th, .prose-chat td { border: 1px solid rgba(156, 163, 175, 0.2); padding: 0.5rem 0.75rem; }
+    .prose-chat th { background: rgba(156, 163, 175, 0.1); }
+    .prose-chat blockquote {
+      border-left: 4px solid #3b82f6;
+      padding-left: 1rem;
+      color: #94a3b8;
+      margin: 0.75rem 0;
+    }
+
+    /* Thinking Process Accordion */
+    details.thinking-box {
+      border: 1px solid rgba(147, 51, 234, 0.25);
+      background: rgba(147, 51, 234, 0.05);
+      border-radius: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      margin-bottom: 0.75rem;
+      font-size: 0.875rem;
+    }
+    details.thinking-box summary {
+      cursor: pointer;
+      font-weight: 500;
+      color: #c084fc;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    details.thinking-box[open] summary { margin-bottom: 0.5rem; }
+    .thinking-content {
+      color: #94a3b8;
+      font-style: italic;
+      white-space: pre-wrap;
+      line-height: 1.5;
+    }
+
+    /* Gradient Text */
+    .gemini-gradient {
+      background: linear-gradient(135deg, #4a89f3 0%, #9b72cf 50%, #d96570 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col font-sans antialiased">
+
+  <!-- Top Notification / Status Banner -->
+  <div id="statusBanner" class="bg-amber-500/10 border-b border-amber-500/30 px-4 py-2 text-xs flex items-center justify-between text-amber-300">
+    <div class="flex items-center gap-2">
+      <i class="fa-solid fa-circle-info"></i>
+      <span id="bannerText">Cổng kết nối: <strong>2211</strong> | Kết nối Google Gemini qua Session Cookies</span>
+    </div>
+    <div class="flex items-center gap-3">
+      <a href="/docs" target="_blank" class="hover:underline flex items-center gap-1 font-medium text-amber-200">
+        <i class="fa-solid fa-book-open"></i> API Docs (/docs)
+      </a>
+      <button onclick="openCookieModal()" class="px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 transition border border-amber-500/40 font-semibold">
+        <i class="fa-solid fa-key"></i> Hướng dẫn Cookie
+      </button>
+    </div>
+  </div>
+
+  <div class="flex-1 flex overflow-hidden">
+    <!-- Sidebar -->
+    <aside id="sidebar" class="w-72 bg-slate-950 border-r border-slate-800 flex flex-col transition-all duration-200 z-20">
+      <!-- App Header -->
+      <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-blue-600 via-purple-600 to-pink-500 flex items-center justify-center shadow-lg shadow-purple-500/20">
+            <i class="fa-solid fa-wand-magic-sparkles text-white text-sm"></i>
+          </div>
+          <div>
+            <h1 class="font-bold text-sm tracking-wide gemini-gradient">Gemini Web To API</h1>
+            <p class="text-[10px] text-slate-400">Port 2211 • OpenAI Bridge</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Button -->
+      <div class="p-3">
+        <button onclick="newChat()" class="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-medium text-sm shadow-md shadow-blue-600/20 transition-all active:scale-[0.99]">
+          <i class="fa-solid fa-plus text-xs"></i> Cuộc trò chuyện mới
+        </button>
+      </div>
+
+      <!-- Settings Section -->
+      <div class="px-4 py-2 flex-1 overflow-y-auto space-y-4">
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1.5 flex items-center gap-1.5">
+            <i class="fa-solid fa-robot text-purple-400"></i> Mô hình (Model)
+          </label>
+          <select id="modelSelect" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500 transition">
+            <option value="gemini-everyday-help" selected>Everyday help (gemini-everyday-help)</option>
+            <option value="gemini-quick-answers">Quick answers (gemini-quick-answers)</option>
+            <option value="gemini-detailed-research">Detailed research (gemini-detailed-research)</option>
+            <option value="gemini-most-complex-work">Most complex work (gemini-most-complex-work)</option>
+          </select>
+          <p class="text-[10px] text-slate-500 mt-1">Được đồng bộ động từ tài khoản Gemini của bạn.</p>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1.5 flex items-center gap-1.5">
+            <i class="fa-solid fa-brain text-pink-400"></i> Mức độ Tư duy (Thinking Effort)
+          </label>
+          <select id="thinkingSelect" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500 transition">
+            <option value="low">Thấp (Low - Phản hồi nhanh)</option>
+            <option value="medium" selected>Trung bình (Medium - Cân bằng)</option>
+            <option value="high">Cao (High - Suy nghĩ kỹ lưỡng)</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1.5 flex items-center gap-1.5">
+            <i class="fa-solid fa-sliders text-blue-400"></i> Lời nhắc hệ thống (System Prompt)
+          </label>
+          <textarea id="systemPrompt" rows="3" placeholder="Ví dụ: Bạn là một trợ lý AI thông minh, nhiệt tình trả lời bằng tiếng Việt..." class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition resize-none"></textarea>
+        </div>
+
+        <!-- System Status Box -->
+        <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-3 space-y-2">
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-slate-400">Trạng thái Server:</span>
+            <span class="inline-flex items-center gap-1.5 text-emerald-400 font-medium">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Hoạt động (2211)
+            </span>
+          </div>
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-slate-400">Endpoint:</span>
+            <span class="text-slate-300 font-mono text-[11px]">/openai/v1</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sidebar Footer -->
+      <div class="p-3 border-t border-slate-800 text-center text-[11px] text-slate-500">
+        Google Gemini Web To API • Cổng 2211
+      </div>
+    </aside>
+
+    <!-- Main Chat Container -->
+    <main class="flex-1 flex flex-col bg-slate-900 overflow-hidden relative">
+      <!-- Chat Header -->
+      <header class="h-14 border-b border-slate-800 px-4 flex items-center justify-between bg-slate-900/80 backdrop-blur z-10">
+        <div class="flex items-center gap-3">
+          <button onclick="toggleSidebar()" class="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition">
+            <i class="fa-solid fa-bars text-sm"></i>
+          </button>
+          <div class="flex items-center gap-2">
+            <span id="currentModelBadge" class="px-2.5 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-300 text-xs font-medium">
+              gemini-auto
+            </span>
+            <span id="streamingIndicator" class="hidden text-xs text-blue-400 animate-pulse flex items-center gap-1">
+              <i class="fa-solid fa-circle-notch fa-spin"></i> Đang phản hồi...
+            </span>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="clearChat()" title="Xóa lịch sử chat" class="text-slate-400 hover:text-red-400 p-2 rounded-lg hover:bg-slate-800 transition text-sm">
+            <i class="fa-regular fa-trash-can"></i>
+          </button>
+        </div>
+      </header>
+
+      <!-- Messages View -->
+      <div id="messagesContainer" class="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
+        <!-- Welcome Screen -->
+        <div id="welcomeScreen" class="h-full flex flex-col items-center justify-center max-w-xl mx-auto text-center py-10">
+          <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 via-purple-600 to-pink-500 flex items-center justify-center shadow-xl shadow-purple-500/20 mb-6">
+            <i class="fa-solid fa-wand-magic-sparkles text-white text-2xl"></i>
+          </div>
+          <h2 class="text-2xl font-bold mb-2 gemini-gradient">Xin chào! Bạn muốn tìm hiểu điều gì hôm nay?</h2>
+          <p class="text-slate-400 text-sm mb-8">
+            Hệ thống đang hoạt động trên cổng <strong>2211</strong>, kết nối trực tiếp với sức mạnh của Google Gemini qua phiên bản Web API chuẩn hóa.
+          </p>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full text-left">
+            <button onclick="quickPrompt('Giải thích khái niệm điện toán lượng tử một cách đơn giản, dễ hiểu')" class="p-3.5 rounded-xl bg-slate-800/60 border border-slate-700/60 hover:bg-slate-800 hover:border-purple-500/40 transition group">
+              <div class="text-xs font-semibold text-slate-200 group-hover:text-purple-300 flex items-center gap-2 mb-1">
+                <i class="fa-solid fa-atom text-purple-400"></i> Khái niệm phức tạp
+              </div>
+              <div class="text-[11px] text-slate-400">Giải thích điện toán lượng tử đơn giản</div>
+            </button>
+            <button onclick="quickPrompt('Viết một script Python hoàn chỉnh để tải video từ YouTube hoặc cào dữ liệu web')" class="p-3.5 rounded-xl bg-slate-800/60 border border-slate-700/60 hover:bg-slate-800 hover:border-blue-500/40 transition group">
+              <div class="text-xs font-semibold text-slate-200 group-hover:text-blue-300 flex items-center gap-2 mb-1">
+                <i class="fa-solid fa-code text-blue-400"></i> Lập trình Code
+              </div>
+              <div class="text-[11px] text-slate-400">Viết script Python giải quyết công việc</div>
+            </button>
+            <button onclick="quickPrompt('Lên kế hoạch một chuyến du lịch 3 ngày 2 đêm tại Đà Lạt chi tiết')" class="p-3.5 rounded-xl bg-slate-800/60 border border-slate-700/60 hover:bg-slate-800 hover:border-emerald-500/40 transition group">
+              <div class="text-xs font-semibold text-slate-200 group-hover:text-emerald-300 flex items-center gap-2 mb-1">
+                <i class="fa-solid fa-compass text-emerald-400"></i> Kế hoạch du lịch
+              </div>
+              <div class="text-[11px] text-slate-400">Lịch trình 3 ngày 2 đêm tại Đà Lạt</div>
+            </button>
+            <button onclick="quickPrompt('Viết một bài phân tích ngắn gọn về xu hướng trí tuệ nhân tạo năm 2026')" class="p-3.5 rounded-xl bg-slate-800/60 border border-slate-700/60 hover:bg-slate-800 hover:border-pink-500/40 transition group">
+              <div class="text-xs font-semibold text-slate-200 group-hover:text-pink-300 flex items-center gap-2 mb-1">
+                <i class="fa-solid fa-chart-line text-pink-400"></i> Phân tích xu hướng
+              </div>
+              <div class="text-[11px] text-slate-400">Xu hướng phát triển của AI năm 2026</div>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Image Preview Container (when image attached) -->
+      <div id="imagePreviewContainer" class="hidden px-4 pt-2 bg-slate-900 border-t border-slate-800/50">
+        <div class="inline-flex items-center gap-2 bg-slate-800 p-1.5 rounded-lg border border-slate-700 relative">
+          <img id="imagePreview" src="" alt="Attached Preview" class="w-14 h-14 object-cover rounded">
+          <div class="text-xs text-slate-300 pr-6">
+            <div id="imageName" class="font-medium truncate max-w-[150px]">image.png</div>
+            <div id="imageSize" class="text-[10px] text-slate-400">0 KB</div>
+          </div>
+          <button onclick="removeImage()" class="absolute top-1 right-1 w-5 h-5 rounded-full bg-slate-700 hover:bg-red-500 text-white text-[10px] flex items-center justify-center transition">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Composer Input Area -->
+      <div class="p-4 bg-slate-900/90 border-t border-slate-800">
+        <div class="max-w-4xl mx-auto">
+          <form id="chatForm" onsubmit="handleSubmit(event)" class="relative bg-slate-800/90 border border-slate-700 rounded-2xl p-2 shadow-xl focus-within:border-blue-500/60 transition-all">
+            <textarea
+              id="userInput"
+              rows="1"
+              placeholder="Nhập tin nhắn cho Gemini... (Enter để gửi, Shift+Enter để xuống dòng)"
+              class="w-full bg-transparent text-slate-100 placeholder-slate-400 px-3 py-2 text-sm focus:outline-none resize-none max-h-48 overflow-y-auto"
+              oninput="autoResize(this)"
+              onkeydown="handleKeyDown(event)"
+            ></textarea>
+
+            <div class="flex items-center justify-between pt-2 border-t border-slate-700/50 mt-1 px-1">
+              <div class="flex items-center gap-1.5">
+                <!-- Attach Image Button -->
+                <input type="file" id="imageInput" accept="image/*" class="hidden" onchange="handleImageSelect(event)">
+                <button type="button" onclick="document.getElementById('imageInput').click()" title="Đính kèm ảnh" class="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 transition text-sm">
+                  <i class="fa-regular fa-image"></i>
+                </button>
+                <span class="text-[11px] text-slate-500 hidden sm:inline">Hỗ trợ dán ảnh từ Clipboard (Ctrl+V)</span>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <button type="submit" id="sendBtn" class="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-medium text-xs shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed">
+                  <span>Gửi</span>
+                  <i class="fa-solid fa-arrow-up text-xs"></i>
+                </button>
+              </div>
+            </div>
+          </form>
+          <div class="text-center mt-2 text-[10px] text-slate-500">
+            Gemini Web To API • Máy chủ cục bộ tại http://localhost:2211
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Cookie Guidance Modal -->
+  <div id="cookieModal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full p-6 shadow-2xl overflow-y-auto max-h-[90vh]">
+      <div class="flex items-center justify-between pb-4 border-b border-slate-800 mb-4">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center">
+            <i class="fa-solid fa-key"></i>
+          </div>
+          <h3 class="text-base font-bold text-white">Hướng Dẫn Lấy Cookie Google Gemini</h3>
+        </div>
+        <button onclick="closeCookieModal()" class="text-slate-400 hover:text-white p-1">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <div class="space-y-4 text-xs text-slate-300">
+        <p class="leading-relaxed">
+          Dự án <strong>gemini-web-to-api</strong> sử dụng phiên làm việc (Session Cookies) của tài khoản Google của bạn để giao tiếp trực tiếp với Gemini Web mà không cần API Key có phí.
+        </p>
+
+        <div class="space-y-3 bg-slate-950 p-4 rounded-xl border border-slate-800">
+          <div class="flex items-start gap-3">
+            <span class="w-5 h-5 rounded-full bg-blue-600/30 text-blue-400 flex items-center justify-center font-bold text-[10px] flex-shrink-0 mt-0.5">1</span>
+            <div>
+              <strong class="text-white">Truy cập Gemini:</strong> Mở trình duyệt và đăng nhập vào <a href="https://gemini.google.com" target="_blank" class="text-blue-400 underline">gemini.google.com</a>.
+            </div>
+          </div>
+          <div class="flex items-start gap-3">
+            <span class="w-5 h-5 rounded-full bg-blue-600/30 text-blue-400 flex items-center justify-center font-bold text-[10px] flex-shrink-0 mt-0.5">2</span>
+            <div>
+              <strong class="text-white">Mở Developer Tools:</strong> Bấm phím <kbd class="px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700">F12</kbd> (hoặc chuột phải chọn <em>Inspect / Kiểm tra</em>) -> Chuyển sang thẻ <strong>Network</strong> (Mạng).
+            </div>
+          </div>
+          <div class="flex items-start gap-3">
+            <span class="w-5 h-5 rounded-full bg-blue-600/30 text-blue-400 flex items-center justify-center font-bold text-[10px] flex-shrink-0 mt-0.5">3</span>
+            <div>
+              <strong class="text-white">Tìm Request:</strong> Tải lại trang (F5) hoặc gửi 1 tin nhắn bất kỳ. Gõ vào ô Filter: <code class="bg-slate-800 text-purple-300 px-1 py-0.5 rounded">batchexecute</code>.
+            </div>
+          </div>
+          <div class="flex items-start gap-3">
+            <span class="w-5 h-5 rounded-full bg-blue-600/30 text-blue-400 flex items-center justify-center font-bold text-[10px] flex-shrink-0 mt-0.5">4</span>
+            <div>
+              <strong class="text-white">Sao chép Cookie:</strong> Bấm vào request <code class="text-amber-300">batchexecute?rpcids=otAQ7b</code> -> Trong tab <strong>Headers</strong> -> Cuộn xuống mục <strong>Request Headers</strong> -> Copy toàn bộ chuỗi giá trị của dòng <strong>Cookie:</strong> (bắt đầu chứa <code>__Secure-1PSID=...</code>).
+            </div>
+          </div>
+          <div class="flex items-start gap-3">
+            <span class="w-5 h-5 rounded-full bg-blue-600/30 text-blue-400 flex items-center justify-center font-bold text-[10px] flex-shrink-0 mt-0.5">5</span>
+            <div>
+              <strong class="text-white">Cấu hình file .env:</strong> Mở file <code class="text-emerald-300">.env</code> trong thư mục dự án và dán vào biến <code class="text-emerald-300">GEMINI_COOKIES=...</code>, sau đó chạy lại <code class="text-emerald-300">run.bat</code>.
+            </div>
+          </div>
+        </div>
+
+        <div class="p-3 bg-purple-900/20 border border-purple-500/30 rounded-xl text-purple-300">
+          <i class="fa-solid fa-lightbulb mr-1"></i>
+          <strong>Mẹo:</strong> Nếu tài khoản Google của bạn là tài khoản phụ (ví dụ URL có dạng <code>/u/1/</code> hoặc <code>/u/2/</code>), hãy điền thêm số tương ứng vào <code>GEMINI_AUTH_USER=1</code> hoặc <code>GEMINI_AUTH_USER=2</code> trong file <code>.env</code>.
+        </div>
+      </div>
+
+      <div class="mt-6 flex justify-end">
+        <button onclick="closeCookieModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold transition">
+          Đã hiểu & Đóng
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // State
+    let conversationHistory = [];
+    let currentAttachedImage = null;
+    let isStreaming = false;
+
+    // Load available models on startup
+    async function loadModels() {
+      try {
+        const res = await fetch('/openai/v1/models');
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.data && data.data.length > 0) {
+            const select = document.getElementById('modelSelect');
+            select.innerHTML = '';
+            data.data.forEach(m => {
+              const opt = document.createElement('option');
+              opt.value = m.id;
+              opt.textContent = m.display_name ? `${m.id} (${m.display_name})` : m.id;
+              if (m.id === 'gemini-auto') opt.selected = true;
+              select.appendChild(opt);
+            });
+            updateModelBadge();
+          }
+        }
+      } catch (e) {
+        console.log('Using default models list');
+      }
+    }
+
+    document.getElementById('modelSelect').addEventListener('change', updateModelBadge);
+    function updateModelBadge() {
+      const select = document.getElementById('modelSelect');
+      document.getElementById('currentModelBadge').textContent = select.value;
+    }
+
+    function toggleSidebar() {
+      const sb = document.getElementById('sidebar');
+      sb.classList.toggle('-translate-x-full');
+      sb.classList.toggle('hidden');
+    }
+
+    function autoResize(textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = Math.min(textarea.scrollHeight, 180) + 'px';
+    }
+
+    function handleKeyDown(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        document.getElementById('chatForm').requestSubmit();
+      }
+    }
+
+    // Image handling
+    function handleImageSelect(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      processImageFile(file);
+    }
+
+    function processImageFile(file) {
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        currentAttachedImage = {
+          name: file.name,
+          size: (file.size / 1024).toFixed(1) + ' KB',
+          dataUrl: evt.target.result
+        };
+        document.getElementById('imagePreview').src = currentAttachedImage.dataUrl;
+        document.getElementById('imageName').textContent = currentAttachedImage.name;
+        document.getElementById('imageSize').textContent = currentAttachedImage.size;
+        document.getElementById('imagePreviewContainer').classList.remove('hidden');
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function removeImage() {
+      currentAttachedImage = null;
+      document.getElementById('imageInput').value = '';
+      document.getElementById('imagePreviewContainer').classList.add('hidden');
+    }
+
+    // Paste Image from Clipboard
+    window.addEventListener('paste', (e) => {
+      const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+      for (const item of items) {
+        if (item.type.indexOf('image') === 0) {
+          const blob = item.getAsFile();
+          processImageFile(blob);
+          break;
+        }
+      }
+    });
+
+    function quickPrompt(text) {
+      const input = document.getElementById('userInput');
+      input.value = text;
+      autoResize(input);
+      document.getElementById('chatForm').requestSubmit();
+    }
+
+    function newChat() {
+      conversationHistory = [];
+      document.getElementById('messagesContainer').innerHTML = '';
+      removeImage();
+      document.getElementById('userInput').value = '';
+      autoResize(document.getElementById('userInput'));
+      // Reload welcome screen
+      location.reload();
+    }
+
+    function clearChat() {
+      if (confirm('Bạn có chắc muốn xóa lịch sử trò chuyện hiện tại?')) {
+        newChat();
+      }
+    }
+
+    function openCookieModal() {
+      document.getElementById('cookieModal').classList.remove('hidden');
+    }
+
+    function closeCookieModal() {
+      document.getElementById('cookieModal').classList.add('hidden');
+    }
+
+    // Submit and Streaming Chat
+    async function handleSubmit(e) {
+      e.preventDefault();
+      if (isStreaming) return;
+
+      const input = document.getElementById('userInput');
+      const text = input.value.trim();
+      if (!text && !currentAttachedImage) return;
+
+      // Hide welcome screen
+      const welcome = document.getElementById('welcomeScreen');
+      if (welcome) welcome.remove();
+
+      // Prepare user message
+      let messageContent;
+      let displayHtml = text;
+
+      if (currentAttachedImage) {
+        messageContent = [
+          { type: 'text', text: text || 'Phân tích hình ảnh này:' },
+          { type: 'image_url', image_url: { url: currentAttachedImage.dataUrl } }
+        ];
+        displayHtml = `
+          <div class="mb-2">
+            <img src="${currentAttachedImage.dataUrl}" class="max-w-xs max-h-48 rounded-lg border border-slate-700 object-contain">
+          </div>
+          <div>${escapeHtml(text)}</div>
+        `;
+      } else {
+        messageContent = text;
+        displayHtml = escapeHtml(text);
+      }
+
+      // Append user bubble to UI
+      appendUserMessage(displayHtml);
+
+      // Save to history
+      conversationHistory.push({
+        role: 'user',
+        content: messageContent
+      });
+
+      // Clear input
+      input.value = '';
+      autoResize(input);
+      const attached = currentAttachedImage;
+      removeImage();
+
+      // Create assistant container
+      const assistantMsg = createAssistantMessageElement();
+      document.getElementById('messagesContainer').appendChild(assistantMsg.wrapper);
+      scrollChatToBottom();
+
+      // Send to server via SSE
+      isStreaming = true;
+      document.getElementById('sendBtn').disabled = true;
+      document.getElementById('streamingIndicator').classList.remove('hidden');
+
+      const model = document.getElementById('modelSelect').value;
+      const thinking = document.getElementById('thinkingSelect').value;
+      const systemPrompt = document.getElementById('systemPrompt').value.trim();
+
+      const messagesPayload = [];
+      if (systemPrompt) {
+        messagesPayload.push({ role: 'system', content: systemPrompt });
+      }
+      messagesPayload.push(...conversationHistory);
+
+      let fullContent = '';
+      let fullReasoning = '';
+
+      try {
+        const response = await fetch('/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: model,
+            messages: messagesPayload,
+            stream: true,
+            reasoning_effort: thinking
+          })
+        });
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          const errMsg = errData.error?.message || errData.message || `Lỗi HTTP ${response.status}: ${response.statusText}`;
+          throw new Error(errMsg);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop(); // keep partial line
+
+          for (const line of lines) {
+            const cleanLine = line.trim();
+            if (!cleanLine || cleanLine.startsWith(':')) continue;
+            if (cleanLine === 'data: [DONE]') continue;
+
+            if (cleanLine.startsWith('data: ')) {
+              try {
+                const parsed = JSON.parse(cleanLine.slice(6));
+                const delta = parsed.choices?.[0]?.delta;
+                if (!delta) continue;
+
+                // Reasoning / Thinking Content
+                if (delta.reasoning_content) {
+                  fullReasoning += delta.reasoning_content;
+                  assistantMsg.updateThinking(fullReasoning);
+                  scrollChatToBottom();
+                }
+
+                // Regular Content
+                if (delta.content) {
+                  fullContent += delta.content;
+                  assistantMsg.updateContent(fullContent);
+                  scrollChatToBottom();
+                }
+              } catch (e) {
+                // Ignore parse error on partial chunks
+              }
+            }
+          }
+        }
+
+        // Save assistant reply to conversation history
+        conversationHistory.push({
+          role: 'assistant',
+          content: fullContent
+        });
+
+      } catch (err) {
+        console.error('Chat error:', err);
+        assistantMsg.showError(err.message || 'Lỗi kết nối tới Gemini API');
+      } finally {
+        isStreaming = false;
+        document.getElementById('sendBtn').disabled = false;
+        document.getElementById('streamingIndicator').classList.add('hidden');
+        scrollChatToBottom();
+      }
+    }
+
+    function appendUserMessage(contentHtml) {
+      const container = document.getElementById('messagesContainer');
+      const div = document.createElement('div');
+      div.className = 'flex items-start justify-end gap-3 max-w-4xl mx-auto';
+      div.innerHTML = `
+        <div class="max-w-[85%] sm:max-w-[75%] rounded-2xl rounded-tr-sm bg-blue-600 px-4 py-3 text-white text-sm shadow-md">
+          <div class="break-words whitespace-pre-wrap">${contentHtml}</div>
+        </div>
+        <div class="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-slate-300 text-xs font-semibold flex-shrink-0">
+          <i class="fa-solid fa-user"></i>
+        </div>
+      `;
+      container.appendChild(div);
+      scrollChatToBottom();
+    }
+
+    function createAssistantMessageElement() {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'flex items-start gap-3 max-w-4xl mx-auto';
+
+      wrapper.innerHTML = `
+        <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 via-purple-600 to-pink-500 flex items-center justify-center text-white text-xs flex-shrink-0 shadow-md">
+          <i class="fa-solid fa-wand-magic-sparkles"></i>
+        </div>
+        <div class="flex-1 max-w-[85%] sm:max-w-[90%]">
+          <!-- Thinking Box (hidden initially) -->
+          <details class="thinking-box hidden">
+            <summary>
+              <i class="fa-solid fa-brain"></i> Quá trình tư duy (Thinking Process)
+            </summary>
+            <div class="thinking-content"></div>
+          </details>
+
+          <!-- Main Content -->
+          <div class="content-box prose-chat text-slate-200 text-sm bg-slate-800/40 border border-slate-700/40 rounded-2xl rounded-tl-sm p-4 shadow-md">
+            <span class="inline-flex items-center gap-1.5 text-slate-400 text-xs">
+              <i class="fa-solid fa-circle-notch fa-spin text-purple-400"></i> Đang suy nghĩ câu trả lời...
+            </span>
+          </div>
+        </div>
+      `;
+
+      const thinkingBox = wrapper.querySelector('.thinking-box');
+      const thinkingContent = wrapper.querySelector('.thinking-content');
+      const contentBox = wrapper.querySelector('.content-box');
+
+      return {
+        wrapper,
+        updateThinking: (text) => {
+          thinkingBox.classList.remove('hidden');
+          thinkingBox.open = true;
+          thinkingContent.textContent = text;
+        },
+        updateContent: (markdown) => {
+          contentBox.innerHTML = marked.parse(markdown);
+          // Highlight code blocks
+          contentBox.querySelectorAll('pre code').forEach((block) => {
+            hljs.highlightElement(block);
+            addCopyButton(block.parentElement);
+          });
+        },
+        showError: (errMsg) => {
+          contentBox.innerHTML = `
+            <div class="p-3 bg-red-900/30 border border-red-500/40 rounded-xl text-red-200 text-xs">
+              <div class="font-bold flex items-center gap-2 mb-1">
+                <i class="fa-solid fa-circle-exclamation text-red-400"></i> Không thể phản hồi
+              </div>
+              <div>${escapeHtml(errMsg)}</div>
+              ${errMsg.includes('initialized') || errMsg.includes('GEMINI_COOKIES') || errMsg.includes('400') ? `
+                <div class="mt-2 pt-2 border-t border-red-500/20">
+                  <button onclick="openCookieModal()" class="px-2.5 py-1 bg-red-800 hover:bg-red-700 text-white rounded font-medium text-[11px] transition">
+                    <i class="fa-solid fa-key mr-1"></i> Xem hướng dẫn cấu hình Cookie
+                  </button>
+                </div>
+              ` : ''}
+            </div>
+          `;
+        }
+      };
+    }
+
+    function addCopyButton(pre) {
+      if (pre.querySelector('.copy-btn')) return;
+      const btn = document.createElement('button');
+      btn.className = 'copy-btn absolute top-2 right-2 px-2 py-1 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-[10px] font-mono border border-slate-700 transition flex items-center gap-1';
+      btn.innerHTML = '<i class="fa-regular fa-copy"></i> Copy';
+      btn.onclick = () => {
+        const code = pre.querySelector('code')?.innerText || pre.innerText;
+        navigator.clipboard.writeText(code).then(() => {
+          btn.innerHTML = '<i class="fa-solid fa-check text-emerald-400"></i> Copied!';
+          setTimeout(() => {
+            btn.innerHTML = '<i class="fa-regular fa-copy"></i> Copy';
+          }, 2000);
+        });
+      };
+      pre.appendChild(btn);
+    }
+
+    function scrollChatToBottom() {
+      const container = document.getElementById('messagesContainer');
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    // Initialize
+    window.addEventListener('DOMContentLoaded', () => {
+      loadModels();
+    });
+  </script>
+</body>
+</html>

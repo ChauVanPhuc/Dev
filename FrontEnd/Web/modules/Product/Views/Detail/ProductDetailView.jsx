@@ -1307,6 +1307,23 @@ const ProductDetailView = () => {
     });
   }, [bomRows, searchTerm]);
 
+  // Phân nhóm vật tư động theo Cột 17 / Nhóm Nvl tiêu hao (hoặc danh mục Ảnh 2)
+  const { materialGroups, totalQuotaCount, sortedGroupNames } = useMemo(() => {
+    const groups = {};
+    let totalQ = 0;
+    (materialRows || []).forEach(mat => {
+      const gName = (mat.group_type || 'Vật tư dùng chung').trim();
+      if (!groups[gName]) groups[gName] = [];
+      groups[gName].push(mat);
+      totalQ += parseFloat(mat.quota || mat.quantity || 0) || 0;
+    });
+    return { 
+      materialGroups: groups, 
+      totalQuotaCount: Math.round(totalQ * 1000) / 1000,
+      sortedGroupNames: Object.keys(groups)
+    };
+  }, [materialRows]);
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -3056,30 +3073,15 @@ const ProductDetailView = () => {
 
                 <div style={{ height: '32px', width: '1px', backgroundColor: '#EADCC9' }} />
 
-                {/* Hàng trắng */}
+                {/* Số nhóm vật tư */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <Layers size={20} color="#1D4ED8" />
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.72rem', fontWeight: '700', color: '#1E40AF', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Hàng trắng</div>
+                    <div style={{ fontSize: '0.72rem', fontWeight: '700', color: '#1E40AF', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Số nhóm vật tư</div>
                     <div style={{ fontSize: '1.15rem', fontWeight: '900', color: '#1E3A8A' }}>
-                      {materialRows.filter(m => (m.group_type || '').toUpperCase().includes('TRẮNG')).length} <span style={{ fontSize: '0.78rem', fontWeight: '600', color: '#64748B' }}>mục</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ height: '32px', width: '1px', backgroundColor: '#EADCC9' }} />
-
-                {/* Sau sơn */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Palette size={20} color="#15803D" />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '0.72rem', fontWeight: '700', color: '#166534', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Sau sơn</div>
-                    <div style={{ fontSize: '1.15rem', fontWeight: '900', color: '#14532D' }}>
-                      {materialRows.filter(m => (m.group_type || '').toUpperCase().includes('SƠN')).length} <span style={{ fontSize: '0.78rem', fontWeight: '600', color: '#64748B' }}>mục</span>
+                      {sortedGroupNames.length} <span style={{ fontSize: '0.78rem', fontWeight: '600', color: '#64748B' }}>nhóm</span>
                     </div>
                   </div>
                 </div>
@@ -3094,7 +3096,7 @@ const ProductDetailView = () => {
                   <div>
                     <div style={{ fontSize: '0.72rem', fontWeight: '700', color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Tổng định mức</div>
                     <div style={{ fontSize: '1.15rem', fontWeight: '900', color: '#78350F' }}>
-                      {materialRows.reduce((acc, m) => acc + (parseFloat(m.quota || m.quantity || 0) || 0), 0)} <span style={{ fontSize: '0.78rem', fontWeight: '600', color: '#64748B' }}>phụ kiện</span>
+                      {totalQuotaCount} <span style={{ fontSize: '0.78rem', fontWeight: '600', color: '#64748B' }}>phụ kiện</span>
                     </div>
                   </div>
                 </div>
@@ -3143,7 +3145,7 @@ const ProductDetailView = () => {
                   )}
                 </div>
 
-                {/* Bộ lọc nhóm vật tư */}
+                {/* Bộ lọc nhóm vật tư động theo Cột 17 */}
                 <select
                   value={materialGroupFilter}
                   onChange={(e) => setMaterialGroupFilter(e.target.value)}
@@ -3156,12 +3158,14 @@ const ProductDetailView = () => {
                     color: '#2D1A12',
                     fontWeight: '700',
                     cursor: 'pointer',
-                    outline: 'none'
+                    outline: 'none',
+                    maxWidth: '220px'
                   }}
                 >
-                  <option value="ALL">Tất cả các nhóm</option>
-                  <option value="HANG_TRANG">Chỉ Hàng Trắng</option>
-                  <option value="SAU_SON">Chỉ Sau Sơn</option>
+                  <option value="ALL">Tất cả các nhóm ({sortedGroupNames.length} nhóm)</option>
+                  {sortedGroupNames.map(g => (
+                    <option key={g} value={g}>{g} ({materialGroups[g]?.length || 0} mục)</option>
+                  ))}
                 </select>
 
                 {/* Nút Xuất Excel */}
@@ -3219,31 +3223,30 @@ const ProductDetailView = () => {
               </div>
             </div>
 
-            {/* BẢNG CÁC NHÓM VẬT TƯ */}
+            {/* BẢNG CÁC NHÓM VẬT TƯ CHUẨN THEO ẢNH 1 & ẢNH 2 / CỘT 17 */}
             {(() => {
-              // 1. Phân nhóm vật tư
-              const rawGroups = {
-                'VẬT TƯ HÀNG TRẮNG': [],
-                'VẬT TƯ SAU SƠN': []
-              };
-
-              materialRows.forEach(mat => {
-                const gName = (mat.group_type || 'VẬT TƯ HÀNG TRẮNG').toUpperCase();
-                if (!rawGroups[gName]) rawGroups[gName] = [];
-                rawGroups[gName].push(mat);
-              });
-
-              // 2. Lọc theo Group Filter
-              let activeGroupKeys = Object.keys(rawGroups);
-              if (materialGroupFilter === 'HANG_TRANG') {
-                activeGroupKeys = activeGroupKeys.filter(k => k.includes('TRẮNG'));
-              } else if (materialGroupFilter === 'SAU_SON') {
-                activeGroupKeys = activeGroupKeys.filter(k => k.includes('SƠN'));
+              let activeGroupKeys = sortedGroupNames;
+              if (materialGroupFilter && materialGroupFilter !== 'ALL') {
+                activeGroupKeys = activeGroupKeys.filter(k => k === materialGroupFilter);
               }
 
-              // 3. Render các nhóm
+              if (activeGroupKeys.length === 0) {
+                return (
+                  <div style={{
+                    backgroundColor: '#FFFFFF',
+                    borderRadius: '12px',
+                    border: '1.5px solid #EADCC9',
+                    padding: '40px 20px',
+                    textAlign: 'center',
+                    color: '#64748B'
+                  }}>
+                    {materialSearch ? `Không tìm thấy vật tư nào khớp với từ khóa "${materialSearch}"` : 'Chưa có dữ liệu định mức vật tư nào cho sản phẩm này.'}
+                  </div>
+                );
+              }
+
               return activeGroupKeys.map((gName, gIdx) => {
-                const allGroupItems = rawGroups[gName] || [];
+                const allGroupItems = materialGroups[gName] || [];
                 
                 // Lọc theo từ khóa tìm kiếm
                 const searchLower = materialSearch.trim().toLowerCase();
@@ -3257,12 +3260,6 @@ const ProductDetailView = () => {
                   return nameMatch || codeMatch || colorMatch || suppMatch || noteMatch;
                 });
 
-                const isHangTrang = gName.includes('TRẮNG');
-                const badgeBg = isHangTrang ? '#EFF6FF' : '#F0FDF4';
-                const badgeColor = isHangTrang ? '#1D4ED8' : '#15803D';
-                const badgeBorder = isHangTrang ? '#BFDBFE' : '#BBF7D0';
-                const headerBarColor = isHangTrang ? '#2563EB' : '#16A34A';
-
                 return (
                   <div
                     key={gName || gIdx}
@@ -3272,10 +3269,10 @@ const ProductDetailView = () => {
                       border: '1.5px solid #EADCC9',
                       overflow: 'hidden',
                       boxShadow: '0 4px 16px rgba(45, 26, 18, 0.04)',
-                      marginBottom: '12px'
+                      marginBottom: '14px'
                     }}
                   >
-                    {/* Header Nhóm */}
+                    {/* Header Nhóm CHUẨN 100% THEO ẢNH 1 */}
                     <div style={{
                       padding: '10px 18px',
                       backgroundColor: '#FAF6F0',
@@ -3287,18 +3284,23 @@ const ProductDetailView = () => {
                       gap: '8px'
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <div style={{ width: '8px', height: '18px', borderRadius: '4px', backgroundColor: headerBarColor }} />
+                        {/* Thanh dọc bo tròn màu xanh dương chuẩn Ảnh 1 */}
+                        <div style={{ width: '8px', height: '20px', borderRadius: '4px', backgroundColor: '#2563EB', flexShrink: 0 }} />
+                        
+                        {/* Tên nhóm in hoa đậm */}
                         <h4 style={{ margin: 0, fontSize: '0.94rem', fontWeight: '800', color: '#2D1A12', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
                           {gName}
                         </h4>
+
+                        {/* Pill badge số lượng mục chuẩn Ảnh 1 */}
                         <span style={{
-                          backgroundColor: badgeBg,
-                          color: badgeColor,
-                          borderRadius: '12px',
+                          backgroundColor: '#EFF6FF',
+                          color: '#1D4ED8',
+                          borderRadius: '16px',
                           padding: '2px 10px',
                           fontSize: '0.75rem',
                           fontWeight: '800',
-                          border: `1px solid ${badgeBorder}`
+                          border: '1px solid #BFDBFE'
                         }}>
                           {allGroupItems.length} mục
                         </span>
@@ -3316,10 +3318,10 @@ const ProductDetailView = () => {
                         }}
                         style={{
                           padding: '4px 12px',
-                          backgroundColor: isHangTrang ? '#EFF6FF' : '#F0FDF4',
-                          border: `1px solid ${badgeBorder}`,
+                          backgroundColor: '#EFF6FF',
+                          border: '1px solid #BFDBFE',
                           borderRadius: '6px',
-                          color: badgeColor,
+                          color: '#1D4ED8',
                           fontWeight: '700',
                           fontSize: '0.78rem',
                           cursor: isEditing ? 'pointer' : 'not-allowed',

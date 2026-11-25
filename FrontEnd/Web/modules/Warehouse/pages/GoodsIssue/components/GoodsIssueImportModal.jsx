@@ -47,7 +47,6 @@ export const GoodsIssueImportModal = ({ isOpen, onClose, onImportSuccess }) => {
         const qty1 = Number(row['SL xuất 1'] || row['Số lượng'] || row['quantity1'] || 0);
         const unit2 = String(row['ĐVT2'] || row['unit2'] || '').trim();
         const qty2 = Number(row['SL xuất 2'] || row['quantity2'] || 0);
-        const unitPrice = Number(row['Đơn giá'] || row['unit_price'] || 0);
 
         if (!itemCode || isNaN(qty1) || qty1 <= 0) {
           return;
@@ -80,8 +79,6 @@ export const GoodsIssueImportModal = ({ isOpen, onClose, onImportSuccess }) => {
           quantity1: qty1,
           unit2,
           quantity2: qty2 || qty1,
-          unit_price: unitPrice,
-          amount: qty1 * unitPrice,
           lsx: String(row['LSX'] || row['lsx'] || '').trim(),
           notes: String(row['Ghi chú'] || row['notes'] || '').trim()
         });
@@ -127,7 +124,6 @@ export const GoodsIssueImportModal = ({ isOpen, onClose, onImportSuccess }) => {
         'SL xuất 1': 10,
         'ĐVT2': 'm2',
         'SL xuất 2': 29.76,
-        'Đơn giá': 250000,
         'LSX': 'LSX-1112',
         'Ghi chú': ''
       }

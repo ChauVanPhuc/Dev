@@ -1,14 +1,13 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useNavigate, useLocation } from 'react-router-dom';
 import {
   Calendar, Plus, Sliders, FileSpreadsheet, Printer, Pencil,
-  Trash2, Check, RefreshCw, Layers, Eye, EyeOff, Search, PackageCheck
+  Trash2, Check, RefreshCw, Layers, Eye, EyeOff, Search,
+  ChevronDown, ChevronRight
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import { useScreenMetadataCached } from '@webShared/hooks/useScreenMetadata';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
 import { dailyProductionService } from '../Services/dailyProduction.service';
-import DailyProductionBuilderModal from './DailyProductionBuilderModal';
 import '../styles/dailyProduction.css';
 
 /**
@@ -18,6 +17,8 @@ import '../styles/dailyProduction.css';
  * và Custom chọn hiển thị chi tiết sản xuất hôm nay.
  */
 const DailyProductionManageView = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const outletContext = useOutletContext() || {};
   const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, setHeaderExtra } = outletContext;
   const { toast } = useToast();
@@ -40,7 +41,7 @@ const DailyProductionManageView = () => {
   });
 
   const [batches, setBatches] = useState([]);
-  const [selectedBatchId, setSelectedBatchId] = useState(null);
+  const [selectedBatchId, setSelectedBatchId] = useState(location.state?.selectedBatchId || null);
   const [loading, setLoading] = useState(true);
 
   // Chế độ Custom nhanh ngay trên bảng chính
@@ -49,9 +50,9 @@ const DailyProductionManageView = () => {
   const [draftItems, setDraftItems] = useState([]);
   const [savingQuickCustom, setSavingQuickCustom] = useState(false);
 
-  // Workspace tạo mới / chỉnh sửa gộp Cont (Hiển thị inline toàn trang, không bị Sidebar che)
-  const [isBuilderOpen, setIsBuilderOpen] = useState(false);
-  const [editingBatch, setEditingBatch] = useState(null);
+  // Trạng thái Colab (thu gọn / mở rộng) theo từng mã tủ trên bảng danh sách (mặc định thu gọn cho gọn)
+  const [expandedCabinets, setExpandedCabinets] = useState({});
+  const [exportingExcel, setExportingExcel] = useState(false);
 
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/daily-production');
 
@@ -123,7 +124,14 @@ const DailyProductionManageView = () => {
     return batches.find(b => b.id === selectedBatchId) || batches[0];
   }, [batches, selectedBatchId]);
 
-  // Đồng bộ draftItems khi đổi activeBatch
+  // Đồng bộ selectedBatchId nếu quay về từ trang tạo mới / chỉnh sửa
+  useEffect(() => {
+    if (location.state?.selectedBatchId) {
+      setSelectedBatchId(location.state.selectedBatchId);
+    }
+  }, [location.state?.selectedBatchId]);
+
+  // Đồng bộ draftItems & reset trạng thái Colab khi đổi activeBatch
   useEffect(() => {
     if (activeBatch && Array.isArray(activeBatch.items)) {
       setDraftItems(activeBatch.items.map(it => ({ ...it })));
@@ -131,6 +139,7 @@ const DailyProductionManageView = () => {
       setDraftItems([]);
     }
     setIsQuickCustomMode(false);
+    setExpandedCabinets({});
   }, [activeBatch]);
 
   // Thống kê tổng quan trong ngày
@@ -153,27 +162,151 @@ const DailyProductionManageView = () => {
     };
   }, [batches]);
 
-  // Các dòng hiển thị trên bảng chính
-  const displayedRowsWithIndex = useMemo(() => {
+  // Gom nhóm các dòng theo CABINET_HEADER để hỗ trợ chức năng Colab (Thu gọn / Mở rộng)
+  const groupedDisplayRows = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return draftItems
-      .map((item, idx) => ({ item, idx }))
-      .filter(({ item }) => {
-        if (!isQuickCustomMode && !showHiddenInView && !item.is_visible) {
-          return false;
+    const rawGroups = [];
+    let currentGroup = null;
+
+    draftItems.forEach((item, idx) => {
+      if (item.row_type === 'CABINET_HEADER') {
+        currentGroup = {
+          groupKey: `cab-${idx}-${item.cabinet_code || ''}-${item.color_code || ''}`,
+          header: { item, idx },
+          details: []
+        };
+        rawGroups.push(currentGroup);
+      } else {
+        if (!currentGroup) {
+          currentGroup = {
+            groupKey: `orphan-${idx}`,
+            header: null,
+            details: []
+          };
+          rawGroups.push(currentGroup);
         }
-        if (!q) return true;
-        return (
-          (item.cont_code || '').toLowerCase().includes(q) ||
-          (item.color_code || '').toLowerCase().includes(q) ||
-          (item.cabinet_code || '').toLowerCase().includes(q) ||
-          (item.stt_code || '').toLowerCase().includes(q) ||
-          (item.material_name || '').toLowerCase().includes(q) ||
-          (item.item_name || '').toLowerCase().includes(q) ||
-          (item.note || '').toLowerCase().includes(q)
-        );
-      });
+        currentGroup.details.push({ item, idx });
+      }
+    });
+
+    const matchesQuery = (it) => {
+      if (!q) return true;
+      return (
+        (it.cont_code || '').toLowerCase().includes(q) ||
+        (it.color_code || '').toLowerCase().includes(q) ||
+        (it.cabinet_code || '').toLowerCase().includes(q) ||
+        (it.stt_code || '').toLowerCase().includes(q) ||
+        (it.material_name || '').toLowerCase().includes(q) ||
+        (it.item_name || '').toLowerCase().includes(q) ||
+        (it.source_orders_text || '').toLowerCase().includes(q) ||
+        (it.note || '').toLowerCase().includes(q)
+      );
+    };
+
+    const result = [];
+    rawGroups.forEach(group => {
+      const totalDetailCount = group.details.length;
+      const visibleDetailCount = group.details.filter(d => d.item.is_visible).length;
+
+      const visibilityFilteredDetails = group.details.filter(
+        ({ item }) => isQuickCustomMode || showHiddenInView || item.is_visible
+      );
+
+      if (!q) {
+        const headerVisible = !group.header || isQuickCustomMode || showHiddenInView || group.header.item.is_visible;
+        if (headerVisible || visibilityFilteredDetails.length > 0) {
+          result.push({
+            ...group,
+            details: visibilityFilteredDetails,
+            totalDetailCount,
+            visibleDetailCount,
+            forceExpand: false
+          });
+        }
+      } else {
+        const headerMatches = group.header ? matchesQuery(group.header.item) : false;
+        const matchedDetails = visibilityFilteredDetails.filter(({ item }) => matchesQuery(item));
+
+        if (headerMatches) {
+          result.push({
+            ...group,
+            details: visibilityFilteredDetails,
+            totalDetailCount,
+            visibleDetailCount,
+            forceExpand: false
+          });
+        } else if (matchedDetails.length > 0) {
+          result.push({
+            ...group,
+            details: matchedDetails,
+            totalDetailCount,
+            visibleDetailCount,
+            forceExpand: true
+          });
+        }
+      }
+    });
+
+    return result;
   }, [draftItems, isQuickCustomMode, showHiddenInView, searchQuery]);
+
+  // Kiểm tra trạng thái mở rộng tất cả Colab
+  const isAllCabinetsExpanded = useMemo(() => {
+    const groupsWithHeader = groupedDisplayRows.filter(g => g.header);
+    return groupsWithHeader.length > 0 && groupsWithHeader.every(g => !!expandedCabinets[g.groupKey]);
+  }, [groupedDisplayRows, expandedCabinets]);
+
+  const handleToggleCabinetColab = useCallback((groupKey) => {
+    setExpandedCabinets(prev => ({ ...prev, [groupKey]: !prev[groupKey] }));
+  }, []);
+
+  const handleToggleAllCabinets = useCallback(() => {
+    if (isAllCabinetsExpanded) {
+      setExpandedCabinets({});
+    } else {
+      const next = {};
+      groupedDisplayRows.forEach(g => {
+        if (g.header) next[g.groupKey] = true;
+      });
+      setExpandedCabinets(next);
+    }
+  }, [isAllCabinetsExpanded, groupedDisplayRows]);
+
+  const handlePrintSheet = useCallback(() => {
+    if (!isAllCabinetsExpanded && groupedDisplayRows.some(g => g.header)) {
+      const allOpen = {};
+      groupedDisplayRows.forEach(g => {
+        if (g.header) allOpen[g.groupKey] = true;
+      });
+      setExpandedCabinets(allOpen);
+      setTimeout(() => window.print(), 120);
+    } else {
+      window.print();
+    }
+  }, [isAllCabinetsExpanded, groupedDisplayRows]);
+
+  // Điều hướng sang trang Tạo mới / Chỉnh sửa độc lập
+  const handleNavigateCreate = useCallback(() => {
+    navigate('/admin/daily-production/create', {
+      state: {
+        initialDate: planDate,
+        initialFactory: factoryFilter,
+        metadata
+      }
+    });
+  }, [navigate, planDate, factoryFilter, metadata]);
+
+  const handleNavigateEdit = useCallback((batch) => {
+    if (!batch?.id) return;
+    navigate(`/admin/daily-production/edit/${batch.id}`, {
+      state: {
+        editingBatch: batch,
+        initialDate: planDate,
+        initialFactory: factoryFilter,
+        metadata
+      }
+    });
+  }, [navigate, planDate, factoryFilter, metadata]);
 
   // Handlers cho Chế độ Custom nhanh ngay trên bảng
   const handleQuickToggleVisible = useCallback((rowIndex) => {
@@ -253,513 +386,577 @@ const DailyProductionManageView = () => {
     }
   };
 
-  // Xuất Excel chuẩn mẫu "BẢNG LIỆT KÊ CHI TIẾT"
-  const handleExportExcel = useCallback(() => {
-    if (!activeBatch) return;
-    const rowsToExport = (activeBatch.items || []).filter(it => it.is_visible);
-    const sheetData = [
-      [`BẢNG LIỆT KÊ CHI TIẾT - ${activeBatch.section_name}`],
-      [activeBatch.batch_title],
-      [activeBatch.line_color_summary || `Ngày SX: ${activeBatch.plan_date} - Nhà máy: ${activeBatch.factory}`],
-      [],
-      ['CONT', 'MÀU', 'STT', 'NGUYÊN LIỆU', 'SẢN PHẨM / CHI TIẾT', 'Dày', 'Rộng', 'Dài', 'SET', 'SLKH', 'GHI CHÚ']
-    ];
+  // Xuất Excel chuẩn mẫu Phiếu Xưởng ("BẢNG LIỆT KÊ CHI TIẾT") từ Backend OpenPyXL
+  const handleExportExcel = useCallback(async () => {
+    if (!activeBatch?.id || exportingExcel) return;
+    setExportingExcel(true);
+    try {
+      const blob = await dailyProductionService.exportBatchExcel(activeBatch.id, {
+        only_visible: !showHiddenInView
+      });
+      const safeDate = (activeBatch.plan_date || todayStr).replace(/-/g, '');
+      const safeFactory = String(activeBatch.factory || 'SX').replace(/[^A-Za-z0-9_-]/g, '');
+      const filename = `Bang_Liet_Ke_Chi_Tiet_${safeFactory}_${safeDate}.xlsx`;
 
-    rowsToExport.forEach(it => {
-      const isCab = it.row_type === 'CABINET_HEADER';
-      sheetData.push([
-        it.cont_code || '',
-        it.color_code || '',
-        it.stt_code || '',
-        isCab ? '' : (it.material_name || ''),
-        isCab ? '' : (it.item_name || ''),
-        isCab ? '' : (it.dim_thick || ''),
-        isCab ? '' : (it.dim_width || ''),
-        isCab ? '' : (it.dim_length || ''),
-        isCab ? '' : (it.set_qty ?? ''),
-        it.custom_planned_qty ?? 0,
-        it.note || ''
-      ]);
-    });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
 
-    const ws = XLSX.utils.aoa_to_sheet(sheetData);
-    ws['!cols'] = [
-      { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 24 },
-      { wch: 28 }, { wch: 8 }, { wch: 8 }, { wch: 8 },
-      { wch: 8 }, { wch: 12 }, { wch: 32 }
-    ];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'HomNaySanXuatGi');
-    const safeDate = (activeBatch.plan_date || todayStr).replace(/-/g, '');
-    XLSX.writeFile(wb, `Bang_Liet_Ke_Chi_Tiet_${activeBatch.factory}_${safeDate}.xlsx`);
-    toast?.success('Đã xuất file Excel Bảng Liệt Kê Chi Tiết!');
-  }, [activeBatch, todayStr, toast]);
+      toast?.success('Đã xuất file Excel chuẩn mẫu Phiếu Xưởng!');
+    } catch (err) {
+      console.error('Lỗi khi xuất file Excel Bảng Liệt Kê Chi Tiết:', err);
+      toast?.error('Không thể xuất file Excel. Vui lòng thử lại.');
+    } finally {
+      setExportingExcel(false);
+    }
+  }, [activeBatch, exportingExcel, showHiddenInView, todayStr, toast]);
 
   return (
-    <div className={`daily-prod-page ${isBuilderOpen ? 'builder-active' : ''}`}>
-      {/* KHI MỞ WORKSPACE GỘP CONT & CUSTOM -> HIỂN THỊ TRỰC TIẾP TRONG TRANG (KHÔNG DÙNG POPUP BỊ SIDEBAR CHE) */}
-      {isBuilderOpen ? (
-        <DailyProductionBuilderModal
-          isOpen={isBuilderOpen}
-          onClose={() => setIsBuilderOpen(false)}
-          onSaved={(savedBatch) => {
-            fetchBatches();
-            if (savedBatch && savedBatch.id) {
-              setSelectedBatchId(savedBatch.id);
-            }
-          }}
-          initialDate={planDate}
-          initialFactory={factoryFilter}
-          editingBatch={editingBatch}
-          metadata={metadata}
-        />
-      ) : (
-        <>
-          {/* 1. KHỐI ĐIỀU KHIỂN & ĐỢT SẢN XUẤT SIÊU GỌN (ULTRA COMPACT SINGLE PANEL) */}
-          <div className="daily-prod-compact-panel no-print">
-            {/* Hàng 1: Bộ lọc nhanh & Nút hành động trên 1 đường thẳng duy nhất */}
-            <div className="daily-panel-row-top">
-              <div className="daily-compact-filters">
-                <div className="daily-mini-filter-pill">
-                  <Calendar size={13} color="#7B5233" />
-                  <input
-                    type="date"
-                    className="daily-mini-date-input"
-                    disabled={showAllDates}
-                    value={planDate}
-                    onChange={(e) => {
-                      setPlanDate(e.target.value);
-                      setShowAllDates(false);
-                    }}
-                  />
-                  <button
-                    type="button"
-                    className={`daily-mini-btn-pill ${!showAllDates && planDate === todayStr ? 'active' : ''}`}
-                    onClick={() => {
-                      setPlanDate(todayStr);
-                      setShowAllDates(false);
-                    }}
-                  >
-                    Nay
-                  </button>
-                  <button
-                    type="button"
-                    className={`daily-mini-btn-pill ${showAllDates ? 'active' : ''}`}
-                    onClick={() => setShowAllDates(prev => !prev)}
-                  >
-                    Tất cả
-                  </button>
-                </div>
-
-                <select
-                  className="daily-mini-select"
-                  style={{ width: 95 }}
-                  value={factoryFilter}
-                  onChange={(e) => setFactoryFilter(e.target.value)}
-                  title="Lọc theo Nhà máy"
-                >
-                  <option value="ALL">Tất cả NM</option>
-                  {(metadata.factories || []).map(f => (
-                    <option key={f.code} value={f.code}>
-                      {f.code}
-                    </option>
-                  ))}
-                </select>
-
-                <select
-                  className="daily-mini-select"
-                  style={{ width: 110 }}
-                  value={sectionFilter}
-                  onChange={(e) => setSectionFilter(e.target.value)}
-                  title="Lọc theo Cụm / Công đoạn"
-                >
-                  <option value="ALL">Tất cả Cụm</option>
-                  {(metadata.sections || []).map(opt => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-
-                <div className="daily-mini-search-wrap">
-                  <Search size={12} className="daily-mini-search-icon" />
-                  <input
-                    type="text"
-                    className="daily-mini-search-input"
-                    placeholder="Lọc mã tủ, chi tiết..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="daily-panel-actions">
-                <button
-                  type="button"
-                  className="daily-mini-icon-btn"
-                  onClick={fetchBatches}
-                  title="Làm mới dữ liệu"
-                >
-                  <RefreshCw size={13} />
-                </button>
-
-                <button
-                  type="button"
-                  className="daily-btn-primary daily-btn-primary-compact"
-                  onClick={() => {
-                    setEditingBatch(null);
-                    setIsBuilderOpen(true);
-                  }}
-                >
-                  <Plus size={14} /> Gộp Cont & Thiết Lập SX
-                </button>
-              </div>
+    <div className="daily-prod-page">
+      {/* 1. KHỐI ĐIỀU KHIỂN & ĐỢT SẢN XUẤT SIÊU GỌN (ULTRA COMPACT SINGLE PANEL) */}
+      <div className="daily-prod-compact-panel no-print">
+        {/* Hàng 1: Bộ lọc nhanh & Nút hành động trên 1 đường thẳng duy nhất */}
+        <div className="daily-panel-row-top">
+          <div className="daily-compact-filters">
+            <div className="daily-mini-filter-pill">
+              <Calendar size={13} color="#7B5233" />
+              <input
+                type="date"
+                className="daily-mini-date-input"
+                disabled={showAllDates}
+                value={planDate}
+                onChange={(e) => {
+                  setPlanDate(e.target.value);
+                  setShowAllDates(false);
+                }}
+              />
+              <button
+                type="button"
+                className={`daily-mini-btn-pill ${!showAllDates && planDate === todayStr ? 'active' : ''}`}
+                onClick={() => {
+                  setPlanDate(todayStr);
+                  setShowAllDates(false);
+                }}
+              >
+                Nay
+              </button>
+              <button
+                type="button"
+                className={`daily-mini-btn-pill ${showAllDates ? 'active' : ''}`}
+                onClick={() => setShowAllDates(prev => !prev)}
+              >
+                Tất cả
+              </button>
             </div>
 
-            {/* Hàng 2: Đợt SX (Trái) & Mini Stats Inline (Phải) liền mạch không viền rườm rà */}
-            <div className="daily-panel-row-sub">
-              <div className="daily-compact-batches">
-                <span className="daily-batch-lead-label">Đợt SX:</span>
-                {batches.length === 0 ? (
-                  <span className="daily-batch-empty-text">Chưa có đợt sản xuất nào trong ngày</span>
-                ) : (
-                  batches.map(b => {
-                    const isSel = activeBatch && activeBatch.id === b.id;
-                    return (
-                      <button
-                        key={b.id}
-                        type="button"
-                        className={`daily-mini-batch-chip ${isSel ? 'active' : ''}`}
-                        onClick={() => setSelectedBatchId(b.id)}
-                        title={b.batch_title}
-                      >
-                        <span className="chip-badge">{b.section_name} • {b.factory}</span>
-                        <span className="chip-title">{b.batch_title}</span>
-                        <span className="chip-count">({b.total_cabinets} tủ • {b.orders_count} Cont)</span>
-                      </button>
-                    );
-                  })
-                )}
-              </div>
+            <select
+              className="daily-mini-select"
+              style={{ width: 95 }}
+              value={factoryFilter}
+              onChange={(e) => setFactoryFilter(e.target.value)}
+              title="Lọc theo Nhà máy"
+            >
+              <option value="ALL">Tất cả NM</option>
+              {(metadata.factories || []).map(f => (
+                <option key={f.code} value={f.code}>
+                  {f.code}
+                </option>
+              ))}
+            </select>
 
-              <div className="daily-compact-stats-inline">
-                <span><b>{kpiStats.batchesCount}</b> bảng</span>
-                <span className="dot">•</span>
-                <span><b>{kpiStats.containersCount}</b> Cont</span>
-                <span className="dot">•</span>
-                <span className="stat-success"><b>{kpiStats.totalCabinets}</b> tủ</span>
-                <span className="dot">•</span>
-                <span className="stat-warning"><b>{kpiStats.totalVisibleParts}</b> BOM</span>
-              </div>
+            <select
+              className="daily-mini-select"
+              style={{ width: 110 }}
+              value={sectionFilter}
+              onChange={(e) => setSectionFilter(e.target.value)}
+              title="Lọc theo Cụm / Công đoạn"
+            >
+              <option value="ALL">Tất cả Cụm</option>
+              {(metadata.sections || []).map(opt => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+
+            <div className="daily-mini-search-wrap">
+              <Search size={12} className="daily-mini-search-icon" />
+              <input
+                type="text"
+                className="daily-mini-search-input"
+                placeholder="Lọc mã tủ, chi tiết..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
             </div>
           </div>
 
-          {/* 4. NỘI DUNG BẢNG LIỆT KÊ CHI TIẾT (CHUẨN MẪU PHIẾU XƯỞNG) */}
-          {loading ? (
-            <div className="factory-sheet-card" style={{ padding: 60, textAlign: 'center', color: '#7B5233', fontWeight: 700 }}>
-              Đang tải bảng "Hôm nay sản xuất gì" từ CSDL...
+          <div className="daily-panel-actions">
+            <button
+              type="button"
+              className="daily-mini-icon-btn"
+              onClick={fetchBatches}
+              title="Làm mới dữ liệu"
+            >
+              <RefreshCw size={13} />
+            </button>
+
+            <button
+              type="button"
+              className="daily-btn-primary daily-btn-primary-compact"
+              onClick={handleNavigateCreate}
+            >
+              <Plus size={14} /> Gộp Cont & Thiết Lập SX
+            </button>
+          </div>
+        </div>
+
+        {/* Hàng 2: Đợt SX (Trái) & Mini Stats Inline (Phải) liền mạch không viền rườm rà */}
+        <div className="daily-panel-row-sub">
+          <div className="daily-compact-batches">
+            <span className="daily-batch-lead-label">Đợt SX:</span>
+            {batches.length === 0 ? (
+              <span className="daily-batch-empty-text">Chưa có đợt sản xuất nào trong ngày</span>
+            ) : (
+              batches.map(b => {
+                const isSel = activeBatch && activeBatch.id === b.id;
+                return (
+                  <button
+                    key={b.id}
+                    type="button"
+                    className={`daily-mini-batch-chip ${isSel ? 'active' : ''}`}
+                    onClick={() => setSelectedBatchId(b.id)}
+                    title={b.batch_title}
+                  >
+                    <span className="chip-badge">{b.section_name} • {b.factory}</span>
+                    <span className="chip-title">{b.batch_title}</span>
+                    <span className="chip-count">({b.total_cabinets} tủ • {b.orders_count} Cont)</span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+
+          <div className="daily-compact-stats-inline">
+            <span><b>{kpiStats.batchesCount}</b> bảng</span>
+            <span className="dot">•</span>
+            <span><b>{kpiStats.containersCount}</b> Cont</span>
+            <span className="dot">•</span>
+            <span className="stat-success"><b>{kpiStats.totalCabinets}</b> tủ</span>
+            <span className="dot">•</span>
+            <span className="stat-warning"><b>{kpiStats.totalVisibleParts}</b> BOM</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 4. NỘI DUNG BẢNG LIỆT KÊ CHI TIẾT (CHUẨN MẪU PHIẾU XƯỞNG) */}
+      {loading ? (
+        <div className="factory-sheet-card" style={{ padding: 60, textAlign: 'center', color: '#7B5233', fontWeight: 700 }}>
+          Đang tải bảng "Hôm nay sản xuất gì" từ CSDL...
+        </div>
+      ) : !activeBatch ? (
+        <div className="factory-sheet-card" style={{ padding: 60, textAlign: 'center' }}>
+          <Layers size={48} color="#7B5233" style={{ marginBottom: 12, opacity: 0.75 }} />
+          <h3 style={{ margin: '0 0 8px 0', fontSize: '1.15rem', fontWeight: 800, color: '#2D1A12' }}>
+            Chưa có bảng "Hôm nay sản xuất gì" nào cho bộ lọc hiện tại
+          </h3>
+          <p style={{ margin: '0 auto 20px auto', maxWidth: 540, color: '#786452', fontSize: '0.9rem' }}>
+            Hãy bấm nút <b>"Gộp Cont & Thiết Lập Hôm Nay SX Gì"</b> để chọn các Cont lẻ từ cơ sở dữ liệu (VD: APT-0063-03~04, APT-0074-01~02...) và Custom các chi tiết sản xuất trong ngày.
+          </p>
+          <button
+            type="button"
+            className="daily-btn-primary"
+            onClick={handleNavigateCreate}
+          >
+            <Plus size={18} /> Tạo Bảng Gộp Cont & Custom Ngay
+          </button>
+        </div>
+      ) : (
+        <div className="factory-sheet-card factory-sheet-printable">
+          {/* TIÊU ĐỀ IN PHIẾU (CHỈ HIỆN KHI IN GIẤY A4 NGANG) */}
+          <div className="factory-sheet-print-header print-only">
+            <div className="factory-sheet-print-company">
+              CÔNG TY CỔ PHẦN VINA G7 - CCN Tam Phước 1, KP Long Khánh 3, P. Tam Phước, Tỉnh Đồng Nai | Website: https://phutai.com.vn/ - Email: vinag7@vinag7furniture.com
             </div>
-          ) : !activeBatch ? (
-            <div className="factory-sheet-card" style={{ padding: 60, textAlign: 'center' }}>
-              <Layers size={48} color="#7B5233" style={{ marginBottom: 12, opacity: 0.75 }} />
-              <h3 style={{ margin: '0 0 8px 0', fontSize: '1.15rem', fontWeight: 800, color: '#2D1A12' }}>
-                Chưa có bảng "Hôm nay sản xuất gì" nào cho bộ lọc hiện tại
-              </h3>
-              <p style={{ margin: '0 auto 20px auto', maxWidth: 540, color: '#786452', fontSize: '0.9rem' }}>
-                Hãy bấm nút <b>"Gộp Cont & Thiết Lập Hôm Nay SX Gì"</b> để chọn các Cont lẻ từ cơ sở dữ liệu (VD: APT-0063-03~04, APT-0074-01~02...) và Custom các chi tiết sản xuất trong ngày.
-              </p>
-              <button
-                type="button"
-                className="daily-btn-primary"
-                onClick={() => {
-                  setEditingBatch(null);
-                  setIsBuilderOpen(true);
-                }}
-              >
-                <Plus size={18} /> Tạo Bảng Gộp Cont & Custom Ngay
-              </button>
+            <h1 className="factory-sheet-main-title">
+              BẢNG LIỆT KÊ CHI TIẾT - {activeBatch.section_name}
+            </h1>
+            <div className="factory-sheet-sub-orders">{activeBatch.batch_title}</div>
+            <div className="factory-sheet-line-summary">
+              {activeBatch.line_color_summary || `Nhà máy ${activeBatch.factory} • Ngày ${activeBatch.plan_date}`}
             </div>
-          ) : (
-            <div className="factory-sheet-card factory-sheet-printable">
-              {/* BANNER TIÊU ĐỀ CHUẨN TỜ PHIẾU XƯỞNG */}
-              <div className="factory-sheet-banner">
-                <div style={{ minWidth: 200 }} className="no-print">
-                  <div style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    background: '#DCFCE7',
-                    color: '#15803D',
-                    padding: '4px 10px',
-                    borderRadius: 99,
-                    fontSize: '0.76rem',
-                    fontWeight: 800,
-                    marginBottom: 6
-                  }}>
-                    ● ĐANG HIỂN THỊ SẢN XUẤT ({activeBatch.plan_date})
-                  </div>
-                  <div style={{ fontSize: '0.8rem', color: '#5D3E26', fontWeight: 600 }}>
-                    Mã bảng: <b>{activeBatch.batch_code}</b> • Nhà máy: <b>{activeBatch.factory}</b>
-                  </div>
-                  {/* Hiển thị các tag Cont lẻ đã được gộp */}
-                  {activeBatch.selected_orders && activeBatch.selected_orders.length > 0 && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
-                      {activeBatch.selected_orders.map(oc => (
-                        <span
-                          key={oc}
-                          style={{
-                            fontSize: '0.72rem',
-                            fontWeight: 700,
-                            background: '#EFE4D4',
-                            color: '#4A3525',
-                            padding: '2px 7px',
-                            borderRadius: 5
-                          }}
-                        >
-                          {oc}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
+          </div>
 
-                <div className="factory-sheet-heading-center">
-                  <h1 className="factory-sheet-main-title">
-                    BẢNG LIỆT KÊ CHI TIẾT - {activeBatch.section_name}
-                  </h1>
-                  <div className="factory-sheet-sub-orders">
-                    {activeBatch.batch_title}
-                  </div>
-                  <div className="factory-sheet-line-summary">
-                    {activeBatch.line_color_summary || `Nhà máy ${activeBatch.factory} • Ngày ${activeBatch.plan_date}`}
-                  </div>
-                </div>
-
-                {/* CÁC NÚT THAO TÁC TRÊN BẢNG */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }} className="no-print">
-                  {isQuickCustomMode ? (
-                    <>
-                      <button
-                        type="button"
-                        className="daily-btn-primary"
-                        disabled={savingQuickCustom}
-                        onClick={handleSaveQuickCustom}
-                      >
-                        <Check size={16} /> {savingQuickCustom ? 'Đang lưu...' : 'Lưu Custom Hiển Thị'}
-                      </button>
-                      <button
-                        type="button"
-                        className="daily-btn-outline"
-                        onClick={() => {
-                          setDraftItems((activeBatch.items || []).map(it => ({ ...it })));
-                          setIsQuickCustomMode(false);
-                        }}
-                      >
-                        Hủy
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        className="daily-btn-outline"
-                        onClick={() => setIsQuickCustomMode(true)}
-                        title="Bật chế độ tick chọn ẩn/hiện dòng và sửa số lượng trực tiếp trên bảng"
-                      >
-                        <Sliders size={15} /> Custom Nhanh Trên Bảng
-                      </button>
-
-                      <button
-                        type="button"
-                        className={`daily-btn-outline ${showHiddenInView ? 'active' : ''}`}
-                        onClick={() => setShowHiddenInView(prev => !prev)}
-                        title="Xem cả các dòng đang bị ẩn để kiểm tra"
-                      >
-                        {showHiddenInView ? <EyeOff size={15} /> : <Eye size={15} />}
-                        {showHiddenInView ? 'Ẩn dòng không chọn' : `Xem cả dòng ẩn (${activeBatch.total_detail_count - activeBatch.visible_detail_count})`}
-                      </button>
-
-                      <button
-                        type="button"
-                        className="daily-btn-outline"
-                        onClick={() => {
-                          setEditingBatch(activeBatch);
-                          setIsBuilderOpen(true);
-                        }}
-                      >
-                        <Pencil size={15} /> Gộp thêm / Sửa Cont
-                      </button>
-
-                      <button
-                        type="button"
-                        className="daily-btn-outline"
-                        onClick={handleExportExcel}
-                      >
-                        <FileSpreadsheet size={15} /> Xuất Excel
-                      </button>
-
-                      <button
-                        type="button"
-                        className="daily-btn-outline"
-                        onClick={() => window.print()}
-                      >
-                        <Printer size={15} /> In Phiếu
-                      </button>
-
-                      <button
-                        type="button"
-                        className="daily-btn-danger"
-                        onClick={() => handleDeleteBatch(activeBatch)}
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    </>
-                  )}
-                </div>
+          {/* BANNER GỌN NHẸ & THANH THAO TÁC TRỰC QUAN (NO-PRINT) */}
+          <div className="factory-sheet-banner-compact no-print">
+            {/* Dòng 1: Thông tin bảng + Tiêu đề + Cont gộp trên 1 hàng gọn gàng */}
+            <div className="factory-sheet-info-row">
+              <div className="factory-sheet-title-group">
+                <span className="factory-sheet-status-pill" title={`Đang hiển thị sản xuất ngày ${activeBatch.plan_date}`}>
+                  ● {activeBatch.plan_date}
+                </span>
+                <span className="factory-sheet-title-inline">
+                  BẢNG LIỆT KÊ CHI TIẾT - {activeBatch.section_name}
+                </span>
+                <span className="factory-sheet-sep">|</span>
+                <span className="factory-sheet-orders-inline" title={activeBatch.batch_title}>
+                  {activeBatch.batch_title}
+                </span>
+                <span className="factory-sheet-meta-inline">
+                  ({activeBatch.batch_code} • {activeBatch.factory}
+                  {activeBatch.line_color_summary ? ` • ${activeBatch.line_color_summary}` : ''})
+                </span>
               </div>
 
-              {/* BẢNG DỮ LIỆU CHUẨN MẪU PHIẾU XƯỞNG */}
-              <div className="factory-sheet-table-wrap">
-                <table className="factory-sheet-table">
-                  <thead>
-                    <tr>
-                      {isQuickCustomMode && (
-                        <th rowSpan={2} style={{ width: 64 }} className="no-print">
-                          HIỂN THỊ
-                        </th>
-                      )}
-                      <th rowSpan={2} style={{ width: 76 }}>CONT</th>
-                      <th rowSpan={2} style={{ width: 76 }}>MÀU</th>
-                      <th rowSpan={2} style={{ width: 82 }}>STT</th>
-                      <th rowSpan={2} style={{ minWidth: 165 }}>NGUYÊN LIỆU</th>
-                      <th rowSpan={2} style={{ minWidth: 210 }}>SẢN PHẨM / CHI TIẾT</th>
-                      <th colSpan={3}>QUY CÁCH TINH</th>
-                      <th rowSpan={2} style={{ width: 65 }}>SET</th>
-                      <th rowSpan={2} style={{ width: 95 }}>SLKH</th>
-                      <th rowSpan={2} style={{ minWidth: 200 }}>GHI CHÚ</th>
-                    </tr>
-                    <tr>
-                      <th style={{ width: 62 }}>Dày</th>
-                      <th style={{ width: 68 }}>Rộng</th>
-                      <th style={{ width: 68 }}>Dài</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {displayedRowsWithIndex.length === 0 ? (
-                      <tr>
-                        <td colSpan={isQuickCustomMode ? 12 : 11} style={{ textAlign: 'center', padding: 40, color: '#786452' }}>
-                          Không có dòng chi tiết nào đang được chọn hiển thị. Hãy bấm <b>"Custom Nhanh Trên Bảng"</b> để tick chọn các mục cần hiển thị hôm nay.
-                        </td>
-                      </tr>
-                    ) : (
-                      displayedRowsWithIndex.map(({ item, idx }) => {
-                        const isCabHeader = item.row_type === 'CABINET_HEADER';
-                        const isSubPart = !isCabHeader && String(item.stt_code || '').includes('.');
-                        const rowClass = [
-                          isCabHeader
-                            ? 'factory-sheet-row-cabinet'
-                            : isSubPart
-                              ? 'factory-sheet-row-subpart'
-                              : 'factory-sheet-row-assembly',
-                          !item.is_visible ? 'factory-sheet-row-hidden' : ''
-                        ].filter(Boolean).join(' ');
+              {activeBatch.selected_orders && activeBatch.selected_orders.length > 0 && (
+                <div className="factory-sheet-cont-tags" title={activeBatch.selected_orders.join(', ')}>
+                  {activeBatch.selected_orders.slice(0, 4).map(oc => (
+                    <span key={oc} className="factory-sheet-cont-tag">{oc}</span>
+                  ))}
+                  {activeBatch.selected_orders.length > 4 && (
+                    <span className="factory-sheet-cont-tag more">
+                      +{activeBatch.selected_orders.length - 4} Cont
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
 
-                        return (
-                          <tr key={item.id || `${item.cabinet_code}-${item.stt_code}-${idx}`} className={rowClass}>
-                            {isQuickCustomMode && (
-                              <td style={{ textAlign: 'center' }} className="no-print">
-                                <input
-                                  type="checkbox"
-                                  checked={!!item.is_visible}
-                                  onChange={() => handleQuickToggleVisible(idx)}
-                                  style={{ width: 17, height: 17, accentColor: '#7B5233', cursor: 'pointer' }}
-                                />
+            {/* Dòng 2: Thanh công cụ thao tác phân nhóm Trái (Xem/Custom) & Phải (Sửa/Xuất/In/Xóa) */}
+            <div className="factory-sheet-action-bar">
+              <div className="factory-sheet-action-group">
+                <button
+                  type="button"
+                  className={`daily-sheet-btn ${isAllCabinetsExpanded ? 'active' : ''}`}
+                  onClick={handleToggleAllCabinets}
+                  title={isAllCabinetsExpanded ? 'Thu gọn tất cả chi tiết BOM theo từng mã tủ' : 'Mở rộng tất cả chi tiết BOM'}
+                >
+                  {isAllCabinetsExpanded ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                  {isAllCabinetsExpanded ? 'Thu gọn' : 'Mở tất cả'}
+                </button>
+
+                {isQuickCustomMode ? (
+                  <>
+                    <button
+                      type="button"
+                      className="daily-sheet-btn primary"
+                      disabled={savingQuickCustom}
+                      onClick={handleSaveQuickCustom}
+                    >
+                      <Check size={14} /> {savingQuickCustom ? 'Đang lưu...' : 'Lưu Custom'}
+                    </button>
+                    <button
+                      type="button"
+                      className="daily-sheet-btn"
+                      onClick={() => {
+                        setDraftItems((activeBatch.items || []).map(it => ({ ...it })));
+                        setIsQuickCustomMode(false);
+                      }}
+                    >
+                      Hủy
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="daily-sheet-btn"
+                      onClick={() => setIsQuickCustomMode(true)}
+                      title="Bật chế độ tick chọn ẩn/hiện dòng và sửa số lượng trực tiếp trên bảng"
+                    >
+                      <Sliders size={13} /> Custom nhanh
+                    </button>
+
+                    <button
+                      type="button"
+                      className={`daily-sheet-btn ${showHiddenInView ? 'active' : ''}`}
+                      onClick={() => setShowHiddenInView(prev => !prev)}
+                      title="Xem cả các dòng đang bị ẩn để kiểm tra"
+                    >
+                      {showHiddenInView ? <EyeOff size={13} /> : <Eye size={13} />}
+                      {showHiddenInView
+                        ? 'Ẩn dòng không chọn'
+                        : `Dòng ẩn (${Math.max(0, (activeBatch.total_detail_count || 0) - (activeBatch.visible_detail_count || 0))})`}
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {!isQuickCustomMode && (
+                <div className="factory-sheet-action-group">
+                  <button
+                    type="button"
+                    className="daily-sheet-btn accent"
+                    onClick={() => handleNavigateEdit(activeBatch)}
+                    title="Mở trang chỉnh sửa để gộp thêm Cont hoặc custom chi tiết BOM"
+                  >
+                    <Pencil size={13} /> Sửa / Gộp Cont
+                  </button>
+
+                  <button
+                    type="button"
+                    className="daily-sheet-btn"
+                    disabled={exportingExcel}
+                    onClick={handleExportExcel}
+                    title="Xuất bảng hiện tại ra file Excel chuẩn mẫu Phiếu Xưởng"
+                  >
+                    <FileSpreadsheet size={13} /> {exportingExcel ? 'Đang xuất...' : 'Excel'}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="daily-sheet-btn"
+                    onClick={handlePrintSheet}
+                    title="In phiếu Bảng Liệt Kê Chi Tiết"
+                  >
+                    <Printer size={13} /> In
+                  </button>
+
+                  <button
+                    type="button"
+                    className="daily-sheet-btn danger icon-only"
+                    onClick={() => handleDeleteBatch(activeBatch)}
+                    title="Xóa bảng sản xuất này"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* BẢNG DỮ LIỆU CHUẨN MẪU PHIẾU XƯỞNG */}
+          <div className="factory-sheet-table-wrap">
+            <table className="factory-sheet-table">
+              <thead>
+                <tr>
+                  {isQuickCustomMode && (
+                    <th rowSpan={2} style={{ width: 64 }} className="no-print">
+                      HIỂN THỊ
+                    </th>
+                  )}
+                  <th rowSpan={2} style={{ width: 92 }}>CONT</th>
+                  <th rowSpan={2} style={{ width: 76 }}>MÀU</th>
+                  <th rowSpan={2} style={{ width: 82 }}>STT</th>
+                  <th rowSpan={2} style={{ minWidth: 165 }}>NGUYÊN LIỆU</th>
+                  <th rowSpan={2} style={{ minWidth: 210 }}>SẢN PHẨM / CHI TIẾT</th>
+                  <th colSpan={3}>QUY CÁCH TINH</th>
+                  <th rowSpan={2} style={{ width: 65 }}>SET</th>
+                  <th rowSpan={2} style={{ width: 95 }}>SLKH</th>
+                  <th rowSpan={2} style={{ minWidth: 200 }}>GHI CHÚ</th>
+                </tr>
+                <tr>
+                  <th style={{ width: 62 }}>Dày</th>
+                  <th style={{ width: 68 }}>Rộng</th>
+                  <th style={{ width: 68 }}>Dài</th>
+                </tr>
+              </thead>
+              <tbody>
+                {groupedDisplayRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={isQuickCustomMode ? 12 : 11} style={{ textAlign: 'center', padding: 40, color: '#786452' }}>
+                      Không có dòng chi tiết nào đang được chọn hiển thị. Hãy bấm <b>"Custom Nhanh Trên Bảng"</b> để tick chọn các mục cần hiển thị hôm nay.
+                    </td>
+                  </tr>
+                ) : (
+                  groupedDisplayRows.map(group => {
+                    const isExpanded = !group.header || !!expandedCabinets[group.groupKey] || group.forceExpand;
+                    const headerEntry = group.header;
+
+                    return (
+                      <React.Fragment key={group.groupKey}>
+                        {headerEntry && (() => {
+                          const { item, idx } = headerEntry;
+                          const headerClass = [
+                            'factory-sheet-row-cabinet',
+                            'factory-sheet-row-cabinet-toggle',
+                            isExpanded ? 'expanded' : '',
+                            !item.is_visible ? 'factory-sheet-row-hidden' : ''
+                          ].filter(Boolean).join(' ');
+
+                          return (
+                            <tr
+                              key={item.id || `${item.cabinet_code}-${item.stt_code}-${idx}`}
+                              className={headerClass}
+                              onClick={() => handleToggleCabinetColab(group.groupKey)}
+                              title={isExpanded ? 'Bấm để thu gọn chi tiết BOM' : 'Bấm để mở rộng chi tiết BOM'}
+                            >
+                              {isQuickCustomMode && (
+                                <td
+                                  style={{ textAlign: 'center' }}
+                                  className="no-print"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={!!item.is_visible}
+                                    onChange={() => handleQuickToggleVisible(idx)}
+                                    style={{ width: 17, height: 17, accentColor: '#7B5233', cursor: 'pointer' }}
+                                  />
+                                </td>
+                              )}
+                              <td style={{ textAlign: 'center', fontWeight: 800 }}>
+                                <div className="daily-colab-cont-cell">
+                                  <span className="daily-colab-chevron no-print">
+                                    {isExpanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                                  </span>
+                                  <span>{item.cont_code}</span>
+                                </div>
                               </td>
-                            )}
-                            <td style={{ textAlign: 'center', fontWeight: 800 }}>
-                              {item.cont_code}
-                            </td>
-                            <td style={{ textAlign: 'center', fontWeight: 800 }}>
-                              {item.color_code}
-                            </td>
-                            <td style={{
-                              textAlign: isCabHeader ? 'center' : (isSubPart ? 'right' : 'left'),
-                              fontWeight: isCabHeader ? 900 : 700,
-                              paddingLeft: isSubPart ? 20 : 10,
-                              fontSize: isCabHeader ? '1rem' : '0.87rem'
-                            }}>
-                              {item.stt_code}
-                            </td>
-                            <td>
-                              {isCabHeader ? (
+                              <td style={{ textAlign: 'center', fontWeight: 800 }}>
+                                {item.color_code}
+                              </td>
+                              <td style={{
+                                textAlign: 'center',
+                                fontWeight: 900,
+                                paddingLeft: 10,
+                                fontSize: '1rem'
+                              }}>
+                                {item.stt_code}
+                              </td>
+                              <td>
                                 <span style={{ fontSize: '0.75rem', color: '#7B5233', fontWeight: 600 }} className="no-print">
                                   {item.source_orders_text ? `Cont: ${item.source_orders_text}` : ''}
                                 </span>
-                              ) : (
-                                item.material_name
+                              </td>
+                              <td style={{ paddingLeft: 10, fontWeight: 800 }}>
+                                <div className="daily-colab-summary-cell no-print">
+                                  <span>{item.item_name || `Tủ ${item.cabinet_code}`}</span>
+                                  <span className="factory-sheet-colab-badge">
+                                    {isQuickCustomMode || showHiddenInView
+                                      ? `${group.visibleDetailCount}/${group.totalDetailCount} chi tiết`
+                                      : `${group.details.length} chi tiết`}
+                                  </span>
+                                </div>
+                              </td>
+                              <td style={{ textAlign: 'center' }}></td>
+                              <td style={{ textAlign: 'center' }}></td>
+                              <td style={{ textAlign: 'center' }}></td>
+                              <td style={{ textAlign: 'center', fontWeight: 700 }}></td>
+                              <td
+                                style={{
+                                  textAlign: 'center',
+                                  fontWeight: 900,
+                                  fontSize: '1.05rem',
+                                  color: '#2D1A12'
+                                }}
+                                onClick={(e) => {
+                                  if (isQuickCustomMode) e.stopPropagation();
+                                }}
+                              >
+                                {isQuickCustomMode ? (
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    className="daily-prod-input"
+                                    style={{ width: 78, padding: '3px 6px', textAlign: 'center', fontWeight: 800 }}
+                                    value={item.custom_planned_qty ?? 0}
+                                    onChange={(e) => handleQuickChangeQty(idx, e.target.value)}
+                                  />
+                                ) : (
+                                  item.custom_planned_qty
+                                )}
+                              </td>
+                              <td style={{ fontWeight: 600, fontSize: '0.82rem', color: '#3F2A1D' }}>
+                                {item.note}
+                              </td>
+                            </tr>
+                          );
+                        })()}
+
+                        {isExpanded && group.details.map(({ item, idx }) => {
+                          const isSubPart = String(item.stt_code || '').includes('.');
+                          const rowClass = [
+                            isSubPart ? 'factory-sheet-row-subpart' : 'factory-sheet-row-assembly',
+                            !item.is_visible ? 'factory-sheet-row-hidden' : ''
+                          ].filter(Boolean).join(' ');
+
+                          return (
+                            <tr key={item.id || `${item.cabinet_code}-${item.stt_code}-${idx}`} className={rowClass}>
+                              {isQuickCustomMode && (
+                                <td style={{ textAlign: 'center' }} className="no-print">
+                                  <input
+                                    type="checkbox"
+                                    checked={!!item.is_visible}
+                                    onChange={() => handleQuickToggleVisible(idx)}
+                                    style={{ width: 17, height: 17, accentColor: '#7B5233', cursor: 'pointer' }}
+                                  />
+                                </td>
                               )}
-                            </td>
-                            <td style={{
-                              paddingLeft: isSubPart ? 24 : 10,
-                              fontWeight: isCabHeader ? 800 : (isSubPart ? 500 : 700)
-                            }}>
-                              {isCabHeader ? '' : item.item_name}
-                            </td>
-                            <td style={{ textAlign: 'center' }}>
-                              {isCabHeader ? '' : item.dim_thick}
-                            </td>
-                            <td style={{ textAlign: 'center' }}>
-                              {isCabHeader ? '' : item.dim_width}
-                            </td>
-                            <td style={{ textAlign: 'center' }}>
-                              {isCabHeader ? '' : item.dim_length}
-                            </td>
-                            <td style={{ textAlign: 'center', fontWeight: 700 }}>
-                              {isCabHeader ? '' : item.set_qty}
-                            </td>
-                            <td style={{
-                              textAlign: 'center',
-                              fontWeight: 900,
-                              fontSize: isCabHeader ? '1.05rem' : '0.9rem',
-                              color: isCabHeader ? '#2D1A12' : '#1E130C'
-                            }}>
-                              {isQuickCustomMode ? (
-                                <input
-                                  type="number"
-                                  min="0"
-                                  className="daily-prod-input"
-                                  style={{ width: 78, padding: '3px 6px', textAlign: 'center', fontWeight: 800 }}
-                                  value={item.custom_planned_qty ?? 0}
-                                  onChange={(e) => handleQuickChangeQty(idx, e.target.value)}
-                                />
-                              ) : (
-                                item.custom_planned_qty
-                              )}
-                            </td>
-                            <td style={{ fontWeight: 600, fontSize: '0.82rem', color: '#3F2A1D' }}>
-                              {isQuickCustomMode && !isCabHeader ? (
-                                <input
-                                  type="text"
-                                  className="daily-prod-input"
-                                  style={{ width: '100%', padding: '3px 6px', fontSize: '0.8rem' }}
-                                  value={item.note || ''}
-                                  placeholder="Nhập ghi chú..."
-                                  onChange={(e) => handleQuickChangeNote(idx, e.target.value)}
-                                />
-                              ) : (
-                                item.note
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </>
+                              <td style={{ textAlign: 'center', fontWeight: 800 }}>
+                                {item.cont_code}
+                              </td>
+                              <td style={{ textAlign: 'center', fontWeight: 800 }}>
+                                {item.color_code}
+                              </td>
+                              <td style={{
+                                textAlign: isSubPart ? 'right' : 'left',
+                                fontWeight: 700,
+                                paddingLeft: isSubPart ? 20 : 10,
+                                fontSize: '0.87rem'
+                              }}>
+                                {item.stt_code}
+                              </td>
+                              <td>{item.material_name}</td>
+                              <td style={{
+                                paddingLeft: isSubPart ? 24 : 10,
+                                fontWeight: isSubPart ? 500 : 700
+                              }}>
+                                {item.item_name}
+                              </td>
+                              <td style={{ textAlign: 'center' }}>{item.dim_thick}</td>
+                              <td style={{ textAlign: 'center' }}>{item.dim_width}</td>
+                              <td style={{ textAlign: 'center' }}>{item.dim_length}</td>
+                              <td style={{ textAlign: 'center', fontWeight: 700 }}>{item.set_qty}</td>
+                              <td style={{
+                                textAlign: 'center',
+                                fontWeight: 900,
+                                fontSize: '0.9rem',
+                                color: '#1E130C'
+                              }}>
+                                {isQuickCustomMode ? (
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    className="daily-prod-input"
+                                    style={{ width: 78, padding: '3px 6px', textAlign: 'center', fontWeight: 800 }}
+                                    value={item.custom_planned_qty ?? 0}
+                                    onChange={(e) => handleQuickChangeQty(idx, e.target.value)}
+                                  />
+                                ) : (
+                                  item.custom_planned_qty
+                                )}
+                              </td>
+                              <td style={{ fontWeight: 600, fontSize: '0.82rem', color: '#3F2A1D' }}>
+                                {isQuickCustomMode ? (
+                                  <input
+                                    type="text"
+                                    className="daily-prod-input"
+                                    style={{ width: '100%', padding: '3px 6px', fontSize: '0.8rem' }}
+                                    value={item.note || ''}
+                                    placeholder="Nhập ghi chú..."
+                                    onChange={(e) => handleQuickChangeNote(idx, e.target.value)}
+                                  />
+                                ) : (
+                                  item.note
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </React.Fragment>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -70,9 +70,7 @@ export const GoodsIssueToolbar = ({
     { key: 'issue_date', label: 'Ngày xuất kho (Mới nhất)', dir: 'desc' },
     { key: 'issue_date', label: 'Ngày xuất kho (Cũ nhất)', dir: 'asc' },
     { key: 'voucher_no', label: 'Mã phiếu (A - Z)', dir: 'asc' },
-    { key: 'voucher_no', label: 'Mã phiếu (Z - A)', dir: 'desc' },
-    { key: 'total_amount', label: 'Giá trị xuất (Cao - Thấp)', dir: 'desc' },
-    { key: 'total_amount', label: 'Giá trị xuất (Thấp - Cao)', dir: 'asc' }
+    { key: 'voucher_no', label: 'Mã phiếu (Z - A)', dir: 'desc' }
   ];
 
   return (

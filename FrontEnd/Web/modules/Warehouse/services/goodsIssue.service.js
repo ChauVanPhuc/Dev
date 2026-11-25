@@ -46,12 +46,6 @@ export const goodsIssueService = {
         throw new Error(`Dòng số ${rowIdx}: Số lượng xuất phải lớn hơn 0.`);
       }
 
-      if (it.unit_price !== undefined && it.unit_price !== '' && it.unit_price !== null) {
-        if (String(it.unit_price).trim().startsWith('-') || Number(it.unit_price) < 0) {
-          throw new Error(`Dòng số ${rowIdx}: Đơn giá không được âm.`);
-        }
-      }
-
       if (!it.item_code || !it.item_code.trim()) {
         throw new Error(`Dòng số ${rowIdx}: Mã mặt hàng không được để trống.`);
       }
@@ -95,8 +89,7 @@ export const goodsIssueService = {
       'Ngày tạo',
       'Người tạo',
       'Tổng dòng hàng',
-      'Tổng số lượng xuất',
-      'Tổng giá trị xuất VNĐ'
+      'Tổng số lượng xuất'
     ];
 
     const rows = records.map((r, i) => [
@@ -115,8 +108,7 @@ export const goodsIssueService = {
       `"${r.created_at || ''}"`,
       `"${r.created_by || ''}"`,
       r.total_lines || (r.items ? r.items.length : 1),
-      r.total_quantity || 0,
-      r.total_amount || 0
+      r.total_quantity || 0
     ]);
 
     const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((row) => row.join(','))].join('\r\n');

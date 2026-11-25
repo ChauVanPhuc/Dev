@@ -16,11 +16,17 @@ import {
   RotateCcw,
   AlertCircle,
   BarChart3,
-  Table
+  Table,
+  Printer,
+  Sparkles,
+  TrendingUp,
+  User,
+  Calendar
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import JSZip from 'jszip';
+import api from '@webShared/Services/api.service';
 
 /**
  * Danh sách Dashboard chuẩn trong phân hệ Quản lý chất lượng & Khiếu nại ERP G7.
@@ -64,6 +70,18 @@ export const DASHBOARD_CARDS_MAP = {
     { id: 'container', label: 'Phân tích độ trễ xuất Container', defaultMode: 'chart' },
     { id: 'penalty', label: 'Phân bổ theo phương án xử lý', defaultMode: 'table' }
   ]
+};
+
+export const PERIOD_METRICS_MAP = {
+  '10-2026': { claims: 28, pages: 7, label: 'Tháng 10/2026' },
+  '09-2026': { claims: 25, pages: 7, label: 'Tháng 09/2026' },
+  '08-2026': { claims: 47, pages: 9, label: 'Tháng 08/2026' },
+  '06-2026': { claims: 50, pages: 10, label: 'Tháng 06/2026' },
+  '05-2026': { claims: 50, pages: 10, label: 'Tháng 05/2026' },
+  '04-2026': { claims: 47, pages: 9, label: 'Tháng 04/2026' },
+  '03-2026': { claims: 30, pages: 7, label: 'Tháng 03/2026' },
+  '02-2026': { claims: 65, pages: 12, label: 'Tháng 02/2026' },
+  '01-2026': { claims: 70, pages: 12, label: 'Tháng 01/2026' }
 };
 
 const formatDateVN = (dateStr) => {
@@ -211,7 +229,23 @@ export const DashboardExportModal = ({
     penalty: 'table'
   });
 
-  const [exportFormat, setExportFormat] = useState('png');
+  const [exportFormat, setExportFormat] = useState('pdf');
+
+  // Cấu hình báo cáo chuyên sâu chuẩn BÁO CÁO TÌNH HÌNH KHIẾU NẠI T10_2026.pdf
+  const [reportAuthor, setReportAuthor] = useState('Dương Thị Lệ Uyên');
+  const [reportPeriod, setReportPeriod] = useState(customFilters?.period || '10-2026');
+  const [includeAi, setIncludeAi] = useState(true);
+  const [predictTrend, setPredictTrend] = useState(true);
+  const [richReportPages, setRichReportPages] = useState([]);
+  const [isLoadingRichReport, setIsLoadingRichReport] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
+
+  const expectedPages = PERIOD_METRICS_MAP[reportPeriod]?.pages || 7;
+  const currentTotalPages = (isLoadingRichReport || richReportPages.length === 0)
+    ? expectedPages
+    : richReportPages.length;
+  const currentTotalClaims = PERIOD_METRICS_MAP[reportPeriod]?.claims || 28;
+  const currentPeriodLabel = PERIOD_METRICS_MAP[reportPeriod]?.label || reportPeriod;
 
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
   const [previewPages, setPreviewPages] = useState([]);
@@ -230,6 +264,42 @@ export const DashboardExportModal = ({
   const prevIsOpenRef = useRef(false);
   const previewRequestIdRef = useRef(0);
 
+  // Nạp dữ liệu báo cáo chuyên nghiệp đa trang từ Server khi mở Modal hoặc đổi cấu hình PDF
+  useEffect(() => {
+    if (!isOpen || exportFormat !== 'pdf') return;
+
+    let isMounted = true;
+    setIsLoadingRichReport(true);
+
+    const fetchRichReport = async () => {
+      try {
+        const res = await api.post('claims/report-data', {
+          pageId: selectedPageId,
+          author: reportAuthor || 'Dương Thị Lệ Uyên',
+          includeAi: includeAi,
+          predictTrend: predictTrend,
+          period: reportPeriod || customFilters?.period || '10-2026'
+        });
+
+        // Xử lý an toàn cả trường hợp Axios tự bọc hay Axios interceptor đã unwrap response.data
+        const pages = res?.pages || res?.data?.pages || (Array.isArray(res) ? res : []);
+        if (isMounted && Array.isArray(pages) && pages.length > 0) {
+          setRichReportPages(pages);
+        }
+      } catch (err) {
+        console.warn('[DashboardExportModal] Lỗi nạp dữ liệu báo cáo chuyên sâu PDF:', err);
+      } finally {
+        if (isMounted) setIsLoadingRichReport(false);
+      }
+    };
+
+    const timer = setTimeout(fetchRichReport, 120);
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [isOpen, exportFormat, selectedPageId, reportAuthor, includeAi, predictTrend, customFilters, reportPeriod]);
+
   useEffect(() => {
     if (!isOpen) return;
     const updateSize = () => {
@@ -246,17 +316,26 @@ export const DashboardExportModal = ({
       clearTimeout(timer);
       window.removeEventListener('resize', updateSize);
     };
-  }, [isOpen, previewPages.length]);
+  }, [isOpen, previewPages.length, richReportPages.length]);
 
   useEffect(() => {
     if (isOpen && !prevIsOpenRef.current) {
       prevIsOpenRef.current = true;
-      setExportScope('single');
+      setExportScope('all'); // Mặc định xuất Toàn bộ Dashboard 7 trang theo đúng chuẩn báo cáo VINA G7
       const targetPageId = currentPageId || (availablePages[0]?.id || 'page1');
       setSelectedPageId(targetPageId);
+      const pageIndexMap = { page1: 0, page2: 1, page3: 2, page4: 3 };
+      if (pageIndexMap[targetPageId] !== undefined) {
+        setPreviewActiveIndex(pageIndexMap[targetPageId]);
+      } else {
+        setPreviewActiveIndex(0);
+      }
       setExportMode('current');
       setCustomFilters(initialCustomFilters || {});
-      setExportFormat('png');
+      setExportFormat('pdf'); // Mặc định PDF theo yêu cầu chuẩn báo cáo
+      setReportAuthor('Dương Thị Lệ Uyên');
+      setIncludeAi(true);
+      setPredictTrend(true);
 
       const currentDashMode = initialCustomFilters?.dashboardViewMode === 'table' ? 'table' : 'chart';
       setDisplayType(currentDashMode);
@@ -473,8 +552,137 @@ export const DashboardExportModal = ({
     targetRef
   ]);
 
+  const handlePrintReport = async () => {
+    if (isPrinting) return;
+    setIsPrinting(true);
+    try {
+      if (exportFormat === 'pdf' && richReportPages && richReportPages.length > 0) {
+        let iframe = document.getElementById('report-print-iframe');
+        if (iframe) {
+          iframe.remove();
+        }
+        iframe = document.createElement('iframe');
+        iframe.id = 'report-print-iframe';
+        iframe.style.position = 'fixed';
+        iframe.style.right = '0';
+        iframe.style.bottom = '0';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = '0';
+        document.body.appendChild(iframe);
+
+        let pagesToPrint = richReportPages;
+        if (exportScope === 'single') {
+          const pageMap = { page1: [0], page2: [1], page3: [2], page4: [3, 4, 5, 6] };
+          const indices = pageMap[selectedPageId] || [0];
+          pagesToPrint = indices.map((idx) => richReportPages[idx]).filter(Boolean);
+          if (pagesToPrint.length === 0) pagesToPrint = richReportPages;
+        }
+
+        const combinedBody = pagesToPrint.map((p, idx) => {
+          let content = p.html || '';
+          const styleMatches = content.match(/<style[^>]*>([\s\S]*?)<\/style>/gi);
+          const pageStyles = styleMatches ? styleMatches.join('\n') : '';
+          const bodyMatch = content.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+          const inner = bodyMatch ? bodyMatch[1] : content;
+          const isLandscape = p.orientation === 'landscape';
+          return `
+            ${pageStyles}
+            <div class="print-page ${isLandscape ? 'page-landscape' : 'page-portrait'}" style="page-break-after: ${idx < pagesToPrint.length - 1 ? 'always' : 'auto'}; break-after: ${idx < pagesToPrint.length - 1 ? 'page' : 'auto'};">
+              ${inner}
+            </div>
+          `;
+        }).join('\n');
+
+        const printDoc = `
+          <!DOCTYPE html>
+          <html lang="vi">
+          <head>
+            <meta charset="utf-8" />
+            <title>BÁO CÁO TÌNH HÌNH KHIẾU NẠI & CHẤT LƯỢNG - ERP G7</title>
+            <style>
+              @page {
+                margin: 0;
+                size: auto;
+              }
+              * { box-sizing: border-box; }
+              body {
+                margin: 0;
+                padding: 0;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+                background: #FFFFFF;
+                color: #1E293B;
+              }
+              .print-page {
+                box-sizing: border-box;
+                background: #FFFFFF;
+                position: relative;
+              }
+              .page-portrait {
+                width: 210mm;
+                min-height: 297mm;
+                padding: 10mm 12mm;
+                margin: 0 auto;
+              }
+              .page-landscape {
+                width: 297mm;
+                min-height: 210mm;
+                padding: 8mm 10mm;
+                margin: 0 auto;
+              }
+              @media print {
+                body {
+                  -webkit-print-color-adjust: exact !important;
+                  print-color-adjust: exact !important;
+                }
+                .print-page {
+                  box-shadow: none !important;
+                }
+                .page-portrait {
+                  width: 100% !important;
+                  min-height: 100vh !important;
+                  page-break-after: always !important;
+                  break-after: page !important;
+                }
+                .page-landscape {
+                  width: 100% !important;
+                  min-height: 100vh !important;
+                  page-break-after: always !important;
+                  break-after: page !important;
+                }
+              }
+            </style>
+          </head>
+          <body>
+            ${combinedBody}
+          </body>
+          </html>
+        `;
+
+        const frameDoc = iframe.contentWindow.document;
+        frameDoc.open();
+        frameDoc.write(printDoc);
+        frameDoc.close();
+
+        setTimeout(() => {
+          iframe.contentWindow.focus();
+          iframe.contentWindow.print();
+          setIsPrinting(false);
+        }, 500);
+      } else {
+        window.print();
+        setIsPrinting(false);
+      }
+    } catch (err) {
+      console.error('Print error:', err);
+      setIsPrinting(false);
+      alert('Không thể mở hộp thoại in: ' + err.message);
+    }
+  };
+
   const handleExecuteExport = async () => {
-    if (previewPages.length === 0 || isGeneratingPreview) return;
+    if (exportFormat === 'png' && (previewPages.length === 0 || isGeneratingPreview)) return;
+    if (exportFormat === 'pdf' && (isLoadingRichReport || isGeneratingPreview)) return;
 
     setIsExporting(true);
     setErrorMessage('');
@@ -484,6 +692,71 @@ export const DashboardExportModal = ({
       const timestamp = getTimestamp();
 
       if (exportFormat === 'pdf') {
+        try {
+          const period = reportPeriod || customFilters?.period || '10-2026';
+          let selectedPages = null;
+          if (exportScope === 'single') {
+            const pageMap = {
+              page1: [1],
+              page2: [2],
+              page3: [3],
+              page4: [4, 5, 6, 7]
+            };
+            selectedPages = pageMap[selectedPageId] || [1, 2, 3, 4, 5, 6, 7];
+          }
+
+          const response = await api.post('claims/export-report-pdf', {
+            pageId: selectedPageId,
+            period: period,
+            author: reportAuthor || 'Dương Thị Lệ Uyên',
+            includeAi: includeAi,
+            predictTrend: predictTrend,
+            exportScope: exportScope,
+            selectedPages: selectedPages
+          }, {
+            responseType: 'blob'
+          });
+
+          // Xử lý an toàn: Axios interceptor unwrap response.data hay giữ nguyên response object
+          const rawData = (response && response.data !== undefined && response.data !== null) ? response.data : response;
+          const blob = rawData instanceof Blob 
+            ? rawData 
+            : new Blob([rawData], { type: 'application/pdf' });
+
+          // Kiểm tra tính toàn vẹn: nếu file < 500 bytes tức là máy chủ trả về chuỗi lỗi hoặc rỗng
+          if (!blob || blob.size < 500) {
+            let errorDetail = 'Dữ liệu không hợp lệ';
+            try {
+              if (blob) errorDetail = await blob.text();
+            } catch (e) {}
+            console.error('[DashboardExportModal] Tệp PDF không hợp lệ:', errorDetail);
+            throw new Error(`Máy chủ không thể tạo file PDF (${errorDetail}).`);
+          }
+
+          const downloadUrl = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = downloadUrl;
+          const cleanPeriod = String(period).replace(/[\/\-]/g, '_');
+          const suffix = exportScope === 'all' ? 'ToanBo' : selectedPageId;
+          link.download = `BAO_CAO_TINH_HINH_KHIEU_NAI_${cleanPeriod}_${suffix}_${timestamp}.pdf`;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          window.URL.revokeObjectURL(downloadUrl);
+
+          setExportSuccess(true);
+          setTimeout(() => {
+            onClose();
+            setExportSuccess(false);
+          }, 1200);
+          return;
+        } catch (serverErr) {
+          console.error('[DashboardExportModal] Lỗi server PDF:', serverErr);
+          setErrorMessage(serverErr.message || 'Không thể tạo file PDF từ máy chủ. Vui lòng thử lại.');
+          setIsExporting(false);
+          return;
+        }
+
         const pdf = new jsPDF({
           orientation: 'landscape',
           unit: 'mm',
@@ -563,6 +836,7 @@ export const DashboardExportModal = ({
 
   const activePreview = previewPages[previewActiveIndex] || previewPages[0];
   const activePageObj = getActivePageObj(selectedPageId);
+  const activeRichPage = richReportPages[previewActiveIndex] || richReportPages[0];
 
   const fitScale = useMemo(() => {
     if (!activePreview || !viewportSize.width || !viewportSize.height) return 1.0;
@@ -572,6 +846,16 @@ export const DashboardExportModal = ({
     const imgH = activePreview.height || 850;
     return Math.min(availW / imgW, availH / imgH, 1.0);
   }, [activePreview, viewportSize]);
+
+  const richScale = useMemo(() => {
+    if (!activeRichPage || !viewportSize.width || !viewportSize.height) return 1.0;
+    const isLandscape = activeRichPage.orientation === 'landscape';
+    const baseW = isLandscape ? 1123 : 794;
+    const baseH = isLandscape ? 794 : 1123;
+    const availW = Math.max(viewportSize.width - 32, 200);
+    const availH = Math.max(viewportSize.height - 32, 200);
+    return Math.min(availW / baseW, availH / baseH, 1.0);
+  }, [activeRichPage, viewportSize]);
 
   if (!isOpen) return null;
 
@@ -762,6 +1046,10 @@ export const DashboardExportModal = ({
                         onChange={(e) => {
                           const newPageId = e.target.value;
                           setSelectedPageId(newPageId);
+                          const pageIndexMap = { page1: 0, page2: 1, page3: 2, page4: 3 };
+                          if (pageIndexMap[newPageId] !== undefined) {
+                            setPreviewActiveIndex(pageIndexMap[newPageId]);
+                          }
                           const pageCards = DASHBOARD_CARDS_MAP[newPageId] || DASHBOARD_CARDS_MAP['page4'] || [];
                           const newModes = {};
                           pageCards.forEach((c) => {
@@ -1133,13 +1421,149 @@ export const DashboardExportModal = ({
 
               <div style={{ marginTop: '6px', fontSize: '0.68rem', color: '#78716C', lineHeight: 1.3 }}>
                 {exportFormat === 'pdf'
-                  ? 'Xuất tài liệu PDF khổ A4 ngang chuẩn in ấn.'
+                  ? 'Báo cáo chuyên nghiệp chuẩn VINA G7 (Trang 1-3 Đứng + Trang 4 trở đi Ngang 9 cột kèm ảnh thực tế).'
                   : exportScope === 'all'
                   ? 'Đóng gói file nén (.zip) chứa các hình ảnh PNG riêng biệt.'
                   : 'Xuất file ảnh PNG độ nét cao (2x DPI).'
                 }
               </div>
             </div>
+
+            {/* 5. Cấu hình Báo cáo PDF Chuyên sâu chuẩn BÁO CÁO TÌNH HÌNH KHIẾU NẠI */}
+            {exportFormat === 'pdf' && (
+              <div
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: '6px',
+                  backgroundColor: '#FFFFFF',
+                  border: '1.5px solid #EADCC9',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px'
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: '0.72rem',
+                    fontWeight: 800,
+                    color: '#5B3924',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.4px'
+                  }}
+                >
+                  <Sparkles size={13} style={{ color: '#D97706' }} />
+                  <span>Chuẩn Báo Cáo Khiếu Nại ({currentTotalPages} Trang)</span>
+                </div>
+
+                {/* Người lập báo cáo */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 700, color: '#795137', marginBottom: '3px' }}>
+                    Người lập báo cáo:
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="text"
+                      value={reportAuthor}
+                      onChange={(e) => setReportAuthor(e.target.value)}
+                      placeholder="Dương Thị Lệ Uyên"
+                      style={{
+                        width: '100%',
+                        height: '28px',
+                        padding: '0 8px 0 24px',
+                        borderRadius: '4px',
+                        border: '1px solid #C4B5A5',
+                        fontSize: '0.74rem',
+                        fontWeight: 600,
+                        color: '#2D1A12',
+                        backgroundColor: '#FAF8F5',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                    <User size={12} style={{ position: 'absolute', left: '7px', top: '8px', color: '#79543D' }} />
+                  </div>
+                </div>
+
+                {/* Kỳ báo cáo (Tháng / Năm) */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 700, color: '#795137', marginBottom: '3px' }}>
+                    Kỳ báo cáo (Tháng / Năm):
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <select
+                      value={reportPeriod}
+                      onChange={(e) => {
+                        const newPeriod = e.target.value;
+                        setReportPeriod(newPeriod);
+                        setRichReportPages([]);
+                        setPreviewActiveIndex(0);
+                      }}
+                      style={{
+                        width: '100%',
+                        height: '28px',
+                        padding: '0 8px 0 24px',
+                        borderRadius: '4px',
+                        border: '1px solid #C4B5A5',
+                        fontSize: '0.74rem',
+                        fontWeight: 600,
+                        color: '#2D1A12',
+                        backgroundColor: '#FAF8F5',
+                        boxSizing: 'border-box',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <option value="10-2026">Tháng 10/2026 (28 ca - Đối soát CN 2026-20)</option>
+                      <option value="09-2026">Tháng 09/2026 (25 ca - Đối soát CN 2026-15)</option>
+                      <option value="08-2026">Tháng 08/2026 (47 ca - Đối soát CN 2026-14)</option>
+                      <option value="06-2026">Tháng 06/2026 (50 ca - Đối soát CN 2026-07)</option>
+                      <option value="05-2026">Tháng 05/2026 (50 ca - Đối soát CN 2026-02)</option>
+                      <option value="04-2026">Tháng 04/2026 (47 ca)</option>
+                      <option value="03-2026">Tháng 03/2026 (30 ca)</option>
+                      <option value="02-2026">Tháng 02/2026 (65 ca)</option>
+                      <option value="01-2026">Tháng 01/2026 (70 ca)</option>
+                    </select>
+                    <Calendar size={12} style={{ position: 'absolute', left: '7px', top: '8px', color: '#79543D', pointerEvents: 'none' }} />
+                  </div>
+                </div>
+
+                {/* Tùy chọn AI */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.72rem', color: '#303030' }}>
+                    <input
+                      type="checkbox"
+                      checked={includeAi}
+                      onChange={(e) => setIncludeAi(e.target.checked)}
+                      style={{ accentColor: '#79543D', cursor: 'pointer' }}
+                    />
+                    <span style={{ fontWeight: 600 }}>Tích hợp nhận định AI Pareto & Aging</span>
+                  </label>
+
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.72rem', color: '#303030' }}>
+                    <input
+                      type="checkbox"
+                      checked={predictTrend}
+                      onChange={(e) => setPredictTrend(e.target.checked)}
+                      style={{ accentColor: '#79543D', cursor: 'pointer' }}
+                    />
+                    <span style={{ fontWeight: 600 }}>Dự báo xu hướng chất lượng Q1/2027</span>
+                  </label>
+                </div>
+
+                <div
+                  style={{
+                    fontSize: '0.66rem',
+                    color: '#64748B',
+                    lineHeight: 1.35,
+                    paddingTop: '6px',
+                    borderTop: '1px dashed #E2E8F0'
+                  }}
+                >
+                  Tự động kết xuất {richReportPages.length > 0 ? `${richReportPages.length} trang` : 'đa trang'} chi tiết từ CSDL kỳ {reportPeriod} (biểu đồ Pareto 80/20, chuỗi cung ứng, đường cong Bell Curve 8 quý và danh sách ca khiếu nại thực tế).
+                </div>
+              </div>
+            )}
 
             {errorMessage && (
               <div
@@ -1190,13 +1614,17 @@ export const DashboardExportModal = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Eye size={15} style={{ color: '#79543D' }} />
                 <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#5B3924', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                  Xem trước Dashboard trực tiếp
+                  {exportFormat === 'pdf' ? 'Xem trước Báo Cáo Chuyên Nghiệp' : 'Xem trước Dashboard trực tiếp'}
                 </span>
-                {activePreview && (
+                {exportFormat === 'pdf' && activeRichPage ? (
+                  <span style={{ fontSize: '0.72rem', color: '#78716C' }}>
+                    • {activeRichPage.label}
+                  </span>
+                ) : activePreview ? (
                   <span style={{ fontSize: '0.72rem', color: '#78716C' }}>
                     • {activePreview.label}
                   </span>
-                )}
+                ) : null}
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1210,7 +1638,10 @@ export const DashboardExportModal = ({
                     color: exportFormat === 'pdf' ? '#5B3924' : '#1E40AF'
                   }}
                 >
-                  {exportFormat === 'pdf' ? 'Khổ A4 Ngang' : 'Ảnh PNG 2x DPI'}
+                  {exportFormat === 'pdf'
+                    ? `Khổ A4 ${activeRichPage?.orientation === 'landscape' ? 'Ngang' : 'Đứng'} • Chuẩn VINA G7`
+                    : 'Ảnh PNG 2x DPI'
+                  }
                 </span>
               </div>
             </div>
@@ -1230,12 +1661,12 @@ export const DashboardExportModal = ({
                 backgroundColor: '#EBE5DF'
               }}
             >
-              {isGeneratingPreview && (
+              {(isGeneratingPreview || (exportFormat === 'pdf' && isLoadingRichReport)) && (
                 <div
                   style={{
                     position: 'absolute',
                     inset: 0,
-                    backgroundColor: 'rgba(250, 248, 246, 0.78)',
+                    backgroundColor: 'rgba(250, 248, 246, 0.85)',
                     backdropFilter: 'blur(2px)',
                     zIndex: 20,
                     display: 'flex',
@@ -1247,15 +1678,21 @@ export const DashboardExportModal = ({
                 >
                   <Loader2 size={30} className="animate-spin" style={{ color: '#79543D' }} />
                   <div style={{ fontSize: '0.80rem', fontWeight: 700, color: '#5B3924' }}>
-                    Đang kết xuất bản xem trước trực tiếp...
+                    {exportFormat === 'pdf'
+                      ? `Đang kết xuất Báo cáo ${currentTotalPages} trang chuẩn VINA G7 (${currentPeriodLabel})...`
+                      : 'Đang kết xuất bản xem trước trực tiếp...'
+                    }
                   </div>
                   <div style={{ fontSize: '0.70rem', color: '#78716C' }}>
-                    Đang dựng biểu đồ, KPI và số liệu thực tế
+                    {exportFormat === 'pdf'
+                      ? `Tích hợp ${currentTotalClaims} ca khiếu nại thực tế, biểu đồ Vector SVG & Nhận định AI`
+                      : 'Đang dựng biểu đồ, KPI và số liệu thực tế'
+                    }
                   </div>
                 </div>
               )}
 
-              {!isGeneratingPreview && errorMessage && previewPages.length === 0 && (
+              {!isGeneratingPreview && !isLoadingRichReport && errorMessage && previewPages.length === 0 && richReportPages.length === 0 && (
                 <div
                   style={{
                     margin: 'auto',
@@ -1299,7 +1736,53 @@ export const DashboardExportModal = ({
                 </div>
               )}
 
-              {activePreview && activePreview.dataUrl && (
+              {exportFormat === 'pdf' && richReportPages.length > 0 && activeRichPage ? (() => {
+                const isLandscape = activeRichPage.orientation === 'landscape';
+                const baseW = isLandscape ? 1123 : 794;
+                const baseH = isLandscape ? 794 : 1123;
+                const currentScale = fitMode === 'contain' ? richScale : zoom / 100;
+                const targetW = Math.round(baseW * currentScale);
+                const targetH = Math.round(baseH * currentScale);
+
+                return (
+                  <div
+                    style={{
+                      width: `${targetW}px`,
+                      minWidth: `${targetW}px`,
+                      maxWidth: `${targetW}px`,
+                      height: `${targetH}px`,
+                      minHeight: `${targetH}px`,
+                      maxHeight: `${targetH}px`,
+                      position: 'relative',
+                      overflow: 'hidden',
+                      boxShadow: '0 8px 32px rgba(0, 0, 0, 0.20)',
+                      borderRadius: '4px',
+                      backgroundColor: '#FFFFFF',
+                      flexShrink: 0,
+                      margin: 'auto'
+                    }}
+                  >
+                    <iframe
+                      key={`rich-preview-${previewActiveIndex}-${fitMode}-${zoom}-${reportAuthor}-${refreshKey}`}
+                      srcDoc={activeRichPage.html}
+                      title={activeRichPage.label || `Trang ${previewActiveIndex + 1}`}
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: `${baseW}px`,
+                        height: `${baseH}px`,
+                        transform: `scale(${currentScale})`,
+                        transformOrigin: 'top left',
+                        border: 'none',
+                        backgroundColor: '#FFFFFF',
+                        display: 'block',
+                        pointerEvents: 'none'
+                      }}
+                    />
+                  </div>
+                );
+              })() : activePreview && activePreview.dataUrl ? (
                 <div
                   style={{
                     width: fitMode === 'contain' ? `${Math.round((activePreview.width || 1400) * fitScale)}px` : `${zoom}%`,
@@ -1328,7 +1811,7 @@ export const DashboardExportModal = ({
                     }}
                   />
                 </div>
-              )}
+              ) : null}
             </div>
 
             <div
@@ -1346,7 +1829,62 @@ export const DashboardExportModal = ({
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                {previewPages.length > 1 ? (
+                {exportFormat === 'pdf' && richReportPages.length > 0 ? (
+                  <>
+                    <button
+                      type="button"
+                      className="page-btn"
+                      disabled={previewActiveIndex === 0}
+                      onClick={() => setPreviewActiveIndex((i) => Math.max(0, i - 1))}
+                      style={{
+                        padding: '4px 8px',
+                        fontSize: '0.72rem',
+                        fontWeight: 600,
+                        backgroundColor: '#FFFFFF',
+                        border: '1px solid #D6D3D1',
+                        borderRadius: '4px',
+                        cursor: previewActiveIndex === 0 ? 'not-allowed' : 'pointer',
+                        opacity: previewActiveIndex === 0 ? 0.4 : 1,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '2px',
+                        color: '#5B3924'
+                      }}
+                    >
+                      <ChevronLeft size={14} />
+                      <span>Trước</span>
+                    </button>
+                    <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#5B3924', margin: '0 4px' }}>
+                      {previewActiveIndex + 1} / {richReportPages.length}
+                    </span>
+                    <button
+                      type="button"
+                      className="page-btn"
+                      disabled={previewActiveIndex >= richReportPages.length - 1}
+                      onClick={() => setPreviewActiveIndex((i) => Math.min(richReportPages.length - 1, i + 1))}
+                      style={{
+                        padding: '4px 8px',
+                        fontSize: '0.72rem',
+                        fontWeight: 600,
+                        backgroundColor: '#FFFFFF',
+                        border: '1px solid #D6D3D1',
+                        borderRadius: '4px',
+                        cursor: previewActiveIndex >= richReportPages.length - 1 ? 'not-allowed' : 'pointer',
+                        opacity: previewActiveIndex >= richReportPages.length - 1 ? 0.4 : 1,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '2px',
+                        color: '#5B3924'
+                      }}
+                    >
+                      <span>Tiếp</span>
+                      <ChevronRight size={14} />
+                    </button>
+                    <span style={{ fontSize: '0.72rem', color: '#78716C', marginLeft: '6px' }}>
+                      ({activeRichPage?.label} • Khổ A4 {activeRichPage?.orientation === 'landscape' ? 'Ngang' : 'Đứng'})
+                    </span>
+                  </>
+                ) : previewPages.length > 1 ? (
                   <>
                     <button
                       type="button"
@@ -1546,11 +2084,47 @@ export const DashboardExportModal = ({
             Hủy
           </button>
 
+          {/* Nút 1: Hộp thoại In ấn / Lưu PDF trực tiếp chuẩn trình duyệt */}
+          <button
+            type="button"
+            className="page-btn"
+            onClick={handlePrintReport}
+            disabled={isExporting || isPrinting || (exportFormat === 'pdf' && richReportPages.length === 0)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '7px 18px',
+              fontSize: '0.76rem',
+              fontWeight: 700,
+              color: '#79543D',
+              backgroundColor: '#FAF6F2',
+              border: '1.5px solid #79543D',
+              borderRadius: '5px',
+              cursor: (isExporting || isPrinting || (exportFormat === 'pdf' && richReportPages.length === 0)) ? 'not-allowed' : 'pointer',
+              opacity: (isExporting || isPrinting || (exportFormat === 'pdf' && richReportPages.length === 0)) ? 0.6 : 1,
+              transition: 'all 0.15s ease'
+            }}
+          >
+            {isPrinting ? (
+              <>
+                <Loader2 size={15} className="animate-spin" />
+                <span>Đang chuẩn bị in...</span>
+              </>
+            ) : (
+              <>
+                <Printer size={15} />
+                <span>In ấn / Lưu PDF</span>
+              </>
+            )}
+          </button>
+
+          {/* Nút 2: Tải file Vector PDF chuẩn VINA G7 từ Server */}
           <button
             type="button"
             className="page-btn"
             onClick={handleExecuteExport}
-            disabled={isExporting || isGeneratingPreview || previewPages.length === 0}
+            disabled={isExporting || (exportFormat === 'png' && previewPages.length === 0) || (exportFormat === 'pdf' && richReportPages.length === 0 && previewPages.length === 0)}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -1562,9 +2136,9 @@ export const DashboardExportModal = ({
               backgroundColor: '#79543D',
               border: 'none',
               borderRadius: '5px',
-              cursor: (isExporting || isGeneratingPreview || previewPages.length === 0) ? 'not-allowed' : 'pointer',
+              cursor: (isExporting || (exportFormat === 'png' && previewPages.length === 0) || (exportFormat === 'pdf' && richReportPages.length === 0 && previewPages.length === 0)) ? 'not-allowed' : 'pointer',
               boxShadow: '0 2px 6px rgba(91, 57, 36, 0.25)',
-              opacity: (isExporting || isGeneratingPreview || previewPages.length === 0) ? 0.6 : 1,
+              opacity: (isExporting || (exportFormat === 'png' && previewPages.length === 0) || (exportFormat === 'pdf' && richReportPages.length === 0 && previewPages.length === 0)) ? 0.6 : 1,
               transition: 'all 0.15s ease'
             }}
           >

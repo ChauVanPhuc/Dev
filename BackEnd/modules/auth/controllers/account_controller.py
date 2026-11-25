@@ -383,6 +383,24 @@ def resolve_permissions_by_params(
             elif any(p in r_lower for p in ["/admin/lpn-crawler", "/admin/ai-ocr-train"]):
                 parent_titles.add("Crawl & Tích hợp")
             all_screens_dict[sc.route_path] = parent_titles
+
+    # Đảm bảo các route chuẩn của Web luôn có trong all_screens_dict để phân giải quyền đầy đủ
+    standard_web_routes = {
+        "/admin/quality": {"Quản lý chất lượng", "Module chất lượng"},
+        "/admin/quality/parameter": {"Quản lý chất lượng", "Module chất lượng"},
+        "/admin/daily-production": {"Quản lý sản xuất"},
+        "/admin/production-orders": {"Quản lý sản xuất"},
+        "/admin/warehouse/goods-receipt": {"Quản lý kho"},
+        "/admin/warehouse/goods-issue": {"Quản lý kho"},
+        "/admin/warehouse/management": {"Quản lý kho"},
+        "/admin/warehouse/rejected-goods": {"Quản lý kho"},
+        "/warehouse/goods-receipt": {"Kho"},
+        "/warehouse/handover": {"Kho"},
+        "/warehouse/returns": {"Kho"},
+    }
+    for r_path, p_set in standard_web_routes.items():
+        if r_path not in all_screens_dict:
+            all_screens_dict[r_path] = p_set
         
     ALL_SCREENS = list(all_screens_dict.keys())
     
@@ -595,6 +613,12 @@ def resolve_user_permissions(user, db: Session) -> dict:
                     overrides["/admin/sos-guides"] = overrides["/admin/inspection-guides"]
                 if "/admin/ctq-guides" not in overrides:
                     overrides["/admin/ctq-guides"] = overrides["/admin/inspection-guides"]
+
+            # Đồng bộ alias /admin/quality và /admin/quality-records
+            if "/admin/quality-records" in overrides and "/admin/quality" not in overrides:
+                overrides["/admin/quality"] = overrides["/admin/quality-records"]
+            elif "/admin/quality" in overrides and "/admin/quality-records" not in overrides:
+                overrides["/admin/quality-records"] = overrides["/admin/quality"]
 
             legacy_rank_map = {
                 "none": [],

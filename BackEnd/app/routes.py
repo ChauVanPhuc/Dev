@@ -152,6 +152,9 @@ from modules.warehouse.routes import warehouse_router, unit_of_measure_router
 api_router.include_router(warehouse_router, prefix="/warehouses", tags=["warehouses"])
 api_router.include_router(unit_of_measure_router, prefix="/units-of-measure", tags=["units-of-measure"])
 
+from modules.chatbot.routes import router as chatbot_router
+api_router.include_router(chatbot_router, prefix="/chatbot", tags=["chatbot"])
+
 import sys
 import os
 

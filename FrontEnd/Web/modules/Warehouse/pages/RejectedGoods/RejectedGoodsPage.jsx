@@ -36,7 +36,7 @@ export const RejectedGoodsPage = () => {
 
   // Phân trang
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(25);
+  const [pageSize, setPageSize] = useState(15);
 
   // Dữ liệu bảng & thống kê
   const [items, setItems] = useState([]);
@@ -367,6 +367,7 @@ export const RejectedGoodsPage = () => {
         page={page}
         setPage={setPage}
         pageSize={pageSize}
+        setPageSize={setPageSize}
         totalCount={totalCount}
         totalPages={totalPages}
         itemsLength={items.length}

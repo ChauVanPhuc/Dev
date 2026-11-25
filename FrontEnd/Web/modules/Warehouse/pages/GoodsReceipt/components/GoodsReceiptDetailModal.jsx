@@ -82,36 +82,19 @@ export const GoodsReceiptDetailModal = ({
   const activeDepartments = departmentNames.length > 0 ? departmentNames : DEPARTMENT_OPTIONS;
   const activeReceiptTypes = dbReceiptTypes.length > 0 ? dbReceiptTypes : RECEIPT_TYPES;
 
-  // Tải danh mục tồn kho + vật tư PO / Sản phẩm mẫu trực tiếp từ Database
+  // Tải danh mục vật tư nhanh trực tiếp từ Database khi Modal mở
   useEffect(() => {
+    if (!isOpen) return;
     let isMounted = true;
-    Promise.all([
-      warehouseInventoryService.getRawItems().catch((err) => {
-        console.warn('Lỗi tải tồn kho hiện có:', err);
-        return [];
-      }),
-      warehouseDataService.searchCatalog({ limit: 150 }).catch((err) => {
+    warehouseDataService
+      .searchCatalog({ limit: 150 })
+      .then((catalogItems) => {
+        if (!isMounted) return;
+        setInventoryCatalog(Array.isArray(catalogItems) ? catalogItems : []);
+      })
+      .catch((err) => {
         console.warn('Lỗi tải danh mục vật tư DB:', err);
-        return [];
-      }),
-    ]).then(([rawItems, catalogItems]) => {
-      if (!isMounted) return;
-      const merged = [
-        ...(Array.isArray(rawItems) ? rawItems.map((it) => ({ ...it, source: 'Kho' })) : []),
-      ];
-      const seen = new Set(
-        merged.map((m) => `${String(m.warehouse_name || '').toLowerCase()}|${String(m.item_code || '').toLowerCase()}`)
-      );
-      if (Array.isArray(catalogItems)) {
-        for (const c of catalogItems) {
-          const codeKey = `|${String(c.item_code || '').toLowerCase()}`;
-          if (!c.item_code || seen.has(codeKey)) continue;
-          seen.add(codeKey);
-          merged.push(c);
-        }
-      }
-      setInventoryCatalog(merged);
-    });
+      });
     return () => {
       isMounted = false;
     };

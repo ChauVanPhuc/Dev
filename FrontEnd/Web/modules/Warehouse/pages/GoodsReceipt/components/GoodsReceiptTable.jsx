@@ -5,8 +5,7 @@ import {
   GOODS_RECEIPT_COLUMNS,
   RECEIPT_STATUSES,
   formatDate,
-  formatNumber,
-  formatCurrencyVND
+  formatNumber
 } from '../../../types/goodsReceipt.types';
 import GoodsReceiptPagination from './GoodsReceiptPagination';
 import { ChannelBadge } from '../../../components/WarehouseMobileSyncBadge';
@@ -46,7 +45,8 @@ export const GoodsReceiptTable = ({
   totalPages = 1,
   page = 1,
   setPage,
-  pageSize = 25,
+  pageSize = 15,
+  setPageSize,
   sortBy = 'created_at',
   setSortBy,
   sortDir = 'desc',
@@ -393,6 +393,7 @@ export const GoodsReceiptTable = ({
         page={page}
         setPage={setPage}
         pageSize={pageSize}
+        setPageSize={setPageSize}
         totalCount={totalCount}
         totalPages={totalPages}
         itemsLength={receipts.length}

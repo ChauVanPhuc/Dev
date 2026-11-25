@@ -96,10 +96,26 @@ const AddMaterialModal = ({ productId, editMaterial = null, defaultGroupType = '
                 onChange={e => setGroupType(e.target.value)}
                 style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.84rem', outline: 'none', backgroundColor: '#F8FAFC', fontWeight: '700', color: '#7B5233' }}
               >
-                <option value="VẬT TƯ HÀNG TRẮNG">VẬT TƯ HÀNG TRẮNG (Thô & Lắp ráp)</option>
-                <option value="VẬT TƯ SAU SƠN">VẬT TƯ SAU SƠN (Hoàn thiện & Phụ kiện)</option>
-                <option value="VẬT TƯ PHỤ SƠN">VẬT TƯ PHỤ SƠN (Dung môi, Keo, Giấy nhám)</option>
-                <option value="VẬT TƯ ĐÓNG GÓI">VẬT TƯ ĐÓNG GÓI (Thùng carton, Xốp, Băng keo)</option>
+                <option value="Vật tư lắp ráp">Vật tư lắp ráp</option>
+                <option value="Sơn">Sơn</option>
+                <option value="Sơn Lót">Sơn Lót</option>
+                <option value="Sơn Bóng">Sơn Bóng</option>
+                <option value="Sơn UV">Sơn UV</option>
+                <option value="Sơn UV Plywood">Sơn UV Plywood</option>
+                <option value="Sơn Dặm Glaze">Sơn Dặm Glaze</option>
+                <option value="Bao bì, đóng gói">Bao bì, đóng gói</option>
+                <option value="Vật tư đi kèm">Vật tư đi kèm</option>
+                <option value="Vật tư dùng chung">Vật tư dùng chung</option>
+                <option value="Vật tư lắp ráp (LR3-ADV)">Vật tư lắp ráp (LR3-ADV)</option>
+                <option value="VẬT TƯ HÀNG TRẮNG">VẬT TƯ HÀNG TRẮNG</option>
+                <option value="VẬT TƯ SAU SƠN">VẬT TƯ SAU SƠN</option>
+                {groupType && ![
+                  'Vật tư lắp ráp', 'Sơn', 'Sơn Lót', 'Sơn Bóng', 'Sơn UV', 'Sơn UV Plywood',
+                  'Sơn Dặm Glaze', 'Bao bì, đóng gói', 'Vật tư đi kèm', 'Vật tư dùng chung',
+                  'Vật tư lắp ráp (LR3-ADV)', 'VẬT TƯ HÀNG TRẮNG', 'VẬT TƯ SAU SƠN'
+                ].includes(groupType) && (
+                  <option value={groupType}>{groupType}</option>
+                )}
               </select>
             </div>
 

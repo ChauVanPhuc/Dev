@@ -190,9 +190,8 @@ const UserPermissionView = () => {
     setSuccess(false);
 
     try {
-      // Chỉ lưu những key mà user đã thực sự thay đổi so với quyền mặc định baseline của vai trò/chức vụ
+      // Lưu toàn bộ ma trận phân quyền để đảm bảo Zero-Trust: màn hình nào không cho phép được ghi nhận rõ ràng là 'none'
       const permissionsToSave = {};
-      const defaults = initialBaselineDefaults.current || {};
       
       const allScreenKeys = new Set();
       dynamicWebGroups.forEach(g => g.screens.forEach(s => allScreenKeys.add(s.key)));
@@ -201,15 +200,10 @@ const UserPermissionView = () => {
 
       allScreenKeys.forEach(key => {
         const currentPerms = screenPermissions[key] || [];
-        const defaultPerms = defaults[key] || [];
-        
-        const currentSorted = [...currentPerms].sort().join(',');
-        const defaultSorted = [...defaultPerms].sort().join(',');
-        
-        if (currentSorted !== defaultSorted) {
-          permissionsToSave[key] = currentPerms.includes('none') || currentPerms.length === 0 
-            ? 'none' 
-            : currentPerms.join(',');
+        if (!currentPerms || currentPerms.length === 0 || currentPerms.includes('none')) {
+          permissionsToSave[key] = 'none';
+        } else {
+          permissionsToSave[key] = currentPerms.join(',');
         }
       });
 
@@ -223,11 +217,11 @@ const UserPermissionView = () => {
       const loggedInUser = JSON.parse(localStorage.getItem('smartflow_user') || '{}');
       if (Number(loggedInUser.id) === Number(id)) {
         const fullPermsToStore = {};
-        Object.keys(screenPermissions).forEach(key => {
-          const perms = screenPermissions[key] || [];
-          fullPermsToStore[key] = perms.includes('none') || perms.length === 0 ? 'none' : perms.join(',');
+        Object.keys(permissionsToSave).forEach(key => {
+          fullPermsToStore[key] = permissionsToSave[key];
         });
         localStorage.setItem('smartflow_active_permissions', JSON.stringify(fullPermsToStore));
+        window.dispatchEvent(new CustomEvent('smartflow_permissions_updated', { detail: fullPermsToStore }));
       }
 
       window.scrollTo({ top: 0, behavior: 'smooth' });

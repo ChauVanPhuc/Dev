@@ -119,12 +119,17 @@ def get_master_products(
     skip: int = 0, 
     limit: int = 50, 
     q: str = None,
+    tab: str = None,
+    has_materials: bool = False,
     db: Session = Depends(get_db)
 ):
     """
     [GET] Lấy danh sách các sản phẩm mẫu (Master Product/BOM Master) có phân trang và tìm kiếm.
+    Hỗ trợ lọc tab='materials' hoặc has_materials=True để chỉ lấy sản phẩm ĐÃ CÓ định mức vật tư BOM.
     """
-    return master_product_controller.get_master_products(db, skip=skip, limit=limit, q=q)
+    return master_product_controller.get_master_products(
+        db, skip=skip, limit=limit, q=q, tab=tab, has_materials=has_materials
+    )
 
 @router.post("/", response_model=MasterProduct)
 def create_master_product(master_product: MasterProductCreate, db: Session = Depends(get_db)):
@@ -234,6 +239,13 @@ def get_all_materials(
         db, product_id=product_id, group_type=group_type, supplier=supplier, q=q, skip=skip, limit=limit
     )
 
+@router.get("/material-groups")
+def get_material_groups(db: Session = Depends(get_db)):
+    """
+    [GET] Lấy danh sách tất cả các nhóm vật tư tiêu hao thực tế.
+    """
+    return master_product_controller.get_all_material_groups(db)
+
 @router.get("/materials-by-product")
 def get_materials_by_product(
     product_id: Optional[int] = None,
@@ -276,15 +288,41 @@ def delete_standalone_product_material(material_id: int, db: Session = Depends(g
     return {"message": "Đã xóa dòng vật tư thành công"}
 
 @router.post("/import-material-bom-excel")
-async def import_material_bom_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def import_material_bom_excel(
+    file: Optional[UploadFile] = File(None),
+    files: Optional[List[UploadFile]] = File(None),
+    db: Session = Depends(get_db)
+):
     """
-    [POST] Nhập BOM vật tư từ file Excel tổng hợp (ví dụ BOM KHUNG U CAO SU.xlsx).
+    [POST] Nhập dữ liệu định mức BOM Vật tư từ 1 hoặc nhiều file Excel (Hỗ trợ Streaming Progress).
     """
-    if not file.filename.endswith(('.xlsx', '.xls')):
-        raise HTTPException(status_code=400, detail="Vui lòng tải lên file Excel (.xlsx hoặc .xls)")
-    
-    contents = await file.read()
-    return master_product_controller.import_material_boms_from_excel(db, contents)
+    upload_files = []
+    if files:
+        upload_files = [f for f in files if f.filename and f.filename.endswith(('.xlsx', '.xls')) and not os.path.basename(f.filename).startswith('~$')]
+    elif file:
+        if not file.filename.endswith(('.xlsx', '.xls')):
+            raise HTTPException(status_code=400, detail="Vui lòng tải lên file Excel (.xlsx hoặc .xls)")
+        upload_files = [file]
+
+    if not upload_files:
+        raise HTTPException(status_code=400, detail="Vui lòng chọn ít nhất một file Excel (.xlsx hoặc .xls)")
+
+    if len(upload_files) == 1:
+        contents = await upload_files[0].read()
+        fname = upload_files[0].filename or "BOM_VatTu.xlsx"
+        return StreamingResponse(
+            master_product_controller.import_material_boms_from_excel(db, contents, filename=fname),
+            media_type="text/plain"
+        )
+    else:
+        files_data = []
+        for f in upload_files:
+            data = await f.read()
+            files_data.append((f.filename, data))
+        return StreamingResponse(
+            master_product_controller.import_material_boms_from_excel_batch(db, files_data),
+            media_type="text/plain"
+        )
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CÁC ROUTE CÔNG VIỆC KỸ THUẬT VÀ PHỤ TRỢ (KT01, KT03.1, KT03.3)

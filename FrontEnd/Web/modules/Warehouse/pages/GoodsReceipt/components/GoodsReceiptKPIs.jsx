@@ -1,7 +1,7 @@
-// GoodsReceiptKPIs.jsx - 4 thẻ KPI đầu trang danh sách Nhập kho đồng bộ chuẩn Đơn hàng xuất khẩu
+// GoodsReceiptKPIs.jsx - 3 thẻ KPI đầu trang danh sách Nhập kho
 import React from 'react';
-import { ClipboardList, Layers, Package, DollarSign } from 'lucide-react';
-import { formatNumber, formatCurrencyVND } from '../../../types/goodsReceipt.types';
+import { ClipboardList, Layers, Package } from 'lucide-react';
+import { formatNumber } from '../../../types/goodsReceipt.types';
 
 export const GoodsReceiptKPIs = ({ stats = {}, totalCount = 0 }) => {
   return (
@@ -40,19 +40,6 @@ export const GoodsReceiptKPIs = ({ stats = {}, totalCount = 0 }) => {
         </div>
         <div className="wh-stat-icon" style={{ backgroundColor: '#FFFBEB', color: '#B45309' }}>
           <Package size={18} />
-        </div>
-      </div>
-
-      {/* KPI 4: Tổng giá trị nhập kho */}
-      <div className="wh-stat-card">
-        <div className="wh-stat-info">
-          <span className="wh-stat-title">Tổng giá trị nhập kho</span>
-          <span className="wh-stat-value" style={{ color: '#047857' }}>
-            {formatCurrencyVND(stats.total_value ?? 0)}
-          </span>
-        </div>
-        <div className="wh-stat-icon" style={{ backgroundColor: '#ECFDF5', color: '#047857' }}>
-          <DollarSign size={18} />
         </div>
       </div>
     </div>

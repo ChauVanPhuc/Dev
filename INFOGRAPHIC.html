@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<title>SmartFlow ERP — Infographic Tổng Hợp Toàn Bộ Chức Năng</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif;
+    background: #FAF7F2;
+    color: #1E293B;
+    width: 1800px;
+    margin: 0 auto;
+    padding: 32px;
+  }
+  .poster {
+    background: #FAF7F2;
+    border: 2px solid #E2D1BC;
+    border-radius: 24px;
+    overflow: hidden;
+    box-shadow: 0 20px 55px rgba(62, 39, 22, 0.09);
+  }
+
+  /* HERO */
+  .hero {
+    background: linear-gradient(135deg, #3A2313 0%, #6A4325 55%, #8D5F3D 100%);
+    color: #FFFFFF;
+    padding: 40px 50px 32px;
+  }
+  .hero-badge {
+    display: inline-block;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.28);
+    color: #FDE68A;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+    padding: 6px 16px;
+    border-radius: 999px;
+    margin-bottom: 14px;
+  }
+  .hero h1 {
+    font-size: 40px;
+    font-weight: 900;
+    letter-spacing: -0.4px;
+    line-height: 1.15;
+    margin-bottom: 10px;
+  }
+  .hero p {
+    font-size: 16.5px;
+    color: #F3E8DC;
+    max-width: 1380px;
+    line-height: 1.5;
+    margin-bottom: 24px;
+  }
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+  }
+  .kpi-card {
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.22);
+    border-radius: 14px;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .kpi-num {
+    font-size: 36px;
+    font-weight: 900;
+    color: #FDE68A;
+    line-height: 1;
+    min-width: 52px;
+  }
+  .kpi-num.green { color: #86EFAC; }
+  .kpi-num.amber { color: #FCD34D; }
+  .kpi-label { font-size: 14.5px; font-weight: 800; color: #FFFFFF; }
+  .kpi-sub { font-size: 12.5px; color: #E8D9C8; margin-top: 2px; }
+
+  /* LEGEND BAR */
+  .legend-bar {
+    background: #F2E8DC;
+    border-bottom: 1.5px solid #E2D1BC;
+    padding: 12px 50px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: #3E2716;
+  }
+  .legend-items { display: flex; gap: 28px; align-items: center; }
+  .lg { display: inline-flex; align-items: center; gap: 7px; }
+  .dot {
+    display: inline-block;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+  }
+  .dot.on { background: #15803D; }
+  .dot.rd { background: #D97706; }
+  .dot.ph { background: #64748B; }
+  .dot.off { background: #DC2626; }
+
+  /* CONTENT */
+  .content { padding: 32px 50px 40px; }
+  .sec-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    margin-top: 6px;
+  }
+  .sec-left { display: flex; align-items: center; gap: 12px; }
+  .sec-pill {
+    background: #7B5233;
+    color: #FFFFFF;
+    font-size: 12px;
+    font-weight: 800;
+    padding: 5px 13px;
+    border-radius: 999px;
+    letter-spacing: 0.7px;
+    text-transform: uppercase;
+  }
+  .sec-title { font-size: 22px; font-weight: 800; color: #3E2716; }
+  .sec-note { font-size: 13px; color: #64748B; font-weight: 600; }
+
+  /* SECTION 1: 5 VALUE CHAIN */
+  .chain-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 14px;
+    margin-bottom: 30px;
+  }
+  .chain-card {
+    background: #FFFFFF;
+    border: 1.5px solid #EADCC9;
+    border-top: 5px solid #7B5233;
+    border-radius: 14px;
+    padding: 16px;
+  }
+  .chain-card.c2 { border-top-color: #15803D; }
+  .chain-card.c3 { border-top-color: #0369A1; }
+  .chain-card.c4 { border-top-color: #B45309; }
+  .chain-card.c5 { border-top-color: #6D28D9; }
+  .chain-num { font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.7px; color: #7B5233; margin-bottom: 4px; }
+  .chain-card.c2 .chain-num { color: #15803D; }
+  .chain-card.c3 .chain-num { color: #0369A1; }
+  .chain-card.c4 .chain-num { color: #B45309; }
+  .chain-card.c5 .chain-num { color: #6D28D9; }
+  .chain-title { font-size: 15.5px; font-weight: 800; color: #1E293B; margin-bottom: 8px; }
+  .chain-list { list-style: none; }
+  .chain-list li {
+    font-size: 12.8px;
+    color: #334155;
+    line-height: 1.44;
+    padding-left: 13px;
+    position: relative;
+    margin-bottom: 4px;
+  }
+  .chain-list li::before { content: "•"; color: #7B5233; font-weight: 900; position: absolute; left: 0; }
+
+  /* STATUS PILLS */
+  .st {
+    font-size: 11px;
+    font-weight: 800;
+    padding: 3px 9px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .st.on { background: #DCFCE7; color: #15803D; }
+  .st.rd { background: #FEF3C7; color: #B45309; }
+  .st.off { background: #FEE2E2; color: #DC2626; }
+  .st.ph { background: #E2E8F0; color: #475569; }
+  .plat {
+    font-size: 10.5px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: #F5EFE6;
+    color: #6B4426;
+    white-space: nowrap;
+  }
+
+  /* SECTION 2: QLCL 11 SUB-MODULES */
+  .qlcl-wrap {
+    background: #FFFFFF;
+    border: 2px solid #D9C3A8;
+    border-radius: 18px;
+    padding: 22px 24px 24px;
+    margin-bottom: 30px;
+  }
+  .qlcl-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 13px;
+  }
+  .q-card {
+    background: #FCF9F5;
+    border: 1px solid #EADCC9;
+    border-radius: 12px;
+    padding: 14px 15px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .q-card.wide { grid-column: span 2; background: #F8F3EB; border-color: #D9C3A8; }
+  .q-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .q-title { font-size: 14px; font-weight: 800; color: #3E2716; line-height: 1.3; }
+  .q-desc { font-size: 12.5px; color: #334155; line-height: 1.44; margin-bottom: 8px; }
+  .q-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    border-top: 1px dashed #E5D5C3;
+    padding-top: 7px;
+    font-size: 11.8px;
+    color: #15803D;
+    font-weight: 700;
+  }
+  .q-foot.rd-txt { color: #B45309; }
+
+  /* SECTION 3: OTHER 6 MODULES MATRIX */
+  .mod-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 30px;
+  }
+  .mod-card {
+    background: #FFFFFF;
+    border: 1.5px solid #EADCC9;
+    border-radius: 16px;
+    padding: 18px 20px;
+  }
+  .mod-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    padding-bottom: 9px;
+    border-bottom: 1.5px solid #F2E8DC;
+  }
+  .mod-name { font-size: 16.5px; font-weight: 800; color: #3E2716; }
+  .feat-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px dashed #F0E6D8;
+  }
+  .feat-row:last-child { border-bottom: none; padding-bottom: 0; }
+  .feat-txt { font-size: 12.8px; color: #1E293B; line-height: 1.4; }
+  .feat-txt strong { color: #3E2716; }
+  .feat-sub { display: block; font-size: 11.8px; color: #475569; margin-top: 1px; }
+
+  /* SECTION 4: 3 CROSS-CUTTING LAYERS (THÔNG BÁO, ZALO, AI) */
+  .infra-box {
+    background: linear-gradient(135deg, #27190F 0%, #4C2F1C 100%);
+    border-radius: 18px;
+    padding: 24px 28px;
+    color: #FFFFFF;
+    margin-bottom: 30px;
+  }
+  .infra-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .infra-head h2 { font-size: 20px; font-weight: 800; color: #FDE68A; }
+  .infra-head span {
+    font-size: 12.5px;
+    font-weight: 700;
+    background: rgba(134, 239, 172, 0.16);
+    color: #86EFAC;
+    border: 1px solid rgba(134, 239, 172, 0.35);
+    padding: 4px 12px;
+    border-radius: 999px;
+  }
+  .infra-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+  .infra-card {
+    background: rgba(255,255,255,0.09);
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 14px;
+    padding: 16px 18px;
+  }
+  .infra-card h3 { font-size: 15.5px; font-weight: 800; color: #FFFFFF; margin-bottom: 6px; }
+  .infra-card p { font-size: 13px; color: #EFE3D5; line-height: 1.48; }
+
+  /* SECTION 5: 9 ROLES GRID */
+  .role-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+  .role-card {
+    background: #FFFFFF;
+    border: 1.5px solid #EADCC9;
+    border-radius: 14px;
+    padding: 15px 17px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .role-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 7px;
+  }
+  .role-name { font-size: 14.5px; font-weight: 800; color: #7B5233; }
+  .role-freq {
+    font-size: 11px;
+    font-weight: 700;
+    color: #475569;
+    background: #F1F5F9;
+    padding: 2px 8px;
+    border-radius: 6px;
+    white-space: nowrap;
+  }
+  .role-funcs { font-size: 12.6px; color: #1E293B; line-height: 1.44; margin-bottom: 8px; }
+  .role-val {
+    background: #F0FDF4;
+    border-left: 3px solid #15803D;
+    padding: 6px 10px;
+    border-radius: 5px;
+    font-size: 12px;
+    color: #166534;
+    font-weight: 600;
+    line-height: 1.38;
+  }
+
+  /* FOOTER */
+  .footer {
+    background: #EFE4D6;
+    border-top: 1.5px solid #E2D1BC;
+    padding: 16px 50px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+    font-weight: 700;
+    color: #5C3D24;
+  }
+</style>
+</head>
+<body>
+<div class="poster">
+  <!-- HERO -->
+  <div class="hero">
+    <div class="hero-badge">SMARTFLOW ERP • TỔNG HỢP TOÀN BỘ CHỨC NĂNG HỆ THỐNG (BẢN CHÍNH THỨC)</div>
+    <h1>BỨC TRANH TOÀN CẢNH HỆ THỐNG SMARTFLOW ERP</h1>
+    <p>Chuỗi giá trị vận hành khép kín từ Thiết lập sản phẩm mẫu (BOM) → Mua vật tư → Sản xuất → Kiểm soát chất lượng 4 tầng → Đóng Container xuất khẩu → Xử lý Claim &amp; Tính KPI, được hỗ trợ bởi 3 lớp nền tảng ngang hàng: System · Thông báo / Zalo · Trí tuệ nhân tạo AI.</p>
+    <div class="kpi-row">
+      <div class="kpi-card">
+        <div class="kpi-num">10</div>
+        <div>
+          <div class="kpi-label">Phân Hệ Nghiệp Vụ</div>
+          <div class="kpi-sub">36 nhóm chức năng toàn diện</div>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-num green">24</div>
+        <div>
+          <div class="kpi-label">Chức Năng Đang Hoạt Động</div>
+          <div class="kpi-sub">QLCL · Load Cont · Giá tủ · System · AI · Zalo</div>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-num amber">10</div>
+        <div>
+          <div class="kpi-label">Chức Năng Đang R&amp;D</div>
+          <div class="kpi-sub">Sản xuất · Kỹ thuật BOM · Kho vận · Thiết bị</div>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-num">9</div>
+        <div>
+          <div class="kpi-label">Vai Trò Phòng Ban</div>
+          <div class="kpi-sub">Đồng bộ Web · Mobile · Zalo · AI</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LEGEND -->
+  <div class="legend-bar">
+    <div class="legend-items">
+      <span class="lg"><span class="dot on"></span> Đang hoạt động: Hoàn thiện, sẵn sàng sử dụng</span>
+      <span class="lg"><span class="dot rd"></span> Đang R&amp;D: Nghiên cứu &amp; thử nghiệm tính năng</span>
+      <span class="lg"><span class="dot ph"></span> Placeholder: Trang giữ chỗ giao diện</span>
+      <span class="lg"><span class="dot off"></span> Ngừng sử dụng: Đã thay thế bởi module mới</span>
+    </div>
+    <div>Nguồn: Bản Đặc Tả Người Dùng Chính Thức</div>
+  </div>
+
+  <div class="content">
+    <!-- BLOCK 1: 5 VALUE CHAIN LAYERS -->
+    <div class="sec-header">
+      <div class="sec-left">
+        <span class="sec-pill">Mục 01</span>
+        <div class="sec-title">5 Lớp Chuỗi Giá Trị Liên Kết Toàn Hệ Thống</div>
+      </div>
+      <div class="sec-note">Liên thông dữ liệu xuyên suốt nhà máy</div>
+    </div>
+    <div class="chain-grid">
+      <div class="chain-card">
+        <div class="chain-num">1. Khởi Tạo &amp; Chạy Chuyền</div>
+        <div class="chain-title">Kỹ Thuật &amp; Sản Xuất</div>
+        <ul class="chain-list">
+          <li>BOM Sản phẩm &amp; BOM Vật tư (định mức theo PO).</li>
+          <li>Đơn hàng (PO), Lệnh SX &amp; Kế hoạch SX ngày.</li>
+          <li>Bàn giao luân chuyển công đoạn + Thẻ QR dự phòng.</li>
+        </ul>
+      </div>
+      <div class="chain-card c2">
+        <div class="chain-num">2. Kiểm Soát Hiện Trường</div>
+        <div class="chain-title">Quản Lý Chất Lượng &amp; Góp Ý</div>
+        <ul class="chain-list">
+          <li>Kiểm tra Đầu vào / Công đoạn / Hàng ngày / Chuẩn lấy mẫu.</li>
+          <li>Hồ sơ &amp; Mục tiêu chất lượng, Pareto Lỗi &amp; CAPA.</li>
+          <li>Nhân sự QLCL, Thi QR, Thiết bị đo, Hồ sơ ISO &amp; Góp ý nhanh.</li>
+        </ul>
+      </div>
+      <div class="chain-card c3">
+        <div class="chain-num">3. Chốt Chặn Trước Kẹp Chì</div>
+        <div class="chain-title">Load Cont &amp; Xuất Hàng</div>
+        <ul class="chain-list">
+          <li>Crawl dữ liệu AppSheet khách hàng + Check tem OCR.</li>
+          <li>Quét Cont thực tế tại bãi (Máy quét / Mobile AI OCR).</li>
+          <li>Đối chiếu 3 chiều: AppSheet ↔ Thực tế trước khi xuất.</li>
+        </ul>
+      </div>
+      <div class="chain-card c4">
+        <div class="chain-num">4. Vật Tư &amp; Hậu Mãi</div>
+        <div class="chain-title">Kinh Doanh &amp; Claim</div>
+        <ul class="chain-list">
+          <li>Danh sách Mua hàng, Xuất–Nhập–Tồn kho &amp; Lịch xuất Cont.</li>
+          <li>Quản lý Giá tủ chuẩn làm căn cứ so sánh bồi thường.</li>
+          <li>Tiếp nhận, tính toán trừ tiền &amp; xử lý Claim khách hàng.</li>
+        </ul>
+      </div>
+      <div class="chain-card c5">
+        <div class="chain-num">5. Phủ Dọc Toàn Hệ Thống</div>
+        <div class="chain-title">Hạ Tầng &amp; Trí Tuệ AI</div>
+        <ul class="chain-list">
+          <li>System: Tài khoản, Phân quyền 4 chiều, Giám sát Server.</li>
+          <li>Thông báo tức thì Web/Mobile + Zalo Bot tự động.</li>
+          <li>AI Vision OCR, Đọc máy đo QC &amp; Chatbot tra cứu Claim.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- BLOCK 2: DEEP DIVE QLCL (11 SUB-MODULES) -->
+    <div class="sec-header">
+      <div class="sec-left">
+        <span class="sec-pill">Mục 03 • Trọng Tâm</span>
+        <div class="sec-title">Module Quản Lý Chất Lượng (QLCL) — 11 Nhóm Chức Năng Chi Tiết</div>
+      </div>
+      <div class="sec-note">10 Đang hoạt động · 1 Đang R&amp;D</div>
+    </div>
+    <div class="qlcl-wrap">
+      <div class="qlcl-grid">
+        <div class="q-card">
+          <div>
+            <div class="q-top"><div class="q-title">3.1. Dashboard &amp; Pareto Lỗi</div><span class="st on">● Hoạt động</span></div>
+            <div class="q-desc">5 biểu đồ tương tác + 5 thẻ KPI, lọc theo Tháng/Tổng quan, KH, SKU, Cont, LPN, tiền phạt theo nguyên tắc 80/20.</div>
+          </div>
+          <div class="q-foot"><span>Web</span><span>Nhận diện Top 20% lỗi gây 80% phạt</span></div>
+        </div>
+
+        <div class="q-card">
+          <div>
+            <div class="q-top"><div class="q-title">3.2. Danh Sách Lỗi G7 &amp; KH</div><span class="st on">● Hoạt động</span></div>
+            <div class="q-desc">Tự sinh mã lỗi G7 theo phân nhóm, ảnh mẫu, Import Excel; ánh xạ mã lỗi KH sang G7; gắn cờ lỗi trọng tâm xuống Mobile.</div>
+          </div>
+          <div class="q-foot"><span>Web</span><span>Từ điển lỗi thống nhất toàn nhà máy</span></div>
+        </div>
+
+        <div class="q-card">
+          <div>
+            <div class="q-top"><div class="q-title">3.3. Claim Khách Hàng</div><span class="st on">● Hoạt động</span></div>
+            <div class="q-desc">Bóc tách tự động file KH (Cabinet, SKU, LPN, ảnh, mức phạt), tự đối chiếu Giá tủ &amp; Credit Note, liên kết CAPA &amp; AI Chat.</div>
+          </div>
+          <div class="q-foot"><span>Web</span><span>Kiểm soát chi phí bồi thường &amp; gốc lỗi</span></div>
+        </div>
+
+        <div class="q-card">
+          <div>
+            <div class="q-top"><div class="q-title">3.4. Hồ Sơ Chất Lượng</div><span class="st on">● Hoạt động</span></div>
+            <div class="q-desc">Gom lịch sử IQC/PQC/thành phẩm theo KHSX &amp; PO; duyệt phiếu hàng loạt; AI OCR tự đọc Độ bóng (GU) &amp; Sai lệch màu (ΔE).</div>
+          </div>
+          <div class="q-foot"><span>Web</span><span>Truy xuất nguồn gốc chuẩn Audit ISO</span></div>
+        </div>
+
+        <div class="q-card">
+          <div>
+            <div class="q-top"><div class="q-title">3.5. Nhân Sự QLCL &amp; Điểm Danh</div><span class="st on">● Hoạt động</span></div>
+            <div class="q-desc">3 chế độ xem: Bảng phân cấp, Sơ đồ chốt chặn 3 nhà máy, Lịch chấm công; quản lý nghỉ phép, tăng ca (OT 20H/22H) &amp; KPI.</div>
+          </div>
+          <div class="q-foot"><span>Web / Mobile</span><span>Điều phối chốt kiểm &amp; bảng công</span></div>
+        </div>
+
+        <div class="q-card">
+          <div>
+            <div class="q-top"><div class="q-title">3.6. Đánh Giá &amp; Thi Năng Lực QR</div><span class="st on">● Hoạt động</span></div>
+            <div class="q-desc">Đánh giá định kỳ + Tạo đề thi (Excel/Markdown), phát mã QR thi trên điện thoại, tự chấm trắc nghiệm, AI chấm tự luận (A/B/C/D).</div>
+          </div>
+          <div class="q-foot"><span>Web / Mobile / QR</span><span>Số hóa 100% sát hạch tay nghề</span></div>
+        </div>
+
+        <div class="q-card">
+          <div>
+            <div class="q-top"><div class="q-title">3.7. Báo Cáo &amp; Infographic</div><span class="st on">● Hoạt động</span></div>
+            <div class="q-desc">4 loại biên bản (ảnh lightbox + in PDF ký tên); xuất Poster Infographic Ngày/Tuần (PNG HD), Excel 6 sheet &amp; Word ISO/CAPA.</div>
+          </div>
+          <div class="q-foot"><span>Web</span><span>Biên bản chuẩn &amp; bản tin giao ban BGĐ</span></div>
+        </div>
+
+        <div class="q-card">
+          <div>
+            <div class="q-top"><div class="q-title">3.8. Thiết Bị Đo &amp; Máy Móc</div><span class="st rd">◐ Đang R&amp;D</span></div>
+            <div class="q-desc">Hồ sơ thiết bị đo QC &amp; máy móc xưởng, lịch hiệu chuẩn/bảo trì định kỳ, đào tạo SOP, bàn giao &amp; xuất trọn bộ hồ sơ ZIP.</div>
+          </div>
+          <div class="q-foot rd-txt"><span>Web / Mobile</span><span>Đảm bảo chuẩn đo &amp; bảo trì đúng hạn</span></div>
+        </div>
+
+        <div class="q-card wide">
+          <div>
+            <div class="q-top"><div class="q-title">3.9. Tài Liệu Ban Hành (HDKT, SOS, CTQ) &amp; Hồ Sơ ISO 9001 Ký Số</div><span class="st on">● Hoạt động</span></div>
+            <div class="q-desc">Biên soạn HDKT kèm ảnh/thông số đo, SOS thao tác chuẩn, cảnh báo CTQ đồng bộ xuống Mobile; hệ thống ISO tự sinh mã chuẩn G7, soạn thảo trực tiếp trên trình duyệt (ONLYOFFICE / Canvas), Master List 12 trường, phê duyệt 2 cấp (TP → BGĐ) &amp; đóng dấu chữ ký số.</div>
+          </div>
+          <div class="q-foot"><span>Web / Mobile</span><span>Văn phòng không giấy tờ — Tiêu chuẩn mới cập nhật tức thì xuống chuyền</span></div>
+        </div>
+
+        <div class="q-card">
+          <div>
+            <div class="q-top"><div class="q-title">3.10. Mục Tiêu CL, KPI &amp; Vi Phạm</div><span class="st on">● Hoạt động</span></div>
+            <div class="q-desc">Theo dõi FPY, PPM, Claim/DT &lt;0.5%, CAPA trễ &lt;10%, Cont đạt &gt;95% với &gt;30 công thức tự động; luật cộng/trừ điểm &amp; ghi nhận vi phạm.</div>
+          </div>
+          <div class="q-foot"><span>Web / Mobile</span><span>Đo lường ISO &amp; thưởng phạt minh bạch</span></div>
+        </div>
+
+        <div class="q-card">
+          <div>
+            <div class="q-top"><div class="q-title">3.11. CAPA &amp; Mobile QC 4 Tầng</div><span class="st on">● Hoạt động</span></div>
+            <div class="q-desc">6 màn hình Mobile QC (Đầu chuyền, Tái kiểm, Thông số AI OCR, Quy trình, QA, Lỗi ngày + IQC) &amp; quy trình CAPA 5-Why đóng lỗi gốc.</div>
+          </div>
+          <div class="q-foot"><span>Web / Mobile</span><span>Kiểm soát IQC → FAI → IPQC → OQC</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BLOCK 3: ALL REMAINING 6 OPERATIONAL & SYSTEM MODULES -->
+    <div class="sec-header">
+      <div class="sec-left">
+        <span class="sec-pill">Mục 02 • Ma Trận Đầy Đủ</span>
+        <div class="sec-title">Các Phân Hệ Vận Hành, Kinh Doanh, Kỹ Thuật &amp; Quản Trị Hệ Thống</div>
+      </div>
+      <div class="sec-note">Đầy đủ trạng thái thực tế theo Bản Final</div>
+    </div>
+    <div class="mod-grid">
+      <!-- LOAD CONT -->
+      <div class="mod-card">
+        <div class="mod-head">
+          <div class="mod-name">📦 7. Module Load Cont</div>
+          <span class="st on">3/3 Hoạt động</span>
+        </div>
+        <div class="feat-row">
+          <div class="feat-txt"><strong>Crawl LPN từ AppSheet</strong><span class="feat-sub">Tự động lấy dữ liệu &amp; kiểm tra tem tủ bằng AI OCR.</span></div>
+          <span class="st on">●</span>
+        </div>
+        <div class="feat-row">
+          <div class="feat-txt"><strong>Quét Cont thủ công (Mobile + AI)</strong><span class="feat-sub">Quét barcode / chụp ảnh kiện Pallet &amp; bộ tủ thực tế tại bãi.</span></div>
+          <span class="st on">●</span>
+        </div>
+        <div class="feat-row">
+          <div class="feat-txt"><strong>Đối chiếu Cont 3 chiều</strong><span class="feat-sub">So khớp AppSheet ↔ Quét Cont, phát hiện Cont chưa quét/lệch tem.</span></div>
+          <span class="st on">●</span>
+        </div>
+      </div>
+
+      <!-- SẢN XUẤT -->
+      <div class="mod-card">
+        <div class="mod-head">
+          <div class="mod-name">🏭 4. Module Sản Xuất</div>
+          <span class="st rd">4 R&amp;D · 2 Ngừng</span>
+        </div>
+        <div class="feat-row">
+          <div class="feat-txt"><strong>Lệnh SX &amp; Đơn hàng SX</strong><span class="feat-sub">Theo dõi tiến độ đơn hàng theo PO (Web / Mobile).</span></div>
+          <span class="st rd">◐</span>
+        </div>
+        <div class="feat-row">
+          <div class="feat-txt"><strong>Bảng KHSX theo ngày &amp; Tiến độ SX</strong><span class="feat-sub">Lập bảng SX ngày tự động, cảnh báo trễ tiến độ.</span></div>
+          <span class="st rd">◐</span>
+        </div>
+        <div class="feat-row">
+          <div class="feat-txt"><strong>Bàn giao xưởng &amp; Phiếu ngoại lệ</strong><span class="feat-sub">Luân chuyển công đoạn, trả hàng &amp; kiểm soát lệch.</span></div>
+          <span class="st rd">◐</span>
+        </div>
+        <div class="feat-row">
+          <div class="feat-txt"><strong>Lịch SX &amp; Quy trình Routing</strong><span class="feat-sub">Đã ngừng (thay bằng Bảng KHSX theo ngày).</span></div>
+          <span class="st off">✕</span>
+        </div>
+      </div>
+
+      <!-- KINH DOANH -->
+      <div class="mod-card">
+        <div class="mod-head">
+          <div class="mod-name">💼 5. Module Kinh Doanh &amp; Kho</div>
+          <span class="st on">1 Hoạt động · 2 R&amp;D</span>
+        </div>
+        <div class="feat-row">
+          <div class="feat-txt"><strong>Quản lý Giá tủ</strong><span class="feat-sub">Bảng giá chuẩn làm căn cứ so sánh &amp; tính đền bù Claim.</span></div>
+          <span class="st on">●</span>
+        </div>
+        <div class="feat-row">
+          <div class="feat-txt"><strong>Danh sách Mua hàng &amp; Kho vận</strong><span class="feat-sub">Quản lý PO vật tư, quy đổi gỗ m³→cái, Xuất–Nhập–Tồn.</span></div>
+          <span class="st rd">◐</span>
+        </div>
+        <div class="feat-row">
+          <div class="feat-txt"><strong>Khách hàng &amp; Lịch xuất Container</strong><span class="feat-sub">Danh bạ đối tác &amp; lịch ETD/ETA từng chuyến tàu.</span></div>
+          <span class="st rd">◐</span>
+        </div>
+      </div>
+
+      <!-- KỸ THUẬT -->
+      <div class="mod-card">
+        <div class="mod-head">
+          <div class="mod-name">📐 6. Module Kỹ Thuật (BOM)</div>
+          <span class="st rd">3/3 Đang R&amp;D</span>
+        </div>
+        <div class="feat-row">
+          <div class="feat-txt"><strong>BOM Sản phẩm</strong><span class="feat-sub">Chi tiết gỗ, cấu trúc công đoạn &amp; mẫu màu sơn chuẩn.</span></div>
+          <span class="st rd">◐</span>
+        </div>
+        <div class="feat-row">
+          <div class="feat-txt"><strong>BOM Vật tư (4 nhóm cấp phát)</strong><span class="feat-sub">Hàng trắng / Sau sơn / Phụ sơn / Đóng gói theo từng PO.</span></div>
+          <span class="st rd">◐</span>
+        </div>
+        <div class="feat-row">
+          <div class="feat-txt"><strong>Bản vẽ &amp; Tiêu chuẩn kỹ thuật</strong><span class="feat-sub">Quản lý phiên bản (Revision) bản vẽ theo lô &amp; tiêu chuẩn gỗ.</span></div>
+          <span class="st rd">◐</span>
+        </div>
+      </div>
+
+      <!-- GÓP Ý -->
+      <div class="mod-card">
+        <div class="mod-head">
+          <div class="mod-name">💬 8. Module Góp Ý &amp; Báo Lỗi</div>
+          <span class="st on">2/2 Hoạt động</span>
+        </div>
+        <div class="feat-row">
+          <div class="feat-txt"><strong>Góp ý &amp; Báo cáo nhanh sự cố</strong><span class="feat-sub">Công nhân gửi báo cáo dừng chuyền, Kaizen kèm ảnh, ghi âm &amp; AI tóm tắt (Web / Mobile).</span></div>
+          <span class="st on">●</span>
+        </div>
+        <div class="feat-row">
+          <div class="feat-txt"><strong>Báo lỗi màn hình giao diện</strong><span class="feat-sub">Người dùng báo lỗi phần mềm kèm ảnh dán nhanh cho IT xử lý &amp; theo dõi tiến độ sửa.</span></div>
+          <span class="st on">●</span>
+        </div>
+      </div>
+
+      <!-- SYSTEM -->
+      <div class="mod-card">
+        <div class="mod-head">
+          <div class="mod-name">⚙️ 9. Module System &amp; Bảo Mật</div>
+          <span class="st on">4 Hoạt động · 1 Khung</span>
+        </div>
+        <div class="feat-row">
+          <div class="feat-txt"><strong>Giám sát máy chủ &amp; Người dùng Online</strong><span class="feat-sub">Theo dõi sức khỏe server, cảnh báo nghẽn dữ liệu 24/7.</span></div>
+          <span class="st on">●</span>
+        </div>
+        <div class="feat-row">
+          <div class="feat-txt"><strong>Tài khoản, Phân quyền 4 chiều &amp; Sơ đồ HR</strong><span class="feat-sub">Kiểm soát chi tiết từng chức năng &amp; cây nhân sự.</span></div>
+          <span class="st on">●</span>
+        </div>
+        <div class="feat-row">
+          <div class="feat-txt"><strong>Cấu hình động &amp; Mã QR dự phòng</strong><span class="feat-sub">Thiết lập Nhà máy, AQL, Loại phiếu, Menu; tạo &amp; in thẻ QR A4.</span></div>
+          <span class="st on">●</span>
+        </div>
+        <div class="feat-row">
+          <div class="feat-txt"><strong>Quản lý màn hình, Đóng gói dữ liệu &amp; Logs</strong><span class="feat-sub">Danh mục màn hình &amp; tiến độ hoàn thiện phần mềm.</span></div>
+          <span class="st ph">● / ○</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- BLOCK 4: 3 CROSS-CUTTING SMART LAYERS -->
+    <div class="infra-box">
+      <div class="infra-head">
+        <h2>3 LỚP NỀN TẢNG THÔNG MINH PHỦ DỌC TOÀN HỆ THỐNG (MỤC 10 · 11 · 12)</h2>
+        <span>● 100% Đang Hoạt Động Thực Chiến</span>
+      </div>
+      <div class="infra-grid">
+        <div class="infra-card">
+          <h3>🔔 10. Thông Báo Đa Kênh Tức Thì</h3>
+          <p>Truyền tin khẩn &amp; cảnh báo chất lượng đồng bộ qua Web, Mobile Push, Banner nổi bật và Zalo theo đúng phòng ban, công đoạn phụ trách — không bỏ sót thông tin điều hành.</p>
+        </div>
+        <div class="infra-card">
+          <h3>🤖 11. Zalo Bot &amp; Tự Động Hóa Tin Nhắn</h3>
+          <p>Kết nối 1-Click, tự động gửi báo cáo kết quả kiểm tra Container/tem lỗi và thông báo nội bộ theo yêu cầu thẳng về Zalo Ban Giám Đốc &amp; Quản lý mọi lúc mọi nơi.</p>
+        </div>
+        <div class="infra-card">
+          <h3>🧠 12. Hệ Sinh Thái Trí Tuệ Nhân Tạo (AI)</h3>
+          <p>AI Vision/OCR tự động đọc tem LPN/SKU và màn hình thiết bị đo QC (độ ẩm, độ bóng, lệch màu); Chatbot AI tra cứu Claim tiếng Việt; AI tóm tắt sự cố &amp; chấm thi tự luận năng lực.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- BLOCK 5: 9 ROLES MATRIX (FROM TABLE 2.2) -->
+    <div class="sec-header">
+      <div class="sec-left">
+        <span class="sec-pill">Mục 2.2</span>
+        <div class="sec-title">Phân Bổ Chức Năng Theo 9 Vai Trò Người Dùng &amp; Hiệu Quả Vận Hành</div>
+      </div>
+      <div class="sec-note">Tra cứu nhanh: Ai dùng gì · Trên thiết bị nào · Hiệu quả ra sao</div>
+    </div>
+    <div class="role-grid">
+      <div class="role-card">
+        <div>
+          <div class="role-top"><div class="role-name">1. Ban Giám Đốc (BGĐ)</div><span class="plat">Web &amp; Zalo</span></div>
+          <div class="role-funcs">Dashboard Pareto lỗi &amp; Claim · Báo cáo Infographic · Mục tiêu ISO · Duyệt &amp; Ký số cấp 2 · Báo cáo Cont tự động qua Zalo.</div>
+        </div>
+        <div class="role-val">Hiệu quả: Nắm nhanh chất lượng &amp; chi phí phạt; ký duyệt văn bản mọi lúc mọi nơi.</div>
+      </div>
+
+      <div class="role-card">
+        <div>
+          <div class="role-top"><div class="role-name">2. Trưởng Phòng &amp; Giám Sát QLCL</div><span class="plat">Web · Mobile · Zalo</span></div>
+          <div class="role-funcs">Duyệt phiếu hiện trường · Danh mục lỗi G7 &amp; CAPA 5-Why · Điều phối chốt kiểm · Chấm KPI &amp; vi phạm · Chatbot AI tra cứu.</div>
+        </div>
+        <div class="role-val">Hiệu quả: Kiểm soát đồng bộ 3 nhà máy, giảm 70% thời gian làm báo cáo Excel.</div>
+      </div>
+
+      <div class="role-card">
+        <div>
+          <div class="role-top"><div class="role-name">3. Nhân Viên QA, QC</div><span class="plat">Mobile App</span></div>
+          <div class="role-funcs">Nhập liệu phiếu kiểm tra &amp; lưu ảnh · Hạn chế tối đa lỗi ghi chép · Xem tài liệu HDKT/SOS/CTQ trực tiếp trên điện thoại.</div>
+        </div>
+        <div class="role-val">Hiệu quả: Xóa bỏ hoàn toàn ghi chép giấy, số hóa dữ liệu lỗi &amp; báo cáo nhanh.</div>
+      </div>
+
+      <div class="role-card">
+        <div>
+          <div class="role-top"><div class="role-name">4. Kế Hoạch &amp; Điều Độ Sản Xuất</div><span class="plat">Web &amp; Mobile</span></div>
+          <div class="role-funcs">Quản lý Đơn hàng &amp; Lệnh SX · Kế hoạch sản xuất theo ngày · Thêm KHSX Excel &amp; xếp ưu tiên · Theo dõi % tiến độ thực tế.</div>
+        </div>
+        <div class="role-val">Hiệu quả: Báo cáo nhanh tiến độ, nhìn rõ ngay các điểm nghẽn sản xuất.</div>
+      </div>
+
+      <div class="role-card">
+        <div>
+          <div class="role-top"><div class="role-name">5. Quản Đốc, Tổ Trưởng &amp; Công Nhân</div><span class="plat">Mobile App</span></div>
+          <div class="role-funcs">Quét thẻ QR bàn giao &amp; nhận bán thành phẩm · In nhiệt thẻ Pallet · Xem SOS/CTQ · Gửi Góp ý/Sự cố nhanh kèm ảnh &amp; ghi âm.</div>
+        </div>
+        <div class="role-val">Hiệu quả: Chống thất thoát số lượng giữa các tổ, hạn chế lọt lỗi giữa công đoạn.</div>
+      </div>
+
+      <div class="role-card">
+        <div>
+          <div class="role-top"><div class="role-name">6. Nhân Viên Bãi Cont &amp; Kho Xuất</div><span class="plat">Mobile &amp; Web</span></div>
+          <div class="role-funcs">Quét mã vạch/chụp ảnh AI kiện Pallet &amp; bộ tủ nhiều thùng · Tự động kiểm tra tem AppSheet · Đối chiếu Cont 3 chiều trước đai kiện.</div>
+        </div>
+        <div class="role-val">Hiệu quả: Phát hiện tức thì kiện sai sót, giải phóng nhân sự check tay, giảm sai tem.</div>
+      </div>
+
+      <div class="role-card">
+        <div>
+          <div class="role-top"><div class="role-name">7. Kinh Doanh, Mua Hàng &amp; Kế Toán</div><span class="plat">Web</span></div>
+          <div class="role-funcs">Quản lý Giá tủ chuẩn &amp; đối chiếu Credit Note · Quản lý Đơn đặt mua, quy đổi gỗ m³→cái · Theo dõi Xuất–Nhập–Tồn &amp; lịch xuất Cont.</div>
+        </div>
+        <div class="role-val">Hiệu quả: Minh bạch bồi thường, chống thất thoát xuất nhập &amp; cảnh báo tồn kho.</div>
+      </div>
+
+      <div class="role-card">
+        <div>
+          <div class="role-top"><div class="role-name">8. Phòng Kỹ Thuật (R&amp;D / BOM)</div><span class="plat">Web</span></div>
+          <div class="role-funcs">Sản phẩm mẫu, Cây BOM theo công đoạn, Chi tiết gỗ, Màu sơn · Định mức vật tư 4 nhóm · Cấp phát &amp; lưu thông báo thay đổi bản vẽ.</div>
+        </div>
+        <div class="role-val">Hiệu quả: Bộ dữ liệu kỹ thuật thống nhất cho Sản xuất, dễ cập nhật thay đổi kỹ thuật.</div>
+      </div>
+
+      <div class="role-card">
+        <div>
+          <div class="role-top"><div class="role-name">9. Quản Trị Hệ Thống (IT Admin)</div><span class="plat">Web</span></div>
+          <div class="role-funcs">Giám sát hiệu năng máy chủ &amp; lượng người dùng Online · Phân quyền chi tiết từng chức năng · Cấu hình danh mục động.</div>
+        </div>
+        <div class="role-val">Hiệu quả: Đảm bảo hệ thống vận hành ổn định 24/7, dễ chỉnh sửa và mở rộng.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <div class="footer">
+    <div>SMARTFLOW ERP • TỔNG HỢP TOÀN BỘ CHỨC NĂNG HỆ THỐNG (ĐỒNG BỘ 100% TỪ BẢN NGƯỜI DÙNG FINAL)</div>
+    <div>10 Phân Hệ · 36 Chức Năng · 9 Vai Trò Vận Hành · Web · Mobile · Zalo · AI</div>
+  </div>
+</div>
+</body>
+</html>

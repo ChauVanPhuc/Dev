@@ -1,10 +1,17 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   ArrowLeft, Search, CheckSquare, Square, ChevronDown, ChevronRight,
-  Layers, Plus, Filter, Check, RefreshCw, Trash2, FileSpreadsheet
+  Layers, Plus, Filter, Check, RefreshCw, Trash2, FileSpreadsheet, X
 } from 'lucide-react';
 import { dailyProductionService } from '../Services/dailyProduction.service';
 import { useToast } from '@webShared/Views/components/feedback/ToastContext';
+
+const formatScheduledDate = (isoDate, shortYear = false) => {
+  if (!isoDate || typeof isoDate !== 'string') return '';
+  const parts = isoDate.slice(0, 10).split('-');
+  if (parts.length !== 3) return isoDate;
+  return shortYear ? `${parts[2]}/${parts[1]}` : `${parts[2]}/${parts[1]}/${parts[0]}`;
+};
 
 const DailyProductionBuilderModal = ({
   isOpen,
@@ -83,17 +90,6 @@ const DailyProductionBuilderModal = ({
         total_root_pos: res?.total_root_pos ?? groups.length,
         total_containers: res?.total_containers ?? 0
       });
-      // Mặc định mở 4 nhóm PO đầu tiên để người dùng thấy ngay danh sách Cont lẻ
-      if (groups.length > 0) {
-        setExpandedRoots(prev => {
-          if (Object.keys(prev).length > 0) return prev;
-          const initExp = {};
-          groups.slice(0, 4).forEach(g => {
-            initExp[g.root_po] = true;
-          });
-          return initExp;
-        });
-      }
     } catch (err) {
       console.error('Lỗi khi tải danh sách Cont từ CSDL:', err);
       toast?.error('Không thể tải danh sách đơn hàng / Cont từ cơ sở dữ liệu.');
@@ -389,6 +385,42 @@ const DailyProductionBuilderModal = ({
     setSelectedProductIds(nextProdIds);
     triggerPreviewMerge(nextOrders, sectionName, factory, selectedColors, nextProdIds);
   }, [selectedOrderCodes, selectedProductIds, sectionName, factory, selectedColors, triggerPreviewMerge]);
+
+  // Xóa nhanh 1 PO/Cont khỏi danh sách đã chọn
+  const handleRemoveSelectedOrder = useCallback((orderCode) => {
+    const nextOrders = selectedOrderCodes.filter(c => c !== orderCode);
+    const prodIdsToRemove = [];
+    containerGroups.forEach(g => {
+      (g.sub_containers || []).forEach(sc => {
+        if (sc.order_code === orderCode) {
+          (sc.products || []).forEach(p => prodIdsToRemove.push(p.product_id));
+        }
+      });
+    });
+    const nextProdIds = prodIdsToRemove.length > 0
+      ? selectedProductIds.filter(id => !prodIdsToRemove.includes(id))
+      : selectedProductIds;
+
+    setSelectedOrderCodes(nextOrders);
+    setSelectedProductIds(nextProdIds);
+    if (nextOrders.length === 0) {
+      setItems([]);
+      setCabinets([]);
+      if (!isTitleManuallyEdited) setBatchTitle('');
+      setLineColorSummary('');
+    } else {
+      triggerPreviewMerge(nextOrders, sectionName, factory, selectedColors, nextProdIds);
+    }
+  }, [
+    selectedOrderCodes,
+    selectedProductIds,
+    containerGroups,
+    isTitleManuallyEdited,
+    sectionName,
+    factory,
+    selectedColors,
+    triggerPreviewMerge
+  ]);
 
   // Toggle chọn 1 sản phẩm chi tiết (Level 3: Chọn sâu thêm 1 bậc từng sản phẩm trong Cont)
   const handleToggleSingleProduct = useCallback((sc, prod) => {
@@ -786,13 +818,15 @@ const DailyProductionBuilderModal = ({
                     setSelectedOrderCodes([]);
                     setSelectedProductIds([]);
                     setItems([]);
+                    setCabinets([]);
                     if (!isTitleManuallyEdited) setBatchTitle('');
+                    setLineColorSummary('');
                   }}
                   style={{
                     background: 'none',
                     border: 'none',
                     color: '#DC2626',
-                    fontSize: '0.76rem',
+                    fontSize: '0.74rem',
                     fontWeight: 700,
                     cursor: 'pointer'
                   }}
@@ -801,6 +835,37 @@ const DailyProductionBuilderModal = ({
                 </button>
               )}
             </div>
+
+            {/* Khu vực hiển thị rõ các PO / Cont đã chọn (bấm tag để lọc, bấm × để gỡ nhanh) */}
+            {selectedOrderCodes.length > 0 && (
+              <div className="daily-selected-po-box">
+                <div className="daily-selected-po-label">
+                  PO / Cont đã chọn ({selectedOrderCodes.length}):
+                </div>
+                <div className="daily-selected-po-chips">
+                  {selectedOrderCodes.map(code => (
+                    <span key={code} className="daily-selected-po-chip">
+                      <button
+                        type="button"
+                        className="daily-selected-po-chip-text"
+                        onClick={() => setPoSearch(code)}
+                        title={`Tìm nhanh ${code} trong danh sách`}
+                      >
+                        {code}
+                      </button>
+                      <button
+                        type="button"
+                        className="daily-selected-po-chip-remove"
+                        onClick={() => handleRemoveSelectedOrder(code)}
+                        title={`Gỡ ${code} khỏi danh sách gộp`}
+                      >
+                        <X size={11} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div style={{ fontSize: '0.74rem', color: '#786452', marginBottom: 8, fontWeight: 600 }}>
               Dữ liệu CSDL: <b>{totalStats.total_root_pos} PO gốc</b> ({totalStats.total_containers} Cont/Đơn hàng)
@@ -874,7 +939,7 @@ const DailyProductionBuilderModal = ({
                       className={`po-root-header ${isExp ? 'expanded' : ''}`}
                       onClick={() => setExpandedRoots(prev => ({ ...prev, [group.root_po]: !prev[group.root_po] }))}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, flexWrap: 'wrap' }}>
                         {isExp ? <ChevronDown size={16} color="#7B5233" /> : <ChevronRight size={16} color="#7B5233" />}
                         <span style={{ fontWeight: 800, fontSize: '0.88rem', color: '#2D1A12', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {group.root_po}
@@ -890,6 +955,32 @@ const DailyProductionBuilderModal = ({
                         }}>
                           {selectedInGroupCount}/{group.total_containers} Cont
                         </span>
+                        {group.scheduled_dates && group.scheduled_dates.length > 0 && (() => {
+                          const schedConts = group.scheduled_containers_count || 0;
+                          const totalConts = group.total_containers || 0;
+                          const schedCabs = group.scheduled_cabinets_qty || 0;
+                          const totalCabs = group.total_cabinets || 0;
+                          const dateShort = group.scheduled_dates.slice(0, 2).map(d => formatScheduledDate(d, true)).join(', ');
+                          const moreDates = group.scheduled_dates.length > 2 ? ` +${group.scheduled_dates.length - 2}` : '';
+                          return (
+                            <span
+                              style={{
+                                fontSize: '0.66rem',
+                                fontWeight: 700,
+                                padding: '1px 6px',
+                                borderRadius: 99,
+                                background: '#FEF3C7',
+                                color: '#B45309',
+                                border: '1px solid #FDE68A',
+                                whiteSpace: 'nowrap',
+                                flexShrink: 0
+                              }}
+                              title={`Đã chọn SX: ${schedConts}/${totalConts} Cont (${schedCabs}/${totalCabs} tủ) • Ngày: ${group.scheduled_dates.map(d => formatScheduledDate(d)).join(', ')}`}
+                            >
+                              Đã chọn SX: {schedConts}/{totalConts} Cont ({dateShort}{moreDates})
+                            </span>
+                          );
+                        })()}
                       </div>
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
@@ -1065,20 +1156,49 @@ const DailyProductionBuilderModal = ({
                                   </div>
                                 )}
 
-                                {sc.is_scheduled_today && (
-                                  <div style={{
-                                    fontSize: '0.66rem',
-                                    fontWeight: 700,
-                                    color: '#B45309',
-                                    background: '#FEF3C7',
-                                    padding: '1px 5px',
-                                    borderRadius: 4,
-                                    marginTop: 2,
-                                    width: 'fit-content'
-                                  }}>
-                                    Đã có lịch hôm nay
-                                  </div>
-                                )}
+                                {((sc.scheduled_batches && sc.scheduled_batches.length > 0) || sc.is_scheduled_today) && (() => {
+                                  const batchesList = sc.scheduled_batches || [];
+                                  const uniqueDates = Array.from(
+                                    new Set(
+                                      (sc.scheduled_dates && sc.scheduled_dates.length > 0
+                                        ? sc.scheduled_dates
+                                        : batchesList.map(b => b.plan_date).filter(Boolean))
+                                    )
+                                  );
+                                  const dateText = uniqueDates.length > 0
+                                    ? uniqueDates.map(d => formatScheduledDate(d)).join(', ')
+                                    : formatScheduledDate(planDate);
+                                  const schedQty = sc.scheduled_cabinets_qty || 0;
+                                  const totalQty = sc.total_cabinets || 0;
+                                  const qtyLabel = totalQty > 0 && schedQty > 0
+                                    ? `${schedQty}/${totalQty} tủ`
+                                    : '';
+                                  const tooltipText = batchesList.length > 0
+                                    ? batchesList
+                                        .map(b => `${b.batch_code || ''} (${formatScheduledDate(b.plan_date)} • ${b.factory || ''}${b.section_name ? ` • ${b.section_name}` : ''})`)
+                                        .join('\n')
+                                    : `Đã chọn sản xuất ngày ${dateText}`;
+                                  return (
+                                    <div
+                                      title={tooltipText}
+                                      style={{
+                                        fontSize: '0.68rem',
+                                        fontWeight: 700,
+                                        color: '#B45309',
+                                        background: '#FEF3C7',
+                                        border: '1px solid #FDE68A',
+                                        padding: '2px 6px',
+                                        borderRadius: 4,
+                                        marginTop: 3,
+                                        width: 'fit-content'
+                                      }}
+                                    >
+                                      {qtyLabel
+                                        ? `Đã chọn SX: ${qtyLabel} (${dateText})`
+                                        : `Đã chọn SX ngày: ${dateText}`}
+                                    </div>
+                                  );
+                                })()}
 
                                 {/* LEVEL 3: DANH SÁCH CHI TIẾT TỪNG SẢN PHẨM TRONG CONT (SÂU THÊM 1 BẬC) */}
                                 {isContExpanded && prods.length > 0 && (
@@ -1174,36 +1294,23 @@ const DailyProductionBuilderModal = ({
 
         {/* PANEL PHẢI: CUSTOM HÔM NAY SẢN XUẤT GÌ (CHỌN ĐỂ HIỂN THỊ) */}
         <div className="daily-builder-right">
-          {/* Thông tin Header của Bảng Liệt Kê */}
-          <div style={{
-            background: '#FFFFFF',
-            border: '1px solid #EADCC9',
-            borderRadius: 10,
-            padding: '10px 14px',
-            marginBottom: 8,
-            flexShrink: 0
-          }}>
-            <div className="daily-builder-form-grid-4">
+          {/* Thông tin Header của Bảng Liệt Kê (Siêu gọn) */}
+          <div className="daily-builder-form-compact">
+            <div className="daily-builder-form-grid-4-compact">
               <div>
-                <label className="daily-field-label">
-                  Ngày sản xuất
-                </label>
+                <label className="daily-field-label-compact">Ngày SX</label>
                 <input
                   type="date"
-                  className="daily-prod-input"
-                  style={{ width: '100%' }}
+                  className="daily-prod-input daily-prod-input-compact"
                   value={planDate}
                   onChange={(e) => setPlanDate(e.target.value)}
                 />
               </div>
 
               <div>
-                <label className="daily-field-label">
-                  Nhà máy (Từ CSDL)
-                </label>
+                <label className="daily-field-label-compact">Nhà máy</label>
                 <select
-                  className="daily-prod-select"
-                  style={{ width: '100%' }}
+                  className="daily-prod-select daily-prod-input-compact"
                   value={factory}
                   onChange={(e) => {
                     const nextFac = e.target.value;
@@ -1222,12 +1329,9 @@ const DailyProductionBuilderModal = ({
               </div>
 
               <div>
-                <label className="daily-field-label">
-                  Cụm chi tiết / Công đoạn (Từ CSDL)
-                </label>
+                <label className="daily-field-label-compact">Cụm / Công đoạn</label>
                 <select
-                  className="daily-prod-select"
-                  style={{ width: '100%' }}
+                  className="daily-prod-select daily-prod-input-compact"
                   value={sectionName}
                   onChange={(e) => handleApplySectionPreset(e.target.value)}
                 >
@@ -1240,30 +1344,30 @@ const DailyProductionBuilderModal = ({
               </div>
 
               <div>
-                <label className="daily-field-label">
-                  Dòng hàng / Màu / Nhà máy
-                </label>
+                <label className="daily-field-label-compact">Dòng hàng / Màu</label>
                 <input
                   type="text"
-                  className="daily-prod-input"
-                  style={{ width: '100%' }}
-                  placeholder="Tự động tổng hợp từ các Cont đã chọn..."
+                  className="daily-prod-input daily-prod-input-compact"
+                  placeholder="Tự động tổng hợp từ Cont..."
                   value={lineColorSummary}
                   onChange={(e) => setLineColorSummary(e.target.value)}
                 />
               </div>
             </div>
 
-            <div className="daily-builder-form-grid-2">
+            <div className="daily-builder-form-grid-2-compact">
               <div>
-                <label className="daily-field-label">
-                  Tiêu đề Cont gộp hiển thị trên phiếu (Tự động rút gọn từ Cont đã chọn, có thể sửa tay)
+                <label
+                  className="daily-field-label-compact"
+                  title="Tự động rút gọn từ Cont đã chọn, có thể sửa tay"
+                >
+                  Tiêu đề Cont gộp
                 </label>
                 <input
                   type="text"
-                  className="daily-prod-input"
-                  style={{ width: '100%', fontWeight: 800, color: '#7B5233' }}
-                  placeholder="Chọn Cont bên trái để tự động điền (VD: APT-0063-03~04; APT-0074-01~02...)"
+                  className="daily-prod-input daily-prod-input-compact"
+                  style={{ fontWeight: 800, color: '#7B5233' }}
+                  placeholder="Chọn Cont bên trái để tự động điền..."
                   value={batchTitle}
                   onChange={(e) => {
                     setBatchTitle(e.target.value);
@@ -1272,13 +1376,10 @@ const DailyProductionBuilderModal = ({
                 />
               </div>
               <div>
-                <label className="daily-field-label">
-                  Ghi chú bảng sản xuất
-                </label>
+                <label className="daily-field-label-compact">Ghi chú</label>
                 <input
                   type="text"
-                  className="daily-prod-input"
-                  style={{ width: '100%' }}
+                  className="daily-prod-input daily-prod-input-compact"
                   placeholder="Ghi chú ca chạy / tổ phụ trách..."
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
@@ -1288,9 +1389,9 @@ const DailyProductionBuilderModal = ({
 
             {/* Bộ lọc Màu sơn nhanh nếu có nhiều màu */}
             {availableColors.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 10 }}>
-                <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#7B5233' }}>
-                  Lọc màu sơn trong các Cont đã chọn:
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 6 }}>
+                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#7B5233' }}>
+                  Lọc màu sơn:
                 </span>
                 {availableColors.map(clr => {
                   const active = selectedColors.includes(clr);
@@ -1697,13 +1798,13 @@ const DailyProductionBuilderModal = ({
         </div>
       </div>
 
-      {/* FOOTER WORKSPACE */}
+      {/* FOOTER WORKSPACE (THANH TỔNG HỢP GỌN - NÚT LƯU & QUAY LẠI CHỈ ĐẶT Ở HEADER TRÊN) */}
       <div className="daily-builder-footer">
-        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 16, fontSize: '0.85rem' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 14, fontSize: '0.8rem' }}>
           <span>
             Đã gộp: <b style={{ color: '#7B5233' }}>{selectedOrderCodes.length} Cont</b>
             {selectedProductIds.length > 0 && (
-              <span style={{ fontSize: '0.8rem', color: '#B45309', marginLeft: 4 }}>
+              <span style={{ fontSize: '0.76rem', color: '#B45309', marginLeft: 4 }}>
                 ({selectedProductIds.length} sản phẩm đã chọn)
               </span>
             )}
@@ -1716,21 +1817,6 @@ const DailyProductionBuilderModal = ({
           <span>
             Chi tiết chọn hiển thị: <b style={{ color: '#15803D' }}>{statsSummary.visibleDetailsCount}</b> / {statsSummary.totalDetailsCount} dòng BOM
           </span>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button type="button" className="daily-btn-outline" onClick={onClose}>
-            Quay lại danh sách
-          </button>
-          <button
-            type="button"
-            className="daily-btn-primary"
-            disabled={saving}
-            onClick={handleSaveBatch}
-          >
-            <Check size={17} />
-            {saving ? 'Đang lưu...' : (editingBatch ? 'Lưu Cập Nhật Bảng SX Hôm Nay' : 'Lưu & Phát Hành "Hôm Nay Sản Xuất Gì"')}
-          </button>
         </div>
       </div>
     </div>

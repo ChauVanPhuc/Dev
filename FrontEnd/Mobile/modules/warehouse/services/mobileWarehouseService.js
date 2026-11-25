@@ -98,6 +98,55 @@ export const mobileWarehouseService = {
     return res.data || { available: 0, available_stock: 0, unit: '', item_name: '' };
   },
 
+  async getSubPoCodes({ search = '', limit = 100 } = {}) {
+    try {
+      const res = await apiClient.get('/warehouses/sub-po-codes', {
+        params: { search, limit },
+      });
+      return Array.isArray(res.data) ? res.data : [];
+    } catch (err) {
+      console.warn('[mobileWarehouseService] Lỗi tìm kiếm mã phân đoạn PO:', err);
+      return [];
+    }
+  },
+
+  async getPoMaterials(poCodeOrList, warehouseName = '') {
+    if (Array.isArray(poCodeOrList)) {
+      const cleaned = poCodeOrList.map((c) => String(c || '').trim()).filter(Boolean);
+      if (cleaned.length === 0) return null;
+      const res = await apiClient.get('/warehouses/po-materials', {
+        params: { po_codes: cleaned.join(','), warehouse_name: warehouseName },
+      });
+      return res.data;
+    }
+    const cleanSingle = String(poCodeOrList || '').trim();
+    if (!cleanSingle) return null;
+    const res = await apiClient.get('/warehouses/po-materials', {
+      params: { po_code: cleanSingle, warehouse_name: warehouseName },
+    });
+    return res.data;
+  },
+
+  async getPurchasePoCodes({ search = '', warehouseName = '', limit = 80 } = {}) {
+    try {
+      const res = await apiClient.get('/warehouses/purchase-po-codes', {
+        params: { search, warehouse_name: warehouseName || undefined, limit },
+      });
+      return Array.isArray(res.data) ? res.data : [];
+    } catch (err) {
+      console.warn('[mobileWarehouseService] Lỗi tìm kiếm Mã PO đặt hàng:', err);
+      return [];
+    }
+  },
+
+  async getPurchasePoItems(poCode) {
+    if (!poCode) return null;
+    const res = await apiClient.get('/warehouses/purchase-po-items', {
+      params: { po_code: poCode },
+    });
+    return res.data;
+  },
+
   async uploadImage(file) {
     const compressed = await compressImageFile(file);
     const formData = new FormData();
@@ -214,6 +263,8 @@ export const mobileWarehouseService = {
         search: params.search || '',
         fromDate: params.fromDate || '',
         toDate: params.toDate || '',
+        page: params.page || 1,
+        pageSize: params.pageSize || 15,
       },
     });
     return res.data || { data: [], stats: {} };

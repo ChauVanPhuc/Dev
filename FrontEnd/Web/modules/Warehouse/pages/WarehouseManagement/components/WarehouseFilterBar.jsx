@@ -12,7 +12,7 @@ import {
 import { useWarehouseMeta } from '../../../hooks/useWarehouseMeta';
 
 export const WarehouseFilterBar = ({
-  pageSize = 25,
+  pageSize = 15,
   setPageSize,
   setPage,
   timeFilter = { year: '', month: '', fromDate: '', toDate: '' },
@@ -70,7 +70,7 @@ export const WarehouseFilterBar = ({
         </button>
         {activeDropdown === 'pagesize' && (
           <div className="exp-filter-dropdown-card" style={{ width: '160px' }}>
-            {[15, 25, 50, 100, 300].map((size) => (
+            {[10, 15, 25, 50, 100, 300].map((size) => (
               <button
                 key={size}
                 type="button"

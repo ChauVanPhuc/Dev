@@ -180,6 +180,14 @@ app = FastAPI(
 async def health_check():
     return {"status": "ok"}
 
+@app.get("/test-12345")
+def test_12345():
+    return {"magic": "found-it"}
+
+@app.get("/api/v1/test-12345")
+def test_api_12345():
+    return {"magic": "found-api-v1-it"}
+
 # [STATIC FILES] Static files are mounted after router registration (see below)
 
 
@@ -251,7 +259,12 @@ async def check_write_permissions(request: Request, call_next):
         bypass_prefixes = (
             "/accounts/login",
             "/api/v1/accounts/login",
+            "/api/v1/chatbot",
             "/api/v1/claims/chat",
+            "/api/v1/claims/report-data",
+            "/api/v1/claims/export-report-pdf",
+            "/api/v1/claims/claims/report-data",
+            "/api/v1/claims/claims/export-report-pdf",
             "/api/v1/screen-bugs/upload-image",
             "/api/v1/master-products/upload-image",
             "/api/v1/inspections/upload-image",
@@ -832,41 +845,3 @@ async def serve_ui(request: Request, full_path: str):
         
     return {"message": "ERP_G7 API is running. UI builds not found."}
 
-@app.get("/test-direct")
-def test_direct_endpoint():
-    import os
-    try:
-        from modules.chatbot.services.ai_chatbot_service import ai_chatbot_service
-        available = ai_chatbot_service.is_available()
-        api_key_env = os.getenv("GEMINI_API_KEY")
-        
-        # Test Gemini client call directly
-        err_msg = None
-        response_text = None
-        try:
-            if ai_chatbot_service.client:
-                # Direct test call to Gemini API
-                direct_res = ai_chatbot_service.client.models.generate_content(
-                    model="gemini-1.0-pro",  # Use gemini-1.0-pro (available in v1beta)
-                    contents="Xin chào"
-                )
-                response_text = direct_res.text
-            else:
-                err_msg = "Client Gemini chưa được khởi tạo"
-        except Exception as api_err:
-            err_msg = f"Gọi Gemini API thất bại: {str(api_err)}"
-            
-        return {
-            "status": "ok",
-            "is_available": available,
-            "api_key_present": api_key_env is not None,
-            "api_key_preview": api_key_env[:10] + "..." if api_key_env else "None",
-            "direct_response": response_text,
-            "direct_error": err_msg
-        }
-    except Exception as e:
-        import traceback
-        return {
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }

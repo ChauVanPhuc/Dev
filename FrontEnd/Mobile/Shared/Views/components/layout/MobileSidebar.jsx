@@ -213,30 +213,57 @@ const filterRootMenuItems = (items) => {
   
   const isAdmin = combinedAuthStr.includes('admin') || combinedAuthStr.includes('it') || combinedAuthStr.includes('bgd');
 
-  const checkItemVisible = (item) => {
-    if (isAdmin) return true;
-    if (!permissions || Object.keys(permissions).length === 0) return true;
-
+  // Trả về true/false nếu tài khoản có cấu hình quyền tường minh cho mục này, null nếu không có cấu hình
+  const getExplicitAccess = (item) => {
+    const rawPath = item.route_path || '';
     const candidates = [
-      item.route_path,
-      item.route_path ? item.route_path.replace(/^\//, '') : null,
+      rawPath,
+      rawPath ? rawPath.replace(/^\//, '') : null,
+      rawPath && !rawPath.startsWith('/admin') ? `/admin${rawPath}` : null,
+      rawPath && rawPath.startsWith('/admin') ? rawPath.replace(/^\/admin/, '') : null,
       item.permission_key,
       item.permission_key ? item.permission_key.replace(/^mobile_/, '') : null,
       item.permission_key ? `/${item.permission_key.replace(/^mobile_/, '').replace(/^\//, '')}` : null
-    ].filter(Boolean);
+    ].filter((k) => k && k !== '#');
 
     for (const key of candidates) {
       const userPerm = permissions[key];
       if (userPerm !== undefined) {
         if (userPerm === 'none' || userPerm === '') return false;
-        const actions = userPerm.split(',').map(p => p.trim());
-        if (actions.includes('read') || actions.includes('create') || actions.includes('write') || actions.includes('edit')) {
-          return true;
-        }
-        return false;
+        const actions = String(userPerm).split(',').map(p => p.trim());
+        return actions.includes('read') || actions.includes('create') || actions.includes('write') || actions.includes('edit');
       }
     }
-    return true;
+    return null;
+  };
+
+  const checkItemVisible = (item) => {
+    if (isAdmin) return true;
+    if (!permissions || Object.keys(permissions).length === 0) return true;
+    const explicit = getExplicitAccess(item);
+    return explicit === null ? true : explicit;
+  };
+
+  // Lọc mục con theo nhóm: mục con không có cấu hình quyền riêng sẽ KẾ THỪA quyền của nhóm.
+  // Nhóm bị "Không cho phép" (mọi mục con có cấu hình đều = none) => ẩn luôn các mục con chưa cấu hình.
+  const filterGroupChildren = (group) => {
+    const children = group.children || [];
+    if (isAdmin || !permissions || Object.keys(permissions).length === 0) return children;
+
+    // Quyền cấp nhóm: chỉ xét đúng permission_key của nhóm (không bỏ tiền tố mobile_ để tránh trùng key Web)
+    let groupExplicit = null;
+    const gPerm = group.permission_key ? permissions[group.permission_key] : undefined;
+    if (gPerm !== undefined) {
+      groupExplicit = !(gPerm === 'none' || gPerm === '');
+    }
+    if (groupExplicit === false) return [];
+
+    const states = children.map((sub) => getExplicitAccess(sub));
+    const hasExplicit = states.some((s) => s !== null);
+    const anyAllowed = states.some((s) => s === true);
+    const inherited = groupExplicit === true ? true : (hasExplicit ? anyAllowed : true);
+
+    return children.filter((_, i) => (states[i] === null ? inherited : states[i]));
   };
 
   const menuItems = menuList
@@ -246,7 +273,7 @@ const filterRootMenuItems = (items) => {
         return {
           ...item,
           hasSub,
-          children: item.children.filter(sub => checkItemVisible(sub))
+          children: filterGroupChildren(item)
         };
       }
       return { ...item, hasSub };

@@ -70,9 +70,7 @@ export const GoodsReceiptToolbar = ({
     { key: 'receipt_date', label: 'Ngày nhập kho (Mới nhất)', dir: 'desc' },
     { key: 'receipt_date', label: 'Ngày nhập kho (Cũ nhất)', dir: 'asc' },
     { key: 'voucher_no', label: 'Mã phiếu (A - Z)', dir: 'asc' },
-    { key: 'voucher_no', label: 'Mã phiếu (Z - A)', dir: 'desc' },
-    { key: 'total_amount', label: 'Giá trị nhập (Cao - Thấp)', dir: 'desc' },
-    { key: 'total_amount', label: 'Giá trị nhập (Thấp - Cao)', dir: 'asc' }
+    { key: 'voucher_no', label: 'Mã phiếu (Z - A)', dir: 'desc' }
   ];
 
   return (

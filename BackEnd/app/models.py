@@ -42,6 +42,7 @@ from modules.system.models.system_guide import SystemGuide
 from modules.inspection.models.daily_inspection import DailyInspectionRecord, DailyInspectionDefect
 from modules.inspection.models.defect_type import DefectType, ClientDefect, DefectGlossary
 from modules.chatbot.models.chatbot_history import ChatbotHistory
+from modules.chatbot.models.chatbot_feedback import ChatbotFeedback
 from modules.purchasing.models.purchase_requisition import PurchaseRequisition
 from modules.purchasing.models.purchase_order_item import PurchaseOrderItem
 from modules.equipment.models.equipment import Equipment, EquipmentInspection, EquipmentTraining
@@ -91,7 +92,7 @@ __all__ = [
     "DeliveryQC", "DeliveryReturn", "permission_stage", "role_permission",
     "BackupQRCode", "PalletCard", "KPI", "AwardDiscipline", "StaffEvaluation", "CAPA",
     "CAPAOccurrence", "CAPAEvaluation", "SystemScreen", "SystemComponent", "SystemGuide", "ScreenBug",
-    "ScreenBugUpdate", "ScreenBugImage", "DefectType", "ClientDefect", "DefectGlossary", "ChatbotHistory",
+    "ScreenBugUpdate", "ScreenBugImage", "DefectType", "ClientDefect", "DefectGlossary", "ChatbotHistory", "ChatbotFeedback",
     "PurchaseRequisition", "PurchaseOrderItem", "Equipment", "EquipmentInspection", "EquipmentTraining",
     "DailyInspectionRecord", "DailyInspectionDefect",
     "Machine", "MachineMaintenance", "MachineDocument",

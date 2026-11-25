@@ -174,6 +174,7 @@ export const GoodsReceiptPage = () => {
         page={wh.page}
         setPage={wh.setPage}
         pageSize={wh.pageSize}
+        setPageSize={wh.setPageSize}
         sortBy={wh.sortBy}
         setSortBy={wh.setSortBy}
         sortDir={wh.sortDir}
@@ -185,22 +186,26 @@ export const GoodsReceiptPage = () => {
         onDeleteReceipt={handleDeleteSingle}
       />
 
-      {/* 5. Modal Chi tiết / Chỉnh sửa / Thêm mới */}
-      <GoodsReceiptDetailModal
-        isOpen={showDetailModal}
-        onClose={() => setShowDetailModal(false)}
-        initialData={selectedReceipt}
-        isEditMode={isEditMode}
-        isCreateMode={isCreateMode}
-        onSave={handleSaveReceipt}
-      />
+      {/* 5. Modal Chi tiết / Chỉnh sửa / Thêm mới (Chỉ mount khi người dùng mở modal) */}
+      {showDetailModal && (
+        <GoodsReceiptDetailModal
+          isOpen={showDetailModal}
+          onClose={() => setShowDetailModal(false)}
+          initialData={selectedReceipt}
+          isEditMode={isEditMode}
+          isCreateMode={isCreateMode}
+          onSave={handleSaveReceipt}
+        />
+      )}
 
-      {/* 6. Modal Nhập dữ liệu từ Excel */}
-      <GoodsReceiptImportModal
-        isOpen={showImportModal}
-        onClose={() => setShowImportModal(false)}
-        onImportSuccess={handleImportSuccess}
-      />
+      {/* 6. Modal Nhập dữ liệu từ Excel (Chỉ mount khi người dùng mở modal) */}
+      {showImportModal && (
+        <GoodsReceiptImportModal
+          isOpen={showImportModal}
+          onClose={() => setShowImportModal(false)}
+          onImportSuccess={handleImportSuccess}
+        />
+      )}
     </div>
   );
 };

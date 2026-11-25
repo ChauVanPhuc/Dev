@@ -6,7 +6,8 @@ import { formatNumber } from '../../../types/warehouseInventory.types';
 export const WarehousePagination = ({
   page = 1,
   setPage,
-  pageSize = 25,
+  pageSize = 15,
+  setPageSize,
   totalCount = 0,
   totalPages = 1,
   itemsLength = 0
@@ -35,8 +36,37 @@ export const WarehousePagination = ({
 
   return (
     <div className="exp-pagination-bar">
-      <div className="exp-pagination-info">
-        Hiển thị <b>{rawStart}</b>–<b>{rawEnd}</b> trên tổng số <b>{formatNumber(safeTotal)}</b> vật tư
+      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+        <div className="exp-pagination-info">
+          Hiển thị <b>{rawStart}</b>–<b>{rawEnd}</b> trên tổng số <b>{formatNumber(safeTotal)}</b> vật tư
+        </div>
+
+        {setPageSize && (
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '0.8rem', color: '#8D6E63' }}>Hiển thị:</span>
+            {[10, 15].map((size) => (
+              <button
+                key={size}
+                type="button"
+                className={`exp-page-btn ${pageSize === size ? 'active' : ''}`}
+                onClick={() => {
+                  setPageSize(size);
+                  setPage(1);
+                }}
+                style={{
+                  padding: '0 8px',
+                  height: '26px',
+                  fontSize: '0.75rem',
+                  fontWeight: pageSize === size ? '700' : '500',
+                  minWidth: 'unset',
+                  cursor: 'pointer'
+                }}
+              >
+                {size} dòng
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="exp-pagination-controls">

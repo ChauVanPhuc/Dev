@@ -195,6 +195,9 @@ export const resolvePageTitle = (pathname = '', search = '') => {
   if (cleanPath.startsWith('/admin/screens/')) return 'Chi tiết màn hình';
   if (cleanPath.startsWith('/admin/products/')) return 'Chi tiết BOM sản phẩm';
   if (cleanPath.startsWith('/admin/production-orders/')) return 'Chi tiết lệnh sản xuất';
+  if (cleanPath === '/admin/daily-production/create') return 'Thiết lập gộp Cont & SX hôm nay';
+  if (cleanPath.startsWith('/admin/daily-production/edit/')) return 'Chỉnh sửa bảng SX hôm nay';
+  if (cleanPath.startsWith('/admin/daily-production/')) return 'Chi tiết bảng SX hôm nay';
   if (cleanPath.startsWith('/admin/plan/')) return 'Chi tiết kế hoạch sản xuất';
   if (cleanPath.startsWith('/admin/orders/')) return 'Chi tiết đơn hàng sản xuất';
   if (cleanPath.startsWith('/admin/export-orders/')) return 'Chi tiết đơn hàng xuất khẩu';

@@ -103,7 +103,7 @@ export const useWarehouseInventory = ({ toast } = {}) => {
 
   // 3. Phân trang
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize, setPageSize] = useState(15);
 
   // 4. Trạng thái dữ liệu
   const [loading, setLoading] = useState(false);
@@ -133,14 +133,14 @@ export const useWarehouseInventory = ({ toast } = {}) => {
       if (saved) {
         return { ...DEFAULT_INVENTORY_VISIBLE_COLUMNS, ...JSON.parse(saved) };
       }
-    } catch (e) {}
+    } catch (e) { }
     return { ...DEFAULT_INVENTORY_VISIBLE_COLUMNS };
   });
 
   const saveColumnsToStorage = (newCols) => {
     try {
       localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(newCols));
-    } catch (e) {}
+    } catch (e) { }
   };
 
   const handleToggleColumn = useCallback((key) => {
@@ -294,7 +294,7 @@ export const useWarehouseInventory = ({ toast } = {}) => {
     try {
       const counts = await warehouseInventoryService.getWarehouseCounts();
       setWarehouseCounts(counts);
-    } catch (e) {}
+    } catch (e) { }
   }, []);
 
   useEffect(() => {

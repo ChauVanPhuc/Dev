@@ -319,66 +319,44 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
     if (!key) return false;
     let perm = activePermissions[key] || (item.permission_key ? activePermissions[item.permission_key] : undefined);
 
+    // Đồng bộ alias /admin/quality và /admin/quality-records
+    if (perm === undefined && item.route_path === '/admin/quality') {
+      perm = activePermissions['/admin/quality-records'] || activePermissions['quality-records'] || activePermissions['quality'];
+    } else if (perm === undefined && item.route_path === '/admin/quality-records') {
+      perm = activePermissions['/admin/quality'] || activePermissions['quality'] || activePermissions['quality-records'];
+    }
+
     // Fallback: nếu chưa cấu hình riêng cho SOS/CTQ, kế thừa quyền từ inspection-guides
     if (perm === undefined && (item.route_path === '/admin/sos-guides' || item.route_path === '/admin/ctq-guides')) {
       perm = activePermissions['/admin/inspection-guides'] || activePermissions['inspection-guides'];
     }
 
-    // Cho phép hiển thị Quản lý kho & Quản lý đơn vị tính
-    if (item.route_path && item.route_path.startsWith('/admin/warehouse')) {
-      const whPerm = activePermissions ? (activePermissions[item.route_path] || activePermissions['warehouse']) : undefined;
-      if (whPerm !== 'none') return false;
-    }
-
-    if (item.route_path === '/admin/units' || item.permission_key === 'units') {
-      const uomPerm = activePermissions ? (activePermissions['/admin/units'] || activePermissions['units'] || activePermissions['screens'] || activePermissions['system-config']) : undefined;
-      if (uomPerm !== 'none') return false;
-    }
-
-    // Cho phép hiển thị Dashboard KPI nếu là kpi route
-    if (item.route_path === '/admin/kpi/dashboard' || item.permission_key === 'kpi') {
-      const kpiPerm = activePermissions['/admin/kpi/dashboard'] || activePermissions['kpi'];
-      if (kpiPerm !== 'none') return false;
-    }
-
-    // Cho phép hiển thị Quản Lý Góp Ý
-    if (item.route_path === '/admin/feedback' || item.permission_key === 'feedback') {
-      const fbPerm = activePermissions['/admin/feedback'] || activePermissions['feedback'];
-      if (fbPerm !== 'none') return false;
-    }
-
-    // Whitelist các module Claim, Dashboard, Price, Crawl, Train không bao giờ bị chặn trừ khi gán 'none' rõ ràng
-    const allowByDefaultRoutes = [
-      '/admin/claim-dashboard',
-      '/admin/defects',
-      '/admin/claims',
-      '/admin/prices',
-      '/admin/lpn-crawler',
-      '/admin/ai-ocr-train',
-      '/admin/pallet-check',
-      '/admin/system-config',
-      '/admin/quality-reports',
-      '/admin/daily-production'
-    ];
-    if (allowByDefaultRoutes.includes(item.route_path)) {
+    // 1. Đối với admin/IT/BGD: Cho phép tất cả trừ khi bị chặn rõ ràng bởi 'none'
+    if (isAdmin) {
       if (perm === 'none') return true;
+      if (Array.isArray(perm) && (perm.includes('none') || perm.length === 0)) return true;
+      if (typeof perm === 'string' && perm.split(',').map(s => s.trim()).includes('none')) return true;
       return false;
     }
 
-    // 1. Kiểm tra chặn rõ ràng (Explicit block)
-    if (perm === 'none') return true;
-    if (Array.isArray(perm)) {
-      return perm.length === 0 || perm.includes('none');
-    }
-    if (typeof perm === 'string' && perm.split(',').map(s => s.trim()).includes('none')) {
+    // 2. Đối với tài khoản thường: MẶC ĐỊNH CHẶN nếu chưa được cấp quyền (Zero-Trust)
+    if (perm === undefined || perm === null || perm === 'none' || perm === '') {
       return true;
     }
 
-    // 2. Mặc định đối với admin/IT/BGD (nếu không bị chặn rõ ràng ở trên)
-    if (isAdmin) return false;
+    if (Array.isArray(perm)) {
+      return perm.length === 0 || perm.includes('none');
+    }
 
-    // 3. Với các tài khoản thường, nếu chưa cấu hình (undefined/null) thì mặc định chặn
-    return perm === undefined || perm === null;
+    if (typeof perm === 'string') {
+      const actions = perm.split(',').map(s => s.trim()).filter(Boolean);
+      if (actions.length === 0 || actions.includes('none')) {
+        return true;
+      }
+      return false; // Có hành động hợp lệ (read, create, edit, export_import, write...)
+    }
+
+    return true;
   };
 
   // Helper to check if a route is active
@@ -825,11 +803,14 @@ const Sidebar = ({ active, collapsed, onToggleCollapse, onLogout, onClose, uploa
 
                 const handleHeaderClick = () => {
                   if (isQualityGroup) {
+                    const qualityBlocked = isBlocked({ route_path: '/admin/quality', permission_key: 'quality' });
                     setExpandedGroups(prev => ({
                       ...prev,
                       [item.id]: true
                     }));
-                    if (location.pathname === '/admin/quality' || location.pathname === '/admin/quality/') {
+                    if (qualityBlocked) {
+                      toggleGroup(item.id);
+                    } else if (location.pathname === '/admin/quality' || location.pathname === '/admin/quality/') {
                       toggleGroup(item.id);
                     } else {
                       navigate('/admin/quality');

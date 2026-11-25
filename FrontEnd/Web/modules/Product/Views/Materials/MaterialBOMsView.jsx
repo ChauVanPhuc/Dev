@@ -15,11 +15,44 @@ import '@styles/components.css';
  * View: KT03.4 - Quản lý BOM Vật tư (/admin/material-boms)
  * Trang chuyên biệt quản lý danh mục Định mức vật tư phụ kiện (Hàng Trắng & Sau Sơn).
  */
+const DEFAULT_MATERIAL_GROUPS = [
+  'Vật tư lắp ráp',
+  'Sơn',
+  'Sơn Lót',
+  'Sơn Bóng',
+  'Sơn UV',
+  'Sơn UV Plywood',
+  'Sơn UV Mặt Tiền',
+  'Sơn UV Chi Tiết Phụ',
+  'Sơn UV Ván Hậu',
+  'Sơn UV THK',
+  'Sơn Lót Mặt Tiền',
+  'Sơn Lót Cạnh',
+  'Sơn Lót Sườn tủ',
+  'Sơn Bóng Mặt tiền',
+  'Sơn Bóng Sườn Tủ',
+  'Sơn Stain Màu',
+  'Sơn Dặm Glaze',
+  'Bao bì, đóng gói',
+  'Vật tư đi kèm',
+  'Vật tư dùng chung',
+  'Vật tư dùng chung (ĐH 1)',
+  'Vật tư dùng chung (ĐHV1)',
+  'Vật tư dùng chung (LR,Chà nhám 1)',
+  'Vật tư dùng chung (Sơn 1)',
+  'Vật tư lắp ráp (LR3-ADV)',
+  'Vật tư lắp ráp (Đóng gói)',
+  'Vật tư lắp ráp (Định hình tủ)',
+  'Vật tư dùng chung (Định hình mặt tiền 2)',
+  'Vật tư dùng chung (Sơn 2)',
+  'Vật tư dùng chung (ĐH 2, LR 2)'
+];
+
 const MaterialBOMsView = ({ isEmbedded = false }) => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const outletContext = useOutletContext() || {};
-  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode } = outletContext;
+  const { setCustomTitle, setCustomSubtitle, setCustomScreenCode, startGlobalUpload } = outletContext;
 
   const { screenCode, title, subtitle } = useScreenMetadataCached('/admin/material-boms', {
     code: 'KT03.4',
@@ -43,6 +76,7 @@ const MaterialBOMsView = ({ isEmbedded = false }) => {
     count_sau_son: 0,
     unique_products: 0
   });
+  const [availableGroups, setAvailableGroups] = useState(DEFAULT_MATERIAL_GROUPS);
   const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState([]);
 
@@ -129,6 +163,9 @@ const MaterialBOMsView = ({ isEmbedded = false }) => {
         setTotal(res.total || 0);
         if (res.summary) {
           setSummary(res.summary);
+          if (res.summary.groups && res.summary.groups.length > 0) {
+            setAvailableGroups(Array.from(new Set([...res.summary.groups, ...DEFAULT_MATERIAL_GROUPS])));
+          }
         }
       } else {
         setItems([]);
@@ -162,7 +199,7 @@ const MaterialBOMsView = ({ isEmbedded = false }) => {
     setFormData({
       master_product_id: firstP ? String(firstP.id) : '',
       product_name: defaultProdText,
-      group_type: 'VẬT TƯ HÀNG TRẮNG',
+      group_type: availableGroups[0] || 'Vật tư lắp ráp',
       stt: items.length + 1,
       material_code: `VT-${String(items.length + 1).padStart(3, '0')}`,
       material_name: '',
@@ -184,7 +221,7 @@ const MaterialBOMsView = ({ isEmbedded = false }) => {
     setFormData({
       master_product_id: String(item.master_product_id || ''),
       product_name: prodText,
-      group_type: item.group_type || 'VẬT TƯ HÀNG TRẮNG',
+      group_type: item.group_type || 'Vật tư lắp ráp',
       stt: item.stt || 1,
       material_code: item.material_code || '',
       material_name: item.material_name || '',
@@ -270,21 +307,29 @@ const MaterialBOMsView = ({ isEmbedded = false }) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const formDataUpload = new FormData();
-    formDataUpload.append('file', file);
-
     try {
-      setIsImporting(true);
-      setImportProgress('Đang đọc cấu trúc file Excel BOM vật tư...');
-      const res = await api.post('/master-products/import-material-bom-excel', formDataUpload, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      if (res && res.status === 'success') {
-        if (toast) toast('success', `Đã nhập thành công ${res.imported_count} dòng định mức vật tư!`);
-        setShowImportModal(false);
-        fetchMaterials();
+      setShowImportModal(false);
+      if (startGlobalUpload) {
+        await startGlobalUpload(
+          file,
+          '/master-products/import-material-bom-excel',
+          () => fetchMaterials()
+        );
       } else {
-        if (toast) toast('error', 'Không thể nhập dữ liệu từ file Excel');
+        const formDataUpload = new FormData();
+        formDataUpload.append('file', file);
+        setIsImporting(true);
+        setImportProgress('Đang đọc cấu trúc file Excel BOM vật tư...');
+        const res = await api.post('/master-products/import-material-bom-excel', formDataUpload, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        if (res && res.status === 'success') {
+          const successMsg = res.message || `Đã nhập thành công ${res.imported_count} dòng định mức vật tư!`;
+          if (toast) toast('success', successMsg);
+          fetchMaterials();
+        } else {
+          if (toast) toast('error', 'Không thể nhập dữ liệu từ file Excel');
+        }
       }
     } catch (err) {
       console.error('Lỗi upload Excel BOM vật tư:', err);
@@ -456,11 +501,12 @@ const MaterialBOMsView = ({ isEmbedded = false }) => {
               <select
                 value={groupFilter}
                 onChange={(e) => { setGroupFilter(e.target.value); setCurrentPage(1); }}
-                style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.84rem', outline: 'none', color: '#2D1A12', fontWeight: '600', backgroundColor: '#FFF', minWidth: '160px' }}
+                style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.84rem', outline: 'none', color: '#2D1A12', fontWeight: '600', backgroundColor: '#FFF', minWidth: '180px' }}
               >
-                <option value="">Tất cả nhóm</option>
-                <option value="HÀNG TRẮNG">VẬT TƯ HÀNG TRẮNG</option>
-                <option value="SAU SƠN">VẬT TƯ SAU SƠN</option>
+                <option value="">Tất cả nhóm ({availableGroups.length} nhóm)</option>
+                {availableGroups.map(g => (
+                  <option key={g} value={g}>{g}</option>
+                ))}
               </select>
             </div>
 
@@ -559,13 +605,13 @@ const MaterialBOMsView = ({ isEmbedded = false }) => {
                                 borderRadius: '12px',
                                 fontSize: '0.75rem',
                                 fontWeight: '700',
-                                backgroundColor: (item.group_type || '').includes('TRẮNG') ? '#EFF6FF' : '#ECFDF5',
-                                color: (item.group_type || '').includes('TRẮNG') ? '#1D4ED8' : '#15803D',
-                                border: `1px solid ${(item.group_type || '').includes('TRẮNG') ? '#BFDBFE' : '#BBF7D0'}`,
+                                backgroundColor: '#EFF6FF',
+                                color: '#1D4ED8',
+                                border: '1px solid #BFDBFE',
                                 whiteSpace: 'nowrap'
                               }}
                             >
-                              {(item.group_type || '').includes('TRẮNG') ? 'Hàng Trắng' : 'Sau Sơn'}
+                              {item.group_type || 'Vật tư dùng chung'}
                             </span>
                           </td>
                           <td className="font-bold">{item.material_code || '-'}</td>
@@ -732,12 +778,12 @@ const MaterialBOMsView = ({ isEmbedded = false }) => {
                     borderRadius: '10px',
                     fontSize: '0.72rem',
                     fontWeight: '700',
-                    backgroundColor: (item.group_type || '').includes('TRẮNG') ? '#EFF6FF' : '#ECFDF5',
-                    color: (item.group_type || '').includes('TRẮNG') ? '#1D4ED8' : '#15803D',
-                    border: `1px solid ${(item.group_type || '').includes('TRẮNG') ? '#BFDBFE' : '#BBF7D0'}`
+                    backgroundColor: '#EFF6FF',
+                    color: '#1D4ED8',
+                    border: '1px solid #BFDBFE'
                   }}
                 >
-                  {(item.group_type || '').includes('TRẮNG') ? 'Hàng Trắng' : 'Sau Sơn'}
+                  {item.group_type || 'Vật tư dùng chung'}
                 </span>
               </div>
             </div>
@@ -849,10 +895,14 @@ const MaterialBOMsView = ({ isEmbedded = false }) => {
                     <select
                       value={formData.group_type}
                       onChange={(e) => setFormData(prev => ({ ...prev, group_type: e.target.value }))}
-                      style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #CBD5E1', fontSize: '0.86rem', outline: 'none', backgroundColor: '#FFFFFF' }}
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #CBD5E1', fontSize: '0.86rem', outline: 'none', backgroundColor: '#FFFFFF', fontWeight: '700', color: '#7B5233' }}
                     >
-                      <option value="VẬT TƯ HÀNG TRẮNG">VẬT TƯ HÀNG TRẮNG</option>
-                      <option value="VẬT TƯ SAU SƠN">VẬT TƯ SAU SƠN</option>
+                      {availableGroups.map(g => (
+                        <option key={g} value={g}>{g}</option>
+                      ))}
+                      {formData.group_type && !availableGroups.includes(formData.group_type) && (
+                        <option value={formData.group_type}>{formData.group_type}</option>
+                      )}
                     </select>
                   </div>
                 </div>
@@ -1032,7 +1082,7 @@ const MaterialBOMsView = ({ isEmbedded = false }) => {
                   {isImporting ? 'Đang xử lý tải lên...' : 'Chọn hoặc kéo thả file Excel BOM Vật tư'}
                 </div>
                 <div style={{ fontSize: '0.82rem', color: '#64748B' }}>
-                  Hỗ trợ định dạng .xlsx, .xls (Tự động đọc các sheet Hàng Trắng & Sau Sơn)
+                  Hỗ trợ định dạng .xlsx, .xls (Tự động nhận diện file bảng phẳng VTTH hoặc tệp nhiều sheet)
                 </div>
                 <input
                   type="file"

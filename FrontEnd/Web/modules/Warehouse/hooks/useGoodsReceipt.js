@@ -11,16 +11,23 @@ export const useGoodsReceipt = ({ toast }) => {
   const [totalCount, setTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize, setPageSize] = useState(15);
   const [stats, setStats] = useState({
     total_vouchers: 0,
     total_lines: 0,
-    total_quantity: 0,
-    total_value: 0
+    total_quantity: 0
   });
 
-  // Tìm kiếm
+  // Tìm kiếm có debounce 280ms
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 280);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   // Sắp xếp
   const [sortBy, setSortBy] = useState('created_at');
@@ -56,7 +63,7 @@ export const useGoodsReceipt = ({ toast }) => {
     setLoading(true);
     try {
       const res = await goodsReceiptService.filterReceipts({
-        search,
+        search: debouncedSearch,
         warehouse: warehouseFilter,
         receiptType: receiptTypeFilter,
         status: statusFilter,
@@ -74,7 +81,7 @@ export const useGoodsReceipt = ({ toast }) => {
       setReceipts(list);
       setTotalCount(typeof res?.totalCount === 'number' ? res.totalCount : list.length);
       setTotalPages(typeof res?.totalPages === 'number' ? res.totalPages : 1);
-      setStats(res?.stats || { total_vouchers: 0, total_lines: 0, total_quantity: 0, total_value: 0 });
+      setStats(res?.stats || { total_vouchers: 0, total_lines: 0, total_quantity: 0 });
     } catch (err) {
       console.error('Lỗi tải danh sách phiếu nhập kho:', err);
       if (toast?.error) toast.error('Không thể tải danh sách phiếu nhập kho');
@@ -82,7 +89,7 @@ export const useGoodsReceipt = ({ toast }) => {
       setLoading(false);
     }
   }, [
-    search,
+    debouncedSearch,
     warehouseFilter,
     receiptTypeFilter,
     statusFilter,

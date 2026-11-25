@@ -143,6 +143,7 @@ export const WarehouseManagementPage = () => {
         page={wh.page}
         setPage={wh.setPage}
         pageSize={wh.pageSize}
+        setPageSize={wh.setPageSize}
         totalCount={wh.totalCount}
         totalPages={wh.totalPages}
         itemsLength={wh.items.length}

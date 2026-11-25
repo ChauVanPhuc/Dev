@@ -520,6 +520,107 @@ def export_claims_excel(claims_data: List[Dict[str, Any]]):
         import_service.logger.exception("Error exporting claims Excel:")
         raise HTTPException(status_code=500, detail=f"Lỗi xuất file Excel: {str(e)}")
 
+class ClaimPdfExportRequest(BaseModel):
+    pageId: Optional[str] = "page4"
+    period: Optional[str] = "10-2026"
+    author: Optional[str] = "Dương Thị Lệ Uyên"
+    includeAi: Optional[bool] = True
+    predictTrend: Optional[bool] = True
+    exportScope: Optional[str] = "all"
+    selectedPages: Optional[List[int]] = None
+    customFilters: Optional[Dict[str, Any]] = None
+
+@router.api_route("/report-data", methods=["GET", "POST"])
+@router.api_route("/claims/report-data", methods=["GET", "POST"])
+def get_claim_report_data(
+    req: Optional[ClaimPdfExportRequest] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    [POST] Lấy trọn bộ dữ liệu báo cáo chuyên sâu (KPI, Pareto, biểu đồ, bảng 9 cột và nhận định AI)
+    phục vụ Xem trước Đa trang và In ấn trực tiếp trên Trình duyệt.
+    """
+    from modules.claim.services.claim_report_pdf_service import ClaimReportPdfService
+    p_id = req.pageId if req else "page4"
+    author = req.author if req and req.author else "Dương Thị Lệ Uyên"
+    period = req.period if req and req.period else "10-2026"
+    include_ai = req.includeAi if req else True
+    predict_trend = req.predictTrend if req else True
+
+    try:
+        report_data = ClaimReportPdfService.aggregate_claim_data(
+            db=db,
+            period=period,
+            author=author,
+            include_ai=include_ai,
+            predict_trend=predict_trend
+        )
+        individual_pages = ClaimReportPdfService.get_individual_pages_html(report_data)
+        return {
+            "success": True, 
+            "data": report_data,
+            "pages": individual_pages
+        }
+    except Exception as e:
+        import_service.logger.exception("Error aggregating claim report data:")
+        raise HTTPException(status_code=500, detail=f"Lỗi nạp dữ liệu báo cáo: {str(e)}")
+
+@router.api_route("/export-report-pdf", methods=["GET", "POST"])
+@router.api_route("/claims/export-report-pdf", methods=["GET", "POST"])
+def export_claim_report_pdf(
+    req: Optional[ClaimPdfExportRequest] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    [POST] Xuất bản file PDF Báo cáo Quản trị Chất lượng & Khiếu nại Khách hàng chuẩn VINA G7
+    Tái hiện 100% bố cục và chất lượng tài liệu mẫu BÁO CÁO TÌNH HÌNH KHIẾU NẠI T10_2026.pdf
+    (Khổ kết hợp: Trang 1-3 Portrait + Trang 4-7 Landscape bảng 9 cột có ảnh thực tế).
+    """
+    from modules.claim.services.claim_report_pdf_service import ClaimReportPdfService
+    p_id = req.pageId if req else "page4"
+    author = req.author if req and req.author else "Dương Thị Lệ Uyên"
+    period = req.period if req and req.period else "10-2026"
+    include_ai = req.includeAi if req else True
+    predict_trend = req.predictTrend if req else True
+
+    try:
+        report_data = ClaimReportPdfService.aggregate_claim_data(
+            db=db,
+            period=period,
+            author=author,
+            include_ai=include_ai,
+            predict_trend=predict_trend
+        )
+        selected_pages = None
+        if req and req.selectedPages:
+            selected_pages = req.selectedPages
+        elif req and req.exportScope == "single":
+            page_map = {
+                "page1": [1],
+                "page2": [2],
+                "page3": [3],
+                "page4": [4, 5, 6, 7]
+            }
+            selected_pages = page_map.get(p_id)
+
+        pdf_bytes = ClaimReportPdfService.generate_full_pdf(report_data, selected_pages=selected_pages)
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+        clean_period = period.replace("-", "_").replace("/", "_")
+        filename = f"BAO_CAO_TINH_HINH_KHIEU_NAI_{clean_period}_{timestamp}.pdf"
+
+        return StreamingResponse(
+            iter([pdf_bytes]),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}",
+                "Content-Type": "application/pdf"
+            }
+        )
+    except Exception as e:
+        import_service.logger.exception("Error exporting claim report PDF:")
+        raise HTTPException(status_code=500, detail=f"Lỗi xuất báo cáo PDF: {str(e)}")
+
 @router.get("/claims/{claim_id}", response_model=schemas.CustomerClaimResponse)
 def read_claim(claim_id: int, db: Session = Depends(get_db)):
     db_claim = service.get_claim_by_id(db, claim_id)

@@ -62,7 +62,7 @@ const ManufactureProducts = () => {
 
   useEffect(() => {
     fetchProducts();
-  }, [page, searchTerm, limit, filterType]); // Reload when page, search, limit, or filterType changes
+  }, [page, searchTerm, limit, filterType, tabParam]); // Reload when page, search, limit, filterType or tabParam changes
   
   // Đã gỡ bỏ logic khóa điều hướng cục bộ, Layout sẽ xử lý ngầm
 
@@ -78,7 +78,11 @@ const ManufactureProducts = () => {
       }, 200);
 
       const skip = page * limit;
-      const response = await api.get(`/master-products/?skip=${skip}&limit=${limit}&q=${searchTerm || ''}`);
+      let url = `/master-products/?skip=${skip}&limit=${limit}&q=${encodeURIComponent(searchTerm || '')}`;
+      if (tabParam) {
+        url += `&tab=${encodeURIComponent(tabParam)}`;
+      }
+      const response = await api.get(url);
       
       if (response && response.items) {
         setProducts(response.items);
@@ -99,6 +103,28 @@ const ManufactureProducts = () => {
   const handleImportExcel = async (e) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
+
+    // NẾU ĐANG Ở CHẾ ĐỘ BOM VẬT TƯ (?tab=materials): TỰ ĐỘNG GỌI STREAMING API NẠP BOM VẬT TƯ (VTTH)
+    if (tabParam === 'materials') {
+      try {
+        const targetFiles = files.length === 1 ? files[0] : files;
+        if (startGlobalUpload) {
+          await startGlobalUpload(
+            targetFiles,
+            '/master-products/import-material-bom-excel',
+            () => fetchProducts()
+          );
+        } else {
+          if (toast) toast('info', 'Hệ thống đang tiến hành nạp BOM vật tư...');
+        }
+      } catch (error) {
+        console.error('Lỗi upload Excel BOM vật tư:', error);
+        if (toast) toast('error', 'Có lỗi xảy ra khi nạp file Excel định mức vật tư.');
+      } finally {
+        e.target.value = '';
+      }
+      return;
+    }
 
     try {
       if (files.length === 1) {
@@ -260,15 +286,15 @@ const ManufactureProducts = () => {
           activeFiltersCount={(filterType !== 'all' ? 1 : 0) + (woodFilter ? 1 : 0) + (statusFilter ? 1 : 0)}
           importActions={[
             {
-              label: 'Nhập file Excel (1 hoặc nhiều)',
+              label: tabParam === 'materials' ? 'Nhập Excel BOM Vật tư' : 'Nhập file Excel (1 hoặc nhiều)',
               icon: <FileSpreadsheet size={16} />,
               onClick: () => document.getElementById('excel-upload').click()
             },
-            {
+            ...(tabParam !== 'materials' ? [{
               label: 'Đồng bộ D:\\SmartFlow\\BOM',
               icon: <RefreshCw size={16} />,
               onClick: handleSyncFolderBom
-            }
+            }] : [])
           ]}
           onExport={null}
           extraActions={[
@@ -418,6 +444,22 @@ const ManufactureProducts = () => {
         </div>
       ) : (
         <>
+          {tabParam === 'materials' && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 18px', backgroundColor: '#EFF6FF', border: '1.5px solid #BFDBFE', borderRadius: '10px', margin: '4px 0 10px 0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#1E40AF', fontWeight: '800', fontSize: '0.85rem' }}>
+                <Package size={18} color="#2563EB" />
+                <span>Chế độ BOM Vật tư: Chỉ hiển thị các sản phẩm đã có dữ liệu định mức vật tư ({total} sản phẩm)</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate('/admin/products')}
+                style={{ background: '#DBEAFE', border: 'none', padding: '5px 12px', borderRadius: '6px', color: '#1E40AF', fontWeight: '800', fontSize: '0.78rem', cursor: 'pointer' }}
+              >
+                Xem toàn bộ sản phẩm
+              </button>
+            </div>
+          )}
+
           {/* Desktop view */}
           <div className="admin-list-layout desktop-only">
             <div className="mgmt-table admin-table-card card-shadow" style={{ position: 'relative', backgroundColor: 'white', minHeight: '400px' }}>
@@ -691,6 +733,8 @@ const ManufactureProducts = () => {
           onConfirm={handleConfirmSheetImport}
         />
       )}
+
+
     </div>
   );
 };

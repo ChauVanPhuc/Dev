@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import Optional
+import re
 
 from config.database import get_db
+from modules.daily_production.services.daily_production_excel_service import build_daily_production_excel
 from modules.daily_production.schemas.daily_production_schema import (
     PreviewMergeRequest,
     DailyProductionBatchCreate,
@@ -110,6 +113,34 @@ def api_get_daily_batch_detail(
     if not res:
         raise HTTPException(status_code=404, detail="Không tìm thấy bảng kế hoạch sản xuất ngày.")
     return res
+
+
+@router.get("/batches/{batch_id}/export-excel")
+def api_export_daily_batch_excel(
+    batch_id: int,
+    only_visible: bool = Query(True, description="Chỉ xuất các dòng đang hiển thị (is_visible=True)"),
+    db: Session = Depends(get_db)
+):
+    """
+    [GET] Xuất file Excel chuẩn mẫu Phiếu Xưởng ("BẢNG LIỆT KÊ CHI TIẾT") định dạng đẹp sẵn sàng in A4 ngang.
+    """
+    batch_data = get_daily_batch_detail(db=db, batch_id=batch_id, only_visible=only_visible)
+    if not batch_data:
+        raise HTTPException(status_code=404, detail="Không tìm thấy bảng kế hoạch sản xuất ngày.")
+
+    excel_stream = build_daily_production_excel(batch_data)
+    safe_factory = re.sub(r"[^A-Za-z0-9_-]", "", str(batch_data.get("factory") or "SX"))
+    safe_date = re.sub(r"[^0-9]", "", str(batch_data.get("plan_date") or ""))
+    filename = f"Bang_Liet_Ke_Chi_Tiet_{safe_factory}_{safe_date}.xlsx"
+
+    return StreamingResponse(
+        excel_stream,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        }
+    )
 
 
 @router.post("/batches")

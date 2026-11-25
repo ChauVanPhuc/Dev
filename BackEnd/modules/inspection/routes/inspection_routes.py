@@ -2517,11 +2517,11 @@ async def upload_ocr_image(
 
         # 1. Local AI & Cloud Local AI Endpoints
         local_candidates = [
-            # Candidate 1: Local Gemini Proxy (PC C:\AI)
+            # Candidate 1: Local Gemini Proxy (Go Server - Port 8081)
             (
-                os.getenv("LOCAL_GEMINI_URL", "http://localhost:8081/v1/chat/completions"),
-                os.getenv("LOCAL_GEMINI_MODEL", "gemini-3.5-flash-thinking"),
-                os.getenv("LOCAL_GEMINI_API_KEY", "sk-gemini")
+                os.getenv("LOCAL_GEMINI_URL", "http://localhost:8081/openai/v1/chat/completions"),
+                os.getenv("LOCAL_GEMINI_MODEL", "gemini-everyday-help"),
+                os.getenv("LOCAL_GEMINI_API_KEY", "not-needed")
             ),
             # Candidate 2: Cloud Local AI / Ollama
             (

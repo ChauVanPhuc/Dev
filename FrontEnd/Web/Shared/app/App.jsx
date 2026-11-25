@@ -123,6 +123,7 @@ const ProductionOrders = lazy(() => import('@modules/Production/Views/Orders/Pro
 const ProductionOrderCreate = lazy(() => import('@modules/Production/Views/Orders/ProductionOrderCreateView'));
 const ProductionSchedule = lazy(() => import('@modules/Production/Views/Schedule/ProductionScheduleView'));
 const DailyProductionManage = lazy(() => import('@modules/DailyProduction/Views/DailyProductionManageView'));
+const DailyProductionEdit = lazy(() => import('@modules/DailyProduction/Views/DailyProductionEditView'));
 const ProductionPlans = lazy(() => import('@modules/Production/Views/Plans/ProductionPlansView'));
 const ProductionRouting = lazy(() => import('@modules/Production/Views/Routing/ProductionRoutingView'));
 const ManufactureOrders = lazy(() => import('@modules/Order/Views/List/OrdersListView'));
@@ -557,7 +558,7 @@ const ProtectedRoute = ({ permissionKey, children }) => {
 
   const isAdmin = user.role_name === 'IT' || user.role_name === 'BGD' || user.username === 'admin';
 
-  let permission = 'write';
+  let permission = isAdmin ? 'write' : 'none';
   let hasExplicitPermission = false;
   try {
     const activePermsStr = localStorage.getItem('smartflow_active_permissions');
@@ -610,6 +611,8 @@ const ProtectedRoute = ({ permissionKey, children }) => {
 
   if (isAdmin && !hasExplicitPermission) {
     permission = 'write';
+  } else if (!isAdmin && !hasExplicitPermission) {
+    permission = 'none';
   }
 
   // Phân giải xem có hành động nào được phép không
@@ -624,13 +627,13 @@ const ProtectedRoute = ({ permissionKey, children }) => {
     }
   }
 
-  // Kiểm tra nếu bị chặn rõ ràng bởi 'none'
+  // Kiểm tra nếu bị chặn rõ ràng bởi 'none' hoặc không được cấp quyền rõ ràng
   const isExplicitlyNone =
     permission === 'none' ||
     (Array.isArray(permission) && (permission.includes('none') || permission.length === 0)) ||
     (typeof permission === 'string' && permission.split(',').map(s => s.trim()).includes('none'));
 
-  if (isExplicitlyNone) {
+  if (isExplicitlyNone || (!isAdmin && !hasExplicitPermission)) {
     return <AccessDenied />;
   }
 
@@ -744,8 +747,8 @@ function App() {
                 <Route path="reports" element={<ProtectedRoute permissionKey="reports"><InspectionReports /></ProtectedRoute>} />
                 <Route path="reports/detail/:type/:id" element={<ProtectedRoute permissionKey="reports"><InspectionDetail /></ProtectedRoute>} />
                 <Route path="quality-reports" element={<ProtectedRoute permissionKey={["reports", "quality-records", "/admin/quality-reports"]}><QualityInfographicReport /></ProtectedRoute>} />
-                <Route path="quality" element={<ProtectedRoute permissionKey={["/admin/quality", "quality"]}><QualityOverview /></ProtectedRoute>} />
-                <Route path="quality/parameter" element={<ProtectedRoute permissionKey={["/admin/quality/parameter", "/admin/quality", "quality"]}><QualityOverview isParameterMode={true} /></ProtectedRoute>} />
+                <Route path="quality" element={<ProtectedRoute permissionKey={["/admin/quality", "/admin/quality-records", "quality", "quality-records"]}><QualityOverview /></ProtectedRoute>} />
+                <Route path="quality/parameter" element={<ProtectedRoute permissionKey={["/admin/quality/parameter", "/admin/quality", "/admin/quality-records", "quality", "quality-records"]}><QualityOverview isParameterMode={true} /></ProtectedRoute>} />
                 <Route path="quality-parameter" element={<Navigate to="/admin/quality/parameter" replace />} />
                 <Route path="quality-targets" element={<Navigate to="/admin/kpi/dashboard" replace />} />
                 <Route path="quality-records" element={<ProtectedRoute permissionKey="quality-records"><QualityRecords /></ProtectedRoute>} />
@@ -813,6 +816,9 @@ function App() {
                 <Route path="production-orders/create" element={<ProtectedRoute permissionKey="orders"><ProductionOrderCreate /></ProtectedRoute>} />
                 <Route path="production-orders/edit/:id" element={<ProtectedRoute permissionKey="orders"><ProductionOrderCreate /></ProtectedRoute>} />
                 <Route path="daily-production" element={<ProtectedRoute permissionKey={["plan", "orders", "/admin/production-orders", "/admin/production-schedule", "/admin/plan", "/admin/daily-production"]}><DailyProductionManage /></ProtectedRoute>} />
+                <Route path="daily-production/create" element={<ProtectedRoute permissionKey={["plan", "orders", "/admin/production-orders", "/admin/production-schedule", "/admin/plan", "/admin/daily-production"]}><DailyProductionEdit /></ProtectedRoute>} />
+                <Route path="daily-production/edit/:id" element={<ProtectedRoute permissionKey={["plan", "orders", "/admin/production-orders", "/admin/production-schedule", "/admin/plan", "/admin/daily-production"]}><DailyProductionEdit /></ProtectedRoute>} />
+                <Route path="daily-production/:id" element={<ProtectedRoute permissionKey={["plan", "orders", "/admin/production-orders", "/admin/production-schedule", "/admin/plan", "/admin/daily-production"]}><DailyProductionEdit /></ProtectedRoute>} />
                 <Route path="production-schedule" element={<ProtectedRoute permissionKey="plan"><ProductionSchedule /></ProtectedRoute>} />
                 <Route path="production-routing" element={<ProtectedRoute permissionKey="products"><ProductionRouting /></ProtectedRoute>} />
                 <Route path="technical-dashboard" element={<ProtectedRoute permissionKey="products"><TechnicalDashboard /></ProtectedRoute>} />

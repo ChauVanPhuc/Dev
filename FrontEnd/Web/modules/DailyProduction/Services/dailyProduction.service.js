@@ -88,5 +88,20 @@ export const dailyProductionService = {
   deleteBatch: async (batchId) => {
     const res = await api.delete(`daily-production/batches/${batchId}`);
     return unwrap(res);
+  },
+
+  /**
+   * Xuất file Excel chuẩn mẫu Phiếu Xưởng (.xlsx) từ Backend OpenPyXL
+   */
+  exportBatchExcel: async (batchId, params = { only_visible: true }) => {
+    const res = await api.get(`daily-production/batches/${batchId}/export-excel`, {
+      params,
+      responseType: 'blob'
+    });
+    if (res instanceof Blob) return res;
+    if (res?.data instanceof Blob) return res.data;
+    return new Blob([res?.data ?? res], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    });
   }
 };

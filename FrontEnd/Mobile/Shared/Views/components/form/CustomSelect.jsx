@@ -155,6 +155,8 @@ const CustomSelect = ({
     
     setInputValue(codePart)
     setIsOpen(false)
+    // Đóng bàn phím ảo trên Mobile ngay khi đã chọn xong
+    if (inputRef.current) inputRef.current.blur()
     if (onChange) {
       onChange(opt.value || codePart)
     }

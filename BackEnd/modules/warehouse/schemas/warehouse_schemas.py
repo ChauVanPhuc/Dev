@@ -98,6 +98,11 @@ class GoodsReceiptItemSchema(BaseModel):
     unit2: Optional[str] = None
     quantity2: Optional[float] = 0.0
     conversion_rate: float = 1.0
+    unit_price: Optional[float] = 0.0
+    amount: Optional[float] = 0.0
+    po_code: Optional[str] = None
+    order_code: Optional[str] = None
+    partner_po: Optional[str] = None
     lsx: Optional[str] = None
     package_split: Optional[str] = None
     notes: Optional[str] = None
@@ -116,6 +121,7 @@ class GoodsReceiptCreate(BaseModel):
     receipt_type: Optional[str] = "Nhập mua hàng"
     status: str = "PENDING"
     ctgs: Optional[str] = None
+    total_amount: Optional[float] = 0.0
     created_by: Optional[str] = None
     created_channel: Optional[str] = "Web"
     images: Optional[List[str]] = None

@@ -6,7 +6,8 @@ import { formatNumber } from '../../../types/goodsReceipt.types';
 export const GoodsReceiptPagination = ({
   page = 1,
   setPage,
-  pageSize = 25,
+  pageSize = 15,
+  setPageSize,
   totalCount = 0,
   totalPages = 1,
   itemsLength = 0
@@ -47,9 +48,38 @@ export const GoodsReceiptPagination = ({
 
   return (
     <div className="wh-pagination">
-      <div className="wh-pagination-info">
-        Đang hiển thị <strong>{formatNumber(startIdx)}</strong> – <strong>{formatNumber(endIdx)}</strong> trên tổng{' '}
-        <strong>{formatNumber(totalCount)}</strong> bản ghi
+      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+        <div className="wh-pagination-info">
+          Đang hiển thị <strong>{formatNumber(startIdx)}</strong> – <strong>{formatNumber(endIdx)}</strong> trên tổng{' '}
+          <strong>{formatNumber(totalCount)}</strong> bản ghi
+        </div>
+
+        {setPageSize && (
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '0.8rem', color: 'var(--wh-text-muted, #8D6E63)' }}>Hiển thị:</span>
+            {[10, 15].map((size) => (
+              <button
+                key={size}
+                type="button"
+                className={`wh-btn-page ${pageSize === size ? 'active' : ''}`}
+                onClick={() => {
+                  setPageSize(size);
+                  setPage(1);
+                }}
+                style={{
+                  padding: '0 8px',
+                  height: '26px',
+                  fontSize: '0.75rem',
+                  fontWeight: pageSize === size ? '700' : '500',
+                  minWidth: 'unset',
+                  cursor: 'pointer'
+                }}
+              >
+                {size} dòng
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="wh-pagination-pages">

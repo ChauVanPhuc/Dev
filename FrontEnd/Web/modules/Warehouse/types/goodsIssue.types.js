@@ -113,11 +113,3 @@ export const formatNumber = (num) => {
   if (num === null || num === undefined || isNaN(num)) return '0';
   return Number(num).toLocaleString('vi-VN');
 };
-
-/**
- * Helper format tiền tệ VNĐ
- */
-export const formatCurrencyVND = (num) => {
-  if (num === null || num === undefined || isNaN(num)) return '0 ₫';
-  return Number(num).toLocaleString('vi-VN') + ' ₫';
-};

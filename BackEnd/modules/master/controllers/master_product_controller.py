@@ -201,7 +201,7 @@ def to_master_product_dict(master: MasterProduct):
         "product_details": [serialize_product_detail_item(x) for x in (master.product_details or [])]
     }
 
-def get_master_products(db: Session, skip: int = 0, limit: int = 50, q: str = None):
+def get_master_products(db: Session, skip: int = 0, limit: int = 50, q: str = None, tab: str = None, has_materials: bool = False):
     query = db.query(MasterProduct)
     if q and q.strip():
         search_filter = f"%{q.strip()}%"
@@ -209,6 +209,13 @@ def get_master_products(db: Session, skip: int = 0, limit: int = 50, q: str = No
             (MasterProduct.sku.ilike(search_filter)) | 
             (MasterProduct.name.ilike(search_filter))
         )
+    if tab == 'materials' or has_materials:
+        # Chỉ lấy sản phẩm nào ĐÃ CÓ định mức vật tư trong bảng master_product_materials (Dùng subquery để không bị giới hạn 2100 parameters của SQL Server)
+        mat_subquery = db.query(MasterProductMaterial.master_product_id).filter(
+            MasterProductMaterial.master_product_id.isnot(None)
+        ).distinct()
+        query = query.filter(MasterProduct.id.in_(mat_subquery))
+
     total = query.count()
     items = query.order_by(MasterProduct.sku).offset(skip).limit(limit).all()
     return {"items": items, "total": total}
@@ -222,6 +229,18 @@ def get_master_product(db: Session, master_product_id: int):
         selectinload(MasterProduct.materials),
         selectinload(MasterProduct.product_details)
     ).filter(MasterProduct.id == master_product_id).first()
+    if not master:
+        return None
+    # Tự động liên kết self-healing nếu vật tư có SKU trùng với Mã sản phẩm nhưng chưa gán master_product_id
+    if not master.materials and master.sku:
+        unlinked = db.query(MasterProductMaterial).filter(
+            MasterProductMaterial.product_sku == master.sku.strip()
+        ).all()
+        if unlinked:
+            for m in unlinked:
+                m.master_product_id = master.id
+            db.commit()
+            db.refresh(master)
     return to_master_product_dict(master)
 
 def create_master_product(db: Session, master_product: MasterProductCreate):
@@ -2512,89 +2531,393 @@ def delete_product_material(db: Session, material_id: int):
     db.commit()
     return True
 
-def import_material_boms_from_excel(db: Session, file_contents: bytes):
+def import_material_boms_from_excel(
+    db: Session,
+    file_contents: bytes,
+    filename: str = "BOM_VatTu.xlsx",
+    file_index: int = 1,
+    total_files: int = 1
+):
+    """
+    [STREAMING GENERATOR] Nhập dữ liệu định mức BOM Vật tư (VTTH) từ 1 file Excel:
+    - Báo cáo tiến trình streaming NDJSON (status, percent, processed, total, message)
+    - Tự động hiển thị thẻ tiến trình ở chân Sidebar bên trái (non-blocking)
+    - Khớp nối theo Mã chi tiết sử dụng (SKU) và Cột 17 (Nhóm Nvl tiêu hao)
+    """
     import io
     import openpyxl
-    
-    wb = openpyxl.load_workbook(filename=io.BytesIO(file_contents), data_only=True)
-    total_imported = 0
-    
-    for sheet_name in wb.sheetnames:
-        sheet = wb[sheet_name]
-        clean_sname = sheet_name.strip()
-        
-        # Tìm xem sản phẩm có sẵn trong bảng master_products hay không (nếu có thì liên kết ID, TUYỆT ĐỐI KHÔNG TẠO MỚI SẢN PHẨM VÀO master_products)
-        matched_prod = db.query(MasterProduct).filter(
-            (MasterProduct.sku.ilike(f"%{clean_sname}%")) | 
-            (MasterProduct.name.ilike(f"%{clean_sname}%"))
-        ).first()
-        
-        prod_id = matched_prod.id if matched_prod else None
-        prod_sku = matched_prod.sku if matched_prod else clean_sname
-        prod_name = matched_prod.name if matched_prod else clean_sname
-            
-        current_group = "VẬT TƯ HÀNG TRẮNG"
-        
-        for row_idx, row in enumerate(sheet.iter_rows(values_only=True), start=1):
+    import re
+    from shared.utils.timezone import get_vietnam_time
+
+    base_prog = int(((file_index - 1) / max(1, total_files)) * 100)
+    file_slice = int(100 / max(1, total_files))
+
+    yield json.dumps({
+        "status": "processing",
+        "file_index": file_index,
+        "total_files": total_files,
+        "file_name": filename,
+        "percent": min(98, base_prog + 5),
+        "processed": 0,
+        "total": 0,
+        "message": f"[{filename}] Đang đọc cấu trúc file Excel..."
+    }) + "\n"
+
+    try:
+        wb = openpyxl.load_workbook(filename=io.BytesIO(file_contents), data_only=True, read_only=True)
+    except Exception as e:
+        yield json.dumps({
+            "status": "error",
+            "message": f"[{filename}] Không thể mở file Excel: {str(e)}"
+        }) + "\n"
+        return
+
+    if not wb.sheetnames:
+        wb.close()
+        yield json.dumps({
+            "status": "error",
+            "message": f"[{filename}] File Excel không có sheet nào."
+        }) + "\n"
+        return
+
+    first_sheet_name = wb.sheetnames[0]
+    sheet = wb[first_sheet_name]
+    rows_iter = sheet.iter_rows(values_only=True)
+    first_row = next(rows_iter, None)
+
+    if not first_row:
+        wb.close()
+        yield json.dumps({
+            "status": "error",
+            "message": f"[{filename}] File Excel trống không có dữ liệu."
+        }) + "\n"
+        return
+
+    header_strings = [str(cell or '').strip().upper() for cell in first_row]
+
+    # Kiểm tra xem có phải định dạng bảng phẳng chuẩn xưởng ERP VTTH (như Phuc1.xlsx) hay không
+    is_flat_vtth_format = any("NVL TIÊU HAO" in h or "NVL TIEU HAO" in h for h in header_strings) or \
+                          any("CHI TIẾT SỬ DỤNG" in h or "CHI TIET SU DUNG" in h for h in header_strings)
+
+    if is_flat_vtth_format:
+        # ── 1. ĐỊNH VỊ CỘT DỮ LIỆU ĐỘNG THEO TIÊU ĐỀ ──
+        col_mat_code = 1    # Mã Nvl tiêu hao
+        col_mat_name = 2    # Tên Nvl tiêu hao
+        col_unit = 3        # ĐVT Nvl tiêu hao
+        col_spec = 4        # Quy cách Nvl tiêu hao
+        col_prod_sku = 5    # Mã chi tiết sử dụng (Chìa khóa SKU sản phẩm)
+        col_prod_name = 6   # Tên chi tiết sử dụng
+        col_quota = 11      # Tổng vật tư sử dụng (Định mức)
+        col_stage = 12      # Công đoạn
+        col_note = 15       # Ghi chú
+        col_group = 16      # Nhóm Nvl tiêu hao
+
+        for idx, h in enumerate(header_strings):
+            if "MÃ NVL TIÊU HAO" in h or "MA NVL TIEU HAO" in h:
+                col_mat_code = idx
+            elif "TÊN NVL TIÊU HAO" in h or "TEN NVL TIEU HAO" in h:
+                col_mat_name = idx
+            elif "ĐVT NVL TIÊU HAO" in h or "DVT NVL TIEU HAO" in h:
+                col_unit = idx
+            elif "QUY CÁCH NVL TIÊU HAO" in h or "QUY CACH NVL TIEU HAO" in h:
+                col_spec = idx
+            elif "MÃ CHI TIẾT SỬ DỤNG" in h or "MA CHI TIET SU DUNG" in h:
+                col_prod_sku = idx
+            elif "TÊN CHI TIẾT SỬ DỤNG" in h or "TEN CHI TIET SU DUNG" in h:
+                col_prod_name = idx
+            elif "TỔNG VẬT TƯ SỬ DỤNG" in h or "TONG VAT TU SU DUNG" in h:
+                col_quota = idx
+            elif "CÔNG ĐOẠN" in h or "CONG DOAN" in h:
+                col_stage = idx
+            elif "GHI CHÚ" in h or "GHI CHU" in h:
+                col_note = idx
+            elif "NHÓM NVL TIÊU HAO" in h or "NHOM NVL TIEU HAO" in h:
+                col_group = idx
+
+        yield json.dumps({
+            "status": "processing",
+            "file_index": file_index,
+            "total_files": total_files,
+            "file_name": filename,
+            "percent": min(98, base_prog + 8),
+            "processed": 0,
+            "total": 0,
+            "message": f"[{filename}] Đang tra cứu danh mục MasterProduct..."
+        }) + "\n"
+
+        # Pre-load in-memory hash maps của toàn bộ MasterProduct để tra cứu O(1)
+        all_prods = db.query(MasterProduct.id, MasterProduct.sku, MasterProduct.name).all()
+        sku_lookup = {p.sku.strip().upper(): p for p in all_prods if p.sku}
+        name_lookup = {p.name.strip().upper(): p for p in all_prods if p.name}
+
+        def extract_color_spec(mat_name, spec):
+            if spec and str(spec).strip():
+                return str(spec).strip()
+            match = re.search(r'\(([^)]+)\)', str(mat_name or ''))
+            if match:
+                return match.group(1).strip()
+            return ''
+
+        # Thu thập các mã SKU trong file để chỉ xóa và thay thế đúng các sản phẩm đó
+        incoming_skus = set()
+        for r in sheet.iter_rows(values_only=True):
+            if r and len(r) > col_prod_sku and r[col_prod_sku]:
+                val = str(r[col_prod_sku]).strip().upper()
+                if val and val not in ['MÃ CHI TIẾT SỬ DỤNG', 'MA CHI TIET SU DUNG']:
+                    incoming_skus.add(val)
+
+        if incoming_skus:
+            yield json.dumps({
+                "status": "processing",
+                "file_index": file_index,
+                "total_files": total_files,
+                "file_name": filename,
+                "percent": min(98, base_prog + 12),
+                "processed": 0,
+                "total": len(incoming_skus),
+                "message": f"[{filename}] Đồng bộ dữ liệu cũ của {len(incoming_skus)} mã sản phẩm..."
+            }) + "\n"
+
+            sku_list = list(incoming_skus)
+            for i in range(0, len(sku_list), 1000):
+                db.query(MasterProductMaterial).filter(
+                    MasterProductMaterial.product_sku.in_(sku_list[i:i+1000])
+                ).delete(synchronize_session=False)
+            db.commit()
+
+        # Reset iterator về đầu sau khi quét header
+        sheet_iter = sheet.iter_rows(values_only=True)
+        next(sheet_iter, None) # Bỏ qua header
+
+        mappings = []
+        batch_size = 2000
+        total_imported = 0
+        matched_prods_set = set()
+        unique_sku_set = set()
+        now_vn = get_vietnam_time()
+        approx_total = sheet.max_row - 1 if sheet.max_row and sheet.max_row > 1 else 25000
+
+        for row_idx, row in enumerate(sheet_iter, start=2):
             if not row or not any(row):
                 continue
-                
-            first_cell = str(row[0] or '').strip().upper()
-            second_cell = str(row[1] or '').strip().upper() if len(row) > 1 else ''
-            
-            # Check Group Header (HÀNG TRẮNG / SAU SƠN)
-            if "HÀNG TRẮNG" in first_cell or "HANG TRANG" in first_cell or "HÀNG TRẮNG" in second_cell:
-                current_group = "VẬT TƯ HÀNG TRẮNG"
-                continue
-            elif "SAU SƠN" in first_cell or "SAU SON" in first_cell or "SAU SƠN" in second_cell:
-                current_group = "VẬT TƯ SAU SƠN"
-                continue
-                
-            # Skip table headers
-            if any(k in first_cell or k in second_cell for k in ["STT", "TÊN VẬT TƯ", "MÃ VẬT TƯ", "TÊN CHI TIẾT", "MATERIAL"]):
-                continue
-                
-            # Parse material columns
-            stt_val = row[0] if len(row) > 0 else None
-            mat_name = str(row[1] if len(row) > 1 and row[1] is not None else '').strip()
+
+            mat_name = str(row[col_mat_name] if len(row) > col_mat_name and row[col_mat_name] is not None else '').strip()
             if not mat_name:
                 continue
-                
-            mat_code = str(row[2] if len(row) > 2 and row[2] is not None else '').strip()
-            color = str(row[3] if len(row) > 3 and row[3] is not None else '').strip()
-            
-            quota_val = 1.0
-            if len(row) > 4 and row[4] is not None:
-                try:
-                    quota_val = float(str(row[4]).replace(',', '.').strip())
-                except ValueError:
-                    quota_val = 1.0
-                    
-            unit_val = str(row[5] if len(row) > 5 and row[5] is not None else 'Cái').strip()
-            supplier_val = str(row[6] if len(row) > 6 and row[6] is not None else '').strip()
-            note_val = str(row[7] if len(row) > 7 and row[7] is not None else '').strip()
-            
-            if not mat_code:
-                mat_code = f"VT-{mat_name[:6].upper().replace(' ', '')}"
-                
-            db.add(MasterProductMaterial(
-                master_product_id=prod_id,
-                product_sku=prod_sku,
-                product_name=prod_name,
-                stt=int(stt_val) if isinstance(stt_val, (int, float)) else (row_idx),
-                group_type=current_group,
-                material_code=mat_code,
-                material_name=mat_name,
-                color=color,
-                quota=quota_val,
-                unit=unit_val or 'Cái',
-                supplier=supplier_val,
-                note=note_val
-            ))
-            total_imported += 1
 
-    db.commit()
-    return {"status": "success", "imported_count": total_imported}
+            mat_code = str(row[col_mat_code] if len(row) > col_mat_code and row[col_mat_code] is not None else '').strip()
+            unit_val = str(row[col_unit] if len(row) > col_unit and row[col_unit] is not None else 'Cái').strip()
+            spec_val = str(row[col_spec] if len(row) > col_spec and row[col_spec] is not None else '').strip()
+
+            prod_sku = str(row[col_prod_sku] if len(row) > col_prod_sku and row[col_prod_sku] is not None else '').strip()
+            prod_name = str(row[col_prod_name] if len(row) > col_prod_name and row[col_prod_name] is not None else '').strip()
+
+            quota_val = 1.0
+            if len(row) > col_quota and row[col_quota] is not None:
+                try:
+                    quota_val = float(str(row[col_quota]).replace(',', '.').strip())
+                except:
+                    quota_val = 1.0
+
+            stage_val = str(row[col_stage] if len(row) > col_stage and row[col_stage] is not None else '').strip()
+            note_val = str(row[col_note] if len(row) > col_note and row[col_note] is not None else '').strip()
+            group_val = str(row[col_group] if len(row) > col_group and row[col_group] is not None else '').strip()
+
+            group_type = group_val if group_val and str(group_val).strip() else (stage_val if stage_val and str(stage_val).strip() else "Vật tư dùng chung")
+            group_type = group_type.strip()
+
+            color_val = extract_color_spec(mat_name, spec_val)
+
+            matched_prod = sku_lookup.get(prod_sku.upper()) or name_lookup.get(prod_name.upper())
+            prod_id = matched_prod.id if matched_prod else None
+
+            if prod_id:
+                matched_prods_set.add(prod_id)
+            if prod_sku:
+                unique_sku_set.add(prod_sku.upper())
+
+            full_note = note_val
+            extra_info = []
+            if stage_val: extra_info.append(f"CĐ: {stage_val}")
+            if group_val: extra_info.append(f"Nhóm: {group_val}")
+            if extra_info:
+                full_note = (full_note + " | " + " - ".join(extra_info)).strip(" | ")
+
+            mappings.append({
+                "master_product_id": prod_id,
+                "product_sku": prod_sku,
+                "product_name": prod_name,
+                "stt": row_idx,
+                "group_type": group_type,
+                "material_code": mat_code or f"VT-{mat_name[:6].upper().replace(' ', '')}",
+                "material_name": mat_name,
+                "color": color_val,
+                "quota": quota_val,
+                "unit": unit_val or 'Cái',
+                "supplier": '',
+                "note": full_note,
+                "created_at": now_vn
+            })
+
+            if len(mappings) >= batch_size:
+                db.bulk_insert_mappings(MasterProductMaterial, mappings)
+                db.commit()
+                total_imported += len(mappings)
+                mappings = []
+
+                ratio = min(0.98, total_imported / max(1, approx_total))
+                cur_prog = base_prog + 15 + int(ratio * file_slice * 0.8)
+                yield json.dumps({
+                    "status": "processing",
+                    "file_index": file_index,
+                    "total_files": total_files,
+                    "file_name": filename,
+                    "processed": total_imported,
+                    "total": approx_total,
+                    "percent": min(98, cur_prog),
+                    "message": f"[{filename}] Đang lưu {total_imported:,}/{approx_total:,} dòng ({prod_sku})..."
+                }) + "\n"
+
+        if mappings:
+            db.bulk_insert_mappings(MasterProductMaterial, mappings)
+            db.commit()
+            total_imported += len(mappings)
+
+        wb.close()
+        final_file_pct = base_prog + file_slice if file_index < total_files else 100
+        yield json.dumps({
+            "status": "completed" if file_index == total_files else "processing",
+            "file_index": file_index,
+            "total_files": total_files,
+            "file_name": filename,
+            "processed": total_imported,
+            "total": total_imported,
+            "percent": final_file_pct,
+            "imported_count": total_imported,
+            "matched_products": len(matched_prods_set),
+            "message": f"[{filename}] Hoàn tất! Đã nạp {total_imported:,} dòng định mức cho {len(matched_prods_set):,} sản phẩm."
+        }) + "\n"
+
+    else:
+        # ── 2. BỘ XỬ LÝ ĐA SHEET / MẪU LEGACY ──
+        total_imported = 0
+        wb_full = openpyxl.load_workbook(filename=io.BytesIO(file_contents), data_only=True)
+        total_sheets = len(wb_full.sheetnames)
+
+        for s_idx, sheet_name in enumerate(wb_full.sheetnames, start=1):
+            cur_sheet = wb_full[sheet_name]
+            clean_sname = sheet_name.strip()
+
+            matched_prod = db.query(MasterProduct).filter(
+                (MasterProduct.sku.ilike(f"%{clean_sname}%")) | 
+                (MasterProduct.name.ilike(f"%{clean_sname}%"))
+            ).first()
+
+            prod_id = matched_prod.id if matched_prod else None
+            prod_sku = matched_prod.sku if matched_prod else clean_sname
+            prod_name = matched_prod.name if matched_prod else clean_sname
+            current_group = "VẬT TƯ HÀNG TRẮNG"
+
+            for row_idx, row in enumerate(cur_sheet.iter_rows(values_only=True), start=1):
+                if not row or not any(row):
+                    continue
+
+                first_cell = str(row[0] or '').strip().upper()
+                second_cell = str(row[1] or '').strip().upper() if len(row) > 1 else ''
+
+                if "HÀNG TRẮNG" in first_cell or "HANG TRANG" in first_cell or "HÀNG TRẮNG" in second_cell:
+                    current_group = "VẬT TƯ HÀNG TRẮNG"
+                    continue
+                elif "SAU SƠN" in first_cell or "SAU SON" in first_cell or "SAU SƠN" in second_cell:
+                    current_group = "VẬT TƯ SAU SƠN"
+                    continue
+
+                if any(k in first_cell or k in second_cell for k in ["STT", "TÊN VẬT TƯ", "MÃ VẬT TƯ", "TÊN CHI TIẾT", "MATERIAL"]):
+                    continue
+
+                stt_val = row[0] if len(row) > 0 else None
+                mat_name = str(row[1] if len(row) > 1 and row[1] is not None else '').strip()
+                if not mat_name:
+                    continue
+
+                mat_code = str(row[2] if len(row) > 2 and row[2] is not None else '').strip()
+                color = str(row[3] if len(row) > 3 and row[3] is not None else '').strip()
+
+                quota_val = 1.0
+                if len(row) > 4 and row[4] is not None:
+                    try:
+                        quota_val = float(str(row[4]).replace(',', '.').strip())
+                    except ValueError:
+                        quota_val = 1.0
+
+                unit_val = str(row[5] if len(row) > 5 and row[5] is not None else 'Cái').strip()
+                supplier_val = str(row[6] if len(row) > 6 and row[6] is not None else '').strip()
+                note_val = str(row[7] if len(row) > 7 and row[7] is not None else '').strip()
+
+                if not mat_code:
+                    mat_code = f"VT-{mat_name[:6].upper().replace(' ', '')}"
+
+                db.add(MasterProductMaterial(
+                    master_product_id=prod_id,
+                    product_sku=prod_sku,
+                    product_name=prod_name,
+                    stt=int(stt_val) if isinstance(stt_val, (int, float)) else (row_idx),
+                    group_type=current_group,
+                    material_code=mat_code,
+                    material_name=mat_name,
+                    color=color,
+                    quota=quota_val,
+                    unit=unit_val or 'Cái',
+                    supplier=supplier_val,
+                    note=note_val
+                ))
+                total_imported += 1
+
+            if s_idx % 2 == 0 or s_idx == total_sheets:
+                s_prog = base_prog + int((s_idx / total_sheets) * file_slice)
+                yield json.dumps({
+                    "status": "processing",
+                    "file_index": file_index,
+                    "total_files": total_files,
+                    "file_name": filename,
+                    "percent": min(98, s_prog),
+                    "sheet_index": s_idx,
+                    "total_sheets": total_sheets,
+                    "processed": total_imported,
+                    "message": f"[{filename}] Đang lưu sheet {s_idx}/{total_sheets} ({sheet_name})..."
+                }) + "\n"
+
+        db.commit()
+        yield json.dumps({
+            "status": "completed" if file_index == total_files else "processing",
+            "file_index": file_index,
+            "total_files": total_files,
+            "file_name": filename,
+            "percent": 100 if file_index == total_files else base_prog + file_slice,
+            "imported_count": total_imported,
+            "message": f"[{filename}] Hoàn tất! Đã nạp {total_imported:,} dòng định mức vật tư."
+        }) + "\n"
+
+def import_material_boms_from_excel_batch(db: Session, files_list: List[tuple]):
+    """
+    [STREAMING BATCH] Nạp danh sách nhiều file Excel BOM Vật tư liên tiếp:
+    files_list: [(filename, file_bytes), ...]
+    """
+    total_files = len(files_list)
+    if not total_files:
+        yield json.dumps({"status": "error", "message": "Không có file nào được cung cấp."}) + "\n"
+        return
+
+    for idx, (filename, file_bytes) in enumerate(files_list, start=1):
+        yield from import_material_boms_from_excel(
+            db, file_bytes, filename=filename, file_index=idx, total_files=total_files
+        )
+
+    yield json.dumps({
+        "status": "completed",
+        "percent": 100,
+        "message": f"Hoàn tất nạp toàn bộ {total_files} file Excel BOM Vật tư!"
+    }) + "\n"
 
 def get_all_product_materials(
     db: Session,
@@ -2679,135 +3002,107 @@ def is_hardware_material(mat) -> bool:
 
 def get_materials_by_product(db: Session, product_id: Optional[int] = None, sku: Optional[str] = None, name: Optional[str] = None):
     """
-    Tự động truy vấn Định mức Vật tư theo product_id HOẶC theo sự trùng khớp thông minh của Mã SP (SKU) / Tên SP.
-    Hỗ trợ đối soát kích thước / model (24S, 30S, 36S, 42S, 48S, 54S, 60D, 66D, 72D, ...) từ cả SKU lẫn Tên SP.
-    Đảm bảo chỉ nạp đúng các phụ kiện/vật tư tiêu hao phục vụ cho cấu trúc BOM chi tiết của sản phẩm.
+    Tự động truy vấn Định mức Vật tư theo product_id HOẶC ăn theo SKU sản phẩm (cột Mã chi tiết sử dụng).
+    Tự động liên kết self-healing nếu vật tư chưa được gán master_product_id.
     """
     import re
 
-    # 1. Ưu tiên lấy theo master_product_id nếu đã được liên kết
+    current_prod = None
+    if product_id:
+        current_prod = db.query(MasterProduct).filter(MasterProduct.id == product_id).first()
+
+    target_sku = (sku or (current_prod.sku if current_prod else '') or '').strip()
+    target_name = (name or (current_prod.name if current_prod else '') or '').strip()
+
+    materials = []
+
+    # 1. Ưu tiên 1: Lấy trực tiếp theo master_product_id nếu đã liên kết
     if product_id:
         materials = db.query(MasterProductMaterial).filter(
             MasterProductMaterial.master_product_id == product_id
         ).order_by(MasterProductMaterial.group_type.asc(), MasterProductMaterial.stt.asc()).all()
-        clean_linked = [m for m in materials if is_hardware_material(m)]
-        if clean_linked:
-            return [serialize_material_item(m) for m in clean_linked]
 
-    # 2. Tìm kiếm liên kết thông minh theo mã định danh (SKU / Model token)
-    distinct_skus = [r[0] for r in db.query(MasterProductMaterial.product_sku).filter(
-        MasterProductMaterial.product_sku != None,
-        MasterProductMaterial.product_sku != '---'
-    ).distinct().all() if r[0]]
+    # 2. Ưu tiên 2: Khớp nối trực tiếp theo SKU sản phẩm (Cột Mã chi tiết sử dụng)
+    if not materials and target_sku:
+        materials = db.query(MasterProductMaterial).filter(
+            MasterProductMaterial.product_sku == target_sku
+        ).order_by(MasterProductMaterial.group_type.asc(), MasterProductMaterial.stt.asc()).all()
 
-    raw_tokens = set()
-    synthesized_tokens = set()
-    
-    for text in [sku or '', name or '']:
-        words = re.split(r'[^A-Za-z0-9]', text)
-        for w in words:
-            if w:
-                raw_tokens.add(w.upper())
-                digits = re.findall(r'\d+', w)
-                for d in digits:
-                    synthesized_tokens.add(d)
-                    synthesized_tokens.add(f"{d}S")
-                    synthesized_tokens.add(f"{d}D")
-                    synthesized_tokens.add(f"{d}C")
-                    if d.startswith('0') and len(d) > 1:
-                        d_no0 = str(int(d))
-                        synthesized_tokens.add(d_no0)
-                        synthesized_tokens.add(f"{d_no0}S")
-                        synthesized_tokens.add(f"{d_no0}D")
-                        synthesized_tokens.add(f"{d_no0}C")
+        # Tự động gắn master_product_id (Self-healing link) để các lần sau truy vấn siêu tốc
+        if materials and product_id:
+            for m in materials:
+                if not m.master_product_id:
+                    m.master_product_id = product_id
+            db.commit()
 
-    matched_sku = None
+    # 3. Ưu tiên 3: Khớp nối theo Tên sản phẩm nếu SKU chưa khớp
+    if not materials and target_name:
+        materials = db.query(MasterProductMaterial).filter(
+            MasterProductMaterial.product_name == target_name
+        ).order_by(MasterProductMaterial.group_type.asc(), MasterProductMaterial.stt.asc()).all()
 
-    # Priority 1: Khớp chính xác với RAW tokens (ví dụ: 66D, 60D, 48S, 72D, 36C-1)
-    for d_sku in distinct_skus:
-        if d_sku.upper() in raw_tokens:
-            matched_sku = d_sku
-            break
+        if materials and product_id:
+            for m in materials:
+                if not m.master_product_id:
+                    m.master_product_id = product_id
+            db.commit()
 
-    # Priority 2: Khớp theo kích thước model & cấu hình S (Single) / D (Double) / L-R (Left-Right)
-    if not matched_sku:
-        wants_left_right = any(k in (sku or '').upper() or k in (name or '').upper() for k in ['-L', '-R', '36L', '36R', '42L', '42R', 'S-L', 'S-R', 'L/R'])
-        wants_double = ('D' in (sku or '').upper() or 'D' in (name or '').upper()) and not ('S' in (sku or '').upper())
+    # 4. Fallback: Tìm kiếm liên kết thông minh theo token / model đối với dòng tủ vanity cũ
+    if not materials:
+        distinct_skus = [r[0] for r in db.query(MasterProductMaterial.product_sku).filter(
+            MasterProductMaterial.product_sku != None,
+            MasterProductMaterial.product_sku != '---'
+        ).distinct().all() if r[0]]
 
-        candidates = []
+        raw_tokens = set()
+        synthesized_tokens = set()
+        for text in [target_sku, target_name]:
+            words = re.split(r'[^A-Za-z0-9]', text)
+            for w in words:
+                if w:
+                    raw_tokens.add(w.upper())
+                    digits = re.findall(r'\d+', w)
+                    for d in digits:
+                        synthesized_tokens.add(d)
+                        synthesized_tokens.add(f"{d}S")
+                        synthesized_tokens.add(f"{d}D")
+                        synthesized_tokens.add(f"{d}C")
+
+        matched_sku = None
         for d_sku in distinct_skus:
-            m_up = d_sku.upper()
-            m_digits = re.findall(r'\d+', m_up)
-            if m_up in synthesized_tokens or (m_digits and m_digits[0] in synthesized_tokens):
-                candidates.append(d_sku)
+            if d_sku.upper() in raw_tokens:
+                matched_sku = d_sku
+                break
 
-        if candidates:
-            if wants_left_right:
-                lr_cands = [c for c in candidates if 'L-R' in c.upper() or 'L/R' in c.upper()]
-                if lr_cands:
-                    matched_sku = lr_cands[0]
-            if not matched_sku:
-                if wants_double:
-                    d_cands = [c for c in candidates if 'D' in c.upper()]
-                    if d_cands:
-                        matched_sku = d_cands[0]
-                else:
-                    s_cands = [c for c in candidates if 'S' in c.upper() and 'L-R' not in c.upper()]
-                    if s_cands:
-                        matched_sku = s_cands[0]
-            if not matched_sku:
-                matched_sku = candidates[0]
+        if matched_sku:
+            materials = db.query(MasterProductMaterial).filter(
+                MasterProductMaterial.product_sku == matched_sku
+            ).order_by(MasterProductMaterial.group_type.asc(), MasterProductMaterial.stt.asc()).all()
 
-    if matched_sku:
-        raw_mats = db.query(MasterProductMaterial).filter(
-            MasterProductMaterial.product_sku == matched_sku
-        ).all()
-        clean_mats = [m for m in raw_mats if is_hardware_material(m)]
+    # 5. Nếu tìm thấy vật tư, phân chia theo nhóm động (Nhóm Nvl tiêu hao / Ảnh 2) và đánh lại STT chuẩn đẹp
+    if materials:
+        clean_mats = [m for m in materials if is_hardware_material(m)]
+        if not clean_mats:
+            clean_mats = materials
 
-        # Khử trùng lặp theo nhóm và tên vật tư, ưu tiên định mức đầy đủ nhất
-        dedup = {}
+        # Gom nhóm theo group_type (Nhóm Nvl tiêu hao)
+        groups_map = {}
         for m in clean_mats:
-            key = (m.group_type or '', (m.material_name or '').strip().lower())
-            if key not in dedup or (m.quota or 0) > (dedup[key].quota or 0):
-                dedup[key] = m
+            grp = (m.group_type or 'Vật tư dùng chung').strip()
+            if grp not in groups_map:
+                groups_map[grp] = []
+            groups_map[grp].append(m)
 
-        result = list(dedup.values())
-        # Sắp xếp Hàng trắng trước, Sau sơn sau
-        result.sort(key=lambda x: (0 if 'TRẮNG' in (x.group_type or '').upper() else 1, x.stt or 999))
-        
-        # Đánh lại số thứ tự STT chuẩn
         serialized = []
-        ht_idx = 1
-        ss_idx = 1
-        for m in result:
-            m_dict = serialize_material_item(m)
-            if 'TRẮNG' in (m.group_type or '').upper():
-                m_dict['stt'] = ht_idx
-                ht_idx += 1
-            else:
-                m_dict['stt'] = ss_idx
-                ss_idx += 1
-            serialized.append(m_dict)
-            
+        for grp_name, grp_items in groups_map.items():
+            for idx, m in enumerate(grp_items, start=1):
+                m_dict = serialize_material_item(m)
+                m_dict['stt'] = idx
+                m_dict['group_type'] = grp_name
+                serialized.append(m_dict)
+
         return serialized
 
-    # 3. Fallback tìm kiếm ilike
-    conds = []
-    if sku and sku.strip():
-        conds.append(MasterProductMaterial.product_sku.ilike(f"%{sku.strip()}%"))
-        conds.append(MasterProductMaterial.product_name.ilike(f"%{sku.strip()}%"))
-    if name and name.strip():
-        conds.append(MasterProductMaterial.product_name.ilike(f"%{name.strip()}%"))
-        conds.append(MasterProductMaterial.product_sku.ilike(f"%{name.strip()}%"))
-        
-    if conds:
-        from sqlalchemy import or_
-        materials = db.query(MasterProductMaterial).filter(
-            or_(*conds)
-        ).order_by(MasterProductMaterial.group_type.asc(), MasterProductMaterial.stt.asc()).all()
-        clean_fallback = [m for m in materials if is_hardware_material(m)]
-        return [serialize_material_item(m) for m in clean_fallback]
-    
     return []
 
 

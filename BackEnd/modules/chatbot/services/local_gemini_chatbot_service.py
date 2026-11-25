@@ -446,9 +446,9 @@ SYSTEM_PROMPT = SYSTEM_PROMPT_TEMPLATE.replace("{DB_SCHEMA}", DB_SCHEMA)
 class LocalGeminiChatbotService:
     def __init__(self):
         # Configure endpoints from environment variables or use defaults
-        self.api_url = os.getenv("LOCAL_GEMINI_URL", "http://localhost:8081/v1/chat/completions")
-        self.model_name = os.getenv("LOCAL_GEMINI_MODEL", "gemini-3.5-flash-thinking")
-        self.api_key = os.getenv("LOCAL_GEMINI_API_KEY", "sk-gemini")
+        self.api_url = os.getenv("LOCAL_GEMINI_URL", "http://localhost:8081/openai/v1/chat/completions")
+        self.model_name = os.getenv("LOCAL_GEMINI_MODEL", "gemini-everyday-help")
+        self.api_key = os.getenv("LOCAL_GEMINI_API_KEY", "not-needed")
         self.max_retries = 2
         self.retry_delay = 1
         self.active_model = self.model_name
@@ -463,9 +463,9 @@ class LocalGeminiChatbotService:
         Check if local Gemini proxy is active and scan for available models.
         """
         # Dynamically refresh configurations from env to handle hot reloading / old singletons in memory
-        self.api_url = os.getenv("LOCAL_GEMINI_URL", "http://localhost:8081/v1/chat/completions")
-        self.model_name = os.getenv("LOCAL_GEMINI_MODEL", "gemini-3.5-flash-thinking")
-        self.api_key = os.getenv("LOCAL_GEMINI_API_KEY", "sk-gemini")
+        self.api_url = os.getenv("LOCAL_GEMINI_URL", "http://localhost:8081/openai/v1/chat/completions")
+        self.model_name = os.getenv("LOCAL_GEMINI_MODEL", "gemini-everyday-help")
+        self.api_key = os.getenv("LOCAL_GEMINI_API_KEY", "not-needed")
 
         base_url = self.get_base_url()
         headers = {}
@@ -1067,7 +1067,7 @@ class LocalGeminiChatbotService:
                         payload["tool_choice"] = "auto"
 
                     print(f"[LocalGemini] Sending request (round {round_idx+1}) using model: {self.active_model}")
-                    res = requests.post(self.api_url, headers=headers, json=payload, timeout=45.0)
+                    res = requests.post(self.api_url, headers=headers, json=payload, timeout=60.0)
                     
                     if res.status_code != 200:
                         raise Exception(f"HTTP {res.status_code}: {res.text}")

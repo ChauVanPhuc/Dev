@@ -638,6 +638,7 @@ const UserEdit = ({ isProfile = false }) => {
           activePermsToStore[key] = perms.includes('none') || perms.length === 0 ? 'none' : perms.join(',');
         });
         localStorage.setItem('smartflow_active_permissions', JSON.stringify(activePermsToStore));
+        window.dispatchEvent(new CustomEvent('smartflow_permissions_updated', { detail: activePermsToStore }));
       }
       
       setIsDirty(false);
@@ -945,10 +946,8 @@ const UserEdit = ({ isProfile = false }) => {
         await api.post(`/accounts/${id}/sync-departments/`, syncPayload);
 
 
-        // Chỉ lưu những key mà user đã thực sự thay đổi so với quyền mặc định baseline của vai trò/chức vụ
-        // Đảm bảo không bị mất quyền Mobile khi lưu Web hoặc ngược lại
+        // Lưu toàn bộ ma trận phân quyền để đảm bảo Zero-Trust: màn hình nào không cho phép được ghi nhận rõ ràng là 'none'
         const permissionsToSave = {};
-        const defaults = initialBaselineDefaults.current || {};
         
         const allScreenKeys = new Set();
         dynamicWebGroups.forEach(g => g.screens.forEach(s => allScreenKeys.add(s.key)));
@@ -957,16 +956,10 @@ const UserEdit = ({ isProfile = false }) => {
 
         allScreenKeys.forEach(key => {
           const currentPerms = screenPermissions[key] || [];
-          const defaultPerms = defaults[key] || [];
-          
-          // So sánh: nếu quyền hiện tại khác quyền mặc định baseline → là override cần lưu
-          const currentSorted = [...currentPerms].sort().join(',');
-          const defaultSorted = [...defaultPerms].sort().join(',');
-          
-          if (currentSorted !== defaultSorted) {
-            permissionsToSave[key] = currentPerms.includes('none') || currentPerms.length === 0 
-              ? 'none' 
-              : currentPerms.join(',');
+          if (!currentPerms || currentPerms.length === 0 || currentPerms.includes('none')) {
+            permissionsToSave[key] = 'none';
+          } else {
+            permissionsToSave[key] = currentPerms.join(',');
           }
         });
 
@@ -978,11 +971,11 @@ const UserEdit = ({ isProfile = false }) => {
         // Nếu chỉnh sửa cho chính mình, lưu toàn bộ quyền hiện tại vào localStorage (cho sidebar/navigation)
         if (Number(loggedInUser.id) === Number(id)) {
           const fullPermsToStore = {};
-          Object.keys(screenPermissions).forEach(key => {
-            const perms = screenPermissions[key] || [];
-            fullPermsToStore[key] = perms.includes('none') || perms.length === 0 ? 'none' : perms.join(',');
+          Object.keys(permissionsToSave).forEach(key => {
+            fullPermsToStore[key] = permissionsToSave[key];
           });
           localStorage.setItem('smartflow_active_permissions', JSON.stringify(fullPermsToStore));
+          window.dispatchEvent(new CustomEvent('smartflow_permissions_updated', { detail: fullPermsToStore }));
         }
 
         setSuccess(true);

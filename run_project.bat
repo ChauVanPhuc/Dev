@@ -113,9 +113,9 @@ if exist "%~dp0Report\app.py" (
     start "Report - ERP G7 (Port 8099)" cmd /k "cd /d %~dp0 && call start_report.bat"
 )
 
-:: --- 5. GEMINI WEB2API AI SERVER ---
-echo [5/7] Starting Gemini Web2API AI Server...
-start "Gemini Web2API - AI Server" cmd /k "cd /d %~dp0AI\gemini-web2api && call run.bat"
+:: --- 5. GEMINI WEB TO API AI SERVER (Port 8081) ---
+echo [5/7] Starting Gemini Web To API AI Server (Port 8081)...
+start "Gemini Web To API - AI Server" cmd /k "cd /d %~dp0AI\gemini-web-to-api && call run.bat"
 
 :: --- 6. FEEDBACK PORTAL (Port 3001) ---
 echo [6/7] Processing Feedback Portal (Port 3001)...
@@ -146,6 +146,7 @@ echo  - Mobile:         http://localhost:3000
 echo  - Quality Report: http://localhost:8099
 echo  - Feedback:       http://localhost:3001
 echo  - Canvas Editor:  http://localhost:1000/canvas-editor/
+echo  - Gemini Web Chat: http://localhost:8081
 echo  Check the individual windows for status and logs.
 echo ======================================================
 pause
@@ -260,8 +261,8 @@ if exist "%~dp0Report\app.py" (
     start "Report (Cloud) - ERP G7" cmd /k "cd /d %~dp0 && call start_report.bat"
 )
 
-echo  [5/5] Starting Gemini Web2API AI Server...
-start "Gemini Web2API - AI Server" cmd /k "cd /d %~dp0AI\gemini-web2api && call run.bat"
+echo  [5/5] Starting Gemini Web To API AI Server (Port 8081)...
+start "Gemini Web To API - AI Server" cmd /k "cd /d %~dp0AI\gemini-web-to-api && call run.bat"
 
 echo.
 echo ======================================================
@@ -356,9 +357,9 @@ if exist "%~dp0Report\app.py" (
     start "Report - ERP G7" cmd /k "cd /d %~dp0 && call start_report.bat"
 )
 
-:: Start Gemini Web2API AI Server
-echo Starting Gemini Web2API AI Server...
-start "Gemini Web2API - AI Server" cmd /k "cd /d %~dp0AI\gemini-web2api && call run.bat"
+:: Start Gemini Web To API AI Server (Port 8081)
+echo Starting Gemini Web To API AI Server (Port 8081)...
+start "Gemini Web To API - AI Server" cmd /k "cd /d %~dp0AI\gemini-web-to-api && call run.bat"
 
 echo.
 echo ======================================================

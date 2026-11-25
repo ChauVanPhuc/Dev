@@ -13,7 +13,7 @@ Tài liệu này là **Tuyên ngôn Kiến trúc & Quy chuẩn Lập trình Toà
 | **Xác thực & Bảo mật** | **PyJWT** / OAuth2 Bearer | JWT Tokens (Access Token), Password Hashing (Passlib/Bcrypt), Custom ACL Middleware |
 | **Web Frontend** | **React 18** / **Vite** | Single Page Application (Port 5173), Custom Design System, Lucide Icons, Axios Interceptors |
 | **Mobile Frontend** | **React 18** / **Vite PWA** | Mobile-First Responsive App (Port 5174/5175), Offline Ready, OCR/Camera integrations |
-| **AI & Vision** | Python / OpenCV / OCR | AI Chatbot Service, OCR Đọc tem nhãn sản phẩm, Nhận diện lỗi ảnh kiểm tra |
+| **AI & Vision** | **Golang** / **Gemini Web To API** | Engine AI Go (Port 8081, OpenAI/Claude/Gemini Native API), Web Chat UI, OCR tem nhãn & Vision |
 | **Báo cáo & Xuất file**| SheetJS (XLSX) / OpenPyXL | Import/Export Excel báo cáo QC, KPI, Tiến độ sản xuất |
 | **Môi trường Thực thi**| Windows PowerShell | Virtualenv `BackEnd/venv`, Bắt buộc lệnh `$env:PYTHONIOENCODING="utf-8"` |
 
@@ -24,6 +24,7 @@ Tài liệu này là **Tuyên ngôn Kiến trúc & Quy chuẩn Lập trình Toà
 ```
 SmartFlow_v2_Test/
 ├── AI/                                     # Phân hệ AI Chatbot & Xử lý Thị giác Máy tính (OCR / Vision)
+│   └── gemini-web-to-api/                  # Go-based Gemini Web to API Server (Port 8081, Web Chat UI, Scalar Docs)
 ├── BackEnd/                                # MÃ NGUỒN BACKEND PYTHON (FASTAPI)
 │   ├── app/                                # Cấu hình ứng dụng lõi
 │   │   ├── main.py                         # App Entry Point, CORS, Auth/ACL Middleware, Error Handlers

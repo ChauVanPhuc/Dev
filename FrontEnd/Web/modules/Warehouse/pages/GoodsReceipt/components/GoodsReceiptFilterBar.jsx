@@ -63,7 +63,7 @@ export const GoodsReceiptFilterBar = ({
         </button>
         {activeDropdown === 'pagesize' && (
           <div className="wh-filter-dropdown-card" style={{ width: '160px' }}>
-            {[15, 25, 50, 100, 300].map((size) => (
+            {[10, 15, 25, 50, 100, 300].map((size) => (
               <button
                 key={size}
                 type="button"

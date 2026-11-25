@@ -5,8 +5,7 @@ import {
   GOODS_ISSUE_COLUMNS,
   ISSUE_STATUSES,
   formatDate,
-  formatNumber,
-  formatCurrencyVND
+  formatNumber
 } from '../../../types/goodsIssue.types';
 import GoodsIssuePagination from './GoodsIssuePagination';
 import { ChannelBadge } from '../../../components/WarehouseMobileSyncBadge';
@@ -46,7 +45,8 @@ export const GoodsIssueTable = ({
   totalPages = 1,
   page = 1,
   setPage,
-  pageSize = 25,
+  pageSize = 15,
+  setPageSize,
   sortBy = 'created_at',
   setSortBy,
   sortDir = 'desc',
@@ -415,8 +415,7 @@ export const GoodsIssueTable = ({
                             <div className="wh-subtable-header">
                               <span>Chi tiết các dòng hàng thuộc phiếu {iss.voucher_no}</span>
                               <span style={{ fontWeight: 'normal', color: '#6B7280' }}>
-                                Tổng SL xuất: <strong>{formatNumber(iss.total_quantity || 0)}</strong> | Tổng giá trị:{' '}
-                                <strong style={{ color: '#047857' }}>{formatCurrencyVND(iss.total_amount || 0)}</strong>
+                                Tổng SL xuất: <strong>{formatNumber(iss.total_quantity || 0)}</strong>
                               </span>
                             </div>
 
@@ -428,8 +427,6 @@ export const GoodsIssueTable = ({
                                   <th style={{ textAlign: 'left' }}>Tên hàng hóa / vật tư</th>
                                   <th style={{ width: '80px', textAlign: 'center' }}>ĐVT</th>
                                   <th style={{ width: '100px', textAlign: 'right' }}>Số lượng</th>
-                                  <th style={{ width: '120px', textAlign: 'right' }}>Đơn giá</th>
-                                  <th style={{ width: '140px', textAlign: 'right' }}>Thành tiền</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -445,15 +442,11 @@ export const GoodsIssueTable = ({
                                       <td style={{ textAlign: 'right', fontWeight: '600' }}>
                                         {formatNumber(it.quantity)}
                                       </td>
-                                      <td style={{ textAlign: 'right' }}>{formatCurrencyVND(it.unit_price)}</td>
-                                      <td style={{ textAlign: 'right', fontWeight: '700', color: '#047857' }}>
-                                        {formatCurrencyVND(it.amount || it.quantity * it.unit_price)}
-                                      </td>
                                     </tr>
                                   ))
                                 ) : (
                                   <tr>
-                                    <td colSpan={7} style={{ textAlign: 'center', padding: '12px', color: '#9CA3AF' }}>
+                                    <td colSpan={5} style={{ textAlign: 'center', padding: '12px', color: '#9CA3AF' }}>
                                       Chưa có danh mục dòng hàng chi tiết.
                                     </td>
                                   </tr>
@@ -477,6 +470,7 @@ export const GoodsIssueTable = ({
         page={page}
         setPage={setPage}
         pageSize={pageSize}
+        setPageSize={setPageSize}
         totalCount={totalCount}
         totalPages={totalPages}
         itemsLength={issues.length}
